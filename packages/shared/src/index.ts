@@ -4,4 +4,4 @@ export type {
   AuthUser,
   LoginResult,
   HealthStatus,
-} from '@xiaotuanbao/shared'
+} from './types/api.types'

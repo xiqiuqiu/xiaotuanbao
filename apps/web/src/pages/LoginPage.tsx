@@ -22,7 +22,7 @@ export function LoginPage() {
     <AuthLayout>
       <Card>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-          当前为 Mock 登录模式，任意用户名 + 4 位以上密码即可进入系统。
+          演示账号：admin / admin123（需先执行 pnpm db:seed）
         </Typography.Paragraph>
 
         {loginMutation.error ? (
