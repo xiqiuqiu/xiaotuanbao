@@ -7,10 +7,12 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { PropsWithChildren } from 'react'
+import { useMemo } from 'react'
 import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
+import { filterMenuItems } from '@/utils/menu-permission'
 
 const { Header, Sider } = Layout
 
@@ -20,9 +22,15 @@ export function MainLayout({ children }: PropsWithChildren) {
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
   const user = useAuthStore((state) => state.user)
+  const menuKeys = useAuthStore((state) => state.menuKeys)
   const logout = useAuthStore((state) => state.logout)
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
+
+  const visibleMenuItems = useMemo(
+    () => filterMenuItems(mainMenuItems, menuKeys),
+    [menuKeys],
+  )
 
   const selectedKeys = [pathname]
   const openKeys = pathname.startsWith('/finance')
@@ -65,7 +73,7 @@ export function MainLayout({ children }: PropsWithChildren) {
           mode="inline"
           selectedKeys={selectedKeys}
           defaultOpenKeys={openKeys}
-          items={mainMenuItems}
+          items={visibleMenuItems}
           onClick={({ key }) => {
             if (key.startsWith('/')) {
               navigate({ to: key })

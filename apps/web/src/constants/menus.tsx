@@ -2,10 +2,8 @@ import type { ReactNode } from 'react'
 import type { MenuProps } from 'antd'
 import {
   BankOutlined,
-  CarOutlined,
   DollarOutlined,
   SettingOutlined,
-  ShopOutlined,
   TeamOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons'
@@ -19,15 +17,13 @@ function item(label: string, key: string, icon?: ReactNode, children?: MenuItem[
 export const mainMenuItems: MenuItem[] = [
   item('首页', '/'),
   item('发团管理', '/departure', <UnorderedListOutlined />),
-  item('行程管理', '/itinerary', <CarOutlined />),
-  item('资源管理', '/resource', <ShopOutlined />),
   item('财务管理', 'finance', <DollarOutlined />, [
     item('应收管理', '/finance/receivable'),
     item('应付管理', '/finance/payable'),
     item('财务流水', '/finance/transactions'),
     item('核销管理', '/finance/verification'),
   ]),
-  item('客户/同行管理', '/partner', <TeamOutlined />),
+  item('合作伙伴', '/partner', <TeamOutlined />),
   item('供应商管理', '/supplier', <BankOutlined />),
   item('系统管理', 'system', <SettingOutlined />, [
     item('组织管理', '/system/organization'),
@@ -39,13 +35,11 @@ export const mainMenuItems: MenuItem[] = [
 export const routeTitles: Record<string, string> = {
   '/': '首页',
   '/departure': '发团管理',
-  '/itinerary': '行程管理',
-  '/resource': '资源管理',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',
   '/finance/transactions': '财务流水',
   '/finance/verification': '核销管理',
-  '/partner': '客户/同行管理',
+  '/partner': '合作伙伴',
   '/supplier': '供应商管理',
   '/system/organization': '组织管理',
   '/system/users': '员工管理',

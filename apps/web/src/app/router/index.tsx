@@ -6,11 +6,15 @@ import {
   Outlet,
 } from '@tanstack/react-router'
 import { useAuthStore } from '@/app/store/auth.store'
+import { ensureAuthenticatedSession } from '@/lib/auth/session'
 import { AppLayout } from '@/layouts/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { EmployeesPage } from '@/pages/system/EmployeesPage'
+import { OrganizationPage } from '@/pages/system/OrganizationPage'
+import { RolesPage } from '@/pages/system/RolesPage'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -32,10 +36,8 @@ const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
   component: AppLayout,
-  beforeLoad: () => {
-    if (!useAuthStore.getState().isAuthenticated()) {
-      throw redirect({ to: '/login', search: { redirect: location.pathname } })
-    }
+  beforeLoad: async ({ location }) => {
+    await ensureAuthenticatedSession(location.pathname)
   },
 })
 
@@ -49,18 +51,6 @@ const departureRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure',
   component: () => <PlaceholderPage title="发团管理" />,
-})
-
-const itineraryRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/itinerary',
-  component: () => <PlaceholderPage title="行程管理" />,
-})
-
-const resourceRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/resource',
-  component: () => <PlaceholderPage title="资源管理" />,
 })
 
 const financeReceivableRoute = createRoute({
@@ -90,7 +80,7 @@ const financeVerificationRoute = createRoute({
 const partnerRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/partner',
-  component: () => <PlaceholderPage title="客户/同行管理" />,
+  component: () => <PlaceholderPage title="合作伙伴" />,
 })
 
 const supplierRoute = createRoute({
@@ -102,19 +92,19 @@ const supplierRoute = createRoute({
 const systemOrganizationRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/organization',
-  component: () => <PlaceholderPage title="组织管理" />,
+  component: OrganizationPage,
 })
 
 const systemUsersRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/users',
-  component: () => <PlaceholderPage title="员工管理" />,
+  component: EmployeesPage,
 })
 
 const systemRolesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/roles',
-  component: () => <PlaceholderPage title="角色权限" />,
+  component: RolesPage,
 })
 
 const routeTree = rootRoute.addChildren([
@@ -122,8 +112,6 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
     departureRoute,
-    itineraryRoute,
-    resourceRoute,
     financeReceivableRoute,
     financePayableRoute,
     financeTransactionsRoute,

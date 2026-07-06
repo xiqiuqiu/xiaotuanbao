@@ -7,7 +7,8 @@ const AUTH_STORAGE_KEY = 'xiaotuanbao-auth'
 interface AuthState {
   token: string | null
   user: AuthUser | null
-  setAuth: (token: string, user: AuthUser) => void
+  menuKeys: string[]
+  setSession: (token: string, user: AuthUser, menuKeys: string[]) => void
   logout: () => void
   isAuthenticated: () => boolean
 }
@@ -17,13 +18,18 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       token: null,
       user: null,
-      setAuth: (token, user) => set({ token, user }),
-      logout: () => set({ token: null, user: null }),
+      menuKeys: [],
+      setSession: (token, user, menuKeys) => set({ token, user, menuKeys }),
+      logout: () => set({ token: null, user: null, menuKeys: [] }),
       isAuthenticated: () => Boolean(get().token),
     }),
     {
       name: AUTH_STORAGE_KEY,
-      partialize: (state) => ({ token: state.token, user: state.user }),
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        menuKeys: state.menuKeys,
+      }),
     },
   ),
 )

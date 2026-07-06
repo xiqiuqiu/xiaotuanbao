@@ -6,7 +6,7 @@ import { useAuthStore } from '@/app/store/auth.store'
 export function HomePage() {
   const user = useAuthStore((state) => state.user)
 
-  const healthQuery = useQuery({
+  const { data: healthData, isLoading: healthLoading, isError: healthError } = useQuery({
     queryKey: ['health'],
     queryFn: fetchHealth,
     retry: false,
@@ -43,9 +43,9 @@ export function HomePage() {
       </Row>
 
       <Card title="前后端连通性" style={{ marginTop: 24 }}>
-        {healthQuery.isLoading ? (
+        {healthLoading ? (
           <Spin description="正在检测 /api/health ..." />
-        ) : healthQuery.isError ? (
+        ) : healthError ? (
           <Alert
             type="warning"
             showIcon
@@ -59,8 +59,8 @@ export function HomePage() {
             title="后端连接正常"
             description={
               <>
-                状态：<Tag color="green">{healthQuery.data?.status ?? 'ok'}</Tag>
-                {healthQuery.data?.timestamp ? ` · ${healthQuery.data.timestamp}` : null}
+                状态：<Tag color="green">{healthData?.status ?? 'ok'}</Tag>
+                {healthData?.timestamp ? ` · ${healthData.timestamp}` : null}
               </>
             }
           />

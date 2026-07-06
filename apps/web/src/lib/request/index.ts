@@ -1,1 +1,1 @@
-export { request, ApiError, default as http } from './client'
+export { request, ApiError } from './client'

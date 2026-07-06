@@ -14,7 +14,7 @@ importers:
         specifier: ^11.1.3
         version: 11.1.27(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/config':
-        specifier: ^4.0.2
+        specifier: ^4.0.4
         version: 4.0.4(@nestjs/common@11.1.27(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(rxjs@7.8.2)
       '@nestjs/core':
         specifier: ^11.1.3
@@ -57,7 +57,7 @@ importers:
         version: 7.8.2
     devDependencies:
       '@nestjs/cli':
-        specifier: ^11.0.5
+        specifier: ^11.0.23
         version: 11.0.23(@types/node@22.20.0)
       '@nestjs/schematics':
         specifier: ^11.0.5
@@ -105,7 +105,7 @@ importers:
         specifier: ^6.5.0
         version: 6.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       axios:
-        specifier: ^1.10.0
+        specifier: ^1.18.1
         version: 1.18.1
       react:
         specifier: ^19.1.0
@@ -135,7 +135,11 @@ importers:
 
   packages/config: {}
 
-  packages/shared: {}
+  packages/shared:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
 
 packages:
 

@@ -46,8 +46,11 @@ pnpm dev:web
 | `pnpm db:down` | 停止 PostgreSQL |
 | `pnpm db:migrate` | 开发迁移（`prisma migrate dev`） |
 | `pnpm db:seed` | 初始化演示数据 |
-| `pnpm lint:web` | 前端类型检查 |
-| `pnpm lint:api` | 后端类型检查 |
+| `pnpm typecheck` | 全项目类型检查（web + api + shared） |
+| `pnpm typecheck:web` | 前端类型检查 |
+| `pnpm typecheck:api` | 后端类型检查 |
+| `pnpm lint:web` | 同 `typecheck:web`（兼容旧命令） |
+| `pnpm lint:api` | 同 `typecheck:api`（兼容旧命令） |
 | `pnpm build:web` | 构建前端 |
 | `pnpm build:api` | 构建后端 |
 

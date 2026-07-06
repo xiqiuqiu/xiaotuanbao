@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+.pnpm-store/
+
+# Local scratch / WIP notes
+.scratch/
 
 # Build
 dist/

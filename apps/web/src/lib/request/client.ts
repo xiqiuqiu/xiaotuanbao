@@ -67,6 +67,9 @@ export const request = {
   post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     return http.post<T, T>(url, data, config)
   },
+  patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    return http.patch<T, T>(url, data, config)
+  },
   put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     return http.put<T, T>(url, data, config)
   },
@@ -74,5 +77,3 @@ export const request = {
     return http.delete<T, T>(url, config)
   },
 }
-
-export default http

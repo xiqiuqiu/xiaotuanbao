@@ -4,16 +4,21 @@ import { useNavigate } from '@tanstack/react-router'
 import { login } from '@/services/auth.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { AuthLayout } from '@/layouts/MainLayout'
+import { queryClient } from '@/lib/query/client'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const setAuth = useAuthStore((state) => state.setAuth)
+  const setSession = useAuthStore((state) => state.setSession)
   const [form] = Form.useForm()
 
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (result) => {
-      setAuth(result.accessToken, result.user)
+      setSession(result.accessToken, result.user, result.menuKeys)
+      queryClient.invalidateQueries({ queryKey: ['roles'] })
+      queryClient.invalidateQueries({ queryKey: ['employees'] })
+      queryClient.invalidateQueries({ queryKey: ['organization'] })
+      queryClient.invalidateQueries({ queryKey: ['health'] })
       navigate({ to: '/' })
     },
   })
@@ -22,7 +27,7 @@ export function LoginPage() {
     <AuthLayout>
       <Card>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-          演示账号：admin / admin123（需先执行 pnpm db:seed）
+          演示账号：admin / admin123（企业管理员）；wangjie / admin123（计调）；acai / admin123（财务）
         </Typography.Paragraph>
 
         {loginMutation.error ? (
