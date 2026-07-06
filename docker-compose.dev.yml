@@ -1,0 +1,5 @@
+# 本地开发专用：暴露 PostgreSQL 5432，供 pnpm dev:api 连接
+services:
+  postgres:
+    ports:
+      - "5432:5432"

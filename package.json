@@ -9,10 +9,16 @@
     "preview:web": "pnpm --filter web preview",
     "lint:web": "pnpm --filter web lint",
     "lint:api": "pnpm --filter api lint",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down",
+    "db:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres",
+    "db:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres",
     "db:migrate": "pnpm --filter api prisma:migrate:dev",
-    "db:seed": "pnpm --filter api prisma:db:seed"
+    "db:seed": "pnpm --filter api prisma:db:seed",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:restart:api": "docker compose restart api",
+    "docker:migrate": "docker compose exec api pnpm exec prisma migrate deploy",
+    "docker:seed": "docker compose exec api pnpm exec prisma db seed"
   },
   "engines": {
     "node": ">=20"

@@ -1,16 +1,89 @@
 services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: export
+      args:
+        VITE_APP_NAME: ${VITE_APP_NAME:-小团宝}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_APP_ENV: ${VITE_APP_ENV:-production}
+    container_name: xiaotuanbao-web
+    restart: "no"
+    volumes:
+      - web_dist:/output
+
+  caddy:
+    image: caddy:2
+    container_name: xiaotuanbao-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${CADDY_DOMAIN:-:80}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - web_dist:/srv/web
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: xiaotuanbao-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-xiaotuanbao}:${POSTGRES_PASSWORD:-please-change-this-password}@postgres:5432/${POSTGRES_DB:-xiaotuanbao}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
   postgres:
     image: postgres:16
     container_name: xiaotuanbao-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-xiaotuanbao}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-this-password}
       POSTGRES_DB: ${POSTGRES_DB:-xiaotuanbao}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/backup:/backup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xiaotuanbao} -d ${POSTGRES_DB:-xiaotuanbao}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
+  web_dist:
