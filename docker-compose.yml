@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: xiaotuanbao-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-xiaotuanbao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-this-password}
+      POSTGRES_DB: ${POSTGRES_DB:-xiaotuanbao}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

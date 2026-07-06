@@ -1,0 +1,20 @@
+{
+  "name": "xiaotuanbao",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter api build",
+    "preview:web": "pnpm --filter web preview",
+    "lint:web": "pnpm --filter web lint",
+    "lint:api": "pnpm --filter api lint",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter api prisma:migrate:dev",
+    "db:seed": "pnpm --filter api prisma:db:seed"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
