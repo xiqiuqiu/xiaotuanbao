@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Button,
   Drawer,
@@ -45,24 +45,47 @@ export function SourceOrderGuestDrawer({
   onClose,
   onSynced,
 }: SourceOrderGuestDrawerProps) {
+  if (!open || !sourceOrder) {
+    return <Drawer open={open} onClose={onClose} />
+  }
+
+  return (
+    <SourceOrderGuestDrawerPanel
+      key={sourceOrder.id}
+      open={open}
+      sourceOrder={sourceOrder}
+      readOnly={readOnly}
+      onClose={onClose}
+      onSynced={onSynced}
+    />
+  )
+}
+
+interface SourceOrderGuestDrawerPanelProps {
+  open: boolean
+  sourceOrder: SourceOrderSummary
+  readOnly: boolean
+  onClose: () => void
+  onSynced: () => void
+}
+
+function SourceOrderGuestDrawerPanel({
+  open,
+  sourceOrder,
+  readOnly,
+  onClose,
+  onSynced,
+}: SourceOrderGuestDrawerPanelProps) {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<GuestFormValues>()
   const [editingGuest, setEditingGuest] = useState<SourceOrderGuestSummary | null>(null)
 
-  const sourceOrderId = sourceOrder?.id
+  const sourceOrderId = sourceOrder.id
 
   const { data: guests = [], isLoading } = useQuery({
     queryKey: ['source-order-guests', sourceOrderId],
-    queryFn: () => listSourceOrderGuests(sourceOrderId!),
-    enabled: open && Boolean(sourceOrderId),
+    queryFn: () => listSourceOrderGuests(sourceOrderId),
   })
-
-  useEffect(() => {
-    if (!open) {
-      setEditingGuest(null)
-      form.resetFields()
-    }
-  }, [open, form])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
@@ -71,9 +94,6 @@ export function SourceOrderGuestDrawer({
 
   const saveMutation = useMutation({
     mutationFn: (values: GuestFormValues) => {
-      if (!sourceOrderId) {
-        throw new Error('missing source order')
-      }
       if (editingGuest) {
         return updateSourceOrderGuest(sourceOrderId, editingGuest.id, values)
       }
@@ -88,7 +108,7 @@ export function SourceOrderGuestDrawer({
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (guestId: string) => deleteSourceOrderGuest(sourceOrderId!, guestId),
+    mutationFn: (guestId: string) => deleteSourceOrderGuest(sourceOrderId, guestId),
     onSuccess: () => {
       message.success('客人已删除')
       invalidate()
@@ -96,7 +116,7 @@ export function SourceOrderGuestDrawer({
   })
 
   const syncMutation = useMutation({
-    mutationFn: () => syncSourceOrderGuestCount(sourceOrderId!),
+    mutationFn: () => syncSourceOrderGuestCount(sourceOrderId),
     onSuccess: () => {
       message.success('已同步客人人数')
       invalidate()
@@ -157,10 +177,11 @@ export function SourceOrderGuestDrawer({
 
   return (
     <Drawer
-      title={`客人名单 · ${sourceOrder?.displayName ?? ''}`}
+      title={`客人名单 · ${sourceOrder.displayName}`}
       open={open}
       width={720}
       onClose={onClose}
+      destroyOnClose
       extra={
         readOnly ? null : (
           <Button
@@ -217,7 +238,7 @@ export function SourceOrderGuestDrawer({
       ) : null}
 
       <Typography.Paragraph type="secondary">
-        当前名单 {guests.length} 人 · 客源单人数 {sourceOrder?.guestCount ?? 0} 人
+        当前名单 {guests.length} 人 · 客源单人数 {sourceOrder.guestCount} 人
       </Typography.Paragraph>
 
       <Table
