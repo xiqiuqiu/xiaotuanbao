@@ -19,6 +19,7 @@ import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateDepartureDto,
+  CopyDepartureDto,
   ListDeparturesQueryDto,
   NextDepartureNoQueryDto,
   TransitionDepartureDto,
@@ -59,6 +60,16 @@ export class DepartureController {
     @Body() dto: CreateDepartureDto,
   ): Promise<DepartureSummary> {
     return this.departureService.create(request.user.organizationId, dto)
+  }
+
+  @Post(':id/copy')
+  @RequireMenu('/departure')
+  copy(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: CopyDepartureDto,
+  ): Promise<DepartureSummary> {
+    return this.departureService.copy(request.user.organizationId, id, dto)
   }
 
   @Get(':id')

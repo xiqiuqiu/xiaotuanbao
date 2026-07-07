@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer'
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -99,5 +100,27 @@ export class CreateRouteTemplateDto {
 export interface RouteTemplateCopyFlags {
   copySegments?: boolean
   copyResources?: boolean
+  copyReferencePrices?: boolean
+}
+
+export class CreateRouteTemplateFromDepartureDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string
+
+  @IsInt()
+  @Min(1)
+  defaultDayCount!: number
+
+  @IsOptional()
+  @IsBoolean()
+  copySegments?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  copyResources?: boolean
+
+  @IsOptional()
+  @IsBoolean()
   copyReferencePrices?: boolean
 }

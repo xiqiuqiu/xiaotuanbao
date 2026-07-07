@@ -174,6 +174,19 @@ export interface CreateDepartureDto {
   copyReferencePrices?: boolean
 }
 
+export interface CopyDepartureDto {
+  name: string
+  startDate: string
+  endDate: string
+  ownerUserId: string
+  departureNo?: string
+  departureType?: string
+  notes?: string
+  copySegments?: boolean
+  copyResources?: boolean
+  copyReferencePrices?: boolean
+}
+
 export interface UpdateDepartureDto {
   departureNo?: string
   name?: string
@@ -240,6 +253,14 @@ export interface CreateRouteTemplateDto {
   defaultDayCount: number
   notes?: string
   segments?: CreateRouteTemplateSegmentDto[]
+}
+
+export interface CreateRouteTemplateFromDepartureDto {
+  name: string
+  defaultDayCount: number
+  copySegments?: boolean
+  copyResources?: boolean
+  copyReferencePrices?: boolean
 }
 
 export interface PaymentScheduleSummary {

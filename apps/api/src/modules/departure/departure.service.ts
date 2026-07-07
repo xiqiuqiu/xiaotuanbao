@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   CreateDepartureDto,
+  CopyDepartureDto,
   ListDeparturesQueryDto,
   TransitionDepartureDto,
   UpdateDepartureDto,
@@ -25,6 +26,7 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from './departure-date.utils'
+import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
 
@@ -49,6 +51,7 @@ export class DepartureService {
     private readonly prisma: PrismaService,
     private readonly routeTemplateService: RouteTemplateService,
     private readonly routeTemplateCopyService: RouteTemplateCopyService,
+    private readonly departureCopyService: DepartureCopyService,
   ) {}
 
   async list(
@@ -192,6 +195,76 @@ export class DepartureService {
           data: { usageCount: { increment: 1 } },
         })
       }
+
+      return created
+    })
+
+    return this.toDepartureSummary(departure)
+  }
+
+  async copy(
+    organizationId: string,
+    sourceDepartureId: string,
+    dto: CopyDepartureDto,
+  ): Promise<DepartureSummary> {
+    const sourceDeparture = await this.departureCopyService.findForCopy(
+      organizationId,
+      sourceDepartureId,
+    )
+
+    const name = dto.name.trim()
+    if (!name) {
+      throw new BadRequestException('团名不能为空')
+    }
+
+    const startDate = parseDateOnly(dto.startDate)
+    const endDate = parseDateOnly(dto.endDate)
+
+    if (endDate < startDate) {
+      throw new BadRequestException('结束日期不能早于出团日期')
+    }
+
+    await this.ensureOwnerInOrganization(organizationId, dto.ownerUserId)
+
+    const departureNo =
+      dto.departureNo?.trim() ||
+      (await this.generateDepartureNo(organizationId, startDate))
+
+    await this.ensureDepartureNoAvailable(organizationId, departureNo)
+
+    const dayCount = computeDayCount(startDate, endDate)
+
+    const departure = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.departure.create({
+        data: {
+          organizationId,
+          departureNo,
+          name,
+          routeName: sourceDeparture.routeName,
+          routeSource: DepartureRouteSource.copy,
+          sourceTemplateId: null,
+          departureType: dto.departureType ?? sourceDeparture.departureType,
+          startDate,
+          endDate,
+          dayCount,
+          ownerUserId: dto.ownerUserId,
+          status: DepartureStatus.editing,
+          notes: dto.notes?.trim() || null,
+        },
+      })
+
+      await this.departureCopyService.copyToDeparture({
+        tx,
+        organizationId,
+        sourceDepartureId,
+        targetDepartureId: created.id,
+        targetStartDate: startDate,
+        flags: {
+          copySegments: dto.copySegments,
+          copyResources: dto.copyResources,
+          copyReferencePrices: dto.copyReferencePrices,
+        },
+      })
 
       return created
     })

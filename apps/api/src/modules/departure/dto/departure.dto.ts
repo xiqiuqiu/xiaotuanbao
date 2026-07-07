@@ -161,3 +161,44 @@ export class TransitionDepartureDto {
   @IsEnum(PrismaDepartureStatus)
   targetStatus!: PrismaDepartureStatus
 }
+
+export class CopyDepartureDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string
+
+  @IsDateString()
+  startDate!: string
+
+  @IsDateString()
+  endDate!: string
+
+  @IsString()
+  @IsNotEmpty()
+  ownerUserId!: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  departureNo?: string
+
+  @IsOptional()
+  @IsEnum(PrismaDepartureType)
+  departureType?: PrismaDepartureType
+
+  @IsOptional()
+  @IsString()
+  notes?: string
+
+  @IsOptional()
+  @IsBoolean()
+  copySegments?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  copyResources?: boolean
+
+  @IsOptional()
+  @IsBoolean()
+  copyReferencePrices?: boolean
+}

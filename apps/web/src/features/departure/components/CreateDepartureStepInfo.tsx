@@ -8,7 +8,7 @@ import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoStepValues, RouteStepValues } from '../utils/departure-wizard-form'
 import {
   buildDefaultDepartureName,
-  buildTemplateCopySummary,
+  buildRouteSummary,
   computeDayCount,
   computeEndDateFromDefaultDays,
 } from '../utils/departure-wizard-form'
@@ -36,7 +36,7 @@ export function CreateDepartureStepInfo({
   onRegenerateDepartureNo,
 }: CreateDepartureStepInfoProps) {
   const defaultDayCount = route.defaultDayCount
-  const copySummary = buildTemplateCopySummary(route)
+  const copySummary = buildRouteSummary(route)
 
   const handleStartDateChange = (value: Dayjs | null) => {
     const startDate = value?.format('YYYY-MM-DD')
@@ -172,7 +172,7 @@ export function CreateDepartureStepInfo({
       </Col>
 
       <Col xs={24} lg={8}>
-        <Card title="已选路线" size="small">
+        <Card title={route.mode === 'copy' ? '复制来源' : '已选路线'} size="small">
           <Typography.Paragraph strong style={{ marginBottom: 8 }}>
             {route.routeName || '—'}
           </Typography.Paragraph>

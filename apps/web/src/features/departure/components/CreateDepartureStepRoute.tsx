@@ -11,7 +11,9 @@ interface CreateDepartureStepRouteProps {
 
 export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureStepRouteProps) {
   const [keyword, setKeyword] = useState('')
-  const [activeTab, setActiveTab] = useState<'template' | 'manual'>(values.mode)
+  const [activeTab, setActiveTab] = useState<'template' | 'manual'>(
+    values.mode === 'copy' ? 'template' : values.mode,
+  )
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['route-templates', keyword],

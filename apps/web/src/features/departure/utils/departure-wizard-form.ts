@@ -1,13 +1,15 @@
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { CreateDepartureDto } from '@/types/api'
+import type { CopyDepartureDto, CreateDepartureDto } from '@/types/api'
 
-export type RouteStepMode = 'manual' | 'template'
+export type RouteStepMode = 'manual' | 'template' | 'copy'
 
 export interface RouteStepValues {
   mode: RouteStepMode
   routeName: string
   defaultDayCount?: number
   templateId?: string
+  copyFromDepartureId?: string
+  sourceDepartureNo?: string
   copySegments?: boolean
   copyResources?: boolean
   copyReferencePrices?: boolean
@@ -116,17 +118,56 @@ export function buildCreateDeparturePayload(
   return payload
 }
 
+export function buildCopyDeparturePayload(
+  route: RouteStepValues,
+  info: InfoStepValues,
+): CopyDepartureDto {
+  return {
+    name: info.name.trim(),
+    startDate: info.startDate,
+    endDate: info.endDate,
+    ownerUserId: info.ownerUserId,
+    departureNo: info.departureNo.trim() || undefined,
+    departureType: info.departureType,
+    notes: info.notes?.trim() || undefined,
+    copySegments: route.copySegments ?? true,
+    copyResources: route.copyResources ?? true,
+    copyReferencePrices: route.copyReferencePrices ?? true,
+  }
+}
+
+export function buildRouteSummary(route: RouteStepValues): string | null {
+  if (route.mode === 'copy' && route.sourceDepartureNo) {
+    return `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
+  }
+
+  return buildTemplateCopySummary(route)
+}
+
 export function buildTemplateCopySummary(route: RouteStepValues): string | null {
-  if (route.mode !== 'template') {
-    return null
+  if (route.mode === 'template') {
+    const segmentCount = route.previewSegmentCount ?? 0
+    const resourceCount = route.previewResourceCount ?? 0
+
+    if (segmentCount === 0 && resourceCount === 0) {
+      return '无模板复制项'
+    }
+
+    return `将复制 ${segmentCount} 段行程、${resourceCount} 项资源草稿`
   }
 
-  const segmentCount = route.previewSegmentCount ?? 0
-  const resourceCount = route.previewResourceCount ?? 0
+  if (route.mode === 'copy') {
+    const segmentCount = route.previewSegmentCount ?? 0
+    const resourceCount = route.previewResourceCount ?? 0
 
-  if (segmentCount === 0 && resourceCount === 0) {
-    return '无模板复制项'
+    if (segmentCount === 0 && resourceCount === 0) {
+      return route.sourceDepartureNo
+        ? `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
+        : null
+    }
+
+    return `将复制 ${segmentCount} 段行程、${resourceCount} 项资源草稿`
   }
 
-  return `将复制 ${segmentCount} 段行程、${resourceCount} 项资源草稿`
+  return null
 }

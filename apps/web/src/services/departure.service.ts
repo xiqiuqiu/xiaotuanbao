@@ -1,5 +1,6 @@
 import { request } from '@/lib/request'
 import type {
+  CopyDepartureDto,
   CreateDepartureDto,
   DepartureDetail,
   DepartureListResult,
@@ -24,6 +25,13 @@ export async function listDepartures(params: ListDeparturesParams): Promise<Depa
 
 export async function createDeparture(payload: CreateDepartureDto): Promise<DepartureSummary> {
   return request.post<DepartureSummary>('/departures', payload)
+}
+
+export async function copyDeparture(
+  sourceDepartureId: string,
+  payload: CopyDepartureDto,
+): Promise<DepartureSummary> {
+  return request.post<DepartureSummary>(`/departures/${sourceDepartureId}/copy`, payload)
 }
 
 export async function previewDepartureNo(

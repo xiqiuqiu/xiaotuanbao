@@ -63,6 +63,9 @@ const departureRoute = createRoute({
 const departureNewRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/new',
+  validateSearch: (search: Record<string, unknown>): { copyFrom?: string } => ({
+    copyFrom: typeof search.copyFrom === 'string' ? search.copyFrom : undefined,
+  }),
   component: CreateDeparturePage,
 })
 

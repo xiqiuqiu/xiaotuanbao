@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Button, Card, Col, Descriptions, Divider, Row, Space, Statistic, Tag, Typography } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
@@ -12,6 +13,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { SaveAsRouteTemplateModal } from './SaveAsRouteTemplateModal'
 
 interface DepartureHeaderProps {
   departure: DepartureDetail
@@ -20,32 +22,36 @@ interface DepartureHeaderProps {
 const responsiveColumns = { xs: 1, sm: 2, md: 3, xl: 4 } as const
 
 export function DepartureHeader({ departure }: DepartureHeaderProps) {
-  return (
-    <Card style={{ marginBottom: 16 }}>
-      <Link to="/departure">
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
-          返回发团列表
-        </Button>
-      </Link>
+  const [saveModalOpen, setSaveModalOpen] = useState(false)
 
-      <Row justify="space-between" align="top" gutter={[16, 12]} style={{ marginBottom: 16 }}>
-        <Col xs={24} lg={16}>
-          <Typography.Text type="secondary">{departure.departureNo}</Typography.Text>
-          <Typography.Title level={4} style={{ marginTop: 4, marginBottom: 0 }}>
-            {departure.name}
-          </Typography.Title>
-        </Col>
-        <Col xs={24} lg={8} style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Space wrap>
-            <Tag color={DEPARTURE_PROGRESS_COLORS[departure.departureProgress] ?? 'default'}>
-              {catalogLabel(DEPARTURE_PROGRESS_LABELS, departure.departureProgress)}
-            </Tag>
-            <Tag color={DEPARTURE_STATUS_COLORS[departure.status as DepartureStatus] ?? 'default'}>
-              {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
-            </Tag>
-          </Space>
-        </Col>
-      </Row>
+  return (
+    <>
+      <Card style={{ marginBottom: 16 }}>
+        <Link to="/departure">
+          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+            返回发团列表
+          </Button>
+        </Link>
+
+        <Row justify="space-between" align="top" gutter={[16, 12]} style={{ marginBottom: 16 }}>
+          <Col xs={24} lg={14}>
+            <Typography.Text type="secondary">{departure.departureNo}</Typography.Text>
+            <Typography.Title level={4} style={{ marginTop: 4, marginBottom: 0 }}>
+              {departure.name}
+            </Typography.Title>
+          </Col>
+          <Col xs={24} lg={10} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Space wrap>
+              <Button onClick={() => setSaveModalOpen(true)}>保存为常用路线</Button>
+              <Tag color={DEPARTURE_PROGRESS_COLORS[departure.departureProgress] ?? 'default'}>
+                {catalogLabel(DEPARTURE_PROGRESS_LABELS, departure.departureProgress)}
+              </Tag>
+              <Tag color={DEPARTURE_STATUS_COLORS[departure.status as DepartureStatus] ?? 'default'}>
+                {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
+              </Tag>
+            </Space>
+          </Col>
+        </Row>
 
       <Descriptions
         size="small"
@@ -99,5 +105,12 @@ export function DepartureHeader({ departure }: DepartureHeaderProps) {
         </Col>
       </Row>
     </Card>
+
+      <SaveAsRouteTemplateModal
+        departure={departure}
+        open={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+      />
+    </>
   )
 }

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Table, Tag, Typography } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Button, Card, Space, Table, Tag, Typography } from 'antd'
+import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -54,6 +54,22 @@ function buildColumns(): ColumnsType<DepartureSummary> {
         <Tag color={DEPARTURE_STATUS_COLORS[status] ?? 'default'}>
           {catalogLabel(DEPARTURE_STATUS_LABELS, status)}
         </Tag>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_value, record) => (
+        <Space size="small">
+          <Link
+            to="/departure/new"
+            search={{ copyFrom: record.id }}
+          >
+            <Button type="link" size="small" icon={<CopyOutlined />}>
+              复制
+            </Button>
+          </Link>
+        </Space>
       ),
     },
   ]

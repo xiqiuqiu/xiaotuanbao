@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module'
 import { DepartureController } from './departure.controller'
 import { DepartureService } from './departure.service'
 import { RouteTemplateController } from './route-template.controller'
+import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
 import { SourceOrderController } from './source-order.controller'
@@ -22,6 +23,7 @@ import { SegmentService } from './segment.service'
     DepartureService,
     RouteTemplateService,
     RouteTemplateCopyService,
+    DepartureCopyService,
     SourceOrderService,
     SegmentService,
   ],

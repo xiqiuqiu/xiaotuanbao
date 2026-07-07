@@ -4,8 +4,10 @@ import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateRouteTemplateDto,
+  CreateRouteTemplateFromDepartureDto,
   ListRouteTemplatesQueryDto,
 } from './dto/route-template.dto'
+import { DepartureCopyService } from './departure-copy.service'
 import {
   RouteTemplateDetailSummary,
   RouteTemplateService,
@@ -15,7 +17,10 @@ import {
 @Controller('route-templates')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class RouteTemplateController {
-  constructor(private readonly routeTemplateService: RouteTemplateService) {}
+  constructor(
+    private readonly routeTemplateService: RouteTemplateService,
+    private readonly departureCopyService: DepartureCopyService,
+  ) {}
 
   @Get()
   @RequireMenu('/departure')
@@ -24,6 +29,20 @@ export class RouteTemplateController {
     @Query() query: ListRouteTemplatesQueryDto,
   ): Promise<RouteTemplateCardSummary[]> {
     return this.routeTemplateService.list(request.user.organizationId, query.keyword)
+  }
+
+  @Post('from-departure/:departureId')
+  @RequireMenu('/departure')
+  createFromDeparture(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+    @Body() dto: CreateRouteTemplateFromDepartureDto,
+  ): Promise<RouteTemplateDetailSummary> {
+    return this.departureCopyService.copyToTemplate(
+      request.user.organizationId,
+      departureId,
+      dto,
+    )
   }
 
   @Get(':id')

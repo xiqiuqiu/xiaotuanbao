@@ -13,7 +13,8 @@
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
-    "prisma:db:seed": "dotenv -e ../../.env -- prisma db seed"
+    "prisma:db:seed": "dotenv -e ../../.env -- prisma db seed",
+    "db:reset-departures": "dotenv -e ../../.env -- tsx scripts/reset-demo-departures.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",
