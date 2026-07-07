@@ -34,5 +34,9 @@ export function isMenuPathAllowed(pathname: string, menuKeys: string[]): boolean
     return menuKeys.includes('/')
   }
 
-  return menuKeys.includes(pathname)
+  if (menuKeys.includes(pathname)) {
+    return true
+  }
+
+  return menuKeys.some((key) => key !== '/' && pathname.startsWith(`${key}/`))
 }

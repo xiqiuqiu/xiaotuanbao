@@ -32,7 +32,8 @@ export function MainLayout({ children }: PropsWithChildren) {
     [menuKeys],
   )
 
-  const selectedKeys = [pathname]
+  const menuSelectedKey = pathname.startsWith('/supplier/') ? '/supplier' : pathname
+  const selectedKeys = [menuSelectedKey]
   const openKeys = pathname.startsWith('/finance')
     ? ['finance']
     : pathname.startsWith('/system')
@@ -40,10 +41,15 @@ export function MainLayout({ children }: PropsWithChildren) {
       : []
 
   const breadcrumbItems = [
-    { title: <Link to="/">首页</Link> },
-    ...(pathname !== '/'
-      ? [{ title: routeTitles[pathname] ?? '页面' }]
-      : []),
+    { title: <Link to="/">{routeTitles['/']}</Link> },
+    ...(pathname.startsWith('/supplier/')
+      ? [
+          { title: <Link to="/supplier">供应商管理</Link> },
+          { title: '详情' },
+        ]
+      : pathname !== '/'
+        ? [{ title: routeTitles[pathname] ?? '页面' }]
+        : []),
   ]
 
   return (

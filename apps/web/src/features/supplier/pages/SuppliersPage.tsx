@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
+import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { SupplierSummary } from '@/types/api'
 import {
   DirectoryProfileStatus,
-  InvoiceAvailable,
   type SupplierCategory,
 } from '@xiaotuanbao/shared'
 import {
@@ -27,53 +27,12 @@ import {
   SUPPLIER_CATEGORY_LABELS,
   catalogLabel,
 } from '../catalog'
-
-function toFormValues(supplier: SupplierSummary): SupplierFormValues {
-  return {
-    name: supplier.name,
-    category: supplier.category as SupplierCategory,
-    status: supplier.status as DirectoryProfileStatus,
-    contactName: supplier.contactName ?? undefined,
-    contactPhone: supplier.contactPhone ?? undefined,
-    settlementMethod: (supplier.settlementMethod as SupplierFormValues['settlementMethod']) ?? undefined,
-    settlementCycle: (supplier.settlementCycle as SupplierFormValues['settlementCycle']) ?? undefined,
-    settlementNotes: supplier.settlementNotes ?? undefined,
-    referenceQuoteNotes: supplier.referenceQuoteNotes ?? undefined,
-    invoiceAvailable: (supplier.invoiceAvailable as SupplierFormValues['invoiceAvailable']) ?? undefined,
-    invoiceType: (supplier.invoiceType as SupplierFormValues['invoiceType']) ?? undefined,
-    taxRate: supplier.taxRate ?? undefined,
-    accountName: supplier.accountName ?? undefined,
-    bankName: supplier.bankName ?? undefined,
-    bankAccount: supplier.bankAccount ?? undefined,
-    businessNotes: supplier.businessNotes ?? undefined,
-  }
-}
-
-function buildCreatePayload(values: SupplierFormValues) {
-  const { status: _status, ...payload } = buildUpdatePayload(values)
-  return payload
-}
-
-function buildUpdatePayload(values: SupplierFormValues) {
-  return {
-    name: values.name,
-    category: values.category,
-    status: values.status ?? DirectoryProfileStatus.ACTIVE,
-    contactName: values.contactName,
-    contactPhone: values.contactPhone,
-    settlementMethod: values.settlementMethod,
-    settlementCycle: values.settlementCycle,
-    settlementNotes: values.settlementNotes,
-    referenceQuoteNotes: values.referenceQuoteNotes,
-    invoiceAvailable: values.invoiceAvailable,
-    invoiceType: values.invoiceType,
-    taxRate: values.taxRate,
-    accountName: values.accountName,
-    bankName: values.bankName,
-    bankAccount: values.bankAccount,
-    businessNotes: values.businessNotes,
-  }
-}
+import {
+  buildCreatePayload,
+  buildUpdatePayload,
+  clearInvoiceFieldsWhenUnavailable,
+  toFormValues,
+} from '../utils/supplier-form'
 
 function buildColumns(
   includeArchived: boolean,
@@ -85,7 +44,11 @@ function buildColumns(
     {
       title: '供应商名称',
       dataIndex: 'name',
-      render: (name: string) => <Typography.Text strong>{name}</Typography.Text>,
+      render: (name: string, record) => (
+        <Link to="/supplier/$supplierId" params={{ supplierId: record.id }}>
+          <Typography.Text strong>{name}</Typography.Text>
+        </Link>
+      ),
     },
     {
       title: '类别',
@@ -211,25 +174,21 @@ export function SuppliersPage() {
   const saveMutation = useMutation({
     mutationFn: async (values: SupplierFormValues) => {
       if (editingSupplier) {
-        const payload = buildUpdatePayload(values)
-        if (payload.invoiceAvailable === InvoiceAvailable.NO) {
-          payload.invoiceType = undefined
-          payload.taxRate = undefined
-        }
+        const payload = clearInvoiceFieldsWhenUnavailable(buildUpdatePayload(values))
         return updateSupplier(editingSupplier.id, payload)
       }
 
-      const createPayload = buildCreatePayload(values)
-      if (createPayload.invoiceAvailable === InvoiceAvailable.NO) {
-        createPayload.invoiceType = undefined
-        createPayload.taxRate = undefined
-      }
+      const createPayload = clearInvoiceFieldsWhenUnavailable(buildCreatePayload(values))
       return createSupplier(createPayload)
     },
     onSuccess: () => {
       message.success(editingSupplier ? '供应商已更新' : '供应商已创建')
+      const editedId = editingSupplier?.id
       closeDrawer()
       queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      if (editedId) {
+        queryClient.invalidateQueries({ queryKey: ['supplier', editedId] })
+      }
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '保存失败')

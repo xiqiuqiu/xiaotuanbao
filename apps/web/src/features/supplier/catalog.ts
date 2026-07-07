@@ -68,6 +68,14 @@ export const INVOICE_TYPE_OPTIONS = [
   { value: InvoiceType.UNSUPPORTED, label: '不支持' },
 ] as const
 
+export const INVOICE_AVAILABLE_LABELS = Object.fromEntries(
+  INVOICE_AVAILABLE_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<InvoiceAvailable, string>
+
+export const INVOICE_TYPE_LABELS = Object.fromEntries(
+  INVOICE_TYPE_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<InvoiceType, string>
+
 export function catalogLabel(
   labels: Record<string, string>,
   value: string | null | undefined,
