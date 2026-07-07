@@ -29,6 +29,11 @@ import {
 import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
+import { DepartureReadModelService } from './departure-read-model.service'
+import {
+  emptyDepartureReadModelAggregate,
+  type DepartureReadModelAggregate,
+} from './departure-read-model.utils'
 
 const UPDATE_DEPARTURE_FIELDS = [
   'departureNo',
@@ -43,6 +48,7 @@ const UPDATE_DEPARTURE_FIELDS = [
 
 const TRANSITION_TARGETS: Partial<Record<DepartureStatus, DepartureStatus[]>> = {
   [DepartureStatus.editing]: [DepartureStatus.pending_settlement],
+  [DepartureStatus.pending_settlement]: [DepartureStatus.settled],
 }
 
 @Injectable()
@@ -52,6 +58,7 @@ export class DepartureService {
     private readonly routeTemplateService: RouteTemplateService,
     private readonly routeTemplateCopyService: RouteTemplateCopyService,
     private readonly departureCopyService: DepartureCopyService,
+    private readonly departureReadModelService: DepartureReadModelService,
   ) {}
 
   async list(
@@ -65,6 +72,14 @@ export class DepartureService {
     const where: Prisma.DepartureWhereInput = {
       organizationId,
       ...(query.status ? { status: query.status } : {}),
+      ...(query.routeName?.trim()
+        ? { routeName: { contains: query.routeName.trim(), mode: 'insensitive' } }
+        : {}),
+      ...(query.departureType ? { departureType: query.departureType } : {}),
+      ...(query.ownerUserId ? { ownerUserId: query.ownerUserId } : {}),
+      ...(query.partnerId
+        ? { sourceOrders: { some: { partnerId: query.partnerId } } }
+        : {}),
       ...(keyword
         ? {
             OR: [
@@ -92,7 +107,7 @@ export class DepartureService {
       this.prisma.departure.count({ where }),
     ])
 
-    let summaries = items.map((departure) => this.toDepartureSummary(departure))
+    let summaries = await this.enrichSummaries(items)
 
     if (query.departureProgress) {
       summaries = summaries.filter((item) => item.departureProgress === query.departureProgress)
@@ -199,7 +214,8 @@ export class DepartureService {
       return created
     })
 
-    return this.toDepartureSummary(departure)
+    const [summary] = await this.enrichSummaries([departure])
+    return summary
   }
 
   async copy(
@@ -269,12 +285,13 @@ export class DepartureService {
       return created
     })
 
-    return this.toDepartureSummary(departure)
+    const [summary] = await this.enrichSummaries([departure])
+    return summary
   }
 
   async getById(organizationId: string, departureId: string): Promise<DepartureDetail> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
-    return this.toDepartureDetail(departure)
+    return this.toDepartureDetailAsync(departure)
   }
 
   async update(
@@ -357,7 +374,7 @@ export class DepartureService {
       data,
     })
 
-    return this.toDepartureDetail(updated)
+    return this.toDepartureDetailAsync(updated)
   }
 
   async transition(
@@ -376,12 +393,22 @@ export class DepartureService {
       throw new BadRequestException('不允许的状态转换')
     }
 
+    if (
+      dto.targetStatus === DepartureStatus.settled &&
+      departure.status === DepartureStatus.pending_settlement
+    ) {
+      const readModel = await this.departureReadModelService.getForDeparture(departure.id)
+      if (!readModel.isFinanciallySettled) {
+        throw new BadRequestException('全部账款尚未结清，不可标记为已结清')
+      }
+    }
+
     const updated = await this.prisma.departure.update({
       where: { id: departure.id },
       data: { status: dto.targetStatus },
     })
 
-    return this.toDepartureDetail(updated)
+    return this.toDepartureDetailAsync(updated)
   }
 
   async close(organizationId: string, departureId: string): Promise<DepartureDetail> {
@@ -396,7 +423,30 @@ export class DepartureService {
       data: { status: DepartureStatus.closed },
     })
 
-    return this.toDepartureDetail(updated)
+    return this.toDepartureDetailAsync(updated)
+  }
+
+  private async enrichSummaries(departures: Departure[]): Promise<DepartureSummary[]> {
+    if (departures.length === 0) {
+      return []
+    }
+
+    const departureIds = departures.map((departure) => departure.id)
+    const ownerUserIds = departures.map((departure) => departure.ownerUserId)
+    const [readModelMap, ownerNameMap] = await Promise.all([
+      this.departureReadModelService.batchGetForDepartures(departureIds),
+      this.departureReadModelService.batchGetOwnerNames(ownerUserIds),
+    ])
+
+    return departures.map((departure) => {
+      const readModel = readModelMap.get(departure.id) ?? emptyDepartureReadModelAggregate()
+      return this.toDepartureSummary(departure, readModel, ownerNameMap.get(departure.ownerUserId))
+    })
+  }
+
+  private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
+    const readModel = await this.departureReadModelService.getForDeparture(departure.id)
+    return this.toDepartureDetail(departure, readModel)
   }
 
   private hasUpdateFields(dto: UpdateDepartureDto): boolean {
@@ -461,23 +511,27 @@ export class DepartureService {
     return `${prefix}${String(count + 1).padStart(4, '0')}`
   }
 
-  private toDepartureDetail(departure: Departure): DepartureDetail {
+  private toDepartureDetail(
+    departure: Departure,
+    readModel: DepartureReadModelAggregate,
+  ): DepartureDetail {
     return {
-      ...this.toDepartureSummary(departure),
-      totalGuests: 0,
-      grossReceivableCents: 0,
-      discountCents: 0,
-      netReceivableCents: 0,
-      payableCents: 0,
-      estimatedMarginCents: 0,
-      collectedCents: 0,
-      uncollectedCents: 0,
-      paidCents: 0,
-      unpaidCents: 0,
+      ...this.toDepartureSummary(departure, readModel),
+      grossReceivableCents: readModel.grossReceivableCents,
+      discountCents: readModel.discountCents,
+      collectedCents: readModel.collectedCents,
+      uncollectedCents: readModel.uncollectedCents,
+      paidCents: readModel.paidCents,
+      unpaidCents: readModel.unpaidCents,
+      isFinanciallySettled: readModel.isFinanciallySettled,
     }
   }
 
-  private toDepartureSummary(departure: Departure): DepartureSummary {
+  private toDepartureSummary(
+    departure: Departure,
+    readModel: DepartureReadModelAggregate = emptyDepartureReadModelAggregate(),
+    ownerName?: string,
+  ): DepartureSummary {
     return {
       id: departure.id,
       departureNo: departure.departureNo,
@@ -490,11 +544,20 @@ export class DepartureService {
       endDate: formatDateOnly(departure.endDate),
       dayCount: departure.dayCount,
       ownerUserId: departure.ownerUserId,
+      ...(ownerName ? { ownerName } : {}),
       status: departure.status,
       departureProgress: deriveDepartureProgress(departure.startDate, departure.endDate),
       notes: departure.notes,
       createdAt: departure.createdAt.toISOString(),
       updatedAt: departure.updatedAt.toISOString(),
+      totalGuests: readModel.totalGuests,
+      sourceOrderCount: readModel.sourceOrderCount,
+      segmentCount: readModel.segmentCount,
+      resourceCount: readModel.resourceCount,
+      completionTags: readModel.completionTags,
+      netReceivableCents: readModel.netReceivableCents,
+      payableCents: readModel.payableCents,
+      estimatedMarginCents: readModel.estimatedMarginCents,
     }
   }
 }

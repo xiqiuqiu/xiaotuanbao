@@ -1,21 +1,61 @@
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
-import { DepartureStatus } from '@xiaotuanbao/shared'
-import { DEPARTURE_STATUS_OPTIONS } from '../catalog'
+import { DepartureProgress, DepartureStatus, DepartureType } from '@xiaotuanbao/shared'
+import {
+  DEPARTURE_PROGRESS_OPTIONS,
+  DEPARTURE_STATUS_OPTIONS,
+  DEPARTURE_TYPE_OPTIONS,
+} from '../catalog'
 
 export type DateRangeStrings = [string | undefined, string | undefined] | null
 
+export interface DepartureFilterValues {
+  keyword?: string
+  routeName?: string
+  departureType?: DepartureType
+  departureProgress?: DepartureProgress
+  status?: DepartureStatus
+  ownerUserId?: string
+  partnerId?: string
+  startDateFrom?: string
+  startDateTo?: string
+}
+
 interface DepartureFiltersProps {
   statusFilter?: DepartureStatus
+  routeNameFilter?: string
+  departureTypeFilter?: DepartureType
+  departureProgressFilter?: DepartureProgress
+  ownerUserIdFilter?: string
+  partnerIdFilter?: string
+  ownerOptions: Array<{ value: string; label: string }>
+  partnerOptions: Array<{ value: string; label: string }>
   onSearch: (value: string) => void
+  onRouteNameChange: (value?: string) => void
+  onDepartureTypeChange: (value?: DepartureType) => void
+  onDepartureProgressChange: (value?: DepartureProgress) => void
   onStatusChange: (value?: DepartureStatus) => void
+  onOwnerChange: (value?: string) => void
+  onPartnerChange: (value?: string) => void
   onStartDateRangeChange: (value: DateRangeStrings) => void
   onReset: () => void
 }
 
 export function DepartureFilters({
   statusFilter,
+  routeNameFilter,
+  departureTypeFilter,
+  departureProgressFilter,
+  ownerUserIdFilter,
+  partnerIdFilter,
+  ownerOptions,
+  partnerOptions,
   onSearch,
+  onRouteNameChange,
+  onDepartureTypeChange,
+  onDepartureProgressChange,
   onStatusChange,
+  onOwnerChange,
+  onPartnerChange,
   onStartDateRangeChange,
   onReset,
 }: DepartureFiltersProps) {
@@ -28,13 +68,56 @@ export function DepartureFilters({
           style={{ width: 240 }}
           onSearch={(value) => onSearch(value.trim())}
         />
+        <Input
+          allowClear
+          placeholder="路线名称"
+          style={{ width: 160 }}
+          value={routeNameFilter}
+          onChange={(event) => onRouteNameChange(event.target.value || undefined)}
+        />
+        <Select
+          allowClear
+          placeholder="发团类型"
+          style={{ width: 120 }}
+          value={departureTypeFilter}
+          onChange={onDepartureTypeChange}
+          options={[...DEPARTURE_TYPE_OPTIONS]}
+        />
+        <Select
+          allowClear
+          placeholder="出团进度"
+          style={{ width: 120 }}
+          value={departureProgressFilter}
+          onChange={onDepartureProgressChange}
+          options={[...DEPARTURE_PROGRESS_OPTIONS]}
+        />
         <Select
           allowClear
           placeholder="发团状态"
-          style={{ width: 140 }}
+          style={{ width: 120 }}
           value={statusFilter}
           onChange={onStatusChange}
           options={[...DEPARTURE_STATUS_OPTIONS]}
+        />
+        <Select
+          allowClear
+          placeholder="负责人"
+          style={{ width: 140 }}
+          value={ownerUserIdFilter}
+          onChange={onOwnerChange}
+          options={ownerOptions}
+          showSearch
+          optionFilterProp="label"
+        />
+        <Select
+          allowClear
+          placeholder="发客客户"
+          style={{ width: 160 }}
+          value={partnerIdFilter}
+          onChange={onPartnerChange}
+          options={partnerOptions}
+          showSearch
+          optionFilterProp="label"
         />
         <DatePicker.RangePicker
           allowClear

@@ -90,8 +90,12 @@ export function DepartureDetailPage() {
     )
   }
 
-  const readOnly =
-    departure.status === DepartureStatus.CLOSED ||
+  const readOnly = departure.status === DepartureStatus.CLOSED
+  const amountReadOnly =
+    departure.status === DepartureStatus.SETTLED ||
+    departure.status === DepartureStatus.CLOSED
+  const overviewReadOnly =
+    readOnly ||
     departure.status === DepartureStatus.SETTLED
 
   const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
@@ -105,7 +109,7 @@ export function DepartureDetailPage() {
           <DepartureOverview
             departure={departure}
             form={form}
-            readOnly={readOnly}
+            readOnly={overviewReadOnly}
             onUpdated={handleUpdated}
           />
         ),
@@ -116,7 +120,7 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: <SourceOrdersTab departure={departure} readOnly={readOnly} />,
+        children: <SourceOrdersTab departure={departure} readOnly={readOnly} amountReadOnly={amountReadOnly} />,
       }
     }
 
@@ -137,6 +141,7 @@ export function DepartureDetailPage() {
             departure={departure}
             segmentId={search.segmentId}
             readOnly={readOnly}
+            amountReadOnly={amountReadOnly}
           />
         ),
       }

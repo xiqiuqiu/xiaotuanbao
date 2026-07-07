@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module'
 import { FinanceModule } from '../finance/finance.module'
 import { DepartureController } from './departure.controller'
 import { DepartureService } from './departure.service'
+import { DepartureReadModelService } from './departure-read-model.service'
 import { RouteTemplateController } from './route-template.controller'
 import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
@@ -28,6 +29,7 @@ import { DepartureFinanceReadController } from './departure-finance-read.control
   ],
   providers: [
     DepartureService,
+    DepartureReadModelService,
     RouteTemplateService,
     RouteTemplateCopyService,
     DepartureCopyService,

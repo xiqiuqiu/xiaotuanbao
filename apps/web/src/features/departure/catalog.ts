@@ -80,6 +80,22 @@ export function formatCents(cents: number): string {
   return `¥${(cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+export function renderCompletionTags(tags: {
+  sourceOrders: string
+  segments: string
+  resources: string
+  receivables: string
+  payables: string
+}) {
+  return [
+    tags.sourceOrders,
+    tags.segments,
+    tags.resources,
+    tags.receivables,
+    tags.payables,
+  ].map((label) => ({ label }))
+}
+
 export const SOURCE_ORDER_COLLECTION_OPTIONS = [
   { value: SourceOrderCollectionMode.GUEST_ONLY, label: '全部我方代收' },
   { value: SourceOrderCollectionMode.SPLIT, label: '客户已收 + 我方代收' },

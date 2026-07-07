@@ -133,6 +133,14 @@ export interface PartnerListResult {
   summary: PartnerListSummary
 }
 
+export interface DepartureCompletionTags {
+  sourceOrders: string
+  segments: string
+  resources: string
+  receivables: string
+  payables: string
+}
+
 export interface DepartureSummary {
   id: string
   departureNo: string
@@ -145,11 +153,20 @@ export interface DepartureSummary {
   endDate: string
   dayCount: number
   ownerUserId: string
+  ownerName?: string
   status: string
   departureProgress: string
   notes: string | null
   createdAt: string
   updatedAt: string
+  totalGuests: number
+  sourceOrderCount: number
+  segmentCount: number
+  resourceCount: number
+  completionTags: DepartureCompletionTags
+  netReceivableCents: number
+  payableCents: number
+  estimatedMarginCents: number
 }
 
 export interface DepartureListResult {
@@ -202,18 +219,15 @@ export interface TransitionDepartureDto {
   targetStatus: string
 }
 
-/** Detail response extends summary with Read Model aggregates (placeholder zeros until E7). */
+/** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
-  totalGuests: number
   grossReceivableCents: number
   discountCents: number
-  netReceivableCents: number
-  payableCents: number
-  estimatedMarginCents: number
   collectedCents: number
   uncollectedCents: number
   paidCents: number
   unpaidCents: number
+  isFinanciallySettled: boolean
 }
 
 export interface RouteTemplateCardSummary {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Button, DatePicker, Form, Input, Popconfirm, Select, Space, Typography, message } from 'antd'
+import { Alert, Button, DatePicker, Form, Input, Popconfirm, Select, Space, Typography, message } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -89,12 +89,10 @@ export function DepartureOverview({
   })
 
   const transitionMutation = useMutation({
-    mutationFn: () =>
-      transitionDeparture(departure.id, {
-        targetStatus: DepartureStatus.PENDING_SETTLEMENT,
-      }),
+    mutationFn: (targetStatus: DepartureStatus) =>
+      transitionDeparture(departure.id, { targetStatus }),
     onSuccess: () => {
-      message.success('已切换为待结算')
+      message.success('状态已更新')
       onUpdated()
     },
     onError: (error) => {
@@ -147,11 +145,34 @@ export function DepartureOverview({
 
   const canTransitionToPending =
     !readOnly && departure.status === DepartureStatus.EDITING
+  const canTransitionToSettled =
+    !readOnly &&
+    departure.status === DepartureStatus.PENDING_SETTLEMENT &&
+    departure.isFinanciallySettled
   const canClose =
     !readOnly && departure.status !== DepartureStatus.CLOSED
 
   return (
     <div>
+      {canTransitionToSettled ? (
+        <Alert
+          type="success"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="全部账款已结清，可标记为已结清"
+          action={
+            <Popconfirm
+              title="确认标记为已结清？"
+              onConfirm={() => transitionMutation.mutate(DepartureStatus.SETTLED)}
+            >
+              <Button size="small" type="primary" loading={transitionMutation.isPending}>
+                标记为已结清
+              </Button>
+            </Popconfirm>
+          }
+        />
+      ) : null}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Typography.Title level={5} style={{ margin: 0 }}>
           基础信息
@@ -160,7 +181,7 @@ export function DepartureOverview({
           {canTransitionToPending ? (
             <Popconfirm
               title="确认切换为待结算？"
-              onConfirm={() => transitionMutation.mutate()}
+              onConfirm={() => transitionMutation.mutate(DepartureStatus.PENDING_SETTLEMENT)}
             >
               <Button loading={transitionMutation.isPending}>切换为待结算</Button>
             </Popconfirm>

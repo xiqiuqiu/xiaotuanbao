@@ -30,6 +30,7 @@ interface ResourceDrawerProps {
   segment?: ItinerarySegmentSummary
   editing: SegmentResourceSummary | null
   readOnly: boolean
+  amountReadOnly?: boolean
   loading: boolean
   form: FormInstance<ResourceFormValues>
   onClose: () => void
@@ -41,6 +42,7 @@ export function ResourceDrawer({
   segment,
   editing,
   readOnly,
+  amountReadOnly = false,
   loading,
   form,
   onClose,
@@ -198,7 +200,7 @@ export function ResourceDrawer({
             min={0.01}
             precision={2}
             style={{ width: '100%' }}
-            disabled={readOnly || amountFieldsLocked}
+            disabled={readOnly || amountReadOnly || amountFieldsLocked}
           />
         </Form.Item>
 

@@ -16,6 +16,7 @@ export type {
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
+  DepartureCompletionTags,
   DepartureSummary,
   DepartureListResult,
   DepartureDetail,

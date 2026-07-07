@@ -8,11 +8,16 @@ import type {
   TransitionDepartureDto,
   UpdateDepartureDto,
 } from '@/types/api'
-import type { DepartureStatus } from '@xiaotuanbao/shared'
+import type { DepartureStatus, DepartureProgress, DepartureType } from '@xiaotuanbao/shared'
 
 export interface ListDeparturesParams {
   keyword?: string
+  routeName?: string
+  departureType?: DepartureType
+  departureProgress?: DepartureProgress
   status?: DepartureStatus
+  ownerUserId?: string
+  partnerId?: string
   startDateFrom?: string
   startDateTo?: string
   page?: number

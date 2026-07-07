@@ -41,10 +41,30 @@ describe('Departure API (e2e)', () => {
   })
 
   afterAll(async () => {
+    await prisma.financeVerification.deleteMany({
+      where: {
+        organizationId,
+        paymentSchedule: {
+          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        },
+      },
+    })
+    await prisma.financeTransaction.deleteMany({
+      where: {
+        organizationId,
+        verifications: {
+          some: {
+            paymentSchedule: {
+              departure: { organizationId, departureNo: { startsWith: testPrefix } },
+            },
+          },
+        },
+      },
+    })
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
-        scheduleNo: { startsWith: testPrefix },
+        departure: { departureNo: { startsWith: testPrefix } },
       },
     })
     await prisma.sourceOrderGuest.deleteMany({
@@ -72,6 +92,12 @@ describe('Departure API (e2e)', () => {
       },
     })
     await prisma.partner.deleteMany({
+      where: {
+        organizationId,
+        name: { startsWith: testPrefix },
+      },
+    })
+    await prisma.supplier.deleteMany({
       where: {
         organizationId,
         name: { startsWith: testPrefix },
@@ -838,6 +864,303 @@ describe('Departure API (e2e)', () => {
         .expect(409)
 
       expect(createResponse.body.message).toBe('发团已关闭，不可编辑')
+    })
+  })
+
+  describe('Read Model', () => {
+    let rmPartnerId: string
+    let rmSupplierId: string
+
+    beforeAll(async () => {
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-rm-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      rmPartnerId = partner.id
+
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-rm-supplier`,
+          category: SupplierCategory.transport,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      rmSupplierId = supplier.id
+    })
+
+    async function createReadModelDeparture(suffix = '') {
+      const departureNo = `${testPrefix}-rm${suffix}-${Math.random().toString(36).slice(2, 8)}`
+      const response = await authRequest(app, coordinatorToken)
+        .post('/api/departures')
+        .send(
+          createPayload({
+            departureNo,
+            name: `${testPrefix}-rm${suffix}`,
+            startDate: '2026-08-01',
+            endDate: '2026-08-10',
+          }),
+        )
+        .expect(201)
+
+      return response.body.data as { id: string }
+    }
+
+    async function seedDepartureData(departureId: string) {
+      const sourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departureId}/source-orders`)
+        .send({
+          partnerId: rmPartnerId,
+          guestCount: 10,
+          unitPriceCents: 100000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departureId}/segments`)
+        .send({
+          name: '喀纳斯段',
+          startDate: '2026-08-01',
+          endDate: '2026-08-05',
+          destination: '喀纳斯',
+        })
+        .expect(201)
+
+      const resource = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.transport,
+          supplierId: rmSupplierId,
+          title: '用车',
+          amountCents: 360000,
+        })
+        .expect(201)
+
+      return {
+        sourceOrderId: sourceOrder.body.data.id as string,
+        displayName: sourceOrder.body.data.displayName as string,
+        resourceId: resource.body.data.id as string,
+      }
+    }
+
+    it('returns aggregated read model fields on detail', async () => {
+      const departure = await createReadModelDeparture('-detail')
+      await seedDepartureData(departure.id)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(response.body.data).toMatchObject({
+        totalGuests: 10,
+        sourceOrderCount: 1,
+        segmentCount: 1,
+        resourceCount: 1,
+        grossReceivableCents: 1000000,
+        discountCents: 0,
+        netReceivableCents: 1000000,
+        payableCents: 360000,
+        estimatedMarginCents: 640000,
+        collectedCents: 0,
+        uncollectedCents: 0,
+        paidCents: 0,
+        unpaidCents: 0,
+        isFinanciallySettled: false,
+      })
+      expect(response.body.data.completionTags).toMatchObject({
+        sourceOrders: '客源1单',
+        segments: '行程1段',
+        resources: '资源1项',
+        receivables: '应收未生成',
+        payables: '应付未生成',
+      })
+    })
+
+    it('returns completionTags on list items', async () => {
+      const departure = await createReadModelDeparture('-list')
+      await seedDepartureData(departure.id)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get('/api/departures')
+        .query({ keyword: `${testPrefix}-rm-list`, pageSize: 10 })
+        .expect(200)
+
+      const item = response.body.data.items.find(
+        (row: { id: string }) => row.id === departure.id,
+      )
+      expect(item).toBeTruthy()
+      expect(item.completionTags).toMatchObject({
+        sourceOrders: '客源1单',
+        segments: '行程1段',
+        resources: '资源1项',
+      })
+      expect(item.netReceivableCents).toBe(1000000)
+      expect(item.payableCents).toBe(360000)
+    })
+
+    it('filters departures by partnerId', async () => {
+      const withPartner = await createReadModelDeparture('-partner-a')
+      await seedDepartureData(withPartner.id)
+
+      const withoutPartner = await createReadModelDeparture('-partner-b')
+
+      const response = await authRequest(app, coordinatorToken)
+        .get('/api/departures')
+        .query({ partnerId: rmPartnerId, keyword: `${testPrefix}-rm-partner`, pageSize: 20 })
+        .expect(200)
+
+      const ids = response.body.data.items.map((item: { id: string }) => item.id)
+      expect(ids).toContain(withPartner.id)
+      expect(ids).not.toContain(withoutPartner.id)
+    })
+
+    it('reflects collected and uncollected amounts after confirm-collection', async () => {
+      const departure = await createReadModelDeparture('-finance')
+      const seeded = await seedDepartureData(departure.id)
+
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+
+      const scheduleId = generated.body.data.schedules[0].id as string
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+        .send({
+          amountCents: 500000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(response.body.data.collectedCents).toBe(500000)
+      expect(response.body.data.uncollectedCents).toBe(500000)
+      expect(response.body.data.completionTags.receivables).toBe('应收已生成')
+      expect(response.body.data.isFinanciallySettled).toBe(false)
+    })
+
+    it('sets isFinanciallySettled when all schedules are settled or cancelled', async () => {
+      const departure = await createReadModelDeparture('-settled')
+      const seeded = await seedDepartureData(departure.id)
+
+      const receivable = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const receivableScheduleId = receivable.body.data.schedules[0].id as string
+
+      const payable = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${seeded.resourceId}/generate-payable`)
+        .expect(201)
+      const payableScheduleId = payable.body.data.schedule.id as string
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivableScheduleId}/confirm-collection`)
+        .send({
+          amountCents: 1000000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+        .send({
+          amountCents: 360000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: rmSupplierId,
+        })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(detail.body.data.isFinanciallySettled).toBe(true)
+      expect(detail.body.data.completionTags.receivables).toBe('已收齐')
+      expect(detail.body.data.completionTags.payables).toBe('已付清')
+      expect(detail.body.data.collectedCents).toBe(1000000)
+      expect(detail.body.data.uncollectedCents).toBe(0)
+      expect(detail.body.data.paidCents).toBe(360000)
+      expect(detail.body.data.unpaidCents).toBe(0)
+    })
+
+    it('rejects pending_settlement to settled when not financially settled', async () => {
+      const departure = await createReadModelDeparture('-reject-settled')
+      await seedDepartureData(departure.id)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/transition`)
+        .send({ targetStatus: DepartureStatus.pending_settlement })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/transition`)
+        .send({ targetStatus: DepartureStatus.settled })
+        .expect(400)
+
+      expect(response.body.message).toBe('全部账款尚未结清，不可标记为已结清')
+    })
+
+    it('transitions pending_settlement to settled when financially settled', async () => {
+      const departure = await createReadModelDeparture('-transition-settled')
+      const seeded = await seedDepartureData(departure.id)
+
+      const receivable = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const receivableScheduleId = receivable.body.data.schedules[0].id as string
+
+      const payable = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${seeded.resourceId}/generate-payable`)
+        .expect(201)
+      const payableScheduleId = payable.body.data.schedule.id as string
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivableScheduleId}/confirm-collection`)
+        .send({
+          amountCents: 1000000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+        .send({
+          amountCents: 360000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: rmSupplierId,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/transition`)
+        .send({ targetStatus: DepartureStatus.pending_settlement })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/transition`)
+        .send({ targetStatus: DepartureStatus.settled })
+        .expect(201)
+
+      expect(response.body.data.status).toBe(DepartureStatus.settled)
+      expect(response.body.data.isFinanciallySettled).toBe(true)
     })
   })
 })

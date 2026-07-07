@@ -43,9 +43,10 @@ interface ResourcesTabProps {
   departure: DepartureDetail
   segmentId?: string
   readOnly: boolean
+  amountReadOnly?: boolean
 }
 
-export function ResourcesTab({ departure, segmentId, readOnly }: ResourcesTabProps) {
+export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = false }: ResourcesTabProps) {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<ResourceFormValues>()
   const [resourceKindFilter, setResourceKindFilter] = useState<ResourceKind>()
@@ -330,6 +331,7 @@ export function ResourcesTab({ departure, segmentId, readOnly }: ResourcesTabPro
         segment={segment as ItinerarySegmentSummary | undefined}
         editing={editingResource}
         readOnly={readOnly || viewOnly}
+        amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         form={form}
         onClose={() => {

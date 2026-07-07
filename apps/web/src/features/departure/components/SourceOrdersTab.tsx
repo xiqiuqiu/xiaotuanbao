@@ -43,9 +43,10 @@ import { formValuesToPayload } from '../utils/source-order-form'
 interface SourceOrdersTabProps {
   departure: DepartureDetail
   readOnly: boolean
+  amountReadOnly?: boolean
 }
 
-export function SourceOrdersTab({ departure, readOnly }: SourceOrdersTabProps) {
+export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }: SourceOrdersTabProps) {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<SourceOrderFormValues>()
   const [partnerFilter, setPartnerFilter] = useState<string>()
@@ -376,6 +377,7 @@ export function SourceOrdersTab({ departure, readOnly }: SourceOrdersTabProps) {
         open={drawerOpen}
         editing={editingOrder}
         readOnly={readOnly || viewOnly}
+        amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         form={form}
         onClose={() => {

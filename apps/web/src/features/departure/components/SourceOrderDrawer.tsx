@@ -36,6 +36,7 @@ interface SourceOrderDrawerProps {
   open: boolean
   editing: SourceOrderSummary | null
   readOnly: boolean
+  amountReadOnly?: boolean
   loading: boolean
   form: FormInstance<SourceOrderFormValues>
   onClose: () => void
@@ -75,6 +76,7 @@ export function SourceOrderDrawer({
   open,
   editing,
   readOnly,
+  amountReadOnly = false,
   loading,
   form,
   onClose,
@@ -83,6 +85,7 @@ export function SourceOrderDrawer({
   const discountType = Form.useWatch('discountType', form)
   const collectionMode = Form.useWatch('collectionMode', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
+  const lockAmounts = readOnly || amountReadOnly || amountFieldsLocked
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -173,7 +176,7 @@ export function SourceOrderDrawer({
             min={1}
             precision={0}
             style={{ width: '100%' }}
-            disabled={readOnly || amountFieldsLocked}
+            disabled={lockAmounts}
           />
         </Form.Item>
         <Form.Item name="notes" label="备注">
@@ -191,7 +194,7 @@ export function SourceOrderDrawer({
             min={0}
             precision={2}
             style={{ width: '100%' }}
-            disabled={readOnly || amountFieldsLocked}
+            disabled={lockAmounts}
           />
         </Form.Item>
         <Form.Item
@@ -201,7 +204,7 @@ export function SourceOrderDrawer({
         >
           <Select
             options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]}
-            disabled={readOnly || amountFieldsLocked}
+            disabled={lockAmounts}
           />
         </Form.Item>
         {discountType === SourceOrderDiscountType.LUMP_SUM ? (
@@ -214,7 +217,7 @@ export function SourceOrderDrawer({
               min={0}
               precision={2}
               style={{ width: '100%' }}
-              disabled={readOnly || amountFieldsLocked}
+              disabled={lockAmounts}
             />
           </Form.Item>
         ) : null}
@@ -231,7 +234,7 @@ export function SourceOrderDrawer({
         >
           <Select
             options={[...SOURCE_ORDER_COLLECTION_OPTIONS]}
-            disabled={readOnly || amountFieldsLocked}
+            disabled={lockAmounts}
           />
         </Form.Item>
         {collectionMode === SourceOrderCollectionMode.SPLIT ? (
@@ -244,7 +247,7 @@ export function SourceOrderDrawer({
               min={0}
               precision={2}
               style={{ width: '100%' }}
-              disabled={readOnly || amountFieldsLocked}
+              disabled={lockAmounts}
             />
           </Form.Item>
         ) : null}

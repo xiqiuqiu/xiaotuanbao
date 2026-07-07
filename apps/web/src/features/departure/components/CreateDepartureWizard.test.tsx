@@ -59,6 +59,20 @@ const mockDeparture: DepartureSummary = {
   notes: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  totalGuests: 0,
+  sourceOrderCount: 0,
+  segmentCount: 0,
+  resourceCount: 0,
+  completionTags: {
+    sourceOrders: '客源未录入',
+    segments: '行程未录入',
+    resources: '资源未安排',
+    receivables: '应收未生成',
+    payables: '应付未生成',
+  },
+  netReceivableCents: 0,
+  payableCents: 0,
+  estimatedMarginCents: 0,
 }
 
 function renderWizard() {
