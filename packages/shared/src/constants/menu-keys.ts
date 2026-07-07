@@ -15,7 +15,7 @@ export const V1_MENU_KEYS = [
 export type MenuKey = (typeof V1_MENU_KEYS)[number]
 
 export const MENU_KEY_LABELS: Record<MenuKey, string> = {
-  '/': '首页',
+  '/': '工作台',
   '/departure': '发团管理',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',

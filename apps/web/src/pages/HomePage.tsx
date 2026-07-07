@@ -14,10 +14,11 @@ export function HomePage() {
 
   return (
     <div>
-      <Typography.Title level={3}>欢迎回来，{user?.name}</Typography.Title>
+      <Typography.Title level={3}>工作台</Typography.Title>
       <Typography.Paragraph type="secondary">
-        {user?.organizationName} · 小团宝后台管理系统
+        概览整体情况，追踪业务进度 · {user?.organizationName}
       </Typography.Paragraph>
+      <Typography.Paragraph>欢迎回来，{user?.name}</Typography.Paragraph>
 
       <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
         <Col xs={24} sm={12} lg={6}>

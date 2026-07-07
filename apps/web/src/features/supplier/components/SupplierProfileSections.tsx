@@ -116,28 +116,16 @@ export function SupplierProfileSections({ form, showStatus = false }: SupplierPr
                 <Form.Item label="税率" name="taxRate">
                   <Input disabled={invoiceDisabled} placeholder="例如：3%" />
                 </Form.Item>
-                <Collapse
-                  defaultActiveKey={[]}
-                  items={[
-                    {
-                      key: 'bank',
-                      label: '收款账户信息',
-                      children: (
-                        <>
-                          <Form.Item label="开户名称" name="accountName">
-                            <Input placeholder="可选" />
-                          </Form.Item>
-                          <Form.Item label="开户行" name="bankName">
-                            <Input placeholder="可选" />
-                          </Form.Item>
-                          <Form.Item label="银行账号" name="bankAccount">
-                            <Input placeholder="可选" />
-                          </Form.Item>
-                        </>
-                      ),
-                    },
-                  ]}
-                />
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>收款账户信息</div>
+                <Form.Item label="开户名称" name="accountName">
+                  <Input placeholder="可选" />
+                </Form.Item>
+                <Form.Item label="开户行" name="bankName">
+                  <Input placeholder="可选" />
+                </Form.Item>
+                <Form.Item label="银行账号" name="bankAccount">
+                  <Input placeholder="可选" />
+                </Form.Item>
               </>
             ),
           },

@@ -1,4 +1,4 @@
-import { Collapse, Descriptions } from 'antd'
+import { Descriptions } from 'antd'
 import type { ReactNode } from 'react'
 import { InvoiceAvailable } from '@xiaotuanbao/shared'
 import type { SupplierSummary } from '@/types/api'
@@ -55,53 +55,27 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
         </Descriptions>
       </ReadonlySection>
 
-      <Collapse
-        defaultActiveKey={[]}
-        items={[
-          {
-            key: 'financial',
-            label: '更多财务信息',
-            children: (
-              <>
-                <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
-                  <Descriptions.Item label="是否可开票">
-                    {catalogLabel(INVOICE_AVAILABLE_LABELS, supplier.invoiceAvailable)}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="发票类型">
-                    {invoiceDisabled
-                      ? '—'
-                      : catalogLabel(INVOICE_TYPE_LABELS, supplier.invoiceType)}
-                  </Descriptions.Item>
-                  <Descriptions.Item label="税率">
-                    {invoiceDisabled ? '—' : (supplier.taxRate ?? '—')}
-                  </Descriptions.Item>
-                </Descriptions>
-                <Collapse
-                  defaultActiveKey={[]}
-                  items={[
-                    {
-                      key: 'bank',
-                      label: '收款账户信息',
-                      children: (
-                        <Descriptions column={1} size="small" bordered>
-                          <Descriptions.Item label="开户名称">
-                            {supplier.accountName ?? '—'}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="开户行">{supplier.bankName ?? '—'}</Descriptions.Item>
-                          <Descriptions.Item label="银行账号">
-                            {supplier.bankAccount ?? '—'}
-                          </Descriptions.Item>
-                        </Descriptions>
-                      ),
-                    },
-                  ]}
-                />
-              </>
-            ),
-          },
-        ]}
-        style={{ marginBottom: 16 }}
-      />
+      <ReadonlySection title="更多财务信息">
+        <Descriptions column={1} size="small" bordered>
+          <Descriptions.Item label="是否可开票">
+            {catalogLabel(INVOICE_AVAILABLE_LABELS, supplier.invoiceAvailable)}
+          </Descriptions.Item>
+          <Descriptions.Item label="发票类型">
+            {invoiceDisabled ? '—' : catalogLabel(INVOICE_TYPE_LABELS, supplier.invoiceType)}
+          </Descriptions.Item>
+          <Descriptions.Item label="税率">
+            {invoiceDisabled ? '—' : (supplier.taxRate ?? '—')}
+          </Descriptions.Item>
+        </Descriptions>
+      </ReadonlySection>
+
+      <ReadonlySection title="收款账户信息">
+        <Descriptions column={1} size="small" bordered>
+          <Descriptions.Item label="开户名称">{supplier.accountName ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="开户行">{supplier.bankName ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="银行账号">{supplier.bankAccount ?? '—'}</Descriptions.Item>
+        </Descriptions>
+      </ReadonlySection>
 
       <ReadonlySection title="备注">
         <Descriptions column={1} size="small" bordered>
