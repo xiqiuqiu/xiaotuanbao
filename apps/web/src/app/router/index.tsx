@@ -13,6 +13,7 @@ import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { PartnersPage } from '@/features/partner/pages/PartnersPage'
+import { DeparturesPage } from '@/features/departure/pages/DeparturesPage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
@@ -54,7 +55,15 @@ const indexRoute = createRoute({
 const departureRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure',
-  component: () => <PlaceholderPage title="发团管理" />,
+  component: DeparturesPage,
+})
+
+const departureNewRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/departure/new',
+  component: () => (
+    <PlaceholderPage title="新建发团" description="新建向导将在后续迭代中实现。" />
+  ),
 })
 
 const financeReceivableRoute = createRoute({
@@ -128,6 +137,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     indexRoute,
     departureRoute,
+    departureNewRoute,
     financeReceivableRoute,
     financePayableRoute,
     financeTransactionsRoute,

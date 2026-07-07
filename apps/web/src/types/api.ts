@@ -16,6 +16,9 @@ export type {
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
+  DepartureSummary,
+  DepartureListResult,
+  CreateDepartureDto,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -29,4 +32,8 @@ export {
   PartnerKind,
   PartnerType,
   PartnerContactRole,
+  DepartureStatus,
+  DepartureType,
+  DepartureRouteSource,
+  DepartureProgress,
 } from '@xiaotuanbao/shared'

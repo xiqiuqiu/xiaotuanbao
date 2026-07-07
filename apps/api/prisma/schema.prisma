@@ -99,6 +99,30 @@ enum PartnerContactRole {
   @@map("partner_contact_role")
 }
 
+enum DepartureRouteSource {
+  template
+  manual
+  copy
+
+  @@map("departure_route_source")
+}
+
+enum DepartureType {
+  independent
+  combined
+
+  @@map("departure_type")
+}
+
+enum DepartureStatus {
+  editing
+  pending_settlement
+  settled
+  closed
+
+  @@map("departure_status")
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -108,6 +132,7 @@ model Organization {
   users     User[]
   suppliers Supplier[]
   partners  Partner[]
+  departures Departure[]
 
   @@map("organizations")
 }
@@ -127,6 +152,7 @@ model User {
   updatedAt       DateTime     @updatedAt @map("updated_at")
   deletedAt       DateTime?    @map("deleted_at")
   roles           UserRole[]
+  ownedDepartures Departure[]  @relation("DepartureOwner")
 
   @@unique([organizationId, username])
   @@map("users")
@@ -220,4 +246,28 @@ model Partner {
 
   @@unique([organizationId, name])
   @@map("partners")
+}
+
+model Departure {
+  id               String               @id @default(cuid())
+  organizationId   String               @map("organization_id")
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  departureNo      String               @map("departure_no")
+  name             String
+  routeName        String               @map("route_name")
+  routeSource      DepartureRouteSource @default(manual) @map("route_source")
+  sourceTemplateId String?              @map("source_template_id")
+  departureType    DepartureType        @default(combined) @map("departure_type")
+  startDate        DateTime             @map("start_date") @db.Date
+  endDate          DateTime             @map("end_date") @db.Date
+  dayCount         Int                  @map("day_count")
+  ownerUserId      String               @map("owner_user_id")
+  owner            User                 @relation("DepartureOwner", fields: [ownerUserId], references: [id])
+  status           DepartureStatus      @default(editing)
+  notes            String?
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+
+  @@unique([organizationId, departureNo])
+  @@map("departures")
 }

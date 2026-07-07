@@ -16,6 +16,9 @@ export type {
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
+  DepartureSummary,
+  DepartureListResult,
+  CreateDepartureDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -30,3 +33,7 @@ export { InvoiceType } from './enums/invoice-type.enum'
 export { PartnerKind } from './enums/partner-kind.enum'
 export { PartnerType } from './enums/partner-type.enum'
 export { PartnerContactRole } from './enums/partner-contact-role.enum'
+export { DepartureStatus } from './enums/departure-status.enum'
+export { DepartureType } from './enums/departure-type.enum'
+export { DepartureRouteSource } from './enums/departure-route-source.enum'
+export { DepartureProgress } from './enums/departure-progress.enum'

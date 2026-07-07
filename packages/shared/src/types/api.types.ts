@@ -132,3 +132,40 @@ export interface PartnerListResult {
   pageSize: number
   summary: PartnerListSummary
 }
+
+export interface DepartureSummary {
+  id: string
+  departureNo: string
+  name: string
+  routeName: string
+  routeSource: string
+  sourceTemplateId: string | null
+  departureType: string
+  startDate: string
+  endDate: string
+  dayCount: number
+  ownerUserId: string
+  status: string
+  departureProgress: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DepartureListResult {
+  items: DepartureSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CreateDepartureDto {
+  name: string
+  routeName: string
+  startDate: string
+  endDate: string
+  ownerUserId: string
+  departureNo?: string
+  departureType?: string
+  notes?: string
+}
