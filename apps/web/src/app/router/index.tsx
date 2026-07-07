@@ -11,7 +11,6 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { PartnersPage } from '@/features/partner/pages/PartnersPage'
 import { DeparturesPage } from '@/features/departure/pages/DeparturesPage'
 import { CreateDeparturePage } from '@/features/departure/pages/CreateDeparturePage'
@@ -20,6 +19,10 @@ import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
 import { PartnerDetailPage } from '@/features/partner/pages/PartnerDetailPage'
+import { ReceivablesPage } from '@/features/finance/pages/ReceivablesPage'
+import { PayablesPage } from '@/features/finance/pages/PayablesPage'
+import { TransactionsPage } from '@/features/finance/pages/TransactionsPage'
+import { VerificationsPage } from '@/features/finance/pages/VerificationsPage'
 import { OrganizationPage } from '@/pages/system/OrganizationPage'
 import { RolesPage } from '@/pages/system/RolesPage'
 
@@ -85,25 +88,25 @@ const departureDetailRoute = createRoute({
 const financeReceivableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/receivable',
-  component: () => <PlaceholderPage title="应收管理" />,
+  component: ReceivablesPage,
 })
 
 const financePayableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/payable',
-  component: () => <PlaceholderPage title="应付管理" />,
+  component: PayablesPage,
 })
 
 const financeTransactionsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/transactions',
-  component: () => <PlaceholderPage title="财务流水" />,
+  component: TransactionsPage,
 })
 
 const financeVerificationRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/verification',
-  component: () => <PlaceholderPage title="核销管理" />,
+  component: VerificationsPage,
 })
 
 const partnerRoute = createRoute({

@@ -45,6 +45,12 @@ export type {
   GeneratePayableResult,
   CreateSegmentResourceDto,
   UpdateSegmentResourceDto,
+  PaymentScheduleSummary,
+  PaymentScheduleListResult,
+  FinanceTransactionSummary,
+  FinanceTransactionListResult,
+  FinanceVerificationSummary,
+  FinanceVerificationListResult,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -67,4 +73,8 @@ export {
   SourceOrderReceivableStatus,
   SegmentPayableStatus,
   GuestGender,
+  PaymentScheduleStatus,
+  TransactionDirection,
+  VerificationStatus,
+  CounterpartyType,
 } from '@xiaotuanbao/shared'

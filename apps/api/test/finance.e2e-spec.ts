@@ -451,6 +451,15 @@ describe('Finance API (e2e)', () => {
     ).toBe(true)
   })
 
+  it('returns 403 for coordinator on GET /finance/receivables', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/finance/receivables')
+      .expect(403)
+
+    expect(response.body.code).toBe(403)
+    expect(response.body.message).toBe('无权访问')
+  })
+
   it('returns 403 for coordinator finance mutations', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
