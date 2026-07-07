@@ -87,11 +87,6 @@ function SourceOrderGuestDrawerPanel({
     queryFn: () => listSourceOrderGuests(sourceOrderId),
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
-    queryClient.invalidateQueries({ queryKey: ['source-orders'] })
-  }
-
   const saveMutation = useMutation({
     mutationFn: (values: GuestFormValues) => {
       if (editingGuest) {
@@ -103,7 +98,8 @@ function SourceOrderGuestDrawerPanel({
       message.success(editingGuest ? '客人已更新' : '客人已添加')
       setEditingGuest(null)
       form.resetFields()
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
+      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
     },
   })
 
@@ -111,7 +107,8 @@ function SourceOrderGuestDrawerPanel({
     mutationFn: (guestId: string) => deleteSourceOrderGuest(sourceOrderId, guestId),
     onSuccess: () => {
       message.success('客人已删除')
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
+      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
     },
   })
 
@@ -119,7 +116,8 @@ function SourceOrderGuestDrawerPanel({
     mutationFn: () => syncSourceOrderGuestCount(sourceOrderId),
     onSuccess: () => {
       message.success('已同步客人人数')
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
+      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
       onSynced()
     },
   })

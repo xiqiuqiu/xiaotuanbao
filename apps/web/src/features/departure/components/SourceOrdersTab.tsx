@@ -85,11 +85,6 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       }),
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
-    queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-  }
-
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
       if (editingOrder) {
@@ -101,7 +96,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       message.success(editingOrder ? '客源单已更新' : '客源单已添加')
       setDrawerOpen(false)
       setEditingOrder(null)
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -109,7 +105,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     mutationFn: (id: string) => deleteSourceOrder(id),
     onSuccess: () => {
       message.success('客源单已删除')
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -121,7 +118,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
           ? '应收已生成，存在来源金额差异，请核对'
           : '应收已生成',
       )
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -396,7 +394,10 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
           setGuestDrawerOpen(false)
           setGuestOrder(null)
         }}
-        onSynced={invalidate}
+        onSynced={() => {
+          void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+          void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+        }}
       />
     </div>
   )

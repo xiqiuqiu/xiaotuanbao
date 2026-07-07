@@ -36,7 +36,7 @@ export function CreateDepartureWizard() {
   const copyFromInitialized = useRef(false)
 
   const [currentStep, setCurrentStep] = useState(0)
-  const [routeValues, setRouteValues] = useState<RouteStepValues>(createInitialRouteStepValues())
+  const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
   const [initializingStep2, setInitializingStep2] = useState(false)
   const [regeneratingNo, setRegeneratingNo] = useState(false)
   const [copyModalOpen, setCopyModalOpen] = useState(false)

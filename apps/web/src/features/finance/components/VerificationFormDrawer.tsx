@@ -42,20 +42,25 @@ export function VerificationFormDrawer({
     enabled: open,
   })
 
-  const scheduleOptions = [...(receivablesResult?.items ?? []), ...(payablesResult?.items ?? [])]
-    .filter((schedule) => schedule.unsettledAmountCents > 0 && !schedule.cancelledAt)
-    .map((schedule) => ({
-      value: schedule.id,
-      label: `${schedule.scheduleNo} · ${schedule.title} · 未结清 ${formatCents(schedule.unsettledAmountCents)}`,
-    }))
+  const scheduleOptions: Array<{ value: string; label: string }> = []
+  for (const schedule of [...(receivablesResult?.items ?? []), ...(payablesResult?.items ?? [])]) {
+    if (schedule.unsettledAmountCents > 0 && !schedule.cancelledAt) {
+      scheduleOptions.push({
+        value: schedule.id,
+        label: `${schedule.scheduleNo} · ${schedule.title} · 未结清 ${formatCents(schedule.unsettledAmountCents)}`,
+      })
+    }
+  }
 
-  const transactionOptions =
-    transactionsResult?.items
-      .filter((transaction) => !transaction.voidedAt && transaction.unallocatedAmountCents > 0)
-      .map((transaction) => ({
+  const transactionOptions: Array<{ value: string; label: string }> = []
+  for (const transaction of transactionsResult?.items ?? []) {
+    if (!transaction.voidedAt && transaction.unallocatedAmountCents > 0) {
+      transactionOptions.push({
         value: transaction.id,
         label: `${transaction.transactionNo} · 可分配 ${formatCents(transaction.unallocatedAmountCents)}`,
-      })) ?? []
+      })
+    }
+  }
 
   return (
     <Modal

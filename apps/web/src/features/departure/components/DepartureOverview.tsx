@@ -3,7 +3,7 @@ import { Alert, Button, DatePicker, Form, Input, Popconfirm, Select, Space, Typo
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import { listEmployees } from '@/services/employee.service'
@@ -36,6 +36,7 @@ export function DepartureOverview({
   readOnly,
   onUpdated,
 }: DepartureOverviewProps) {
+  const queryClient = useQueryClient()
   const { data: employeesResult } = useQuery({
     queryKey: ['employees', 'departure-overview'],
     queryFn: () => listEmployees({ pageSize: 100 }),
@@ -59,6 +60,8 @@ export function DepartureOverview({
       }),
     onSuccess: () => {
       message.success('发团信息已保存')
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
       onUpdated()
     },
     onError: (error) => {
@@ -71,6 +74,8 @@ export function DepartureOverview({
       transitionDeparture(departure.id, { targetStatus }),
     onSuccess: () => {
       message.success('状态已更新')
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
       onUpdated()
     },
     onError: (error) => {
@@ -82,6 +87,8 @@ export function DepartureOverview({
     mutationFn: () => closeDeparture(departure.id),
     onSuccess: () => {
       message.success('发团已关闭')
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
       onUpdated()
     },
     onError: (error) => {

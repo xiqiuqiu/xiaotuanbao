@@ -41,11 +41,6 @@ export function SegmentTab({ departure, readOnly }: SegmentTabProps) {
     queryFn: () => listSegments(departure.id),
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
-    queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-  }
-
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
       if (editingSegment) {
@@ -57,7 +52,8 @@ export function SegmentTab({ departure, readOnly }: SegmentTabProps) {
       message.success(editingSegment ? '行程段已更新' : '行程段已添加')
       setDrawerOpen(false)
       setEditingSegment(null)
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -65,7 +61,8 @@ export function SegmentTab({ departure, readOnly }: SegmentTabProps) {
     mutationFn: (id: string) => deleteSegment(id),
     onSuccess: () => {
       message.success('行程段已删除')
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 

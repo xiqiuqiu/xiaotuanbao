@@ -78,12 +78,6 @@ export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = 
     enabled: Boolean(segmentId),
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['segment-resources', segmentId] })
-    queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
-    queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-  }
-
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
       if (editingResource) {
@@ -95,7 +89,9 @@ export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = 
       message.success(editingResource ? '资源已更新' : '资源已添加')
       setDrawerOpen(false)
       setEditingResource(null)
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources', segmentId] })
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -103,7 +99,9 @@ export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = 
     mutationFn: (id: string) => deleteSegmentResource(id),
     onSuccess: () => {
       message.success('资源已删除')
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources', segmentId] })
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 
@@ -115,7 +113,9 @@ export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = 
           ? '应付已生成，存在来源金额差异，请核对'
           : '应付已生成',
       )
-      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources', segmentId] })
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
 

@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Checkbox, Form, Input, InputNumber, Modal, Space, Tooltip, Typography, message } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
@@ -26,17 +25,15 @@ export function SaveAsRouteTemplateModal({
   const queryClient = useQueryClient()
   const [form] = Form.useForm<SaveFormValues>()
 
-  useEffect(() => {
-    if (open) {
-      form.setFieldsValue({
-        name: departure.routeName,
-        defaultDayCount: departure.dayCount,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
-      })
-    }
-  }, [open, departure, form])
+  const resetForm = () => {
+    form.setFieldsValue({
+      name: departure.routeName,
+      defaultDayCount: departure.dayCount,
+      copySegments: true,
+      copyResources: true,
+      copyReferencePrices: true,
+    })
+  }
 
   const saveMutation = useMutation({
     mutationFn: (values: SaveFormValues) =>
@@ -75,6 +72,11 @@ export function SaveAsRouteTemplateModal({
       confirmLoading={saveMutation.isPending}
       onCancel={onClose}
       onOk={() => void handleOk()}
+      afterOpenChange={(isOpen) => {
+        if (isOpen) {
+          resetForm()
+        }
+      }}
     >
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         常用路线仅保存路线、行程段、资源配置和参考价格，不保存客源单、收付款节点和流水信息。

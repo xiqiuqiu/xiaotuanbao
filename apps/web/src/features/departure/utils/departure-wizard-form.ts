@@ -65,8 +65,10 @@ export function isEndDateBeforeStartDate(startDate: string, endDate: string): bo
   return endDate < startDate
 }
 
+const shanghaiDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' })
+
 export function getShanghaiTodayString(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+  return shanghaiDateFormatter.format(new Date())
 }
 
 export function buildInitialInfoValues(

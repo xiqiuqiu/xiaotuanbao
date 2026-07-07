@@ -113,7 +113,7 @@ export function PaymentScheduleWorkspace({
     ? 'departure-receivables'
     : 'departure-payables'
 
-  const [departureFilter, setDepartureFilter] = useState<string | undefined>(lockedDepartureId)
+  const [departureFilter, setDepartureFilter] = useState<string | undefined>()
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatus | undefined>()
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
@@ -189,14 +189,6 @@ export function PaymentScheduleWorkspace({
 
   const tableTotal = hasClientFilters ? filteredItems.length : (schedulesResult?.total ?? 0)
 
-  const invalidateSchedules = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-    queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-    queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-    queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-    queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-  }, [queryClient, listQueryKey, departureListQueryKey])
-
   const confirmMutation = useMutation({
     mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
       if (!activeSchedule) {
@@ -212,7 +204,11 @@ export function PaymentScheduleWorkspace({
       setConfirmOpen(false)
       setActiveSchedule(null)
       confirmForm.resetFields()
-      invalidateSchedules()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '操作失败')
@@ -234,7 +230,11 @@ export function PaymentScheduleWorkspace({
       setLinkOpen(false)
       setActiveSchedule(null)
       linkForm.resetFields()
-      invalidateSchedules()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '关联失败')
@@ -255,7 +255,11 @@ export function PaymentScheduleWorkspace({
       setCancelOpen(false)
       setActiveSchedule(null)
       cancelForm.resetFields()
-      invalidateSchedules()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '关闭失败')
@@ -277,7 +281,11 @@ export function PaymentScheduleWorkspace({
       setEditOpen(false)
       setActiveSchedule(null)
       editForm.resetFields()
-      invalidateSchedules()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '更新失败')

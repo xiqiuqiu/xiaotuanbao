@@ -56,16 +56,6 @@ export function VerificationsWorkspace({
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
 
-  const invalidateVerifications = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-    queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
-    queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-    queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
-    queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-    queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-  }, [queryClient])
-
   const createMutation = useMutation({
     mutationFn: (values: VerificationFormValues) =>
       createVerification(buildCreateVerificationPayload(values)),
@@ -73,7 +63,13 @@ export function VerificationsWorkspace({
       message.success('核销已创建')
       setModalOpen(false)
       form.resetFields()
-      invalidateVerifications()
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '创建失败')
@@ -84,7 +80,13 @@ export function VerificationsWorkspace({
     mutationFn: cancelVerification,
     onSuccess: () => {
       message.success('核销已撤销')
-      invalidateVerifications()
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '撤销失败')
