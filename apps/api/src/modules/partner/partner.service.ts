@@ -7,7 +7,24 @@ import {
 import type { PartnerListResult, PartnerSummary } from '@xiaotuanbao/shared'
 import { DirectoryProfileStatus, type Partner } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import type { CreatePartnerDto, ListPartnersQueryDto } from './dto/partner.dto'
+import type {
+  CreatePartnerDto,
+  ListPartnersQueryDto,
+  UpdatePartnerDto,
+} from './dto/partner.dto'
+
+const UPDATE_PARTNER_FIELDS = [
+  'name',
+  'partnerKind',
+  'partnerType',
+  'contactName',
+  'contactRole',
+  'contactPhone',
+  'settlementMethod',
+  'paymentTermRule',
+  'settlementNotes',
+  'status',
+] as const
 
 @Injectable()
 export class PartnerService {
@@ -84,6 +101,80 @@ export class PartnerService {
     })
 
     return this.toPartnerSummary(partner)
+  }
+
+  async update(
+    organizationId: string,
+    partnerId: string,
+    dto: UpdatePartnerDto,
+  ): Promise<PartnerSummary> {
+    const partner = await this.findPartnerOrThrow(organizationId, partnerId)
+
+    if (partner.status === DirectoryProfileStatus.archived) {
+      throw new BadRequestException('已归档合作伙伴不可编辑，请先恢复')
+    }
+
+    if (!this.hasUpdateFields(dto)) {
+      throw new BadRequestException('请至少提供一个待更新字段')
+    }
+
+    const data: Record<string, unknown> = {}
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim()
+      if (!name) {
+        throw new BadRequestException('合作伙伴名称不能为空')
+      }
+      await this.ensureNameAvailable(organizationId, name, partner.id)
+      data.name = name
+    }
+
+    if (dto.partnerKind !== undefined) {
+      data.partnerKind = dto.partnerKind
+    }
+
+    if (dto.partnerType !== undefined) {
+      data.partnerType = dto.partnerType
+    }
+
+    if (dto.status !== undefined) {
+      data.status = dto.status
+    }
+
+    if (dto.contactName !== undefined) {
+      data.contactName = dto.contactName.trim() || null
+    }
+
+    if (dto.contactRole !== undefined) {
+      data.contactRole = dto.contactRole
+    }
+
+    if (dto.contactPhone !== undefined) {
+      data.contactPhone = dto.contactPhone.trim() || null
+    }
+
+    if (dto.settlementMethod !== undefined) {
+      data.settlementMethod = dto.settlementMethod
+    }
+
+    if (dto.paymentTermRule !== undefined) {
+      data.paymentTermRule = dto.paymentTermRule
+    }
+
+    if (dto.settlementNotes !== undefined) {
+      data.settlementNotes = dto.settlementNotes.trim() || null
+    }
+
+    const updated = await this.prisma.partner.update({
+      where: { id: partner.id },
+      data,
+    })
+
+    return this.toPartnerSummary(updated)
+  }
+
+  private hasUpdateFields(dto: UpdatePartnerDto): boolean {
+    return UPDATE_PARTNER_FIELDS.some((field) => dto[field] !== undefined)
   }
 
   private async findPartnerOrThrow(organizationId: string, partnerId: string) {

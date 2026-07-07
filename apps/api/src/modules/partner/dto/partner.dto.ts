@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -9,6 +10,7 @@ import {
 } from 'class-validator'
 import { Type, Transform } from 'class-transformer'
 import {
+  DirectoryProfileStatus,
   PartnerContactRole,
   PartnerKind,
   PartnerType,
@@ -50,6 +52,54 @@ export class CreatePartnerDto {
   @IsOptional()
   @IsString()
   settlementNotes?: string
+}
+
+const EDITABLE_PARTNER_STATUSES = [
+  DirectoryProfileStatus.active,
+  DirectoryProfileStatus.disabled,
+] as const
+
+export class UpdatePartnerDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  name?: string
+
+  @IsOptional()
+  @IsEnum(PartnerKind)
+  partnerKind?: PartnerKind
+
+  @IsOptional()
+  @IsEnum(PartnerType)
+  partnerType?: PartnerType
+
+  @IsOptional()
+  @IsString()
+  contactName?: string
+
+  @IsOptional()
+  @IsEnum(PartnerContactRole)
+  contactRole?: PartnerContactRole
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string
+
+  @IsOptional()
+  @IsEnum(SettlementMethod)
+  settlementMethod?: SettlementMethod
+
+  @IsOptional()
+  @IsEnum(SettlementCycle)
+  paymentTermRule?: SettlementCycle
+
+  @IsOptional()
+  @IsString()
+  settlementNotes?: string
+
+  @IsOptional()
+  @IsIn(EDITABLE_PARTNER_STATUSES)
+  status?: (typeof EDITABLE_PARTNER_STATUSES)[number]
 }
 
 export class ListPartnersQueryDto {

@@ -7,6 +7,7 @@ import {
 
 interface PartnerFormDrawerProps {
   open: boolean
+  editing: boolean
   loading: boolean
   form: FormInstance<PartnerFormValues>
   onClose: () => void
@@ -15,6 +16,7 @@ interface PartnerFormDrawerProps {
 
 export function PartnerFormDrawer({
   open,
+  editing,
   loading,
   form,
   onClose,
@@ -22,7 +24,7 @@ export function PartnerFormDrawer({
 }: PartnerFormDrawerProps) {
   return (
     <Drawer
-      title="创建合作伙伴"
+      title={editing ? '编辑合作伙伴' : '创建合作伙伴'}
       open={open}
       width={520}
       onClose={onClose}
@@ -36,7 +38,7 @@ export function PartnerFormDrawer({
       }
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        <PartnerProfileSections />
+        <PartnerProfileSections showStatus={editing} />
       </Form>
     </Drawer>
   )

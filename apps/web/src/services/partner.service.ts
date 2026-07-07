@@ -1,6 +1,7 @@
 import { request } from '@/lib/request'
 import type { PartnerListResult, PartnerSummary } from '@/types/api'
 import type {
+  DirectoryProfileStatus,
   PartnerContactRole,
   PartnerKind,
   PartnerType,
@@ -26,10 +27,21 @@ export interface CreatePartnerPayload {
   settlementNotes?: string
 }
 
+export interface UpdatePartnerPayload extends CreatePartnerPayload {
+  status: DirectoryProfileStatus
+}
+
 export async function listPartners(params: ListPartnersParams): Promise<PartnerListResult> {
   return request.get<PartnerListResult>('/partners', { params })
 }
 
 export async function createPartner(payload: CreatePartnerPayload): Promise<PartnerSummary> {
   return request.post<PartnerSummary>('/partners', payload)
+}
+
+export async function updatePartner(
+  id: string,
+  payload: UpdatePartnerPayload,
+): Promise<PartnerSummary> {
+  return request.patch<PartnerSummary>(`/partners/${id}`, payload)
 }

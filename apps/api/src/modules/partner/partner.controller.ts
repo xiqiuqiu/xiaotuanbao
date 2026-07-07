@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type { PartnerListResult, PartnerSummary } from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { CreatePartnerDto, ListPartnersQueryDto } from './dto/partner.dto'
+import { CreatePartnerDto, ListPartnersQueryDto, UpdatePartnerDto } from './dto/partner.dto'
 import { PartnerService } from './partner.service'
 
 @Controller('partners')
@@ -36,5 +36,15 @@ export class PartnerController {
     @Param('id') id: string,
   ): Promise<PartnerSummary> {
     return this.partnerService.getById(request.user.organizationId, id)
+  }
+
+  @Patch(':id')
+  @RequireMenu('/partner')
+  update(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdatePartnerDto,
+  ): Promise<PartnerSummary> {
+    return this.partnerService.update(request.user.organizationId, id, dto)
   }
 }

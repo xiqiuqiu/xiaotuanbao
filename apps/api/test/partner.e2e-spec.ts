@@ -196,4 +196,130 @@ describe('Partner API (e2e)', () => {
     await prisma.partner.delete({ where: { id: foreignPartner.id } })
     await prisma.organization.delete({ where: { id: otherOrg.id } })
   })
+
+  it('updates partner fields via PATCH', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/partners')
+      .send({
+        name: `${testPartnerPrefix}-patch`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+      })
+      .expect(201)
+
+    const partnerId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/partners/${partnerId}`)
+      .send({
+        name: `${testPartnerPrefix}-patch-updated`,
+        partnerKind: PartnerKind.peer,
+        partnerType: PartnerType.local_agency,
+        status: DirectoryProfileStatus.disabled,
+        contactName: '李经理',
+        contactPhone: '13900139000',
+        settlementMethod: 'postpay',
+        paymentTermRule: 'monthly',
+        settlementNotes: '月结 30 天',
+      })
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      name: `${testPartnerPrefix}-patch-updated`,
+      partnerKind: PartnerKind.peer,
+      partnerType: PartnerType.local_agency,
+      status: DirectoryProfileStatus.disabled,
+      contactName: '李经理',
+      contactPhone: '13900139000',
+      settlementMethod: 'postpay',
+      paymentTermRule: 'monthly',
+      settlementNotes: '月结 30 天',
+    })
+  })
+
+  it('returns 409 when PATCH renames to an existing partner name', async () => {
+    const firstName = `${testPartnerPrefix}-patch-conflict-a`
+    const secondName = `${testPartnerPrefix}-patch-conflict-b`
+
+    await authRequest(app, coordinatorToken)
+      .post('/api/partners')
+      .send({
+        name: firstName,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+      })
+      .expect(201)
+
+    const second = await authRequest(app, coordinatorToken)
+      .post('/api/partners')
+      .send({
+        name: secondName,
+        partnerKind: PartnerKind.peer,
+        partnerType: PartnerType.local_agency,
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/partners/${second.body.data.id}`)
+      .send({ name: firstName })
+      .expect(409)
+
+    expect(response.body.code).toBe(409)
+    expect(response.body.message).toBe('合作伙伴名称已存在')
+  })
+
+  it('returns 404 when PATCH partner does not exist', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .patch('/api/partners/nonexistent-partner-id')
+      .send({ name: `${testPartnerPrefix}-ghost` })
+      .expect(404)
+
+    expect(response.body.code).toBe(404)
+  })
+
+  it('returns 404 when PATCH partner belongs to another organization', async () => {
+    const otherOrg = await prisma.organization.create({
+      data: { name: `${testPartnerPrefix}-patch-other-org` },
+    })
+
+    const foreignPartner = await prisma.partner.create({
+      data: {
+        organizationId: otherOrg.id,
+        name: `${testPartnerPrefix}-patch-foreign`,
+        partnerKind: PartnerKind.peer,
+        partnerType: PartnerType.other,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/partners/${foreignPartner.id}`)
+      .send({ name: `${testPartnerPrefix}-patch-foreign-updated` })
+      .expect(404)
+
+    expect(response.body.code).toBe(404)
+
+    await prisma.partner.delete({ where: { id: foreignPartner.id } })
+    await prisma.organization.delete({ where: { id: otherOrg.id } })
+  })
+
+  it('returns 400 when PATCH body is empty', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/partners')
+      .send({
+        name: `${testPartnerPrefix}-patch-empty`,
+        partnerKind: PartnerKind.both,
+        partnerType: PartnerType.wholesaler,
+      })
+      .expect(201)
+
+    const partnerId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/partners/${partnerId}`)
+      .send({})
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
 })

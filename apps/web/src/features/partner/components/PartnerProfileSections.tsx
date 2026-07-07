@@ -1,6 +1,7 @@
 import { Form, Input, Select } from 'antd'
 import type { ReactNode } from 'react'
 import type {
+  DirectoryProfileStatus,
   PartnerContactRole,
   PartnerKind,
   PartnerType,
@@ -8,6 +9,7 @@ import type {
   SettlementMethod,
 } from '@xiaotuanbao/shared'
 import {
+  DIRECTORY_PROFILE_STATUS_OPTIONS,
   SETTLEMENT_CYCLE_OPTIONS,
   SETTLEMENT_METHOD_OPTIONS,
 } from '@/features/directory/catalog'
@@ -21,6 +23,7 @@ export interface PartnerFormValues {
   name: string
   partnerKind: PartnerKind
   partnerType: PartnerType
+  status?: DirectoryProfileStatus
   contactName?: string
   contactRole?: PartnerContactRole
   contactPhone?: string
@@ -29,7 +32,11 @@ export interface PartnerFormValues {
   settlementNotes?: string
 }
 
-export function PartnerProfileSections() {
+interface PartnerProfileSectionsProps {
+  showStatus?: boolean
+}
+
+export function PartnerProfileSections({ showStatus = false }: PartnerProfileSectionsProps) {
   return (
     <>
       <TypographySection title="基础信息">
@@ -54,6 +61,11 @@ export function PartnerProfileSections() {
         >
           <Select options={[...PARTNER_KIND_OPTIONS]} placeholder="请选择合作方向" />
         </Form.Item>
+        {showStatus ? (
+          <Form.Item label="状态" name="status" rules={[{ required: true, message: '请选择状态' }]}>
+            <Select options={[...DIRECTORY_PROFILE_STATUS_OPTIONS]} />
+          </Form.Item>
+        ) : null}
       </TypographySection>
 
       <TypographySection title="联系人信息">
