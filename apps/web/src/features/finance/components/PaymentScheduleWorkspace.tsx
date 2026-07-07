@@ -11,6 +11,8 @@ import {
   confirmPayment,
   linkPayableTransaction,
   linkReceivableTransaction,
+  listDeparturePayables,
+  listDepartureReceivables,
   listPayables,
   listReceivables,
   updatePayable,
@@ -105,7 +107,11 @@ export function PaymentScheduleWorkspace({
 }: PaymentScheduleWorkspaceProps) {
   const queryClient = useQueryClient()
   const isReceivable = direction === 'receivable'
+  const isDepartureScope = scope === 'departure'
   const listQueryKey = isReceivable ? 'finance-receivables' : 'finance-payables'
+  const departureListQueryKey = isReceivable
+    ? 'departure-receivables'
+    : 'departure-payables'
 
   const [departureFilter, setDepartureFilter] = useState<string | undefined>(lockedDepartureId)
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatus | undefined>()
@@ -130,18 +136,37 @@ export function PaymentScheduleWorkspace({
   const fetchPageSize = hasClientFilters ? 100 : pageSize
 
   const { data: schedulesResult, isLoading } = useQuery({
-    queryKey: [listQueryKey, effectiveDepartureId, page, fetchPageSize, hasClientFilters],
-    queryFn: () =>
-      (isReceivable ? listReceivables : listPayables)({
+    queryKey: [
+      isDepartureScope ? departureListQueryKey : listQueryKey,
+      effectiveDepartureId,
+      page,
+      fetchPageSize,
+      hasClientFilters,
+    ],
+    queryFn: () => {
+      if (isDepartureScope) {
+        if (!lockedDepartureId) {
+          throw new Error('发团 ID 缺失')
+        }
+        const listFn = isReceivable ? listDepartureReceivables : listDeparturePayables
+        return listFn(lockedDepartureId, {
+          page: hasClientFilters ? 1 : page,
+          pageSize: fetchPageSize,
+        })
+      }
+      return (isReceivable ? listReceivables : listPayables)({
         departureId: effectiveDepartureId,
         page: hasClientFilters ? 1 : page,
         pageSize: fetchPageSize,
-      }),
+      })
+    },
+    enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-schedule-map'],
     queryFn: () => listDepartures({ pageSize: 100 }),
+    enabled: !isDepartureScope,
   })
 
   const departureMap = useMemo(() => {
@@ -166,9 +191,11 @@ export function PaymentScheduleWorkspace({
 
   const invalidateSchedules = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+    queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
     queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
     queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-  }, [queryClient, listQueryKey])
+    queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+  }, [queryClient, listQueryKey, departureListQueryKey])
 
   const confirmMutation = useMutation({
     mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
@@ -312,21 +339,25 @@ export function PaymentScheduleWorkspace({
         render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
       },
       { title: '标题', dataIndex: 'title' },
-      {
-        title: '发团',
-        dataIndex: 'departureId',
-        render: (departureId: string) => {
-          const departure = departureMap.get(departureId)
-          if (!departure) {
-            return '—'
-          }
-          return (
-            <Link to="/departure/$departureId" params={{ departureId }}>
-              {departure.departureNo} · {departure.name}
-            </Link>
-          )
-        },
-      },
+      ...(isDepartureScope
+        ? []
+        : [
+            {
+              title: '发团',
+              dataIndex: 'departureId',
+              render: (departureId: string) => {
+                const departure = departureMap.get(departureId)
+                if (!departure) {
+                  return '—'
+                }
+                return (
+                  <Link to="/departure/$departureId" params={{ departureId }}>
+                    {departure.departureNo} · {departure.name}
+                  </Link>
+                )
+              },
+            },
+          ]),
       {
         title: '往来对象',
         render: (_, record) => (
@@ -406,7 +437,7 @@ export function PaymentScheduleWorkspace({
         },
       },
     ],
-    [departureMap, isReceivable, openCancel, openConfirm, openEdit, openLink, readOnly],
+    [departureMap, isDepartureScope, isReceivable, openCancel, openConfirm, openEdit, openLink, readOnly],
   )
 
   return (

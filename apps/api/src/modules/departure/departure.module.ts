@@ -14,11 +14,13 @@ import { SegmentService } from './segment.service'
 import { SegmentResourceController } from './segment-resource.controller'
 import { SegmentResourceService } from './segment-resource.service'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
+import { DepartureFinanceReadController } from './departure-finance-read.controller'
 
 @Module({
   imports: [AuthModule, FinanceModule],
   controllers: [
     DepartureController,
+    DepartureFinanceReadController,
     RouteTemplateController,
     SourceOrderController,
     SegmentController,

@@ -29,6 +29,7 @@ export interface ListFinanceTransactionsParams {
 }
 
 export interface ListFinanceVerificationsParams {
+  departureId?: string
   paymentScheduleId?: string
   transactionId?: string
   page?: number
@@ -143,6 +144,34 @@ export async function listVerifications(
   params: ListFinanceVerificationsParams,
 ): Promise<FinanceVerificationListResult> {
   return request.get<FinanceVerificationListResult>('/finance/verifications', { params })
+}
+
+export async function listDepartureReceivables(
+  departureId: string,
+  params: Omit<ListPaymentSchedulesParams, 'departureId'> = {},
+): Promise<PaymentScheduleListResult> {
+  return request.get<PaymentScheduleListResult>(`/departures/${departureId}/receivables`, {
+    params,
+  })
+}
+
+export async function listDeparturePayables(
+  departureId: string,
+  params: Omit<ListPaymentSchedulesParams, 'departureId'> = {},
+): Promise<PaymentScheduleListResult> {
+  return request.get<PaymentScheduleListResult>(`/departures/${departureId}/payables`, {
+    params,
+  })
+}
+
+export async function listDepartureVerifications(
+  departureId: string,
+  params: Omit<ListFinanceVerificationsParams, 'departureId'> = {},
+): Promise<FinanceVerificationListResult> {
+  return request.get<FinanceVerificationListResult>(
+    `/departures/${departureId}/verifications`,
+    { params },
+  )
 }
 
 export async function createVerification(

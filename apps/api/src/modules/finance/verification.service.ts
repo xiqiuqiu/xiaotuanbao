@@ -27,6 +27,9 @@ export class VerificationService {
       organizationId,
       ...(query.paymentScheduleId ? { paymentScheduleId: query.paymentScheduleId } : {}),
       ...(query.transactionId ? { transactionId: query.transactionId } : {}),
+      ...(query.departureId
+        ? { paymentSchedule: { departureId: query.departureId } }
+        : {}),
     }
 
     const [items, total] = await Promise.all([

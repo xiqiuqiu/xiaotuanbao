@@ -26,6 +26,10 @@ export class ListFinanceVerificationsQueryDto {
   transactionId?: string
 
   @IsOptional()
+  @IsString()
+  departureId?: string
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

@@ -1,14 +1,18 @@
 import { Form, Spin, Tabs, Typography } from 'antd'
+import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
+import { useAuthStore } from '@/app/store/auth.store'
+import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
+import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
+import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
 import { SegmentTab } from '../components/SegmentTab'
 import { ResourcesTab } from '../components/ResourcesTab'
-import { DepartureTabPlaceholder } from '../components/DepartureTabPlaceholder'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
@@ -23,6 +27,7 @@ export function DepartureDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm()
+  const menuKeys = useAuthStore((state) => state.menuKeys)
 
   const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
 
@@ -89,7 +94,9 @@ export function DepartureDetailPage() {
     departure.status === DepartureStatus.CLOSED ||
     departure.status === DepartureStatus.SETTLED
 
-  const tabItems = DEPARTURE_DETAIL_TABS.map((tab) => {
+  const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
+
+  const tabItems: NonNullable<TabsProps['items']> = DEPARTURE_DETAIL_TABS.map((tab) => {
     if (tab.key === 'overview') {
       return {
         key: tab.key,
@@ -135,10 +142,46 @@ export function DepartureDetailPage() {
       }
     }
 
+    if (tab.key === 'receivables') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: (
+          <PaymentScheduleWorkspace
+            scope="departure"
+            direction="receivable"
+            departureId={departure.id}
+            readOnly={financeReadOnly}
+          />
+        ),
+      }
+    }
+
+    if (tab.key === 'payables') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: (
+          <PaymentScheduleWorkspace
+            scope="departure"
+            direction="payable"
+            departureId={departure.id}
+            readOnly={financeReadOnly}
+          />
+        ),
+      }
+    }
+
     return {
       key: tab.key,
       label: tab.label,
-      children: <DepartureTabPlaceholder title={tab.label} />,
+      children: (
+        <VerificationsWorkspace
+          scope="departure"
+          departureId={departure.id}
+          readOnly={financeReadOnly}
+        />
+      ),
     }
   })
 
