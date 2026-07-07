@@ -1,0 +1,139 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { Modal } from 'antd'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DepartureType } from '@xiaotuanbao/shared'
+import type { DepartureSummary } from '@/types/api'
+import { CreateDepartureWizard } from './CreateDepartureWizard'
+
+const mockNavigate = vi.fn()
+const mockUser = {
+  id: 'user-1',
+  username: 'wangjie',
+  name: '王杰',
+  organizationId: 'org-1',
+  organizationName: '测试企业',
+  roles: ['coordinator'],
+}
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+  useNavigate: () => mockNavigate,
+}))
+
+vi.mock('@/app/store/auth.store', () => ({
+  useAuthStore: (selector: (state: { user: typeof mockUser | null }) => unknown) =>
+    selector({ user: mockUser }),
+}))
+
+vi.mock('@/services/departure.service', () => ({
+  previewDepartureNo: vi.fn(),
+  createDeparture: vi.fn(),
+}))
+
+import { createDeparture, previewDepartureNo } from '@/services/departure.service'
+
+const mockDeparture: DepartureSummary = {
+  id: 'departure-1',
+  departureNo: 'DT202608010001',
+  name: '喀纳斯阿勒泰10日线 8月1日团',
+  routeName: '喀纳斯阿勒泰10日线',
+  routeSource: 'manual',
+  sourceTemplateId: null,
+  departureType: DepartureType.COMBINED,
+  startDate: '2026-08-01',
+  endDate: '2026-08-10',
+  dayCount: 10,
+  ownerUserId: 'user-1',
+  status: 'editing',
+  departureProgress: 'not_started',
+  notes: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+}
+
+function renderWizard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <CreateDepartureWizard />
+    </QueryClientProvider>,
+  )
+}
+
+describe('CreateDepartureWizard', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+    Modal.destroyAll()
+  })
+
+  beforeEach(() => {
+    vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'DT202608010001' })
+    vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
+  })
+
+  it('disables next step until route name is filled', () => {
+    renderWizard()
+
+    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+  })
+
+  it('enters step 2 from manual tab without template copy modal', async () => {
+    const confirmSpy = vi.spyOn(Modal, 'confirm')
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
+    expect(screen.getByText('无模板复制项')).toBeInTheDocument()
+  })
+
+  it('validates required fields before creating departure', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await screen.findByLabelText('团名')
+
+    await user.clear(screen.getByLabelText('团名'))
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    expect(await screen.findByText('请输入团名')).toBeInTheDocument()
+    expect(createDeparture).not.toHaveBeenCalled()
+  })
+
+  it('navigates to departure detail after successful create', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await screen.findByLabelText('团名')
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(createDeparture).toHaveBeenCalled()
+    })
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/departure/$departureId',
+        params: { departureId: 'departure-1' },
+        search: { tab: 'overview' },
+      })
+    })
+  })
+})

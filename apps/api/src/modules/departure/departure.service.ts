@@ -76,6 +76,15 @@ export class DepartureService {
     }
   }
 
+  async previewNextDepartureNo(
+    organizationId: string,
+    startDateStr: string,
+  ): Promise<{ departureNo: string }> {
+    const startDate = parseDateOnly(startDateStr)
+    const departureNo = await this.generateDepartureNo(organizationId, startDate)
+    return { departureNo }
+  }
+
   async create(organizationId: string, dto: CreateDepartureDto): Promise<DepartureSummary> {
     const name = dto.name.trim()
     const routeName = dto.routeName.trim()

@@ -3,7 +3,11 @@ import type { DepartureListResult, DepartureSummary } from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { CreateDepartureDto, ListDeparturesQueryDto } from './dto/departure.dto'
+import {
+  CreateDepartureDto,
+  ListDeparturesQueryDto,
+  NextDepartureNoQueryDto,
+} from './dto/departure.dto'
 import { DepartureService } from './departure.service'
 
 @Controller('departures')
@@ -18,6 +22,18 @@ export class DepartureController {
     @Query() query: ListDeparturesQueryDto,
   ): Promise<DepartureListResult> {
     return this.departureService.list(request.user.organizationId, query)
+  }
+
+  @Get('next-no')
+  @RequireMenu('/departure')
+  previewNextNo(
+    @Req() request: { user: { organizationId: string } },
+    @Query() query: NextDepartureNoQueryDto,
+  ): Promise<{ departureNo: string }> {
+    return this.departureService.previewNextDepartureNo(
+      request.user.organizationId,
+      query.startDate,
+    )
   }
 
   @Post()

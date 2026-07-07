@@ -14,6 +14,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { PartnersPage } from '@/features/partner/pages/PartnersPage'
 import { DeparturesPage } from '@/features/departure/pages/DeparturesPage'
+import { CreateDeparturePage } from '@/features/departure/pages/CreateDeparturePage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
@@ -61,8 +62,17 @@ const departureRoute = createRoute({
 const departureNewRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/new',
+  component: CreateDeparturePage,
+})
+
+const departureDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/departure/$departureId',
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+  }),
   component: () => (
-    <PlaceholderPage title="新建发团" description="新建向导将在后续迭代中实现。" />
+    <PlaceholderPage title="发团详情" description="详情页将在后续迭代中实现。" />
   ),
 })
 
@@ -138,6 +148,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     departureRoute,
     departureNewRoute,
+    departureDetailRoute,
     financeReceivableRoute,
     financePayableRoute,
     financeTransactionsRoute,

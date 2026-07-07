@@ -18,3 +18,11 @@ export async function listDepartures(params: ListDeparturesParams): Promise<Depa
 export async function createDeparture(payload: CreateDepartureDto): Promise<DepartureSummary> {
   return request.post<DepartureSummary>('/departures', payload)
 }
+
+export async function previewDepartureNo(
+  startDate: string,
+): Promise<{ departureNo: string }> {
+  return request.get<{ departureNo: string }>('/departures/next-no', {
+    params: { startDate },
+  })
+}

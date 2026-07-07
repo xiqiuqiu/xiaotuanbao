@@ -27,3 +27,8 @@ export function catalogLabel(
   }
   return labels[value] ?? value
 }
+
+export const DEPARTURE_TYPE_OPTIONS = [
+  { value: 'independent', label: '独立团' },
+  { value: 'combined', label: '拼团' },
+] as const

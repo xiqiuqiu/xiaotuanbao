@@ -66,6 +66,24 @@ describe('Departure API (e2e)', () => {
     expect(response.body.code).toBe(403)
   })
 
+  it('returns preview departure number for startDate', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/next-no')
+      .query({ startDate: '2026-08-01' })
+      .expect(200)
+
+    expect(response.body.data.departureNo).toMatch(/^DT20260801\d{4}$/)
+  })
+
+  it('returns 403 for finance role on GET /departures/next-no', async () => {
+    const response = await authRequest(app, financeToken)
+      .get('/api/departures/next-no')
+      .query({ startDate: '2026-08-01' })
+      .expect(403)
+
+    expect(response.body.code).toBe(403)
+  })
+
   it('creates departure with core fields', async () => {
     const departureNo = `${testPrefix}-001`
 

@@ -47,6 +47,11 @@ export class CreateDepartureDto {
   notes?: string
 }
 
+export class NextDepartureNoQueryDto {
+  @IsDateString()
+  startDate!: string
+}
+
 export class ListDeparturesQueryDto {
   @IsOptional()
   @IsString()
