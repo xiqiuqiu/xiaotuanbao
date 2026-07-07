@@ -24,6 +24,14 @@ export type {
   TransitionDepartureDto,
   RouteTemplateCardSummary,
   RouteTemplateDetailSummary,
+  SourceOrderSummary,
+  SourceOrderListResult,
+  SourceOrderListSummary,
+  CreateSourceOrderDto,
+  UpdateSourceOrderDto,
+  SourceOrderGuestSummary,
+  CreateSourceOrderGuestDto,
+  UpdateSourceOrderGuestDto,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -41,4 +49,8 @@ export {
   DepartureType,
   DepartureRouteSource,
   DepartureProgress,
+  SourceOrderDiscountType,
+  SourceOrderCollectionMode,
+  SourceOrderReceivableStatus,
+  GuestGender,
 } from '@xiaotuanbao/shared'

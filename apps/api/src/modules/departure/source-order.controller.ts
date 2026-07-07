@@ -1,0 +1,142 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common'
+import type {
+  SourceOrderGuestSummary,
+  SourceOrderListResult,
+  SourceOrderSummary,
+} from '@xiaotuanbao/shared'
+import { RequireMenu } from '../../common/decorators/require-menu.decorator'
+import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
+import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import {
+  CreateSourceOrderDto,
+  CreateSourceOrderGuestDto,
+  ListSourceOrdersQueryDto,
+  UpdateSourceOrderDto,
+  UpdateSourceOrderGuestDto,
+} from './dto/source-order.dto'
+import { SourceOrderService } from './source-order.service'
+
+@Controller()
+@UseGuards(JwtAuthGuard, MenuPermissionGuard)
+export class SourceOrderController {
+  constructor(private readonly sourceOrderService: SourceOrderService) {}
+
+  @Get('departures/:departureId/source-orders')
+  @RequireMenu('/departure')
+  listByDeparture(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+    @Query() query: ListSourceOrdersQueryDto,
+  ): Promise<SourceOrderListResult> {
+    return this.sourceOrderService.listByDeparture(
+      request.user.organizationId,
+      departureId,
+      query,
+    )
+  }
+
+  @Post('departures/:departureId/source-orders')
+  @RequireMenu('/departure')
+  create(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+    @Body() dto: CreateSourceOrderDto,
+  ): Promise<SourceOrderSummary> {
+    return this.sourceOrderService.create(request.user.organizationId, departureId, dto)
+  }
+
+  @Get('source-orders/:id')
+  @RequireMenu('/departure')
+  getById(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<SourceOrderSummary> {
+    return this.sourceOrderService.getById(request.user.organizationId, id)
+  }
+
+  @Patch('source-orders/:id')
+  @RequireMenu('/departure')
+  update(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateSourceOrderDto,
+  ): Promise<SourceOrderSummary> {
+    return this.sourceOrderService.update(request.user.organizationId, id, dto)
+  }
+
+  @Delete('source-orders/:id')
+  @RequireMenu('/departure')
+  async remove(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<{ success: true }> {
+    await this.sourceOrderService.remove(request.user.organizationId, id)
+    return { success: true }
+  }
+
+  @Get('source-orders/:id/guests')
+  @RequireMenu('/departure')
+  listGuests(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<SourceOrderGuestSummary[]> {
+    return this.sourceOrderService.listGuests(request.user.organizationId, id)
+  }
+
+  @Post('source-orders/:id/guests')
+  @RequireMenu('/departure')
+  createGuest(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: CreateSourceOrderGuestDto,
+  ): Promise<SourceOrderGuestSummary> {
+    return this.sourceOrderService.createGuest(request.user.organizationId, id, dto)
+  }
+
+  @Patch('source-orders/:id/guests/:guestId')
+  @RequireMenu('/departure')
+  updateGuest(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Param('guestId') guestId: string,
+    @Body() dto: UpdateSourceOrderGuestDto,
+  ): Promise<SourceOrderGuestSummary> {
+    return this.sourceOrderService.updateGuest(
+      request.user.organizationId,
+      id,
+      guestId,
+      dto,
+    )
+  }
+
+  @Delete('source-orders/:id/guests/:guestId')
+  @RequireMenu('/departure')
+  async removeGuest(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Param('guestId') guestId: string,
+  ): Promise<{ success: true }> {
+    await this.sourceOrderService.removeGuest(request.user.organizationId, id, guestId)
+    return { success: true }
+  }
+
+  @Post('source-orders/:id/sync-guest-count')
+  @RequireMenu('/departure')
+  syncGuestCount(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<SourceOrderSummary> {
+    return this.sourceOrderService.syncGuestCount(request.user.organizationId, id)
+  }
+}

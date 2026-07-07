@@ -1,5 +1,15 @@
 import type { INestApplication } from '@nestjs/common'
-import { DepartureStatus, DepartureType } from '@prisma/client'
+import {
+  CounterpartyType,
+  DepartureStatus,
+  DepartureType,
+  DirectoryProfileStatus,
+  PartnerKind,
+  PartnerType,
+  PaymentScheduleDirection,
+  SourceOrderCollectionMode,
+  SourceOrderDiscountType,
+} from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { authRequest, createTestApp, loginAs } from './helpers'
 
@@ -29,6 +39,30 @@ describe('Departure API (e2e)', () => {
   })
 
   afterAll(async () => {
+    await prisma.paymentSchedule.deleteMany({
+      where: {
+        organizationId,
+        scheduleNo: { startsWith: testPrefix },
+      },
+    })
+    await prisma.sourceOrderGuest.deleteMany({
+      where: {
+        sourceOrder: {
+          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        },
+      },
+    })
+    await prisma.sourceOrder.deleteMany({
+      where: {
+        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+      },
+    })
+    await prisma.partner.deleteMany({
+      where: {
+        organizationId,
+        name: { startsWith: testPrefix },
+      },
+    })
     await prisma.departure.deleteMany({
       where: {
         organizationId,
@@ -342,5 +376,237 @@ describe('Departure API (e2e)', () => {
 
     expect(response.body.code).toBe(400)
     expect(response.body.message).toBe('已关闭发团不可变更状态')
+  })
+
+  describe('Source orders', () => {
+    let partnerId: string
+    let disabledPartnerId: string
+
+    beforeAll(async () => {
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      partnerId = partner.id
+
+      const disabledPartner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-disabled-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.disabled,
+        },
+      })
+      disabledPartnerId = disabledPartner.id
+    })
+
+    function sourceOrderPayload(overrides: Record<string, unknown> = {}) {
+      return {
+        partnerId,
+        guestCount: 10,
+        unitPriceCents: 100000,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+        ...overrides,
+      }
+    }
+
+    async function createSourceOrderDeparture() {
+      return createTestDeparture({ startDate: '2026-07-01', endDate: '2026-07-05' })
+    }
+
+    it('creates source order with guest_only collection', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload())
+        .expect(201)
+
+      expect(response.body.data).toMatchObject({
+        partnerId,
+        guestCount: 10,
+        grossReceivableCents: 1000000,
+        netReceivableCents: 1000000,
+        partnerCollectedCents: 0,
+        guestCollectCents: 1000000,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+        receivableStatus: 'not_generated',
+        hasPaymentSchedule: false,
+      })
+      expect(response.body.data.displayName).toBe(`${testPrefix}-partner 7月1日发客`)
+    })
+
+    it('auto-generates displayName sequence for same partner', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload())
+        .expect(201)
+
+      const second = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload())
+        .expect(201)
+
+      expect(second.body.data.displayName).toBe(`${testPrefix}-partner 7月1日发客 2`)
+    })
+
+    it('validates split collection amounts', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            collectionMode: SourceOrderCollectionMode.split,
+            partnerCollectedCents: 1100000,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.message).toBe('客户已收金额不能大于结算金额')
+    })
+
+    it('validates discount cannot exceed gross', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            discountType: SourceOrderDiscountType.lump_sum,
+            discountCents: 2000000,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.message).toBe('优惠金额不能大于原始应收')
+    })
+
+    it('rejects disabled partner', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload({ partnerId: disabledPartnerId }))
+        .expect(400)
+
+      expect(response.body.message).toBe('客户不可用，请选择有效客户')
+    })
+
+    it('lists source orders with summary', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            guestCount: 5,
+            discountType: SourceOrderDiscountType.lump_sum,
+            discountCents: 50000,
+          }),
+        )
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/source-orders`)
+        .expect(200)
+
+      expect(response.body.data.items).toHaveLength(1)
+      expect(response.body.data.summary).toMatchObject({
+        orderCount: 1,
+        totalGuests: 5,
+        partnerCount: 1,
+        totalDiscountCents: 50000,
+        totalNetReceivableCents: 450000,
+      })
+    })
+
+    it('manages guest list and syncs guest count', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload({ guestCount: 1 }))
+        .expect(201)
+
+      const sourceOrderId = created.body.data.id as string
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrderId}/guests`)
+        .send({ name: '张三', phone: '13800000000', gender: 'male' })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrderId}/guests`)
+        .send({ name: '李四' })
+        .expect(201)
+
+      const synced = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrderId}/sync-guest-count`)
+        .expect(201)
+
+      expect(synced.body.data.guestCount).toBe(2)
+    })
+
+    it('deletes source order without payment schedule', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload())
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .delete(`/api/source-orders/${created.body.data.id}`)
+        .expect(200)
+
+      const list = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/source-orders`)
+        .expect(200)
+
+      expect(list.body.data.items).toHaveLength(0)
+    })
+
+    it('returns 409 when deleting source order with payment schedule', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(sourceOrderPayload())
+        .expect(201)
+
+      const sourceOrderId = created.body.data.id as string
+
+      await prisma.paymentSchedule.create({
+        data: {
+          organizationId,
+          departureId: departure.id,
+          direction: PaymentScheduleDirection.receivable,
+          scheduleNo: `${testPrefix}-AR001`,
+          title: '客户补款',
+          amountCents: 100000,
+          dueDate: new Date('2026-12-31T00:00:00.000Z'),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: partnerId,
+          sourceType: 'source_order_customer_settlement',
+          sourceId: sourceOrderId,
+        },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/source-orders/${sourceOrderId}`)
+        .expect(409)
+
+      expect(response.body.message).toBe('当前客源单已生成应收，不能直接删除')
+    })
   })
 })

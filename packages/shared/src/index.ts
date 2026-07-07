@@ -39,6 +39,14 @@ export type {
   ConfirmCollectionDto,
   ConfirmPaymentDto,
   LinkTransactionDto,
+  SourceOrderSummary,
+  SourceOrderListSummary,
+  SourceOrderListResult,
+  CreateSourceOrderDto,
+  UpdateSourceOrderDto,
+  SourceOrderGuestSummary,
+  CreateSourceOrderGuestDto,
+  UpdateSourceOrderGuestDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -64,6 +72,10 @@ export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.
 export { TransactionDirection } from './enums/transaction-direction.enum'
 export { VerificationStatus } from './enums/verification-status.enum'
 export { ResourceKind } from './enums/resource-kind.enum'
+export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
+export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
+export { GuestGender } from './enums/guest-gender.enum'
+export { SourceOrderReceivableStatus } from './enums/source-order-receivable-status.enum'
 export {
   deriveScheduleState,
   isFinanceTouched,

@@ -5,6 +5,7 @@ import { DepartureStatus } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
+import { SourceOrdersTab } from '../components/SourceOrdersTab'
 import { DepartureTabPlaceholder } from '../components/DepartureTabPlaceholder'
 import {
   DEPARTURE_DETAIL_TABS,
@@ -94,6 +95,14 @@ export function DepartureDetailPage() {
             onUpdated={handleUpdated}
           />
         ),
+      }
+    }
+
+    if (tab.key === 'sourceOrders') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: <SourceOrdersTab departure={departure} readOnly={readOnly} />,
       }
     }
 

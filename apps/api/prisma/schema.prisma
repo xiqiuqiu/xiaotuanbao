@@ -165,6 +165,29 @@ enum ResourceKind {
   @@map("resource_kind")
 }
 
+enum SourceOrderDiscountType {
+  none
+  lump_sum
+
+  @@map("source_order_discount_type")
+}
+
+enum SourceOrderCollectionMode {
+  guest_only
+  split
+  partner_settled
+
+  @@map("source_order_collection_mode")
+}
+
+enum GuestGender {
+  male
+  female
+  unknown
+
+  @@map("guest_gender")
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -292,7 +315,8 @@ model Partner {
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
   routeTemplateResources RouteTemplateResource[]
-  segmentResources SegmentResource[]
+  segmentResources    SegmentResource[]
+  sourceOrders        SourceOrder[]
 
   @@unique([organizationId, name])
   @@map("partners")
@@ -365,10 +389,52 @@ model Departure {
   updatedAt        DateTime             @updatedAt @map("updated_at")
   paymentSchedules PaymentSchedule[]
   financeTransactions FinanceTransaction[]
-  itinerarySegments ItinerarySegment[]
+  itinerarySegments   ItinerarySegment[]
+  sourceOrders        SourceOrder[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
+}
+
+model SourceOrder {
+  id                   String                    @id @default(cuid())
+  departureId          String                    @map("departure_id")
+  departure            Departure                 @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  partnerId            String                    @map("partner_id")
+  partner              Partner                   @relation(fields: [partnerId], references: [id])
+  displayName          String                    @map("display_name")
+  guestCount           Int                       @map("guest_count")
+  unitPriceCents       Int                       @map("unit_price_cents")
+  grossReceivableCents Int                       @map("gross_receivable_cents")
+  discountType         SourceOrderDiscountType   @default(none) @map("discount_type")
+  discountCents        Int                       @default(0) @map("discount_cents")
+  discountNotes        String?                   @map("discount_notes")
+  netReceivableCents   Int                       @map("net_receivable_cents")
+  collectionMode       SourceOrderCollectionMode @map("collection_mode")
+  partnerCollectedCents Int                      @map("partner_collected_cents")
+  guestCollectCents    Int                       @map("guest_collect_cents")
+  settlementNotes      String?                   @map("settlement_notes")
+  notes                String?
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+  guests               SourceOrderGuest[]
+
+  @@index([departureId, partnerId])
+  @@map("source_orders")
+}
+
+model SourceOrderGuest {
+  id            String      @id @default(cuid())
+  sourceOrderId String      @map("source_order_id")
+  sourceOrder   SourceOrder @relation(fields: [sourceOrderId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  gender        GuestGender @default(unknown)
+  notes         String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@map("source_order_guests")
 }
 
 model ItinerarySegment {

@@ -1,4 +1,10 @@
-import { DepartureStatus } from '@xiaotuanbao/shared'
+import {
+  DepartureStatus,
+  SourceOrderCollectionMode,
+  SourceOrderDiscountType,
+  SourceOrderReceivableStatus,
+  GuestGender,
+} from '@xiaotuanbao/shared'
 
 export const DEPARTURE_STATUS_OPTIONS = [
   { value: DepartureStatus.EDITING, label: '编辑中' },
@@ -72,3 +78,39 @@ export function isDepartureDetailTabKey(value: string | undefined): value is Dep
 export function formatCents(cents: number): string {
   return `¥${(cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
+
+export const SOURCE_ORDER_COLLECTION_OPTIONS = [
+  { value: SourceOrderCollectionMode.GUEST_ONLY, label: '全部我方代收' },
+  { value: SourceOrderCollectionMode.SPLIT, label: '客户已收 + 我方代收' },
+  { value: SourceOrderCollectionMode.PARTNER_SETTLED, label: '客户结算' },
+] as const
+
+export const SOURCE_ORDER_COLLECTION_LABELS = Object.fromEntries(
+  SOURCE_ORDER_COLLECTION_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>
+
+export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
+  { value: SourceOrderDiscountType.NONE, label: '无优惠' },
+  { value: SourceOrderDiscountType.LUMP_SUM, label: '整单优惠' },
+] as const
+
+export const SOURCE_ORDER_DISCOUNT_LABELS = Object.fromEntries(
+  SOURCE_ORDER_DISCOUNT_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>
+
+export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
+  [SourceOrderReceivableStatus.NOT_GENERATED]: '未生成',
+  [SourceOrderReceivableStatus.PENDING]: '待收',
+  [SourceOrderReceivableStatus.PARTIAL]: '部分收款',
+  [SourceOrderReceivableStatus.COLLECTED]: '已收齐',
+}
+
+export const GUEST_GENDER_OPTIONS = [
+  { value: GuestGender.MALE, label: '男' },
+  { value: GuestGender.FEMALE, label: '女' },
+  { value: GuestGender.UNKNOWN, label: '未知' },
+] as const
+
+export const GUEST_GENDER_LABELS = Object.fromEntries(
+  GUEST_GENDER_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>

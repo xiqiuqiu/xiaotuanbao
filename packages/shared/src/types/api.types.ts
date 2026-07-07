@@ -382,3 +382,93 @@ export interface LinkTransactionDto {
   transactionId: string
   amountCents: number
 }
+
+export interface SourceOrderSummary {
+  id: string
+  departureId: string
+  partnerId: string
+  partnerName: string
+  displayName: string
+  guestCount: number
+  unitPriceCents: number
+  grossReceivableCents: number
+  discountType: string
+  discountCents: number
+  discountNotes: string | null
+  netReceivableCents: number
+  collectionMode: string
+  partnerCollectedCents: number
+  guestCollectCents: number
+  settlementNotes: string | null
+  notes: string | null
+  receivableStatus: string
+  hasPaymentSchedule: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SourceOrderListSummary {
+  orderCount: number
+  totalGuests: number
+  partnerCount: number
+  totalDiscountCents: number
+  totalNetReceivableCents: number
+  totalGuestCollectCents: number
+}
+
+export interface SourceOrderListResult {
+  items: SourceOrderSummary[]
+  summary: SourceOrderListSummary
+  total: number
+}
+
+export interface CreateSourceOrderDto {
+  partnerId: string
+  guestCount: number
+  unitPriceCents: number
+  discountType: string
+  discountCents?: number
+  discountNotes?: string
+  collectionMode: string
+  partnerCollectedCents?: number
+  settlementNotes?: string
+  notes?: string
+}
+
+export interface UpdateSourceOrderDto {
+  partnerId?: string
+  guestCount?: number
+  unitPriceCents?: number
+  discountType?: string
+  discountCents?: number
+  discountNotes?: string | null
+  collectionMode?: string
+  partnerCollectedCents?: number
+  settlementNotes?: string | null
+  notes?: string | null
+}
+
+export interface SourceOrderGuestSummary {
+  id: string
+  sourceOrderId: string
+  name: string
+  phone: string | null
+  gender: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSourceOrderGuestDto {
+  name: string
+  phone?: string
+  gender?: string
+  notes?: string
+}
+
+export interface UpdateSourceOrderGuestDto {
+  name?: string
+  phone?: string | null
+  gender?: string
+  notes?: string | null
+}
