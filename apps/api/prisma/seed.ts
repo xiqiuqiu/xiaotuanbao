@@ -9,6 +9,9 @@ import {
   DirectoryProfileStatus,
   InvoiceAvailable,
   InvoiceType,
+  PartnerContactRole,
+  PartnerKind,
+  PartnerType,
   PrismaClient,
   SettlementCycle,
   SettlementMethod,
@@ -156,6 +159,7 @@ async function seedDemoOrganization() {
   }
 
   await seedDemoSuppliers(organization.id)
+  await seedDemoPartners(organization.id)
 
   return organization
 }
@@ -353,6 +357,148 @@ async function seedDemoSuppliers(organizationId: string) {
   }
 
   console.log(`Seeded ${DEMO_SUPPLIERS.length} demo suppliers.`)
+}
+
+const DEMO_PARTNERS = [
+  {
+    name: '华东国旅（上海）',
+    partnerKind: PartnerKind.group_agent,
+    partnerType: PartnerType.group_agency,
+    status: DirectoryProfileStatus.active,
+    contactName: '陈计调',
+    contactRole: PartnerContactRole.operator,
+    contactPhone: '13801668801',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.monthly,
+    settlementNotes: '月结 30 天，每月 5 日前对账',
+  },
+  {
+    name: '浙旅集团杭州分公司',
+    partnerKind: PartnerKind.group_agent,
+    partnerType: PartnerType.integrated_agency,
+    status: DirectoryProfileStatus.active,
+    contactName: '林经理',
+    contactRole: PartnerContactRole.sales,
+    contactPhone: '13801668802',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.semi_monthly,
+    settlementNotes: '半月结对账',
+  },
+  {
+    name: '苏州水乡地接社',
+    partnerKind: PartnerKind.peer,
+    partnerType: PartnerType.local_agency,
+    status: DirectoryProfileStatus.active,
+    contactName: '周计调',
+    contactRole: PartnerContactRole.operator,
+    contactPhone: '13801668803',
+    settlementMethod: SettlementMethod.prepay,
+    paymentTermRule: SettlementCycle.per_group,
+    settlementNotes: '预付 50%，余款回团后 7 日结清',
+  },
+  {
+    name: '黄山徽行天下地接',
+    partnerKind: PartnerKind.peer,
+    partnerType: PartnerType.local_agency,
+    status: DirectoryProfileStatus.active,
+    contactName: '吴老板',
+    contactRole: PartnerContactRole.owner,
+    contactPhone: '13801668804',
+    settlementMethod: SettlementMethod.cash,
+    paymentTermRule: SettlementCycle.per_group,
+    settlementNotes: '每团结清',
+  },
+  {
+    name: '携程渠道华东区',
+    partnerKind: PartnerKind.both,
+    partnerType: PartnerType.wholesaler,
+    status: DirectoryProfileStatus.active,
+    contactName: '郑对接',
+    contactRole: PartnerContactRole.sales,
+    contactPhone: '13801668805',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.monthly,
+    settlementNotes: '按平台规则月结',
+  },
+  {
+    name: '同程旅行浙江站',
+    partnerKind: PartnerKind.both,
+    partnerType: PartnerType.wholesaler,
+    status: DirectoryProfileStatus.active,
+    contactName: '钱专员',
+    contactRole: PartnerContactRole.customer_service,
+    contactPhone: '13801668806',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.as_agreed,
+    settlementNotes: '按合同约定',
+  },
+  {
+    name: '南京中山国旅',
+    partnerKind: PartnerKind.group_agent,
+    partnerType: PartnerType.group_agency,
+    status: DirectoryProfileStatus.disabled,
+    contactName: '孙计调',
+    contactRole: PartnerContactRole.operator,
+    contactPhone: '13801668807',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.monthly,
+    settlementNotes: '暂停合作中，恢复前勿发团',
+  },
+  {
+    name: '无锡太湖国旅（已终止）',
+    partnerKind: PartnerKind.group_agent,
+    partnerType: PartnerType.group_agency,
+    status: DirectoryProfileStatus.archived,
+    contactName: '冯经理',
+    contactRole: PartnerContactRole.finance,
+    contactPhone: '13801668808',
+    settlementMethod: SettlementMethod.cash,
+    paymentTermRule: SettlementCycle.per_group,
+    settlementNotes: '2025 年已终止合作，仅供历史追溯',
+  },
+  {
+    name: '福建土楼专线地接',
+    partnerKind: PartnerKind.peer,
+    partnerType: PartnerType.local_agency,
+    status: DirectoryProfileStatus.active,
+    contactName: '黄计调',
+    contactRole: PartnerContactRole.operator,
+    contactPhone: '13801668809',
+    settlementMethod: SettlementMethod.postpay,
+    paymentTermRule: SettlementCycle.weekly,
+    settlementNotes: '周结，每周一核对上周团款',
+  },
+  {
+    name: '备用合作伙伴',
+    partnerKind: PartnerKind.both,
+    partnerType: PartnerType.other,
+    status: DirectoryProfileStatus.active,
+    contactName: '计调自建',
+    contactPhone: '13801668810',
+    settlementNotes: '字段最少，便于测轻量创建',
+  },
+] as const
+
+async function seedDemoPartners(organizationId: string) {
+  for (const partner of DEMO_PARTNERS) {
+    const { name, ...fields } = partner
+    await prisma.partner.upsert({
+      where: {
+        organizationId_name: {
+          organizationId,
+          name,
+        },
+      },
+      create: {
+        organizationId,
+        name,
+        ...fields,
+      },
+      update: fields,
+    })
+  }
+
+  console.log(`Seeded ${DEMO_PARTNERS.length} demo partners.`)
 }
 
 async function main() {
