@@ -47,6 +47,11 @@ export type {
   SourceOrderGuestSummary,
   CreateSourceOrderGuestDto,
   UpdateSourceOrderGuestDto,
+  ItinerarySegmentSummary,
+  ItinerarySegmentListSummary,
+  ItinerarySegmentListResult,
+  CreateItinerarySegmentDto,
+  UpdateItinerarySegmentDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -76,6 +81,7 @@ export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum
 export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
 export { GuestGender } from './enums/guest-gender.enum'
 export { SourceOrderReceivableStatus } from './enums/source-order-receivable-status.enum'
+export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
   isFinanceTouched,

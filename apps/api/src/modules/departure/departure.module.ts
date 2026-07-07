@@ -7,15 +7,23 @@ import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
 import { SourceOrderController } from './source-order.controller'
 import { SourceOrderService } from './source-order.service'
+import { SegmentController } from './segment.controller'
+import { SegmentService } from './segment.service'
 
 @Module({
   imports: [AuthModule],
-  controllers: [DepartureController, RouteTemplateController, SourceOrderController],
+  controllers: [
+    DepartureController,
+    RouteTemplateController,
+    SourceOrderController,
+    SegmentController,
+  ],
   providers: [
     DepartureService,
     RouteTemplateService,
     RouteTemplateCopyService,
     SourceOrderService,
+    SegmentService,
   ],
 })
 export class DepartureModule {}

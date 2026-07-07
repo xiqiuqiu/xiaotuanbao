@@ -69,8 +69,12 @@ const departureNewRoute = createRoute({
 const departureDetailRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/$departureId',
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): {
+    tab?: string
+    segmentId?: string
+  } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
+    segmentId: typeof search.segmentId === 'string' ? search.segmentId : undefined,
   }),
   component: DepartureDetailPage,
 })

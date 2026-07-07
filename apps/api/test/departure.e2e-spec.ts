@@ -7,8 +7,10 @@ import {
   PartnerKind,
   PartnerType,
   PaymentScheduleDirection,
+  ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
+  SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { authRequest, createTestApp, loginAs } from './helpers'
@@ -53,6 +55,18 @@ describe('Departure API (e2e)', () => {
       },
     })
     await prisma.sourceOrder.deleteMany({
+      where: {
+        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+      },
+    })
+    await prisma.segmentResource.deleteMany({
+      where: {
+        segment: {
+          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        },
+      },
+    })
+    await prisma.itinerarySegment.deleteMany({
       where: {
         departure: { organizationId, departureNo: { startsWith: testPrefix } },
       },
@@ -607,6 +621,223 @@ describe('Departure API (e2e)', () => {
         .expect(409)
 
       expect(response.body.message).toBe('当前客源单已生成应收，不能直接删除')
+    })
+  })
+
+  describe('Itinerary segments', () => {
+    let supplierId: string
+
+    beforeAll(async () => {
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-segment-supplier`,
+          category: SupplierCategory.transport,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      supplierId = supplier.id
+    })
+
+    function segmentPayload(overrides: Record<string, unknown> = {}) {
+      return {
+        name: '喀纳斯段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        destination: '喀纳斯',
+        ...overrides,
+      }
+    }
+
+    async function createSegmentDeparture() {
+      return createTestDeparture({ startDate: '2026-08-01', endDate: '2026-08-10' })
+    }
+
+    it('creates segment with computed day count and default guest count', async () => {
+      const departure = await createSegmentDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      expect(response.body.data).toMatchObject({
+        name: '喀纳斯段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        dayCount: 3,
+        destination: '喀纳斯',
+        applicableGuestCount: 1,
+        fromTemplate: false,
+        resourceCount: 0,
+        outsourceCount: 0,
+        resourceAmountCents: 0,
+        payableStatus: 'not_generated',
+      })
+    })
+
+    it('defaults applicable guest count from source orders', async () => {
+      const departure = await createSegmentDeparture()
+      const partner = await prisma.partner.findFirst({
+        where: { organizationId, name: { startsWith: testPrefix } },
+      })
+      if (!partner) {
+        throw new Error('Partner not found')
+      }
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: partner.id,
+          guestCount: 12,
+          unitPriceCents: 100000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload({ name: '阿勒泰段', startDate: '2026-08-04', endDate: '2026-08-10' }))
+        .expect(201)
+
+      expect(response.body.data.applicableGuestCount).toBe(12)
+    })
+
+    it('lists segments with summary', async () => {
+      const departure = await createSegmentDeparture()
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(
+          segmentPayload({
+            name: '阿勒泰段',
+            startDate: '2026-08-04',
+            endDate: '2026-08-10',
+          }),
+        )
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/segments`)
+        .expect(200)
+
+      expect(response.body.data.total).toBe(2)
+      expect(response.body.data.summary).toMatchObject({
+        segmentCount: 2,
+        totalDays: 10,
+        resourceCount: 0,
+        payableOverview: 'not_generated',
+      })
+      expect(response.body.data.items[0].name).toBe('喀纳斯段')
+      expect(response.body.data.items[1].name).toBe('阿勒泰段')
+    })
+
+    it('returns 400 when end date is before start date', async () => {
+      const departure = await createSegmentDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload({ startDate: '2026-08-05', endDate: '2026-08-03' }))
+        .expect(400)
+
+      expect(response.body.message).toBe('结束日期不能早于开始日期')
+    })
+
+    it('returns 400 when segment dates exceed departure range', async () => {
+      const departure = await createSegmentDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload({ startDate: '2026-07-28', endDate: '2026-08-03' }))
+        .expect(400)
+
+      expect(response.body.message).toBe('行程段日期不能超出发团日期')
+    })
+
+    it('updates segment fields', async () => {
+      const departure = await createSegmentDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .patch(`/api/segments/${created.body.data.id}`)
+        .send({ name: '喀纳斯修订段', applicableGuestCount: 8 })
+        .expect(200)
+
+      expect(response.body.data.name).toBe('喀纳斯修订段')
+      expect(response.body.data.applicableGuestCount).toBe(8)
+    })
+
+    it('deletes segment without resources', async () => {
+      const departure = await createSegmentDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .delete(`/api/segments/${created.body.data.id}`)
+        .expect(200)
+
+      const list = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/segments`)
+        .expect(200)
+
+      expect(list.body.data.total).toBe(0)
+    })
+
+    it('returns 409 when deleting segment with resources', async () => {
+      const departure = await createSegmentDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      const segmentId = created.body.data.id as string
+
+      await prisma.segmentResource.create({
+        data: {
+          segmentId,
+          resourceKind: ResourceKind.transport,
+          counterpartyType: CounterpartyType.supplier,
+          supplierId,
+          title: '用车',
+          amountCents: 360000,
+          fromTemplate: false,
+        },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/segments/${segmentId}`)
+        .expect(409)
+
+      expect(response.body.message).toBe('当前行程段已有资源，不能删除')
+    })
+
+    it('returns 409 when mutating segments on closed departure', async () => {
+      const departure = await createSegmentDeparture()
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .expect(201)
+
+      const createResponse = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(409)
+
+      expect(createResponse.body.message).toBe('发团已关闭，不可编辑')
     })
   })
 })

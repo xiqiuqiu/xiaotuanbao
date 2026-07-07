@@ -6,6 +6,7 @@ import { getDeparture } from '@/services/departure.service'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
+import { SegmentTab } from '../components/SegmentTab'
 import { DepartureTabPlaceholder } from '../components/DepartureTabPlaceholder'
 import {
   DEPARTURE_DETAIL_TABS,
@@ -80,7 +81,9 @@ export function DepartureDetailPage() {
     )
   }
 
-  const readOnly = departure.status === DepartureStatus.CLOSED
+  const readOnly =
+    departure.status === DepartureStatus.CLOSED ||
+    departure.status === DepartureStatus.SETTLED
 
   const tabItems = DEPARTURE_DETAIL_TABS.map((tab) => {
     if (tab.key === 'overview') {
@@ -103,6 +106,14 @@ export function DepartureDetailPage() {
         key: tab.key,
         label: tab.label,
         children: <SourceOrdersTab departure={departure} readOnly={readOnly} />,
+      }
+    }
+
+    if (tab.key === 'segments') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: <SegmentTab departure={departure} readOnly={readOnly} />,
       }
     }
 

@@ -472,3 +472,51 @@ export interface UpdateSourceOrderGuestDto {
   gender?: string
   notes?: string | null
 }
+
+export interface ItinerarySegmentSummary {
+  id: string
+  departureId: string
+  name: string
+  startDate: string
+  endDate: string
+  dayCount: number
+  destination: string | null
+  applicableGuestCount: number
+  notes: string | null
+  fromTemplate: boolean
+  resourceCount: number
+  outsourceCount: number
+  resourceAmountCents: number
+  payableStatus: string
+}
+
+export interface ItinerarySegmentListSummary {
+  segmentCount: number
+  totalDays: number
+  resourceCount: number
+  payableOverview: string
+}
+
+export interface ItinerarySegmentListResult {
+  items: ItinerarySegmentSummary[]
+  summary: ItinerarySegmentListSummary
+  total: number
+}
+
+export interface CreateItinerarySegmentDto {
+  name: string
+  startDate: string
+  endDate: string
+  destination: string
+  applicableGuestCount?: number
+  notes?: string
+}
+
+export interface UpdateItinerarySegmentDto {
+  name?: string
+  startDate?: string
+  endDate?: string
+  destination?: string
+  applicableGuestCount?: number
+  notes?: string | null
+}

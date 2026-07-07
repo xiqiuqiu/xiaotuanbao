@@ -1,5 +1,6 @@
 import {
   DepartureStatus,
+  SegmentPayableStatus,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
   SourceOrderReceivableStatus,
@@ -114,3 +115,17 @@ export const GUEST_GENDER_OPTIONS = [
 export const GUEST_GENDER_LABELS = Object.fromEntries(
   GUEST_GENDER_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<string, string>
+
+export const SEGMENT_PAYABLE_STATUS_LABELS: Record<string, string> = {
+  [SegmentPayableStatus.NOT_GENERATED]: '未生成',
+  [SegmentPayableStatus.PENDING]: '待付',
+  [SegmentPayableStatus.PARTIAL]: '部分付款',
+  [SegmentPayableStatus.PAID]: '已付清',
+}
+
+export const SEGMENT_PAYABLE_OVERVIEW_LABELS: Record<string, string> = {
+  [SegmentPayableStatus.NOT_GENERATED]: '应付未生成',
+  [SegmentPayableStatus.PENDING]: '应付待付',
+  [SegmentPayableStatus.PARTIAL]: '应付部分付款',
+  [SegmentPayableStatus.PAID]: '应付已付清',
+}

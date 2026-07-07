@@ -32,6 +32,11 @@ export type {
   SourceOrderGuestSummary,
   CreateSourceOrderGuestDto,
   UpdateSourceOrderGuestDto,
+  ItinerarySegmentSummary,
+  ItinerarySegmentListResult,
+  ItinerarySegmentListSummary,
+  CreateItinerarySegmentDto,
+  UpdateItinerarySegmentDto,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -52,5 +57,6 @@ export {
   SourceOrderDiscountType,
   SourceOrderCollectionMode,
   SourceOrderReceivableStatus,
+  SegmentPayableStatus,
   GuestGender,
 } from '@xiaotuanbao/shared'
