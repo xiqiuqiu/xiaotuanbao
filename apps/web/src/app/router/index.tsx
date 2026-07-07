@@ -16,6 +16,7 @@ import { PartnersPage } from '@/features/partner/pages/PartnersPage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
+import { PartnerDetailPage } from '@/features/partner/pages/PartnerDetailPage'
 import { OrganizationPage } from '@/pages/system/OrganizationPage'
 import { RolesPage } from '@/pages/system/RolesPage'
 
@@ -86,6 +87,12 @@ const partnerRoute = createRoute({
   component: PartnersPage,
 })
 
+const partnerDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/partner/$partnerId',
+  component: PartnerDetailPage,
+})
+
 const supplierRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/supplier',
@@ -126,6 +133,7 @@ const routeTree = rootRoute.addChildren([
     financeTransactionsRoute,
     financeVerificationRoute,
     partnerRoute,
+    partnerDetailRoute,
     supplierRoute,
     supplierDetailRoute,
     systemOrganizationRoute,

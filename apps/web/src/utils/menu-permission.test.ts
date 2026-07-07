@@ -12,6 +12,10 @@ describe('isMenuPathAllowed', () => {
     expect(isMenuPathAllowed('/supplier/clxyz123', menuKeys)).toBe(true)
   })
 
+  it('allows partner detail sub-route when /partner is granted', () => {
+    expect(isMenuPathAllowed('/partner/clxyz123', ['/', '/partner'])).toBe(true)
+  })
+
   it('denies unrelated paths', () => {
     expect(isMenuPathAllowed('/partner', menuKeys)).toBe(false)
   })

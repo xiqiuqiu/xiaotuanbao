@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
+import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { PartnerSummary } from '@/types/api'
@@ -42,7 +43,11 @@ function buildColumns(
     {
       title: '合作伙伴名称',
       dataIndex: 'name',
-      render: (name: string) => <Typography.Text strong>{name}</Typography.Text>,
+      render: (name: string, record) => (
+        <Link to="/partner/$partnerId" params={{ partnerId: record.id }}>
+          <Typography.Text strong>{name}</Typography.Text>
+        </Link>
+      ),
     },
     {
       title: '合作伙伴类型',

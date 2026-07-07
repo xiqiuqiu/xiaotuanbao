@@ -39,6 +39,10 @@ export async function listPartners(params: ListPartnersParams): Promise<PartnerL
   return request.get<PartnerListResult>('/partners', { params })
 }
 
+export async function getPartner(id: string): Promise<PartnerSummary> {
+  return request.get<PartnerSummary>(`/partners/${id}`)
+}
+
 export async function createPartner(payload: CreatePartnerPayload): Promise<PartnerSummary> {
   return request.post<PartnerSummary>('/partners', payload)
 }
