@@ -5,19 +5,17 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type {
+  GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
 } from '@xiaotuanbao/shared'
 import {
   SourceOrderReceivableStatus,
-  deriveScheduleState,
-  PaymentScheduleStatus,
 } from '@xiaotuanbao/shared'
 import {
   DepartureStatus,
   DirectoryProfileStatus,
-  PaymentScheduleDirection,
   type Departure,
   type Partner,
   type Prisma,
@@ -37,13 +35,19 @@ import {
   computeSourceOrderAmounts,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
-import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
+import {
+  DepartureFinanceBridgeService,
+  type SourceOrderFinanceMeta,
+} from './departure-finance-bridge.service'
 
 type SourceOrderWithPartner = SourceOrder & { partner: Partner }
 
 @Injectable()
 export class SourceOrderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financeBridge: DepartureFinanceBridgeService,
+  ) {}
 
   async listByDeparture(
     organizationId: string,
@@ -79,9 +83,9 @@ export class SourceOrderService {
       orderBy: [{ createdAt: 'asc' }],
     })
 
-    const scheduleMap = await this.loadScheduleMeta(organizationId, orders.map((o) => o.id))
+    const scheduleMetaMap = await this.loadScheduleMeta(organizationId, orders.map((o) => o.id))
     const items = orders.map((order) =>
-      this.toSourceOrderSummary(order, scheduleMap.get(order.id)),
+      this.toSourceOrderSummary(order, scheduleMetaMap.get(order.id)),
     )
 
     const partnerIds = new Set(items.map((item) => item.partnerId))
@@ -144,7 +148,23 @@ export class SourceOrderService {
       include: { partner: true },
     })
 
-    return this.toSourceOrderSummary(created, { hasSchedule: false, receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED })
+    return this.toSourceOrderSummary(created, {
+      hasSchedule: false,
+      receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
+      hasSourceAmountMismatch: false,
+      amountFieldsLocked: false,
+    })
+  }
+
+  async generateReceivables(
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<GenerateReceivablesResult> {
+    return this.financeBridge.generateReceivables(
+      organizationId,
+      sourceOrderId,
+      (order, meta) => this.toSourceOrderSummary(order, meta),
+    )
   }
 
   async getById(organizationId: string, sourceOrderId: string): Promise<SourceOrderSummary> {
@@ -184,6 +204,21 @@ export class SourceOrderService {
     })
 
     const amounts = computeSourceOrderAmounts(normalized)
+
+    await this.financeBridge.assertAmountFieldsEditable(
+      organizationId,
+      order.id,
+      order,
+      {
+        guestCount: normalized.guestCount,
+        unitPriceCents: normalized.unitPriceCents,
+        discountType: normalized.discountType,
+        discountCents: amounts.discountCents,
+        collectionMode: normalized.collectionMode,
+        partnerCollectedCents: amounts.partnerCollectedCents,
+      },
+    )
+
     const displayName =
       dto.partnerId !== undefined
         ? await this.generateDisplayName(order.departure, partner.name, partner.id, order.id)
@@ -209,11 +244,14 @@ export class SourceOrderService {
           dto.settlementNotes !== undefined ? dto.settlementNotes?.trim() || null : undefined,
         notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
       },
-      include: { partner: true },
+      include: { partner: true, departure: true },
     })
 
-    const scheduleMeta = await this.loadScheduleMeta(organizationId, [order.id])
-    return this.toSourceOrderSummary(updated, scheduleMeta.get(order.id))
+    const financeMeta = await this.financeBridge.syncSourceOrderSchedules(
+      organizationId,
+      updated,
+    )
+    return this.toSourceOrderSummary(updated, financeMeta)
   }
 
   async remove(organizationId: string, sourceOrderId: string): Promise<void> {
@@ -391,74 +429,14 @@ export class SourceOrderService {
   }
 
   private async loadScheduleMeta(organizationId: string, sourceOrderIds: string[]) {
-    const map = new Map<
-      string,
-      { hasSchedule: boolean; receivableStatus: SourceOrderReceivableStatus }
-    >()
+    const map = new Map<string, SourceOrderFinanceMeta>()
 
-    if (sourceOrderIds.length === 0) {
-      return map
-    }
-
-    const schedules = await this.prisma.paymentSchedule.findMany({
-      where: {
-        organizationId,
-        sourceId: { in: sourceOrderIds },
-        direction: PaymentScheduleDirection.receivable,
-        cancelledAt: null,
-      },
-      include: {
-        verifications: {
-          where: { status: 'normal' },
-        },
-      },
-    })
-
-    for (const sourceOrderId of sourceOrderIds) {
-      const linked = schedules.filter((schedule) => schedule.sourceId === sourceOrderId)
-      if (linked.length === 0) {
-        map.set(sourceOrderId, {
-          hasSchedule: false,
-          receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
-        })
-        continue
-      }
-
-      const scheduleStates = linked.map((schedule) => {
-        const settledAmountCents = schedule.verifications.reduce(
-          (sum, verification) => sum + verification.amountCents,
-          0,
-        )
-        return {
-          amountCents: schedule.amountCents,
-          settledAmountCents,
-          status: deriveScheduleState({
-            amountCents: schedule.amountCents,
-            settledAmountCents,
-            dueDate: formatDateOnly(schedule.dueDate),
-            cancelledAt: schedule.cancelledAt,
-            businessDate: getShanghaiTodayString(),
-          }),
-        }
-      })
-
-      let receivableStatus = SourceOrderReceivableStatus.PENDING
-      const allCollected = scheduleStates.every(
-        (item) => item.status === PaymentScheduleStatus.SETTLED,
-      )
-      const anyPartial = scheduleStates.some(
-        (item) =>
-          item.settledAmountCents > 0 && item.settledAmountCents < item.amountCents,
-      )
-
-      if (allCollected) {
-        receivableStatus = SourceOrderReceivableStatus.COLLECTED
-      } else if (anyPartial) {
-        receivableStatus = SourceOrderReceivableStatus.PARTIAL
-      }
-
-      map.set(sourceOrderId, { hasSchedule: true, receivableStatus })
-    }
+    await Promise.all(
+      sourceOrderIds.map(async (sourceOrderId) => {
+        const meta = await this.financeBridge.evaluateFinanceMeta(organizationId, sourceOrderId)
+        map.set(sourceOrderId, meta)
+      }),
+    )
 
     return map
   }
@@ -530,7 +508,7 @@ export class SourceOrderService {
 
   private toSourceOrderSummary(
     order: SourceOrderWithPartner,
-    scheduleMeta?: { hasSchedule: boolean; receivableStatus: SourceOrderReceivableStatus },
+    scheduleMeta?: SourceOrderFinanceMeta,
   ): SourceOrderSummary {
     return {
       id: order.id,
@@ -553,6 +531,8 @@ export class SourceOrderService {
       receivableStatus:
         scheduleMeta?.receivableStatus ?? SourceOrderReceivableStatus.NOT_GENERATED,
       hasPaymentSchedule: scheduleMeta?.hasSchedule ?? false,
+      hasSourceAmountMismatch: scheduleMeta?.hasSourceAmountMismatch ?? false,
+      amountFieldsLocked: scheduleMeta?.amountFieldsLocked ?? false,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
     }

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import type {
+  GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -138,5 +139,14 @@ export class SourceOrderController {
     @Param('id') id: string,
   ): Promise<SourceOrderSummary> {
     return this.sourceOrderService.syncGuestCount(request.user.organizationId, id)
+  }
+
+  @Post('source-orders/:id/generate-receivables')
+  @RequireMenu('/departure')
+  generateReceivables(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<GenerateReceivablesResult> {
+    return this.sourceOrderService.generateReceivables(request.user.organizationId, id)
   }
 }

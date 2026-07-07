@@ -44,6 +44,7 @@ export type {
   SourceOrderSummary,
   SourceOrderListSummary,
   SourceOrderListResult,
+  GenerateReceivablesResult,
   CreateSourceOrderDto,
   UpdateSourceOrderDto,
   SourceOrderGuestSummary,

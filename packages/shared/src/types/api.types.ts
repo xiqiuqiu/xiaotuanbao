@@ -424,8 +424,16 @@ export interface SourceOrderSummary {
   notes: string | null
   receivableStatus: string
   hasPaymentSchedule: boolean
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface GenerateReceivablesResult {
+  schedules: PaymentScheduleSummary[]
+  sourceOrder: SourceOrderSummary
+  sourceAmountMismatch: boolean
 }
 
 export interface SourceOrderListSummary {

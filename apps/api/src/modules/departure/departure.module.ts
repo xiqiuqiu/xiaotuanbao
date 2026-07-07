@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
+import { FinanceModule } from '../finance/finance.module'
 import { DepartureController } from './departure.controller'
 import { DepartureService } from './departure.service'
 import { RouteTemplateController } from './route-template.controller'
@@ -10,9 +11,10 @@ import { SourceOrderController } from './source-order.controller'
 import { SourceOrderService } from './source-order.service'
 import { SegmentController } from './segment.controller'
 import { SegmentService } from './segment.service'
+import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, FinanceModule],
   controllers: [
     DepartureController,
     RouteTemplateController,
@@ -26,6 +28,7 @@ import { SegmentService } from './segment.service'
     DepartureCopyService,
     SourceOrderService,
     SegmentService,
+    DepartureFinanceBridgeService,
   ],
 })
 export class DepartureModule {}

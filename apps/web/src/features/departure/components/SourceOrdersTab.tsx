@@ -24,6 +24,7 @@ import { listPartners } from '@/services/partner.service'
 import {
   createSourceOrder,
   deleteSourceOrder,
+  generateReceivables,
   listSourceOrders,
   updateSourceOrder,
 } from '@/services/source-order.service'
@@ -107,6 +108,18 @@ export function SourceOrdersTab({ departure, readOnly }: SourceOrdersTabProps) {
     mutationFn: (id: string) => deleteSourceOrder(id),
     onSuccess: () => {
       message.success('客源单已删除')
+      invalidate()
+    },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: (id: string) => generateReceivables(id),
+    onSuccess: (result) => {
+      message.success(
+        result.sourceAmountMismatch
+          ? '应收已生成，存在来源金额差异，请核对'
+          : '应收已生成',
+      )
       invalidate()
     },
   })
@@ -213,7 +226,12 @@ export function SourceOrdersTab({ departure, readOnly }: SourceOrdersTabProps) {
                 >
                   客人名单
                 </Button>
-                <Button type="link" size="small" disabled title="将在后续版本实现">
+                <Button
+                  type="link"
+                  size="small"
+                  loading={generateMutation.isPending && generateMutation.variables === record.id}
+                  onClick={() => generateMutation.mutate(record.id)}
+                >
                   生成应收
                 </Button>
                 {!record.hasPaymentSchedule ? (
@@ -232,7 +250,7 @@ export function SourceOrdersTab({ departure, readOnly }: SourceOrdersTabProps) {
         ),
       },
     ],
-    [deleteMutation, readOnly],
+    [deleteMutation, generateMutation, readOnly],
   )
 
   const summary = listResult?.summary

@@ -2,6 +2,7 @@ import { request } from '@/lib/request'
 import type {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
+  GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -46,6 +47,12 @@ export async function updateSourceOrder(
 
 export async function deleteSourceOrder(id: string): Promise<void> {
   await request.delete(`/source-orders/${id}`)
+}
+
+export async function generateReceivables(sourceOrderId: string): Promise<GenerateReceivablesResult> {
+  return request.post<GenerateReceivablesResult>(
+    `/source-orders/${sourceOrderId}/generate-receivables`,
+  )
 }
 
 export async function listSourceOrderGuests(

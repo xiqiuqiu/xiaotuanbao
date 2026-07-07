@@ -25,5 +25,6 @@ import { VerificationService } from './verification.service'
     TransactionService,
     FinanceOperationsService,
   ],
+  exports: [PaymentScheduleService, VerificationService],
 })
 export class FinanceModule {}

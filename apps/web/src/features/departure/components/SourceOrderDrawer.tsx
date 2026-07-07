@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import {
+  Alert,
   Divider,
   Drawer,
   Form,
@@ -81,6 +82,7 @@ export function SourceOrderDrawer({
 }: SourceOrderDrawerProps) {
   const discountType = Form.useWatch('discountType', form)
   const collectionMode = Form.useWatch('collectionMode', form)
+  const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -129,6 +131,15 @@ export function SourceOrderDrawer({
         )
       }
     >
+      {editing?.hasSourceAmountMismatch ? (
+        <Alert
+          type="warning"
+          showIcon
+          message="来源差异警示"
+          description="客源单金额与已生成的应收节点不一致，且财务已介入，请核对后再处理。"
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
       <Form
         form={form}
         layout="vertical"
@@ -158,7 +169,12 @@ export function SourceOrderDrawer({
           label="客人人数"
           rules={[{ required: true, message: '请输入客人人数' }]}
         >
-          <InputNumber min={1} precision={0} style={{ width: '100%' }} />
+          <InputNumber
+            min={1}
+            precision={0}
+            style={{ width: '100%' }}
+            disabled={readOnly || amountFieldsLocked}
+          />
         </Form.Item>
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={2} placeholder="儿童、免票、特殊要求等" />
@@ -171,14 +187,22 @@ export function SourceOrderDrawer({
           label="原始团款单价（元）"
           rules={[{ required: true, message: '请输入单价' }]}
         >
-          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+          <InputNumber
+            min={0}
+            precision={2}
+            style={{ width: '100%' }}
+            disabled={readOnly || amountFieldsLocked}
+          />
         </Form.Item>
         <Form.Item
           name="discountType"
           label="优惠方式"
           rules={[{ required: true, message: '请选择优惠方式' }]}
         >
-          <Select options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]} />
+          <Select
+            options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]}
+            disabled={readOnly || amountFieldsLocked}
+          />
         </Form.Item>
         {discountType === SourceOrderDiscountType.LUMP_SUM ? (
           <Form.Item
@@ -186,7 +210,12 @@ export function SourceOrderDrawer({
             label="优惠金额（元）"
             rules={[{ required: true, message: '请输入优惠金额' }]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={readOnly || amountFieldsLocked}
+            />
           </Form.Item>
         ) : null}
         <Form.Item name="discountNotes" label="优惠备注">
@@ -200,7 +229,10 @@ export function SourceOrderDrawer({
           label="收款方式"
           rules={[{ required: true, message: '请选择收款方式' }]}
         >
-          <Select options={[...SOURCE_ORDER_COLLECTION_OPTIONS]} />
+          <Select
+            options={[...SOURCE_ORDER_COLLECTION_OPTIONS]}
+            disabled={readOnly || amountFieldsLocked}
+          />
         </Form.Item>
         {collectionMode === SourceOrderCollectionMode.SPLIT ? (
           <Form.Item
@@ -208,7 +240,12 @@ export function SourceOrderDrawer({
             label="客户已收金额（元）"
             rules={[{ required: true, message: '请输入客户已收金额' }]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={readOnly || amountFieldsLocked}
+            />
           </Form.Item>
         ) : null}
         <Form.Item name="settlementNotes" label="结算说明">
