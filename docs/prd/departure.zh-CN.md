@@ -183,7 +183,7 @@ Departure 接口 `@RequireMenu('/departure')`；Finance mutation 接口 `@Requir
 
 | 路径 | 说明 |
 | ---- | ---- |
-| `/departure` | 发团列表 + 新建抽屉 |
+| `/departure` | 发团列表 + **新建向导**（两步：选路线 → 填信息；宽 Drawer 或 Modal） |
 | `/departure/$departureId` | 详情页（Tab）；query `tab` 切换 |
 | `/departure/$departureId?tab=overview` | 概览 |
 | `/departure/$departureId?tab=sourceOrders` | 客源管理 |
@@ -228,6 +228,8 @@ settled / pending_settlement / editing ──[OP 手动]──► closed（已�
 ### 常用路线（Route Template）
 
 独立表 `route_templates` + 子表 `route_template_segments`、`route_template_resources`（结构与发团段/资源平行，无客源/财务 FK）。
+
+列表/卡片字段：`name`、`defaultDayCount`、`usageCount`（建团选用时 +1，供新建向导卡片展示）、`updatedAt`。
 
 **copy-on-create 规则**（勾选项默认全选除禁用项）：
 
