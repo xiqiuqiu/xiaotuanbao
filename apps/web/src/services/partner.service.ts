@@ -11,6 +11,9 @@ import type {
 
 export interface ListPartnersParams {
   search?: string
+  partnerKind?: PartnerKind
+  partnerType?: PartnerType
+  status?: DirectoryProfileStatus
   includeArchived?: boolean
   page?: number
   pageSize?: number

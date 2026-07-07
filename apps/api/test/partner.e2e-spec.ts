@@ -112,6 +112,162 @@ describe('Partner API (e2e)', () => {
     expect(names).toContain(archivedName)
   })
 
+  it('returns summary counts for active partners by kind', async () => {
+    const prefix = `${testPartnerPrefix}-summary`
+
+    const beforeResponse = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ pageSize: 1 })
+      .expect(200)
+
+    const before = beforeResponse.body.data.summary
+
+    await prisma.partner.createMany({
+      data: [
+        {
+          organizationId,
+          name: `${prefix}-group-agent`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-peer`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.local_agency,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-both`,
+          partnerKind: PartnerKind.both,
+          partnerType: PartnerType.wholesaler,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-disabled`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.other,
+          status: DirectoryProfileStatus.disabled,
+        },
+        {
+          organizationId,
+          name: `${prefix}-archived`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.other,
+          status: DirectoryProfileStatus.archived,
+        },
+      ],
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ pageSize: 1 })
+      .expect(200)
+
+    const summary = response.body.data.summary
+    expect(summary.total).toBe(before.total + 3)
+    expect(summary.groupAgent).toBe(before.groupAgent + 1)
+    expect(summary.peer).toBe(before.peer + 1)
+    expect(summary.both).toBe(before.both + 1)
+    expect(summary.total).toBe(summary.groupAgent + summary.peer + summary.both)
+  })
+
+  it('filters partners by partnerKind', async () => {
+    const prefix = `${testPartnerPrefix}-kind-filter`
+
+    await prisma.partner.createMany({
+      data: [
+        {
+          organizationId,
+          name: `${prefix}-group-agent`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-peer`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.local_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      ],
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: prefix, partnerKind: PartnerKind.peer, pageSize: 50 })
+      .expect(200)
+
+    expect(response.body.data.items).toHaveLength(1)
+    expect(response.body.data.items[0].name).toBe(`${prefix}-peer`)
+  })
+
+  it('filters partners by partnerType', async () => {
+    const prefix = `${testPartnerPrefix}-type-filter`
+
+    await prisma.partner.createMany({
+      data: [
+        {
+          organizationId,
+          name: `${prefix}-group-agency`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-wholesaler`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.wholesaler,
+          status: DirectoryProfileStatus.active,
+        },
+      ],
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: prefix, partnerType: PartnerType.wholesaler, pageSize: 50 })
+      .expect(200)
+
+    expect(response.body.data.items).toHaveLength(1)
+    expect(response.body.data.items[0].name).toBe(`${prefix}-wholesaler`)
+  })
+
+  it('filters partners by status', async () => {
+    const prefix = `${testPartnerPrefix}-status-filter`
+
+    await prisma.partner.createMany({
+      data: [
+        {
+          organizationId,
+          name: `${prefix}-active`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+        {
+          organizationId,
+          name: `${prefix}-disabled`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.local_agency,
+          status: DirectoryProfileStatus.disabled,
+        },
+      ],
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: prefix, status: DirectoryProfileStatus.disabled, pageSize: 50 })
+      .expect(200)
+
+    expect(response.body.data.items).toHaveLength(1)
+    expect(response.body.data.items[0].name).toBe(`${prefix}-disabled`)
+  })
+
   it('creates partner with name, partnerKind and partnerType', async () => {
     const name = `${testPartnerPrefix}-create`
 

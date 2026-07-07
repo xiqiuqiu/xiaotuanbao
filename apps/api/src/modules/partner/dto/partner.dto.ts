@@ -108,6 +108,18 @@ export class ListPartnersQueryDto {
   search?: string
 
   @IsOptional()
+  @IsEnum(PartnerKind)
+  partnerKind?: PartnerKind
+
+  @IsOptional()
+  @IsEnum(PartnerType)
+  partnerType?: PartnerType
+
+  @IsOptional()
+  @IsEnum(DirectoryProfileStatus)
+  status?: DirectoryProfileStatus
+
+  @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   includeArchived?: boolean

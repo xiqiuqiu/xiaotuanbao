@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Input, Modal, Space, Switch, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { PartnerSummary } from '@/types/api'
-import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { DirectoryProfileStatus, type PartnerKind, type PartnerType } from '@xiaotuanbao/shared'
 import {
   archivePartner,
   createPartner,
@@ -12,7 +12,9 @@ import {
   restorePartner,
   updatePartner,
 } from '@/services/partner.service'
+import { PartnerFilters } from '../components/PartnerFilters'
 import { PartnerFormDrawer } from '../components/PartnerFormDrawer'
+import { PartnerStatsCards } from '../components/PartnerStatsCards'
 import type { PartnerFormValues } from '../components/PartnerProfileSections'
 import {
   PARTNER_KIND_LABELS,
@@ -114,20 +116,46 @@ export function PartnersPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingPartner, setEditingPartner] = useState<PartnerSummary | null>(null)
   const [search, setSearch] = useState('')
+  const [partnerKindFilter, setPartnerKindFilter] = useState<PartnerKind | undefined>()
+  const [partnerTypeFilter, setPartnerTypeFilter] = useState<PartnerType | undefined>()
+  const [statusFilter, setStatusFilter] = useState<DirectoryProfileStatus | undefined>()
   const [includeArchived, setIncludeArchived] = useState(false)
+  const [filtersKey, setFiltersKey] = useState(0)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
   const { data: partnersResult, isLoading } = useQuery({
-    queryKey: ['partners', search, includeArchived, page, pageSize],
+    queryKey: [
+      'partners',
+      search,
+      partnerKindFilter,
+      partnerTypeFilter,
+      statusFilter,
+      includeArchived,
+      page,
+      pageSize,
+    ],
     queryFn: () =>
       listPartners({
         search: search || undefined,
+        partnerKind: partnerKindFilter,
+        partnerType: partnerTypeFilter,
+        status: statusFilter,
         includeArchived,
         page,
         pageSize,
       }),
   })
+
+  const resetFilters = useCallback(() => {
+    setSearch('')
+    setPartnerKindFilter(undefined)
+    setPartnerTypeFilter(undefined)
+    setStatusFilter(undefined)
+    setIncludeArchived(false)
+    setPage(1)
+    setFiltersKey((key) => key + 1)
+  }, [])
 
   const closeDrawer = () => {
     setDrawerOpen(false)
@@ -231,29 +259,36 @@ export function PartnersPage() {
         </Button>
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Input.Search
-            allowClear
-            placeholder="搜索名称 / 联系人 / 联系方式"
-            style={{ width: 280 }}
-            onSearch={(value) => {
-              setSearch(value.trim())
-              setPage(1)
-            }}
-          />
-          <Space>
-            <span>显示已归档</span>
-            <Switch
-              checked={includeArchived}
-              onChange={(value) => {
-                setIncludeArchived(value)
-                setPage(1)
-              }}
-            />
-          </Space>
-        </Space>
-      </Card>
+      <PartnerStatsCards summary={partnersResult?.summary} />
+
+      <PartnerFilters
+        key={filtersKey}
+        partnerKindFilter={partnerKindFilter}
+        partnerTypeFilter={partnerTypeFilter}
+        statusFilter={statusFilter}
+        includeArchived={includeArchived}
+        onSearch={(value) => {
+          setSearch(value)
+          setPage(1)
+        }}
+        onPartnerKindChange={(value) => {
+          setPartnerKindFilter(value)
+          setPage(1)
+        }}
+        onPartnerTypeChange={(value) => {
+          setPartnerTypeFilter(value)
+          setPage(1)
+        }}
+        onStatusChange={(value) => {
+          setStatusFilter(value)
+          setPage(1)
+        }}
+        onIncludeArchivedChange={(value) => {
+          setIncludeArchived(value)
+          setPage(1)
+        }}
+        onReset={resetFilters}
+      />
 
       <Card>
         <Table

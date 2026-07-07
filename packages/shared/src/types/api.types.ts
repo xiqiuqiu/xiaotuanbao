@@ -118,9 +118,17 @@ export interface PartnerSummary {
   updatedAt: string
 }
 
+export interface PartnerListSummary {
+  total: number
+  groupAgent: number
+  peer: number
+  both: number
+}
+
 export interface PartnerListResult {
   items: PartnerSummary[]
   total: number
   page: number
   pageSize: number
+  summary: PartnerListSummary
 }

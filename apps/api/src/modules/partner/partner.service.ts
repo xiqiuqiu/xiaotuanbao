@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type { PartnerListResult, PartnerSummary } from '@xiaotuanbao/shared'
-import { DirectoryProfileStatus, type Partner } from '@prisma/client'
+import { DirectoryProfileStatus, PartnerKind, type Partner } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   CreatePartnerDto,
@@ -38,10 +38,17 @@ export class PartnerService {
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
     const search = query.search?.trim()
     const includeArchived = query.includeArchived === true
+    const statusFilter =
+      query.status && (!includeArchived && query.status === DirectoryProfileStatus.archived
+        ? undefined
+        : query.status)
 
     const where = {
       organizationId,
       ...(!includeArchived ? { status: { not: DirectoryProfileStatus.archived } } : {}),
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(query.partnerKind ? { partnerKind: query.partnerKind } : {}),
+      ...(query.partnerType ? { partnerType: query.partnerType } : {}),
       ...(search
         ? {
             OR: [
@@ -53,7 +60,7 @@ export class PartnerService {
         : {}),
     }
 
-    const [items, total] = await Promise.all([
+    const [items, total, summary] = await Promise.all([
       this.prisma.partner.findMany({
         where,
         orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
@@ -61,6 +68,7 @@ export class PartnerService {
         take: pageSize,
       }),
       this.prisma.partner.count({ where }),
+      this.computeSummary(organizationId),
     ])
 
     return {
@@ -68,7 +76,30 @@ export class PartnerService {
       total,
       page,
       pageSize,
+      summary,
     }
+  }
+
+  private async computeSummary(organizationId: string) {
+    const baseWhere = {
+      organizationId,
+      status: DirectoryProfileStatus.active,
+    }
+
+    const [total, groupAgent, peer, both] = await Promise.all([
+      this.prisma.partner.count({ where: baseWhere }),
+      this.prisma.partner.count({
+        where: { ...baseWhere, partnerKind: PartnerKind.group_agent },
+      }),
+      this.prisma.partner.count({
+        where: { ...baseWhere, partnerKind: PartnerKind.peer },
+      }),
+      this.prisma.partner.count({
+        where: { ...baseWhere, partnerKind: PartnerKind.both },
+      }),
+    ])
+
+    return { total, groupAgent, peer, both }
   }
 
   async getById(organizationId: string, partnerId: string): Promise<PartnerSummary> {

@@ -14,6 +14,7 @@ export type {
   SupplierSummary,
   SupplierListResult,
   PartnerSummary,
+  PartnerListSummary,
   PartnerListResult,
 } from './types/api.types'
 
