@@ -101,3 +101,26 @@ export interface SupplierListResult {
   page: number
   pageSize: number
 }
+
+export interface PartnerSummary {
+  id: string
+  name: string
+  partnerKind: string
+  partnerType: string
+  status: 'active' | 'disabled' | 'archived'
+  contactName: string | null
+  contactRole: string | null
+  contactPhone: string | null
+  settlementMethod: string | null
+  paymentTermRule: string | null
+  settlementNotes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PartnerListResult {
+  items: PartnerSummary[]
+  total: number
+  page: number
+  pageSize: number
+}

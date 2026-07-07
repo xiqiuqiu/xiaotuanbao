@@ -70,6 +70,35 @@ enum InvoiceType {
   @@map("invoice_type")
 }
 
+enum PartnerKind {
+  group_agent
+  peer
+  both
+
+  @@map("partner_kind")
+}
+
+enum PartnerType {
+  group_agency
+  local_agency
+  wholesaler
+  integrated_agency
+  other
+
+  @@map("partner_type")
+}
+
+enum PartnerContactRole {
+  owner
+  operator
+  finance
+  sales
+  customer_service
+  other
+
+  @@map("partner_contact_role")
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -78,6 +107,7 @@ model Organization {
   deletedAt DateTime? @map("deleted_at")
   users     User[]
   suppliers Supplier[]
+  partners  Partner[]
 
   @@map("organizations")
 }
@@ -169,4 +199,25 @@ model Supplier {
 
   @@unique([organizationId, name])
   @@map("suppliers")
+}
+
+model Partner {
+  id               String                 @id @default(cuid())
+  organizationId   String                 @map("organization_id")
+  organization     Organization           @relation(fields: [organizationId], references: [id])
+  name             String
+  partnerKind      PartnerKind            @map("partner_kind")
+  partnerType      PartnerType            @map("partner_type")
+  status           DirectoryProfileStatus @default(active)
+  contactName      String?                @map("contact_name")
+  contactRole      PartnerContactRole?    @map("contact_role")
+  contactPhone     String?                @map("contact_phone")
+  settlementMethod SettlementMethod?      @map("settlement_method")
+  paymentTermRule  SettlementCycle?       @map("payment_term_rule")
+  settlementNotes  String?                @map("settlement_notes")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  @@unique([organizationId, name])
+  @@map("partners")
 }

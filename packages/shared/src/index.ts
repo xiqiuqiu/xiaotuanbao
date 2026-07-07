@@ -13,6 +13,8 @@ export type {
   EmployeeListResult,
   SupplierSummary,
   SupplierListResult,
+  PartnerSummary,
+  PartnerListResult,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -24,3 +26,6 @@ export { SettlementMethod } from './enums/settlement-method.enum'
 export { SettlementCycle } from './enums/settlement-cycle.enum'
 export { InvoiceAvailable } from './enums/invoice-available.enum'
 export { InvoiceType } from './enums/invoice-type.enum'
+export { PartnerKind } from './enums/partner-kind.enum'
+export { PartnerType } from './enums/partner-type.enum'
+export { PartnerContactRole } from './enums/partner-contact-role.enum'

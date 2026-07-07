@@ -13,6 +13,8 @@ export type {
   EmployeeListResult,
   SupplierSummary,
   SupplierListResult,
+  PartnerSummary,
+  PartnerListResult,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -23,4 +25,7 @@ export {
   SettlementCycle,
   InvoiceAvailable,
   InvoiceType,
+  PartnerKind,
+  PartnerType,
+  PartnerContactRole,
 } from '@xiaotuanbao/shared'

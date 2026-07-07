@@ -7,6 +7,7 @@ import { OrganizationModule } from './modules/organization/organization.module'
 import { RoleModule } from './modules/role/role.module'
 import { UserModule } from './modules/user/user.module'
 import { SupplierModule } from './modules/supplier/supplier.module'
+import { PartnerModule } from './modules/partner/partner.module'
 import { PrismaModule } from './database/prisma/prisma.module'
 
 @Module({
@@ -23,6 +24,7 @@ import { PrismaModule } from './database/prisma/prisma.module'
     OrganizationModule,
     UserModule,
     SupplierModule,
+    PartnerModule,
   ],
 })
 export class AppModule {}

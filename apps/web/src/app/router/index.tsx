@@ -12,6 +12,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+import { PartnersPage } from '@/features/partner/pages/PartnersPage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
@@ -82,7 +83,7 @@ const financeVerificationRoute = createRoute({
 const partnerRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/partner',
-  component: () => <PlaceholderPage title="合作伙伴" />,
+  component: PartnersPage,
 })
 
 const supplierRoute = createRoute({
