@@ -168,6 +168,49 @@ export interface CreateDepartureDto {
   departureNo?: string
   departureType?: string
   notes?: string
+  templateId?: string
+  copySegments?: boolean
+  copyResources?: boolean
+  copyReferencePrices?: boolean
+}
+
+export interface RouteTemplateCardSummary {
+  id: string
+  name: string
+  defaultDayCount: number
+  usageCount: number
+  updatedAt: string
+}
+
+export interface RouteTemplateDetailSummary extends RouteTemplateCardSummary {
+  segmentCount: number
+  resourceCount: number
+}
+
+export interface CreateRouteTemplateResourceDto {
+  resourceKind: string
+  counterpartyType: string
+  partnerId?: string
+  supplierId?: string
+  title: string
+  amountCents: number
+  notes?: string
+}
+
+export interface CreateRouteTemplateSegmentDto {
+  sortOrder: number
+  name: string
+  dayCount: number
+  destination?: string
+  notes?: string
+  resources?: CreateRouteTemplateResourceDto[]
+}
+
+export interface CreateRouteTemplateDto {
+  name: string
+  defaultDayCount: number
+  notes?: string
+  segments?: CreateRouteTemplateSegmentDto[]
 }
 
 export interface PaymentScheduleSummary {
@@ -185,6 +228,8 @@ export interface PaymentScheduleSummary {
   sourceId: string | null
   status: string
   financeTouched: boolean
+  settledAmountCents: number
+  unsettledAmountCents: number
   cancelledAt: string | null
   cancelReason: string | null
   amountAdjustedAt: string | null
@@ -218,4 +263,93 @@ export interface UpdatePaymentScheduleDto {
   counterpartyType?: string
   counterpartyId?: string | null
   counterpartyName?: string | null
+}
+
+export interface FinanceTransactionSummary {
+  id: string
+  transactionNo: string
+  direction: string
+  amountCents: number
+  allocatedAmountCents: number
+  unallocatedAmountCents: number
+  transactionDate: string
+  counterpartyType: string
+  counterpartyId: string | null
+  counterpartyName: string | null
+  departureId: string | null
+  voidedAt: string | null
+  voidReason: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FinanceTransactionListResult {
+  items: FinanceTransactionSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CreateFinanceTransactionDto {
+  direction: string
+  amountCents: number
+  transactionDate: string
+  counterpartyType: string
+  counterpartyId?: string
+  counterpartyName?: string
+  departureId?: string
+  notes?: string
+}
+
+export interface VoidFinanceTransactionDto {
+  voidReason?: string
+}
+
+export interface FinanceVerificationSummary {
+  id: string
+  verificationNo: string
+  paymentScheduleId: string
+  transactionId: string
+  amountCents: number
+  status: string
+  cancelledAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FinanceVerificationListResult {
+  items: FinanceVerificationSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CreateFinanceVerificationDto {
+  paymentScheduleId: string
+  transactionId: string
+  amountCents: number
+}
+
+export interface ConfirmCollectionDto {
+  amountCents: number
+  transactionDate: string
+  counterpartyType?: string
+  counterpartyId?: string
+  counterpartyName?: string
+  notes?: string
+}
+
+export interface ConfirmPaymentDto {
+  amountCents: number
+  transactionDate: string
+  counterpartyType?: string
+  counterpartyId?: string
+  counterpartyName?: string
+  notes?: string
+}
+
+export interface LinkTransactionDto {
+  transactionId: string
+  amountCents: number
 }

@@ -34,7 +34,13 @@ vi.mock('@/services/departure.service', () => ({
   createDeparture: vi.fn(),
 }))
 
+vi.mock('@/services/route-template.service', () => ({
+  listRouteTemplates: vi.fn(),
+  getRouteTemplate: vi.fn(),
+}))
+
 import { createDeparture, previewDepartureNo } from '@/services/departure.service'
+import { getRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
 
 const mockDeparture: DepartureSummary = {
   id: 'departure-1',
@@ -77,32 +83,66 @@ describe('CreateDepartureWizard', () => {
   beforeEach(() => {
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'DT202608010001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
+    vi.mocked(listRouteTemplates).mockResolvedValue([])
+    vi.mocked(getRouteTemplate).mockResolvedValue({
+      id: 'template-1',
+      name: '西安-青海湖-茶卡6日游',
+      defaultDayCount: 6,
+      usageCount: 3,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      segmentCount: 2,
+      resourceCount: 5,
+    })
   })
 
-  it('disables next step until route name is filled', () => {
+  it('disables next step until route name is filled on manual tab', async () => {
+    const user = userEvent.setup()
     renderWizard()
 
+    await user.click(screen.getByRole('tab', { name: '手动输入' }))
     expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
   })
 
   it('enters step 2 from manual tab without template copy modal', async () => {
-    const confirmSpy = vi.spyOn(Modal, 'confirm')
     const user = userEvent.setup()
     renderWizard()
 
+    await user.click(screen.getByRole('tab', { name: '手动输入' }))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
 
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
-    expect(confirmSpy).not.toHaveBeenCalled()
     expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
     expect(screen.getByText('无模板复制项')).toBeInTheDocument()
+  })
+
+  it('opens copy modal for template tab before entering step 2', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      {
+        id: 'template-1',
+        name: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        usageCount: 3,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
+    await user.click(screen.getByText('西安-青海湖-茶卡6日游'))
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+
+    expect(await screen.findByText('复制行程段')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '使用该路线建团' })).toBeInTheDocument()
   })
 
   it('validates required fields before creating departure', async () => {
     const user = userEvent.setup()
     renderWizard()
 
+    await user.click(screen.getByRole('tab', { name: '手动输入' }))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await screen.findByLabelText('团名')
@@ -118,6 +158,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
+    await user.click(screen.getByRole('tab', { name: '手动输入' }))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await screen.findByLabelText('团名')

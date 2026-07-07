@@ -19,10 +19,16 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from './departure-date.utils'
+import { RouteTemplateCopyService } from './route-template-copy.service'
+import { RouteTemplateService } from './route-template.service'
 
 @Injectable()
 export class DepartureService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly routeTemplateService: RouteTemplateService,
+    private readonly routeTemplateCopyService: RouteTemplateCopyService,
+  ) {}
 
   async list(
     organizationId: string,
@@ -87,14 +93,10 @@ export class DepartureService {
 
   async create(organizationId: string, dto: CreateDepartureDto): Promise<DepartureSummary> {
     const name = dto.name.trim()
-    const routeName = dto.routeName.trim()
+    let routeName = dto.routeName.trim()
 
     if (!name) {
       throw new BadRequestException('团名不能为空')
-    }
-
-    if (!routeName) {
-      throw new BadRequestException('路线名称不能为空')
     }
 
     const startDate = parseDateOnly(dto.startDate)
@@ -106,6 +108,23 @@ export class DepartureService {
 
     await this.ensureOwnerInOrganization(organizationId, dto.ownerUserId)
 
+    const templateId = dto.templateId?.trim()
+    let routeSource: DepartureRouteSource = DepartureRouteSource.manual
+    let sourceTemplateId: string | null = null
+
+    if (templateId) {
+      const template = await this.routeTemplateService.findForCopy(organizationId, templateId)
+      routeSource = DepartureRouteSource.template
+      sourceTemplateId = template.id
+      if (!routeName) {
+        routeName = template.name
+      }
+    }
+
+    if (!routeName) {
+      throw new BadRequestException('路线名称不能为空')
+    }
+
     const departureNo =
       dto.departureNo?.trim() ||
       (await this.generateDepartureNo(organizationId, startDate))
@@ -114,21 +133,46 @@ export class DepartureService {
 
     const dayCount = computeDayCount(startDate, endDate)
 
-    const departure = await this.prisma.departure.create({
-      data: {
-        organizationId,
-        departureNo,
-        name,
-        routeName,
-        routeSource: DepartureRouteSource.manual,
-        departureType: dto.departureType ?? DepartureType.combined,
-        startDate,
-        endDate,
-        dayCount,
-        ownerUserId: dto.ownerUserId,
-        status: DepartureStatus.editing,
-        notes: dto.notes?.trim() || null,
-      },
+    const departure = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.departure.create({
+        data: {
+          organizationId,
+          departureNo,
+          name,
+          routeName,
+          routeSource,
+          sourceTemplateId,
+          departureType: dto.departureType ?? DepartureType.combined,
+          startDate,
+          endDate,
+          dayCount,
+          ownerUserId: dto.ownerUserId,
+          status: DepartureStatus.editing,
+          notes: dto.notes?.trim() || null,
+        },
+      })
+
+      if (templateId) {
+        await this.routeTemplateCopyService.copyToDeparture({
+          tx,
+          organizationId,
+          departureId: created.id,
+          departureStartDate: startDate,
+          templateId,
+          flags: {
+            copySegments: dto.copySegments,
+            copyResources: dto.copyResources,
+            copyReferencePrices: dto.copyReferencePrices,
+          },
+        })
+
+        await tx.routeTemplate.update({
+          where: { id: templateId },
+          data: { usageCount: { increment: 1 } },
+        })
+      }
+
+      return created
     })
 
     return this.toDepartureSummary(departure)

@@ -21,6 +21,7 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
+import { VerificationService } from './verification.service'
 import {
   formatDateOnly,
   getShanghaiTodayString,
@@ -46,6 +47,7 @@ export class PaymentScheduleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
+    private readonly verificationService: VerificationService,
   ) {}
 
   async list(
@@ -72,8 +74,14 @@ export class PaymentScheduleService {
       this.prisma.paymentSchedule.count({ where }),
     ])
 
+    const settledMap = await this.verificationService.batchGetSettledAmounts(
+      items.map((schedule) => schedule.id),
+    )
+
     return {
-      items: items.map((schedule) => this.toSummary(schedule)),
+      items: items.map((schedule) =>
+        this.toSummary(schedule, settledMap.get(schedule.id) ?? 0),
+      ),
       total,
       page,
       pageSize,
@@ -86,7 +94,8 @@ export class PaymentScheduleService {
     scheduleId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-    return this.toSummary(schedule)
+    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
+    return this.toSummary(schedule, settledAmountCents)
   }
 
   async create(
@@ -123,7 +132,7 @@ export class PaymentScheduleService {
       },
     })
 
-    return this.toSummary(schedule)
+    return this.toSummary(schedule, 0)
   }
 
   async update(
@@ -142,7 +151,8 @@ export class PaymentScheduleService {
       throw new BadRequestException('请至少提供一个待更新字段')
     }
 
-    const touched = isFinanceTouched(schedule, 0)
+    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
+    const touched = isFinanceTouched(schedule, settledAmountCents)
     const data: Prisma.PaymentScheduleUpdateInput = {}
     let financeAdjusted = false
 
@@ -204,7 +214,7 @@ export class PaymentScheduleService {
       data,
     })
 
-    return this.toSummary(updated)
+    return this.toSummary(updated, settledAmountCents)
   }
 
   async cancel(
@@ -242,7 +252,8 @@ export class PaymentScheduleService {
       },
     })
 
-    return this.toSummary(updated)
+    const settledAmountCents = await this.verificationService.getSettledAmountCents(updated.id)
+    return this.toSummary(updated, settledAmountCents)
   }
 
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {
@@ -311,9 +322,9 @@ export class PaymentScheduleService {
     return generateScheduleNo(prefix, businessDate, lastSequence + 1)
   }
 
-  private toSummary(schedule: PaymentSchedule): PaymentScheduleSummary {
+  private toSummary(schedule: PaymentSchedule, settledAmountCents: number): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
-    const settledAmountCents = 0
+    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
 
     return {
       id: schedule.id,
@@ -336,6 +347,8 @@ export class PaymentScheduleService {
         businessDate,
       }),
       financeTouched: isFinanceTouched(schedule, settledAmountCents),
+      settledAmountCents,
+      unsettledAmountCents,
       cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
       cancelReason: schedule.cancelReason,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,

@@ -19,10 +19,23 @@ export type {
   DepartureSummary,
   DepartureListResult,
   CreateDepartureDto,
+  RouteTemplateCardSummary,
+  RouteTemplateDetailSummary,
+  CreateRouteTemplateDto,
   PaymentScheduleSummary,
   PaymentScheduleListResult,
   CreatePaymentScheduleDto,
   UpdatePaymentScheduleDto,
+  FinanceTransactionSummary,
+  FinanceTransactionListResult,
+  CreateFinanceTransactionDto,
+  VoidFinanceTransactionDto,
+  FinanceVerificationSummary,
+  FinanceVerificationListResult,
+  CreateFinanceVerificationDto,
+  ConfirmCollectionDto,
+  ConfirmPaymentDto,
+  LinkTransactionDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -45,10 +58,18 @@ export { PaymentScheduleDirection } from './enums/payment-schedule-direction.enu
 export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
 export { CounterpartyType } from './enums/counterparty-type.enum'
 export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
+export { TransactionDirection } from './enums/transaction-direction.enum'
+export { VerificationStatus } from './enums/verification-status.enum'
+export { ResourceKind } from './enums/resource-kind.enum'
 export {
   deriveScheduleState,
   isFinanceTouched,
   generateScheduleNo,
+  generateTransactionNo,
+  generateVerificationNo,
+  assertCounterpartyMatch,
+  CounterpartyMismatchError,
   type DeriveScheduleStateInput,
   type FinanceTouchedScheduleInput,
+  type CounterpartySnapshot,
 } from './finance'

@@ -1,0 +1,46 @@
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { RequireMenu } from '../../common/decorators/require-menu.decorator'
+import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
+import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import {
+  CreateRouteTemplateDto,
+  ListRouteTemplatesQueryDto,
+} from './dto/route-template.dto'
+import {
+  RouteTemplateDetailSummary,
+  RouteTemplateService,
+  type RouteTemplateCardSummary,
+} from './route-template.service'
+
+@Controller('route-templates')
+@UseGuards(JwtAuthGuard, MenuPermissionGuard)
+export class RouteTemplateController {
+  constructor(private readonly routeTemplateService: RouteTemplateService) {}
+
+  @Get()
+  @RequireMenu('/departure')
+  list(
+    @Req() request: { user: { organizationId: string } },
+    @Query() query: ListRouteTemplatesQueryDto,
+  ): Promise<RouteTemplateCardSummary[]> {
+    return this.routeTemplateService.list(request.user.organizationId, query.keyword)
+  }
+
+  @Get(':id')
+  @RequireMenu('/departure')
+  getById(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<RouteTemplateDetailSummary> {
+    return this.routeTemplateService.getById(request.user.organizationId, id)
+  }
+
+  @Post()
+  @RequireMenu('/departure')
+  create(
+    @Req() request: { user: { organizationId: string } },
+    @Body() dto: CreateRouteTemplateDto,
+  ): Promise<RouteTemplateDetailSummary> {
+    return this.routeTemplateService.create(request.user.organizationId, dto)
+  }
+}

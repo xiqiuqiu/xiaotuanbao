@@ -19,6 +19,8 @@ export type {
   DepartureSummary,
   DepartureListResult,
   CreateDepartureDto,
+  RouteTemplateCardSummary,
+  RouteTemplateDetailSummary,
 } from '@xiaotuanbao/shared'
 
 export {

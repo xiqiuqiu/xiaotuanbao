@@ -139,6 +139,32 @@ enum CounterpartyType {
   @@map("counterparty_type")
 }
 
+enum TransactionDirection {
+  inflow
+  outflow
+
+  @@map("transaction_direction")
+}
+
+enum VerificationStatus {
+  normal
+  cancelled
+
+  @@map("verification_status")
+}
+
+enum ResourceKind {
+  transport
+  hotel
+  guide
+  ticket
+  meal
+  outsource
+  other
+
+  @@map("resource_kind")
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -149,7 +175,10 @@ model Organization {
   suppliers Supplier[]
   partners  Partner[]
   departures Departure[]
+  routeTemplates RouteTemplate[]
   paymentSchedules PaymentSchedule[]
+  financeTransactions FinanceTransaction[]
+  financeVerifications FinanceVerification[]
 
   @@map("organizations")
 }
@@ -239,6 +268,8 @@ model Supplier {
   businessNotes       String?                @map("business_notes")
   createdAt           DateTime               @default(now()) @map("created_at")
   updatedAt           DateTime               @updatedAt @map("updated_at")
+  routeTemplateResources RouteTemplateResource[]
+  segmentResources    SegmentResource[]
 
   @@unique([organizationId, name])
   @@map("suppliers")
@@ -260,9 +291,57 @@ model Partner {
   settlementNotes  String?                @map("settlement_notes")
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
+  routeTemplateResources RouteTemplateResource[]
+  segmentResources SegmentResource[]
 
   @@unique([organizationId, name])
   @@map("partners")
+}
+
+model RouteTemplate {
+  id              String                 @id @default(cuid())
+  organizationId  String                 @map("organization_id")
+  organization    Organization           @relation(fields: [organizationId], references: [id])
+  name            String
+  defaultDayCount Int                    @map("default_day_count")
+  usageCount      Int                    @default(0) @map("usage_count")
+  notes           String?
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+  segments        RouteTemplateSegment[]
+
+  @@map("route_templates")
+}
+
+model RouteTemplateSegment {
+  id          String                  @id @default(cuid())
+  templateId  String                  @map("template_id")
+  template    RouteTemplate           @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sortOrder   Int                     @map("sort_order")
+  name        String
+  dayCount    Int                     @map("day_count")
+  destination String?
+  notes       String?
+  resources   RouteTemplateResource[]
+
+  @@map("route_template_segments")
+}
+
+model RouteTemplateResource {
+  id                String               @id @default(cuid())
+  templateSegmentId String               @map("template_segment_id")
+  templateSegment   RouteTemplateSegment @relation(fields: [templateSegmentId], references: [id], onDelete: Cascade)
+  resourceKind      ResourceKind         @map("resource_kind")
+  counterpartyType  CounterpartyType     @map("counterparty_type")
+  partnerId         String?              @map("partner_id")
+  partner           Partner?             @relation(fields: [partnerId], references: [id])
+  supplierId        String?              @map("supplier_id")
+  supplier          Supplier?            @relation(fields: [supplierId], references: [id])
+  title             String
+  amountCents       Int                  @map("amount_cents")
+  notes             String?
+
+  @@map("route_template_resources")
 }
 
 model Departure {
@@ -285,9 +364,46 @@ model Departure {
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
   paymentSchedules PaymentSchedule[]
+  financeTransactions FinanceTransaction[]
+  itinerarySegments ItinerarySegment[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
+}
+
+model ItinerarySegment {
+  id                   String            @id @default(cuid())
+  departureId          String            @map("departure_id")
+  departure            Departure         @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  name                 String
+  startDate            DateTime          @map("start_date") @db.Date
+  endDate              DateTime          @map("end_date") @db.Date
+  dayCount             Int               @map("day_count")
+  destination          String?
+  notes                String?
+  applicableGuestCount Int               @default(1) @map("applicable_guest_count")
+  fromTemplate         Boolean           @default(true) @map("from_template")
+  resources            SegmentResource[]
+
+  @@map("itinerary_segments")
+}
+
+model SegmentResource {
+  id               String           @id @default(cuid())
+  segmentId        String           @map("segment_id")
+  segment          ItinerarySegment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  resourceKind     ResourceKind     @map("resource_kind")
+  counterpartyType CounterpartyType @map("counterparty_type")
+  partnerId        String?          @map("partner_id")
+  partner          Partner?         @relation(fields: [partnerId], references: [id])
+  supplierId       String?          @map("supplier_id")
+  supplier         Supplier?        @relation(fields: [supplierId], references: [id])
+  title            String
+  amountCents      Int              @map("amount_cents")
+  notes            String?
+  fromTemplate     Boolean          @default(true) @map("from_template")
+
+  @@map("segment_resources")
 }
 
 model PaymentSchedule {
@@ -312,7 +428,55 @@ model PaymentSchedule {
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
 
+  verifications FinanceVerification[]
+
   @@unique([organizationId, scheduleNo])
   @@index([organizationId, departureId])
   @@map("payment_schedules")
+}
+
+model FinanceTransaction {
+  id               String               @id @default(cuid())
+  organizationId   String               @map("organization_id")
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  transactionNo    String               @map("transaction_no")
+  direction        TransactionDirection
+  amountCents      Int                  @map("amount_cents")
+  transactionDate  DateTime             @map("transaction_date") @db.Date
+  counterpartyType CounterpartyType     @map("counterparty_type")
+  counterpartyId   String?              @map("counterparty_id")
+  counterpartyName String?              @map("counterparty_name")
+  departureId      String?              @map("departure_id")
+  departure        Departure?           @relation(fields: [departureId], references: [id])
+  voidedAt         DateTime?            @map("voided_at")
+  voidReason       String?              @map("void_reason")
+  notes            String?
+  createdAt        DateTime             @default(now()) @map("created_at")
+  updatedAt        DateTime             @updatedAt @map("updated_at")
+  verifications    FinanceVerification[]
+
+  @@unique([organizationId, transactionNo])
+  @@index([organizationId, departureId])
+  @@map("finance_transactions")
+}
+
+model FinanceVerification {
+  id                String             @id @default(cuid())
+  organizationId    String             @map("organization_id")
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  verificationNo    String             @map("verification_no")
+  paymentScheduleId String             @map("payment_schedule_id")
+  paymentSchedule   PaymentSchedule    @relation(fields: [paymentScheduleId], references: [id])
+  transactionId     String             @map("transaction_id")
+  transaction       FinanceTransaction @relation(fields: [transactionId], references: [id])
+  amountCents       Int                @map("amount_cents")
+  status            VerificationStatus @default(normal)
+  cancelledAt       DateTime?          @map("cancelled_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  @@unique([organizationId, verificationNo])
+  @@index([paymentScheduleId, status])
+  @@index([transactionId, status])
+  @@map("finance_verifications")
 }

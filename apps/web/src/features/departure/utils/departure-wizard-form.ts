@@ -1,9 +1,18 @@
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { CreateDepartureDto } from '@/types/api'
 
+export type RouteStepMode = 'manual' | 'template'
+
 export interface RouteStepValues {
+  mode: RouteStepMode
   routeName: string
   defaultDayCount?: number
+  templateId?: string
+  copySegments?: boolean
+  copyResources?: boolean
+  copyReferencePrices?: boolean
+  previewSegmentCount?: number
+  previewResourceCount?: number
 }
 
 export interface InfoStepValues {
@@ -14,6 +23,10 @@ export interface InfoStepValues {
   endDate: string
   ownerUserId: string
   notes?: string
+}
+
+export function createInitialRouteStepValues(): RouteStepValues {
+  return { mode: 'template', routeName: '' }
 }
 
 export function formatChineseMonthDay(dateStr: string): string {
@@ -70,11 +83,19 @@ export function buildInitialInfoValues(
   }
 }
 
+export function canProceedFromRouteStep(route: RouteStepValues): boolean {
+  if (route.mode === 'template') {
+    return Boolean(route.templateId)
+  }
+
+  return route.routeName.trim().length > 0
+}
+
 export function buildCreateDeparturePayload(
   route: RouteStepValues,
   info: InfoStepValues,
 ): CreateDepartureDto {
-  return {
+  const payload: CreateDepartureDto = {
     name: info.name.trim(),
     routeName: route.routeName.trim(),
     startDate: info.startDate,
@@ -84,4 +105,28 @@ export function buildCreateDeparturePayload(
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
   }
+
+  if (route.mode === 'template' && route.templateId) {
+    payload.templateId = route.templateId
+    payload.copySegments = route.copySegments ?? true
+    payload.copyResources = route.copyResources ?? true
+    payload.copyReferencePrices = route.copyReferencePrices ?? true
+  }
+
+  return payload
+}
+
+export function buildTemplateCopySummary(route: RouteStepValues): string | null {
+  if (route.mode !== 'template') {
+    return null
+  }
+
+  const segmentCount = route.previewSegmentCount ?? 0
+  const resourceCount = route.previewResourceCount ?? 0
+
+  if (segmentCount === 0 && resourceCount === 0) {
+    return '无模板复制项'
+  }
+
+  return `将复制 ${segmentCount} 段行程、${resourceCount} 项资源草稿`
 }

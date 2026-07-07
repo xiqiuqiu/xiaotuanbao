@@ -74,6 +74,12 @@ describe('Finance API (e2e)', () => {
   })
 
   afterAll(async () => {
+    await prisma.financeVerification.deleteMany({
+      where: { organizationId },
+    })
+    await prisma.financeTransaction.deleteMany({
+      where: { organizationId },
+    })
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
@@ -276,5 +282,212 @@ describe('Finance API (e2e)', () => {
     await prisma.departure.delete({ where: { id: foreignDeparture.id } })
     await prisma.user.delete({ where: { id: otherUser.id } })
     await prisma.organization.delete({ where: { id: otherOrg.id } })
+  })
+
+  it('confirms collection and settles receivable', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-登记收款`, amountCents: 50000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 50000, transactionDate: '2026-07-07' })
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(response.body.data.settledAmountCents).toBe(50000)
+    expect(response.body.data.unsettledAmountCents).toBe(0)
+    expect(response.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+    expect(response.body.data.financeTouched).toBe(true)
+  })
+
+  it('supports partial collection until settled', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-部分核销`, amountCents: 50000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 30000, transactionDate: '2026-07-07' })
+      .expect(201)
+
+    const partial = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(partial.body.data.settledAmountCents).toBe(30000)
+    expect(partial.body.data.status).toBe(PaymentScheduleStatus.PENDING)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 20000, transactionDate: '2026-07-07' })
+      .expect(201)
+
+    const settled = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(settled.body.data.settledAmountCents).toBe(50000)
+    expect(settled.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+  })
+
+  it('rejects link-transaction on counterparty mismatch', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(
+        schedulePayload({
+          title: `${testPrefix}-往来校验`,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyName: '匹配旅行社',
+        }),
+      )
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        amountCents: 10000,
+        transactionDate: '2026-07-07',
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyName: '不匹配供应商',
+        departureId,
+      })
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 10000 })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('cancels verification and restores unsettled schedule state', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-撤销核销`, amountCents: 50000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 50000, transactionDate: '2026-07-07' })
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .expect(200)
+
+    const verificationId = verifications.body.data.items[0].id
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verificationId}/cancel`)
+      .expect(201)
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(schedule.body.data.settledAmountCents).toBe(0)
+    expect(schedule.body.data.status).not.toBe(PaymentScheduleStatus.SETTLED)
+
+    const again = await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verificationId}/cancel`)
+      .expect(400)
+
+    expect(again.body.code).toBe(400)
+  })
+
+  it('rejects confirm-collection on cancelled schedule', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-关闭后核销` }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .send({ cancelReason: '关闭测试' })
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 10000, transactionDate: '2026-07-07' })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('creates transaction with TR number and filters by departureId', async () => {
+    const response = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        amountCents: 12000,
+        transactionDate: '2026-07-07',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyName: '流水测试',
+        departureId: otherDepartureId,
+      })
+      .expect(201)
+
+    expect(response.body.data.transactionNo).toMatch(/^TR\d{8}\d{4}$/)
+
+    const list = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ departureId: otherDepartureId, pageSize: 50 })
+      .expect(200)
+
+    expect(list.body.data.items.length).toBeGreaterThanOrEqual(1)
+    expect(
+      list.body.data.items.every(
+        (item: { departureId: string | null }) => item.departureId === otherDepartureId,
+      ),
+    ).toBe(true)
+  })
+
+  it('returns 403 for coordinator finance mutations', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-权限测试` }))
+      .expect(201)
+
+    const confirm = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send({ amountCents: 10000, transactionDate: '2026-07-07' })
+      .expect(403)
+
+    expect(confirm.body.code).toBe(403)
+
+    const createTx = await authRequest(app, coordinatorToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        amountCents: 10000,
+        transactionDate: '2026-07-07',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyName: '权限测试',
+      })
+      .expect(403)
+
+    expect(createTx.body.code).toBe(403)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .expect(200)
+
+    if (verifications.body.data.items.length > 0) {
+      const cancel = await authRequest(app, coordinatorToken)
+        .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+        .expect(403)
+
+      expect(cancel.body.code).toBe(403)
+    }
   })
 })

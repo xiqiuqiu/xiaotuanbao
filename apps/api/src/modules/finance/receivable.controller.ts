@@ -10,11 +10,16 @@ import {
   UpdatePaymentScheduleDto,
 } from './dto/payment-schedule.dto'
 import { PaymentScheduleService } from './payment-schedule.service'
+import { FinanceOperationsService } from './finance-operations.service'
+import { ConfirmCollectionDto, LinkTransactionDto } from './dto/finance-operations.dto'
 
 @Controller('finance/receivables')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class ReceivableController {
-  constructor(private readonly paymentScheduleService: PaymentScheduleService) {}
+  constructor(
+    private readonly paymentScheduleService: PaymentScheduleService,
+    private readonly financeOperationsService: FinanceOperationsService,
+  ) {}
 
   @Get()
   @RequireMenu('/finance/receivable')
@@ -63,6 +68,35 @@ export class ReceivableController {
     @Body() dto: UpdatePaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
     return this.paymentScheduleService.update(
+      request.user.organizationId,
+      PaymentScheduleDirection.receivable,
+      id,
+      dto,
+    )
+  }
+
+  @Post(':id/confirm-collection')
+  @RequireMenu('/finance/receivable')
+  confirmCollection(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: ConfirmCollectionDto,
+  ): Promise<PaymentScheduleSummary> {
+    return this.financeOperationsService.confirmCollection(
+      request.user.organizationId,
+      id,
+      dto,
+    )
+  }
+
+  @Post(':id/link-transaction')
+  @RequireMenu('/finance/receivable')
+  linkTransaction(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: LinkTransactionDto,
+  ): Promise<PaymentScheduleSummary> {
+    return this.financeOperationsService.linkTransaction(
       request.user.organizationId,
       PaymentScheduleDirection.receivable,
       id,
