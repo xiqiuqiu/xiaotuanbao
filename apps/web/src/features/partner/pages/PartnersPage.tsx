@@ -1,11 +1,17 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Input, Modal, Space, Switch, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { PartnerSummary } from '@/types/api'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
-import { createPartner, listPartners, updatePartner } from '@/services/partner.service'
+import {
+  archivePartner,
+  createPartner,
+  listPartners,
+  restorePartner,
+  updatePartner,
+} from '@/services/partner.service'
 import { PartnerFormDrawer } from '../components/PartnerFormDrawer'
 import type { PartnerFormValues } from '../components/PartnerProfileSections'
 import {
@@ -24,7 +30,12 @@ import {
   partnerToFormValues,
 } from '../utils/partner-form'
 
-function buildColumns(onEdit: (partner: PartnerSummary) => void): ColumnsType<PartnerSummary> {
+function buildColumns(
+  includeArchived: boolean,
+  onEdit: (partner: PartnerSummary) => void,
+  onArchive: (partner: PartnerSummary) => void,
+  onRestore: (partnerId: string) => void,
+): ColumnsType<PartnerSummary> {
   return [
     {
       title: '合作伙伴名称',
@@ -70,6 +81,14 @@ function buildColumns(onEdit: (partner: PartnerSummary) => void): ColumnsType<Pa
       title: '操作',
       key: 'actions',
       render: (_, record) => {
+        if (includeArchived && record.status === DirectoryProfileStatus.ARCHIVED) {
+          return (
+            <Button type="link" onClick={() => onRestore(record.id)}>
+              恢复
+            </Button>
+          )
+        }
+
         if (record.status === DirectoryProfileStatus.ARCHIVED) {
           return null
         }
@@ -78,6 +97,9 @@ function buildColumns(onEdit: (partner: PartnerSummary) => void): ColumnsType<Pa
           <Space>
             <Button type="link" onClick={() => onEdit(record)}>
               编辑
+            </Button>
+            <Button type="link" danger onClick={() => onArchive(record)}>
+              删除
             </Button>
           </Space>
         )
@@ -91,12 +113,20 @@ export function PartnersPage() {
   const [form] = Form.useForm<PartnerFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingPartner, setEditingPartner] = useState<PartnerSummary | null>(null)
+  const [search, setSearch] = useState('')
+  const [includeArchived, setIncludeArchived] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
   const { data: partnersResult, isLoading } = useQuery({
-    queryKey: ['partners', page, pageSize],
-    queryFn: () => listPartners({ page, pageSize }),
+    queryKey: ['partners', search, includeArchived, page, pageSize],
+    queryFn: () =>
+      listPartners({
+        search: search || undefined,
+        includeArchived,
+        page,
+        pageSize,
+      }),
   })
 
   const closeDrawer = () => {
@@ -137,7 +167,53 @@ export function PartnersPage() {
     },
   })
 
-  const columns = useMemo(() => buildColumns(openEditDrawer), [openEditDrawer])
+  const archiveMutation = useMutation({
+    mutationFn: archivePartner,
+    onSuccess: () => {
+      message.success('合作伙伴已删除')
+      queryClient.invalidateQueries({ queryKey: ['partners'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '删除失败')
+    },
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: restorePartner,
+    onSuccess: () => {
+      message.success('合作伙伴已恢复')
+      queryClient.invalidateQueries({ queryKey: ['partners'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '恢复失败')
+    },
+  })
+
+  const handleArchive = useCallback(
+    (partner: PartnerSummary) => {
+      Modal.confirm({
+        title: '确认删除合作伙伴？',
+        content: `删除后「${partner.name}」将从默认列表中隐藏，可在「显示已归档」中恢复。`,
+        okText: '删除',
+        okType: 'danger',
+        cancelText: '取消',
+        onOk: () => archiveMutation.mutateAsync(partner.id),
+      })
+    },
+    [archiveMutation],
+  )
+
+  const handleRestore = useCallback(
+    (partnerId: string) => {
+      restoreMutation.mutate(partnerId)
+    },
+    [restoreMutation],
+  )
+
+  const columns = useMemo(
+    () => buildColumns(includeArchived, openEditDrawer, handleArchive, handleRestore),
+    [includeArchived, openEditDrawer, handleArchive, handleRestore],
+  )
 
   return (
     <div>
@@ -154,6 +230,30 @@ export function PartnersPage() {
           创建合作伙伴
         </Button>
       </div>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Input.Search
+            allowClear
+            placeholder="搜索名称 / 联系人 / 联系方式"
+            style={{ width: 280 }}
+            onSearch={(value) => {
+              setSearch(value.trim())
+              setPage(1)
+            }}
+          />
+          <Space>
+            <span>显示已归档</span>
+            <Switch
+              checked={includeArchived}
+              onChange={(value) => {
+                setIncludeArchived(value)
+                setPage(1)
+              }}
+            />
+          </Space>
+        </Space>
+      </Card>
 
       <Card>
         <Table

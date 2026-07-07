@@ -11,6 +11,7 @@ import type {
 
 export interface ListPartnersParams {
   search?: string
+  includeArchived?: boolean
   page?: number
   pageSize?: number
 }
@@ -44,4 +45,12 @@ export async function updatePartner(
   payload: UpdatePartnerPayload,
 ): Promise<PartnerSummary> {
   return request.patch<PartnerSummary>(`/partners/${id}`, payload)
+}
+
+export async function archivePartner(id: string): Promise<PartnerSummary> {
+  return request.post<PartnerSummary>(`/partners/${id}/archive`)
+}
+
+export async function restorePartner(id: string): Promise<PartnerSummary> {
+  return request.post<PartnerSummary>(`/partners/${id}/restore`)
 }

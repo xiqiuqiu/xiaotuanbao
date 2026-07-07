@@ -47,4 +47,22 @@ export class PartnerController {
   ): Promise<PartnerSummary> {
     return this.partnerService.update(request.user.organizationId, id, dto)
   }
+
+  @Post(':id/archive')
+  @RequireMenu('/partner')
+  archive(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<PartnerSummary> {
+    return this.partnerService.archive(request.user.organizationId, id)
+  }
+
+  @Post(':id/restore')
+  @RequireMenu('/partner')
+  restore(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<PartnerSummary> {
+    return this.partnerService.restore(request.user.organizationId, id)
+  }
 }

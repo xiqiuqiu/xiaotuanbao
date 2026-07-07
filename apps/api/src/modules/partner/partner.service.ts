@@ -173,6 +173,36 @@ export class PartnerService {
     return this.toPartnerSummary(updated)
   }
 
+  async archive(organizationId: string, partnerId: string): Promise<PartnerSummary> {
+    const partner = await this.findPartnerOrThrow(organizationId, partnerId)
+
+    if (partner.status === DirectoryProfileStatus.archived) {
+      throw new BadRequestException('合作伙伴已归档')
+    }
+
+    const updated = await this.prisma.partner.update({
+      where: { id: partner.id },
+      data: { status: DirectoryProfileStatus.archived },
+    })
+
+    return this.toPartnerSummary(updated)
+  }
+
+  async restore(organizationId: string, partnerId: string): Promise<PartnerSummary> {
+    const partner = await this.findPartnerOrThrow(organizationId, partnerId)
+
+    if (partner.status !== DirectoryProfileStatus.archived) {
+      throw new BadRequestException('仅已归档合作伙伴可恢复')
+    }
+
+    const updated = await this.prisma.partner.update({
+      where: { id: partner.id },
+      data: { status: DirectoryProfileStatus.active },
+    })
+
+    return this.toPartnerSummary(updated)
+  }
+
   private hasUpdateFields(dto: UpdatePartnerDto): boolean {
     return UPDATE_PARTNER_FIELDS.some((field) => dto[field] !== undefined)
   }

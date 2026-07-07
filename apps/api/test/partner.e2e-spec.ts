@@ -90,6 +90,28 @@ describe('Partner API (e2e)', () => {
     expect(names).not.toContain(archivedName)
   })
 
+  it('lists archived partners when includeArchived=true', async () => {
+    const archivedName = `${testPartnerPrefix}-include-archived`
+
+    await prisma.partner.create({
+      data: {
+        organizationId,
+        name: archivedName,
+        partnerKind: PartnerKind.peer,
+        partnerType: PartnerType.local_agency,
+        status: DirectoryProfileStatus.archived,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: archivedName, includeArchived: true })
+      .expect(200)
+
+    const names = response.body.data.items.map((item: { name: string }) => item.name)
+    expect(names).toContain(archivedName)
+  })
+
   it('creates partner with name, partnerKind and partnerType', async () => {
     const name = `${testPartnerPrefix}-create`
 
@@ -321,5 +343,57 @@ describe('Partner API (e2e)', () => {
       .expect(400)
 
     expect(response.body.code).toBe(400)
+  })
+
+  it('archives partner via POST /archive', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/partners')
+      .send({
+        name: `${testPartnerPrefix}-archive`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+      })
+      .expect(201)
+
+    const partnerId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/partners/${partnerId}/archive`)
+      .expect(201)
+
+    expect(response.body.data.status).toBe(DirectoryProfileStatus.archived)
+
+    const listResponse = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: `${testPartnerPrefix}-archive` })
+      .expect(200)
+
+    expect(listResponse.body.data.items).toHaveLength(0)
+  })
+
+  it('restores archived partner via POST /restore', async () => {
+    const name = `${testPartnerPrefix}-restore`
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name,
+        partnerKind: PartnerKind.both,
+        partnerType: PartnerType.wholesaler,
+        status: DirectoryProfileStatus.archived,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/partners/${partner.id}/restore`)
+      .expect(201)
+
+    expect(response.body.data.status).toBe(DirectoryProfileStatus.active)
+
+    const listResponse = await authRequest(app, coordinatorToken)
+      .get('/api/partners')
+      .query({ search: name })
+      .expect(200)
+
+    expect(listResponse.body.data.items.map((item: { name: string }) => item.name)).toContain(name)
   })
 })
