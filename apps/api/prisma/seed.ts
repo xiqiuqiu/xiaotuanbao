@@ -5,7 +5,15 @@ import {
   UserStatus,
   V1_MENU_KEYS,
 } from '@xiaotuanbao/shared'
-import { PrismaClient } from '@prisma/client'
+import {
+  DirectoryProfileStatus,
+  InvoiceAvailable,
+  InvoiceType,
+  PrismaClient,
+  SettlementCycle,
+  SettlementMethod,
+  SupplierCategory,
+} from '@prisma/client'
 import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -146,6 +154,205 @@ async function seedDemoOrganization() {
 
     await assignRole(demoUser.username, organization.id, demoUser.roleName)
   }
+
+  await seedDemoSuppliers(organization.id)
+
+  return organization
+}
+
+const DEMO_SUPPLIERS = [
+  {
+    name: '西湖国宾馆',
+    category: SupplierCategory.hotel,
+    status: DirectoryProfileStatus.active,
+    contactName: '李经理',
+    contactPhone: '13805718801',
+    settlementMethod: SettlementMethod.postpay,
+    settlementCycle: SettlementCycle.monthly,
+    settlementNotes: '出团后 15 个工作日结清',
+    referenceQuoteNotes: '标间 680/间夜，含双早',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.special,
+    taxRate: '6%',
+    accountName: '杭州西湖国宾馆管理有限公司',
+    bankName: '中国工商银行杭州西湖支行',
+    bankAccount: '6222021200001234567',
+    businessNotes: '旺季需提前 7 天确认房量，支持临时加房',
+  },
+  {
+    name: '楼外楼（孤山店）',
+    category: SupplierCategory.restaurant,
+    status: DirectoryProfileStatus.active,
+    contactName: '王主管',
+    contactPhone: '13905718802',
+    settlementMethod: SettlementMethod.cash,
+    settlementCycle: SettlementCycle.per_group,
+    settlementNotes: '每团现结，签单后 3 日内付款',
+    referenceQuoteNotes: '团队餐标 80/100/120 三档',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.normal,
+    taxRate: '3%',
+    accountName: '杭州楼外楼餐饮有限公司',
+    bankName: '中国建设银行杭州分行',
+    bankAccount: '6227001200007654321',
+    businessNotes: '需提前 2 天报人数，最大接待 300 人',
+  },
+  {
+    name: '杭州中亚旅汽',
+    category: SupplierCategory.transport,
+    status: DirectoryProfileStatus.active,
+    contactName: '赵调度',
+    contactPhone: '13705718803',
+    settlementMethod: SettlementMethod.postpay,
+    settlementCycle: SettlementCycle.semi_monthly,
+    settlementNotes: '半月结对账，次月 5 日前付款',
+    referenceQuoteNotes: '33 座 800/天，45 座 1200/天',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.special,
+    taxRate: '9%',
+    accountName: '杭州中亚旅游汽车有限公司',
+    bankName: '中国银行杭州余杭支行',
+    bankAccount: '6216601200009876543',
+    businessNotes: '含司机餐补，不含过路费',
+  },
+  {
+    name: '张导游（西湖线）',
+    category: SupplierCategory.guide,
+    status: DirectoryProfileStatus.disabled,
+    contactName: '张导',
+    contactPhone: '13605718804',
+    settlementMethod: SettlementMethod.cash,
+    settlementCycle: SettlementCycle.per_group,
+    referenceQuoteNotes: '中文导游 400/天，含讲解',
+    invoiceAvailable: InvoiceAvailable.no,
+    businessNotes: '暂时不接新团，恢复合作前请勿安排',
+  },
+  {
+    name: '灵隐飞来峰',
+    category: SupplierCategory.scenic,
+    status: DirectoryProfileStatus.active,
+    contactName: '票务中心',
+    contactPhone: '0571-87968665',
+    settlementMethod: SettlementMethod.prepay,
+    settlementCycle: SettlementCycle.per_group,
+    referenceQuoteNotes: '团队票 45/人，需提前 1 天预约',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.normal,
+    taxRate: '6%',
+  },
+  {
+    name: '宋城演艺',
+    category: SupplierCategory.entertainment,
+    status: DirectoryProfileStatus.active,
+    contactName: '陈销售',
+    contactPhone: '13505718805',
+    settlementMethod: SettlementMethod.prepay,
+    settlementCycle: SettlementCycle.per_group,
+    settlementNotes: '预付锁票，取消需提前 48 小时',
+    referenceQuoteNotes: '千古情团队票 280/人',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.special,
+    taxRate: '6%',
+    accountName: '杭州宋城集团控股有限公司',
+    bankName: '招商银行杭州分行',
+    bankAccount: '6214851200001122334',
+  },
+  {
+    name: '浙江大地保险',
+    category: SupplierCategory.insurance,
+    status: DirectoryProfileStatus.active,
+    contactName: '周专员',
+    contactPhone: '13405718806',
+    settlementMethod: SettlementMethod.postpay,
+    settlementCycle: SettlementCycle.monthly,
+    referenceQuoteNotes: '境内游 10/人/天，含意外医疗',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.normal,
+    taxRate: '6%',
+  },
+  {
+    name: '千岛湖中心湖区票务',
+    category: SupplierCategory.ticket,
+    status: DirectoryProfileStatus.active,
+    contactName: '孙票务',
+    contactPhone: '13305718807',
+    settlementMethod: SettlementMethod.cash,
+    settlementCycle: SettlementCycle.per_group,
+    referenceQuoteNotes: '船票+门票联票 150/人',
+    invoiceAvailable: InvoiceAvailable.no,
+  },
+  {
+    name: '河坊街丝绸馆（已合作终止）',
+    category: SupplierCategory.shop,
+    status: DirectoryProfileStatus.archived,
+    contactName: '刘店长',
+    contactPhone: '13205718808',
+    settlementMethod: SettlementMethod.cash,
+    settlementCycle: SettlementCycle.per_group,
+    businessNotes: '2025 年已终止合作，仅供历史团单追溯',
+  },
+  {
+    name: '黄山迎客松酒店',
+    category: SupplierCategory.hotel,
+    status: DirectoryProfileStatus.active,
+    contactName: '吴经理',
+    contactPhone: '13105598809',
+    settlementMethod: SettlementMethod.prepay,
+    settlementCycle: SettlementCycle.weekly,
+    settlementNotes: '预付 50%，余款离店前结清',
+    referenceQuoteNotes: '标间 520/间夜，淡季可议价',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.special,
+    taxRate: '6%',
+    accountName: '黄山迎客松宾馆有限公司',
+    bankName: '中国农业银行黄山分行',
+    bankAccount: '6228481200005566778',
+    businessNotes: '山顶酒店，行李需索道托运',
+  },
+  {
+    name: '乌镇西栅景区',
+    category: SupplierCategory.scenic,
+    status: DirectoryProfileStatus.active,
+    contactName: '钱对接',
+    contactPhone: '13005718810',
+    settlementMethod: SettlementMethod.postpay,
+    settlementCycle: SettlementCycle.as_agreed,
+    settlementNotes: '按实际入园人数结算，对账后 10 日付款',
+    referenceQuoteNotes: '西栅团队票 120/人，含游船',
+    invoiceAvailable: InvoiceAvailable.yes,
+    invoiceType: InvoiceType.normal,
+    taxRate: '6%',
+  },
+  {
+    name: '备用资源-其他类',
+    category: SupplierCategory.other,
+    status: DirectoryProfileStatus.active,
+    contactName: '计调自建',
+    contactPhone: '12905718811',
+    businessNotes: '杂项资源占位，字段最少便于测轻量创建对比',
+  },
+] as const
+
+async function seedDemoSuppliers(organizationId: string) {
+  for (const supplier of DEMO_SUPPLIERS) {
+    const { name, ...fields } = supplier
+    await prisma.supplier.upsert({
+      where: {
+        organizationId_name: {
+          organizationId,
+          name,
+        },
+      },
+      create: {
+        organizationId,
+        name,
+        ...fields,
+      },
+      update: fields,
+    })
+  }
+
+  console.log(`Seeded ${DEMO_SUPPLIERS.length} demo suppliers.`)
 }
 
 async function main() {
