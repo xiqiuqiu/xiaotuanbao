@@ -7,12 +7,14 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { copyDeparture, createDeparture, getDeparture, previewDepartureNo } from '@/services/departure.service'
 import { getRouteTemplate } from '@/services/route-template.service'
 import { listSegments } from '@/services/segment.service'
-import { CreateDepartureStepInfo, createInfoFormValues, type InfoFormValues } from './CreateDepartureStepInfo'
+import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
 import {
   buildCopyDeparturePayload,
   buildCreateDeparturePayload,
   canProceedFromRouteStep,
+  createInfoFormValues,
+  type InfoFormValues,
   createInitialRouteStepValues,
   getShanghaiTodayString,
   type RouteStepValues,

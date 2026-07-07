@@ -30,10 +30,6 @@ export async function createSegmentResource(
   return request.post<SegmentResourceSummary>(`/segments/${segmentId}/resources`, payload)
 }
 
-export async function getSegmentResource(id: string): Promise<SegmentResourceSummary> {
-  return request.get<SegmentResourceSummary>(`/segment-resources/${id}`)
-}
-
 export async function updateSegmentResource(
   id: string,
   payload: UpdateSegmentResourceDto,

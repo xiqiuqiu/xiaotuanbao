@@ -27,6 +27,11 @@ export interface InfoStepValues {
   notes?: string
 }
 
+export type InfoFormValues = InfoStepValues & {
+  dayCount: number
+  ownerName: string
+}
+
 export function createInitialRouteStepValues(): RouteStepValues {
   return { mode: 'template', routeName: '' }
 }
@@ -136,6 +141,31 @@ export function buildCopyDeparturePayload(
   }
 }
 
+export function createInfoFormValues(
+  route: RouteStepValues,
+  ownerUserId: string,
+  ownerName: string,
+  startDate: string,
+  departureNo: string,
+): InfoFormValues {
+  const endDate =
+    route.defaultDayCount && route.defaultDayCount > 0
+      ? computeEndDateFromDefaultDays(startDate, route.defaultDayCount)
+      : startDate
+
+  return {
+    name: buildDefaultDepartureName(route.routeName, startDate),
+    departureNo,
+    departureType: DepartureType.COMBINED,
+    startDate,
+    endDate,
+    dayCount: computeDayCount(startDate, endDate),
+    ownerUserId,
+    ownerName,
+    notes: undefined,
+  }
+}
+
 export function buildRouteSummary(route: RouteStepValues): string | null {
   if (route.mode === 'copy' && route.sourceDepartureNo) {
     return `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
@@ -144,7 +174,7 @@ export function buildRouteSummary(route: RouteStepValues): string | null {
   return buildTemplateCopySummary(route)
 }
 
-export function buildTemplateCopySummary(route: RouteStepValues): string | null {
+function buildTemplateCopySummary(route: RouteStepValues): string | null {
   if (route.mode === 'template') {
     const segmentCount = route.previewSegmentCount ?? 0
     const resourceCount = route.previewResourceCount ?? 0

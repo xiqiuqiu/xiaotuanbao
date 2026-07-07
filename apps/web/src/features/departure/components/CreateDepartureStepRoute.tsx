@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Card, Col, Empty, Form, Input, InputNumber, Row, Spin, Tabs, Typography } from 'antd'
 import { listRouteTemplates } from '@/services/route-template.service'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
+import styles from './CreateDepartureStepRoute.module.css'
 
 interface CreateDepartureStepRouteProps {
   values: RouteStepValues
@@ -133,18 +134,7 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                 )}
 
                 {selectedTemplateLabel ? (
-                  <div
-                    style={{
-                      marginTop: 24,
-                      padding: '12px 16px',
-                      background: '#fafafa',
-                      borderRadius: 8,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 16,
-                    }}
-                  >
+                  <div className={styles.selectedTemplateBanner}>
                     <Typography.Text>
                       已选：{selectedTemplateLabel}
                     </Typography.Text>

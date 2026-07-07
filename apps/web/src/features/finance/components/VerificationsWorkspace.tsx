@@ -16,11 +16,11 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { VerificationFormDrawer } from './VerificationFormDrawer'
 import {
-  VerificationFormDrawer,
   buildCreateVerificationPayload,
   type VerificationFormValues,
-} from './VerificationFormDrawer'
+} from '../utils/verification-form'
 
 export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'

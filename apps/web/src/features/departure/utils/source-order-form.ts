@@ -17,11 +17,11 @@ export interface SourceOrderFormValues {
   notes?: string
 }
 
-export function yuanToCents(yuan: number): number {
+function yuanToCents(yuan: number): number {
   return Math.round(yuan * 100)
 }
 
-export function centsToYuan(cents: number): number {
+function centsToYuan(cents: number): number {
   return cents / 100
 }
 

@@ -7,13 +7,7 @@ import {
   listTransactions,
 } from '@/services/finance.service'
 import { formatCents } from '../catalog'
-import { yuanToCents } from '../utils/finance-form'
-
-export interface VerificationFormValues {
-  paymentScheduleId: string
-  transactionId: string
-  amountYuan: number
-}
+import type { VerificationFormValues } from '../utils/verification-form'
 
 interface VerificationFormDrawerProps {
   open: boolean
@@ -21,14 +15,6 @@ interface VerificationFormDrawerProps {
   form: FormInstance<VerificationFormValues>
   onClose: () => void
   onSubmit: (values: VerificationFormValues) => void
-}
-
-export function buildCreateVerificationPayload(values: VerificationFormValues) {
-  return {
-    paymentScheduleId: values.paymentScheduleId,
-    transactionId: values.transactionId,
-    amountCents: yuanToCents(values.amountYuan),
-  }
 }
 
 export function VerificationFormDrawer({

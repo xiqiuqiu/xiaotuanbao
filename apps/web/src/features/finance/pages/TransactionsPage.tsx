@@ -14,11 +14,11 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
 import {
-  TransactionFormDrawer,
   buildCreateTransactionPayload,
   type TransactionFormValues,
-} from '../components/TransactionFormDrawer'
+} from '../utils/transaction-form'
 
 export function TransactionsPage() {
   const queryClient = useQueryClient()

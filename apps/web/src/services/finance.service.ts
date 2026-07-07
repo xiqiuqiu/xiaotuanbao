@@ -4,7 +4,6 @@ import type {
   ConfirmPaymentDto,
   CreateFinanceTransactionDto,
   CreateFinanceVerificationDto,
-  CreatePaymentScheduleDto,
   FinanceTransactionListResult,
   FinanceTransactionSummary,
   FinanceVerificationListResult,
@@ -50,26 +49,6 @@ export async function listPayables(
   params: ListPaymentSchedulesParams,
 ): Promise<PaymentScheduleListResult> {
   return request.get<PaymentScheduleListResult>('/finance/payables', { params })
-}
-
-export async function getReceivable(id: string): Promise<PaymentScheduleSummary> {
-  return request.get<PaymentScheduleSummary>(`/finance/receivables/${id}`)
-}
-
-export async function getPayable(id: string): Promise<PaymentScheduleSummary> {
-  return request.get<PaymentScheduleSummary>(`/finance/payables/${id}`)
-}
-
-export async function createReceivable(
-  payload: CreatePaymentScheduleDto,
-): Promise<PaymentScheduleSummary> {
-  return request.post<PaymentScheduleSummary>('/finance/receivables', payload)
-}
-
-export async function createPayable(
-  payload: CreatePaymentScheduleDto,
-): Promise<PaymentScheduleSummary> {
-  return request.post<PaymentScheduleSummary>('/finance/payables', payload)
 }
 
 export async function updateReceivable(

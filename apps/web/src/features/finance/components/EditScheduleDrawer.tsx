@@ -2,19 +2,7 @@ import { DatePicker, Drawer, Form, Input, InputNumber, Select, Space, Button } f
 import type { FormInstance } from 'antd/es/form'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { COUNTERPARTY_TYPE_OPTIONS } from '../catalog'
-import {
-  centsToYuan,
-  dateStringToDayjs,
-  dayjsToDateString,
-  yuanToCents,
-} from '../utils/finance-form'
-
-export interface EditScheduleFormValues {
-  title: string
-  amountYuan?: number
-  dueDate?: ReturnType<typeof dateStringToDayjs>
-  counterpartyName?: string
-}
+import type { EditScheduleFormValues } from '../utils/edit-schedule-form'
 
 interface EditScheduleDrawerProps {
   open: boolean
@@ -23,43 +11,6 @@ interface EditScheduleDrawerProps {
   form: FormInstance<EditScheduleFormValues>
   onClose: () => void
   onSubmit: (values: EditScheduleFormValues) => void
-}
-
-export function scheduleToEditValues(schedule: PaymentScheduleSummary): EditScheduleFormValues {
-  return {
-    title: schedule.title,
-    amountYuan: centsToYuan(schedule.amountCents),
-    dueDate: dateStringToDayjs(schedule.dueDate),
-    counterpartyName: schedule.counterpartyName ?? undefined,
-  }
-}
-
-export function buildUpdateSchedulePayload(
-  schedule: PaymentScheduleSummary,
-  values: EditScheduleFormValues,
-) {
-  const payload: {
-    title: string
-    amountCents?: number
-    dueDate?: string
-    counterpartyName?: string | null
-  } = {
-    title: values.title.trim(),
-  }
-
-  if (!schedule.financeTouched) {
-    if (values.amountYuan !== undefined) {
-      payload.amountCents = yuanToCents(values.amountYuan)
-    }
-    if (values.dueDate) {
-      payload.dueDate = dayjsToDateString(values.dueDate)
-    }
-    if (values.counterpartyName !== undefined) {
-      payload.counterpartyName = values.counterpartyName.trim() || null
-    }
-  }
-
-  return payload
 }
 
 export function EditScheduleDrawer({

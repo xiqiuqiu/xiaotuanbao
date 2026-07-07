@@ -5,7 +5,7 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
-import { DepartureStatus, DepartureType } from '@xiaotuanbao/shared'
+import { DepartureStatus } from '@xiaotuanbao/shared'
 import { listEmployees } from '@/services/employee.service'
 import {
   closeDeparture,
@@ -14,18 +14,10 @@ import {
 } from '@/services/departure.service'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import { computeDayCount } from '../utils/departure-wizard-form'
-
-export interface DepartureOverviewFormValues {
-  departureNo: string
-  name: string
-  routeName: string
-  departureType: DepartureType
-  startDate: string
-  endDate: string
-  dayCount: number
-  ownerUserId: string
-  notes?: string
-}
+import {
+  departureToFormValues,
+  type DepartureOverviewFormValues,
+} from '../utils/departure-overview-form'
 
 interface DepartureOverviewProps {
   departure: DepartureDetail
@@ -36,20 +28,6 @@ interface DepartureOverviewProps {
 
 function toDayjs(value?: string): Dayjs | null {
   return value ? dayjs(value) : null
-}
-
-export function departureToFormValues(departure: DepartureDetail): DepartureOverviewFormValues {
-  return {
-    departureNo: departure.departureNo,
-    name: departure.name,
-    routeName: departure.routeName,
-    departureType: departure.departureType as DepartureType,
-    startDate: departure.startDate,
-    endDate: departure.endDate,
-    dayCount: departure.dayCount,
-    ownerUserId: departure.ownerUserId,
-    notes: departure.notes ?? undefined,
-  }
 }
 
 export function DepartureOverview({

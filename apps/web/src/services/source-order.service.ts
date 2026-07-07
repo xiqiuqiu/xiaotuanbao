@@ -34,10 +34,6 @@ export async function createSourceOrder(
   return request.post<SourceOrderSummary>(`/departures/${departureId}/source-orders`, payload)
 }
 
-export async function getSourceOrder(id: string): Promise<SourceOrderSummary> {
-  return request.get<SourceOrderSummary>(`/source-orders/${id}`)
-}
-
 export async function updateSourceOrder(
   id: string,
   payload: UpdateSourceOrderDto,

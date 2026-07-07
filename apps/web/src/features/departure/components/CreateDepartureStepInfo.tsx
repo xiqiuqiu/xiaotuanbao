@@ -3,20 +3,14 @@ import { Button, Card, Col, DatePicker, Form, Input, Row, Select, Space, Typogra
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { DepartureType } from '@xiaotuanbao/shared'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
-import type { InfoStepValues, RouteStepValues } from '../utils/departure-wizard-form'
+import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import {
   buildDefaultDepartureName,
   buildRouteSummary,
   computeDayCount,
   computeEndDateFromDefaultDays,
 } from '../utils/departure-wizard-form'
-
-export type InfoFormValues = InfoStepValues & {
-  dayCount: number
-  ownerName: string
-}
 
 interface CreateDepartureStepInfoProps {
   form: FormInstance<InfoFormValues>
@@ -186,29 +180,4 @@ export function CreateDepartureStepInfo({
       </Col>
     </Row>
   )
-}
-
-export function createInfoFormValues(
-  route: RouteStepValues,
-  ownerUserId: string,
-  ownerName: string,
-  startDate: string,
-  departureNo: string,
-): InfoFormValues {
-  const endDate =
-    route.defaultDayCount && route.defaultDayCount > 0
-      ? computeEndDateFromDefaultDays(startDate, route.defaultDayCount)
-      : startDate
-
-  return {
-    name: buildDefaultDepartureName(route.routeName, startDate),
-    departureNo,
-    departureType: DepartureType.COMBINED,
-    startDate,
-    endDate,
-    dayCount: computeDayCount(startDate, endDate),
-    ownerUserId,
-    ownerName,
-    notes: undefined,
-  }
 }

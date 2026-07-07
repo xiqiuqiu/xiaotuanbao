@@ -111,10 +111,6 @@ export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
   { value: SourceOrderDiscountType.LUMP_SUM, label: '整单优惠' },
 ] as const
 
-export const SOURCE_ORDER_DISCOUNT_LABELS = Object.fromEntries(
-  SOURCE_ORDER_DISCOUNT_OPTIONS.map((item) => [item.value, item.label]),
-) as Record<string, string>
-
 export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   [SourceOrderReceivableStatus.NOT_GENERATED]: '未生成',
   [SourceOrderReceivableStatus.PENDING]: '待收',

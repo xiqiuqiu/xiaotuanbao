@@ -1,13 +1,8 @@
 import { DatePicker, Drawer, Form, Input, InputNumber, Space, Button } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import { centsToYuan, dateStringToDayjs, dayjsToDateString, yuanToCents } from '../utils/finance-form'
-
-export interface ConfirmPaymentFormValues {
-  amountYuan: number
-  transactionDate: ReturnType<typeof dateStringToDayjs>
-  notes?: string
-}
+import { centsToYuan } from '../utils/finance-form'
+import type { ConfirmPaymentFormValues } from '../utils/confirm-payment-form'
 
 interface ConfirmPaymentDrawerProps {
   open: boolean
@@ -16,24 +11,6 @@ interface ConfirmPaymentDrawerProps {
   form: FormInstance<ConfirmPaymentFormValues>
   onClose: () => void
   onSubmit: (values: ConfirmPaymentFormValues) => void
-}
-
-export function scheduleToConfirmPaymentValues(
-  schedule: PaymentScheduleSummary,
-): ConfirmPaymentFormValues {
-  return {
-    amountYuan: centsToYuan(schedule.unsettledAmountCents),
-    transactionDate: dateStringToDayjs(new Date().toISOString().slice(0, 10)),
-    notes: undefined,
-  }
-}
-
-export function buildConfirmPaymentPayload(values: ConfirmPaymentFormValues) {
-  return {
-    amountCents: yuanToCents(values.amountYuan),
-    transactionDate: dayjsToDateString(values.transactionDate),
-    notes: values.notes?.trim() || undefined,
-  }
 }
 
 export function ConfirmPaymentDrawer({

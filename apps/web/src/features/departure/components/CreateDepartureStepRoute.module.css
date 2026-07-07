@@ -1,0 +1,10 @@
+.selectedTemplateBanner {
+  margin-top: 24px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}

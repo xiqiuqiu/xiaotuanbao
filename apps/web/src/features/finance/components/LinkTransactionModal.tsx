@@ -4,12 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listTransactions } from '@/services/finance.service'
 import { formatCents } from '../catalog'
-import { centsToYuan, yuanToCents } from '../utils/finance-form'
-
-export interface LinkTransactionFormValues {
-  transactionId: string
-  amountYuan: number
-}
+import type { LinkTransactionFormValues } from '../utils/link-transaction-form'
 
 interface LinkTransactionModalProps {
   open: boolean
@@ -18,22 +13,6 @@ interface LinkTransactionModalProps {
   form: FormInstance<LinkTransactionFormValues>
   onClose: () => void
   onSubmit: (values: LinkTransactionFormValues) => void
-}
-
-export function scheduleToLinkTransactionValues(
-  schedule: PaymentScheduleSummary,
-): LinkTransactionFormValues {
-  return {
-    transactionId: '',
-    amountYuan: centsToYuan(schedule.unsettledAmountCents),
-  }
-}
-
-export function buildLinkTransactionPayload(values: LinkTransactionFormValues) {
-  return {
-    transactionId: values.transactionId,
-    amountCents: yuanToCents(values.amountYuan),
-  }
 }
 
 export function LinkTransactionModal({
