@@ -13,6 +13,7 @@ import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
+import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { OrganizationPage } from '@/pages/system/OrganizationPage'
 import { RolesPage } from '@/pages/system/RolesPage'
 
@@ -86,7 +87,7 @@ const partnerRoute = createRoute({
 const supplierRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/supplier',
-  component: () => <PlaceholderPage title="供应商管理" />,
+  component: SuppliersPage,
 })
 
 const systemOrganizationRoute = createRoute({

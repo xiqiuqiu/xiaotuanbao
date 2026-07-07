@@ -72,3 +72,32 @@ export interface EmployeeListResult {
   pageSize: number
   stats: EmployeeListStats
 }
+
+export interface SupplierSummary {
+  id: string
+  name: string
+  category: string
+  status: 'active' | 'disabled' | 'archived'
+  contactName: string | null
+  contactPhone: string | null
+  settlementMethod: string | null
+  settlementCycle: string | null
+  settlementNotes: string | null
+  referenceQuoteNotes: string | null
+  invoiceAvailable: string | null
+  invoiceType: string | null
+  taxRate: string | null
+  accountName: string | null
+  bankName: string | null
+  bankAccount: string | null
+  businessNotes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SupplierListResult {
+  items: SupplierSummary[]
+  total: number
+  page: number
+  pageSize: number
+}

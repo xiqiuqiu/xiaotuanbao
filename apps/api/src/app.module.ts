@@ -6,6 +6,7 @@ import { HealthModule } from './modules/health/health.module'
 import { OrganizationModule } from './modules/organization/organization.module'
 import { RoleModule } from './modules/role/role.module'
 import { UserModule } from './modules/user/user.module'
+import { SupplierModule } from './modules/supplier/supplier.module'
 import { PrismaModule } from './database/prisma/prisma.module'
 
 @Module({
@@ -21,6 +22,7 @@ import { PrismaModule } from './database/prisma/prisma.module'
     RoleModule,
     OrganizationModule,
     UserModule,
+    SupplierModule,
   ],
 })
 export class AppModule {}
