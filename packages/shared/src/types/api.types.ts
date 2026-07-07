@@ -174,6 +174,35 @@ export interface CreateDepartureDto {
   copyReferencePrices?: boolean
 }
 
+export interface UpdateDepartureDto {
+  departureNo?: string
+  name?: string
+  routeName?: string
+  departureType?: string
+  startDate?: string
+  endDate?: string
+  ownerUserId?: string
+  notes?: string | null
+}
+
+export interface TransitionDepartureDto {
+  targetStatus: string
+}
+
+/** Detail response extends summary with Read Model aggregates (placeholder zeros until E7). */
+export interface DepartureDetail extends DepartureSummary {
+  totalGuests: number
+  grossReceivableCents: number
+  discountCents: number
+  netReceivableCents: number
+  payableCents: number
+  estimatedMarginCents: number
+  collectedCents: number
+  uncollectedCents: number
+  paidCents: number
+  unpaidCents: number
+}
+
 export interface RouteTemplateCardSummary {
   id: string
   name: string

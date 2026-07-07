@@ -1,0 +1,114 @@
+import { Form, Spin, Tabs, Typography } from 'antd'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import { DepartureStatus } from '@xiaotuanbao/shared'
+import { getDeparture } from '@/services/departure.service'
+import { DepartureHeader } from '../components/DepartureHeader'
+import { DepartureOverview } from '../components/DepartureOverview'
+import { DepartureTabPlaceholder } from '../components/DepartureTabPlaceholder'
+import {
+  DEPARTURE_DETAIL_TABS,
+  isDepartureDetailTabKey,
+  type DepartureDetailTabKey,
+} from '../catalog'
+
+const DEFAULT_TAB: DepartureDetailTabKey = 'overview'
+
+export function DepartureDetailPage() {
+  const { departureId } = useParams({ strict: false })
+  const search = useSearch({ strict: false })
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [form] = Form.useForm()
+
+  const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
+
+  const { data: departure, isLoading, isError } = useQuery({
+    queryKey: ['departure', departureId],
+    queryFn: () => getDeparture(departureId!),
+    enabled: Boolean(departureId),
+  })
+
+  const handleTabChange = (key: string) => {
+    if (!departureId) {
+      return
+    }
+
+    navigate({
+      to: '/departure/$departureId',
+      params: { departureId },
+      search: { tab: key as DepartureDetailTabKey },
+    })
+  }
+
+  const handleUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
+    queryClient.invalidateQueries({ queryKey: ['departures'] })
+  }
+
+  if (!departureId) {
+    return (
+      <div>
+        <Typography.Title level={4} style={{ marginTop: 0 }}>
+          发团不存在
+        </Typography.Title>
+        <Link to="/departure">返回发团列表</Link>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <Spin />
+      </div>
+    )
+  }
+
+  if (isError || !departure) {
+    return (
+      <div>
+        <Typography.Title level={4} style={{ marginTop: 0 }}>
+          发团不存在
+        </Typography.Title>
+        <Typography.Paragraph type="secondary">
+          该发团可能已被删除或您无权访问。
+        </Typography.Paragraph>
+        <Link to="/departure">返回发团列表</Link>
+      </div>
+    )
+  }
+
+  const readOnly = departure.status === DepartureStatus.CLOSED
+
+  const tabItems = DEPARTURE_DETAIL_TABS.map((tab) => {
+    if (tab.key === 'overview') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: (
+          <DepartureOverview
+            departure={departure}
+            form={form}
+            readOnly={readOnly}
+            onUpdated={handleUpdated}
+          />
+        ),
+      }
+    }
+
+    return {
+      key: tab.key,
+      label: tab.label,
+      children: <DepartureTabPlaceholder title={tab.label} />,
+    }
+  })
+
+  return (
+    <div>
+      <DepartureHeader departure={departure} />
+
+      <Tabs activeKey={activeTab} onChange={handleTabChange} items={tabItems} />
+    </div>
+  )
+}

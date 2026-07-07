@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common'
-import type { DepartureListResult, DepartureSummary } from '@xiaotuanbao/shared'
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common'
+import type {
+  DepartureDetail,
+  DepartureListResult,
+  DepartureSummary,
+} from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -7,6 +21,8 @@ import {
   CreateDepartureDto,
   ListDeparturesQueryDto,
   NextDepartureNoQueryDto,
+  TransitionDepartureDto,
+  UpdateDepartureDto,
 } from './dto/departure.dto'
 import { DepartureService } from './departure.service'
 
@@ -43,5 +59,43 @@ export class DepartureController {
     @Body() dto: CreateDepartureDto,
   ): Promise<DepartureSummary> {
     return this.departureService.create(request.user.organizationId, dto)
+  }
+
+  @Get(':id')
+  @RequireMenu('/departure')
+  getById(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<DepartureDetail> {
+    return this.departureService.getById(request.user.organizationId, id)
+  }
+
+  @Patch(':id')
+  @RequireMenu('/departure')
+  update(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateDepartureDto,
+  ): Promise<DepartureDetail> {
+    return this.departureService.update(request.user.organizationId, id, dto)
+  }
+
+  @Post(':id/transition')
+  @RequireMenu('/departure')
+  transition(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: TransitionDepartureDto,
+  ): Promise<DepartureDetail> {
+    return this.departureService.transition(request.user.organizationId, id, dto)
+  }
+
+  @Post(':id/close')
+  @RequireMenu('/departure')
+  close(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<DepartureDetail> {
+    return this.departureService.close(request.user.organizationId, id)
   }
 }

@@ -118,3 +118,46 @@ export class ListDeparturesQueryDto {
   @Min(1)
   pageSize?: number
 }
+
+export class UpdateDepartureDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  departureNo?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  name?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  routeName?: string
+
+  @IsOptional()
+  @IsEnum(PrismaDepartureType)
+  departureType?: PrismaDepartureType
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  ownerUserId?: string
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null
+}
+
+export class TransitionDepartureDto {
+  @IsEnum(PrismaDepartureStatus)
+  targetStatus!: PrismaDepartureStatus
+}

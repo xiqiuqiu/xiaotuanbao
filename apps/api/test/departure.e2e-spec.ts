@@ -229,4 +229,118 @@ describe('Departure API (e2e)', () => {
     expect(response.body.data.items).toHaveLength(1)
     expect(response.body.data.items[0].departureNo).toBe(departureNo)
   })
+
+  async function createTestDeparture(overrides: Record<string, unknown> = {}) {
+    const departureNo = `${testPrefix}-detail-${Math.random().toString(36).slice(2, 8)}`
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send(createPayload({ departureNo, ...overrides }))
+      .expect(201)
+
+    return response.body.data as { id: string; departureNo: string }
+  }
+
+  it('returns 403 for finance role on GET /departures/:id', async () => {
+    const departure = await createTestDeparture()
+
+    const response = await authRequest(app, financeToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(403)
+
+    expect(response.body.code).toBe(403)
+  })
+
+  it('returns departure detail for coordinator', async () => {
+    const departure = await createTestDeparture({ name: `${testPrefix}-detail-get` })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      id: departure.id,
+      departureNo: departure.departureNo,
+      name: `${testPrefix}-detail-get`,
+      status: DepartureStatus.editing,
+      totalGuests: 0,
+      netReceivableCents: 0,
+      payableCents: 0,
+    })
+    expect(response.body.data.departureProgress).toBeTruthy()
+  })
+
+  it('updates departure core fields', async () => {
+    const departure = await createTestDeparture()
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}`)
+      .send({
+        name: `${testPrefix}-updated`,
+        notes: '更新备注',
+      })
+      .expect(200)
+
+    expect(response.body.data.name).toBe(`${testPrefix}-updated`)
+    expect(response.body.data.notes).toBe('更新备注')
+  })
+
+  it('transitions editing to pending_settlement', async () => {
+    const departure = await createTestDeparture()
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.pending_settlement })
+      .expect(201)
+
+    expect(response.body.data.status).toBe(DepartureStatus.pending_settlement)
+  })
+
+  it('returns 400 for illegal transition pending_settlement to editing', async () => {
+    const departure = await createTestDeparture()
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.pending_settlement })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.editing })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+    expect(response.body.message).toBe('不允许的状态转换')
+  })
+
+  it('closes departure and rejects patch with 409', async () => {
+    const departure = await createTestDeparture()
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/close`)
+      .expect(201)
+
+    const patchResponse = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}`)
+      .send({ name: `${testPrefix}-closed-edit` })
+      .expect(409)
+
+    expect(patchResponse.body.code).toBe(409)
+    expect(patchResponse.body.message).toBe('发团已关闭，不可编辑')
+  })
+
+  it('returns 400 when transitioning closed departure', async () => {
+    const departure = await createTestDeparture()
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/close`)
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.pending_settlement })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+    expect(response.body.message).toBe('已关闭发团不可变更状态')
+  })
 })

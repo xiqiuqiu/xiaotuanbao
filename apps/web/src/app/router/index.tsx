@@ -15,6 +15,7 @@ import { PlaceholderPage } from '@/pages/PlaceholderPage'
 import { PartnersPage } from '@/features/partner/pages/PartnersPage'
 import { DeparturesPage } from '@/features/departure/pages/DeparturesPage'
 import { CreateDeparturePage } from '@/features/departure/pages/CreateDeparturePage'
+import { DepartureDetailPage } from '@/features/departure/pages/DepartureDetailPage'
 import { EmployeesPage } from '@/pages/system/EmployeesPage'
 import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
 import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
@@ -71,9 +72,7 @@ const departureDetailRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
   }),
-  component: () => (
-    <PlaceholderPage title="发团详情" description="详情页将在后续迭代中实现。" />
-  ),
+  component: DepartureDetailPage,
 })
 
 const financeReceivableRoute = createRoute({

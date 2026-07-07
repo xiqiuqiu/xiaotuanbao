@@ -19,12 +19,28 @@ function buildColumns(): ColumnsType<DepartureSummary> {
     {
       title: '团号',
       dataIndex: 'departureNo',
-      render: (value: string) => <Typography.Text strong>{value}</Typography.Text>,
+      render: (value: string, record) => (
+        <Link
+          to="/departure/$departureId"
+          params={{ departureId: record.id }}
+          search={{ tab: 'overview' }}
+        >
+          <Typography.Text strong>{value}</Typography.Text>
+        </Link>
+      ),
     },
     {
       title: '团名',
       dataIndex: 'name',
-      render: (name: string) => name,
+      render: (name: string, record) => (
+        <Link
+          to="/departure/$departureId"
+          params={{ departureId: record.id }}
+          search={{ tab: 'overview' }}
+        >
+          {name}
+        </Link>
+      ),
     },
     {
       title: '出团日期',

@@ -2,8 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common'
-import type { DepartureListResult, DepartureSummary } from '@xiaotuanbao/shared'
+import type { DepartureDetail, DepartureListResult, DepartureSummary } from '@xiaotuanbao/shared'
 import {
   DepartureRouteSource,
   DepartureStatus,
@@ -12,7 +13,12 @@ import {
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import type { CreateDepartureDto, ListDeparturesQueryDto } from './dto/departure.dto'
+import type {
+  CreateDepartureDto,
+  ListDeparturesQueryDto,
+  TransitionDepartureDto,
+  UpdateDepartureDto,
+} from './dto/departure.dto'
 import {
   computeDayCount,
   deriveDepartureProgress,
@@ -21,6 +27,21 @@ import {
 } from './departure-date.utils'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
+
+const UPDATE_DEPARTURE_FIELDS = [
+  'departureNo',
+  'name',
+  'routeName',
+  'departureType',
+  'startDate',
+  'endDate',
+  'ownerUserId',
+  'notes',
+] as const
+
+const TRANSITION_TARGETS: Partial<Record<DepartureStatus, DepartureStatus[]>> = {
+  [DepartureStatus.editing]: [DepartureStatus.pending_settlement],
+}
 
 @Injectable()
 export class DepartureService {
@@ -178,6 +199,167 @@ export class DepartureService {
     return this.toDepartureSummary(departure)
   }
 
+  async getById(organizationId: string, departureId: string): Promise<DepartureDetail> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    return this.toDepartureDetail(departure)
+  }
+
+  async update(
+    organizationId: string,
+    departureId: string,
+    dto: UpdateDepartureDto,
+  ): Promise<DepartureDetail> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+
+    if (departure.status === DepartureStatus.closed) {
+      throw new ConflictException('发团已关闭，不可编辑')
+    }
+
+    if (!this.hasUpdateFields(dto)) {
+      throw new BadRequestException('请至少提供一个待更新字段')
+    }
+
+    const data: Prisma.DepartureUpdateInput = {}
+
+    if (dto.departureNo !== undefined) {
+      const departureNo = dto.departureNo.trim()
+      if (!departureNo) {
+        throw new BadRequestException('团号不能为空')
+      }
+      await this.ensureDepartureNoAvailable(organizationId, departureNo, departure.id)
+      data.departureNo = departureNo
+    }
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim()
+      if (!name) {
+        throw new BadRequestException('团名不能为空')
+      }
+      data.name = name
+    }
+
+    if (dto.routeName !== undefined) {
+      const routeName = dto.routeName.trim()
+      if (!routeName) {
+        throw new BadRequestException('路线名称不能为空')
+      }
+      data.routeName = routeName
+    }
+
+    if (dto.departureType !== undefined) {
+      data.departureType = dto.departureType
+    }
+
+    if (dto.ownerUserId !== undefined) {
+      await this.ensureOwnerInOrganization(organizationId, dto.ownerUserId)
+      data.owner = { connect: { id: dto.ownerUserId } }
+    }
+
+    if (dto.notes !== undefined) {
+      data.notes = dto.notes?.trim() || null
+    }
+
+    let startDate = departure.startDate
+    let endDate = departure.endDate
+
+    if (dto.startDate !== undefined) {
+      startDate = parseDateOnly(dto.startDate)
+    }
+
+    if (dto.endDate !== undefined) {
+      endDate = parseDateOnly(dto.endDate)
+    }
+
+    if (dto.startDate !== undefined || dto.endDate !== undefined) {
+      if (endDate < startDate) {
+        throw new BadRequestException('结束日期不能早于出团日期')
+      }
+      data.startDate = startDate
+      data.endDate = endDate
+      data.dayCount = computeDayCount(startDate, endDate)
+    }
+
+    const updated = await this.prisma.departure.update({
+      where: { id: departure.id },
+      data,
+    })
+
+    return this.toDepartureDetail(updated)
+  }
+
+  async transition(
+    organizationId: string,
+    departureId: string,
+    dto: TransitionDepartureDto,
+  ): Promise<DepartureDetail> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+
+    if (departure.status === DepartureStatus.closed) {
+      throw new BadRequestException('已关闭发团不可变更状态')
+    }
+
+    const allowedTargets = TRANSITION_TARGETS[departure.status] ?? []
+    if (!allowedTargets.includes(dto.targetStatus)) {
+      throw new BadRequestException('不允许的状态转换')
+    }
+
+    const updated = await this.prisma.departure.update({
+      where: { id: departure.id },
+      data: { status: dto.targetStatus },
+    })
+
+    return this.toDepartureDetail(updated)
+  }
+
+  async close(organizationId: string, departureId: string): Promise<DepartureDetail> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+
+    if (departure.status === DepartureStatus.closed) {
+      throw new BadRequestException('发团已关闭')
+    }
+
+    const updated = await this.prisma.departure.update({
+      where: { id: departure.id },
+      data: { status: DepartureStatus.closed },
+    })
+
+    return this.toDepartureDetail(updated)
+  }
+
+  private hasUpdateFields(dto: UpdateDepartureDto): boolean {
+    return UPDATE_DEPARTURE_FIELDS.some((field) => dto[field] !== undefined)
+  }
+
+  private async findDepartureOrThrow(organizationId: string, departureId: string) {
+    const departure = await this.prisma.departure.findFirst({
+      where: { id: departureId, organizationId },
+    })
+
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+
+    return departure
+  }
+
+  private async ensureDepartureNoAvailable(
+    organizationId: string,
+    departureNo: string,
+    excludeId?: string,
+  ) {
+    const existing = await this.prisma.departure.findFirst({
+      where: {
+        organizationId,
+        departureNo,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    })
+
+    if (existing) {
+      throw new ConflictException('团号已存在')
+    }
+  }
+
   private async ensureOwnerInOrganization(organizationId: string, ownerUserId: string) {
     const owner = await this.prisma.user.findFirst({
       where: {
@@ -189,16 +371,6 @@ export class DepartureService {
 
     if (!owner) {
       throw new BadRequestException('负责人不存在或不属于当前企业')
-    }
-  }
-
-  private async ensureDepartureNoAvailable(organizationId: string, departureNo: string) {
-    const existing = await this.prisma.departure.findFirst({
-      where: { organizationId, departureNo },
-    })
-
-    if (existing) {
-      throw new ConflictException('团号已存在')
     }
   }
 
@@ -214,6 +386,22 @@ export class DepartureService {
     })
 
     return `${prefix}${String(count + 1).padStart(4, '0')}`
+  }
+
+  private toDepartureDetail(departure: Departure): DepartureDetail {
+    return {
+      ...this.toDepartureSummary(departure),
+      totalGuests: 0,
+      grossReceivableCents: 0,
+      discountCents: 0,
+      netReceivableCents: 0,
+      payableCents: 0,
+      estimatedMarginCents: 0,
+      collectedCents: 0,
+      uncollectedCents: 0,
+      paidCents: 0,
+      unpaidCents: 0,
+    }
   }
 
   private toDepartureSummary(departure: Departure): DepartureSummary {
