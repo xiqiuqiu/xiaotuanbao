@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useMemo } from 'react'
 import {
   Alert,
   Button,
@@ -10,7 +10,6 @@ import {
   Space,
   Typography,
 } from 'antd'
-import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
@@ -32,7 +31,6 @@ interface ResourceDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
-  form: FormInstance<ResourceFormValues>
   onClose: () => void
   onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
 }
@@ -44,13 +42,25 @@ export function ResourceDrawer({
   readOnly,
   amountReadOnly = false,
   loading,
-  form,
   onClose,
   onSubmit,
 }: ResourceDrawerProps) {
+  const [form] = Form.useForm<ResourceFormValues>()
   const resourceKind = Form.useWatch('resourceKind', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const outsource = isOutsourceKind(resourceKind)
+
+  const formKey = editing?.id ?? 'new'
+  const initialValues = useMemo(
+    () =>
+      editing
+        ? resourceToFormValues(editing)
+        : {
+            resourceKind: ResourceKind.TRANSPORT,
+            amountYuan: 0,
+          },
+    [editing],
+  )
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'resource-select'],
@@ -71,22 +81,6 @@ export function ResourceDrawer({
       }),
     enabled: open && !outsource && Boolean(resourceKind),
   })
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    if (editing) {
-      form.setFieldsValue(resourceToFormValues(editing))
-    } else {
-      form.resetFields()
-      form.setFieldsValue({
-        resourceKind: ResourceKind.TRANSPORT,
-        amountYuan: 0,
-      })
-    }
-  }, [open, editing, form])
 
   return (
     <Drawer
@@ -126,9 +120,11 @@ export function ResourceDrawer({
       ) : null}
 
       <Form
+        key={formKey}
         form={form}
         layout="vertical"
         disabled={readOnly}
+        initialValues={initialValues}
         onFinish={(values) => onSubmit(formValuesToPayload(values))}
       >
         <Form.Item

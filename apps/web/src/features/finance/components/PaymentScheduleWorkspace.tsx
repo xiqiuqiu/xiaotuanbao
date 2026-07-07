@@ -1,56 +1,35 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Space, Table, Tag, Typography, message } from 'antd'
-import { Link } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ColumnsType } from 'antd/es/table'
+import { Card, Form, Table } from 'antd'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listDepartures } from '@/services/departure.service'
 import {
-  cancelSchedule,
-  confirmCollection,
-  confirmPayment,
-  linkPayableTransaction,
-  linkReceivableTransaction,
   listDeparturePayables,
   listDepartureReceivables,
   listPayables,
   listReceivables,
-  updatePayable,
-  updateReceivable,
 } from '@/services/finance.service'
-import {
-  COUNTERPARTY_TYPE_LABELS,
-  PAYMENT_SCHEDULE_STATUS_COLORS,
-  PAYMENT_SCHEDULE_STATUS_LABELS,
-  catalogLabel,
-  formatCents,
-} from '../catalog'
 import { PaymentScheduleFilters, type DueDateRange } from './PaymentScheduleFilters'
-import { ConfirmCollectionDrawer } from './ConfirmCollectionDrawer'
-import { ConfirmPaymentDrawer } from './ConfirmPaymentDrawer'
-import { LinkTransactionModal } from './LinkTransactionModal'
-import { CancelScheduleModal, type CancelScheduleFormValues } from './CancelScheduleModal'
-import { EditScheduleDrawer } from './EditScheduleDrawer'
+import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
+import { buildPaymentScheduleColumns } from './payment-schedule-table-columns'
+import { usePaymentScheduleMutations } from '../hooks/usePaymentScheduleMutations'
 import {
-  buildConfirmCollectionPayload,
   scheduleToConfirmCollectionValues,
   type ConfirmCollectionFormValues,
 } from '../utils/confirm-collection-form'
 import {
-  buildConfirmPaymentPayload,
   scheduleToConfirmPaymentValues,
   type ConfirmPaymentFormValues,
 } from '../utils/confirm-payment-form'
 import {
-  buildLinkTransactionPayload,
   scheduleToLinkTransactionValues,
   type LinkTransactionFormValues,
 } from '../utils/link-transaction-form'
 import {
-  buildUpdateSchedulePayload,
   scheduleToEditValues,
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
+import type { CancelScheduleFormValues } from './CancelScheduleModal'
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -89,14 +68,6 @@ function applyClientFilters(
 
     return true
   })
-}
-
-function isScheduleActionable(schedule: PaymentScheduleSummary): boolean {
-  return schedule.status !== PaymentScheduleStatus.CANCELLED
-}
-
-function canSettle(schedule: PaymentScheduleSummary): boolean {
-  return isScheduleActionable(schedule) && schedule.unsettledAmountCents > 0
 }
 
 export function PaymentScheduleWorkspace({
@@ -189,108 +160,42 @@ export function PaymentScheduleWorkspace({
 
   const tableTotal = hasClientFilters ? filteredItems.length : (schedulesResult?.total ?? 0)
 
-  const confirmMutation = useMutation({
-    mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
-      if (!activeSchedule) {
-        throw new Error('未选择节点')
-      }
-      if (isReceivable) {
-        return confirmCollection(activeSchedule.id, buildConfirmCollectionPayload(values))
-      }
-      return confirmPayment(activeSchedule.id, buildConfirmPaymentPayload(values))
-    },
-    onSuccess: () => {
-      message.success(isReceivable ? '收款已登记' : '付款已登记')
-      setConfirmOpen(false)
-      setActiveSchedule(null)
-      confirmForm.resetFields()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '操作失败')
-    },
-  })
+  const closeConfirm = useCallback(() => {
+    setConfirmOpen(false)
+    setActiveSchedule(null)
+  }, [])
 
-  const linkMutation = useMutation({
-    mutationFn: async (values: LinkTransactionFormValues) => {
-      if (!activeSchedule) {
-        throw new Error('未选择节点')
-      }
-      const payload = buildLinkTransactionPayload(values)
-      return isReceivable
-        ? linkReceivableTransaction(activeSchedule.id, payload)
-        : linkPayableTransaction(activeSchedule.id, payload)
-    },
-    onSuccess: () => {
-      message.success('流水已关联')
-      setLinkOpen(false)
-      setActiveSchedule(null)
-      linkForm.resetFields()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '关联失败')
-    },
-  })
+  const closeLink = useCallback(() => {
+    setLinkOpen(false)
+    setActiveSchedule(null)
+  }, [])
 
-  const cancelMutation = useMutation({
-    mutationFn: async (values: CancelScheduleFormValues) => {
-      if (!activeSchedule) {
-        throw new Error('未选择节点')
-      }
-      return cancelSchedule(activeSchedule.id, {
-        cancelReason: values.cancelReason?.trim() || undefined,
-      })
-    },
-    onSuccess: () => {
-      message.success('节点已关闭')
-      setCancelOpen(false)
-      setActiveSchedule(null)
-      cancelForm.resetFields()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '关闭失败')
-    },
-  })
+  const closeCancel = useCallback(() => {
+    setCancelOpen(false)
+    setActiveSchedule(null)
+  }, [])
 
-  const editMutation = useMutation({
-    mutationFn: async (values: EditScheduleFormValues) => {
-      if (!activeSchedule) {
-        throw new Error('未选择节点')
-      }
-      const payload = buildUpdateSchedulePayload(activeSchedule, values)
-      return isReceivable
-        ? updateReceivable(activeSchedule.id, payload)
-        : updatePayable(activeSchedule.id, payload)
-    },
-    onSuccess: () => {
-      message.success('节点已更新')
-      setEditOpen(false)
-      setActiveSchedule(null)
-      editForm.resetFields()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '更新失败')
-    },
-  })
+  const closeEdit = useCallback(() => {
+    setEditOpen(false)
+    setActiveSchedule(null)
+  }, [])
+
+  const { confirmMutation, linkMutation, cancelMutation, editMutation } =
+    usePaymentScheduleMutations({
+      queryClient,
+      isReceivable,
+      listQueryKey,
+      departureListQueryKey,
+      activeSchedule,
+      confirmForm,
+      linkForm,
+      cancelForm,
+      editForm,
+      onConfirmSuccess: closeConfirm,
+      onLinkSuccess: closeLink,
+      onCancelSuccess: closeCancel,
+      onEditSuccess: closeEdit,
+    })
 
   const openConfirm = useCallback(
     (schedule: PaymentScheduleSummary) => {
@@ -339,113 +244,28 @@ export function PaymentScheduleWorkspace({
     setPage(1)
   }, [scope])
 
-  const columns = useMemo<ColumnsType<PaymentScheduleSummary>>(
-    () => [
-      {
-        title: '节点编号',
-        dataIndex: 'scheduleNo',
-        render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
-      },
-      { title: '标题', dataIndex: 'title' },
-      ...(isDepartureScope
-        ? []
-        : [
-            {
-              title: '发团',
-              dataIndex: 'departureId',
-              render: (departureId: string) => {
-                const departure = departureMap.get(departureId)
-                if (!departure) {
-                  return '—'
-                }
-                return (
-                  <Link to="/departure/$departureId" params={{ departureId }}>
-                    {departure.departureNo} · {departure.name}
-                  </Link>
-                )
-              },
-            },
-          ]),
-      {
-        title: '往来对象',
-        render: (_, record) => (
-          <span>
-            {catalogLabel(COUNTERPARTY_TYPE_LABELS, record.counterpartyType)}
-            {record.counterpartyName ? ` · ${record.counterpartyName}` : ''}
-          </span>
-        ),
-      },
-      {
-        title: '金额',
-        dataIndex: 'amountCents',
-        render: (value: number) => formatCents(value),
-      },
-      {
-        title: '已结清',
-        dataIndex: 'settledAmountCents',
-        render: (value: number) => formatCents(value),
-      },
-      {
-        title: '未结清',
-        dataIndex: 'unsettledAmountCents',
-        render: (value: number) => formatCents(value),
-      },
-      { title: '到期日', dataIndex: 'dueDate' },
-      {
-        title: '状态',
-        dataIndex: 'status',
-        render: (status: string) => (
-          <Tag color={PAYMENT_SCHEDULE_STATUS_COLORS[status]}>
-            {catalogLabel(PAYMENT_SCHEDULE_STATUS_LABELS, status)}
-          </Tag>
-        ),
-      },
-      {
-        title: '财务介入',
-        dataIndex: 'financeTouched',
-        render: (value: boolean) => (value ? <Tag color="gold">已介入</Tag> : '—'),
-      },
-      {
-        title: '操作',
-        key: 'actions',
-        render: (_, record) => {
-          if (readOnly) {
-            return null
-          }
-
-          const actions: React.ReactNode[] = []
-
-          if (canSettle(record)) {
-            actions.push(
-              <Button key="confirm" type="link" onClick={() => openConfirm(record)}>
-                {isReceivable ? '登记收款' : '登记付款'}
-              </Button>,
-            )
-            actions.push(
-              <Button key="link" type="link" onClick={() => openLink(record)}>
-                关联流水
-              </Button>,
-            )
-          }
-
-          if (isScheduleActionable(record)) {
-            actions.push(
-              <Button key="edit" type="link" onClick={() => openEdit(record)}>
-                编辑
-              </Button>,
-            )
-            actions.push(
-              <Button key="cancel" type="link" danger onClick={() => openCancel(record)}>
-                关闭节点
-              </Button>,
-            )
-          }
-
-          return actions.length > 0 ? <Space size={0} wrap>{actions}</Space> : '—'
-        },
-      },
+  const columns = useMemo(
+    () =>
+      buildPaymentScheduleColumns({
+        isDepartureScope,
+        isReceivable,
+        readOnly,
+        departureMap,
+        onConfirm: openConfirm,
+        onLink: openLink,
+        onEdit: openEdit,
+        onCancel: openCancel,
+      }),
+    [
+      departureMap,
+      isDepartureScope,
+      isReceivable,
+      openCancel,
+      openConfirm,
+      openEdit,
+      openLink,
+      readOnly,
     ],
-    [departureMap, isDepartureScope, isReceivable, openCancel, openConfirm, openEdit, openLink, readOnly],
   )
 
   return (
@@ -495,66 +315,25 @@ export function PaymentScheduleWorkspace({
         />
       </Card>
 
-      {isReceivable ? (
-        <ConfirmCollectionDrawer
-          open={confirmOpen}
-          schedule={activeSchedule}
-          loading={confirmMutation.isPending}
-          form={confirmForm}
-          onClose={() => {
-            setConfirmOpen(false)
-            setActiveSchedule(null)
-          }}
-          onSubmit={(values) => confirmMutation.mutate(values)}
-        />
-      ) : (
-        <ConfirmPaymentDrawer
-          open={confirmOpen}
-          schedule={activeSchedule}
-          loading={confirmMutation.isPending}
-          form={confirmForm}
-          onClose={() => {
-            setConfirmOpen(false)
-            setActiveSchedule(null)
-          }}
-          onSubmit={(values) => confirmMutation.mutate(values)}
-        />
-      )}
-
-      <LinkTransactionModal
-        open={linkOpen}
-        schedule={activeSchedule}
-        loading={linkMutation.isPending}
-        form={linkForm}
-        onClose={() => {
-          setLinkOpen(false)
-          setActiveSchedule(null)
-        }}
-        onSubmit={(values) => linkMutation.mutate(values)}
-      />
-
-      <CancelScheduleModal
-        open={cancelOpen}
-        schedule={activeSchedule}
-        loading={cancelMutation.isPending}
-        form={cancelForm}
-        onClose={() => {
-          setCancelOpen(false)
-          setActiveSchedule(null)
-        }}
-        onSubmit={(values) => cancelMutation.mutate(values)}
-      />
-
-      <EditScheduleDrawer
-        open={editOpen}
-        schedule={activeSchedule}
-        loading={editMutation.isPending}
-        form={editForm}
-        onClose={() => {
-          setEditOpen(false)
-          setActiveSchedule(null)
-        }}
-        onSubmit={(values) => editMutation.mutate(values)}
+      <PaymentScheduleActionDialogs
+        isReceivable={isReceivable}
+        activeSchedule={activeSchedule}
+        confirmOpen={confirmOpen}
+        linkOpen={linkOpen}
+        cancelOpen={cancelOpen}
+        editOpen={editOpen}
+        confirmForm={confirmForm}
+        linkForm={linkForm}
+        cancelForm={cancelForm}
+        editForm={editForm}
+        confirmMutation={confirmMutation}
+        linkMutation={linkMutation}
+        cancelMutation={cancelMutation}
+        editMutation={editMutation}
+        onCloseConfirm={closeConfirm}
+        onCloseLink={closeLink}
+        onCloseCancel={closeCancel}
+        onCloseEdit={closeEdit}
       />
     </div>
   )

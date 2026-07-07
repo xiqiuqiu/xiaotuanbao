@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Form, Popconfirm, Space, Table, Tag, message } from 'antd'
+import { Button, Popconfirm, Space, Table, Tag, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -20,7 +20,6 @@ import {
   formatResourceOverview,
   formatSegmentDateRange,
   formValuesToPayload,
-  type SegmentFormValues,
 } from '../utils/segment-form'
 
 interface SegmentTabProps {
@@ -31,7 +30,6 @@ interface SegmentTabProps {
 export function SegmentTab({ departure, readOnly }: SegmentTabProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [form] = Form.useForm<SegmentFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
@@ -204,7 +202,6 @@ export function SegmentTab({ departure, readOnly }: SegmentTabProps) {
         editing={editingSegment}
         readOnly={readOnly || viewOnly}
         loading={saveMutation.isPending}
-        form={form}
         onClose={() => {
           setDrawerOpen(false)
           setEditingSegment(null)

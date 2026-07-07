@@ -1,4 +1,4 @@
-import { Form, Spin, Tabs, Typography } from 'antd'
+import { Spin, Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
@@ -26,7 +26,6 @@ export function DepartureDetailPage() {
   const search = useSearch({ strict: false })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [form] = Form.useForm()
   const menuKeys = useAuthStore((state) => state.menuKeys)
 
   const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
@@ -108,7 +107,6 @@ export function DepartureDetailPage() {
         children: (
           <DepartureOverview
             departure={departure}
-            form={form}
             readOnly={overviewReadOnly}
             onUpdated={handleUpdated}
           />

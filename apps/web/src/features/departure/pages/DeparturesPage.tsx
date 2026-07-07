@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useReducer } from 'react'
 import { Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
@@ -20,6 +20,81 @@ import {
   formatCents,
   renderCompletionTags,
 } from '../catalog'
+
+type DeparturesPageState = {
+  keyword: string
+  routeName?: string
+  departureType?: DepartureType
+  departureProgress?: DepartureProgress
+  statusFilter?: DepartureStatus
+  ownerUserId?: string
+  partnerId?: string
+  startDateRange: [string | undefined, string | undefined] | null
+  filtersKey: number
+  page: number
+  pageSize: number
+}
+
+const initialDeparturesPageState: DeparturesPageState = {
+  keyword: '',
+  routeName: undefined,
+  departureType: undefined,
+  departureProgress: undefined,
+  statusFilter: undefined,
+  ownerUserId: undefined,
+  partnerId: undefined,
+  startDateRange: null,
+  filtersKey: 0,
+  page: 1,
+  pageSize: 10,
+}
+
+type DeparturesPageAction =
+  | { type: 'SET_KEYWORD'; value: string }
+  | { type: 'SET_ROUTE_NAME'; value?: string }
+  | { type: 'SET_DEPARTURE_TYPE'; value?: DepartureType }
+  | { type: 'SET_DEPARTURE_PROGRESS'; value?: DepartureProgress }
+  | { type: 'SET_STATUS'; value?: DepartureStatus }
+  | { type: 'SET_OWNER'; value?: string }
+  | { type: 'SET_PARTNER'; value?: string }
+  | { type: 'SET_START_DATE_RANGE'; value: [string | undefined, string | undefined] | null }
+  | { type: 'SET_PAGE'; page: number; pageSize?: number }
+  | { type: 'RESET_FILTERS' }
+
+function departuresPageReducer(
+  state: DeparturesPageState,
+  action: DeparturesPageAction,
+): DeparturesPageState {
+  switch (action.type) {
+    case 'SET_KEYWORD':
+      return { ...state, keyword: action.value, page: 1 }
+    case 'SET_ROUTE_NAME':
+      return { ...state, routeName: action.value, page: 1 }
+    case 'SET_DEPARTURE_TYPE':
+      return { ...state, departureType: action.value, page: 1 }
+    case 'SET_DEPARTURE_PROGRESS':
+      return { ...state, departureProgress: action.value, page: 1 }
+    case 'SET_STATUS':
+      return { ...state, statusFilter: action.value, page: 1 }
+    case 'SET_OWNER':
+      return { ...state, ownerUserId: action.value, page: 1 }
+    case 'SET_PARTNER':
+      return { ...state, partnerId: action.value, page: 1 }
+    case 'SET_START_DATE_RANGE':
+      return { ...state, startDateRange: action.value, page: 1 }
+    case 'SET_PAGE':
+      return {
+        ...state,
+        page: action.page,
+        pageSize: action.pageSize ?? state.pageSize,
+      }
+    case 'RESET_FILTERS':
+      return {
+        ...initialDeparturesPageState,
+        filtersKey: state.filtersKey + 1,
+      }
+  }
+}
 
 function buildColumns(): ColumnsType<DepartureSummary> {
   return [
@@ -153,20 +228,10 @@ function buildColumns(): ColumnsType<DepartureSummary> {
 }
 
 export function DeparturesPage() {
-  const [keyword, setKeyword] = useState('')
-  const [routeName, setRouteName] = useState<string>()
-  const [departureType, setDepartureType] = useState<DepartureType>()
-  const [departureProgress, setDepartureProgress] = useState<DepartureProgress>()
-  const [statusFilter, setStatusFilter] = useState<DepartureStatus>()
-  const [ownerUserId, setOwnerUserId] = useState<string>()
-  const [partnerId, setPartnerId] = useState<string>()
-  const [startDateRange, setStartDateRange] = useState<[string | undefined, string | undefined] | null>(null)
-  const [filtersKey, setFiltersKey] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [state, dispatch] = useReducer(departuresPageReducer, initialDeparturesPageState)
 
-  const startDateFrom = startDateRange?.[0]
-  const startDateTo = startDateRange?.[1]
+  const startDateFrom = state.startDateRange?.[0]
+  const startDateTo = state.startDateRange?.[1]
 
   const { data: employeesResult } = useQuery({
     queryKey: ['employees', 'departure-filters'],
@@ -185,45 +250,36 @@ export function DeparturesPage() {
   const { data: departuresResult, isLoading } = useQuery({
     queryKey: [
       'departures',
-      keyword,
-      routeName,
-      departureType,
-      departureProgress,
-      statusFilter,
-      ownerUserId,
-      partnerId,
+      state.keyword,
+      state.routeName,
+      state.departureType,
+      state.departureProgress,
+      state.statusFilter,
+      state.ownerUserId,
+      state.partnerId,
       startDateFrom,
       startDateTo,
-      page,
-      pageSize,
+      state.page,
+      state.pageSize,
     ],
     queryFn: () =>
       listDepartures({
-        keyword: keyword || undefined,
-        routeName,
-        departureType,
-        departureProgress,
-        status: statusFilter,
-        ownerUserId,
-        partnerId,
+        keyword: state.keyword || undefined,
+        routeName: state.routeName,
+        departureType: state.departureType,
+        departureProgress: state.departureProgress,
+        status: state.statusFilter,
+        ownerUserId: state.ownerUserId,
+        partnerId: state.partnerId,
         startDateFrom,
         startDateTo,
-        page,
-        pageSize,
+        page: state.page,
+        pageSize: state.pageSize,
       }),
   })
 
   const resetFilters = useCallback(() => {
-    setKeyword('')
-    setRouteName(undefined)
-    setDepartureType(undefined)
-    setDepartureProgress(undefined)
-    setStatusFilter(undefined)
-    setOwnerUserId(undefined)
-    setPartnerId(undefined)
-    setStartDateRange(null)
-    setPage(1)
-    setFiltersKey((key) => key + 1)
+    dispatch({ type: 'RESET_FILTERS' })
   }, [])
 
   const columns = useMemo(() => buildColumns(), [])
@@ -259,47 +315,23 @@ export function DeparturesPage() {
       </div>
 
       <DepartureFilters
-        key={filtersKey}
-        statusFilter={statusFilter}
-        routeNameFilter={routeName}
-        departureTypeFilter={departureType}
-        departureProgressFilter={departureProgress}
-        ownerUserIdFilter={ownerUserId}
-        partnerIdFilter={partnerId}
+        key={state.filtersKey}
+        statusFilter={state.statusFilter}
+        routeNameFilter={state.routeName}
+        departureTypeFilter={state.departureType}
+        departureProgressFilter={state.departureProgress}
+        ownerUserIdFilter={state.ownerUserId}
+        partnerIdFilter={state.partnerId}
         ownerOptions={ownerOptions}
         partnerOptions={partnerOptions}
-        onSearch={(value) => {
-          setKeyword(value)
-          setPage(1)
-        }}
-        onRouteNameChange={(value) => {
-          setRouteName(value)
-          setPage(1)
-        }}
-        onDepartureTypeChange={(value) => {
-          setDepartureType(value)
-          setPage(1)
-        }}
-        onDepartureProgressChange={(value) => {
-          setDepartureProgress(value)
-          setPage(1)
-        }}
-        onStatusChange={(value) => {
-          setStatusFilter(value)
-          setPage(1)
-        }}
-        onOwnerChange={(value) => {
-          setOwnerUserId(value)
-          setPage(1)
-        }}
-        onPartnerChange={(value) => {
-          setPartnerId(value)
-          setPage(1)
-        }}
-        onStartDateRangeChange={(value) => {
-          setStartDateRange(value)
-          setPage(1)
-        }}
+        onSearch={(value) => dispatch({ type: 'SET_KEYWORD', value })}
+        onRouteNameChange={(value) => dispatch({ type: 'SET_ROUTE_NAME', value })}
+        onDepartureTypeChange={(value) => dispatch({ type: 'SET_DEPARTURE_TYPE', value })}
+        onDepartureProgressChange={(value) => dispatch({ type: 'SET_DEPARTURE_PROGRESS', value })}
+        onStatusChange={(value) => dispatch({ type: 'SET_STATUS', value })}
+        onOwnerChange={(value) => dispatch({ type: 'SET_OWNER', value })}
+        onPartnerChange={(value) => dispatch({ type: 'SET_PARTNER', value })}
+        onStartDateRangeChange={(value) => dispatch({ type: 'SET_START_DATE_RANGE', value })}
         onReset={resetFilters}
       />
 
@@ -311,14 +343,13 @@ export function DeparturesPage() {
           dataSource={departuresResult?.items ?? []}
           scroll={{ x: 1800 }}
           pagination={{
-            current: page,
-            pageSize,
+            current: state.page,
+            pageSize: state.pageSize,
             total: departuresResult?.total ?? 0,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
+              dispatch({ type: 'SET_PAGE', page: nextPage, pageSize: nextPageSize })
             },
           }}
         />

@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Card, Checkbox, Form, Modal, Space, Steps, Tooltip, Typography, message } from 'antd'
+import { useCallback, useState } from 'react'
+import { Button, Card, Form, Space, Steps, Typography, message } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
-import { copyDeparture, createDeparture, getDeparture, previewDepartureNo } from '@/services/departure.service'
+import { copyDeparture, createDeparture, previewDepartureNo } from '@/services/departure.service'
 import { getRouteTemplate } from '@/services/route-template.service'
-import { listSegments } from '@/services/segment.service'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
+import {
+  CreateDepartureCopyModal,
+  type TemplateCopyModalState,
+} from './CreateDepartureCopyModal'
+import { useCopyFromDepartureSearch } from '../hooks/useCopyFromDepartureSearch'
 import {
   buildCopyDeparturePayload,
   buildCreateDeparturePayload,
@@ -22,18 +26,11 @@ import {
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 
-interface TemplateCopyModalState {
-  copySegments: boolean
-  copyResources: boolean
-  copyReferencePrices: boolean
-}
-
 export function CreateDepartureWizard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const search = useSearch({ strict: false }) as { copyFrom?: string }
-  const copyFromInitialized = useRef(false)
 
   const [currentStep, setCurrentStep] = useState(0)
   const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
@@ -50,6 +47,15 @@ export function CreateDepartureWizard() {
 
   const isCopyMode = routeValues.mode === 'copy'
   const canProceed = canProceedFromRouteStep(routeValues)
+
+  useCopyFromDepartureSearch({
+    copyFrom: search.copyFrom,
+    navigate,
+    setRouteValues,
+    setCopyModalMode,
+    setCopyModalValues,
+    setCopyModalOpen,
+  })
 
   const loadDepartureNo = useCallback(async (startDate: string) => {
     const result = await previewDepartureNo(startDate)
@@ -82,47 +88,6 @@ export function CreateDepartureWizard() {
       setInitializingStep2(false)
     }
   }
-
-  useEffect(() => {
-    const copyFromDepartureId = search.copyFrom?.trim()
-    if (!copyFromDepartureId || copyFromInitialized.current) {
-      return
-    }
-
-    copyFromInitialized.current = true
-
-    void (async () => {
-      try {
-        const [departure, segmentList] = await Promise.all([
-          getDeparture(copyFromDepartureId),
-          listSegments(copyFromDepartureId),
-        ])
-
-        setRouteValues({
-          mode: 'copy',
-          routeName: departure.routeName,
-          defaultDayCount: departure.dayCount,
-          copyFromDepartureId,
-          sourceDepartureNo: departure.departureNo,
-          previewSegmentCount: segmentList.summary.segmentCount,
-          previewResourceCount: segmentList.summary.resourceCount,
-          copySegments: true,
-          copyResources: true,
-          copyReferencePrices: true,
-        })
-        setCopyModalMode('departure')
-        setCopyModalValues({
-          copySegments: true,
-          copyResources: true,
-          copyReferencePrices: true,
-        })
-        setCopyModalOpen(true)
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : '加载源发团失败')
-        navigate({ to: '/departure/new', search: {} })
-      }
-    })()
-  }, [search.copyFrom, navigate])
 
   const handleRouteStepNext = async () => {
     if (routeValues.mode === 'template' && routeValues.templateId) {
@@ -289,11 +254,12 @@ export function CreateDepartureWizard() {
         </div>
       </Card>
 
-      <Modal
-        title={copyModalTitle}
+      <CreateDepartureCopyModal
         open={copyModalOpen}
+        mode={copyModalMode}
+        values={copyModalValues}
+        title={copyModalTitle}
         okText={copyModalOkText}
-        cancelText="取消"
         confirmLoading={initializingStep2}
         onCancel={() => {
           setCopyModalOpen(false)
@@ -301,66 +267,9 @@ export function CreateDepartureWizard() {
             navigate({ to: '/departure' })
           }
         }}
-        onOk={() => void handleConfirmCopy()}
-      >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Checkbox
-            checked={copyModalValues.copySegments}
-            onChange={(event) =>
-              setCopyModalValues((current) => ({
-                ...current,
-                copySegments: event.target.checked,
-              }))
-            }
-          >
-            复制行程段
-          </Checkbox>
-          <Checkbox
-            checked={copyModalValues.copyResources}
-            onChange={(event) =>
-              setCopyModalValues((current) => ({
-                ...current,
-                copyResources: event.target.checked,
-              }))
-            }
-          >
-            复制资源配置
-          </Checkbox>
-          <Checkbox
-            checked={copyModalValues.copyReferencePrices}
-            onChange={(event) =>
-              setCopyModalValues((current) => ({
-                ...current,
-                copyReferencePrices: event.target.checked,
-              }))
-            }
-          >
-            带出参考价格
-          </Checkbox>
-          <Tooltip
-            title={
-              copyModalMode === 'departure'
-                ? '客源每次不同，不能从发团复制'
-                : '客源每次不同，不能从模板复制'
-            }
-          >
-            <Checkbox disabled checked={false}>
-              复制客源
-            </Checkbox>
-          </Tooltip>
-          <Tooltip
-            title={
-              copyModalMode === 'departure'
-                ? '收付款节点不能从发团复制'
-                : '收付款节点不能从模板复制'
-            }
-          >
-            <Checkbox disabled checked={false}>
-              生成应收应付
-            </Checkbox>
-          </Tooltip>
-        </Space>
-      </Modal>
+        onConfirm={() => void handleConfirmCopy()}
+        onChange={setCopyModalValues}
+      />
     </div>
   )
 }

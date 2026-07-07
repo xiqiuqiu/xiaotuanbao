@@ -1,6 +1,4 @@
-import { useEffect } from 'react'
 import { Alert, Button, DatePicker, Form, Input, Popconfirm, Select, Space, Typography, message } from 'antd'
-import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -21,7 +19,6 @@ import {
 
 interface DepartureOverviewProps {
   departure: DepartureDetail
-  form: FormInstance<DepartureOverviewFormValues>
   readOnly: boolean
   onUpdated: () => void
 }
@@ -32,19 +29,15 @@ function toDayjs(value?: string): Dayjs | null {
 
 export function DepartureOverview({
   departure,
-  form,
   readOnly,
   onUpdated,
 }: DepartureOverviewProps) {
   const queryClient = useQueryClient()
+  const [form] = Form.useForm<DepartureOverviewFormValues>()
   const { data: employeesResult } = useQuery({
     queryKey: ['employees', 'departure-overview'],
     queryFn: () => listEmployees({ pageSize: 100 }),
   })
-
-  useEffect(() => {
-    form.setFieldsValue(departureToFormValues(departure))
-  }, [departure, form])
 
   const saveMutation = useMutation({
     mutationFn: (values: DepartureOverviewFormValues) =>
@@ -182,9 +175,11 @@ export function DepartureOverview({
       </div>
 
       <Form
+        key={`${departure.id}-${departure.updatedAt}`}
         form={form}
         layout="vertical"
         disabled={readOnly}
+        initialValues={departureToFormValues(departure)}
         onFinish={(values) => saveMutation.mutate(values)}
       >
         <Form.Item

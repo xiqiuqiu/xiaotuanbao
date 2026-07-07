@@ -22,6 +22,7 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to}>{children}</a>
   ),
   useNavigate: () => mockNavigate,
+  useSearch: () => ({}),
 }))
 
 vi.mock('@/app/store/auth.store', () => ({

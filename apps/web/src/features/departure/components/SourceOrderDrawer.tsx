@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import {
   Alert,
   Divider,
@@ -11,7 +11,6 @@ import {
   Typography,
   Button,
 } from 'antd'
-import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import {
   SourceOrderCollectionMode,
@@ -38,12 +37,11 @@ interface SourceOrderDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
-  form: FormInstance<SourceOrderFormValues>
   onClose: () => void
   onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
 }
 
-function AmountPreview({ form }: { form: FormInstance<SourceOrderFormValues> }) {
+function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0] }) {
   const watched = Form.useWatch([], form)
   const amounts = useMemo(() => {
     if (!watched?.guestCount || !watched?.unitPriceYuan) {
@@ -78,14 +76,28 @@ export function SourceOrderDrawer({
   readOnly,
   amountReadOnly = false,
   loading,
-  form,
   onClose,
   onSubmit,
 }: SourceOrderDrawerProps) {
+  const [form] = Form.useForm<SourceOrderFormValues>()
   const discountType = Form.useWatch('discountType', form)
   const collectionMode = Form.useWatch('collectionMode', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const lockAmounts = readOnly || amountReadOnly || amountFieldsLocked
+
+  const formKey = editing?.id ?? 'new'
+  const initialValues = useMemo(
+    () =>
+      editing
+        ? sourceOrderToFormValues(editing)
+        : {
+            guestCount: 1,
+            discountType: SourceOrderDiscountType.NONE,
+            collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+            unitPriceYuan: 0,
+          },
+    [editing],
+  )
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -97,30 +109,13 @@ export function SourceOrderDrawer({
     enabled: open,
   })
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    if (editing) {
-      form.setFieldsValue(sourceOrderToFormValues(editing))
-    } else {
-      form.resetFields()
-      form.setFieldsValue({
-        guestCount: 1,
-        discountType: SourceOrderDiscountType.NONE,
-        collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-        unitPriceYuan: 0,
-      })
-    }
-  }, [open, editing, form])
-
   return (
     <Drawer
       title={readOnly ? '查看客源单' : editing ? '编辑客源单' : '添加客源单'}
       open={open}
       width={560}
       onClose={onClose}
+      destroyOnClose
       footer={
         readOnly ? (
           <Button onClick={onClose}>关闭</Button>
@@ -144,9 +139,11 @@ export function SourceOrderDrawer({
         />
       ) : null}
       <Form
+        key={formKey}
         form={form}
         layout="vertical"
         disabled={readOnly}
+        initialValues={initialValues}
         onFinish={(values) => onSubmit(formValuesToPayload(values))}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>

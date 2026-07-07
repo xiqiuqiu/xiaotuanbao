@@ -1,6 +1,5 @@
-import { useEffect } from 'react'
+import { useMemo } from 'react'
 import { Button, DatePicker, Drawer, Form, Input, InputNumber, Space, Typography } from 'antd'
-import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import type { DepartureDetail } from '@/types/api'
@@ -19,7 +18,6 @@ interface SegmentDrawerProps {
   editing: ItinerarySegmentSummary | null
   readOnly: boolean
   loading: boolean
-  form: FormInstance<SegmentFormValues>
   onClose: () => void
   onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
 }
@@ -28,7 +26,7 @@ function toDayjs(value?: string): Dayjs | null {
   return value ? dayjs(value) : null
 }
 
-function DayCountPreview({ form }: { form: FormInstance<SegmentFormValues> }) {
+function DayCountPreview({ form }: { form: ReturnType<typeof Form.useForm<SegmentFormValues>>[0] }) {
   const startDate = Form.useWatch('startDate', form)
   const endDate = Form.useWatch('endDate', form)
 
@@ -51,28 +49,23 @@ export function SegmentDrawer({
   editing,
   readOnly,
   loading,
-  form,
   onClose,
   onSubmit,
 }: SegmentDrawerProps) {
-  useEffect(() => {
-    if (!open) {
-      return
-    }
+  const [form] = Form.useForm<SegmentFormValues>()
 
-    if (editing) {
-      form.setFieldsValue(segmentToFormValues(editing))
-      return
-    }
-
-    form.setFieldsValue(
-      createDefaultSegmentFormValues(
-        departure.startDate,
-        departure.endDate,
-        departure.totalGuests,
-      ),
-    )
-  }, [open, editing, departure, form])
+  const formKey = editing?.id ?? `new-${departure.id}`
+  const initialValues = useMemo(
+    () =>
+      editing
+        ? segmentToFormValues(editing)
+        : createDefaultSegmentFormValues(
+            departure.startDate,
+            departure.endDate,
+            departure.totalGuests,
+          ),
+    [departure.endDate, departure.startDate, departure.totalGuests, editing],
+  )
 
   const handleDateChange = () => {
     const startDate = form.getFieldValue('startDate') as string | undefined
@@ -108,7 +101,13 @@ export function SegmentDrawer({
         )
       }
     >
-      <Form form={form} layout="vertical" disabled={readOnly}>
+      <Form
+        key={formKey}
+        form={form}
+        layout="vertical"
+        disabled={readOnly}
+        initialValues={initialValues}
+      >
         <Form.Item
           label="行程段名称"
           name="name"

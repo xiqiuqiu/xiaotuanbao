@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
@@ -32,6 +32,66 @@ import {
   buildUpdatePayload,
   partnerToFormValues,
 } from '../utils/partner-form'
+
+type PartnersPageState = {
+  search: string
+  partnerKindFilter?: PartnerKind
+  partnerTypeFilter?: PartnerType
+  statusFilter?: DirectoryProfileStatus
+  includeArchived: boolean
+  filtersKey: number
+  page: number
+  pageSize: number
+}
+
+const initialPartnersPageState: PartnersPageState = {
+  search: '',
+  partnerKindFilter: undefined,
+  partnerTypeFilter: undefined,
+  statusFilter: undefined,
+  includeArchived: false,
+  filtersKey: 0,
+  page: 1,
+  pageSize: 10,
+}
+
+type PartnersPageAction =
+  | { type: 'SET_SEARCH'; value: string }
+  | { type: 'SET_PARTNER_KIND'; value?: PartnerKind }
+  | { type: 'SET_PARTNER_TYPE'; value?: PartnerType }
+  | { type: 'SET_STATUS'; value?: DirectoryProfileStatus }
+  | { type: 'SET_INCLUDE_ARCHIVED'; value: boolean }
+  | { type: 'SET_PAGE'; page: number; pageSize?: number }
+  | { type: 'RESET_FILTERS' }
+
+function partnersPageReducer(
+  state: PartnersPageState,
+  action: PartnersPageAction,
+): PartnersPageState {
+  switch (action.type) {
+    case 'SET_SEARCH':
+      return { ...state, search: action.value, page: 1 }
+    case 'SET_PARTNER_KIND':
+      return { ...state, partnerKindFilter: action.value, page: 1 }
+    case 'SET_PARTNER_TYPE':
+      return { ...state, partnerTypeFilter: action.value, page: 1 }
+    case 'SET_STATUS':
+      return { ...state, statusFilter: action.value, page: 1 }
+    case 'SET_INCLUDE_ARCHIVED':
+      return { ...state, includeArchived: action.value, page: 1 }
+    case 'SET_PAGE':
+      return {
+        ...state,
+        page: action.page,
+        pageSize: action.pageSize ?? state.pageSize,
+      }
+    case 'RESET_FILTERS':
+      return {
+        ...initialPartnersPageState,
+        filtersKey: state.filtersKey + 1,
+      }
+  }
+}
 
 function buildColumns(
   includeArchived: boolean,
@@ -120,46 +180,33 @@ export function PartnersPage() {
   const [form] = Form.useForm<PartnerFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingPartner, setEditingPartner] = useState<PartnerSummary | null>(null)
-  const [search, setSearch] = useState('')
-  const [partnerKindFilter, setPartnerKindFilter] = useState<PartnerKind | undefined>()
-  const [partnerTypeFilter, setPartnerTypeFilter] = useState<PartnerType | undefined>()
-  const [statusFilter, setStatusFilter] = useState<DirectoryProfileStatus | undefined>()
-  const [includeArchived, setIncludeArchived] = useState(false)
-  const [filtersKey, setFiltersKey] = useState(0)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [state, dispatch] = useReducer(partnersPageReducer, initialPartnersPageState)
 
   const { data: partnersResult, isLoading } = useQuery({
     queryKey: [
       'partners',
-      search,
-      partnerKindFilter,
-      partnerTypeFilter,
-      statusFilter,
-      includeArchived,
-      page,
-      pageSize,
+      state.search,
+      state.partnerKindFilter,
+      state.partnerTypeFilter,
+      state.statusFilter,
+      state.includeArchived,
+      state.page,
+      state.pageSize,
     ],
     queryFn: () =>
       listPartners({
-        search: search || undefined,
-        partnerKind: partnerKindFilter,
-        partnerType: partnerTypeFilter,
-        status: statusFilter,
-        includeArchived,
-        page,
-        pageSize,
+        search: state.search || undefined,
+        partnerKind: state.partnerKindFilter,
+        partnerType: state.partnerTypeFilter,
+        status: state.statusFilter,
+        includeArchived: state.includeArchived,
+        page: state.page,
+        pageSize: state.pageSize,
       }),
   })
 
   const resetFilters = useCallback(() => {
-    setSearch('')
-    setPartnerKindFilter(undefined)
-    setPartnerTypeFilter(undefined)
-    setStatusFilter(undefined)
-    setIncludeArchived(false)
-    setPage(1)
-    setFiltersKey((key) => key + 1)
+    dispatch({ type: 'RESET_FILTERS' })
   }, [])
 
   const closeDrawer = () => {
@@ -244,8 +291,8 @@ export function PartnersPage() {
   )
 
   const columns = useMemo(
-    () => buildColumns(includeArchived, openEditDrawer, handleArchive, handleRestore),
-    [includeArchived, openEditDrawer, handleArchive, handleRestore],
+    () => buildColumns(state.includeArchived, openEditDrawer, handleArchive, handleRestore),
+    [handleArchive, handleRestore, openEditDrawer, state.includeArchived],
   )
 
   return (
@@ -267,31 +314,16 @@ export function PartnersPage() {
       <PartnerStatsCards summary={partnersResult?.summary} />
 
       <PartnerFilters
-        key={filtersKey}
-        partnerKindFilter={partnerKindFilter}
-        partnerTypeFilter={partnerTypeFilter}
-        statusFilter={statusFilter}
-        includeArchived={includeArchived}
-        onSearch={(value) => {
-          setSearch(value)
-          setPage(1)
-        }}
-        onPartnerKindChange={(value) => {
-          setPartnerKindFilter(value)
-          setPage(1)
-        }}
-        onPartnerTypeChange={(value) => {
-          setPartnerTypeFilter(value)
-          setPage(1)
-        }}
-        onStatusChange={(value) => {
-          setStatusFilter(value)
-          setPage(1)
-        }}
-        onIncludeArchivedChange={(value) => {
-          setIncludeArchived(value)
-          setPage(1)
-        }}
+        key={state.filtersKey}
+        partnerKindFilter={state.partnerKindFilter}
+        partnerTypeFilter={state.partnerTypeFilter}
+        statusFilter={state.statusFilter}
+        includeArchived={state.includeArchived}
+        onSearch={(value) => dispatch({ type: 'SET_SEARCH', value })}
+        onPartnerKindChange={(value) => dispatch({ type: 'SET_PARTNER_KIND', value })}
+        onPartnerTypeChange={(value) => dispatch({ type: 'SET_PARTNER_TYPE', value })}
+        onStatusChange={(value) => dispatch({ type: 'SET_STATUS', value })}
+        onIncludeArchivedChange={(value) => dispatch({ type: 'SET_INCLUDE_ARCHIVED', value })}
         onReset={resetFilters}
       />
 
@@ -302,14 +334,13 @@ export function PartnersPage() {
           columns={columns}
           dataSource={partnersResult?.items ?? []}
           pagination={{
-            current: page,
-            pageSize,
+            current: state.page,
+            pageSize: state.pageSize,
             total: partnersResult?.total ?? 0,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
+              dispatch({ type: 'SET_PAGE', page: nextPage, pageSize: nextPageSize })
             },
           }}
         />

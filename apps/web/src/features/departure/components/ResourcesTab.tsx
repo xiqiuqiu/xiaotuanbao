@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   Alert,
   Button,
-  Form,
   Input,
   Popconfirm,
   Select,
@@ -37,7 +36,7 @@ import {
 } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import { ResourceDrawer } from './ResourceDrawer'
-import { formValuesToPayload, type ResourceFormValues } from '../utils/resource-form'
+import { formValuesToPayload } from '../utils/resource-form'
 
 interface ResourcesTabProps {
   departure: DepartureDetail
@@ -48,7 +47,6 @@ interface ResourcesTabProps {
 
 export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = false }: ResourcesTabProps) {
   const queryClient = useQueryClient()
-  const [form] = Form.useForm<ResourceFormValues>()
   const [resourceKindFilter, setResourceKindFilter] = useState<ResourceKind>()
   const [payableStatusFilter, setPayableStatusFilter] = useState<SegmentPayableStatus>()
   const [keyword, setKeyword] = useState('')
@@ -333,7 +331,6 @@ export function ResourcesTab({ departure, segmentId, readOnly, amountReadOnly = 
         readOnly={readOnly || viewOnly}
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
-        form={form}
         onClose={() => {
           setDrawerOpen(false)
           setEditingResource(null)
