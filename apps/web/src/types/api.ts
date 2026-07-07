@@ -40,6 +40,11 @@ export type {
   ItinerarySegmentListSummary,
   CreateItinerarySegmentDto,
   UpdateItinerarySegmentDto,
+  SegmentResourceSummary,
+  SegmentResourceListResult,
+  GeneratePayableResult,
+  CreateSegmentResourceDto,
+  UpdateSegmentResourceDto,
 } from '@xiaotuanbao/shared'
 
 export {

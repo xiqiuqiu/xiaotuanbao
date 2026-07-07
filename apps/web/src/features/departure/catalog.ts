@@ -129,3 +129,17 @@ export const SEGMENT_PAYABLE_OVERVIEW_LABELS: Record<string, string> = {
   [SegmentPayableStatus.PARTIAL]: '应付部分付款',
   [SegmentPayableStatus.PAID]: '应付已付清',
 }
+
+export const RESOURCE_KIND_OPTIONS = [
+  { value: 'transport', label: '用车' },
+  { value: 'hotel', label: '酒店' },
+  { value: 'guide', label: '导游' },
+  { value: 'ticket', label: '门票' },
+  { value: 'meal', label: '餐' },
+  { value: 'outsource', label: '拼出' },
+  { value: 'other', label: '其他' },
+] as const
+
+export const RESOURCE_KIND_LABELS = Object.fromEntries(
+  RESOURCE_KIND_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>

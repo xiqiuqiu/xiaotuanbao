@@ -7,6 +7,7 @@ import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
 import { SegmentTab } from '../components/SegmentTab'
+import { ResourcesTab } from '../components/ResourcesTab'
 import { DepartureTabPlaceholder } from '../components/DepartureTabPlaceholder'
 import {
   DEPARTURE_DETAIL_TABS,
@@ -39,7 +40,10 @@ export function DepartureDetailPage() {
     navigate({
       to: '/departure/$departureId',
       params: { departureId },
-      search: { tab: key as DepartureDetailTabKey },
+      search: {
+        tab: key as DepartureDetailTabKey,
+        ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+      },
     })
   }
 
@@ -114,6 +118,20 @@ export function DepartureDetailPage() {
         key: tab.key,
         label: tab.label,
         children: <SegmentTab departure={departure} readOnly={readOnly} />,
+      }
+    }
+
+    if (tab.key === 'resources') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: (
+          <ResourcesTab
+            departure={departure}
+            segmentId={search.segmentId}
+            readOnly={readOnly}
+          />
+        ),
       }
     }
 

@@ -55,6 +55,11 @@ export type {
   ItinerarySegmentListResult,
   CreateItinerarySegmentDto,
   UpdateItinerarySegmentDto,
+  SegmentResourceSummary,
+  SegmentResourceListResult,
+  GeneratePayableResult,
+  CreateSegmentResourceDto,
+  UpdateSegmentResourceDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'

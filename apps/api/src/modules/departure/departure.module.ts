@@ -11,6 +11,8 @@ import { SourceOrderController } from './source-order.controller'
 import { SourceOrderService } from './source-order.service'
 import { SegmentController } from './segment.controller'
 import { SegmentService } from './segment.service'
+import { SegmentResourceController } from './segment-resource.controller'
+import { SegmentResourceService } from './segment-resource.service'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 
 @Module({
@@ -20,6 +22,7 @@ import { DepartureFinanceBridgeService } from './departure-finance-bridge.servic
     RouteTemplateController,
     SourceOrderController,
     SegmentController,
+    SegmentResourceController,
   ],
   providers: [
     DepartureService,
@@ -28,6 +31,7 @@ import { DepartureFinanceBridgeService } from './departure-finance-bridge.servic
     DepartureCopyService,
     SourceOrderService,
     SegmentService,
+    SegmentResourceService,
     DepartureFinanceBridgeService,
   ],
 })

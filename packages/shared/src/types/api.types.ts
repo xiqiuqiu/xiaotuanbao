@@ -549,3 +549,53 @@ export interface UpdateItinerarySegmentDto {
   applicableGuestCount?: number
   notes?: string | null
 }
+
+export interface SegmentResourceSummary {
+  id: string
+  segmentId: string
+  departureId: string
+  resourceKind: string
+  counterpartyType: string
+  partnerId: string | null
+  partnerName: string | null
+  supplierId: string | null
+  supplierName: string | null
+  counterpartyName: string
+  title: string
+  amountCents: number
+  notes: string | null
+  fromTemplate: boolean
+  hasPaymentSchedule: boolean
+  payableStatus: string
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+}
+
+export interface SegmentResourceListResult {
+  items: SegmentResourceSummary[]
+  total: number
+}
+
+export interface GeneratePayableResult {
+  schedule: PaymentScheduleSummary
+  resource: SegmentResourceSummary
+  sourceAmountMismatch: boolean
+}
+
+export interface CreateSegmentResourceDto {
+  resourceKind: string
+  partnerId?: string
+  supplierId?: string
+  title?: string
+  amountCents: number
+  notes?: string
+}
+
+export interface UpdateSegmentResourceDto {
+  resourceKind?: string
+  partnerId?: string
+  supplierId?: string
+  title?: string
+  amountCents?: number
+  notes?: string | null
+}

@@ -12,9 +12,11 @@ import type {
 import {
   isFinanceTouched,
   PaymentScheduleSourceType,
+  SegmentPayableStatus,
   SourceOrderReceivableStatus,
   deriveScheduleState,
   PaymentScheduleStatus,
+  ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -22,7 +24,9 @@ import {
   PaymentScheduleDirection,
   type Partner,
   type PaymentSchedule,
+  type SegmentResource,
   type SourceOrder,
+  type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
@@ -48,6 +52,31 @@ export interface SourceOrderFinanceMeta {
   receivableStatus: SourceOrderReceivableStatus
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
+}
+
+export interface SegmentResourceFinanceMeta {
+  hasSchedule: boolean
+  payableStatus: SegmentPayableStatus
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+}
+
+type SegmentResourceWithRelations = SegmentResource & {
+  partner: Partner | null
+  supplier: Supplier | null
+  segment: {
+    id: string
+    endDate: Date
+    departure: { id: string; organizationId: string; status: string; endDate: Date }
+  }
+}
+
+interface PayableSpec {
+  amountCents: number
+  title: string
+  counterpartyType: CounterpartyType
+  counterpartyId?: string
+  counterpartyName?: string
 }
 
 @Injectable()
@@ -299,6 +328,332 @@ export class DepartureFinanceBridgeService {
     }
   }
 
+  async generatePayable(
+    organizationId: string,
+    resourceId: string,
+  ): Promise<{
+    schedule: PaymentScheduleSummary
+    sourceAmountMismatch: boolean
+  }> {
+    const resource = await this.loadSegmentResourceOrThrow(organizationId, resourceId)
+    this.ensureDepartureOpen(resource.segment.departure, '生成应付')
+
+    if (resource.amountCents <= 0) {
+      throw new BadRequestException('资源金额须大于 0 才能生成应付')
+    }
+
+    const spec = this.buildPayableSpec(resource)
+    const dueDate = formatDateOnly(resource.segment.departure.endDate)
+    let sourceAmountMismatch = false
+
+    const existing = await this.findActivePayableSchedule(organizationId, resourceId)
+
+    let schedule: PaymentScheduleSummary
+    if (!existing) {
+      schedule = await this.paymentScheduleService.create(
+        organizationId,
+        PaymentScheduleDirection.payable,
+        {
+          departureId: resource.segment.departure.id,
+          title: spec.title,
+          amountCents: spec.amountCents,
+          dueDate,
+          counterpartyType: spec.counterpartyType,
+          counterpartyId: spec.counterpartyId,
+          counterpartyName: spec.counterpartyName,
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: resourceId,
+        },
+      )
+    } else {
+      const settledAmountCents = await this.verificationService.getSettledAmountCents(
+        existing.id,
+      )
+      const touched = isFinanceTouched(existing, settledAmountCents)
+
+      if (touched) {
+        if (
+          existing.amountCents !== spec.amountCents ||
+          existing.counterpartyType !== spec.counterpartyType ||
+          existing.counterpartyId !== (spec.counterpartyId ?? null)
+        ) {
+          sourceAmountMismatch = true
+        }
+        schedule = await this.paymentScheduleService.getById(
+          organizationId,
+          PaymentScheduleDirection.payable,
+          existing.id,
+        )
+      } else {
+        const updates: {
+          amountCents?: number
+          counterpartyType?: CounterpartyType
+          counterpartyId?: string
+          counterpartyName?: string | null
+        } = {}
+
+        if (existing.amountCents !== spec.amountCents) {
+          updates.amountCents = spec.amountCents
+        }
+        if (existing.counterpartyType !== spec.counterpartyType) {
+          updates.counterpartyType = spec.counterpartyType
+        }
+        if (existing.counterpartyId !== (spec.counterpartyId ?? null)) {
+          updates.counterpartyId = spec.counterpartyId
+          updates.counterpartyName = spec.counterpartyName ?? null
+        }
+
+        if (Object.keys(updates).length > 0) {
+          schedule = await this.paymentScheduleService.update(
+            organizationId,
+            PaymentScheduleDirection.payable,
+            existing.id,
+            updates,
+          )
+        } else {
+          schedule = await this.paymentScheduleService.getById(
+            organizationId,
+            PaymentScheduleDirection.payable,
+            existing.id,
+          )
+        }
+      }
+    }
+
+    const financeMeta = await this.evaluateResourceFinanceMeta(
+      organizationId,
+      resourceId,
+      resource,
+    )
+    if (financeMeta.hasSourceAmountMismatch) {
+      sourceAmountMismatch = true
+    }
+
+    return {
+      schedule,
+      sourceAmountMismatch,
+    }
+  }
+
+  async syncSegmentResourceSchedule(
+    organizationId: string,
+    resource: SegmentResourceWithRelations,
+  ): Promise<SegmentResourceFinanceMeta> {
+    const schedule = await this.findActivePayableSchedule(organizationId, resource.id)
+    if (!schedule) {
+      return this.evaluateResourceFinanceMeta(organizationId, resource.id, resource)
+    }
+
+    const spec = this.buildPayableSpec(resource)
+    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
+    const touched = isFinanceTouched(schedule, settledAmountCents)
+
+    if (!touched) {
+      const updates: {
+        amountCents?: number
+        counterpartyType?: CounterpartyType
+        counterpartyId?: string
+        counterpartyName?: string | null
+      } = {}
+
+      if (schedule.amountCents !== spec.amountCents) {
+        updates.amountCents = spec.amountCents
+      }
+      if (schedule.counterpartyType !== spec.counterpartyType) {
+        updates.counterpartyType = spec.counterpartyType
+      }
+      if (schedule.counterpartyId !== (spec.counterpartyId ?? null)) {
+        updates.counterpartyId = spec.counterpartyId
+        updates.counterpartyName = spec.counterpartyName ?? null
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await this.paymentScheduleService.update(
+          organizationId,
+          PaymentScheduleDirection.payable,
+          schedule.id,
+          updates,
+        )
+      }
+    }
+
+    return this.evaluateResourceFinanceMeta(organizationId, resource.id, resource)
+  }
+
+  async evaluateResourceFinanceMeta(
+    organizationId: string,
+    resourceId: string,
+    resource?: Pick<SegmentResource, 'amountCents' | 'resourceKind' | 'partnerId' | 'supplierId'>,
+  ): Promise<SegmentResourceFinanceMeta> {
+    const amounts =
+      resource ??
+      (await this.prisma.segmentResource.findFirstOrThrow({
+        where: { id: resourceId },
+        select: {
+          amountCents: true,
+          resourceKind: true,
+          partnerId: true,
+          supplierId: true,
+        },
+      }))
+
+    const schedule = await this.findActivePayableSchedule(organizationId, resourceId)
+    if (!schedule) {
+      return {
+        hasSchedule: false,
+        payableStatus: SegmentPayableStatus.NOT_GENERATED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: false,
+      }
+    }
+
+    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
+    const touched = isFinanceTouched(schedule, settledAmountCents)
+    const expectedAmount = amounts.amountCents
+
+    let hasSourceAmountMismatch = false
+    let amountFieldsLocked = false
+
+    if (touched) {
+      amountFieldsLocked = true
+      if (expectedAmount > 0 && schedule.amountCents !== expectedAmount) {
+        hasSourceAmountMismatch = true
+      }
+    }
+
+    const status = deriveScheduleState({
+      amountCents: schedule.amountCents,
+      settledAmountCents,
+      dueDate: formatDateOnly(schedule.dueDate),
+      cancelledAt: schedule.cancelledAt,
+      businessDate: getShanghaiTodayString(),
+    })
+
+    let payableStatus = SegmentPayableStatus.PENDING
+    if (status === PaymentScheduleStatus.SETTLED) {
+      payableStatus = SegmentPayableStatus.PAID
+      amountFieldsLocked = true
+    } else if (settledAmountCents > 0 && settledAmountCents < schedule.amountCents) {
+      payableStatus = SegmentPayableStatus.PARTIAL
+    }
+
+    return {
+      hasSchedule: true,
+      payableStatus,
+      hasSourceAmountMismatch,
+      amountFieldsLocked,
+    }
+  }
+
+  async assertResourceAmountEditable(
+    organizationId: string,
+    resourceId: string,
+    currentAmountCents: number,
+    nextAmountCents: number,
+  ): Promise<void> {
+    if (currentAmountCents === nextAmountCents) {
+      return
+    }
+
+    const meta = await this.evaluateResourceFinanceMeta(organizationId, resourceId)
+    if (meta.amountFieldsLocked) {
+      throw new BadRequestException('当前资源已发生付款，不允许修改金额')
+    }
+  }
+
+  private buildPayableSpec(resource: SegmentResourceWithRelations): PayableSpec {
+    const counterpartyName =
+      resource.resourceKind === ResourceKind.OUTSOURCE
+        ? resource.partner?.name
+        : resource.supplier?.name
+
+    const title =
+      resource.title.trim() ||
+      `${this.resourceKindLabel(resource.resourceKind)}·${counterpartyName ?? '未命名'}`
+
+    if (resource.resourceKind === ResourceKind.OUTSOURCE) {
+      return {
+        amountCents: resource.amountCents,
+        title,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: resource.partnerId ?? undefined,
+        counterpartyName: resource.partner?.name,
+      }
+    }
+
+    return {
+      amountCents: resource.amountCents,
+      title,
+      counterpartyType: CounterpartyType.supplier,
+      counterpartyId: resource.supplierId ?? undefined,
+      counterpartyName: resource.supplier?.name,
+    }
+  }
+
+  private resourceKindLabel(resourceKind: string): string {
+    const labels: Record<string, string> = {
+      transport: '用车',
+      hotel: '酒店',
+      guide: '导游',
+      ticket: '门票',
+      meal: '餐',
+      outsource: '拼出',
+      other: '其他',
+    }
+    return labels[resourceKind] ?? resourceKind
+  }
+
+  private async findActivePayableSchedule(
+    organizationId: string,
+    resourceId: string,
+  ): Promise<PaymentSchedule | null> {
+    return this.prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: resourceId,
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        direction: PaymentScheduleDirection.payable,
+        cancelledAt: null,
+      },
+    })
+  }
+
+  private async loadSegmentResourceOrThrow(
+    organizationId: string,
+    resourceId: string,
+  ): Promise<SegmentResourceWithRelations> {
+    const resource = await this.prisma.segmentResource.findFirst({
+      where: {
+        id: resourceId,
+        segment: { departure: { organizationId } },
+      },
+      include: {
+        partner: true,
+        supplier: true,
+        segment: {
+          select: {
+            id: true,
+            endDate: true,
+            departure: {
+              select: {
+                id: true,
+                organizationId: true,
+                status: true,
+                endDate: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!resource) {
+      throw new NotFoundException('段内资源不存在')
+    }
+
+    return resource
+  }
+
   private buildReceivablePaths(order: SourceOrderWithRelations): ReceivablePathSpec[] {
     const paths: ReceivablePathSpec[] = []
 
@@ -397,9 +752,9 @@ export class DepartureFinanceBridgeService {
     return order
   }
 
-  private ensureDepartureOpen(departure: { status: string }) {
+  private ensureDepartureOpen(departure: { status: string }, action = '生成应收') {
     if (departure.status === DepartureStatus.closed) {
-      throw new ConflictException('发团已关闭，不可生成应收')
+      throw new ConflictException(`发团已关闭，不可${action}`)
     }
   }
 }
