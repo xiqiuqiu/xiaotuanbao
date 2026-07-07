@@ -1,4 +1,9 @@
-import { ConflictException, Injectable } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import type { SupplierListResult, SupplierSummary } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -6,7 +11,13 @@ import {
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import type { CreateSupplierDto, ListSuppliersQueryDto } from './dto/supplier.dto'
+import type {
+  CreateSupplierDto,
+  ListSuppliersQueryDto,
+  UpdateSupplierDto,
+} from './dto/supplier.dto'
+
+type SupplierFieldDto = CreateSupplierDto | UpdateSupplierDto
 
 @Injectable()
 export class SupplierService {
@@ -59,16 +70,116 @@ export class SupplierService {
     }
   }
 
+  async getById(organizationId: string, supplierId: string): Promise<SupplierSummary> {
+    const supplier = await this.findSupplierOrThrow(organizationId, supplierId)
+    return this.toSupplierSummary(supplier)
+  }
+
   async create(organizationId: string, dto: CreateSupplierDto): Promise<SupplierSummary> {
     const name = dto.name.trim()
+    await this.ensureNameAvailable(organizationId, name)
+
+    const supplier = await this.prisma.supplier.create({
+      data: {
+        organizationId,
+        name,
+        category: dto.category,
+        status: DirectoryProfileStatus.active,
+        ...this.toSupplierFieldData(dto),
+      },
+    })
+
+    return this.toSupplierSummary(supplier)
+  }
+
+  async update(
+    organizationId: string,
+    supplierId: string,
+    dto: UpdateSupplierDto,
+  ): Promise<SupplierSummary> {
+    const supplier = await this.findSupplierOrThrow(organizationId, supplierId)
+
+    if (supplier.status === DirectoryProfileStatus.archived) {
+      throw new BadRequestException('已归档供应商不可编辑，请先恢复')
+    }
+
+    const name = dto.name.trim()
+    await this.ensureNameAvailable(organizationId, name, supplier.id)
+
+    const updated = await this.prisma.supplier.update({
+      where: { id: supplier.id },
+      data: {
+        name,
+        category: dto.category,
+        status: dto.status,
+        ...this.toSupplierFieldData(dto),
+      },
+    })
+
+    return this.toSupplierSummary(updated)
+  }
+
+  async archive(organizationId: string, supplierId: string): Promise<SupplierSummary> {
+    const supplier = await this.findSupplierOrThrow(organizationId, supplierId)
+
+    if (supplier.status === DirectoryProfileStatus.archived) {
+      throw new BadRequestException('供应商已归档')
+    }
+
+    const updated = await this.prisma.supplier.update({
+      where: { id: supplier.id },
+      data: { status: DirectoryProfileStatus.archived },
+    })
+
+    return this.toSupplierSummary(updated)
+  }
+
+  async restore(organizationId: string, supplierId: string): Promise<SupplierSummary> {
+    const supplier = await this.findSupplierOrThrow(organizationId, supplierId)
+
+    if (supplier.status !== DirectoryProfileStatus.archived) {
+      throw new BadRequestException('仅已归档供应商可恢复')
+    }
+
+    const updated = await this.prisma.supplier.update({
+      where: { id: supplier.id },
+      data: { status: DirectoryProfileStatus.active },
+    })
+
+    return this.toSupplierSummary(updated)
+  }
+
+  private async findSupplierOrThrow(organizationId: string, supplierId: string) {
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: supplierId, organizationId },
+    })
+
+    if (!supplier) {
+      throw new NotFoundException('供应商不存在')
+    }
+
+    return supplier
+  }
+
+  private async ensureNameAvailable(
+    organizationId: string,
+    name: string,
+    excludeSupplierId?: string,
+  ) {
     const existing = await this.prisma.supplier.findFirst({
-      where: { organizationId, name },
+      where: {
+        organizationId,
+        name,
+        ...(excludeSupplierId ? { id: { not: excludeSupplierId } } : {}),
+      },
     })
 
     if (existing) {
       throw new ConflictException('供应商名称已存在')
     }
+  }
 
+  private toSupplierFieldData(dto: SupplierFieldDto) {
     const invoiceAvailable = dto.invoiceAvailable ?? null
     const invoiceFields =
       invoiceAvailable === InvoiceAvailable.no
@@ -78,28 +189,20 @@ export class SupplierService {
             taxRate: dto.taxRate?.trim() || null,
           }
 
-    const supplier = await this.prisma.supplier.create({
-      data: {
-        organizationId,
-        name,
-        category: dto.category,
-        status: DirectoryProfileStatus.active,
-        contactName: dto.contactName?.trim() || null,
-        contactPhone: dto.contactPhone?.trim() || null,
-        settlementMethod: dto.settlementMethod ?? null,
-        settlementCycle: dto.settlementCycle ?? null,
-        settlementNotes: dto.settlementNotes?.trim() || null,
-        referenceQuoteNotes: dto.referenceQuoteNotes?.trim() || null,
-        invoiceAvailable,
-        ...invoiceFields,
-        accountName: dto.accountName?.trim() || null,
-        bankName: dto.bankName?.trim() || null,
-        bankAccount: dto.bankAccount?.trim() || null,
-        businessNotes: dto.businessNotes?.trim() || null,
-      },
-    })
-
-    return this.toSupplierSummary(supplier)
+    return {
+      contactName: dto.contactName?.trim() || null,
+      contactPhone: dto.contactPhone?.trim() || null,
+      settlementMethod: dto.settlementMethod ?? null,
+      settlementCycle: dto.settlementCycle ?? null,
+      settlementNotes: dto.settlementNotes?.trim() || null,
+      referenceQuoteNotes: dto.referenceQuoteNotes?.trim() || null,
+      invoiceAvailable,
+      ...invoiceFields,
+      accountName: dto.accountName?.trim() || null,
+      bankName: dto.bankName?.trim() || null,
+      bankAccount: dto.bankAccount?.trim() || null,
+      businessNotes: dto.businessNotes?.trim() || null,
+    }
   }
 
   private toSupplierSummary(supplier: Supplier): SupplierSummary {

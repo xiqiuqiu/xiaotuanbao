@@ -6,21 +6,23 @@ import {
   type SupplierFormValues,
 } from './SupplierProfileSections'
 
-interface SupplierCreateDrawerProps {
+interface SupplierFormDrawerProps {
   open: boolean
+  editing: boolean
   loading: boolean
   form: FormInstance<SupplierFormValues>
   onClose: () => void
   onSubmit: (values: SupplierFormValues) => void
 }
 
-export function SupplierCreateDrawer({
+export function SupplierFormDrawer({
   open,
+  editing,
   loading,
   form,
   onClose,
   onSubmit,
-}: SupplierCreateDrawerProps) {
+}: SupplierFormDrawerProps) {
   const handleFinish = (values: SupplierFormValues) => {
     const payload = { ...values }
     if (payload.invoiceAvailable === InvoiceAvailable.NO) {
@@ -32,7 +34,7 @@ export function SupplierCreateDrawer({
 
   return (
     <Drawer
-      title="创建供应商"
+      title={editing ? '编辑供应商' : '创建供应商'}
       open={open}
       width={520}
       onClose={onClose}
@@ -56,7 +58,7 @@ export function SupplierCreateDrawer({
           }
         }}
       >
-        <SupplierProfileSections form={form} />
+        <SupplierProfileSections form={form} showStatus={editing} />
       </Form>
     </Drawer>
   )

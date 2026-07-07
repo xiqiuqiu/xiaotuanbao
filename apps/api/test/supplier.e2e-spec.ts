@@ -118,4 +118,180 @@ describe('Supplier API (e2e)', () => {
     expect(response.body.code).toBe(409)
     expect(response.body.message).toBe('供应商名称已存在')
   })
+
+  it('lists archived suppliers when includeArchived=true', async () => {
+    const archivedName = `${testSupplierPrefix}-include-archived`
+
+    await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: archivedName,
+        category: SupplierCategory.other,
+        status: DirectoryProfileStatus.archived,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/suppliers')
+      .query({ search: archivedName, includeArchived: true })
+      .expect(200)
+
+    const names = response.body.data.items.map((item: { name: string }) => item.name)
+    expect(names).toContain(archivedName)
+  })
+
+  it('gets supplier by id with full profile', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-get-by-id`,
+        category: SupplierCategory.hotel,
+        contactName: '张经理',
+        contactPhone: '13800138000',
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/suppliers/${supplierId}`)
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      id: supplierId,
+      name: `${testSupplierPrefix}-get-by-id`,
+      category: SupplierCategory.hotel,
+      contactName: '张经理',
+      contactPhone: '13800138000',
+    })
+  })
+
+  it('returns 404 when supplier does not belong to current organization', async () => {
+    const otherOrg = await prisma.organization.create({
+      data: { name: `${testSupplierPrefix}-other-org` },
+    })
+
+    const foreignSupplier = await prisma.supplier.create({
+      data: {
+        organizationId: otherOrg.id,
+        name: `${testSupplierPrefix}-foreign`,
+        category: SupplierCategory.other,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/suppliers/${foreignSupplier.id}`)
+      .expect(404)
+
+    expect(response.body.code).toBe(404)
+
+    await prisma.supplier.delete({ where: { id: foreignSupplier.id } })
+    await prisma.organization.delete({ where: { id: otherOrg.id } })
+  })
+
+  it('updates supplier fields via PATCH', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-patch`,
+        category: SupplierCategory.restaurant,
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${supplierId}`)
+      .send({
+        name: `${testSupplierPrefix}-patch-updated`,
+        category: SupplierCategory.hotel,
+        status: DirectoryProfileStatus.disabled,
+        contactName: '李经理',
+      })
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      name: `${testSupplierPrefix}-patch-updated`,
+      category: SupplierCategory.hotel,
+      status: DirectoryProfileStatus.disabled,
+      contactName: '李经理',
+    })
+  })
+
+  it('returns 409 when PATCH renames to an existing supplier name', async () => {
+    const firstName = `${testSupplierPrefix}-patch-conflict-a`
+    const secondName = `${testSupplierPrefix}-patch-conflict-b`
+
+    await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({ name: firstName, category: SupplierCategory.guide })
+      .expect(201)
+
+    const second = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({ name: secondName, category: SupplierCategory.guide })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${second.body.data.id}`)
+      .send({
+        name: firstName,
+        category: SupplierCategory.guide,
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(409)
+
+    expect(response.body.code).toBe(409)
+  })
+
+  it('archives supplier via POST /archive', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-archive`,
+        category: SupplierCategory.scenic,
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/suppliers/${supplierId}/archive`)
+      .expect(201)
+
+    expect(response.body.data.status).toBe(DirectoryProfileStatus.archived)
+
+    const listResponse = await authRequest(app, coordinatorToken)
+      .get('/api/suppliers')
+      .query({ search: `${testSupplierPrefix}-archive` })
+      .expect(200)
+
+    expect(listResponse.body.data.items).toHaveLength(0)
+  })
+
+  it('restores archived supplier via POST /restore', async () => {
+    const name = `${testSupplierPrefix}-restore`
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name,
+        category: SupplierCategory.transport,
+        status: DirectoryProfileStatus.archived,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/suppliers/${supplier.id}/restore`)
+      .expect(201)
+
+    expect(response.body.data.status).toBe(DirectoryProfileStatus.active)
+
+    const listResponse = await authRequest(app, coordinatorToken)
+      .get('/api/suppliers')
+      .query({ search: name })
+      .expect(200)
+
+    expect(listResponse.body.data.items.map((item: { name: string }) => item.name)).toContain(name)
+  })
 })

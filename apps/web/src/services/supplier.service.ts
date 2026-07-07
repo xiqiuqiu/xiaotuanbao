@@ -21,7 +21,6 @@ export interface ListSuppliersParams {
 export interface CreateSupplierPayload {
   name: string
   category: SupplierCategory
-  status?: DirectoryProfileStatus
   contactName?: string
   contactPhone?: string
   settlementMethod?: SettlementMethod
@@ -37,10 +36,33 @@ export interface CreateSupplierPayload {
   businessNotes?: string
 }
 
+export interface UpdateSupplierPayload extends CreateSupplierPayload {
+  status: DirectoryProfileStatus
+}
+
 export async function listSuppliers(params: ListSuppliersParams): Promise<SupplierListResult> {
   return request.get<SupplierListResult>('/suppliers', { params })
 }
 
+export async function getSupplier(id: string): Promise<SupplierSummary> {
+  return request.get<SupplierSummary>(`/suppliers/${id}`)
+}
+
 export async function createSupplier(payload: CreateSupplierPayload): Promise<SupplierSummary> {
   return request.post<SupplierSummary>('/suppliers', payload)
+}
+
+export async function updateSupplier(
+  id: string,
+  payload: UpdateSupplierPayload,
+): Promise<SupplierSummary> {
+  return request.patch<SupplierSummary>(`/suppliers/${id}`, payload)
+}
+
+export async function archiveSupplier(id: string): Promise<SupplierSummary> {
+  return request.post<SupplierSummary>(`/suppliers/${id}/archive`)
+}
+
+export async function restoreSupplier(id: string): Promise<SupplierSummary> {
+  return request.post<SupplierSummary>(`/suppliers/${id}/restore`)
 }

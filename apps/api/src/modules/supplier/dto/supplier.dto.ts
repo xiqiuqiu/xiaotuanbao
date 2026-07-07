@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -24,6 +25,75 @@ export class CreateSupplierDto {
 
   @IsEnum(SupplierCategory)
   category!: SupplierCategory
+
+  @IsOptional()
+  @IsString()
+  contactName?: string
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string
+
+  @IsOptional()
+  @IsEnum(SettlementMethod)
+  settlementMethod?: SettlementMethod
+
+  @IsOptional()
+  @IsEnum(SettlementCycle)
+  settlementCycle?: SettlementCycle
+
+  @IsOptional()
+  @IsString()
+  settlementNotes?: string
+
+  @IsOptional()
+  @IsString()
+  referenceQuoteNotes?: string
+
+  @IsOptional()
+  @IsEnum(InvoiceAvailable)
+  invoiceAvailable?: InvoiceAvailable
+
+  @IsOptional()
+  @IsEnum(InvoiceType)
+  invoiceType?: InvoiceType
+
+  @IsOptional()
+  @IsString()
+  taxRate?: string
+
+  @IsOptional()
+  @IsString()
+  accountName?: string
+
+  @IsOptional()
+  @IsString()
+  bankName?: string
+
+  @IsOptional()
+  @IsString()
+  bankAccount?: string
+
+  @IsOptional()
+  @IsString()
+  businessNotes?: string
+}
+
+const EDITABLE_SUPPLIER_STATUSES = [
+  DirectoryProfileStatus.active,
+  DirectoryProfileStatus.disabled,
+] as const
+
+export class UpdateSupplierDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string
+
+  @IsEnum(SupplierCategory)
+  category!: SupplierCategory
+
+  @IsIn(EDITABLE_SUPPLIER_STATUSES)
+  status!: (typeof EDITABLE_SUPPLIER_STATUSES)[number]
 
   @IsOptional()
   @IsString()
