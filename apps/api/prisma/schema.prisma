@@ -123,6 +123,22 @@ enum DepartureStatus {
   @@map("departure_status")
 }
 
+enum PaymentScheduleDirection {
+  receivable
+  payable
+
+  @@map("payment_schedule_direction")
+}
+
+enum CounterpartyType {
+  partner
+  supplier
+  guest
+  manual
+
+  @@map("counterparty_type")
+}
+
 model Organization {
   id        String    @id @default(cuid())
   name      String
@@ -133,6 +149,7 @@ model Organization {
   suppliers Supplier[]
   partners  Partner[]
   departures Departure[]
+  paymentSchedules PaymentSchedule[]
 
   @@map("organizations")
 }
@@ -267,7 +284,35 @@ model Departure {
   notes            String?
   createdAt        DateTime             @default(now()) @map("created_at")
   updatedAt        DateTime             @updatedAt @map("updated_at")
+  paymentSchedules PaymentSchedule[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
+}
+
+model PaymentSchedule {
+  id               String                   @id @default(cuid())
+  organizationId   String                   @map("organization_id")
+  organization     Organization             @relation(fields: [organizationId], references: [id])
+  departureId      String                   @map("departure_id")
+  departure        Departure                @relation(fields: [departureId], references: [id])
+  direction        PaymentScheduleDirection
+  scheduleNo       String                   @map("schedule_no")
+  title            String
+  amountCents      Int                      @map("amount_cents")
+  dueDate          DateTime                 @map("due_date") @db.Date
+  counterpartyType CounterpartyType         @map("counterparty_type")
+  counterpartyId   String?                  @map("counterparty_id")
+  counterpartyName String?                  @map("counterparty_name")
+  sourceType       String                   @default("manual") @map("source_type")
+  sourceId         String?                  @map("source_id")
+  cancelledAt      DateTime?                @map("cancelled_at")
+  cancelReason     String?                  @map("cancel_reason")
+  amountAdjustedAt DateTime?                @map("amount_adjusted_at")
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  @@unique([organizationId, scheduleNo])
+  @@index([organizationId, departureId])
+  @@map("payment_schedules")
 }

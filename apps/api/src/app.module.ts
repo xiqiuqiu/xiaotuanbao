@@ -9,6 +9,7 @@ import { UserModule } from './modules/user/user.module'
 import { SupplierModule } from './modules/supplier/supplier.module'
 import { PartnerModule } from './modules/partner/partner.module'
 import { DepartureModule } from './modules/departure/departure.module'
+import { FinanceModule } from './modules/finance/finance.module'
 import { PrismaModule } from './database/prisma/prisma.module'
 
 @Module({
@@ -27,6 +28,7 @@ import { PrismaModule } from './database/prisma/prisma.module'
     SupplierModule,
     PartnerModule,
     DepartureModule,
+    FinanceModule,
   ],
 })
 export class AppModule {}

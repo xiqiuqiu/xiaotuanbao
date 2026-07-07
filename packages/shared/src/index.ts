@@ -19,6 +19,10 @@ export type {
   DepartureSummary,
   DepartureListResult,
   CreateDepartureDto,
+  PaymentScheduleSummary,
+  PaymentScheduleListResult,
+  CreatePaymentScheduleDto,
+  UpdatePaymentScheduleDto,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -37,3 +41,14 @@ export { DepartureStatus } from './enums/departure-status.enum'
 export { DepartureType } from './enums/departure-type.enum'
 export { DepartureRouteSource } from './enums/departure-route-source.enum'
 export { DepartureProgress } from './enums/departure-progress.enum'
+export { PaymentScheduleDirection } from './enums/payment-schedule-direction.enum'
+export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
+export { CounterpartyType } from './enums/counterparty-type.enum'
+export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
+export {
+  deriveScheduleState,
+  isFinanceTouched,
+  generateScheduleNo,
+  type DeriveScheduleStateInput,
+  type FinanceTouchedScheduleInput,
+} from './finance'

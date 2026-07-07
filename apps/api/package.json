@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "nest build",
-    "dev": "nest start --watch",
+    "build": "pnpm --filter @xiaotuanbao/shared build && nest build",
+    "dev": "pnpm --filter @xiaotuanbao/shared build && concurrently -k -n shared,api,reload -c blue,green,magenta \"pnpm --filter @xiaotuanbao/shared build:watch\" \"nest start --watch\" \"node scripts/watch-shared-reload.js\"",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit",
@@ -43,6 +43,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.3",
     "dotenv-cli": "^8.0.0",
+    "concurrently": "^9.1.2",
     "jest": "^29.7.0",
     "prisma": "^6.9.0",
     "supertest": "^7.1.1",

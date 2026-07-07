@@ -169,3 +169,53 @@ export interface CreateDepartureDto {
   departureType?: string
   notes?: string
 }
+
+export interface PaymentScheduleSummary {
+  id: string
+  departureId: string
+  direction: string
+  scheduleNo: string
+  title: string
+  amountCents: number
+  dueDate: string
+  counterpartyType: string
+  counterpartyId: string | null
+  counterpartyName: string | null
+  sourceType: string
+  sourceId: string | null
+  status: string
+  financeTouched: boolean
+  cancelledAt: string | null
+  cancelReason: string | null
+  amountAdjustedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PaymentScheduleListResult {
+  items: PaymentScheduleSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface CreatePaymentScheduleDto {
+  departureId: string
+  title: string
+  amountCents: number
+  dueDate: string
+  counterpartyType: string
+  counterpartyId?: string
+  counterpartyName?: string
+  sourceType?: string
+  sourceId?: string
+}
+
+export interface UpdatePaymentScheduleDto {
+  title?: string
+  amountCents?: number
+  dueDate?: string
+  counterpartyType?: string
+  counterpartyId?: string | null
+  counterpartyName?: string | null
+}
