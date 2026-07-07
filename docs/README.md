@@ -16,6 +16,7 @@
 | API 约定与已有接口 | [API 概览](./api/overview.md) |
 | 整体架构与技术选型 | [架构概览](./architecture/overview.md) |
 | 开发规范与 AI 约束 | [开发规范](./architecture/development-guidelines.md) |
+| 供应商功能规格（Epic 1） | [供应商 PRD](./prd/supplier.zh-CN.md) |
 
 ## 目录结构
 
@@ -36,6 +37,8 @@ docs/
     prisma-models.md                 数据模型
   api/
     overview.md                      API 约定与接口
+  prd/
+    supplier.zh-CN.md                供应商管理 Epic 1
 ```
 
 ## 根目录关键文件

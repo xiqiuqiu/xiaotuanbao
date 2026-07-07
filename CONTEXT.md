@@ -88,6 +88,10 @@ _Avoid_: 前端硬编码权限, 前端 code 表, 仅登录返回权限
 Menu Permission 同时约束菜单可见性与后端访问，不能仅靠前端隐藏菜单。第一版对系统管理类 Menu Key 强制后端校验；业务类 Menu Key 随各业务模块落地时补齐。
 _Avoid_: 仅前端校验
 
+**Supplier Management Access**:
+供应商管理（`/supplier` 及其详情子路由）仅企业管理员与计调 Role 可访问与编辑。财务 Role 不进入供应商名录；财务在应付、流水中引用 Supplier 档案，但不维护目录 CRUD。
+_Avoid_: 财务维护供应商名录, 详情页单独 Menu Key
+
 ## Core Entities
 
 **Departure（发团）**:
@@ -115,8 +119,56 @@ _Avoid_: 应收, 团款
 _Avoid_: 客户, 同业, 客户/同行, agent
 
 **Supplier（供应商）**:
-为发团提供资源的服务商，如酒店、车队、餐厅、景区等。
+为发团提供资源的服务商，如酒店、车队、餐厅、景区等。供应商档案是 Organization 内的自营资源名录，主路径是在发团执行安排中选 supplier，而非独立 ERP。
 _Avoid_: 资源商, vendor
+
+**Directory Profile Status（目录档案状态）**:
+Partner 与 Supplier 目录记录的生命周期状态：启用、停用、已归档。适用于目录实体，不适用于 Employee（Employee Status 仅启用/停用）或 Organization 账号。
+_Avoid_: 复用 Employee Status, 用 deletedAt 表达归档
+
+**Directory Archive（目录归档）**:
+将 Partner 或 Supplier 从默认目录列表中移除，同时保留行以供历史追溯。归档后状态为已归档；记录仍可从历史发团、资源、财务上下文中链接，但不得出现在默认目录列表或新业务的选择源中。产品 UI 可将此操作标为 **删除**，当用户意图是从日常名录工作中不再看到该档案时。默认目录列表不展示已归档行；用户可通过「显示已归档」查看并 **恢复**。
+_Avoid_: 归档当作数据库硬删, 归档与停用混为一谈, 归档后不可恢复
+
+**Directory Restore（目录恢复）**:
+将已归档的 Partner 或 Supplier 恢复为非归档状态，使其重新出现在默认目录列表。恢复后状态通常为启用，是否改回停用由用户在编辑抽屉中另行调整。
+_Avoid_: 恢复当作新建, 恢复后自动硬删历史引用
+
+**Supplier Disabled（供应商停用）**:
+供应商目录状态为停用。档案仍在非归档的目录管理视图中可见，但不得在新业务（如资源安排、应付对手方选择）中被选用。
+_Avoid_: 停用当作归档, 停用后从列表隐藏
+
+**Directory Name Uniqueness（目录名称唯一）**:
+同一 Organization 内，Partner 与 Supplier 各自按 **名称** 唯一；不得存在两条同名且均未归档的目录记录。保存重名时拒绝并提示用户修改名称或在名称中加入可区分后缀（如门店、区域）。
+_Avoid_: 允许同名靠备注区分, 全局跨 Organization 唯一
+
+**Directory Catalog（目录层共用）**:
+Partner 与 Supplier 在名录层的共用概念与展示规则，包括三态生命周期、归档/恢复、名称唯一、结算字段与 UI label。Epic 先交付 Supplier，Partner 后续 Epic 复用同一目录层词汇与交互，而非两套独立 CRUD。
+_Avoid_: Partner 与 Supplier 各写一套归档规则, 目录层与 Employee 生命周期混用
+
+**Directory Payment Term Rule（账期规则）**:
+Partner 与 Supplier 目录层的结算节奏，如每团结、周结、半月结、月结、按约定。Supplier 存为 settlementCycle，Partner 存为 paymentTermRule，产品 UI 统一 label **账期规则**。
+_Avoid_: 结算周期, 账期, payment term 混用在目录表单
+
+**Directory Settlement Notes（结算说明）**:
+Partner 与 Supplier 目录层的自由文本，说明结算例外或对账补充（如「出团后 7 个工作日结」）。产品 UI 统一 label **结算说明**。
+_Avoid_: 结算备注, 账期说明
+
+**Supplier Reference Quote Notes（供应商参考报价说明）**:
+Supplier 目录层的自由文本，描述典型报价方式（如人均价、含餐、淡旺季）。仅供计调参考，不是结构化价格事实，不驱动资源金额或应付。
+_Avoid_: 默认单价, 参考价作系统计价
+
+**Supplier Category（供应商类别）**:
+Supplier 名录中对服务商类型的分类，用于列表展示与筛选。固定枚举：餐厅、酒店、车队、导游、景区、购物店、演出、保险、票务、其他。与执行安排中 **资源类型**（单次资源行的 kind）是不同概念：类别描述 supplier 主体是谁，资源类型描述一次安排用了什么资源。
+_Avoid_: 与 resourceKind 共用同一枚举, 类别当作资源类型
+
+**Supplier Business Notes（供应商备注）**:
+Supplier 目录层关于合作事实的自由文本（如接待上限、是否支持加单）。表单与只读区 section 标题为 **备注**，非「业务备注」。
+_Avoid_: 业务备注, 用备注代替结算说明
+
+**Supplier Financial Profile（供应商更多财务信息）**:
+Supplier 目录层可选区块：是否可开票、发票类型、税率、收款银行账户。在创建/编辑表单中 **默认折叠**；收款账户可再内层折叠。轻量创建时不强制填写。
+_Avoid_: 创建时强制填银行账号, 与结算信息混为一段
 
 **Finance Transaction（财务流水）**:
 Organization 内的资金进出记录。

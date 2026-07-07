@@ -12,6 +12,7 @@ import {
 import {
   archiveSupplier,
   createSupplier,
+  getSupplier,
   listSuppliers,
   restoreSupplier,
   updateSupplier,
@@ -194,10 +195,15 @@ export function SuppliersPage() {
   }
 
   const openEditDrawer = useCallback(
-    (supplier: SupplierSummary) => {
-      setEditingSupplier(supplier)
-      form.setFieldsValue(toFormValues(supplier))
-      setDrawerOpen(true)
+    async (supplier: SupplierSummary) => {
+      try {
+        const full = await getSupplier(supplier.id)
+        setEditingSupplier(full)
+        form.setFieldsValue(toFormValues(full))
+        setDrawerOpen(true)
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '加载供应商失败')
+      }
     },
     [form],
   )
