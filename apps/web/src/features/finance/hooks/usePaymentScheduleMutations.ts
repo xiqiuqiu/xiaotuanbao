@@ -6,8 +6,7 @@ import {
   cancelSchedule,
   confirmCollection,
   confirmPayment,
-  linkPayableTransaction,
-  linkReceivableTransaction,
+  createVerification,
   updatePayable,
   updateReceivable,
 } from '@/services/finance.service'
@@ -22,13 +21,13 @@ import {
   type ConfirmPaymentFormValues,
 } from '../utils/confirm-payment-form'
 import {
-  buildLinkTransactionPayload,
-  type LinkTransactionFormValues,
-} from '../utils/link-transaction-form'
-import {
   buildUpdateSchedulePayload,
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
+import {
+  buildCreateVerificationPayload,
+  type CreateVerificationFormValues,
+} from '../utils/verification-form'
 
 interface UsePaymentScheduleMutationsOptions {
   queryClient: QueryClient
@@ -37,11 +36,11 @@ interface UsePaymentScheduleMutationsOptions {
   departureListQueryKey: string
   activeSchedule: PaymentScheduleSummary | null
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
-  linkForm: FormInstance<LinkTransactionFormValues>
+  verifyForm: FormInstance<CreateVerificationFormValues>
   cancelForm: FormInstance<CancelScheduleFormValues>
   editForm: FormInstance<EditScheduleFormValues>
   onConfirmSuccess: () => void
-  onLinkSuccess: () => void
+  onVerifySuccess: () => void
   onCancelSuccess: () => void
   onEditSuccess: () => void
 }
@@ -53,11 +52,11 @@ export function usePaymentScheduleMutations({
   departureListQueryKey,
   activeSchedule,
   confirmForm,
-  linkForm,
+  verifyForm,
   cancelForm,
   editForm,
   onConfirmSuccess,
-  onLinkSuccess,
+  onVerifySuccess,
   onCancelSuccess,
   onEditSuccess,
 }: UsePaymentScheduleMutationsOptions) {
@@ -86,20 +85,13 @@ export function usePaymentScheduleMutations({
     },
   })
 
-  const linkMutation = useMutation({
-    mutationFn: async (values: LinkTransactionFormValues) => {
-      if (!activeSchedule) {
-        throw new Error('未选择节点')
-      }
-      const payload = buildLinkTransactionPayload(values)
-      return isReceivable
-        ? linkReceivableTransaction(activeSchedule.id, payload)
-        : linkPayableTransaction(activeSchedule.id, payload)
-    },
+  const verifyCreateMutation = useMutation({
+    mutationFn: (values: CreateVerificationFormValues) =>
+      createVerification(buildCreateVerificationPayload(values)),
     onSuccess: () => {
       message.success('核销已完成')
-      linkForm.resetFields()
-      onLinkSuccess()
+      verifyForm.resetFields()
+      onVerifySuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
@@ -162,7 +154,7 @@ export function usePaymentScheduleMutations({
 
   return {
     confirmMutation,
-    linkMutation,
+    verifyCreateMutation,
     cancelMutation,
     editMutation,
   }

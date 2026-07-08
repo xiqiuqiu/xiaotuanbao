@@ -3,24 +3,25 @@ import type { UseMutationResult } from '@tanstack/react-query'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { ConfirmCollectionDrawer } from './ConfirmCollectionDrawer'
 import { ConfirmPaymentDrawer } from './ConfirmPaymentDrawer'
-import { MatchTransactionDrawer } from './MatchTransactionDrawer'
+import { CreateVerificationDrawer } from './CreateVerificationDrawer'
 import { CancelScheduleModal, type CancelScheduleFormValues } from './CancelScheduleModal'
 import { EditScheduleDrawer } from './EditScheduleDrawer'
 import type { ConfirmCollectionFormValues } from '../utils/confirm-collection-form'
 import type { ConfirmPaymentFormValues } from '../utils/confirm-payment-form'
-import type { LinkTransactionFormValues } from '../utils/link-transaction-form'
 import type { EditScheduleFormValues } from '../utils/edit-schedule-form'
+import type { CreateVerificationFormValues } from '../utils/verification-form'
 
 interface PaymentScheduleActionDialogsProps {
   isReceivable: boolean
   activeSchedule: PaymentScheduleSummary | null
   departureMap: Map<string, { departureNo: string; name: string }>
+  lockedDepartureId?: string
   confirmOpen: boolean
-  linkOpen: boolean
+  verifyOpen: boolean
   cancelOpen: boolean
   editOpen: boolean
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
-  linkForm: FormInstance<LinkTransactionFormValues>
+  verifyForm: FormInstance<CreateVerificationFormValues>
   cancelForm: FormInstance<CancelScheduleFormValues>
   editForm: FormInstance<EditScheduleFormValues>
   confirmMutation: UseMutationResult<
@@ -29,11 +30,11 @@ interface PaymentScheduleActionDialogsProps {
     ConfirmCollectionFormValues | ConfirmPaymentFormValues,
     unknown
   >
-  linkMutation: UseMutationResult<unknown, Error, LinkTransactionFormValues, unknown>
+  verifyCreateMutation: UseMutationResult<unknown, Error, CreateVerificationFormValues, unknown>
   cancelMutation: UseMutationResult<unknown, Error, CancelScheduleFormValues, unknown>
   editMutation: UseMutationResult<unknown, Error, EditScheduleFormValues, unknown>
   onCloseConfirm: () => void
-  onCloseLink: () => void
+  onCloseVerify: () => void
   onCloseCancel: () => void
   onCloseEdit: () => void
 }
@@ -42,20 +43,21 @@ export function PaymentScheduleActionDialogs({
   isReceivable,
   activeSchedule,
   departureMap,
+  lockedDepartureId,
   confirmOpen,
-  linkOpen,
+  verifyOpen,
   cancelOpen,
   editOpen,
   confirmForm,
-  linkForm,
+  verifyForm,
   cancelForm,
   editForm,
   confirmMutation,
-  linkMutation,
+  verifyCreateMutation,
   cancelMutation,
   editMutation,
   onCloseConfirm,
-  onCloseLink,
+  onCloseVerify,
   onCloseCancel,
   onCloseEdit,
 }: PaymentScheduleActionDialogsProps) {
@@ -83,15 +85,14 @@ export function PaymentScheduleActionDialogs({
         />
       )}
 
-      <MatchTransactionDrawer
-        variant={isReceivable ? 'collection' : 'payment'}
-        open={linkOpen}
-        schedule={activeSchedule}
-        departureMap={departureMap}
-        loading={linkMutation.isPending}
-        form={linkForm}
-        onClose={onCloseLink}
-        onSubmit={(values) => linkMutation.mutate(values)}
+      <CreateVerificationDrawer
+        open={verifyOpen}
+        initialSchedule={activeSchedule ?? undefined}
+        lockedDepartureId={lockedDepartureId ?? activeSchedule?.departureId}
+        loading={verifyCreateMutation.isPending}
+        form={verifyForm}
+        onClose={onCloseVerify}
+        onSubmit={(values) => verifyCreateMutation.mutate(values)}
       />
 
       <CancelScheduleModal

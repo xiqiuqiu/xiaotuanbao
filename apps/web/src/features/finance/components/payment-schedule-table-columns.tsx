@@ -33,7 +33,7 @@ interface BuildPaymentScheduleColumnsOptions {
   readOnly: boolean
   departureMap: Map<string, { departureNo: string; name: string }>
   onConfirm: (schedule: PaymentScheduleSummary) => void
-  onLink: (schedule: PaymentScheduleSummary) => void
+  onVerify: (schedule: PaymentScheduleSummary) => void
   onEdit: (schedule: PaymentScheduleSummary) => void
   onCancel: (schedule: PaymentScheduleSummary) => void
   onViewVerifications: (schedule: PaymentScheduleSummary) => void
@@ -45,7 +45,7 @@ export function buildPaymentScheduleColumns({
   readOnly,
   departureMap,
   onConfirm,
-  onLink,
+  onVerify,
   onEdit,
   onCancel,
   onViewVerifications,
@@ -144,7 +144,7 @@ export function buildPaymentScheduleColumns({
             </Button>,
           )
           primaryActions.push(
-            <Button key="link" type="link" onClick={() => onLink(record)}>
+            <Button key="link" type="link" onClick={() => onVerify(record)}>
               匹配流水
             </Button>,
           )

@@ -23,13 +23,10 @@ import {
   type ConfirmPaymentFormValues,
 } from '../utils/confirm-payment-form'
 import {
-  scheduleToLinkTransactionValues,
-  type LinkTransactionFormValues,
-} from '../utils/link-transaction-form'
-import {
   scheduleToEditValues,
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
+import type { CreateVerificationFormValues } from '../utils/verification-form'
 import type { CancelScheduleFormValues } from './CancelScheduleModal'
 
 export type PaymentScheduleWorkspaceProps = {
@@ -94,13 +91,13 @@ export function PaymentScheduleWorkspace({
   const [pageSize, setPageSize] = useState(10)
 
   const [confirmForm] = Form.useForm<ConfirmCollectionFormValues | ConfirmPaymentFormValues>()
-  const [linkForm] = Form.useForm<LinkTransactionFormValues>()
+  const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
   const [cancelForm] = Form.useForm<CancelScheduleFormValues>()
   const [editForm] = Form.useForm<EditScheduleFormValues>()
 
   const [activeSchedule, setActiveSchedule] = useState<PaymentScheduleSummary | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [linkOpen, setLinkOpen] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
 
@@ -185,11 +182,11 @@ export function PaymentScheduleWorkspace({
     setActiveSchedule(null)
   }, [confirmForm])
 
-  const closeLink = useCallback(() => {
-    linkForm.resetFields()
-    setLinkOpen(false)
+  const closeVerify = useCallback(() => {
+    verifyForm.resetFields()
+    setVerifyOpen(false)
     setActiveSchedule(null)
-  }, [linkForm])
+  }, [verifyForm])
 
   const closeCancel = useCallback(() => {
     cancelForm.resetFields()
@@ -203,7 +200,7 @@ export function PaymentScheduleWorkspace({
     setActiveSchedule(null)
   }, [editForm])
 
-  const { confirmMutation, linkMutation, cancelMutation, editMutation } =
+  const { confirmMutation, verifyCreateMutation, cancelMutation, editMutation } =
     usePaymentScheduleMutations({
       queryClient,
       isReceivable,
@@ -211,11 +208,11 @@ export function PaymentScheduleWorkspace({
       departureListQueryKey,
       activeSchedule,
       confirmForm,
-      linkForm,
+      verifyForm,
       cancelForm,
       editForm,
       onConfirmSuccess: closeConfirm,
-      onLinkSuccess: closeLink,
+      onVerifySuccess: closeVerify,
       onCancelSuccess: closeCancel,
       onEditSuccess: closeEdit,
     })
@@ -234,15 +231,10 @@ export function PaymentScheduleWorkspace({
     [confirmForm, isReceivable],
   )
 
-  const openLink = useCallback(
-    (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
-      linkForm.resetFields()
-      linkForm.setFieldsValue(scheduleToLinkTransactionValues())
-      setLinkOpen(true)
-    },
-    [linkForm],
-  )
+  const openVerify = useCallback((schedule: PaymentScheduleSummary) => {
+    setActiveSchedule(schedule)
+    setVerifyOpen(true)
+  }, [])
 
   const openCancel = useCallback((schedule: PaymentScheduleSummary) => {
     setActiveSchedule(schedule)
@@ -288,7 +280,7 @@ export function PaymentScheduleWorkspace({
         readOnly,
         departureMap,
         onConfirm: openConfirm,
-        onLink: openLink,
+        onVerify: openVerify,
         onEdit: openEdit,
         onCancel: openCancel,
         onViewVerifications: openViewVerifications,
@@ -300,7 +292,7 @@ export function PaymentScheduleWorkspace({
       openCancel,
       openConfirm,
       openEdit,
-      openLink,
+      openVerify,
       openViewVerifications,
       readOnly,
     ],
@@ -357,20 +349,21 @@ export function PaymentScheduleWorkspace({
         isReceivable={isReceivable}
         activeSchedule={activeSchedule}
         departureMap={departureMap}
+        lockedDepartureId={isDepartureScope ? lockedDepartureId : undefined}
         confirmOpen={confirmOpen}
-        linkOpen={linkOpen}
+        verifyOpen={verifyOpen}
         cancelOpen={cancelOpen}
         editOpen={editOpen}
         confirmForm={confirmForm}
-        linkForm={linkForm}
+        verifyForm={verifyForm}
         cancelForm={cancelForm}
         editForm={editForm}
         confirmMutation={confirmMutation}
-        linkMutation={linkMutation}
+        verifyCreateMutation={verifyCreateMutation}
         cancelMutation={cancelMutation}
         editMutation={editMutation}
         onCloseConfirm={closeConfirm}
-        onCloseLink={closeLink}
+        onCloseVerify={closeVerify}
         onCloseCancel={closeCancel}
         onCloseEdit={closeEdit}
       />

@@ -1273,6 +1273,78 @@ describe('Finance API (e2e)', () => {
     })
   })
 
+  describe('match schedule via verifications', () => {
+    it('creates verification for receivable schedule via POST /finance/verifications (match flow)', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-匹配流水等价`, amountCents: 50000 }))
+        .expect(201)
+
+      const beforeTransactions = await authRequest(app, financeToken)
+        .get('/api/finance/transactions')
+        .query({ departureId, pageSize: 100 })
+        .expect(200)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      expect(transaction.body.data.transactionNo).toMatch(TX_NO_REGEX)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: created.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 50000,
+          }),
+        )
+        .expect(201)
+
+      const afterTransactions = await authRequest(app, financeToken)
+        .get('/api/finance/transactions')
+        .query({ departureId, pageSize: 100 })
+        .expect(200)
+
+      expect(afterTransactions.body.data.total).toBe(beforeTransactions.body.data.total + 1)
+
+      const schedule = await authRequest(app, financeToken)
+        .get(`/api/finance/receivables/${created.body.data.id}`)
+        .expect(200)
+
+      expect(schedule.body.data.settledAmountCents).toBe(50000)
+      expect(schedule.body.data.unsettledAmountCents).toBe(0)
+      expect(schedule.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(verifications.body.data.items).toHaveLength(1)
+      expect(verifications.body.data.items[0].verificationNo).toMatch(CL_NO_REGEX)
+      expect(verifications.body.data.items[0].transactionId).toBe(transaction.body.data.id)
+      expect(verifications.body.data.items[0].transactionNo).toMatch(TX_NO_REGEX)
+      expect(verifications.body.data.items[0].scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
+      expect(verifications.body.data.items[0].amountCents).toBe(50000)
+
+      const linkedTransaction = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect(linkedTransaction.body.data.allocatedAmountCents).toBe(50000)
+      expect(linkedTransaction.body.data.unallocatedAmountCents).toBe(0)
+      expect(linkedTransaction.body.data.verificationCount).toBe(1)
+      expect(linkedTransaction.body.data.lastVerificationAt).toEqual(expect.any(String))
+      expect(linkedTransaction.body.data.verifications).toHaveLength(1)
+      expect(linkedTransaction.body.data.verifications[0].verificationNo).toMatch(CL_NO_REGEX)
+      expect(linkedTransaction.body.data.verifications[0].scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
+      expect(linkedTransaction.body.data.verifications[0].amountCents).toBe(50000)
+    })
+  })
+
   describe('verify from transaction', () => {
     it('creates verification via POST /finance/verifications and updates transaction writeoff status', async () => {
       const receivable = await authRequest(app, financeToken)

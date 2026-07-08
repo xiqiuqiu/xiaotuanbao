@@ -1,7 +1,6 @@
 import type { FinanceTransactionSummary, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { TransactionDirection } from '@xiaotuanbao/shared'
 import { centsToYuan, yuanToCents } from './finance-form'
-import { computeDefaultLinkAmountCents } from './link-transaction-form'
 
 export type VerificationDirection = 'receivable' | 'payable'
 
@@ -35,6 +34,13 @@ export function emptyCreateVerificationFormValues(
   }
 }
 
+export function computeDefaultVerificationAmountCents(
+  transaction: FinanceTransactionSummary,
+  schedule: PaymentScheduleSummary,
+): number {
+  return Math.min(transaction.unallocatedAmountCents, schedule.unsettledAmountCents)
+}
+
 export function transactionAndScheduleToFormValues(
   transaction: FinanceTransactionSummary,
   schedule: PaymentScheduleSummary,
@@ -42,7 +48,7 @@ export function transactionAndScheduleToFormValues(
   return {
     transactionId: transaction.id,
     paymentScheduleId: schedule.id,
-    amountYuan: centsToYuan(computeDefaultLinkAmountCents(transaction, schedule)),
+    amountYuan: centsToYuan(computeDefaultVerificationAmountCents(transaction, schedule)),
   }
 }
 

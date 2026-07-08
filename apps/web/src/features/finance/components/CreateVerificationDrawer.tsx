@@ -42,6 +42,7 @@ import { dateStringToDayjs, dayjsToDateString, yuanToCents } from '../utils/fina
 import {
   filterCandidateSchedules,
   filterCandidateTransactions,
+  matchesCounterparty,
 } from '../utils/verification-candidates'
 import {
   emptyCreateVerificationFormValues,
@@ -141,6 +142,8 @@ export function CreateVerificationDrawer({
   const verificationDate = Form.useWatch('verificationDate', form)
 
   const effectiveDepartureId = lockedDepartureId ?? departureId
+
+  const directionLocked = Boolean(initialTransaction || initialSchedule)
 
   useEffect(() => {
     if (!open) {
@@ -275,12 +278,30 @@ export function CreateVerificationDrawer({
   ])
 
   const selectedSchedule = useMemo(() => {
+    if (initialSchedule && initialSchedule.id === selectedScheduleId) {
+      return initialSchedule
+    }
     const fromCandidates = candidateSchedules.find((item) => item.id === selectedScheduleId)
     if (fromCandidates) {
       return fromCandidates
     }
     return (schedulesResult?.items ?? []).find((item) => item.id === selectedScheduleId) ?? null
-  }, [candidateSchedules, schedulesResult?.items, selectedScheduleId])
+  }, [candidateSchedules, initialSchedule, schedulesResult?.items, selectedScheduleId])
+
+  useEffect(() => {
+    if (!open || !selectedTransaction || !selectedSchedule) {
+      return
+    }
+    if (!matchesCounterparty(selectedTransaction, selectedSchedule)) {
+      return
+    }
+    const currentAmount = form.getFieldValue('amountYuan')
+    if (currentAmount == null || currentAmount <= 0) {
+      form.setFieldsValue(
+        transactionAndScheduleToFormValues(selectedTransaction, selectedSchedule),
+      )
+    }
+  }, [form, open, selectedSchedule, selectedTransaction])
 
   const postTransactionBalanceCents =
     selectedTransaction && typeof amountYuan === 'number'
@@ -311,11 +332,18 @@ export function CreateVerificationDrawer({
   }
 
   const handleSelectTransaction = (transaction: FinanceTransactionSummary) => {
-    form.setFieldsValue({
-      transactionId: transaction.id,
-      paymentScheduleId: '',
-      amountYuan: 0,
-    })
+    if (initialSchedule) {
+      form.setFieldsValue({
+        transactionId: transaction.id,
+        amountYuan: 0,
+      })
+    } else {
+      form.setFieldsValue({
+        transactionId: transaction.id,
+        paymentScheduleId: '',
+        amountYuan: 0,
+      })
+    }
     setScheduleSearchKeyword('')
   }
 
@@ -469,6 +497,7 @@ export function CreateVerificationDrawer({
               rules={[{ required: true, message: '请选择核销方向' }]}
             >
               <Radio.Group
+                disabled={directionLocked}
                 options={[...VERIFICATION_DIRECTION_OPTIONS]}
                 onChange={(event) => handleDirectionChange(event.target.value)}
               />

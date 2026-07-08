@@ -26,7 +26,7 @@ import {
 } from '../components/TransactionFilters'
 import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
 import { TransactionDetailDrawer } from '../components/TransactionDetailDrawer'
-import { VerifyFromTransactionDrawer } from '../components/VerifyFromTransactionDrawer'
+import { CreateVerificationDrawer } from '../components/CreateVerificationDrawer'
 import {
   VoidTransactionModal,
   type VoidTransactionFormValues,
@@ -37,10 +37,9 @@ import {
   type TransactionFormValues,
 } from '../utils/transaction-form'
 import {
-  buildVerifyFromTransactionPayload,
-  emptyVerifyFormValues,
-  type VerifyFromTransactionFormValues,
-} from '../utils/verify-from-transaction-form'
+  buildCreateVerificationPayload,
+  type CreateVerificationFormValues,
+} from '../utils/verification-form'
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', {
@@ -57,7 +56,7 @@ export function TransactionsPage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<TransactionFormValues>()
   const [voidForm] = Form.useForm<VoidTransactionFormValues>()
-  const [verifyForm] = Form.useForm<VerifyFromTransactionFormValues>()
+  const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create')
   const [editingTransaction, setEditingTransaction] = useState<FinanceTransactionSummary | null>(null)
@@ -183,12 +182,8 @@ export function TransactionsPage() {
   })
 
   const verifyMutation = useMutation({
-    mutationFn: (values: VerifyFromTransactionFormValues) => {
-      if (!verifyTransaction) {
-        throw new Error('未选择流水')
-      }
-      return createVerification(buildVerifyFromTransactionPayload(verifyTransaction, values))
-    },
+    mutationFn: (values: CreateVerificationFormValues) =>
+      createVerification(buildCreateVerificationPayload(values)),
     onSuccess: () => {
       message.success('核销已创建')
       setVerifyTransaction(null)
@@ -205,9 +200,7 @@ export function TransactionsPage() {
 
   const handleOpenVerify = useCallback((transaction: FinanceTransactionSummary) => {
     setVerifyTransaction(transaction)
-    verifyForm.resetFields()
-    verifyForm.setFieldsValue(emptyVerifyFormValues())
-  }, [verifyForm])
+  }, [])
 
   const handleCloseVerify = useCallback(() => {
     setVerifyTransaction(null)
@@ -513,10 +506,9 @@ export function TransactionsPage() {
         onClose={handleCloseDetail}
       />
 
-      <VerifyFromTransactionDrawer
+      <CreateVerificationDrawer
         open={Boolean(verifyTransaction)}
-        transaction={verifyTransaction}
-        departureMap={departureMap}
+        initialTransaction={verifyTransaction ?? undefined}
         loading={verifyMutation.isPending}
         form={verifyForm}
         onClose={handleCloseVerify}

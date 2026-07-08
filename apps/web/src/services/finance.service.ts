@@ -11,7 +11,6 @@ import type {
   FinanceVerificationDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
-  LinkTransactionDto,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
   UpdateFinanceTransactionDto,
@@ -95,20 +94,6 @@ export async function confirmPayment(
   payload: ConfirmPaymentDto,
 ): Promise<PaymentScheduleSummary> {
   return request.post<PaymentScheduleSummary>(`/finance/payables/${id}/confirm-payment`, payload)
-}
-
-export async function linkReceivableTransaction(
-  id: string,
-  payload: LinkTransactionDto,
-): Promise<PaymentScheduleSummary> {
-  return request.post<PaymentScheduleSummary>(`/finance/receivables/${id}/link-transaction`, payload)
-}
-
-export async function linkPayableTransaction(
-  id: string,
-  payload: LinkTransactionDto,
-): Promise<PaymentScheduleSummary> {
-  return request.post<PaymentScheduleSummary>(`/finance/payables/${id}/link-transaction`, payload)
 }
 
 export async function cancelSchedule(
