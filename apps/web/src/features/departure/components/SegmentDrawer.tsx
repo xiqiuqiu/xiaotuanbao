@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Button, DatePicker, Drawer, Form, Input, InputNumber, Space, Typography } from 'antd'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -54,7 +54,6 @@ export function SegmentDrawer({
 }: SegmentDrawerProps) {
   const [form] = Form.useForm<SegmentFormValues>()
 
-  const formKey = editing?.id ?? `new-${departure.id}`
   const initialValues = useMemo(
     () =>
       editing
@@ -66,6 +65,20 @@ export function SegmentDrawer({
           ),
     [departure.endDate, departure.startDate, departure.totalGuests, editing],
   )
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    form.resetFields()
+    form.setFieldsValue(initialValues)
+  }, [form, initialValues, open])
+
+  const handleClose = () => {
+    form.resetFields()
+    onClose()
+  }
 
   const handleDateChange = () => {
     const startDate = form.getFieldValue('startDate') as string | undefined
@@ -80,14 +93,14 @@ export function SegmentDrawer({
       title={readOnly ? '查看行程段' : editing ? '编辑行程段' : '添加行程段'}
       width={480}
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       destroyOnClose
       footer={
         readOnly ? (
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={handleClose}>关闭</Button>
         ) : (
           <Space>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button
               type="primary"
               loading={loading}
@@ -102,7 +115,7 @@ export function SegmentDrawer({
       }
     >
       <Form
-        key={formKey}
+        key={editing?.id ?? 'new'}
         form={form}
         layout="vertical"
         disabled={readOnly}

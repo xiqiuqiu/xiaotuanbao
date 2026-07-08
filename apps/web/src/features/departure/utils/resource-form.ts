@@ -10,6 +10,13 @@ export interface ResourceFormValues {
   notes?: string
 }
 
+export function createEmptyResourceFormValues(): ResourceFormValues {
+  return {
+    resourceKind: ResourceKind.TRANSPORT,
+    amountYuan: 0,
+  }
+}
+
 export function resourceToFormValues(resource: SegmentResourceSummary): ResourceFormValues {
   return {
     resourceKind: resource.resourceKind as ResourceKind,

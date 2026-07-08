@@ -161,24 +161,28 @@ export function PaymentScheduleWorkspace({
   const tableTotal = hasClientFilters ? filteredItems.length : (schedulesResult?.total ?? 0)
 
   const closeConfirm = useCallback(() => {
+    confirmForm.resetFields()
     setConfirmOpen(false)
     setActiveSchedule(null)
-  }, [])
+  }, [confirmForm])
 
   const closeLink = useCallback(() => {
+    linkForm.resetFields()
     setLinkOpen(false)
     setActiveSchedule(null)
-  }, [])
+  }, [linkForm])
 
   const closeCancel = useCallback(() => {
+    cancelForm.resetFields()
     setCancelOpen(false)
     setActiveSchedule(null)
-  }, [])
+  }, [cancelForm])
 
   const closeEdit = useCallback(() => {
+    editForm.resetFields()
     setEditOpen(false)
     setActiveSchedule(null)
-  }, [])
+  }, [editForm])
 
   const { confirmMutation, linkMutation, cancelMutation, editMutation } =
     usePaymentScheduleMutations({
@@ -200,6 +204,7 @@ export function PaymentScheduleWorkspace({
   const openConfirm = useCallback(
     (schedule: PaymentScheduleSummary) => {
       setActiveSchedule(schedule)
+      confirmForm.resetFields()
       if (isReceivable) {
         confirmForm.setFieldsValue(scheduleToConfirmCollectionValues(schedule))
       } else {
@@ -213,6 +218,7 @@ export function PaymentScheduleWorkspace({
   const openLink = useCallback(
     (schedule: PaymentScheduleSummary) => {
       setActiveSchedule(schedule)
+      linkForm.resetFields()
       linkForm.setFieldsValue(scheduleToLinkTransactionValues(schedule))
       setLinkOpen(true)
     },
@@ -228,6 +234,7 @@ export function PaymentScheduleWorkspace({
   const openEdit = useCallback(
     (schedule: PaymentScheduleSummary) => {
       setActiveSchedule(schedule)
+      editForm.resetFields()
       editForm.setFieldsValue(scheduleToEditValues(schedule))
       setEditOpen(true)
     },

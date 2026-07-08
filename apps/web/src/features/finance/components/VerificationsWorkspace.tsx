@@ -171,7 +171,14 @@ export function VerificationsWorkspace({
     <div>
       {!readOnly ? (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              form.resetFields()
+              setModalOpen(true)
+            }}
+          >
             新建核销
           </Button>
         </div>

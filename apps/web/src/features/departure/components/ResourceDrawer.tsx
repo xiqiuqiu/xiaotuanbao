@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   Alert,
   Button,
@@ -11,13 +11,14 @@ import {
   Typography,
 } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
+import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
 import { listSuppliers } from '@/services/supplier.service'
 import { RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import {
+  createEmptyResourceFormValues,
   formValuesToPayload,
   isOutsourceKind,
   resourceToFormValues,
@@ -52,15 +53,23 @@ export function ResourceDrawer({
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
-    () =>
-      editing
-        ? resourceToFormValues(editing)
-        : {
-            resourceKind: ResourceKind.TRANSPORT,
-            amountYuan: 0,
-          },
+    () => (editing ? resourceToFormValues(editing) : createEmptyResourceFormValues()),
     [editing],
   )
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    form.resetFields()
+    form.setFieldsValue(initialValues)
+  }, [form, initialValues, open])
+
+  const handleClose = () => {
+    form.resetFields()
+    onClose()
+  }
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'resource-select'],
@@ -88,13 +97,13 @@ export function ResourceDrawer({
       open={open}
       width={520}
       destroyOnClose
-      onClose={onClose}
+      onClose={handleClose}
       footer={
         readOnly ? (
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={handleClose}>关闭</Button>
         ) : (
           <Space style={{ float: 'right' }}>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button type="primary" loading={loading} onClick={() => form.submit()}>
               保存
             </Button>
