@@ -28,6 +28,7 @@ export type VerificationsWorkspaceProps = {
   departureId?: string
   readOnly?: boolean
   initialPaymentScheduleId?: string
+  initialTransactionId?: string
 }
 
 export function VerificationsWorkspace({
@@ -35,6 +36,7 @@ export function VerificationsWorkspace({
   departureId: lockedDepartureId,
   readOnly = false,
   initialPaymentScheduleId,
+  initialTransactionId,
 }: VerificationsWorkspaceProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -47,7 +49,14 @@ export function VerificationsWorkspace({
   const listQueryKey = isDepartureScope ? 'departure-verifications' : 'finance-verifications'
 
   const { data: verificationsResult, isLoading } = useQuery({
-    queryKey: [listQueryKey, lockedDepartureId, initialPaymentScheduleId, page, pageSize],
+    queryKey: [
+      listQueryKey,
+      lockedDepartureId,
+      initialPaymentScheduleId,
+      initialTransactionId,
+      page,
+      pageSize,
+    ],
     queryFn: () => {
       if (isDepartureScope) {
         if (!lockedDepartureId) {
@@ -59,6 +68,7 @@ export function VerificationsWorkspace({
         page,
         pageSize,
         paymentScheduleId: initialPaymentScheduleId,
+        transactionId: initialTransactionId,
       })
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
@@ -66,8 +76,19 @@ export function VerificationsWorkspace({
 
   const clearPaymentScheduleFilter = useCallback(() => {
     setPage(1)
-    void navigate({ to: '/finance/verification', search: {} })
-  }, [navigate])
+    void navigate({
+      to: '/finance/verification',
+      search: { transactionId: initialTransactionId },
+    })
+  }, [initialTransactionId, navigate])
+
+  const clearTransactionFilter = useCallback(() => {
+    setPage(1)
+    void navigate({
+      to: '/finance/verification',
+      search: { paymentScheduleId: initialPaymentScheduleId },
+    })
+  }, [initialPaymentScheduleId, navigate])
 
   const createMutation = useMutation({
     mutationFn: (values: VerificationFormValues) =>
@@ -197,13 +218,20 @@ export function VerificationsWorkspace({
         </div>
       ) : null}
 
-      {!isDepartureScope && initialPaymentScheduleId ? (
+      {!isDepartureScope && (initialPaymentScheduleId || initialTransactionId) ? (
         <div style={{ marginBottom: 16 }}>
           <Space wrap>
             <Typography.Text type="secondary">当前筛选：</Typography.Text>
-            <Tag closable onClose={clearPaymentScheduleFilter}>
-              账款节点 {initialPaymentScheduleId.slice(0, 8)}…
-            </Tag>
+            {initialPaymentScheduleId ? (
+              <Tag closable onClose={clearPaymentScheduleFilter}>
+                账款节点 {initialPaymentScheduleId.slice(0, 8)}…
+              </Tag>
+            ) : null}
+            {initialTransactionId ? (
+              <Tag closable onClose={clearTransactionFilter}>
+                当前流水 {initialTransactionId.slice(0, 8)}…
+              </Tag>
+            ) : null}
           </Space>
         </div>
       ) : null}

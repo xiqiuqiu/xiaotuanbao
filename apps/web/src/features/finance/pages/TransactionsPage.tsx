@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Button, Card, Form, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus, TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
-import { createTransaction, listTransactions, updateTransaction, voidTransaction } from '@/services/finance.service'
+import { createTransaction, createVerification, listTransactions, updateTransaction, voidTransaction } from '@/services/finance.service'
 import { listDepartures } from '@/services/departure.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
@@ -25,6 +26,7 @@ import {
 } from '../components/TransactionFilters'
 import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
 import { TransactionDetailDrawer } from '../components/TransactionDetailDrawer'
+import { VerifyFromTransactionDrawer } from '../components/VerifyFromTransactionDrawer'
 import {
   VoidTransactionModal,
   type VoidTransactionFormValues,
@@ -34,6 +36,11 @@ import {
   buildUpdateTransactionPayload,
   type TransactionFormValues,
 } from '../utils/transaction-form'
+import {
+  buildVerifyFromTransactionPayload,
+  emptyVerifyFormValues,
+  type VerifyFromTransactionFormValues,
+} from '../utils/verify-from-transaction-form'
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', {
@@ -46,15 +53,18 @@ function formatDateTime(value: string): string {
 }
 
 export function TransactionsPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<TransactionFormValues>()
   const [voidForm] = Form.useForm<VoidTransactionFormValues>()
+  const [verifyForm] = Form.useForm<VerifyFromTransactionFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create')
   const [editingTransaction, setEditingTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [voidModalOpen, setVoidModalOpen] = useState(false)
   const [voidingTransaction, setVoidingTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [detailTransactionId, setDetailTransactionId] = useState<string | null>(null)
+  const [verifyTransaction, setVerifyTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [dateRange, setDateRange] = useState<TransactionDateRange>(() => {
     const [start, end] = getDefaultTransactionDateRange()
     return [start, end]
@@ -171,6 +181,48 @@ export function TransactionsPage() {
       message.error(error instanceof Error ? error.message : '作废失败')
     },
   })
+
+  const verifyMutation = useMutation({
+    mutationFn: (values: VerifyFromTransactionFormValues) => {
+      if (!verifyTransaction) {
+        throw new Error('未选择流水')
+      }
+      return createVerification(buildVerifyFromTransactionPayload(verifyTransaction.id, values))
+    },
+    onSuccess: () => {
+      message.success('核销已创建')
+      setVerifyTransaction(null)
+      verifyForm.resetFields()
+      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
+      queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '核销失败')
+    },
+  })
+
+  const handleOpenVerify = useCallback((transaction: FinanceTransactionSummary) => {
+    setVerifyTransaction(transaction)
+    verifyForm.resetFields()
+    verifyForm.setFieldsValue(emptyVerifyFormValues())
+  }, [verifyForm])
+
+  const handleCloseVerify = useCallback(() => {
+    setVerifyTransaction(null)
+    verifyForm.resetFields()
+  }, [verifyForm])
+
+  const handleViewVerifications = useCallback(
+    (record: FinanceTransactionSummary) => {
+      void navigate({
+        to: '/finance/verification',
+        search: { transactionId: record.id },
+      })
+    },
+    [navigate],
+  )
 
   const handleOpenVoidModal = useCallback((transaction: FinanceTransactionSummary) => {
     setVoidingTransaction(transaction)
@@ -300,31 +352,45 @@ export function TransactionsPage() {
             record.amountCents,
             record.allocatedAmountCents,
           )
-          const canEdit = writeoff.status === 'none'
-          const canVoid = writeoff.status === 'none'
 
-          if (!canEdit && !canVoid) {
-            return '—'
-          }
-
-          return (
-            <>
-              {canEdit ? (
+          if (writeoff.status === 'none') {
+            return (
+              <>
+                <Button type="link" onClick={() => handleOpenVerify(record)}>
+                  去核销
+                </Button>
                 <Button type="link" onClick={() => handleEdit(record)}>
                   编辑
                 </Button>
-              ) : null}
-              {canVoid ? (
                 <Button type="link" danger onClick={() => handleOpenVoidModal(record)}>
                   作废
                 </Button>
-              ) : null}
-            </>
+              </>
+            )
+          }
+
+          if (writeoff.status === 'partial') {
+            return (
+              <>
+                <Button type="link" onClick={() => handleOpenVerify(record)}>
+                  去核销
+                </Button>
+                <Button type="link" onClick={() => handleViewVerifications(record)}>
+                  查看核销
+                </Button>
+              </>
+            )
+          }
+
+          return (
+            <Button type="link" onClick={() => handleViewVerifications(record)}>
+              查看核销
+            </Button>
           )
         },
       },
     ],
-    [handleEdit, handleOpenDetail, handleOpenVoidModal],
+    [handleEdit, handleOpenDetail, handleOpenVerify, handleOpenVoidModal, handleViewVerifications],
   )
 
   return (
@@ -445,6 +511,16 @@ export function TransactionsPage() {
         transactionId={detailTransactionId}
         departureMap={departureMap}
         onClose={handleCloseDetail}
+      />
+
+      <VerifyFromTransactionDrawer
+        open={Boolean(verifyTransaction)}
+        transaction={verifyTransaction}
+        departureMap={departureMap}
+        loading={verifyMutation.isPending}
+        form={verifyForm}
+        onClose={handleCloseVerify}
+        onSubmit={(values) => verifyMutation.mutate(values)}
       />
     </div>
   )

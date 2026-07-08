@@ -1089,6 +1089,112 @@ describe('Finance API (e2e)', () => {
     )
   })
 
+  describe('verify from transaction', () => {
+    it('creates verification via POST /finance/verifications and updates transaction writeoff status', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-去核销`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const firstVerification = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send({
+          paymentScheduleId: receivable.body.data.id,
+          transactionId: transaction.body.data.id,
+          amountCents: 20000,
+        })
+        .expect(201)
+
+      expect(firstVerification.body.data.verificationNo).toMatch(CL_NO_REGEX)
+      expect(firstVerification.body.data.transactionId).toBe(transaction.body.data.id)
+      expect(firstVerification.body.data.amountCents).toBe(20000)
+
+      const partialDetail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect(partialDetail.body.data.allocatedAmountCents).toBe(20000)
+      expect(partialDetail.body.data.unallocatedAmountCents).toBe(30000)
+
+      const partialList = await authRequest(app, financeToken)
+        .get('/api/finance/transactions')
+        .query({
+          writeoffStatus: 'partial',
+          departureId,
+          pageSize: 100,
+          transactionNo: transaction.body.data.transactionNo,
+        })
+        .expect(200)
+
+      expect(partialList.body.data.items).toHaveLength(1)
+      expect(partialList.body.data.items[0].id).toBe(transaction.body.data.id)
+
+      const secondVerification = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send({
+          paymentScheduleId: receivable.body.data.id,
+          transactionId: transaction.body.data.id,
+          amountCents: 30000,
+        })
+        .expect(201)
+
+      expect(secondVerification.body.data.verificationNo).toMatch(CL_NO_REGEX)
+
+      const doneDetail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect(doneDetail.body.data.allocatedAmountCents).toBe(50000)
+      expect(doneDetail.body.data.unallocatedAmountCents).toBe(0)
+    })
+
+    it('filters verifications by transactionId', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-核销过滤`, amountCents: 30000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 30000 }))
+        .expect(201)
+
+      const otherTransaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 10000, transactionDate: '2026-07-08' }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send({
+          paymentScheduleId: receivable.body.data.id,
+          transactionId: transaction.body.data.id,
+          amountCents: 30000,
+        })
+        .expect(201)
+
+      const filtered = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ transactionId: transaction.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(filtered.body.data.items).toHaveLength(1)
+      expect(filtered.body.data.items[0].transactionId).toBe(transaction.body.data.id)
+
+      const otherFiltered = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ transactionId: otherTransaction.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(otherFiltered.body.data.items).toHaveLength(0)
+    })
+  })
+
   it('returns 403 for coordinator on GET /finance/receivables', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/finance/receivables')

@@ -3,7 +3,10 @@ import { useSearch } from '@tanstack/react-router'
 import { VerificationsWorkspace } from '../components/VerificationsWorkspace'
 
 export function VerificationsPage() {
-  const search = useSearch({ strict: false }) as { paymentScheduleId?: string }
+  const search = useSearch({ strict: false }) as {
+    paymentScheduleId?: string
+    transactionId?: string
+  }
 
   return (
     <div>
@@ -18,7 +21,11 @@ export function VerificationsPage() {
         </div>
       </div>
 
-      <VerificationsWorkspace scope="global" initialPaymentScheduleId={search.paymentScheduleId} />
+      <VerificationsWorkspace
+        scope="global"
+        initialPaymentScheduleId={search.paymentScheduleId}
+        initialTransactionId={search.transactionId}
+      />
     </div>
   )
 }

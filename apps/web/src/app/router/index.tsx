@@ -106,9 +106,10 @@ const financeTransactionsRoute = createRoute({
 const financeVerificationRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/verification',
-  validateSearch: (search: Record<string, unknown>): { paymentScheduleId?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { paymentScheduleId?: string; transactionId?: string } => ({
     paymentScheduleId:
       typeof search.paymentScheduleId === 'string' ? search.paymentScheduleId : undefined,
+    transactionId: typeof search.transactionId === 'string' ? search.transactionId : undefined,
   }),
   component: VerificationsPage,
 })
