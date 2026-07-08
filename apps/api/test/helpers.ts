@@ -46,6 +46,8 @@ export function authRequest(app: INestApplication, token: string) {
       request(app.getHttpServer()).post(url).set('Authorization', `Bearer ${token}`),
     patch: (url: string) =>
       request(app.getHttpServer()).patch(url).set('Authorization', `Bearer ${token}`),
+    put: (url: string) =>
+      request(app.getHttpServer()).put(url).set('Authorization', `Bearer ${token}`),
     delete: (url: string) =>
       request(app.getHttpServer()).delete(url).set('Authorization', `Bearer ${token}`),
   }

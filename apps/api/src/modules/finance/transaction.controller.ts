@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import type {
   FinanceTransactionListResult,
   FinanceTransactionSummary,
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateFinanceTransactionDto,
   ListFinanceTransactionsQueryDto,
+  UpdateFinanceTransactionDto,
   VoidFinanceTransactionDto,
 } from './dto/transaction.dto'
 import { TransactionService } from './transaction.service'
@@ -34,6 +35,16 @@ export class TransactionController {
     @Body() dto: CreateFinanceTransactionDto,
   ): Promise<FinanceTransactionSummary> {
     return this.transactionService.create(request.user.organizationId, dto)
+  }
+
+  @Put(':id')
+  @RequireMenu('/finance/transactions')
+  update(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateFinanceTransactionDto,
+  ): Promise<FinanceTransactionSummary> {
+    return this.transactionService.update(request.user.organizationId, id, dto)
   }
 
   @Get(':id')

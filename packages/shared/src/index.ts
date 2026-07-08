@@ -35,6 +35,7 @@ export type {
   FinanceTransactionSummary,
   FinanceTransactionListResult,
   CreateFinanceTransactionDto,
+  UpdateFinanceTransactionDto,
   VoidFinanceTransactionDto,
   FinanceVerificationSummary,
   FinanceVerificationListResult,

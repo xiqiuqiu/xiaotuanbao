@@ -373,6 +373,8 @@ export interface CreateFinanceTransactionDto {
   notes?: string
 }
 
+export type UpdateFinanceTransactionDto = CreateFinanceTransactionDto
+
 export interface VoidFinanceTransactionDto {
   voidReason?: string
 }

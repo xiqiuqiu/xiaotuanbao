@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus, TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
-import { createTransaction, listTransactions, voidTransaction } from '@/services/finance.service'
+import { createTransaction, listTransactions, updateTransaction, voidTransaction } from '@/services/finance.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
@@ -25,6 +25,7 @@ import {
 import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
 import {
   buildCreateTransactionPayload,
+  buildUpdateTransactionPayload,
   type TransactionFormValues,
 } from '../utils/transaction-form'
 
@@ -42,6 +43,8 @@ export function TransactionsPage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<TransactionFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create')
+  const [editingTransaction, setEditingTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [dateRange, setDateRange] = useState<TransactionDateRange>(() => {
     const [start, end] = getDefaultTransactionDateRange()
     return [start, end]
@@ -89,11 +92,34 @@ export function TransactionsPage() {
     onSuccess: () => {
       message.success('流水已创建')
       setDrawerOpen(false)
+      setEditingTransaction(null)
       form.resetFields()
       queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '创建失败')
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (values: TransactionFormValues) => {
+      if (!editingTransaction) {
+        throw new Error('未选择流水')
+      }
+      return updateTransaction(
+        editingTransaction.id,
+        buildUpdateTransactionPayload(values),
+      )
+    },
+    onSuccess: () => {
+      message.success('流水已更新')
+      setDrawerOpen(false)
+      setEditingTransaction(null)
+      form.resetFields()
+      queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '更新失败')
     },
   })
 
@@ -124,6 +150,18 @@ export function TransactionsPage() {
     },
     [voidMutation],
   )
+
+  const handleEdit = useCallback((transaction: FinanceTransactionSummary) => {
+    setDrawerMode('edit')
+    setEditingTransaction(transaction)
+    setDrawerOpen(true)
+  }, [])
+
+  const handleCreate = useCallback(() => {
+    setDrawerMode('create')
+    setEditingTransaction(null)
+    setDrawerOpen(true)
+  }, [])
 
   const handleResetFilters = useCallback(() => {
     const [start, end] = getDefaultTransactionDateRange()
@@ -213,17 +251,33 @@ export function TransactionsPage() {
       {
         title: '操作',
         key: 'actions',
-        render: (_, record) =>
-          record.voidedAt ? (
-            '—'
-          ) : (
-            <Button type="link" danger onClick={() => handleVoid(record)}>
-              作废
-            </Button>
-          ),
+        render: (_, record) => {
+          if (record.voidedAt) {
+            return '—'
+          }
+
+          const writeoff = deriveTransactionWriteoffStatus(
+            record.amountCents,
+            record.allocatedAmountCents,
+          )
+          const canEdit = writeoff.status === 'none'
+
+          return (
+            <>
+              {canEdit ? (
+                <Button type="link" onClick={() => handleEdit(record)}>
+                  编辑
+                </Button>
+              ) : null}
+              <Button type="link" danger onClick={() => handleVoid(record)}>
+                作废
+              </Button>
+            </>
+          )
+        },
       },
     ],
-    [handleVoid],
+    [handleEdit, handleVoid],
   )
 
   return (
@@ -237,7 +291,7 @@ export function TransactionsPage() {
             登记实际收付款流水，供账款节点关联核销
           </Typography.Paragraph>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           新建流水
         </Button>
       </div>
@@ -304,13 +358,22 @@ export function TransactionsPage() {
 
       <TransactionFormDrawer
         open={drawerOpen}
-        loading={createMutation.isPending}
+        mode={drawerMode}
+        editingTransaction={editingTransaction}
+        loading={createMutation.isPending || updateMutation.isPending}
         form={form}
         onClose={() => {
           setDrawerOpen(false)
+          setEditingTransaction(null)
           form.resetFields()
         }}
-        onSubmit={(values) => createMutation.mutate(values)}
+        onSubmit={(values) => {
+          if (drawerMode === 'edit') {
+            updateMutation.mutate(values)
+            return
+          }
+          createMutation.mutate(values)
+        }}
       />
     </div>
   )

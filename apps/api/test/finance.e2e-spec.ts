@@ -1,5 +1,12 @@
 import type { INestApplication } from '@nestjs/common'
-import { CounterpartyType, PaymentScheduleDirection } from '@prisma/client'
+import {
+  CounterpartyType,
+  DirectoryProfileStatus,
+  PartnerKind,
+  PartnerType,
+  PaymentScheduleDirection,
+  SupplierCategory,
+} from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentScheduleStatus, PaymentChannel } from '@xiaotuanbao/shared'
 import { authRequest, AR_AP_SCHEDULE_NO_REGEX, CL_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
@@ -14,6 +21,8 @@ describe('Finance API (e2e)', () => {
   let ownerUserId: string
   let departureId: string
   let otherDepartureId: string
+  let partnerId: string
+  let supplierId: string
   const testPrefix = `e2e-finance-${Date.now()}`
 
   function schedulePayload(overrides: Record<string, unknown> = {}) {
@@ -23,7 +32,8 @@ describe('Finance API (e2e)', () => {
       amountCents: 50000,
       dueDate: '2026-12-31',
       counterpartyType: CounterpartyType.partner,
-      counterpartyName: '测试旅行社',
+      counterpartyId: partnerId,
+      counterpartyName: `${testPrefix}-partner`,
       ...overrides,
     }
   }
@@ -43,7 +53,8 @@ describe('Finance API (e2e)', () => {
       amountCents: 50000,
       transactionDate: '2026-07-07',
       counterpartyType: CounterpartyType.partner,
-      counterpartyName: '测试旅行社',
+      counterpartyId: partnerId,
+      counterpartyName: `${testPrefix}-partner`,
       departureId,
       ...overrides,
     }
@@ -56,7 +67,8 @@ describe('Finance API (e2e)', () => {
       amountCents: 50000,
       dueDate: '2026-12-31',
       counterpartyType: CounterpartyType.supplier,
-      counterpartyName: '测试供应商',
+      counterpartyId: supplierId,
+      counterpartyName: `${testPrefix}-supplier`,
       ...overrides,
     }
   }
@@ -104,6 +116,27 @@ describe('Finance API (e2e)', () => {
       },
     })
     otherDepartureId = otherDeparture.id
+
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-partner`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    partnerId = partner.id
+
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-supplier`,
+        category: SupplierCategory.transport,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    supplierId = supplier.id
   })
 
   afterAll(async () => {
@@ -124,6 +157,12 @@ describe('Finance API (e2e)', () => {
         organizationId,
         departureNo: { startsWith: testPrefix },
       },
+    })
+    await prisma.partner.deleteMany({
+      where: { organizationId, name: { startsWith: testPrefix } },
+    })
+    await prisma.supplier.deleteMany({
+      where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.$disconnect()
     await app.close()
@@ -392,7 +431,8 @@ describe('Finance API (e2e)', () => {
         amountCents: 10000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.supplier,
-        counterpartyName: '不匹配供应商',
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
         departureId,
       })
       .expect(201)
@@ -499,7 +539,7 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           direction: 'outflow',
           counterpartyType: CounterpartyType.supplier,
-          counterpartyName: '测试供应商',
+          counterpartyId: supplierId,
         }),
       )
       .expect(201)
@@ -563,7 +603,7 @@ describe('Finance API (e2e)', () => {
           direction: 'outflow',
           amountCents: 40000,
           counterpartyType: CounterpartyType.supplier,
-          counterpartyName: '测试供应商',
+          counterpartyId: supplierId,
         }),
       )
       .expect(201)
@@ -699,11 +739,9 @@ describe('Finance API (e2e)', () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/payables')
       .send(
-        schedulePayload({
+        payablePayload({
           title: `${testPrefix}-登记付款`,
           amountCents: 35000,
-          counterpartyType: CounterpartyType.supplier,
-          counterpartyName: '测试供应商',
         }),
       )
       .expect(201)
@@ -743,6 +781,7 @@ describe('Finance API (e2e)', () => {
         amountCents: 12000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
         counterpartyName: '缺少通道',
       })
       .expect(400)
@@ -759,6 +798,7 @@ describe('Finance API (e2e)', () => {
         amountCents: 12000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
         counterpartyName: '流水测试',
         departureId: otherDepartureId,
       })
@@ -800,14 +840,38 @@ describe('Finance API (e2e)', () => {
   it('filters transactions by direction, transactionNo, status, and writeoffStatus', async () => {
     const filterPrefix = `${testPrefix}-filter-${Date.now()}`
 
+    const filterPartner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${filterPrefix}-匹配旅行社`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
     const receivable = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
-      .send(schedulePayload({ title: `${filterPrefix}-应收`, amountCents: 100000 }))
+      .send(
+        schedulePayload({
+          title: `${filterPrefix}-应收`,
+          amountCents: 100000,
+          counterpartyId: filterPartner.id,
+          counterpartyName: filterPartner.name,
+        }),
+      )
       .expect(201)
 
     const receivable2 = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
-      .send(schedulePayload({ title: `${filterPrefix}-应收2`, amountCents: 30000 }))
+      .send(
+        schedulePayload({
+          title: `${filterPrefix}-应收2`,
+          amountCents: 30000,
+          counterpartyId: filterPartner.id,
+          counterpartyName: filterPartner.name,
+        }),
+      )
       .expect(201)
 
     const inflowTx = await authRequest(app, financeToken)
@@ -817,6 +881,8 @@ describe('Finance API (e2e)', () => {
           direction: 'inflow',
           amountCents: 50000,
           transactionDate: '2026-07-10',
+          counterpartyType: CounterpartyType.manual,
+          counterpartyId: undefined,
           counterpartyName: `${filterPrefix}-旅行社A`,
         }),
       )
@@ -829,6 +895,8 @@ describe('Finance API (e2e)', () => {
           direction: 'outflow',
           amountCents: 20000,
           transactionDate: '2026-07-10',
+          counterpartyType: CounterpartyType.manual,
+          counterpartyId: undefined,
           counterpartyName: `${filterPrefix}-供应商B`,
         }),
       )
@@ -840,7 +908,8 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           amountCents: 50000,
           transactionDate: '2026-07-11',
-          counterpartyName: '测试旅行社',
+          counterpartyId: filterPartner.id,
+          counterpartyName: filterPartner.name,
         }),
       )
       .expect(201)
@@ -856,7 +925,8 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           amountCents: 30000,
           transactionDate: '2026-07-11',
-          counterpartyName: '测试旅行社',
+          counterpartyId: filterPartner.id,
+          counterpartyName: filterPartner.name,
         }),
       )
       .expect(201)
@@ -872,6 +942,8 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           amountCents: 10000,
           transactionDate: '2026-07-12',
+          counterpartyType: CounterpartyType.manual,
+          counterpartyId: undefined,
           counterpartyName: `${filterPrefix}-作废`,
         }),
       )
@@ -1024,6 +1096,7 @@ describe('Finance API (e2e)', () => {
         amountCents: 10000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
         counterpartyName: '权限测试',
       })
       .expect(403)
@@ -1042,5 +1115,140 @@ describe('Finance API (e2e)', () => {
 
       expect(cancel.body.code).toBe(403)
     }
+  })
+
+  describe('PUT /finance/transactions/:id', () => {
+    function updatePayload(overrides: Record<string, unknown> = {}) {
+      return {
+        direction: 'outflow',
+        paymentChannel: PaymentChannel.WECHAT,
+        amountCents: 88000,
+        transactionDate: '2026-07-15',
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        departureId,
+        notes: `${testPrefix}-updated`,
+        ...overrides,
+      }
+    }
+
+    it('updates unallocated transaction and persists changes', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            amountCents: 50000,
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      const originalNo = created.body.data.transactionNo
+
+      const updated = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${created.body.data.id}`)
+        .send(updatePayload())
+        .expect(200)
+
+      expect(updated.body.data.amountCents).toBe(88000)
+      expect(updated.body.data.direction).toBe('outflow')
+      expect(updated.body.data.paymentChannel).toBe(PaymentChannel.WECHAT)
+      expect(updated.body.data.transactionDate).toBe('2026-07-15')
+      expect(updated.body.data.counterpartyType).toBe(CounterpartyType.supplier)
+      expect(updated.body.data.counterpartyId).toBe(supplierId)
+      expect(updated.body.data.counterpartyName).toBe(`${testPrefix}-supplier`)
+      expect(updated.body.data.notes).toBe(`${testPrefix}-updated`)
+      expect(updated.body.data.transactionNo).toBe(originalNo)
+      expect(updated.body.data.allocatedAmountCents).toBe(0)
+
+      const fetched = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${created.body.data.id}`)
+        .expect(200)
+
+      expect(fetched.body.data.amountCents).toBe(88000)
+      expect(fetched.body.data.direction).toBe('outflow')
+      expect(fetched.body.data.counterpartyId).toBe(supplierId)
+      expect(fetched.body.data.counterpartyName).toBe(`${testPrefix}-supplier`)
+    })
+
+    it('rejects update when transaction has verification allocation', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-编辑拦截-已核销` }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivable.body.data.id}/link-transaction`)
+        .send({ transactionId: transaction.body.data.id, amountCents: 50000 })
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${transaction.body.data.id}`)
+        .send(updatePayload({ direction: 'inflow', counterpartyType: CounterpartyType.partner, counterpartyId: partnerId }))
+        .expect(400)
+
+      expect(response.body.message).toContain('核销')
+    })
+
+    it('rejects update when transaction is voided', async () => {
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+        .send({})
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${transaction.body.data.id}`)
+        .send(updatePayload({ direction: 'inflow', counterpartyType: CounterpartyType.partner, counterpartyId: partnerId }))
+        .expect(400)
+
+      expect(response.body.message).toContain('作废')
+    })
+
+    it('rejects partner update without counterpartyId', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${created.body.data.id}`)
+        .send(
+          updatePayload({
+            direction: 'inflow',
+            counterpartyType: CounterpartyType.partner,
+            counterpartyId: undefined,
+            counterpartyName: '仅名称',
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
   })
 })

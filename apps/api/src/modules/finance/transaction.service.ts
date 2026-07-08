@@ -5,6 +5,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus, TransactionDirection, PaymentChannel } from '@xiaotuanbao/shared'
 import {
+  CounterpartyType as PrismaCounterpartyType,
   PaymentChannel as PrismaPaymentChannel,
   TransactionDirection as PrismaTransactionDirection,
   type FinanceTransaction,
@@ -19,6 +20,7 @@ import {
 import type {
   CreateFinanceTransactionDto,
   ListFinanceTransactionsQueryDto,
+  UpdateFinanceTransactionDto,
   VoidFinanceTransactionDto,
 } from './dto/transaction.dto'
 import { VerificationService } from './verification.service'
@@ -109,6 +111,8 @@ export class TransactionService {
       await this.ensureDepartureExists(organizationId, dto.departureId, client)
     }
 
+    const counterparty = await this.resolveCounterparty(organizationId, dto, client)
+
     const transactionNo = await this.numberAllocationService.allocateTransactionNo(
       organizationId,
       client,
@@ -122,15 +126,63 @@ export class TransactionService {
         paymentChannel: dto.paymentChannel,
         amountCents: dto.amountCents,
         transactionDate: parseDateOnly(dto.transactionDate),
-        counterpartyType: dto.counterpartyType,
-        counterpartyId: dto.counterpartyId?.trim() || null,
-        counterpartyName: dto.counterpartyName?.trim() || null,
+        counterpartyType: counterparty.counterpartyType,
+        counterpartyId: counterparty.counterpartyId,
+        counterpartyName: counterparty.counterpartyName,
         departureId: dto.departureId ?? null,
         notes: dto.notes?.trim() || null,
       },
     })
 
     return this.toSummary(transaction, 0)
+  }
+
+  async update(
+    organizationId: string,
+    transactionId: string,
+    dto: UpdateFinanceTransactionDto,
+  ): Promise<FinanceTransactionSummary> {
+    const transaction = await this.prisma.financeTransaction.findFirst({
+      where: { id: transactionId, organizationId },
+    })
+
+    if (!transaction) {
+      throw new NotFoundException('流水不存在')
+    }
+
+    if (transaction.voidedAt) {
+      throw new BadRequestException('流水已作废')
+    }
+
+    const allocated = await this.verificationService.getAllocatedAmountCents(transaction.id)
+    if (allocated > 0) {
+      throw new BadRequestException('流水已有核销分配，不可编辑')
+    }
+
+    this.assertPositiveAmount(dto.amountCents)
+
+    if (dto.departureId) {
+      await this.ensureDepartureExists(organizationId, dto.departureId)
+    }
+
+    const counterparty = await this.resolveCounterparty(organizationId, dto)
+
+    const updated = await this.prisma.financeTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        direction: dto.direction,
+        paymentChannel: dto.paymentChannel,
+        amountCents: dto.amountCents,
+        transactionDate: parseDateOnly(dto.transactionDate),
+        counterpartyType: counterparty.counterpartyType,
+        counterpartyId: counterparty.counterpartyId,
+        counterpartyName: counterparty.counterpartyName,
+        departureId: dto.departureId ?? null,
+        notes: dto.notes?.trim() || null,
+      },
+    })
+
+    return this.toSummary(updated, allocated)
   }
 
   async void(
@@ -239,6 +291,58 @@ export class TransactionService {
 
     if (!departure) {
       throw new NotFoundException('发团不存在')
+    }
+  }
+
+  private async resolveCounterparty(
+    organizationId: string,
+    dto: CreateFinanceTransactionDto | UpdateFinanceTransactionDto,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<{
+    counterpartyType: PrismaCounterpartyType
+    counterpartyId: string | null
+    counterpartyName: string | null
+  }> {
+    if (
+      dto.counterpartyType === PrismaCounterpartyType.partner ||
+      dto.counterpartyType === PrismaCounterpartyType.supplier
+    ) {
+      const counterpartyId = dto.counterpartyId?.trim()
+      if (!counterpartyId) {
+        throw new BadRequestException('请选择往来对象档案')
+      }
+
+      if (dto.counterpartyType === PrismaCounterpartyType.partner) {
+        const partner = await client.partner.findFirst({
+          where: { id: counterpartyId, organizationId },
+        })
+        if (!partner) {
+          throw new NotFoundException('合作伙伴不存在')
+        }
+        return {
+          counterpartyType: dto.counterpartyType,
+          counterpartyId: partner.id,
+          counterpartyName: partner.name,
+        }
+      }
+
+      const supplier = await client.supplier.findFirst({
+        where: { id: counterpartyId, organizationId },
+      })
+      if (!supplier) {
+        throw new NotFoundException('供应商不存在')
+      }
+      return {
+        counterpartyType: dto.counterpartyType,
+        counterpartyId: supplier.id,
+        counterpartyName: supplier.name,
+      }
+    }
+
+    return {
+      counterpartyType: dto.counterpartyType,
+      counterpartyId: null,
+      counterpartyName: dto.counterpartyName?.trim() || null,
     }
   }
 

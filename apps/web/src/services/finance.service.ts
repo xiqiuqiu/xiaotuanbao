@@ -11,6 +11,7 @@ import type {
   LinkTransactionDto,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
+  UpdateFinanceTransactionDto,
   UpdatePaymentScheduleDto,
   VoidFinanceTransactionDto,
 } from '@xiaotuanbao/shared'
@@ -117,6 +118,13 @@ export async function createTransaction(
   payload: CreateFinanceTransactionDto,
 ): Promise<FinanceTransactionSummary> {
   return request.post<FinanceTransactionSummary>('/finance/transactions', payload)
+}
+
+export async function updateTransaction(
+  id: string,
+  payload: UpdateFinanceTransactionDto,
+): Promise<FinanceTransactionSummary> {
+  return request.put<FinanceTransactionSummary>(`/finance/transactions/${id}`, payload)
 }
 
 export async function voidTransaction(

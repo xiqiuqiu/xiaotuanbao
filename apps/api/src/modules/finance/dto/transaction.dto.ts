@@ -49,6 +49,8 @@ export class CreateFinanceTransactionDto {
   notes?: string
 }
 
+export class UpdateFinanceTransactionDto extends CreateFinanceTransactionDto {}
+
 const TRANSACTION_LIST_STATUSES = ['normal', 'voided'] as const
 const TRANSACTION_WRITEOFF_STATUSES = ['none', 'partial', 'done'] as const
 

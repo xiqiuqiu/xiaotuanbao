@@ -1,17 +1,31 @@
+import { useEffect } from 'react'
 import { DatePicker, Drawer, Form, Input, InputNumber, Select, Space, Button } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
-import { CounterpartyType, PaymentChannel, TransactionDirection } from '@xiaotuanbao/shared'
+import {
+  CounterpartyType,
+  DirectoryProfileStatus,
+  TransactionDirection,
+  type FinanceTransactionSummary,
+} from '@xiaotuanbao/shared'
 import { listDepartures } from '@/services/departure.service'
+import { listPartners } from '@/services/partner.service'
+import { listSuppliers } from '@/services/supplier.service'
 import {
   COUNTERPARTY_TYPE_OPTIONS,
   PAYMENT_CHANNEL_OPTIONS,
   TRANSACTION_DIRECTION_OPTIONS,
 } from '../catalog'
-import type { TransactionFormValues } from '../utils/transaction-form'
+import {
+  createEmptyTransactionFormValues,
+  transactionToFormValues,
+  type TransactionFormValues,
+} from '../utils/transaction-form'
 
 interface TransactionFormDrawerProps {
   open: boolean
+  mode: 'create' | 'edit'
+  editingTransaction: FinanceTransactionSummary | null
   loading: boolean
   form: FormInstance<TransactionFormValues>
   onClose: () => void
@@ -20,15 +34,53 @@ interface TransactionFormDrawerProps {
 
 export function TransactionFormDrawer({
   open,
+  mode,
+  editingTransaction,
   loading,
   form,
   onClose,
   onSubmit,
 }: TransactionFormDrawerProps) {
+  const counterpartyType = Form.useWatch('counterpartyType', form)
+
+  const initialValues =
+    mode === 'edit' && editingTransaction
+      ? transactionToFormValues(editingTransaction)
+      : createEmptyTransactionFormValues()
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    form.resetFields()
+    form.setFieldsValue(initialValues)
+  }, [form, initialValues, open])
+
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'transaction-form'],
     queryFn: () => listDepartures({ pageSize: 100 }),
     enabled: open,
+  })
+
+  const { data: partnersResult } = useQuery({
+    queryKey: ['partners', 'transaction-form-select'],
+    queryFn: () =>
+      listPartners({
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
+    enabled: open && counterpartyType === CounterpartyType.PARTNER,
+  })
+
+  const { data: suppliersResult } = useQuery({
+    queryKey: ['suppliers', 'transaction-form-select'],
+    queryFn: () =>
+      listSuppliers({
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
+    enabled: open && counterpartyType === CounterpartyType.SUPPLIER,
   })
 
   const departureOptions =
@@ -37,37 +89,58 @@ export function TransactionFormDrawer({
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []
 
+  const partnerOptions =
+    partnersResult?.items.map((partner) => ({
+      value: partner.id,
+      label: partner.name,
+    })) ?? []
+
+  const supplierOptions =
+    suppliersResult?.items.map((supplier) => ({
+      value: supplier.id,
+      label: supplier.name,
+    })) ?? []
+
+  const handleClose = () => {
+    form.resetFields()
+    onClose()
+  }
+
   return (
     <Drawer
-      title="新建流水"
+      title={mode === 'edit' ? '编辑流水' : '新建流水'}
       open={open}
       width={520}
-      onClose={onClose}
+      onClose={handleClose}
+      destroyOnClose
       footer={
         <Space style={{ float: 'right' }}>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={handleClose}>取消</Button>
           <Button type="primary" loading={loading} onClick={() => form.submit()}>
-            创建
+            {mode === 'edit' ? '保存' : '创建'}
           </Button>
         </Space>
       }
     >
-      <Form
-        form={form}
-        layout="vertical"
-        initialValues={{
-          direction: TransactionDirection.INFLOW,
-          paymentChannel: PaymentChannel.CASH,
-          counterpartyType: CounterpartyType.PARTNER,
-        }}
-        onFinish={onSubmit}
-      >
+      <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item
           name="direction"
-          label="方向"
-          rules={[{ required: true, message: '请选择方向' }]}
+          label="收支方向"
+          rules={[{ required: true, message: '请选择收支方向' }]}
         >
-          <Select options={[...TRANSACTION_DIRECTION_OPTIONS]} />
+          <Select
+            options={[...TRANSACTION_DIRECTION_OPTIONS]}
+            onChange={(value: TransactionDirection) => {
+              form.setFieldsValue({
+                counterpartyType:
+                  value === TransactionDirection.INFLOW
+                    ? CounterpartyType.PARTNER
+                    : CounterpartyType.SUPPLIER,
+                counterpartyId: undefined,
+                counterpartyName: undefined,
+              })
+            }}
+          />
         </Form.Item>
         <Form.Item
           name="paymentChannel"
@@ -95,11 +168,50 @@ export function TransactionFormDrawer({
           label="往来对象类型"
           rules={[{ required: true, message: '请选择往来对象类型' }]}
         >
-          <Select options={[...COUNTERPARTY_TYPE_OPTIONS]} />
+          <Select
+            options={[...COUNTERPARTY_TYPE_OPTIONS]}
+            onChange={() => {
+              form.setFieldsValue({
+                counterpartyId: undefined,
+                counterpartyName: undefined,
+              })
+            }}
+          />
         </Form.Item>
-        <Form.Item name="counterpartyName" label="往来对象名称">
-          <Input maxLength={100} />
-        </Form.Item>
+        {counterpartyType === CounterpartyType.PARTNER ? (
+          <Form.Item
+            name="counterpartyId"
+            label="合作伙伴"
+            rules={[{ required: true, message: '请选择合作伙伴' }]}
+          >
+            <Select
+              showSearch
+              placeholder="选择合作伙伴"
+              optionFilterProp="label"
+              options={partnerOptions}
+            />
+          </Form.Item>
+        ) : null}
+        {counterpartyType === CounterpartyType.SUPPLIER ? (
+          <Form.Item
+            name="counterpartyId"
+            label="供应商"
+            rules={[{ required: true, message: '请选择供应商' }]}
+          >
+            <Select
+              showSearch
+              placeholder="选择供应商"
+              optionFilterProp="label"
+              options={supplierOptions}
+            />
+          </Form.Item>
+        ) : null}
+        {counterpartyType === CounterpartyType.GUEST ||
+        counterpartyType === CounterpartyType.MANUAL ? (
+          <Form.Item name="counterpartyName" label="往来对象名称">
+            <Input maxLength={100} />
+          </Form.Item>
+        ) : null}
         <Form.Item name="departureId" label="关联发团">
           <Select
             allowClear
