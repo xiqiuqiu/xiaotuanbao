@@ -113,7 +113,7 @@
 ### 数据完整性
 
 62. 作为开发者，我希望金额一律整数分（cents）、币种 CNY，以便与财务脊柱一致。
-63. 作为开发者，我希望收付款节点编号遵循 AR/AP/TR 规则，以便与生产习惯一致。
+63. 作为开发者，我希望业务编号遵循组织前缀与 AR/AP/TX/CL 规则（见 ADR-0003），以便与财务编号族一致。
 64. 作为开发者，我希望 Partner/Supplier 选择器在新业务中排除已归档与停用档案，以便目录 lifecycle 生效。
 
 ---
@@ -144,7 +144,7 @@ Finance ──派生──► Departure Read Model（待收/待付/结清态）
 
 **决策：领域逻辑移植 + 技术栈重写**（非整库 copy，非从零发明规则）。
 
-- **移植语义**：三层模型（`payment_schedules` / `transactions` / `finance_verification`）、`deriveScheduleState` 优先级、`finance-touched` 判定、来源差异警示、关联流水往来对象匹配（ADR-0007）、P2.1 双写核销、编号规则（AR/AP/TR）。
+- **移植语义**：三层模型（`payment_schedules` / `transactions` / `finance_verification`）、`deriveScheduleState` 优先级、`finance-touched` 判定、来源差异警示、关联流水往来对象匹配（ADR-0007）、P2.1 双写核销、编号规则（组织前缀 + AR/AP/TX/CL，见 ADR-0003）。
 - **重写实现**：NestJS Module + Prisma schema + Ant Design 前端；不引入 Drizzle/Hono 代码。
 - **适配发团模型**：应收来源改为 **客源单**（非 Project 团款组成）；应付来源改为 **段内资源行**（非 Day 确认批量、非独立拼出实体）。不实现 `day_confirmed`、`quote_confirmation` 类 source_type。
 - **Phase 3 义务双层模型**（ADR-0018/0019）**不在本 Epic**；当前 `payment_schedules` 兼计划与账期语义。
@@ -538,7 +538,7 @@ Issue tracker 已配置：GitHub Issues（`docs/agents/issue-tracker.md`）。PR
 - [ ] 计调：团内应收/应付/核销 Tab 只读可见；可触发生成应收/应付；全局 `/finance/*` mutation → 403
 - [ ] 财务：全局财务可操作；发团运营 API → 403
 - [ ] RouteTemplate 代码归属 `departure` 模块（无独立 NestJS 模块）
-- [ ] 金额分、cents API、CNY；编号 AR/AP/TR
+- [ ] 金额分、cents API、CNY；编号组织前缀 + AR/AP/TX/CL（ADR-0003）
 - [ ] Partner/Supplier 选择器 exclude archived/disabled
 - [ ] Finance E2E + Departure E2E 覆盖核心路径
 - [ ] Partner/Supplier 现有 E2E 仍通过

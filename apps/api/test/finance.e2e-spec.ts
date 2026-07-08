@@ -267,7 +267,7 @@ describe('Finance API (e2e)', () => {
         organizationId: otherOrg.id,
         departureId: foreignDeparture.id,
         direction: PaymentScheduleDirection.receivable,
-        scheduleNo: `AR202608019999`,
+        scheduleNo: `AR${otherOrg.businessPrefix}202608000999`,
         title: `${testPrefix}-foreign-schedule`,
         amountCents: 10000,
         dueDate: new Date('2026-12-31T00:00:00.000Z'),
@@ -426,7 +426,7 @@ describe('Finance API (e2e)', () => {
     expect(response.body.code).toBe(400)
   })
 
-  it('creates transaction with TR number and filters by departureId', async () => {
+  it('creates transaction with TX number and filters by departureId', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
       .send({
