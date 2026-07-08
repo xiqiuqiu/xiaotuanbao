@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
+  FinanceVerificationDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
 } from '@xiaotuanbao/shared'
@@ -43,8 +44,8 @@ export class VerificationController {
   getById(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-  ): Promise<FinanceVerificationSummary> {
-    return this.verificationService.getById(request.user.organizationId, id)
+  ): Promise<FinanceVerificationDetail> {
+    return this.verificationService.getDetail(request.user.organizationId, id)
   }
 
   @Post(':id/cancel')

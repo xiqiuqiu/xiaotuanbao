@@ -415,11 +415,30 @@ export interface FinanceVerificationSummary {
   updatedAt: string
 }
 
+export interface FinanceVerificationListItem extends FinanceVerificationSummary {
+  transactionNo: string
+  scheduleNo: string
+  direction: string
+  departureId: string
+  departureNo: string
+  departureName: string
+  counterpartyType: string
+  counterpartyName: string | null
+  createdByName: string
+  cancelledByName: string | null
+}
+
 export interface FinanceVerificationListResult {
-  items: FinanceVerificationSummary[]
+  items: FinanceVerificationListItem[]
   total: number
   page: number
   pageSize: number
+}
+
+export interface FinanceVerificationDetail {
+  verification: FinanceVerificationListItem
+  transaction: FinanceTransactionSummary
+  schedule: PaymentScheduleSummary
 }
 
 export interface CreateFinanceVerificationDto {

@@ -102,6 +102,25 @@ export const COUNTERPARTY_TYPE_LABELS = Object.fromEntries(
   COUNTERPARTY_TYPE_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<CounterpartyType, string>
 
+export const VERIFICATION_DIRECTION_OPTIONS = [
+  { value: 'receivable', label: '应收核销' },
+  { value: 'payable', label: '应付核销' },
+] as const
+
+export const VERIFICATION_DIRECTION_LABELS: Record<string, string> = Object.fromEntries(
+  VERIFICATION_DIRECTION_OPTIONS.map((item) => [item.value, item.label]),
+)
+
+export const VERIFICATION_DIRECTION_COLORS: Record<string, string> = {
+  receivable: 'blue',
+  payable: 'purple',
+}
+
+export const VERIFICATION_STATUS_OPTIONS = [
+  { value: 'normal', label: '正常' },
+  { value: 'cancelled', label: '已撤销' },
+] as const
+
 export const VERIFICATION_STATUS_LABELS: Record<string, string> = {
   [VerificationStatus.NORMAL]: '正常',
   [VerificationStatus.CANCELLED]: '已撤销',
@@ -110,9 +129,4 @@ export const VERIFICATION_STATUS_LABELS: Record<string, string> = {
 export const VERIFICATION_STATUS_COLORS: Record<string, string> = {
   [VerificationStatus.NORMAL]: 'success',
   [VerificationStatus.CANCELLED]: 'default',
-}
-
-export const VERIFICATION_DIRECTION_LABELS: Record<string, string> = {
-  receivable: '应收核销',
-  payable: '应付核销',
 }

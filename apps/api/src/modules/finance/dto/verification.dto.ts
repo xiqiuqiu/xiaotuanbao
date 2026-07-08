@@ -1,4 +1,4 @@
-import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 import { Type } from 'class-transformer'
 
 export class CreateFinanceVerificationDto {
@@ -30,6 +30,34 @@ export class CancelFinanceVerificationDto {
 }
 
 export class ListFinanceVerificationsQueryDto {
+  @IsOptional()
+  @IsDateString()
+  verificationDateStart?: string
+
+  @IsOptional()
+  @IsDateString()
+  verificationDateEnd?: string
+
+  @IsOptional()
+  @IsIn(['receivable', 'payable'])
+  direction?: string
+
+  @IsOptional()
+  @IsIn(['normal', 'cancelled'])
+  status?: string
+
+  @IsOptional()
+  @IsString()
+  transactionNo?: string
+
+  @IsOptional()
+  @IsString()
+  scheduleNo?: string
+
+  @IsOptional()
+  @IsString()
+  departureKeyword?: string
+
   @IsOptional()
   @IsString()
   paymentScheduleId?: string

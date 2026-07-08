@@ -509,6 +509,8 @@ describe('Finance API (e2e)', () => {
     expect(verifications.body.data.items).toHaveLength(1)
     expect(verifications.body.data.items[0].verificationNo).toMatch(CL_NO_REGEX)
     expect(verifications.body.data.items[0].transactionId).toBe(transaction.body.data.id)
+    expect(verifications.body.data.items[0].transactionNo).toMatch(TX_NO_REGEX)
+    expect(verifications.body.data.items[0].scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
     expect(verifications.body.data.items[0].amountCents).toBe(50000)
 
     const linkedTransaction = await authRequest(app, financeToken)
@@ -1352,6 +1354,289 @@ describe('Finance API (e2e)', () => {
         .expect(200)
 
       expect(otherFiltered.body.data.items).toHaveLength(0)
+    })
+  })
+
+  describe('verification list and detail', () => {
+    async function seedListFixture() {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(
+          schedulePayload({
+            title: `${testPrefix}-列表应收`,
+            amountCents: 100000,
+            departureId,
+          }),
+        )
+        .expect(201)
+
+      const payable = await authRequest(app, financeToken)
+        .post('/api/finance/payables')
+        .send(
+          payablePayload({
+            title: `${testPrefix}-列表应付`,
+            amountCents: 80000,
+            departureId: otherDepartureId,
+          }),
+        )
+        .expect(201)
+
+      const receivableTx = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 100000, transactionDate: '2026-07-05' }))
+        .expect(201)
+
+      const payableTx = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            direction: 'outflow',
+            amountCents: 80000,
+            transactionDate: '2026-07-20',
+            counterpartyType: CounterpartyType.supplier,
+            counterpartyId: supplierId,
+            counterpartyName: `${testPrefix}-supplier`,
+            departureId: otherDepartureId,
+          }),
+        )
+        .expect(201)
+
+      const earlyVerification = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: receivableTx.body.data.id,
+            amountCents: 30000,
+            verificationDate: '2026-07-01',
+          }),
+        )
+        .expect(201)
+
+      const lateVerification = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: payable.body.data.id,
+            transactionId: payableTx.body.data.id,
+            amountCents: 40000,
+            verificationDate: '2026-07-15',
+          }),
+        )
+        .expect(201)
+
+      return {
+        receivable,
+        payable,
+        receivableTx,
+        payableTx,
+        earlyVerification,
+        lateVerification,
+      }
+    }
+
+    it('returns enriched list items with transactionNo and scheduleNo', async () => {
+      const fixture = await seedListFixture()
+
+      const list = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(list.body.data.items).toHaveLength(1)
+      const item = list.body.data.items[0]
+      expect(item.transactionNo).toBe(fixture.receivableTx.body.data.transactionNo)
+      expect(item.scheduleNo).toBe(fixture.receivable.body.data.scheduleNo)
+      expect(item.direction).toBe('receivable')
+      expect(item.departureNo).toContain(testPrefix)
+      expect(item.createdByName).toEqual(expect.any(String))
+    })
+
+    it('filters by verification date range', async () => {
+      const fixture = await seedListFixture()
+
+      const inRange = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({
+          verificationDateStart: '2026-07-10',
+          verificationDateEnd: '2026-07-20',
+          scheduleNo: fixture.payable.body.data.scheduleNo,
+          pageSize: 10,
+        })
+        .expect(200)
+
+      expect(inRange.body.data.items).toHaveLength(1)
+      expect(inRange.body.data.items[0].direction).toBe('payable')
+      expect(inRange.body.data.items[0].verificationDate).toBe('2026-07-15')
+
+      const outOfRange = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({
+          verificationDateStart: '2026-07-10',
+          verificationDateEnd: '2026-07-20',
+          scheduleNo: fixture.receivable.body.data.scheduleNo,
+          pageSize: 10,
+        })
+        .expect(200)
+
+      expect(outOfRange.body.data.items).toHaveLength(0)
+    })
+
+    it('filters by direction', async () => {
+      await seedListFixture()
+
+      const receivableOnly = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ direction: 'receivable', pageSize: 100 })
+        .expect(200)
+
+      expect(receivableOnly.body.data.items.length).toBeGreaterThan(0)
+      expect(receivableOnly.body.data.items.every((item: { direction: string }) => item.direction === 'receivable')).toBe(true)
+    })
+
+    it('filters by status', async () => {
+      const fixture = await seedListFixture()
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${fixture.earlyVerification.body.data.id}/cancel`)
+        .send({ cancelReason: '测试撤销' })
+        .expect(201)
+
+      const cancelled = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ status: 'cancelled', paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(cancelled.body.data.items).toHaveLength(1)
+      expect(cancelled.body.data.items[0].status).toBe('cancelled')
+
+      const normal = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ status: 'normal', paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      expect(normal.body.data.items).toHaveLength(0)
+    })
+
+    it('filters by transactionNo contains', async () => {
+      const fixture = await seedListFixture()
+      const partialNo = fixture.receivableTx.body.data.transactionNo.slice(0, 8)
+
+      const filtered = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ transactionNo: partialNo, pageSize: 10 })
+        .expect(200)
+
+      expect(filtered.body.data.items.length).toBeGreaterThan(0)
+      expect(filtered.body.data.items.every((item: { transactionNo: string }) =>
+        item.transactionNo.includes(partialNo),
+      )).toBe(true)
+    })
+
+    it('filters by scheduleNo contains', async () => {
+      const fixture = await seedListFixture()
+      const partialNo = fixture.receivable.body.data.scheduleNo.slice(0, 6)
+
+      const filtered = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ scheduleNo: partialNo, pageSize: 10 })
+        .expect(200)
+
+      expect(filtered.body.data.items.length).toBeGreaterThan(0)
+      expect(filtered.body.data.items.every((item: { scheduleNo: string }) =>
+        item.scheduleNo.includes(partialNo),
+      )).toBe(true)
+    })
+
+    it('filters by departure keyword', async () => {
+      await seedListFixture()
+
+      const byNo = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ departureKeyword: `${testPrefix}-dep-other`, pageSize: 10 })
+        .expect(200)
+
+      expect(byNo.body.data.items.length).toBeGreaterThan(0)
+      expect(byNo.body.data.items.every((item: { departureNo: string }) =>
+        item.departureNo.includes(`${testPrefix}-dep-other`),
+      )).toBe(true)
+
+      const byName = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ departureKeyword: '其他发团', pageSize: 10 })
+        .expect(200)
+
+      expect(byName.body.data.items.length).toBeGreaterThan(0)
+    })
+
+    it('returns detail with verification, transaction, and schedule blocks', async () => {
+      const fixture = await seedListFixture()
+
+      const detail = await authRequest(app, financeToken)
+        .get(`/api/finance/verifications/${fixture.earlyVerification.body.data.id}`)
+        .expect(200)
+
+      expect(detail.body.data.verification).toMatchObject({
+        id: fixture.earlyVerification.body.data.id,
+        transactionNo: fixture.receivableTx.body.data.transactionNo,
+        scheduleNo: fixture.receivable.body.data.scheduleNo,
+        direction: 'receivable',
+      })
+      expect(detail.body.data.transaction.transactionNo).toBe(
+        fixture.receivableTx.body.data.transactionNo,
+      )
+      expect(detail.body.data.transaction.allocatedAmountCents).toEqual(expect.any(Number))
+      expect(detail.body.data.transaction.unallocatedAmountCents).toEqual(expect.any(Number))
+      expect(detail.body.data.schedule.scheduleNo).toBe(fixture.receivable.body.data.scheduleNo)
+      expect(detail.body.data.schedule.settledAmountCents).toEqual(expect.any(Number))
+      expect(detail.body.data.schedule.unsettledAmountCents).toEqual(expect.any(Number))
+      expect(detail.body.data.schedule.status).toEqual(expect.any(String))
+    })
+
+    it('preserves billUnsettledAfterCents snapshot after subsequent partial verification', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-快照不变`, amountCents: 100000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 100000 }))
+        .expect(201)
+
+      const first = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 30000,
+          }),
+        )
+        .expect(201)
+
+      expect(first.body.data.billUnsettledAfterCents).toBe(70000)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 20000,
+          }),
+        )
+        .expect(201)
+
+      const list = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      const firstItem = list.body.data.items.find(
+        (item: { id: string }) => item.id === first.body.data.id,
+      )
+      expect(firstItem.billUnsettledAfterCents).toBe(70000)
     })
   })
 

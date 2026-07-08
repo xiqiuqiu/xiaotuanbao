@@ -1,17 +1,37 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type {
+  FinanceTransactionSummary,
+  FinanceVerificationDetail,
+  FinanceVerificationListItem,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
+  PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
 import {
   assertCounterpartyMatch,
   assertDirectionMatch,
   CounterpartyMismatchError,
+  deriveScheduleState,
   DirectionMismatchError,
+  isFinanceTouched,
+  PaymentChannel,
+  TransactionDirection,
   VerificationStatus,
 } from '@xiaotuanbao/shared'
-import { VerificationStatus as PrismaVerificationStatus, type Prisma } from '@prisma/client'
-import { formatDateOnly, parseDateOnly } from '../departure/departure-date.utils'
+import {
+  PaymentChannel as PrismaPaymentChannel,
+  PaymentScheduleDirection,
+  TransactionDirection as PrismaTransactionDirection,
+  VerificationStatus as PrismaVerificationStatus,
+  type FinanceTransaction,
+  type PaymentSchedule,
+  type Prisma,
+} from '@prisma/client'
+import {
+  formatDateOnly,
+  getShanghaiTodayString,
+  parseDateOnly,
+} from '../departure/departure-date.utils'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import type {
@@ -23,6 +43,23 @@ import type {
 export interface VerificationCreateContext {
   createdBy: string
 }
+
+type VerificationWithRelations = Prisma.FinanceVerificationGetPayload<{
+  include: {
+    paymentSchedule: {
+      select: {
+        scheduleNo: true
+        direction: true
+        counterpartyType: true
+        counterpartyId: true
+        counterpartyName: true
+        departureId: true
+        departure: { select: { departureNo: true; name: true } }
+      }
+    }
+    transaction: { select: { transactionNo: true } }
+  }
+}>
 
 @Injectable()
 export class VerificationService {
@@ -38,43 +75,81 @@ export class VerificationService {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
 
-    const where: Prisma.FinanceVerificationWhereInput = {
-      organizationId,
-      ...(query.paymentScheduleId ? { paymentScheduleId: query.paymentScheduleId } : {}),
-      ...(query.transactionId ? { transactionId: query.transactionId } : {}),
-      ...(query.departureId
-        ? { paymentSchedule: { departureId: query.departureId } }
-        : {}),
-    }
+    const where = this.buildListWhere(organizationId, query)
 
     const [items, total] = await Promise.all([
       this.prisma.financeVerification.findMany({
         where,
-        orderBy: { updatedAt: 'desc' },
+        include: {
+          paymentSchedule: {
+            select: {
+              scheduleNo: true,
+              direction: true,
+              counterpartyType: true,
+              counterpartyId: true,
+              counterpartyName: true,
+              departureId: true,
+              departure: { select: { departureNo: true, name: true } },
+            },
+          },
+          transaction: { select: { transactionNo: true } },
+        },
+        orderBy: [{ verificationDate: 'desc' }, { createdAt: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.financeVerification.count({ where }),
     ])
 
+    const userNames = await this.batchGetUserNames(
+      items.flatMap((item) => [item.createdBy, item.cancelledBy].filter(Boolean) as string[]),
+    )
+
     return {
-      items: items.map((item) => this.toSummary(item)),
+      items: items.map((item) => this.toListItem(item, userNames)),
       total,
       page,
       pageSize,
     }
   }
 
-  async getById(organizationId: string, verificationId: string): Promise<FinanceVerificationSummary> {
+  async getDetail(organizationId: string, verificationId: string): Promise<FinanceVerificationDetail> {
     const verification = await this.prisma.financeVerification.findFirst({
       where: { id: verificationId, organizationId },
+      include: {
+        paymentSchedule: {
+          select: {
+            scheduleNo: true,
+            direction: true,
+            counterpartyType: true,
+            counterpartyId: true,
+            counterpartyName: true,
+            departureId: true,
+            departure: { select: { departureNo: true, name: true } },
+          },
+        },
+        transaction: { select: { transactionNo: true } },
+      },
     })
 
     if (!verification) {
       throw new NotFoundException('核销记录不存在')
     }
 
-    return this.toSummary(verification)
+    const userNames = await this.batchGetUserNames(
+      [verification.createdBy, verification.cancelledBy].filter(Boolean) as string[],
+    )
+
+    const [transaction, schedule] = await Promise.all([
+      this.buildTransactionSummary(organizationId, verification.transactionId),
+      this.buildScheduleSummary(organizationId, verification.paymentScheduleId),
+    ])
+
+    return {
+      verification: this.toListItem(verification, userNames),
+      transaction,
+      schedule,
+    }
   }
 
   async create(
@@ -266,6 +341,138 @@ export class VerificationService {
     return map
   }
 
+  private buildListWhere(
+    organizationId: string,
+    query: ListFinanceVerificationsQueryDto,
+  ): Prisma.FinanceVerificationWhereInput {
+    const paymentScheduleFilter: Prisma.PaymentScheduleWhereInput = {}
+
+    if (query.direction) {
+      paymentScheduleFilter.direction = query.direction as PaymentScheduleDirection
+    }
+    if (query.scheduleNo) {
+      paymentScheduleFilter.scheduleNo = { contains: query.scheduleNo, mode: 'insensitive' }
+    }
+    if (query.departureId) {
+      paymentScheduleFilter.departureId = query.departureId
+    }
+    if (query.departureKeyword) {
+      paymentScheduleFilter.departure = {
+        OR: [
+          { departureNo: { contains: query.departureKeyword, mode: 'insensitive' } },
+          { name: { contains: query.departureKeyword, mode: 'insensitive' } },
+        ],
+      }
+    }
+
+    return {
+      organizationId,
+      ...(query.paymentScheduleId ? { paymentScheduleId: query.paymentScheduleId } : {}),
+      ...(query.transactionId ? { transactionId: query.transactionId } : {}),
+      ...(query.status
+        ? {
+            status:
+              query.status === 'normal'
+                ? PrismaVerificationStatus.normal
+                : PrismaVerificationStatus.cancelled,
+          }
+        : {}),
+      ...(query.verificationDateStart || query.verificationDateEnd
+        ? {
+            verificationDate: {
+              ...(query.verificationDateStart
+                ? { gte: parseDateOnly(query.verificationDateStart) }
+                : {}),
+              ...(query.verificationDateEnd
+                ? { lte: parseDateOnly(query.verificationDateEnd) }
+                : {}),
+            },
+          }
+        : {}),
+      ...(query.transactionNo
+        ? {
+            transaction: {
+              transactionNo: { contains: query.transactionNo, mode: 'insensitive' },
+            },
+          }
+        : {}),
+      ...(Object.keys(paymentScheduleFilter).length > 0
+        ? { paymentSchedule: paymentScheduleFilter }
+        : {}),
+    }
+  }
+
+  private async batchGetUserNames(userIds: string[]): Promise<Map<string, string>> {
+    const uniqueIds = [...new Set(userIds)]
+    if (uniqueIds.length === 0) {
+      return new Map()
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: uniqueIds }, deletedAt: null },
+      select: { id: true, name: true },
+    })
+
+    return new Map(users.map((user) => [user.id, user.name]))
+  }
+
+  private toListItem(
+    verification: VerificationWithRelations,
+    userNames: Map<string, string>,
+  ): FinanceVerificationListItem {
+    const summary = this.toSummary(verification)
+    const schedule = verification.paymentSchedule
+    const departure = schedule.departure
+
+    return {
+      ...summary,
+      transactionNo: verification.transaction.transactionNo,
+      scheduleNo: schedule.scheduleNo,
+      direction: schedule.direction,
+      departureId: schedule.departureId,
+      departureNo: departure.departureNo,
+      departureName: departure.name,
+      counterpartyType: schedule.counterpartyType,
+      counterpartyName: schedule.counterpartyName,
+      createdByName: userNames.get(verification.createdBy) ?? '—',
+      cancelledByName: verification.cancelledBy
+        ? (userNames.get(verification.cancelledBy) ?? '—')
+        : null,
+    }
+  }
+
+  private async buildTransactionSummary(
+    organizationId: string,
+    transactionId: string,
+  ): Promise<FinanceTransactionSummary> {
+    const transaction = await this.prisma.financeTransaction.findFirst({
+      where: { id: transactionId, organizationId },
+    })
+
+    if (!transaction) {
+      throw new NotFoundException('流水不存在')
+    }
+
+    const allocated = await this.getAllocatedAmountCents(transaction.id)
+    return this.toTransactionSummary(transaction, allocated)
+  }
+
+  private async buildScheduleSummary(
+    organizationId: string,
+    scheduleId: string,
+  ): Promise<PaymentScheduleSummary> {
+    const schedule = await this.prisma.paymentSchedule.findFirst({
+      where: { id: scheduleId, organizationId },
+    })
+
+    if (!schedule) {
+      throw new NotFoundException('收付款节点不存在')
+    }
+
+    const settledAmountCents = await this.getSettledAmountCents(schedule.id)
+    return this.toScheduleSummary(schedule, settledAmountCents)
+  }
+
   private async assertScheduleAllocation(
     client: Prisma.TransactionClient | PrismaService,
     scheduleId: string,
@@ -335,6 +542,89 @@ export class VerificationService {
       cancelledAt: verification.cancelledAt?.toISOString() ?? null,
       createdAt: verification.createdAt.toISOString(),
       updatedAt: verification.updatedAt.toISOString(),
+    }
+  }
+
+  private toTransactionSummary(
+    transaction: FinanceTransaction,
+    allocatedAmountCents: number,
+  ): FinanceTransactionSummary {
+    return {
+      id: transaction.id,
+      transactionNo: transaction.transactionNo,
+      direction:
+        transaction.direction === PrismaTransactionDirection.inflow
+          ? TransactionDirection.INFLOW
+          : TransactionDirection.OUTFLOW,
+      paymentChannel: this.toPaymentChannel(transaction.paymentChannel),
+      amountCents: transaction.amountCents,
+      allocatedAmountCents,
+      unallocatedAmountCents: transaction.amountCents - allocatedAmountCents,
+      transactionDate: formatDateOnly(transaction.transactionDate),
+      counterpartyType: transaction.counterpartyType,
+      counterpartyId: transaction.counterpartyId,
+      counterpartyName: transaction.counterpartyName,
+      departureId: transaction.departureId,
+      voidedAt: transaction.voidedAt?.toISOString() ?? null,
+      voidReason: transaction.voidReason,
+      notes: transaction.notes,
+      createdAt: transaction.createdAt.toISOString(),
+      updatedAt: transaction.updatedAt.toISOString(),
+    }
+  }
+
+  private toScheduleSummary(
+    schedule: PaymentSchedule,
+    settledAmountCents: number,
+  ): PaymentScheduleSummary {
+    const businessDate = getShanghaiTodayString()
+    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+
+    return {
+      id: schedule.id,
+      departureId: schedule.departureId,
+      direction: schedule.direction,
+      scheduleNo: schedule.scheduleNo,
+      title: schedule.title,
+      amountCents: schedule.amountCents,
+      dueDate: formatDateOnly(schedule.dueDate),
+      counterpartyType: schedule.counterpartyType,
+      counterpartyId: schedule.counterpartyId,
+      counterpartyName: schedule.counterpartyName,
+      sourceType: schedule.sourceType,
+      sourceId: schedule.sourceId,
+      status: deriveScheduleState({
+        amountCents: schedule.amountCents,
+        settledAmountCents,
+        dueDate: formatDateOnly(schedule.dueDate),
+        cancelledAt: schedule.cancelledAt,
+        businessDate,
+      }),
+      financeTouched: isFinanceTouched(schedule, settledAmountCents),
+      settledAmountCents,
+      unsettledAmountCents,
+      cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+      cancelReason: schedule.cancelReason,
+      amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,
+      createdAt: schedule.createdAt.toISOString(),
+      updatedAt: schedule.updatedAt.toISOString(),
+    }
+  }
+
+  private toPaymentChannel(value: PrismaPaymentChannel): PaymentChannel {
+    switch (value) {
+      case PrismaPaymentChannel.bank_transfer:
+        return PaymentChannel.BANK_TRANSFER
+      case PrismaPaymentChannel.wechat:
+        return PaymentChannel.WECHAT
+      case PrismaPaymentChannel.alipay:
+        return PaymentChannel.ALIPAY
+      case PrismaPaymentChannel.cash:
+        return PaymentChannel.CASH
+      case PrismaPaymentChannel.other:
+        return PaymentChannel.OTHER
+      default:
+        return PaymentChannel.OTHER
     }
   }
 }

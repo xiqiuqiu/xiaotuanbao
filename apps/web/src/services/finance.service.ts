@@ -8,6 +8,7 @@ import type {
   FinanceTransactionListResult,
   FinanceTransactionSummary,
   FinanceTransactionDetail,
+  FinanceVerificationDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
   LinkTransactionDto,
@@ -38,6 +39,13 @@ export interface ListFinanceTransactionsParams {
 }
 
 export interface ListFinanceVerificationsParams {
+  verificationDateStart?: string
+  verificationDateEnd?: string
+  direction?: string
+  status?: string
+  transactionNo?: string
+  scheduleNo?: string
+  departureKeyword?: string
   departureId?: string
   paymentScheduleId?: string
   transactionId?: string
@@ -144,6 +152,10 @@ export async function listVerifications(
   params: ListFinanceVerificationsParams,
 ): Promise<FinanceVerificationListResult> {
   return request.get<FinanceVerificationListResult>('/finance/verifications', { params })
+}
+
+export async function getVerification(id: string): Promise<FinanceVerificationDetail> {
+  return request.get<FinanceVerificationDetail>(`/finance/verifications/${id}`)
 }
 
 export async function listDepartureReceivables(
