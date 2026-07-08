@@ -3,7 +3,7 @@ import type {
   FinanceTransactionListResult,
   FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
-import { TransactionDirection, PaymentChannel } from '@xiaotuanbao/shared'
+import { deriveTransactionWriteoffStatus, TransactionDirection, PaymentChannel } from '@xiaotuanbao/shared'
 import {
   PaymentChannel as PrismaPaymentChannel,
   TransactionDirection as PrismaTransactionDirection,
@@ -38,9 +38,26 @@ export class TransactionService {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
 
-    const where: Prisma.FinanceTransactionWhereInput = {
-      organizationId,
-      ...(query.departureId ? { departureId: query.departureId } : {}),
+    const where = this.buildListWhere(organizationId, query)
+
+    if (query.writeoffStatus) {
+      const candidates = await this.prisma.financeTransaction.findMany({
+        where,
+        select: { id: true, amountCents: true },
+      })
+      const allocatedMap = await this.verificationService.batchGetAllocatedAmounts(
+        candidates.map((item) => item.id),
+      )
+      const filteredIds = candidates
+        .filter((item) => {
+          const allocated = allocatedMap.get(item.id) ?? 0
+          return (
+            deriveTransactionWriteoffStatus(item.amountCents, allocated).status ===
+            query.writeoffStatus
+          )
+        })
+        .map((item) => item.id)
+      where.id = { in: filteredIds }
     }
 
     const [items, total] = await Promise.all([
@@ -147,6 +164,47 @@ export class TransactionService {
     })
 
     return this.toSummary(updated, 0)
+  }
+
+  private buildListWhere(
+    organizationId: string,
+    query: ListFinanceTransactionsQueryDto,
+  ): Prisma.FinanceTransactionWhereInput {
+    const where: Prisma.FinanceTransactionWhereInput = { organizationId }
+
+    if (query.departureId) {
+      where.departureId = query.departureId
+    }
+
+    if (query.direction) {
+      where.direction = query.direction
+    }
+
+    if (query.dateStart || query.dateEnd) {
+      where.transactionDate = {}
+      if (query.dateStart) {
+        where.transactionDate.gte = parseDateOnly(query.dateStart)
+      }
+      if (query.dateEnd) {
+        where.transactionDate.lte = parseDateOnly(query.dateEnd)
+      }
+    }
+
+    if (query.transactionNo?.trim()) {
+      where.transactionNo = { contains: query.transactionNo.trim() }
+    }
+
+    if (query.partnerKeyword?.trim()) {
+      where.counterpartyName = { contains: query.partnerKeyword.trim() }
+    }
+
+    if (query.status === 'normal') {
+      where.voidedAt = null
+    } else if (query.status === 'voided') {
+      where.voidedAt = { not: null }
+    }
+
+    return where
   }
 
   private toPaymentChannel(channel: PrismaPaymentChannel): PaymentChannel {

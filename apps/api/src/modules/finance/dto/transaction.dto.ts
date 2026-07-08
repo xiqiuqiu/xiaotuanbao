@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -48,10 +49,41 @@ export class CreateFinanceTransactionDto {
   notes?: string
 }
 
+const TRANSACTION_LIST_STATUSES = ['normal', 'voided'] as const
+const TRANSACTION_WRITEOFF_STATUSES = ['none', 'partial', 'done'] as const
+
 export class ListFinanceTransactionsQueryDto {
   @IsOptional()
   @IsString()
   departureId?: string
+
+  @IsOptional()
+  @IsDateString()
+  dateStart?: string
+
+  @IsOptional()
+  @IsDateString()
+  dateEnd?: string
+
+  @IsOptional()
+  @IsEnum(PrismaTransactionDirection)
+  direction?: PrismaTransactionDirection
+
+  @IsOptional()
+  @IsString()
+  partnerKeyword?: string
+
+  @IsOptional()
+  @IsString()
+  transactionNo?: string
+
+  @IsOptional()
+  @IsIn(TRANSACTION_WRITEOFF_STATUSES)
+  writeoffStatus?: (typeof TRANSACTION_WRITEOFF_STATUSES)[number]
+
+  @IsOptional()
+  @IsIn(TRANSACTION_LIST_STATUSES)
+  status?: (typeof TRANSACTION_LIST_STATUSES)[number]
 
   @IsOptional()
   @Type(() => Number)

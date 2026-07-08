@@ -84,6 +84,7 @@ export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
 export { CounterpartyType } from './enums/counterparty-type.enum'
 export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
 export { TransactionDirection } from './enums/transaction-direction.enum'
+export { TransactionWriteoffStatus } from './enums/transaction-writeoff-status.enum'
 export { PaymentChannel } from './enums/payment-channel.enum'
 export { VerificationStatus } from './enums/verification-status.enum'
 export { ResourceKind } from './enums/resource-kind.enum'
@@ -95,6 +96,7 @@ export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
   deriveSettlementLabel,
+  deriveTransactionWriteoffStatus,
   isFinanceTouched,
   formatDepartureNo,
   formatScheduleNo,
@@ -104,6 +106,7 @@ export {
   CounterpartyMismatchError,
   type DeriveScheduleStateInput,
   type SettlementLabelResult,
+  type TransactionWriteoffStatusResult,
   type FinanceTouchedScheduleInput,
   type CounterpartySnapshot,
   PAYMENT_CHANNEL_OPTIONS,

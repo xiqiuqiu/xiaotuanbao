@@ -797,6 +797,203 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.departureId).toBeNull()
   })
 
+  it('filters transactions by direction, transactionNo, status, and writeoffStatus', async () => {
+    const filterPrefix = `${testPrefix}-filter-${Date.now()}`
+
+    const receivable = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${filterPrefix}-应收`, amountCents: 100000 }))
+      .expect(201)
+
+    const receivable2 = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${filterPrefix}-应收2`, amountCents: 30000 }))
+      .expect(201)
+
+    const inflowTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'inflow',
+          amountCents: 50000,
+          transactionDate: '2026-07-10',
+          counterpartyName: `${filterPrefix}-旅行社A`,
+        }),
+      )
+      .expect(201)
+
+    const outflowTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'outflow',
+          amountCents: 20000,
+          transactionDate: '2026-07-10',
+          counterpartyName: `${filterPrefix}-供应商B`,
+        }),
+      )
+      .expect(201)
+
+    const partialTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          amountCents: 50000,
+          transactionDate: '2026-07-11',
+          counterpartyName: '测试旅行社',
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivable.body.data.id}/link-transaction`)
+      .send({ transactionId: partialTx.body.data.id, amountCents: 20000 })
+      .expect(201)
+
+    const doneTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          amountCents: 30000,
+          transactionDate: '2026-07-11',
+          counterpartyName: '测试旅行社',
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivable2.body.data.id}/link-transaction`)
+      .send({ transactionId: doneTx.body.data.id, amountCents: 30000 })
+      .expect(201)
+
+    const voidTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          amountCents: 10000,
+          transactionDate: '2026-07-12',
+          counterpartyName: `${filterPrefix}-作废`,
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/transactions/${voidTx.body.data.id}/void`)
+      .send({})
+      .expect(201)
+
+    const inflowList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ direction: 'inflow', departureId, pageSize: 100, partnerKeyword: filterPrefix })
+      .expect(200)
+
+    expect(inflowList.body.data.items.some((item: { id: string }) => item.id === inflowTx.body.data.id)).toBe(
+      true,
+    )
+    expect(
+      inflowList.body.data.items.every((item: { direction: string }) => item.direction === 'inflow'),
+    ).toBe(true)
+    expect(
+      inflowList.body.data.items.some((item: { id: string }) => item.id === outflowTx.body.data.id),
+    ).toBe(false)
+
+    const txNoList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({
+        transactionNo: inflowTx.body.data.transactionNo.slice(-6),
+        departureId,
+        pageSize: 100,
+      })
+      .expect(200)
+
+    expect(txNoList.body.data.items.some((item: { id: string }) => item.id === inflowTx.body.data.id)).toBe(
+      true,
+    )
+
+    const voidedList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ status: 'voided', departureId, pageSize: 100, partnerKeyword: filterPrefix })
+      .expect(200)
+
+    expect(voidedList.body.data.items.some((item: { id: string }) => item.id === voidTx.body.data.id)).toBe(
+      true,
+    )
+    expect(
+      voidedList.body.data.items.every((item: { voidedAt: string | null }) => item.voidedAt !== null),
+    ).toBe(true)
+
+    const normalList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({
+        status: 'normal',
+        departureId,
+        pageSize: 100,
+        transactionNo: inflowTx.body.data.transactionNo,
+      })
+      .expect(200)
+
+    expect(normalList.body.data.items.some((item: { id: string }) => item.id === inflowTx.body.data.id)).toBe(
+      true,
+    )
+    expect(
+      normalList.body.data.items.every((item: { voidedAt: string | null }) => item.voidedAt === null),
+    ).toBe(true)
+
+    const noneList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ writeoffStatus: 'none', departureId, pageSize: 100, partnerKeyword: filterPrefix })
+      .expect(200)
+
+    expect(noneList.body.data.items.some((item: { id: string }) => item.id === inflowTx.body.data.id)).toBe(
+      true,
+    )
+    expect(
+      noneList.body.data.items.some((item: { id: string }) => item.id === partialTx.body.data.id),
+    ).toBe(false)
+    expect(noneList.body.data.items.some((item: { id: string }) => item.id === doneTx.body.data.id)).toBe(
+      false,
+    )
+
+    const partialList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({
+        writeoffStatus: 'partial',
+        departureId,
+        pageSize: 100,
+        transactionNo: partialTx.body.data.transactionNo,
+      })
+      .expect(200)
+
+    expect(partialList.body.data.items).toHaveLength(1)
+    expect(partialList.body.data.items[0].id).toBe(partialTx.body.data.id)
+    expect(partialList.body.data.items[0].allocatedAmountCents).toBe(20000)
+    expect(partialList.body.data.items[0].unallocatedAmountCents).toBe(30000)
+
+    const doneList = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({
+        writeoffStatus: 'done',
+        departureId,
+        pageSize: 100,
+        transactionNo: doneTx.body.data.transactionNo,
+      })
+      .expect(200)
+
+    expect(doneList.body.data.items).toHaveLength(1)
+    expect(doneList.body.data.items[0].id).toBe(doneTx.body.data.id)
+    expect(doneList.body.data.items[0].allocatedAmountCents).toBe(30000)
+    expect(doneList.body.data.items[0].unallocatedAmountCents).toBe(0)
+
+    const byId = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${partialTx.body.data.id}`)
+      .expect(200)
+
+    expect(byId.body.data.allocatedAmountCents).toBe(partialList.body.data.items[0].allocatedAmountCents)
+    expect(byId.body.data.unallocatedAmountCents).toBe(
+      partialList.body.data.items[0].unallocatedAmountCents,
+    )
+  })
+
   it('returns 403 for coordinator on GET /finance/receivables', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/finance/receivables')

@@ -23,6 +23,13 @@ export interface ListPaymentSchedulesParams {
 
 export interface ListFinanceTransactionsParams {
   departureId?: string
+  dateStart?: string
+  dateEnd?: string
+  direction?: string
+  partnerKeyword?: string
+  transactionNo?: string
+  writeoffStatus?: string
+  status?: string
   page?: number
   pageSize?: number
 }

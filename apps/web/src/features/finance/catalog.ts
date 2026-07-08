@@ -4,6 +4,7 @@ import {
   PAYMENT_CHANNEL_OPTIONS,
   PaymentScheduleStatus,
   TransactionDirection,
+  TransactionWriteoffStatus,
   VerificationStatus,
 } from '@xiaotuanbao/shared'
 
@@ -50,8 +51,8 @@ export const PAYMENT_SCHEDULE_STATUS_COLORS: Record<string, string> = {
 }
 
 export const TRANSACTION_DIRECTION_OPTIONS = [
-  { value: TransactionDirection.INFLOW, label: '流入' },
-  { value: TransactionDirection.OUTFLOW, label: '流出' },
+  { value: TransactionDirection.INFLOW, label: '收入' },
+  { value: TransactionDirection.OUTFLOW, label: '支出' },
 ] as const
 
 export const TRANSACTION_DIRECTION_LABELS = Object.fromEntries(
@@ -62,6 +63,31 @@ export const TRANSACTION_DIRECTION_COLORS: Record<string, string> = {
   [TransactionDirection.INFLOW]: 'green',
   [TransactionDirection.OUTFLOW]: 'orange',
 }
+
+export const TRANSACTION_WRITEOFF_STATUS_OPTIONS = [
+  { value: TransactionWriteoffStatus.NONE, label: '未核销' },
+  { value: TransactionWriteoffStatus.PARTIAL, label: '部分核销' },
+  { value: TransactionWriteoffStatus.DONE, label: '已核销' },
+] as const
+
+export const TRANSACTION_WRITEOFF_STATUS_LABELS = Object.fromEntries(
+  TRANSACTION_WRITEOFF_STATUS_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<TransactionWriteoffStatus, string>
+
+export const TRANSACTION_WRITEOFF_STATUS_COLORS: Record<string, string> = {
+  [TransactionWriteoffStatus.NONE]: 'default',
+  [TransactionWriteoffStatus.PARTIAL]: 'gold',
+  [TransactionWriteoffStatus.DONE]: 'success',
+}
+
+export const TRANSACTION_STATUS_OPTIONS = [
+  { value: 'normal', label: '正常' },
+  { value: 'voided', label: '已作废' },
+] as const
+
+export const TRANSACTION_STATUS_LABELS = Object.fromEntries(
+  TRANSACTION_STATUS_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<'normal' | 'voided', string>
 
 export { PAYMENT_CHANNEL_OPTIONS, PAYMENT_CHANNEL_LABELS }
 
