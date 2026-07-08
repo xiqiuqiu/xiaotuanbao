@@ -13,7 +13,7 @@ import {
   SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, createTestApp, DEPARTURE_NO_REGEX, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Departure API (e2e)', () => {
   let app: INestApplication
@@ -45,7 +45,7 @@ describe('Departure API (e2e)', () => {
       where: {
         organizationId,
         paymentSchedule: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
@@ -55,7 +55,7 @@ describe('Departure API (e2e)', () => {
         verifications: {
           some: {
             paymentSchedule: {
-              departure: { organizationId, departureNo: { startsWith: testPrefix } },
+              departure: { organizationId, name: { startsWith: testPrefix } },
             },
           },
         },
@@ -64,31 +64,31 @@ describe('Departure API (e2e)', () => {
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
-        departure: { departureNo: { startsWith: testPrefix } },
+        departure: { name: { startsWith: testPrefix } },
       },
     })
     await prisma.sourceOrderGuest.deleteMany({
       where: {
         sourceOrder: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.sourceOrder.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.segmentResource.deleteMany({
       where: {
         segment: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.itinerarySegment.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.partner.deleteMany({
@@ -106,7 +106,7 @@ describe('Departure API (e2e)', () => {
     await prisma.departure.deleteMany({
       where: {
         organizationId,
-        departureNo: { startsWith: testPrefix },
+        name: { startsWith: testPrefix },
       },
     })
     await prisma.$disconnect()
@@ -140,32 +140,27 @@ describe('Departure API (e2e)', () => {
     expect(response.body.code).toBe(403)
   })
 
-  it('returns preview departure number for startDate', async () => {
+  it('returns preview departure number for current Shanghai month', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/departures/next-no')
-      .query({ startDate: '2026-08-01' })
       .expect(200)
 
-    expect(response.body.data.departureNo).toMatch(/^DT20260801\d{4}$/)
+    expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
   })
 
   it('returns 403 for finance role on GET /departures/next-no', async () => {
     const response = await authRequest(app, financeToken)
       .get('/api/departures/next-no')
-      .query({ startDate: '2026-08-01' })
       .expect(403)
 
     expect(response.body.code).toBe(403)
   })
 
   it('creates departure with core fields', async () => {
-    const departureNo = `${testPrefix}-001`
-
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send(
         createPayload({
-          departureNo,
           name: `${testPrefix}-create`,
           departureType: DepartureType.independent,
           notes: '测试备注',
@@ -174,7 +169,6 @@ describe('Departure API (e2e)', () => {
       .expect(201)
 
     expect(response.body.data).toMatchObject({
-      departureNo,
       name: `${testPrefix}-create`,
       routeName: '喀纳斯阿勒泰10日线',
       routeSource: 'manual',
@@ -186,26 +180,23 @@ describe('Departure API (e2e)', () => {
       status: DepartureStatus.editing,
       notes: '测试备注',
     })
+    expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
     expect(response.body.data.id).toBeTruthy()
     expect(response.body.data.departureProgress).toBeTruthy()
   })
 
   it('lists departures ordered by updatedAt desc', async () => {
-    const firstNo = `${testPrefix}-list-a`
-    const secondNo = `${testPrefix}-list-b`
-
-    await authRequest(app, coordinatorToken)
+    const first = await authRequest(app, coordinatorToken)
       .post('/api/departures')
-      .send(createPayload({ departureNo: firstNo, name: `${testPrefix}-list-first` }))
+      .send(createPayload({ name: `${testPrefix}-list-first` }))
       .expect(201)
 
     await new Promise((resolve) => setTimeout(resolve, 20))
 
-    await authRequest(app, coordinatorToken)
+    const second = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send(
         createPayload({
-          departureNo: secondNo,
           name: `${testPrefix}-list-second`,
           startDate: '2026-09-01',
           endDate: '2026-09-05',
@@ -220,30 +211,25 @@ describe('Departure API (e2e)', () => {
 
     const items = response.body.data.items as Array<{ departureNo: string }>
     expect(items.length).toBeGreaterThanOrEqual(2)
-    expect(items[0].departureNo).toBe(secondNo)
-    expect(items[1].departureNo).toBe(firstNo)
+    expect(items[0].departureNo).toBe(second.body.data.departureNo)
+    expect(items[1].departureNo).toBe(first.body.data.departureNo)
   })
 
-  it('returns 409 when departureNo duplicates in same organization', async () => {
-    const departureNo = `${testPrefix}-dup`
-
-    await authRequest(app, coordinatorToken)
-      .post('/api/departures')
-      .send(createPayload({ departureNo, name: `${testPrefix}-dup-a` }))
-      .expect(201)
-
+  it('rejects manual departureNo in create request', async () => {
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
-      .send(createPayload({ departureNo, name: `${testPrefix}-dup-b` }))
-      .expect(409)
+      .send(createPayload({ departureNo: `${testPrefix}-manual`, name: `${testPrefix}-manual` }))
+      .expect(400)
 
-    expect(response.body.code).toBe(409)
-    expect(response.body.message).toBe('团号已存在')
+    expect(response.body.code).toBe(400)
   })
 
   it('does not list departures from another organization', async () => {
     const otherOrg = await prisma.organization.create({
-      data: { name: `${testPrefix}-other-org` },
+      data: {
+        name: `${testPrefix}-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testPrefix}-other`),
+      },
     })
 
     const otherUser = await prisma.user.create({
@@ -282,11 +268,9 @@ describe('Departure API (e2e)', () => {
   })
 
   it('filters departures by keyword and status', async () => {
-    const departureNo = `${testPrefix}-filter`
-
-    await authRequest(app, coordinatorToken)
+    const created = await authRequest(app, coordinatorToken)
       .post('/api/departures')
-      .send(createPayload({ departureNo, name: `${testPrefix}-filter-name` }))
+      .send(createPayload({ name: `${testPrefix}-filter-name` }))
       .expect(201)
 
     const response = await authRequest(app, coordinatorToken)
@@ -301,14 +285,13 @@ describe('Departure API (e2e)', () => {
       .expect(200)
 
     expect(response.body.data.items).toHaveLength(1)
-    expect(response.body.data.items[0].departureNo).toBe(departureNo)
+    expect(response.body.data.items[0].departureNo).toBe(created.body.data.departureNo)
   })
 
   async function createTestDeparture(overrides: Record<string, unknown> = {}) {
-    const departureNo = `${testPrefix}-detail-${Math.random().toString(36).slice(2, 8)}`
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
-      .send(createPayload({ departureNo, ...overrides }))
+      .send(createPayload({ ...overrides }))
       .expect(201)
 
     return response.body.data as { id: string; departureNo: string }
@@ -895,12 +878,10 @@ describe('Departure API (e2e)', () => {
     })
 
     async function createReadModelDeparture(suffix = '') {
-      const departureNo = `${testPrefix}-rm${suffix}-${Math.random().toString(36).slice(2, 8)}`
       const response = await authRequest(app, coordinatorToken)
         .post('/api/departures')
         .send(
           createPayload({
-            departureNo,
             name: `${testPrefix}-rm${suffix}`,
             startDate: '2026-08-01',
             endDate: '2026-08-10',

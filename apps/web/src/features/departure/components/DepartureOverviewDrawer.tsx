@@ -41,7 +41,6 @@ export function DepartureOverviewDrawer({
   const saveMutation = useMutation({
     mutationFn: (values: DepartureOverviewFormValues) =>
       updateDeparture(departure.id, {
-        departureNo: values.departureNo,
         name: values.name,
         routeName: values.routeName,
         departureType: values.departureType,
@@ -134,12 +133,8 @@ export function DepartureOverviewDrawer({
           <Input />
         </Form.Item>
 
-        <Form.Item
-          name="departureNo"
-          label="团号"
-          rules={[{ required: true, message: '请输入团号' }]}
-        >
-          <Input />
+        <Form.Item name="departureNo" label="团号">
+          <Input readOnly />
         </Form.Item>
 
         <Form.Item

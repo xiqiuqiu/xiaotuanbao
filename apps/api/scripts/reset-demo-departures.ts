@@ -121,7 +121,7 @@ async function seedDemoDepartures(
   const existingDemo = await prisma.departure.count({
     where: {
       organizationId,
-      departureNo: { startsWith: 'DT2026' },
+      departureNo: { startsWith: 'XTB2026' },
       NOT: E2E_DEPARTURE_FILTER,
     },
   })
@@ -133,7 +133,7 @@ async function seedDemoDepartures(
 
   const demoDepartures = [
     {
-      departureNo: 'DT202608150001',
+      departureNo: 'XTB202608150001',
       name: '喀纳斯阿勒泰10日线 8月15日团',
       routeName: '喀纳斯阿勒泰10日线',
       routeSource: DepartureRouteSource.template,
@@ -199,7 +199,7 @@ async function seedDemoDepartures(
       },
     },
     {
-      departureNo: 'DT202609010001',
+      departureNo: 'XTB2026090001',
       name: '杭州西湖文化2日线 9月1日团',
       routeName: '杭州西湖文化2日线',
       routeSource: DepartureRouteSource.manual,
@@ -251,7 +251,7 @@ async function seedDemoDepartures(
       ],
     },
     {
-      departureNo: 'DT202609100001',
+      departureNo: 'XTB2026090002',
       name: '黄山徽州3日线 9月10日团',
       routeName: '黄山徽州3日线',
       routeSource: DepartureRouteSource.copy,
@@ -294,7 +294,7 @@ async function seedDemoDepartures(
       },
     },
     {
-      departureNo: 'DT202607200001',
+      departureNo: 'XTB2026070001',
       name: '千岛湖休闲1日线 7月20日团',
       routeName: '千岛湖休闲1日线',
       routeSource: DepartureRouteSource.manual,
@@ -324,7 +324,7 @@ async function seedDemoDepartures(
       ],
     },
     {
-      departureNo: 'DT202610010001',
+      departureNo: 'XTB2026100001',
       name: '乌镇西栅2日线 10月1日团',
       routeName: '乌镇西栅2日线',
       routeSource: DepartureRouteSource.manual,

@@ -67,25 +67,25 @@ describe('Departure copy & save template (e2e)', () => {
     await prisma.sourceOrderGuest.deleteMany({
       where: {
         sourceOrder: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.sourceOrder.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.segmentResource.deleteMany({
       where: {
         segment: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.itinerarySegment.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.routeTemplateResource.deleteMany({
@@ -104,7 +104,7 @@ describe('Departure copy & save template (e2e)', () => {
       where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.departure.deleteMany({
-      where: { organizationId, departureNo: { startsWith: testPrefix } },
+      where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.partner.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
@@ -116,16 +116,15 @@ describe('Departure copy & save template (e2e)', () => {
     await app.close()
   })
 
-  async function createRichDeparture(departureNo: string) {
+  async function createRichDeparture(suffix: string) {
     const createResponse = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        name: `${testPrefix}-rich`,
+        name: `${testPrefix}-rich-${suffix}`,
         routeName: `${testPrefix}-喀纳斯线`,
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
-        departureNo,
       })
       .expect(201)
 
@@ -173,7 +172,7 @@ describe('Departure copy & save template (e2e)', () => {
         organizationId,
         departureId,
         direction: PaymentScheduleDirection.receivable,
-        scheduleNo: `${testPrefix}-schedule-${departureNo}`,
+        scheduleNo: `${testPrefix}-schedule-${suffix}`,
         title: '测试应收',
         amountCents: 800000,
         dueDate: new Date('2026-08-01'),
@@ -188,8 +187,7 @@ describe('Departure copy & save template (e2e)', () => {
   }
 
   it('saves route template from departure without finance data', async () => {
-    const departureNo = `${testPrefix}-save-src`
-    const { departureId } = await createRichDeparture(departureNo)
+    const { departureId } = await createRichDeparture('save-src')
 
     const response = await authRequest(app, coordinatorToken)
       .post(`/api/route-templates/from-departure/${departureId}`)
@@ -232,8 +230,7 @@ describe('Departure copy & save template (e2e)', () => {
   })
 
   it('copies departure with segments and resources but without finance', async () => {
-    const departureNo = `${testPrefix}-copy-src`
-    const { departureId } = await createRichDeparture(departureNo)
+    const { departureId } = await createRichDeparture('copy-src')
 
     const response = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/copy`)
@@ -242,7 +239,6 @@ describe('Departure copy & save template (e2e)', () => {
         startDate: '2026-09-01',
         endDate: '2026-09-10',
         ownerUserId,
-        departureNo: `${testPrefix}-copy-dst`,
         copySegments: true,
         copyResources: true,
         copyReferencePrices: true,
@@ -254,6 +250,7 @@ describe('Departure copy & save template (e2e)', () => {
       sourceTemplateId: null,
       routeName: `${testPrefix}-喀纳斯线`,
     })
+    expect(response.body.data.departureNo).toMatch(/^[A-Z]{2,4}\d{6}\d{4}$/)
 
     const copiedDepartureId = response.body.data.id as string
 
@@ -285,8 +282,7 @@ describe('Departure copy & save template (e2e)', () => {
   })
 
   it('keeps copied departure unchanged after source segment rename', async () => {
-    const departureNo = `${testPrefix}-detach-src`
-    const { departureId, segmentId } = await createRichDeparture(departureNo)
+    const { departureId, segmentId } = await createRichDeparture('detach-src')
 
     const copyResponse = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/copy`)
@@ -295,7 +291,6 @@ describe('Departure copy & save template (e2e)', () => {
         startDate: '2026-09-01',
         endDate: '2026-09-10',
         ownerUserId,
-        departureNo: `${testPrefix}-detach-dst`,
       })
       .expect(201)
 

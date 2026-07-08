@@ -40,6 +40,10 @@ _Avoid_: 超管, 系统管理员, super admin
 新 Organization 由 Platform Admin 创建，并生成邀请链接发给客户；客户通过邀请链接设置密码后激活 Organization，并绑定企业管理员 Role。
 _Avoid_: 自助注册, 开放注册
 
+**Organization Business Prefix（组织业务前缀）**:
+Organization 创建时必填、仅可设置一次的 2–4 位大写英文字母标识，用于生成发团编号及财务类业务编号。未设置前缀的 Organization 不得创建发团、收付款节点、流水或核销。前缀建议全系统唯一。
+_Avoid_: 租户代码, 组织编码, 创建后补设前缀
+
 ## Roles
 
 **Role Assignment**:

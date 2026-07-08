@@ -74,7 +74,6 @@ describe('departure-wizard-form', () => {
       startDate: '2026-08-01',
       endDate: '2026-08-10',
       ownerUserId: 'user-1',
-      departureNo: 'DT202608010001',
       departureType: DepartureType.COMBINED,
       notes: '备注',
     })

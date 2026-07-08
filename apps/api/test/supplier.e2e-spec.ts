@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import { DirectoryProfileStatus, SupplierCategory } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Supplier API (e2e)', () => {
   let app: INestApplication
@@ -168,7 +168,10 @@ describe('Supplier API (e2e)', () => {
 
   it('returns 404 when supplier does not belong to current organization', async () => {
     const otherOrg = await prisma.organization.create({
-      data: { name: `${testSupplierPrefix}-other-org` },
+      data: {
+        name: `${testSupplierPrefix}-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testSupplierPrefix}-other`),
+      },
     })
 
     const foreignSupplier = await prisma.supplier.create({

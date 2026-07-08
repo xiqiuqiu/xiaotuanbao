@@ -3,16 +3,16 @@ import type {
   FinanceTransactionListResult,
   FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
-import { generateTransactionNo, TransactionDirection } from '@xiaotuanbao/shared'
+import { TransactionDirection } from '@xiaotuanbao/shared'
 import {
   TransactionDirection as PrismaTransactionDirection,
   type FinanceTransaction,
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import {
   formatDateOnly,
-  getShanghaiTodayString,
   parseDateOnly,
 } from '../departure/departure-date.utils'
 import type {
@@ -27,6 +27,7 @@ export class TransactionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly verificationService: VerificationService,
+    private readonly numberAllocationService: NumberAllocationService,
   ) {}
 
   async list(
@@ -90,8 +91,10 @@ export class TransactionService {
       await this.ensureDepartureExists(organizationId, dto.departureId, client)
     }
 
-    const businessDate = getShanghaiTodayString()
-    const transactionNo = await this.allocateTransactionNo(organizationId, businessDate, client)
+    const transactionNo = await this.numberAllocationService.allocateTransactionNo(
+      organizationId,
+      client,
+    )
 
     const transaction = await client.financeTransaction.create({
       data: {
@@ -162,27 +165,6 @@ export class TransactionService {
     if (!departure) {
       throw new NotFoundException('发团不存在')
     }
-  }
-
-  private async allocateTransactionNo(
-    organizationId: string,
-    businessDate: string,
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
-  ): Promise<string> {
-    const datePart = businessDate.replace(/-/g, '')
-    const prefix = `TR${datePart}`
-
-    const latest = await client.financeTransaction.findFirst({
-      where: {
-        organizationId,
-        transactionNo: { startsWith: prefix },
-      },
-      orderBy: { transactionNo: 'desc' },
-      select: { transactionNo: true },
-    })
-
-    const lastSequence = latest ? Number(latest.transactionNo.slice(-4)) : 0
-    return generateTransactionNo(businessDate, lastSequence + 1)
   }
 
   private toSummary(

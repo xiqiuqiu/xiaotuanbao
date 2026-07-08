@@ -109,7 +109,6 @@ export function buildCreateDeparturePayload(
     startDate: info.startDate,
     endDate: info.endDate,
     ownerUserId: info.ownerUserId,
-    departureNo: info.departureNo.trim() || undefined,
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
   }
@@ -133,7 +132,6 @@ export function buildCopyDeparturePayload(
     startDate: info.startDate,
     endDate: info.endDate,
     ownerUserId: info.ownerUserId,
-    departureNo: info.departureNo.trim() || undefined,
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
     copySegments: route.copySegments ?? true,

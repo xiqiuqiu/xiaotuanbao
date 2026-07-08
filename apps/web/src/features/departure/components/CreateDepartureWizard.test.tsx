@@ -50,7 +50,7 @@ import { getRouteTemplate, listRouteTemplates } from '@/services/route-template.
 
 const mockDeparture: DepartureSummary = {
   id: 'departure-1',
-  departureNo: 'DT202608010001',
+  departureNo: 'XTB2026070001',
   name: '喀纳斯阿勒泰10日线 8月1日团',
   routeName: '喀纳斯阿勒泰10日线',
   routeSource: 'manual',
@@ -101,7 +101,7 @@ describe('CreateDepartureWizard', () => {
   })
 
   beforeEach(() => {
-    vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'DT202608010001' })
+    vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(listEmployees).mockResolvedValue({

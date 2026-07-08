@@ -95,6 +95,7 @@ async function seedDemoOrganization() {
     organization = await prisma.organization.create({
       data: {
         name: orgName,
+        businessPrefix: process.env.SEED_ORG_BUSINESS_PREFIX ?? 'XTB',
         users: {
           create: {
             username: adminUsername,
@@ -107,6 +108,11 @@ async function seedDemoOrganization() {
       },
     })
     console.log(`Seeded organization "${organization.name}" with admin user "${adminUsername}".`)
+  } else if (!organization.businessPrefix) {
+    organization = await prisma.organization.update({
+      where: { id: organization.id },
+      data: { businessPrefix: process.env.SEED_ORG_BUSINESS_PREFIX ?? 'XTB' },
+    })
   }
 
   await assignRole(adminUsername, organization.id, PRESET_ROLE_NAMES.ORG_ADMIN)

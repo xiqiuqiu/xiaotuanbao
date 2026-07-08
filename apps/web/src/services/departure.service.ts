@@ -39,12 +39,8 @@ export async function copyDeparture(
   return request.post<DepartureSummary>(`/departures/${sourceDepartureId}/copy`, payload)
 }
 
-export async function previewDepartureNo(
-  startDate: string,
-): Promise<{ departureNo: string }> {
-  return request.get<{ departureNo: string }>('/departures/next-no', {
-    params: { startDate },
-  })
+export async function previewDepartureNo(): Promise<{ departureNo: string }> {
+  return request.get<{ departureNo: string }>('/departures/next-no')
 }
 
 export async function getDeparture(id: string): Promise<DepartureDetail> {

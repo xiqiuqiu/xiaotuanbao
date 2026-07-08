@@ -1,8 +1,9 @@
 export { deriveScheduleState, type DeriveScheduleStateInput } from './derive-schedule-state'
 export { isFinanceTouched, type FinanceTouchedScheduleInput } from './is-finance-touched'
-export { generateScheduleNo } from './generate-schedule-no'
-export { generateTransactionNo } from './generate-transaction-no'
-export { generateVerificationNo } from './generate-verification-no'
+export { formatDepartureNo } from './format-departure-no'
+export { formatScheduleNo } from './format-schedule-no'
+export { formatTransactionNo } from './format-transaction-no'
+export { formatVerificationNo } from './format-verification-no'
 export {
   assertCounterpartyMatch,
   CounterpartyMismatchError,

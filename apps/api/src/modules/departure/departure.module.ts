@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
 import { FinanceModule } from '../finance/finance.module'
+import { NumberAllocationModule } from '../number-allocation/number-allocation.module'
 import { DepartureController } from './departure.controller'
 import { DepartureService } from './departure.service'
 import { DepartureReadModelService } from './departure-read-model.service'
@@ -18,7 +19,7 @@ import { DepartureFinanceBridgeService } from './departure-finance-bridge.servic
 import { DepartureFinanceReadController } from './departure-finance-read.controller'
 
 @Module({
-  imports: [AuthModule, FinanceModule],
+  imports: [AuthModule, FinanceModule, NumberAllocationModule],
   controllers: [
     DepartureController,
     DepartureFinanceReadController,

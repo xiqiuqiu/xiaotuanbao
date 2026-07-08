@@ -406,7 +406,7 @@ packages/shared/src/enums/finance*.ts
 - 金额：**整数分**；展示层格式化为元。
 - 币种：**CNY** 固定。
 - 业务日：**Asia/Shanghai** 日期粒度。
-- 节点编号：`ARyyyyMMdd####` / `APyyyyMMdd####`；流水 `TRyyyyMMdd####`。
+- 业务编号规则见 [ADR-0003：业务编号规则](../adr/0003-business-document-numbering.md)（组织前缀 `XTB` + 年月流水；财务 `AR`/`AP`/`TX`/`CL` 族）。
 
 ### 与生产（dijieshe）差异摘要
 

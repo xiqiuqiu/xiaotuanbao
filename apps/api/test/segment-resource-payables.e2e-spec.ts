@@ -11,7 +11,7 @@ import {
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs } from './helpers'
 
 describe('Segment resource generate payables (e2e)', () => {
   let app: INestApplication
@@ -66,7 +66,7 @@ describe('Segment resource generate payables (e2e)', () => {
       where: {
         organizationId,
         paymentSchedule: {
-          departure: { departureNo: { startsWith: testPrefix } },
+          departure: { name: { startsWith: testPrefix } },
         },
       },
     })
@@ -76,7 +76,7 @@ describe('Segment resource generate payables (e2e)', () => {
         verifications: {
           some: {
             paymentSchedule: {
-              departure: { departureNo: { startsWith: testPrefix } },
+              departure: { name: { startsWith: testPrefix } },
             },
           },
         },
@@ -85,19 +85,19 @@ describe('Segment resource generate payables (e2e)', () => {
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
-        departure: { departureNo: { startsWith: testPrefix } },
+        departure: { name: { startsWith: testPrefix } },
       },
     })
     await prisma.segmentResource.deleteMany({
       where: {
         segment: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.itinerarySegment.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.supplier.deleteMany({
@@ -107,18 +107,16 @@ describe('Segment resource generate payables (e2e)', () => {
       where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.departure.deleteMany({
-      where: { organizationId, departureNo: { startsWith: testPrefix } },
+      where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.$disconnect()
     await app.close()
   })
 
   async function createDeparture() {
-    const departureNo = `${testPrefix}-${Math.random().toString(36).slice(2, 8)}`
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        departureNo,
         name: `${testPrefix}-团`,
         routeName: '测试路线',
         startDate: '2026-07-01',
@@ -182,7 +180,7 @@ describe('Segment resource generate payables (e2e)', () => {
       counterpartyId: supplierId,
       title: '喀纳斯用车',
     })
-    expect(response.body.data.schedule.scheduleNo).toMatch(/^AP\d{8}\d{4}$/)
+    expect(response.body.data.schedule.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
 
     expect(response.body.data.resource).toMatchObject({
       hasPaymentSchedule: true,

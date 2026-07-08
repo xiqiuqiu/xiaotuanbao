@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config'
 import appConfig from './config/app.config'
 import { AuthModule } from './modules/auth/auth.module'
 import { HealthModule } from './modules/health/health.module'
+import { NumberAllocationModule } from './modules/number-allocation/number-allocation.module'
 import { OrganizationModule } from './modules/organization/organization.module'
 import { RoleModule } from './modules/role/role.module'
 import { UserModule } from './modules/user/user.module'
@@ -20,6 +21,7 @@ import { PrismaModule } from './database/prisma/prisma.module'
       envFilePath: ['.env', '../../.env'],
     }),
     PrismaModule,
+    NumberAllocationModule,
     AuthModule,
     HealthModule,
     RoleModule,

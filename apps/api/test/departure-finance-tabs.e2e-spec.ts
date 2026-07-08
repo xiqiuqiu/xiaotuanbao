@@ -55,7 +55,7 @@ describe('Departure finance tabs (e2e)', () => {
       where: {
         organizationId,
         paymentSchedule: {
-          departure: { departureNo: { startsWith: testPrefix } },
+          departure: { name: { startsWith: testPrefix } },
         },
       },
     })
@@ -65,7 +65,7 @@ describe('Departure finance tabs (e2e)', () => {
         verifications: {
           some: {
             paymentSchedule: {
-              departure: { departureNo: { startsWith: testPrefix } },
+              departure: { name: { startsWith: testPrefix } },
             },
           },
         },
@@ -74,37 +74,35 @@ describe('Departure finance tabs (e2e)', () => {
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
-        departure: { departureNo: { startsWith: testPrefix } },
+        departure: { name: { startsWith: testPrefix } },
       },
     })
     await prisma.sourceOrderGuest.deleteMany({
       where: {
         sourceOrder: {
-          departure: { organizationId, departureNo: { startsWith: testPrefix } },
+          departure: { organizationId, name: { startsWith: testPrefix } },
         },
       },
     })
     await prisma.sourceOrder.deleteMany({
       where: {
-        departure: { organizationId, departureNo: { startsWith: testPrefix } },
+        departure: { organizationId, name: { startsWith: testPrefix } },
       },
     })
     await prisma.partner.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.departure.deleteMany({
-      where: { organizationId, departureNo: { startsWith: testPrefix } },
+      where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.$disconnect()
     await app.close()
   })
 
   async function createDeparture(suffix = '') {
-    const departureNo = `${testPrefix}${suffix}-${Math.random().toString(36).slice(2, 8)}`
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        departureNo,
         name: `${testPrefix}-团${suffix}`,
         routeName: '测试路线',
         startDate: '2026-07-01',

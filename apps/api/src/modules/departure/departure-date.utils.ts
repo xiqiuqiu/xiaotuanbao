@@ -14,6 +14,10 @@ export function getShanghaiTodayString(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: SHANGHAI_TIME_ZONE }).format(new Date())
 }
 
+export function getShanghaiYearMonthString(): string {
+  return getShanghaiTodayString().replace(/-/g, '').slice(0, 6)
+}
+
 export function computeDayCount(startDate: Date, endDate: Date): number {
   const startMs = parseDateOnly(formatDateOnly(startDate)).getTime()
   const endMs = parseDateOnly(formatDateOnly(endDate)).getTime()

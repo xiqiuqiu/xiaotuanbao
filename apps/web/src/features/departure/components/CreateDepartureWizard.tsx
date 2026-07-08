@@ -35,7 +35,6 @@ export function CreateDepartureWizard() {
   const [currentStep, setCurrentStep] = useState(0)
   const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
   const [initializingStep2, setInitializingStep2] = useState(false)
-  const [regeneratingNo, setRegeneratingNo] = useState(false)
   const [copyModalOpen, setCopyModalOpen] = useState(false)
   const [copyModalMode, setCopyModalMode] = useState<'template' | 'departure'>('template')
   const [copyModalValues, setCopyModalValues] = useState<TemplateCopyModalState>({
@@ -57,8 +56,8 @@ export function CreateDepartureWizard() {
     setCopyModalOpen,
   })
 
-  const loadDepartureNo = useCallback(async (startDate: string) => {
-    const result = await previewDepartureNo(startDate)
+  const loadDepartureNo = useCallback(async () => {
+    const result = await previewDepartureNo()
     infoForm.setFieldValue('departureNo', result.departureNo)
     return result.departureNo
   }, [infoForm])
@@ -79,7 +78,7 @@ export function CreateDepartureWizard() {
         '',
       )
       infoForm.setFieldsValue(initialValues)
-      await loadDepartureNo(startDate)
+      await loadDepartureNo()
       setCurrentStep(1)
     } catch (error) {
       message.error(error instanceof Error ? error.message : '团号预生成失败')
@@ -125,24 +124,6 @@ export function CreateDepartureWizard() {
     setRouteValues(nextRouteValues)
     setCopyModalOpen(false)
     await goToInfoStep(nextRouteValues)
-  }
-
-  const handleRegenerateDepartureNo = async () => {
-    const startDate = infoForm.getFieldValue('startDate') as string | undefined
-    if (!startDate) {
-      message.warning('请先选择出团日期')
-      return
-    }
-
-    setRegeneratingNo(true)
-    try {
-      await loadDepartureNo(startDate)
-      message.success('团号已重新生成')
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '团号生成失败')
-    } finally {
-      setRegeneratingNo(false)
-    }
   }
 
   const createMutation = useMutation({
@@ -211,8 +192,6 @@ export function CreateDepartureWizard() {
           <CreateDepartureStepInfo
             form={infoForm}
             route={routeValues}
-            regeneratingNo={regeneratingNo}
-            onRegenerateDepartureNo={handleRegenerateDepartureNo}
           />
         )}
 

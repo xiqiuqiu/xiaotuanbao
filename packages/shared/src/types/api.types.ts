@@ -45,6 +45,14 @@ export interface RoleSummary {
 export interface OrganizationSummary {
   id: string
   name: string
+  businessPrefix: string
+  numberingExamples: {
+    departure: string
+    receivable: string
+    payable: string
+    transaction: string
+    verification: string
+  }
 }
 
 export interface EmployeeSummary {
@@ -182,7 +190,6 @@ export interface CreateDepartureDto {
   startDate: string
   endDate: string
   ownerUserId: string
-  departureNo?: string
   departureType?: string
   notes?: string
   templateId?: string
@@ -196,7 +203,6 @@ export interface CopyDepartureDto {
   startDate: string
   endDate: string
   ownerUserId: string
-  departureNo?: string
   departureType?: string
   notes?: string
   copySegments?: boolean
@@ -205,7 +211,6 @@ export interface CopyDepartureDto {
 }
 
 export interface UpdateDepartureDto {
-  departureNo?: string
   name?: string
   routeName?: string
   departureType?: string

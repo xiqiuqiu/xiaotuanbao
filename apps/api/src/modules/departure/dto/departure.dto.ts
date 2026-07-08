@@ -35,11 +35,6 @@ export class CreateDepartureDto {
   ownerUserId!: string
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  departureNo?: string
-
-  @IsOptional()
   @IsEnum(PrismaDepartureType)
   departureType?: PrismaDepartureType
 
@@ -62,11 +57,6 @@ export class CreateDepartureDto {
   @IsOptional()
   @IsBoolean()
   copyReferencePrices?: boolean
-}
-
-export class NextDepartureNoQueryDto {
-  @IsDateString()
-  startDate!: string
 }
 
 export class ListDeparturesQueryDto {
@@ -123,11 +113,6 @@ export class UpdateDepartureDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  departureNo?: string
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
   name?: string
 
   @IsOptional()
@@ -176,11 +161,6 @@ export class CopyDepartureDto {
   @IsString()
   @IsNotEmpty()
   ownerUserId!: string
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  departureNo?: string
 
   @IsOptional()
   @IsEnum(PrismaDepartureType)

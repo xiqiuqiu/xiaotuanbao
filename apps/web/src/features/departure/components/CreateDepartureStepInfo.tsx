@@ -1,5 +1,4 @@
-import { ReloadOutlined } from '@ant-design/icons'
-import { Button, Card, Col, DatePicker, Form, Input, Row, Select, Space, Typography } from 'antd'
+import { Card, Col, DatePicker, Form, Input, Row, Select, Typography } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -17,8 +16,6 @@ import {
 interface CreateDepartureStepInfoProps {
   form: FormInstance<InfoFormValues>
   route: RouteStepValues
-  regeneratingNo: boolean
-  onRegenerateDepartureNo: () => void
 }
 
 function toDayjs(value?: string): Dayjs | null {
@@ -28,8 +25,6 @@ function toDayjs(value?: string): Dayjs | null {
 export function CreateDepartureStepInfo({
   form,
   route,
-  regeneratingNo,
-  onRegenerateDepartureNo,
 }: CreateDepartureStepInfoProps) {
   const defaultDayCount = route.defaultDayCount
   const copySummary = buildRouteSummary(route)
@@ -95,24 +90,12 @@ export function CreateDepartureStepInfo({
             <Input placeholder="路线名称 + 出团日期" />
           </Form.Item>
 
-          <Form.Item label="团号" required>
-            <Space.Compact style={{ width: '100%' }}>
-              <Form.Item
-                name="departureNo"
-                noStyle
-                rules={[{ required: true, message: '请输入团号' }]}
-              >
-                <Input placeholder="自动生成" />
-              </Form.Item>
-              <Button
-                icon={<ReloadOutlined />}
-                loading={regeneratingNo}
-                onClick={onRegenerateDepartureNo}
-              >
-                重新生成
-              </Button>
-            </Space.Compact>
+          <Form.Item name="departureNo" label="团号">
+            <Input readOnly placeholder="系统自动分配" />
           </Form.Item>
+          <Typography.Paragraph type="secondary" style={{ marginTop: -16 }}>
+            团号由系统按创建年月自动分配，创建后不可修改。
+          </Typography.Paragraph>
 
           <Form.Item
             name="departureType"
@@ -127,68 +110,45 @@ export function CreateDepartureStepInfo({
             label="出团日期"
             rules={[{ required: true, message: '请选择出团日期' }]}
             getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
-            getValueFromEvent={(value: Dayjs | null) => value?.format('YYYY-MM-DD')}
           >
-            <DatePicker
-              style={{ width: '100%' }}
-              onChange={handleStartDateChange}
-            />
+            <DatePicker style={{ width: '100%' }} onChange={handleStartDateChange} />
           </Form.Item>
 
           <Form.Item
             name="endDate"
             label="结束日期"
-            dependencies={['startDate']}
-            rules={[
-              { required: true, message: '请选择结束日期' },
-              ({ getFieldValue }) => ({
-                validator(_, value: string | undefined) {
-                  const startDate = getFieldValue('startDate') as string | undefined
-                  if (!startDate || !value || value >= startDate) {
-                    return Promise.resolve()
-                  }
-                  return Promise.reject(new Error('结束日期不能早于出团日期'))
-                },
-              }),
-            ]}
+            rules={[{ required: true, message: '请选择结束日期' }]}
             getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
-            getValueFromEvent={(value: Dayjs | null) => value?.format('YYYY-MM-DD')}
           >
-            <DatePicker
-              style={{ width: '100%' }}
-              onChange={handleEndDateChange}
-            />
+            <DatePicker style={{ width: '100%' }} onChange={handleEndDateChange} />
           </Form.Item>
 
-          <Form.Item name="dayCount" label="团期天数">
+          <Form.Item name="dayCount" label="天数">
             <Input readOnly />
           </Form.Item>
 
           <Form.Item
             name="ownerUserId"
-            label="发团负责人"
+            label="负责人"
             rules={[{ required: true, message: '请选择负责人' }]}
           >
-            <Select options={employeeOptions} showSearch optionFilterProp="label" />
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={employeeOptions}
+              placeholder="选择负责人"
+            />
           </Form.Item>
 
           <Form.Item name="notes" label="备注">
-            <Input.TextArea rows={3} placeholder="特殊说明（可选）" />
+            <Input.TextArea rows={3} placeholder="可选" />
           </Form.Item>
         </Form>
       </Col>
 
       <Col xs={24} lg={8}>
-        <Card title={route.mode === 'copy' ? '复制来源' : '已选路线'} size="small">
-          <Typography.Paragraph strong style={{ marginBottom: 8 }}>
-            {route.routeName || '—'}
-          </Typography.Paragraph>
-          <Typography.Text type="secondary">
-            {route.defaultDayCount ? `默认 ${route.defaultDayCount} 天` : '未设置默认天数'}
-          </Typography.Text>
-          <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-            {copySummary ?? '无模板复制项'}
-          </Typography.Paragraph>
+        <Card size="small" title="路线摘要">
+          {copySummary ? <Typography.Text type="secondary">{copySummary}</Typography.Text> : null}
         </Card>
       </Col>
     </Row>

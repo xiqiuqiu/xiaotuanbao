@@ -3,10 +3,10 @@ import type {
   FinanceVerificationListResult,
   FinanceVerificationSummary,
 } from '@xiaotuanbao/shared'
-import { generateVerificationNo, VerificationStatus } from '@xiaotuanbao/shared'
+import { VerificationStatus } from '@xiaotuanbao/shared'
 import { VerificationStatus as PrismaVerificationStatus, type Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import { getShanghaiTodayString } from '../departure/departure-date.utils'
+import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import type {
   CreateFinanceVerificationDto,
   ListFinanceVerificationsQueryDto,
@@ -14,7 +14,10 @@ import type {
 
 @Injectable()
 export class VerificationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly numberAllocationService: NumberAllocationService,
+  ) {}
 
   async list(
     organizationId: string,
@@ -98,8 +101,10 @@ export class VerificationService {
       dto.amountCents,
     )
 
-    const businessDate = getShanghaiTodayString()
-    const verificationNo = await this.allocateVerificationNo(organizationId, businessDate, client)
+    const verificationNo = await this.numberAllocationService.allocateVerificationNo(
+      organizationId,
+      client,
+    )
 
     const verification = await client.financeVerification.create({
       data: {
@@ -242,27 +247,6 @@ export class VerificationService {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
       throw new BadRequestException('金额必须大于 0')
     }
-  }
-
-  private async allocateVerificationNo(
-    organizationId: string,
-    businessDate: string,
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
-  ): Promise<string> {
-    const datePart = businessDate.replace(/-/g, '')
-    const prefix = `VR${datePart}`
-
-    const latest = await client.financeVerification.findFirst({
-      where: {
-        organizationId,
-        verificationNo: { startsWith: prefix },
-      },
-      orderBy: { verificationNo: 'desc' },
-      select: { verificationNo: true },
-    })
-
-    const lastSequence = latest ? Number(latest.verificationNo.slice(-4)) : 0
-    return generateVerificationNo(businessDate, lastSequence + 1)
   }
 
   private toSummary(verification: {

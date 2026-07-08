@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import { DirectoryProfileStatus, PartnerKind, PartnerType } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Partner API (e2e)', () => {
   let app: INestApplication
@@ -352,7 +352,10 @@ describe('Partner API (e2e)', () => {
 
   it('returns 404 when partner does not belong to current organization', async () => {
     const otherOrg = await prisma.organization.create({
-      data: { name: `${testPartnerPrefix}-other-org` },
+      data: {
+        name: `${testPartnerPrefix}-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testPartnerPrefix}-other`),
+      },
     })
 
     const foreignPartner = await prisma.partner.create({
@@ -457,7 +460,10 @@ describe('Partner API (e2e)', () => {
 
   it('returns 404 when PATCH partner belongs to another organization', async () => {
     const otherOrg = await prisma.organization.create({
-      data: { name: `${testPartnerPrefix}-patch-other-org` },
+      data: {
+        name: `${testPartnerPrefix}-patch-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testPartnerPrefix}-patch`),
+      },
     })
 
     const foreignPartner = await prisma.partner.create({

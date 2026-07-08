@@ -21,7 +21,6 @@ import {
   CreateDepartureDto,
   CopyDepartureDto,
   ListDeparturesQueryDto,
-  NextDepartureNoQueryDto,
   TransitionDepartureDto,
   UpdateDepartureDto,
 } from './dto/departure.dto'
@@ -45,12 +44,8 @@ export class DepartureController {
   @RequireMenu('/departure')
   previewNextNo(
     @Req() request: { user: { organizationId: string } },
-    @Query() query: NextDepartureNoQueryDto,
   ): Promise<{ departureNo: string }> {
-    return this.departureService.previewNextDepartureNo(
-      request.user.organizationId,
-      query.startDate,
-    )
+    return this.departureService.previewNextDepartureNo(request.user.organizationId)
   }
 
   @Post()

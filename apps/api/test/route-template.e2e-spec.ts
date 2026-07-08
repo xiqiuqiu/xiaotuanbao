@@ -52,7 +52,7 @@ describe('Route Template API (e2e)', () => {
         segment: {
           departure: {
             organizationId,
-            departureNo: { startsWith: testPrefix },
+            name: { startsWith: testPrefix },
           },
         },
       },
@@ -61,14 +61,14 @@ describe('Route Template API (e2e)', () => {
       where: {
         departure: {
           organizationId,
-          departureNo: { startsWith: testPrefix },
+          name: { startsWith: testPrefix },
         },
       },
     })
     await prisma.departure.deleteMany({
       where: {
         organizationId,
-        departureNo: { startsWith: testPrefix },
+        name: { startsWith: testPrefix },
       },
     })
     await prisma.routeTemplateResource.deleteMany({
@@ -162,7 +162,6 @@ describe('Route Template API (e2e)', () => {
     const template = await createTemplate()
     expect(template.usageCount).toBe(0)
 
-    const departureNo = `${testPrefix}-001`
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
@@ -171,7 +170,6 @@ describe('Route Template API (e2e)', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
-        departureNo,
         templateId: template.id,
         copySegments: true,
         copyResources: true,
@@ -217,8 +215,6 @@ describe('Route Template API (e2e)', () => {
 
   it('zeros reference prices when copyReferencePrices is false', async () => {
     const template = await createTemplate()
-    const departureNo = `${testPrefix}-002`
-
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
@@ -227,7 +223,6 @@ describe('Route Template API (e2e)', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
-        departureNo,
         templateId: template.id,
         copyReferencePrices: false,
       })
@@ -244,8 +239,6 @@ describe('Route Template API (e2e)', () => {
 
   it('keeps departure segments unchanged after template segment rename', async () => {
     const template = await createTemplate()
-    const departureNo = `${testPrefix}-003`
-
     const createResponse = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
@@ -254,7 +247,6 @@ describe('Route Template API (e2e)', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
-        departureNo,
         templateId: template.id,
       })
       .expect(201)

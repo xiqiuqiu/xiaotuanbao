@@ -16,20 +16,39 @@ export function OrganizationPage() {
     )
   }
 
+  const examples = organization?.numberingExamples
+
   return (
     <div>
       <Typography.Title level={4} style={{ marginTop: 0 }}>
         组织管理
       </Typography.Title>
       <Typography.Paragraph type="secondary">
-        第一版仅展示当前 Organization 基本信息。
+        组织业务前缀在 Organization 创建时设定，用于生成发团与财务类业务编号，设置后不可修改。
       </Typography.Paragraph>
 
-      <Card>
+      <Card title="组织信息" style={{ marginBottom: 16 }}>
         <Descriptions column={1} bordered size="small">
           <Descriptions.Item label="Organization ID">{organization?.id}</Descriptions.Item>
           <Descriptions.Item label="Organization 名称">{organization?.name}</Descriptions.Item>
         </Descriptions>
+      </Card>
+
+      <Card title="编号设置">
+        <Descriptions column={1} bordered size="small">
+          <Descriptions.Item label="组织业务前缀">
+            {organization?.businessPrefix ?? '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="设置状态">已设置，不可修改</Descriptions.Item>
+          <Descriptions.Item label="发团编号示例">{examples?.departure ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="应收编号示例">{examples?.receivable ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="应付编号示例">{examples?.payable ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="流水编号示例">{examples?.transaction ?? '—'}</Descriptions.Item>
+          <Descriptions.Item label="核销编号示例">{examples?.verification ?? '—'}</Descriptions.Item>
+        </Descriptions>
+        <Typography.Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0 }}>
+          组织业务前缀用于生成团单、应收、应付和流水编号。支持 2 到 4 位大写英文字母，设置后不可修改。
+        </Typography.Paragraph>
       </Card>
     </div>
   )

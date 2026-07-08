@@ -30,13 +30,13 @@ import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
 import { DepartureReadModelService } from './departure-read-model.service'
+import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import {
   emptyDepartureReadModelAggregate,
   type DepartureReadModelAggregate,
 } from './departure-read-model.utils'
 
 const UPDATE_DEPARTURE_FIELDS = [
-  'departureNo',
   'name',
   'routeName',
   'departureType',
@@ -59,6 +59,7 @@ export class DepartureService {
     private readonly routeTemplateCopyService: RouteTemplateCopyService,
     private readonly departureCopyService: DepartureCopyService,
     private readonly departureReadModelService: DepartureReadModelService,
+    private readonly numberAllocationService: NumberAllocationService,
   ) {}
 
   async list(
@@ -121,12 +122,8 @@ export class DepartureService {
     }
   }
 
-  async previewNextDepartureNo(
-    organizationId: string,
-    startDateStr: string,
-  ): Promise<{ departureNo: string }> {
-    const startDate = parseDateOnly(startDateStr)
-    const departureNo = await this.generateDepartureNo(organizationId, startDate)
+  async previewNextDepartureNo(organizationId: string): Promise<{ departureNo: string }> {
+    const departureNo = await this.numberAllocationService.previewDepartureNo(organizationId)
     return { departureNo }
   }
 
@@ -164,15 +161,11 @@ export class DepartureService {
       throw new BadRequestException('路线名称不能为空')
     }
 
-    const departureNo =
-      dto.departureNo?.trim() ||
-      (await this.generateDepartureNo(organizationId, startDate))
-
-    await this.ensureDepartureNoAvailable(organizationId, departureNo)
-
     const dayCount = computeDayCount(startDate, endDate)
 
     const departure = await this.prisma.$transaction(async (tx) => {
+      const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
+
       const created = await tx.departure.create({
         data: {
           organizationId,
@@ -242,15 +235,11 @@ export class DepartureService {
 
     await this.ensureOwnerInOrganization(organizationId, dto.ownerUserId)
 
-    const departureNo =
-      dto.departureNo?.trim() ||
-      (await this.generateDepartureNo(organizationId, startDate))
-
-    await this.ensureDepartureNoAvailable(organizationId, departureNo)
-
     const dayCount = computeDayCount(startDate, endDate)
 
     const departure = await this.prisma.$transaction(async (tx) => {
+      const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
+
       const created = await tx.departure.create({
         data: {
           organizationId,
@@ -310,15 +299,6 @@ export class DepartureService {
     }
 
     const data: Prisma.DepartureUpdateInput = {}
-
-    if (dto.departureNo !== undefined) {
-      const departureNo = dto.departureNo.trim()
-      if (!departureNo) {
-        throw new BadRequestException('团号不能为空')
-      }
-      await this.ensureDepartureNoAvailable(organizationId, departureNo, departure.id)
-      data.departureNo = departureNo
-    }
 
     if (dto.name !== undefined) {
       const name = dto.name.trim()
@@ -472,24 +452,6 @@ export class DepartureService {
     return departure
   }
 
-  private async ensureDepartureNoAvailable(
-    organizationId: string,
-    departureNo: string,
-    excludeId?: string,
-  ) {
-    const existing = await this.prisma.departure.findFirst({
-      where: {
-        organizationId,
-        departureNo,
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-      },
-    })
-
-    if (existing) {
-      throw new ConflictException('团号已存在')
-    }
-  }
-
   private async ensureOwnerInOrganization(organizationId: string, ownerUserId: string) {
     const owner = await this.prisma.user.findFirst({
       where: {
@@ -502,20 +464,6 @@ export class DepartureService {
     if (!owner) {
       throw new BadRequestException('负责人不存在或不属于当前企业')
     }
-  }
-
-  private async generateDepartureNo(organizationId: string, startDate: Date): Promise<string> {
-    const datePart = formatDateOnly(startDate).replace(/-/g, '')
-    const prefix = `DT${datePart}`
-
-    const count = await this.prisma.departure.count({
-      where: {
-        organizationId,
-        departureNo: { startsWith: prefix },
-      },
-    })
-
-    return `${prefix}${String(count + 1).padStart(4, '0')}`
   }
 
   private toDepartureDetail(

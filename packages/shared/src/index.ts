@@ -94,9 +94,10 @@ export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
   isFinanceTouched,
-  generateScheduleNo,
-  generateTransactionNo,
-  generateVerificationNo,
+  formatDepartureNo,
+  formatScheduleNo,
+  formatTransactionNo,
+  formatVerificationNo,
   assertCounterpartyMatch,
   CounterpartyMismatchError,
   type DeriveScheduleStateInput,

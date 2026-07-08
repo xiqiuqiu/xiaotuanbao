@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { CounterpartyType, PaymentScheduleDirection } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
 
 describe('Finance API (e2e)', () => {
   let app: INestApplication
@@ -122,7 +122,7 @@ describe('Finance API (e2e)', () => {
       .send(schedulePayload({ title: `${testPrefix}-应收` }))
       .expect(201)
 
-    expect(response.body.data.scheduleNo).toMatch(/^AR\d{8}\d{4}$/)
+    expect(response.body.data.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
     expect(response.body.data.direction).toBe(PaymentScheduleDirection.receivable)
     expect(response.body.data.amountCents).toBe(50000)
     expect(response.body.data.status).toBeTruthy()
@@ -135,7 +135,7 @@ describe('Finance API (e2e)', () => {
       .send(schedulePayload({ title: `${testPrefix}-admin-应收` }))
       .expect(201)
 
-    expect(response.body.data.scheduleNo).toMatch(/^AR\d{8}\d{4}$/)
+    expect(response.body.data.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
   })
 
   it('creates payable with AP schedule number for finance role', async () => {
@@ -149,7 +149,7 @@ describe('Finance API (e2e)', () => {
       )
       .expect(201)
 
-    expect(response.body.data.scheduleNo).toMatch(/^AP\d{8}\d{4}$/)
+    expect(response.body.data.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
     expect(response.body.data.direction).toBe(PaymentScheduleDirection.payable)
   })
 
@@ -234,7 +234,10 @@ describe('Finance API (e2e)', () => {
 
   it('does not expose schedules to another organization', async () => {
     const otherOrg = await prisma.organization.create({
-      data: { name: `${testPrefix}-foreign-org` },
+      data: {
+        name: `${testPrefix}-foreign-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testPrefix}-foreign`),
+      },
     })
 
     const otherUser = await prisma.user.create({
@@ -436,7 +439,7 @@ describe('Finance API (e2e)', () => {
       })
       .expect(201)
 
-    expect(response.body.data.transactionNo).toMatch(/^TR\d{8}\d{4}$/)
+    expect(response.body.data.transactionNo).toMatch(TX_NO_REGEX)
 
     const list = await authRequest(app, financeToken)
       .get('/api/finance/transactions')

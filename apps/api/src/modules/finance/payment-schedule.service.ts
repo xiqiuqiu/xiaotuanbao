@@ -10,9 +10,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import {
   deriveScheduleState,
-  generateScheduleNo,
   isFinanceTouched,
-  PaymentScheduleDirection as SharedPaymentScheduleDirection,
 } from '@xiaotuanbao/shared'
 import {
   PaymentScheduleDirection,
@@ -21,6 +19,7 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
+import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import { VerificationService } from './verification.service'
 import {
   formatDateOnly,
@@ -48,6 +47,7 @@ export class PaymentScheduleService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly verificationService: VerificationService,
+    private readonly numberAllocationService: NumberAllocationService,
   ) {}
 
   async list(
@@ -112,8 +112,10 @@ export class PaymentScheduleService {
 
     await this.ensureDepartureExists(organizationId, dto.departureId)
 
-    const businessDate = getShanghaiTodayString()
-    const scheduleNo = await this.allocateScheduleNo(organizationId, direction, businessDate)
+    const scheduleNo = await this.numberAllocationService.allocateScheduleNo(
+      organizationId,
+      direction,
+    )
 
     const schedule = await this.prisma.paymentSchedule.create({
       data: {
@@ -293,33 +295,6 @@ export class PaymentScheduleService {
     }
 
     return schedule
-  }
-
-  private async allocateScheduleNo(
-    organizationId: string,
-    direction: PaymentScheduleDirection,
-    businessDate: string,
-  ): Promise<string> {
-    const prefix =
-      direction === PaymentScheduleDirection.receivable
-        ? SharedPaymentScheduleDirection.RECEIVABLE
-        : SharedPaymentScheduleDirection.PAYABLE
-    const datePart = businessDate.replace(/-/g, '')
-    const scheduleNoPrefix =
-      direction === PaymentScheduleDirection.receivable ? `AR${datePart}` : `AP${datePart}`
-
-    const latest = await this.prisma.paymentSchedule.findFirst({
-      where: {
-        organizationId,
-        direction,
-        scheduleNo: { startsWith: scheduleNoPrefix },
-      },
-      orderBy: { scheduleNo: 'desc' },
-      select: { scheduleNo: true },
-    })
-
-    const lastSequence = latest ? Number(latest.scheduleNo.slice(-4)) : 0
-    return generateScheduleNo(prefix, businessDate, lastSequence + 1)
   }
 
   private toSummary(schedule: PaymentSchedule, settledAmountCents: number): PaymentScheduleSummary {

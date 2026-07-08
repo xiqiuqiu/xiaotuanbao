@@ -188,12 +188,23 @@ enum GuestGender {
   @@map("guest_gender")
 }
 
+enum DocumentSequenceType {
+  departure
+  ar
+  ap
+  tx
+  cl
+
+  @@map("document_sequence_type")
+}
+
 model Organization {
-  id        String    @id @default(cuid())
-  name      String
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  id             String    @id @default(cuid())
+  name           String
+  businessPrefix String    @unique @map("business_prefix")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
   users     User[]
   suppliers Supplier[]
   partners  Partner[]
@@ -202,8 +213,23 @@ model Organization {
   paymentSchedules PaymentSchedule[]
   financeTransactions FinanceTransaction[]
   financeVerifications FinanceVerification[]
+  documentSequences DocumentSequence[]
 
   @@map("organizations")
+}
+
+model DocumentSequence {
+  id             String               @id @default(cuid())
+  organizationId String               @map("organization_id")
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  documentType   DocumentSequenceType @map("document_type")
+  periodKey      String               @map("period_key")
+  lastSequence   Int                  @default(0) @map("last_sequence")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  @@unique([organizationId, documentType, periodKey])
+  @@map("document_sequences")
 }
 
 model User {
