@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { CounterpartyType, PaymentScheduleDirection } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentScheduleStatus, PaymentChannel } from '@xiaotuanbao/shared'
-import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
+import { authRequest, AR_AP_SCHEDULE_NO_REGEX, CL_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
 
 describe('Finance API (e2e)', () => {
   let app: INestApplication
@@ -33,6 +33,30 @@ describe('Finance API (e2e)', () => {
       amountCents: 50000,
       transactionDate: '2026-07-07',
       paymentChannel: PaymentChannel.BANK_TRANSFER,
+      ...overrides,
+    }
+  }
+  function transactionPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      direction: 'inflow',
+      paymentChannel: PaymentChannel.BANK_TRANSFER,
+      amountCents: 50000,
+      transactionDate: '2026-07-07',
+      counterpartyType: CounterpartyType.partner,
+      counterpartyName: '测试旅行社',
+      departureId,
+      ...overrides,
+    }
+  }
+
+  function payablePayload(overrides: Record<string, unknown> = {}) {
+    return {
+      departureId,
+      title: `${testPrefix}-应付节点`,
+      amountCents: 50000,
+      dueDate: '2026-12-31',
+      counterpartyType: CounterpartyType.supplier,
+      counterpartyName: '测试供应商',
       ...overrides,
     }
   }
@@ -379,6 +403,182 @@ describe('Finance API (e2e)', () => {
       .expect(400)
 
     expect(response.body.code).toBe(400)
+  })
+
+  it('links receivable transaction and creates verification only', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-匹配流水`, amountCents: 50000 }))
+      .expect(201)
+
+    const beforeTransactions = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ departureId, pageSize: 100 })
+      .expect(200)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 50000 }))
+      .expect(201)
+
+    expect(transaction.body.data.transactionNo).toMatch(TX_NO_REGEX)
+    expect(transaction.body.data.paymentChannel).toBe(PaymentChannel.BANK_TRANSFER)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 50000 })
+      .expect(201)
+
+    const afterTransactions = await authRequest(app, financeToken)
+      .get('/api/finance/transactions')
+      .query({ departureId, pageSize: 100 })
+      .expect(200)
+
+    expect(afterTransactions.body.data.total).toBe(beforeTransactions.body.data.total + 1)
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(schedule.body.data.settledAmountCents).toBe(50000)
+    expect(schedule.body.data.unsettledAmountCents).toBe(0)
+    expect(schedule.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .expect(200)
+
+    expect(verifications.body.data.items).toHaveLength(1)
+    expect(verifications.body.data.items[0].verificationNo).toMatch(CL_NO_REGEX)
+    expect(verifications.body.data.items[0].transactionId).toBe(transaction.body.data.id)
+    expect(verifications.body.data.items[0].amountCents).toBe(50000)
+
+    const linkedTransaction = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${transaction.body.data.id}`)
+      .expect(200)
+
+    expect(linkedTransaction.body.data.allocatedAmountCents).toBe(50000)
+    expect(linkedTransaction.body.data.unallocatedAmountCents).toBe(0)
+  })
+
+  it('supports partial link-transaction with min default amount semantics', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-部分匹配`, amountCents: 80000 }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 50000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 50000 })
+      .expect(201)
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(schedule.body.data.settledAmountCents).toBe(50000)
+    expect(schedule.body.data.unsettledAmountCents).toBe(30000)
+    expect(schedule.body.data.status).toBe(PaymentScheduleStatus.PENDING)
+  })
+
+  it('rejects link-transaction on direction mismatch', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-方向校验` }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'outflow',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyName: '测试供应商',
+        }),
+      )
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 10000 })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('rejects link-transaction when amount exceeds unallocated balance', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-流水上限`, amountCents: 50000 }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 30000 }))
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 40000 })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('rejects link-transaction when amount exceeds unsettled schedule balance', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-节点上限`, amountCents: 30000 }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 50000 }))
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 40000 })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('links payable transaction with outflow direction', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/payables')
+      .send(payablePayload({ title: `${testPrefix}-应付匹配`, amountCents: 40000 }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'outflow',
+          amountCents: 40000,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyName: '测试供应商',
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${created.body.data.id}/link-transaction`)
+      .send({ transactionId: transaction.body.data.id, amountCents: 40000 })
+      .expect(201)
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(schedule.body.data.settledAmountCents).toBe(40000)
+    expect(schedule.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
   })
 
   it('cancels verification and restores unsettled schedule state', async () => {

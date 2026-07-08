@@ -122,7 +122,7 @@ export function buildPaymentScheduleColumns({
           )
           actions.push(
             <Button key="link" type="link" onClick={() => onLink(record)}>
-              关联流水
+              匹配流水
             </Button>,
           )
         }

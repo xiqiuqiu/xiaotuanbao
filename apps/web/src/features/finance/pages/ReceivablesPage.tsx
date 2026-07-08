@@ -9,7 +9,7 @@ export function ReceivablesPage() {
           应收管理
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          全局应收节点：登记收款、关联流水、关闭节点
+          全局应收节点：登记收款、匹配流水、关闭节点
         </Typography.Paragraph>
       </div>
       <PaymentScheduleWorkspace scope="global" direction="receivable" readOnly={false} />

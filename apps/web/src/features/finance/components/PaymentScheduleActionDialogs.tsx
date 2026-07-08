@@ -3,7 +3,7 @@ import type { UseMutationResult } from '@tanstack/react-query'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { ConfirmCollectionDrawer } from './ConfirmCollectionDrawer'
 import { ConfirmPaymentDrawer } from './ConfirmPaymentDrawer'
-import { LinkTransactionModal } from './LinkTransactionModal'
+import { MatchTransactionDrawer } from './MatchTransactionDrawer'
 import { CancelScheduleModal, type CancelScheduleFormValues } from './CancelScheduleModal'
 import { EditScheduleDrawer } from './EditScheduleDrawer'
 import type { ConfirmCollectionFormValues } from '../utils/confirm-collection-form'
@@ -83,9 +83,11 @@ export function PaymentScheduleActionDialogs({
         />
       )}
 
-      <LinkTransactionModal
+      <MatchTransactionDrawer
+        variant={isReceivable ? 'collection' : 'payment'}
         open={linkOpen}
         schedule={activeSchedule}
+        departureMap={departureMap}
         loading={linkMutation.isPending}
         form={linkForm}
         onClose={onCloseLink}

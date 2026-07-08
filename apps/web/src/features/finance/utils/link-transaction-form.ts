@@ -1,4 +1,4 @@
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import type { FinanceTransactionSummary, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { centsToYuan, yuanToCents } from './finance-form'
 
 export interface LinkTransactionFormValues {
@@ -6,12 +6,27 @@ export interface LinkTransactionFormValues {
   amountYuan: number
 }
 
-export function scheduleToLinkTransactionValues(
+export function computeDefaultLinkAmountCents(
+  transaction: FinanceTransactionSummary,
+  schedule: PaymentScheduleSummary,
+): number {
+  return Math.min(transaction.unallocatedAmountCents, schedule.unsettledAmountCents)
+}
+
+export function scheduleToLinkTransactionValues(): LinkTransactionFormValues {
+  return {
+    transactionId: '',
+    amountYuan: 0,
+  }
+}
+
+export function transactionToLinkTransactionValues(
+  transaction: FinanceTransactionSummary,
   schedule: PaymentScheduleSummary,
 ): LinkTransactionFormValues {
   return {
-    transactionId: '',
-    amountYuan: centsToYuan(schedule.unsettledAmountCents),
+    transactionId: transaction.id,
+    amountYuan: centsToYuan(computeDefaultLinkAmountCents(transaction, schedule)),
   }
 }
 

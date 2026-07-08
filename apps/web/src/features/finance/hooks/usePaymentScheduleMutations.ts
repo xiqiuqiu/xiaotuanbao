@@ -97,7 +97,7 @@ export function usePaymentScheduleMutations({
         : linkPayableTransaction(activeSchedule.id, payload)
     },
     onSuccess: () => {
-      message.success('流水已关联')
+      message.success('核销已完成')
       linkForm.resetFields()
       onLinkSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
@@ -107,7 +107,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '关联失败')
+      message.error(error instanceof Error ? error.message : '核销失败')
     },
   })
 

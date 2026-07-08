@@ -236,7 +236,7 @@ export function PaymentScheduleWorkspace({
     (schedule: PaymentScheduleSummary) => {
       setActiveSchedule(schedule)
       linkForm.resetFields()
-      linkForm.setFieldsValue(scheduleToLinkTransactionValues(schedule))
+      linkForm.setFieldsValue(scheduleToLinkTransactionValues())
       setLinkOpen(true)
     },
     [linkForm],
