@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 import { Type } from 'class-transformer'
 
 export class CreateFinanceVerificationDto {
@@ -14,6 +14,19 @@ export class CreateFinanceVerificationDto {
   @IsInt()
   @Min(1, { message: '金额必须大于 0' })
   amountCents!: number
+
+  @IsDateString()
+  verificationDate!: string
+
+  @IsOptional()
+  @IsString()
+  remark?: string
+}
+
+export class CancelFinanceVerificationDto {
+  @IsString()
+  @IsNotEmpty()
+  cancelReason!: string
 }
 
 export class ListFinanceVerificationsQueryDto {

@@ -19,6 +19,7 @@ describe('Finance API (e2e)', () => {
   let adminToken: string
   let organizationId: string
   let ownerUserId: string
+  let financeUserId: string
   let departureId: string
   let otherDepartureId: string
   let partnerId: string
@@ -60,6 +61,14 @@ describe('Finance API (e2e)', () => {
     }
   }
 
+  function verificationPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      amountCents: 50000,
+      verificationDate: '2026-07-07',
+      ...overrides,
+    }
+  }
+
   function payablePayload(overrides: Record<string, unknown> = {}) {
     return {
       departureId,
@@ -88,6 +97,14 @@ describe('Finance API (e2e)', () => {
     }
     organizationId = user.organizationId
     ownerUserId = user.id
+
+    const financeUser = await prisma.user.findFirst({
+      where: { username: 'acai', deletedAt: null },
+    })
+    if (!financeUser) {
+      throw new Error('Seed user acai not found')
+    }
+    financeUserId = financeUser.id
 
     const departure = await prisma.departure.create({
       data: {
@@ -664,6 +681,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/verifications/${verificationId}/cancel`)
+      .send({ cancelReason: '测试撤销' })
       .expect(201)
 
     const schedule = await authRequest(app, financeToken)
@@ -675,6 +693,7 @@ describe('Finance API (e2e)', () => {
 
     const again = await authRequest(app, financeToken)
       .post(`/api/finance/verifications/${verificationId}/cancel`)
+      .send({ cancelReason: '重复撤销' })
       .expect(400)
 
     expect(again.body.code).toBe(400)
@@ -1089,6 +1108,141 @@ describe('Finance API (e2e)', () => {
     )
   })
 
+  describe('verification create/cancel hardening', () => {
+    it('rejects direction mismatch between receivable schedule and outflow transaction', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-方向错配`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ direction: 'outflow', amountCents: 50000 }))
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('rejects counterparty mismatch between schedule and transaction', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-往来错配`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyType: CounterpartyType.supplier,
+            counterpartyId: supplierId,
+            counterpartyName: `${testPrefix}-supplier`,
+          }),
+        )
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('rejects cancel without cancelReason', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-缺撤销原因`, amountCents: 50000 }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivable.body.data.id}/confirm-collection`)
+        .send(confirmPayload())
+        .expect(201)
+
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      const response = await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+        .send({})
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('persists snapshot fields on create', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-快照字段`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 20000,
+            verificationDate: '2026-07-08',
+          }),
+        )
+        .expect(201)
+
+      expect(response.body.data.verificationDate).toBe('2026-07-08')
+      expect(response.body.data.createdBy).toBe(financeUserId)
+      expect(response.body.data.billUnsettledAfterCents).toBe(30000)
+    })
+
+    it('persists cancel audit fields on cancel', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-撤销审计`, amountCents: 50000 }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivable.body.data.id}/confirm-collection`)
+        .send(confirmPayload())
+        .expect(201)
+
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .expect(200)
+
+      const verificationId = verifications.body.data.items[0].id
+
+      const response = await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verificationId}/cancel`)
+        .send({ cancelReason: '录入错误' })
+        .expect(201)
+
+      expect(response.body.data.cancelReason).toBe('录入错误')
+      expect(response.body.data.cancelledBy).toBe(financeUserId)
+    })
+  })
+
   describe('verify from transaction', () => {
     it('creates verification via POST /finance/verifications and updates transaction writeoff status', async () => {
       const receivable = await authRequest(app, financeToken)
@@ -1103,11 +1257,13 @@ describe('Finance API (e2e)', () => {
 
       const firstVerification = await authRequest(app, financeToken)
         .post('/api/finance/verifications')
-        .send({
-          paymentScheduleId: receivable.body.data.id,
-          transactionId: transaction.body.data.id,
-          amountCents: 20000,
-        })
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 20000,
+          }),
+        )
         .expect(201)
 
       expect(firstVerification.body.data.verificationNo).toMatch(CL_NO_REGEX)
@@ -1136,11 +1292,13 @@ describe('Finance API (e2e)', () => {
 
       const secondVerification = await authRequest(app, financeToken)
         .post('/api/finance/verifications')
-        .send({
-          paymentScheduleId: receivable.body.data.id,
-          transactionId: transaction.body.data.id,
-          amountCents: 30000,
-        })
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 30000,
+          }),
+        )
         .expect(201)
 
       expect(secondVerification.body.data.verificationNo).toMatch(CL_NO_REGEX)
@@ -1171,11 +1329,13 @@ describe('Finance API (e2e)', () => {
 
       await authRequest(app, financeToken)
         .post('/api/finance/verifications')
-        .send({
-          paymentScheduleId: receivable.body.data.id,
-          transactionId: transaction.body.data.id,
-          amountCents: 30000,
-        })
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 30000,
+          }),
+        )
         .expect(201)
 
       const filtered = await authRequest(app, financeToken)

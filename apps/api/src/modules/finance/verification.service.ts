@@ -3,14 +3,26 @@ import type {
   FinanceVerificationListResult,
   FinanceVerificationSummary,
 } from '@xiaotuanbao/shared'
-import { VerificationStatus } from '@xiaotuanbao/shared'
+import {
+  assertCounterpartyMatch,
+  assertDirectionMatch,
+  CounterpartyMismatchError,
+  DirectionMismatchError,
+  VerificationStatus,
+} from '@xiaotuanbao/shared'
 import { VerificationStatus as PrismaVerificationStatus, type Prisma } from '@prisma/client'
+import { formatDateOnly, parseDateOnly } from '../departure/departure-date.utils'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import type {
+  CancelFinanceVerificationDto,
   CreateFinanceVerificationDto,
   ListFinanceVerificationsQueryDto,
 } from './dto/verification.dto'
+
+export interface VerificationCreateContext {
+  createdBy: string
+}
 
 @Injectable()
 export class VerificationService {
@@ -68,6 +80,7 @@ export class VerificationService {
   async create(
     organizationId: string,
     dto: CreateFinanceVerificationDto,
+    context: VerificationCreateContext,
     tx?: Prisma.TransactionClient,
   ): Promise<FinanceVerificationSummary> {
     const client = tx ?? this.prisma
@@ -93,6 +106,25 @@ export class VerificationService {
       throw new BadRequestException('流水已作废，不可关联')
     }
 
+    try {
+      assertDirectionMatch(schedule.direction, transaction.direction)
+    } catch (error) {
+      if (error instanceof DirectionMismatchError) {
+        throw new BadRequestException(error.message)
+      }
+      throw error
+    }
+
+    try {
+      assertCounterpartyMatch(schedule, transaction)
+    } catch (error) {
+      if (error instanceof CounterpartyMismatchError) {
+        throw new BadRequestException(error.message)
+      }
+      throw error
+    }
+
+    const settled = await this.getSettledAmountCents(schedule.id, client as Prisma.TransactionClient)
     await this.assertScheduleAllocation(client, schedule.id, schedule.amountCents, dto.amountCents)
     await this.assertTransactionAllocation(
       client,
@@ -100,6 +132,8 @@ export class VerificationService {
       transaction.amountCents,
       dto.amountCents,
     )
+
+    const billUnsettledAfterCents = schedule.amountCents - settled - dto.amountCents
 
     const verificationNo = await this.numberAllocationService.allocateVerificationNo(
       organizationId,
@@ -113,6 +147,10 @@ export class VerificationService {
         paymentScheduleId: dto.paymentScheduleId,
         transactionId: dto.transactionId,
         amountCents: dto.amountCents,
+        verificationDate: parseDateOnly(dto.verificationDate),
+        remark: dto.remark?.trim() || null,
+        createdBy: context.createdBy,
+        billUnsettledAfterCents,
         status: PrismaVerificationStatus.normal,
       },
     })
@@ -120,7 +158,17 @@ export class VerificationService {
     return this.toSummary(verification)
   }
 
-  async cancel(organizationId: string, verificationId: string): Promise<FinanceVerificationSummary> {
+  async cancel(
+    organizationId: string,
+    verificationId: string,
+    dto: CancelFinanceVerificationDto,
+    cancelledBy: string,
+  ): Promise<FinanceVerificationSummary> {
+    const cancelReason = dto.cancelReason?.trim()
+    if (!cancelReason) {
+      throw new BadRequestException('撤销原因不能为空')
+    }
+
     const verification = await this.prisma.financeVerification.findFirst({
       where: { id: verificationId, organizationId },
     })
@@ -138,6 +186,8 @@ export class VerificationService {
       data: {
         status: PrismaVerificationStatus.cancelled,
         cancelledAt: new Date(),
+        cancelledBy,
+        cancelReason,
       },
     })
 
@@ -255,6 +305,12 @@ export class VerificationService {
     paymentScheduleId: string
     transactionId: string
     amountCents: number
+    verificationDate: Date
+    remark: string | null
+    createdBy: string
+    cancelledBy: string | null
+    cancelReason: string | null
+    billUnsettledAfterCents: number
     status: PrismaVerificationStatus
     cancelledAt: Date | null
     createdAt: Date
@@ -266,6 +322,12 @@ export class VerificationService {
       paymentScheduleId: verification.paymentScheduleId,
       transactionId: verification.transactionId,
       amountCents: verification.amountCents,
+      verificationDate: formatDateOnly(verification.verificationDate),
+      remark: verification.remark,
+      createdBy: verification.createdBy,
+      cancelledBy: verification.cancelledBy,
+      cancelReason: verification.cancelReason,
+      billUnsettledAfterCents: verification.billUnsettledAfterCents,
       status:
         verification.status === PrismaVerificationStatus.normal
           ? VerificationStatus.NORMAL

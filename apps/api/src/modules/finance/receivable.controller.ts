@@ -78,7 +78,7 @@ export class ReceivableController {
   @Post(':id/confirm-collection')
   @RequireMenu('/finance/receivable')
   confirmCollection(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: ConfirmCollectionDto,
   ): Promise<PaymentScheduleSummary> {
@@ -86,13 +86,14 @@ export class ReceivableController {
       request.user.organizationId,
       id,
       dto,
+      request.user.userId,
     )
   }
 
   @Post(':id/link-transaction')
   @RequireMenu('/finance/receivable')
   linkTransaction(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: LinkTransactionDto,
   ): Promise<PaymentScheduleSummary> {
@@ -101,6 +102,7 @@ export class ReceivableController {
       PaymentScheduleDirection.receivable,
       id,
       dto,
+      request.user.userId,
     )
   }
 }

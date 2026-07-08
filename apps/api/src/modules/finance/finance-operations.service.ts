@@ -9,6 +9,7 @@ import {
   TransactionDirection as PrismaTransactionDirection,
   type PaymentSchedule,
 } from '@prisma/client'
+import { formatDateOnly } from '../departure/departure-date.utils'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   ConfirmCollectionDto,
@@ -32,6 +33,7 @@ export class FinanceOperationsService {
     organizationId: string,
     scheduleId: string,
     dto: ConfirmCollectionDto,
+    userId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(
       organizationId,
@@ -75,7 +77,10 @@ export class FinanceOperationsService {
           paymentScheduleId: schedule.id,
           transactionId: transaction.id,
           amountCents: dto.amountCents,
+          verificationDate: dto.transactionDate,
+          remark: dto.notes,
         },
+        { createdBy: userId },
         tx,
       )
     })
@@ -91,6 +96,7 @@ export class FinanceOperationsService {
     organizationId: string,
     scheduleId: string,
     dto: ConfirmPaymentDto,
+    userId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(
       organizationId,
@@ -134,7 +140,10 @@ export class FinanceOperationsService {
           paymentScheduleId: schedule.id,
           transactionId: transaction.id,
           amountCents: dto.amountCents,
+          verificationDate: dto.transactionDate,
+          remark: dto.notes,
         },
+        { createdBy: userId },
         tx,
       )
     })
@@ -151,6 +160,7 @@ export class FinanceOperationsService {
     direction: PaymentScheduleDirection,
     scheduleId: string,
     dto: LinkTransactionDto,
+    userId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(organizationId, scheduleId, direction)
     this.assertScheduleOpen(schedule)
@@ -168,29 +178,16 @@ export class FinanceOperationsService {
       throw new BadRequestException('流水已作废，不可关联')
     }
 
-    const expectedDirection =
-      direction === PaymentScheduleDirection.receivable
-        ? PrismaTransactionDirection.inflow
-        : PrismaTransactionDirection.outflow
-
-    if (transaction.direction !== expectedDirection) {
-      throw new BadRequestException('流水方向与节点类型不匹配')
-    }
-
-    try {
-      assertCounterpartyMatch(schedule, transaction)
-    } catch (error) {
-      if (error instanceof CounterpartyMismatchError) {
-        throw new BadRequestException(error.message)
-      }
-      throw error
-    }
-
-    await this.verificationService.create(organizationId, {
-      paymentScheduleId: schedule.id,
-      transactionId: transaction.id,
-      amountCents: dto.amountCents,
-    })
+    await this.verificationService.create(
+      organizationId,
+      {
+        paymentScheduleId: schedule.id,
+        transactionId: transaction.id,
+        amountCents: dto.amountCents,
+        verificationDate: formatDateOnly(transaction.transactionDate),
+      },
+      { createdBy: userId },
+    )
 
     return this.paymentScheduleService.getById(organizationId, direction, scheduleId)
   }

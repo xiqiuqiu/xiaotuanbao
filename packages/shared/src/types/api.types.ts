@@ -403,6 +403,12 @@ export interface FinanceVerificationSummary {
   paymentScheduleId: string
   transactionId: string
   amountCents: number
+  verificationDate: string
+  remark: string | null
+  createdBy: string
+  cancelledBy: string | null
+  cancelReason: string | null
+  billUnsettledAfterCents: number
   status: string
   cancelledAt: string | null
   createdAt: string
@@ -420,6 +426,12 @@ export interface CreateFinanceVerificationDto {
   paymentScheduleId: string
   transactionId: string
   amountCents: number
+  verificationDate: string
+  remark?: string
+}
+
+export interface CancelFinanceVerificationDto {
+  cancelReason: string
 }
 
 export interface ConfirmCollectionDto {

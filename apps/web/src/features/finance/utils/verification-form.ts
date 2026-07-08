@@ -11,5 +11,6 @@ export function buildCreateVerificationPayload(values: VerificationFormValues) {
     paymentScheduleId: values.paymentScheduleId,
     transactionId: values.transactionId,
     amountCents: yuanToCents(values.amountYuan),
+    verificationDate: new Date().toISOString().slice(0, 10),
   }
 }

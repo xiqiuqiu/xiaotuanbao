@@ -3,6 +3,7 @@ import type {
   ConfirmCollectionDto,
   ConfirmPaymentDto,
   CreateFinanceTransactionDto,
+  CancelFinanceVerificationDto,
   CreateFinanceVerificationDto,
   FinanceTransactionListResult,
   FinanceTransactionSummary,
@@ -179,6 +180,9 @@ export async function createVerification(
   return request.post<FinanceVerificationSummary>('/finance/verifications', payload)
 }
 
-export async function cancelVerification(id: string): Promise<FinanceVerificationSummary> {
-  return request.post<FinanceVerificationSummary>(`/finance/verifications/${id}/cancel`)
+export async function cancelVerification(
+  id: string,
+  payload: CancelFinanceVerificationDto,
+): Promise<FinanceVerificationSummary> {
+  return request.post<FinanceVerificationSummary>(`/finance/verifications/${id}/cancel`, payload)
 }

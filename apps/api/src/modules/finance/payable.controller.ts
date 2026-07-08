@@ -78,7 +78,7 @@ export class PayableController {
   @Post(':id/confirm-payment')
   @RequireMenu('/finance/payable')
   confirmPayment(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: ConfirmPaymentDto,
   ): Promise<PaymentScheduleSummary> {
@@ -86,13 +86,14 @@ export class PayableController {
       request.user.organizationId,
       id,
       dto,
+      request.user.userId,
     )
   }
 
   @Post(':id/link-transaction')
   @RequireMenu('/finance/payable')
   linkTransaction(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: LinkTransactionDto,
   ): Promise<PaymentScheduleSummary> {
@@ -101,6 +102,7 @@ export class PayableController {
       PaymentScheduleDirection.payable,
       id,
       dto,
+      request.user.userId,
     )
   }
 }

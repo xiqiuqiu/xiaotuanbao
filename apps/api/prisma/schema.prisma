@@ -564,19 +564,25 @@ model FinanceTransaction {
 }
 
 model FinanceVerification {
-  id                String             @id @default(cuid())
-  organizationId    String             @map("organization_id")
-  organization      Organization       @relation(fields: [organizationId], references: [id])
-  verificationNo    String             @map("verification_no")
-  paymentScheduleId String             @map("payment_schedule_id")
-  paymentSchedule   PaymentSchedule    @relation(fields: [paymentScheduleId], references: [id])
-  transactionId     String             @map("transaction_id")
-  transaction       FinanceTransaction @relation(fields: [transactionId], references: [id])
-  amountCents       Int                @map("amount_cents")
-  status            VerificationStatus @default(normal)
-  cancelledAt       DateTime?          @map("cancelled_at")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  id                      String             @id @default(cuid())
+  organizationId          String             @map("organization_id")
+  organization            Organization       @relation(fields: [organizationId], references: [id])
+  verificationNo          String             @map("verification_no")
+  paymentScheduleId       String             @map("payment_schedule_id")
+  paymentSchedule         PaymentSchedule    @relation(fields: [paymentScheduleId], references: [id])
+  transactionId           String             @map("transaction_id")
+  transaction             FinanceTransaction @relation(fields: [transactionId], references: [id])
+  amountCents             Int                @map("amount_cents")
+  verificationDate        DateTime           @map("verification_date") @db.Date
+  remark                  String?
+  createdBy               String             @map("created_by")
+  cancelledBy             String?            @map("cancelled_by")
+  cancelReason            String?            @map("cancel_reason")
+  billUnsettledAfterCents Int                @map("bill_unsettled_after_cents")
+  status                  VerificationStatus @default(normal)
+  cancelledAt             DateTime?          @map("cancelled_at")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
 
   @@unique([organizationId, verificationNo])
   @@index([paymentScheduleId, status])

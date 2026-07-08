@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -18,6 +18,10 @@ import {
   formatCents,
 } from '../catalog'
 import { VerificationFormDrawer } from './VerificationFormDrawer'
+import {
+  CancelVerificationModal,
+  type CancelVerificationFormValues,
+} from './CancelVerificationModal'
 import {
   buildCreateVerificationPayload,
   type VerificationFormValues,
@@ -41,7 +45,11 @@ export function VerificationsWorkspace({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<VerificationFormValues>()
+  const [cancelForm] = Form.useForm<CancelVerificationFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancellingVerification, setCancellingVerification] =
+    useState<FinanceVerificationSummary | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -111,9 +119,13 @@ export function VerificationsWorkspace({
   })
 
   const cancelMutation = useMutation({
-    mutationFn: cancelVerification,
+    mutationFn: ({ id, cancelReason }: { id: string; cancelReason: string }) =>
+      cancelVerification(id, { cancelReason }),
     onSuccess: () => {
       message.success('核销已撤销')
+      setCancelModalOpen(false)
+      setCancellingVerification(null)
+      cancelForm.resetFields()
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
@@ -127,19 +139,16 @@ export function VerificationsWorkspace({
     },
   })
 
-  const handleCancel = useCallback(
-    (verification: FinanceVerificationSummary) => {
-      Modal.confirm({
-        title: '确认撤销核销？',
-        content: `撤销后核销 ${verification.verificationNo} 将不再计入节点结清金额。`,
-        okText: '撤销',
-        okType: 'danger',
-        cancelText: '取消',
-        onOk: () => cancelMutation.mutateAsync(verification.id),
-      })
-    },
-    [cancelMutation],
-  )
+  const handleOpenCancelModal = useCallback((verification: FinanceVerificationSummary) => {
+    setCancellingVerification(verification)
+    setCancelModalOpen(true)
+  }, [])
+
+  const handleCloseCancelModal = useCallback(() => {
+    setCancelModalOpen(false)
+    setCancellingVerification(null)
+    cancelForm.resetFields()
+  }, [cancelForm])
 
   const columns = useMemo<ColumnsType<FinanceVerificationSummary>>(
     () => [
@@ -191,14 +200,14 @@ export function VerificationsWorkspace({
                 record.status === VerificationStatus.CANCELLED ? (
                   '—'
                 ) : (
-                  <Button type="link" danger onClick={() => handleCancel(record)}>
+                  <Button type="link" danger onClick={() => handleOpenCancelModal(record)}>
                     撤销核销
                   </Button>
                 ),
             },
           ]),
     ],
-    [handleCancel, readOnly],
+    [handleOpenCancelModal, readOnly],
   )
 
   return (
@@ -266,6 +275,25 @@ export function VerificationsWorkspace({
             form.resetFields()
           }}
           onSubmit={(values) => createMutation.mutate(values)}
+        />
+      ) : null}
+
+      {!readOnly ? (
+        <CancelVerificationModal
+          open={cancelModalOpen}
+          verification={cancellingVerification}
+          loading={cancelMutation.isPending}
+          form={cancelForm}
+          onClose={handleCloseCancelModal}
+          onSubmit={(values) => {
+            if (!cancellingVerification) {
+              return
+            }
+            cancelMutation.mutate({
+              id: cancellingVerification.id,
+              cancelReason: values.cancelReason,
+            })
+          }}
         />
       ) : null}
     </div>

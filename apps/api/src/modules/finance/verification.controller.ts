@@ -7,6 +7,7 @@ import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
+  CancelFinanceVerificationDto,
   CreateFinanceVerificationDto,
   ListFinanceVerificationsQueryDto,
 } from './dto/verification.dto'
@@ -29,10 +30,12 @@ export class VerificationController {
   @Post()
   @RequireMenu('/finance/verification')
   create(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Body() dto: CreateFinanceVerificationDto,
   ): Promise<FinanceVerificationSummary> {
-    return this.verificationService.create(request.user.organizationId, dto)
+    return this.verificationService.create(request.user.organizationId, dto, {
+      createdBy: request.user.userId,
+    })
   }
 
   @Get(':id')
@@ -47,9 +50,15 @@ export class VerificationController {
   @Post(':id/cancel')
   @RequireMenu('/finance/verification')
   cancel(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
+    @Body() dto: CancelFinanceVerificationDto,
   ): Promise<FinanceVerificationSummary> {
-    return this.verificationService.cancel(request.user.organizationId, id)
+    return this.verificationService.cancel(
+      request.user.organizationId,
+      id,
+      dto,
+      request.user.userId,
+    )
   }
 }

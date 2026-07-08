@@ -17,4 +17,8 @@ export {
   CounterpartyMismatchError,
   type CounterpartySnapshot,
 } from './assert-counterparty-match'
+export {
+  assertDirectionMatch,
+  DirectionMismatchError,
+} from './assert-direction-match'
 export { PAYMENT_CHANNEL_OPTIONS, PAYMENT_CHANNEL_LABELS } from './payment-channel-catalog'
