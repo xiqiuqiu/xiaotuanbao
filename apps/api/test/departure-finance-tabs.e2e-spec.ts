@@ -7,6 +7,7 @@ import {
   PaymentScheduleDirection,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
+  SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentChannel } from '@xiaotuanbao/shared'
@@ -151,6 +152,42 @@ describe('Departure finance tabs (e2e)', () => {
     expect(response.body.data.items).toHaveLength(1)
     expect(response.body.data.items[0].id).toBe(schedules[0].id)
     expect(response.body.data.items[0].departureId).toBe(departure.id)
+  })
+
+  it('allows coordinator to list departure-scoped payables', async () => {
+    const departure = await createDeparture('-ap')
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-应付供应商`,
+        category: SupplierCategory.hotel,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const payable = await authRequest(app, adminToken)
+      .post('/api/finance/payables')
+      .send({
+        departureId: departure.id,
+        title: `${testPrefix}-团内应付`,
+        amountCents: 50000,
+        dueDate: '2026-12-31',
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplier.id,
+        counterpartyName: supplier.name,
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/payables`)
+      .expect(200)
+
+    expect(response.body.data.total).toBe(1)
+    expect(response.body.data.items).toHaveLength(1)
+    expect(response.body.data.items[0].id).toBe(payable.body.data.id)
+    expect(response.body.data.items[0].departureId).toBe(departure.id)
+
+    await prisma.supplier.delete({ where: { id: supplier.id } })
   })
 
   it('blocks coordinator from finance mutation APIs', async () => {

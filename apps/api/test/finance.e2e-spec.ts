@@ -8,7 +8,9 @@ import {
   SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { PaymentScheduleStatus, PaymentChannel } from '@xiaotuanbao/shared'
+import { hash } from 'bcryptjs'
+import { PaymentScheduleStatus, PaymentChannel, PRESET_ROLE_NAMES } from '@xiaotuanbao/shared'
+import { MISSING_BUSINESS_PREFIX_MESSAGE } from '../src/modules/number-allocation/number-allocation.service'
 import { authRequest, AR_AP_SCHEDULE_NO_REGEX, CL_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
 
 describe('Finance API (e2e)', () => {
@@ -319,6 +321,274 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.cancelledAt).toBeTruthy()
     expect(response.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
     expect(response.body.data.financeTouched).toBe(true)
+  })
+
+  describe('payment schedule edit guards', () => {
+    async function createSettledReceivable(titleSuffix: string) {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-${titleSuffix}`, amountCents: 50000 }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+        .send(confirmPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      return created.body.data as { id: string }
+    }
+
+    async function createSettledPayable(titleSuffix: string) {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/payables')
+        .send(payablePayload({ title: `${testPrefix}-${titleSuffix}`, amountCents: 40000 }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${created.body.data.id}/confirm-payment`)
+        .send(confirmPayload({ amountCents: 40000 }))
+        .expect(201)
+
+      return created.body.data as { id: string }
+    }
+
+    it('rejects amount update when finance-touched from settlement', async () => {
+      const schedule = await createSettledReceivable('已介入金额')
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${schedule.id}`)
+        .send({ amountCents: 60000 })
+        .expect(400)
+
+      expect(response.body.message).toBe('财务已介入的节点不可修改金额')
+    })
+
+    it('rejects dueDate update when finance-touched from settlement', async () => {
+      const schedule = await createSettledReceivable('已介入到期日')
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${schedule.id}`)
+        .send({ dueDate: '2027-01-01' })
+        .expect(400)
+
+      expect(response.body.message).toBe('财务已介入的节点不可修改到期日')
+    })
+
+    it('rejects counterparty update when finance-touched from settlement', async () => {
+      const schedule = await createSettledReceivable('已介入往来')
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${schedule.id}`)
+        .send({
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplierId,
+          counterpartyName: `${testPrefix}-supplier`,
+        })
+        .expect(400)
+
+      expect(response.body.message).toBe('财务已介入的节点不可修改往来类型')
+    })
+
+    it('still allows title update when finance-touched from settlement', async () => {
+      const schedule = await createSettledReceivable('标题可改')
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${schedule.id}`)
+        .send({ title: `${testPrefix}-标题已更新` })
+        .expect(200)
+
+      expect(response.body.data.title).toBe(`${testPrefix}-标题已更新`)
+      expect(response.body.data.financeTouched).toBe(true)
+    })
+
+    it('rejects amount update on finance-touched payable', async () => {
+      const schedule = await createSettledPayable('应付已介入')
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/payables/${schedule.id}`)
+        .send({ amountCents: 50000 })
+        .expect(400)
+
+      expect(response.body.message).toBe('财务已介入的节点不可修改金额')
+    })
+
+    it('rejects patch on cancelled receivable schedule', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-关闭后编辑` }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+        .send({ cancelReason: '测试关闭' })
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${created.body.data.id}`)
+        .send({ title: `${testPrefix}-不应成功` })
+        .expect(400)
+
+      expect(response.body.message).toBe('已关闭节点不可编辑')
+    })
+  })
+
+  describe('organization without business prefix', () => {
+    let prefixlessOrgId: string
+    let prefixlessFinanceToken: string
+    let prefixlessDepartureId: string
+    let prefixlessPartnerId: string
+    const prefixlessUsername = `${testPrefix}-noprefix-fin`
+
+    beforeAll(async () => {
+      const password = 'admin123'
+      const passwordHash = await hash(password, 10)
+
+      const org = await prisma.organization.create({
+        data: {
+          name: `${testPrefix}-noprefix-org`,
+          businessPrefix: uniqueBusinessPrefix(`${testPrefix}-tmp`),
+        },
+      })
+      prefixlessOrgId = org.id
+
+      const financeRole = await prisma.role.findUnique({
+        where: { name: PRESET_ROLE_NAMES.FINANCE },
+      })
+      if (!financeRole) {
+        throw new Error('Finance role not found')
+      }
+
+      const user = await prisma.user.create({
+        data: {
+          organizationId: prefixlessOrgId,
+          username: prefixlessUsername,
+          passwordHash,
+          name: '无前缀财务',
+        },
+      })
+
+      await prisma.userRole.create({
+        data: { userId: user.id, roleId: financeRole.id },
+      })
+
+      await prisma.organization.update({
+        where: { id: prefixlessOrgId },
+        data: { businessPrefix: '' },
+      })
+
+      prefixlessFinanceToken = await loginAs(app, prefixlessUsername, password)
+
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId: prefixlessOrgId,
+          name: `${testPrefix}-noprefix-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      prefixlessPartnerId = partner.id
+
+      const owner = await prisma.user.findFirst({
+        where: { id: user.id },
+      })
+      if (!owner) {
+        throw new Error('Prefixless finance user not found')
+      }
+
+      const departure = await prisma.departure.create({
+        data: {
+          organizationId: prefixlessOrgId,
+          departureNo: `${testPrefix}-noprefix-dep`,
+          name: `${testPrefix}-无前缀发团`,
+          routeName: '测试路线',
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          endDate: new Date('2026-08-10T00:00:00.000Z'),
+          dayCount: 10,
+          ownerUserId: owner.id,
+        },
+      })
+      prefixlessDepartureId = departure.id
+    })
+
+    afterAll(async () => {
+      await prisma.departure.deleteMany({
+        where: { organizationId: prefixlessOrgId },
+      })
+      await prisma.partner.deleteMany({
+        where: { organizationId: prefixlessOrgId },
+      })
+      await prisma.userRole.deleteMany({
+        where: { user: { organizationId: prefixlessOrgId } },
+      })
+      await prisma.user.deleteMany({
+        where: { organizationId: prefixlessOrgId },
+      })
+      await prisma.organization.delete({ where: { id: prefixlessOrgId } })
+    })
+
+    it('rejects receivable creation without business prefix', async () => {
+      const response = await authRequest(app, prefixlessFinanceToken)
+        .post('/api/finance/receivables')
+        .send({
+          departureId: prefixlessDepartureId,
+          title: `${testPrefix}-无前缀应收`,
+          amountCents: 50000,
+          dueDate: '2026-12-31',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: prefixlessPartnerId,
+          counterpartyName: `${testPrefix}-noprefix-partner`,
+        })
+        .expect(400)
+
+      expect(response.body.message).toBe(MISSING_BUSINESS_PREFIX_MESSAGE)
+    })
+
+    it('rejects payable creation without business prefix', async () => {
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId: prefixlessOrgId,
+          name: `${testPrefix}-noprefix-supplier`,
+          category: SupplierCategory.hotel,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+
+      const response = await authRequest(app, prefixlessFinanceToken)
+        .post('/api/finance/payables')
+        .send({
+          departureId: prefixlessDepartureId,
+          title: `${testPrefix}-无前缀应付`,
+          amountCents: 50000,
+          dueDate: '2026-12-31',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplier.id,
+          counterpartyName: supplier.name,
+        })
+        .expect(400)
+
+      expect(response.body.message).toBe(MISSING_BUSINESS_PREFIX_MESSAGE)
+
+      await prisma.supplier.delete({ where: { id: supplier.id } })
+    })
+
+    it('rejects transaction creation without business prefix', async () => {
+      const response = await authRequest(app, prefixlessFinanceToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          amountCents: 50000,
+          transactionDate: '2026-07-07',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: prefixlessPartnerId,
+          counterpartyName: `${testPrefix}-noprefix-partner`,
+          departureId: prefixlessDepartureId,
+        })
+        .expect(400)
+
+      expect(response.body.message).toBe(MISSING_BUSINESS_PREFIX_MESSAGE)
+    })
   })
 
   it('does not expose schedules to another organization', async () => {
