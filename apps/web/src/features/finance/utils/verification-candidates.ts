@@ -4,6 +4,7 @@ import {
   type FinanceTransactionSummary,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
+import { COUNTERPARTY_TYPE_LABELS, catalogLabel } from '../catalog'
 import type { VerificationDirection } from './verification-form'
 
 export function matchesCounterparty(
@@ -21,6 +22,27 @@ export function matchesCounterparty(
 
 function expectedTransactionDirection(direction: VerificationDirection): string {
   return direction === 'receivable' ? TransactionDirection.INFLOW : TransactionDirection.OUTFLOW
+}
+
+export function formatCounterpartySearchText(
+  counterpartyType: string,
+  counterpartyName: string | null | undefined,
+): string {
+  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
+  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
+}
+
+function matchesCounterpartyKeyword(
+  counterpartyType: string,
+  counterpartyName: string | null | undefined,
+  keyword: string,
+): boolean {
+  if (!keyword) {
+    return true
+  }
+  return formatCounterpartySearchText(counterpartyType, counterpartyName)
+    .toLowerCase()
+    .includes(keyword)
 }
 
 function formatDepartureLabel(
@@ -72,8 +94,11 @@ export function filterCandidateTransactions(params: {
     }
 
     if (
-      normalizedCounterpartyKeyword &&
-      !(transaction.counterpartyName ?? '').toLowerCase().includes(normalizedCounterpartyKeyword)
+      !matchesCounterpartyKeyword(
+        transaction.counterpartyType,
+        transaction.counterpartyName,
+        normalizedCounterpartyKeyword,
+      )
     ) {
       return false
     }
@@ -83,8 +108,12 @@ export function filterCandidateTransactions(params: {
     }
 
     const departureLabel = formatDepartureLabel(transaction.departureId, departureMap)
+    const counterpartyLabel = formatCounterpartySearchText(
+      transaction.counterpartyType,
+      transaction.counterpartyName,
+    )
     const haystack =
-      `${transaction.transactionNo} ${transaction.counterpartyName ?? ''} ${departureLabel}`.toLowerCase()
+      `${transaction.transactionNo} ${counterpartyLabel} ${departureLabel}`.toLowerCase()
     return haystack.includes(normalizedSearchKeyword)
   })
 }
@@ -118,8 +147,12 @@ export function filterCandidateSchedules(params: {
     }
 
     const departureLabel = formatDepartureLabel(schedule.departureId, departureMap)
+    const counterpartyLabel = formatCounterpartySearchText(
+      schedule.counterpartyType,
+      schedule.counterpartyName,
+    )
     const haystack =
-      `${schedule.scheduleNo} ${schedule.title} ${schedule.counterpartyName ?? ''} ${departureLabel}`.toLowerCase()
+      `${schedule.scheduleNo} ${schedule.title} ${counterpartyLabel} ${departureLabel}`.toLowerCase()
     return haystack.includes(normalizedSearchKeyword)
   })
 }

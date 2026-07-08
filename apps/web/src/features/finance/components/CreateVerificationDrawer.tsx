@@ -579,6 +579,8 @@ export function CreateVerificationDrawer({
               placeholder="搜索流水号、往来对象或发团"
               value={transactionSearchKeyword}
               onChange={(event) => setTransactionSearchKeyword(event.target.value)}
+              onSearch={(value) => setTransactionSearchKeyword(value)}
+              onPressEnter={(event) => event.preventDefault()}
               style={{ marginBottom: 12 }}
             />
             <Table
@@ -612,6 +614,8 @@ export function CreateVerificationDrawer({
               placeholder="搜索单号、标题、往来对象或发团"
               value={scheduleSearchKeyword}
               onChange={(event) => setScheduleSearchKeyword(event.target.value)}
+              onSearch={(value) => setScheduleSearchKeyword(value)}
+              onPressEnter={(event) => event.preventDefault()}
               style={{ marginBottom: 12 }}
             />
             <Table
