@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   Min,
@@ -101,7 +102,7 @@ export class ListFinanceTransactionsQueryDto {
 }
 
 export class VoidFinanceTransactionDto {
-  @IsOptional()
+  @IsNotEmpty({ message: '作废原因不能为空' })
   @IsString()
-  voidReason?: string
+  voidReason!: string
 }

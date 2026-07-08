@@ -129,7 +129,7 @@ export async function updateTransaction(
 
 export async function voidTransaction(
   id: string,
-  payload: VoidFinanceTransactionDto = {},
+  payload: VoidFinanceTransactionDto,
 ): Promise<FinanceTransactionSummary> {
   return request.post<FinanceTransactionSummary>(`/finance/transactions/${id}/void`, payload)
 }

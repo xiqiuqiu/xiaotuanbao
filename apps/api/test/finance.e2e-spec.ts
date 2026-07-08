@@ -951,7 +951,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/transactions/${voidTx.body.data.id}/void`)
-      .send({})
+      .send({ voidReason: '筛选测试作废' })
       .expect(201)
 
     const inflowList = await authRequest(app, financeToken)
@@ -1214,7 +1214,7 @@ describe('Finance API (e2e)', () => {
 
       await authRequest(app, financeToken)
         .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
-        .send({})
+        .send({ voidReason: '编辑拦截测试作废' })
         .expect(201)
 
       const response = await authRequest(app, financeToken)
@@ -1249,6 +1249,83 @@ describe('Finance API (e2e)', () => {
         .expect(400)
 
       expect(response.body.code).toBe(400)
+    })
+  })
+
+  describe('POST /finance/transactions/:id/void', () => {
+    it('rejects void without voidReason', async () => {
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+        .send({})
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('voids unallocated transaction with reason and persists voidReason', async () => {
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      const voided = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+        .send({ voidReason: '录入错误' })
+        .expect(201)
+
+      expect(voided.body.data.voidedAt).not.toBeNull()
+      expect(voided.body.data.voidReason).toBe('录入错误')
+
+      const fetched = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect(fetched.body.data.voidedAt).not.toBeNull()
+      expect(fetched.body.data.voidReason).toBe('录入错误')
+    })
+
+    it('rejects void when transaction has verification allocation', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-作废拦截-已核销` }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            counterpartyId: partnerId,
+            counterpartyName: `${testPrefix}-partner`,
+          }),
+        )
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivable.body.data.id}/link-transaction`)
+        .send({ transactionId: transaction.body.data.id, amountCents: 20000 })
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+        .send({ voidReason: '录入错误' })
+        .expect(400)
+
+      expect(response.body.message).toContain('核销')
     })
   })
 })

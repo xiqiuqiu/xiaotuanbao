@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -24,6 +24,10 @@ import {
 } from '../components/TransactionFilters'
 import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
 import {
+  VoidTransactionModal,
+  type VoidTransactionFormValues,
+} from '../components/VoidTransactionModal'
+import {
   buildCreateTransactionPayload,
   buildUpdateTransactionPayload,
   type TransactionFormValues,
@@ -42,9 +46,12 @@ function formatDateTime(value: string): string {
 export function TransactionsPage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<TransactionFormValues>()
+  const [voidForm] = Form.useForm<VoidTransactionFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerMode, setDrawerMode] = useState<'create' | 'edit'>('create')
   const [editingTransaction, setEditingTransaction] = useState<FinanceTransactionSummary | null>(null)
+  const [voidModalOpen, setVoidModalOpen] = useState(false)
+  const [voidingTransaction, setVoidingTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [dateRange, setDateRange] = useState<TransactionDateRange>(() => {
     const [start, end] = getDefaultTransactionDateRange()
     return [start, end]
@@ -124,9 +131,13 @@ export function TransactionsPage() {
   })
 
   const voidMutation = useMutation({
-    mutationFn: (id: string) => voidTransaction(id),
+    mutationFn: ({ id, voidReason }: { id: string; voidReason: string }) =>
+      voidTransaction(id, { voidReason }),
     onSuccess: () => {
       message.success('流水已作废')
+      setVoidModalOpen(false)
+      setVoidingTransaction(null)
+      voidForm.resetFields()
       queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
       queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
@@ -137,19 +148,16 @@ export function TransactionsPage() {
     },
   })
 
-  const handleVoid = useCallback(
-    (transaction: FinanceTransactionSummary) => {
-      Modal.confirm({
-        title: '确认作废流水？',
-        content: `作废后流水 ${transaction.transactionNo} 将不可再分配。`,
-        okText: '作废',
-        okType: 'danger',
-        cancelText: '取消',
-        onOk: () => voidMutation.mutateAsync(transaction.id),
-      })
-    },
-    [voidMutation],
-  )
+  const handleOpenVoidModal = useCallback((transaction: FinanceTransactionSummary) => {
+    setVoidingTransaction(transaction)
+    setVoidModalOpen(true)
+  }, [])
+
+  const handleCloseVoidModal = useCallback(() => {
+    setVoidModalOpen(false)
+    setVoidingTransaction(null)
+    voidForm.resetFields()
+  }, [voidForm])
 
   const handleEdit = useCallback((transaction: FinanceTransactionSummary) => {
     setDrawerMode('edit')
@@ -261,6 +269,11 @@ export function TransactionsPage() {
             record.allocatedAmountCents,
           )
           const canEdit = writeoff.status === 'none'
+          const canVoid = writeoff.status === 'none'
+
+          if (!canEdit && !canVoid) {
+            return '—'
+          }
 
           return (
             <>
@@ -269,15 +282,17 @@ export function TransactionsPage() {
                   编辑
                 </Button>
               ) : null}
-              <Button type="link" danger onClick={() => handleVoid(record)}>
-                作废
-              </Button>
+              {canVoid ? (
+                <Button type="link" danger onClick={() => handleOpenVoidModal(record)}>
+                  作废
+                </Button>
+              ) : null}
             </>
           )
         },
       },
     ],
-    [handleEdit, handleVoid],
+    [handleEdit, handleOpenVoidModal],
   )
 
   return (
@@ -355,6 +370,23 @@ export function TransactionsPage() {
           }}
         />
       </Card>
+
+      <VoidTransactionModal
+        open={voidModalOpen}
+        transaction={voidingTransaction}
+        loading={voidMutation.isPending}
+        form={voidForm}
+        onClose={handleCloseVoidModal}
+        onSubmit={(values) => {
+          if (!voidingTransaction) {
+            return
+          }
+          voidMutation.mutate({
+            id: voidingTransaction.id,
+            voidReason: values.voidReason,
+          })
+        }}
+      />
 
       <TransactionFormDrawer
         open={drawerOpen}

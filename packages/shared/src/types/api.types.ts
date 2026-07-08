@@ -376,7 +376,7 @@ export interface CreateFinanceTransactionDto {
 export type UpdateFinanceTransactionDto = CreateFinanceTransactionDto
 
 export interface VoidFinanceTransactionDto {
-  voidReason?: string
+  voidReason: string
 }
 
 export interface FinanceVerificationSummary {

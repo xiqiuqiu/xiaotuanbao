@@ -207,11 +207,16 @@ export class TransactionService {
       throw new BadRequestException('流水已有核销分配，不可作废')
     }
 
+    const voidReason = dto.voidReason?.trim()
+    if (!voidReason) {
+      throw new BadRequestException('作废原因不能为空')
+    }
+
     const updated = await this.prisma.financeTransaction.update({
       where: { id: transaction.id },
       data: {
         voidedAt: new Date(),
-        voidReason: dto.voidReason?.trim() || null,
+        voidReason,
       },
     })
 
