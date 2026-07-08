@@ -1,7 +1,10 @@
 import type { FinanceTransactionSummary, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { centsToYuan } from './finance-form'
 import { computeDefaultLinkAmountCents } from './link-transaction-form'
-import { buildCreateVerificationPayload } from './verification-form'
+import {
+  buildCreateVerificationPayload,
+  directionFromTransaction,
+} from './verification-form'
 
 export interface VerifyFromTransactionFormValues {
   paymentScheduleId: string
@@ -26,12 +29,14 @@ export function scheduleToVerifyFormValues(
 }
 
 export function buildVerifyFromTransactionPayload(
-  transactionId: string,
+  transaction: FinanceTransactionSummary,
   values: VerifyFromTransactionFormValues,
 ) {
   return buildCreateVerificationPayload({
     paymentScheduleId: values.paymentScheduleId,
-    transactionId,
+    transactionId: transaction.id,
     amountYuan: values.amountYuan,
+    direction: directionFromTransaction(transaction),
+    verificationDate: new Date().toISOString().slice(0, 10),
   })
 }

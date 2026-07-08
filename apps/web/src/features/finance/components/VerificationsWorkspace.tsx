@@ -22,7 +22,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
-import { VerificationFormDrawer } from './VerificationFormDrawer'
+import { CreateVerificationDrawer } from './CreateVerificationDrawer'
 import {
   CancelVerificationModal,
   type CancelVerificationFormValues,
@@ -35,7 +35,7 @@ import {
 import { VerificationDetailDrawer } from './VerificationDetailDrawer'
 import {
   buildCreateVerificationPayload,
-  type VerificationFormValues,
+  type CreateVerificationFormValues,
 } from '../utils/verification-form'
 
 export type VerificationsWorkspaceProps = {
@@ -63,7 +63,7 @@ export function VerificationsWorkspace({
 }: VerificationsWorkspaceProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [form] = Form.useForm<VerificationFormValues>()
+  const [form] = Form.useForm<CreateVerificationFormValues>()
   const [cancelForm] = Form.useForm<CancelVerificationFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
@@ -168,7 +168,7 @@ export function VerificationsWorkspace({
   }, [initialPaymentScheduleId, navigate])
 
   const createMutation = useMutation({
-    mutationFn: (values: VerificationFormValues) =>
+    mutationFn: (values: CreateVerificationFormValues) =>
       createVerification(buildCreateVerificationPayload(values)),
     onSuccess: () => {
       message.success('核销已创建')
@@ -321,11 +321,10 @@ export function VerificationsWorkspace({
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => {
-              form.resetFields()
               setModalOpen(true)
             }}
           >
-            新建核销
+            新增核销
           </Button>
         </div>
       ) : null}
@@ -411,10 +410,11 @@ export function VerificationsWorkspace({
       />
 
       {!readOnly ? (
-        <VerificationFormDrawer
+        <CreateVerificationDrawer
           open={modalOpen}
           loading={createMutation.isPending}
           form={form}
+          lockedDepartureId={isDepartureScope ? lockedDepartureId : undefined}
           onClose={() => {
             setModalOpen(false)
             form.resetFields()

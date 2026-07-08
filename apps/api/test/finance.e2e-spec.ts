@@ -1217,6 +1217,34 @@ describe('Finance API (e2e)', () => {
       expect(response.body.data.billUnsettledAfterCents).toBe(30000)
     })
 
+    it('persists remark on POST /finance/verifications', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-备注字段`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 20000,
+            verificationDate: '2026-07-08',
+            remark: '线下抹零说明',
+          }),
+        )
+        .expect(201)
+
+      expect(response.body.data.remark).toBe('线下抹零说明')
+      expect(response.body.data.verificationDate).toBe('2026-07-08')
+    })
+
     it('persists cancel audit fields on cancel', async () => {
       const receivable = await authRequest(app, financeToken)
         .post('/api/finance/receivables')

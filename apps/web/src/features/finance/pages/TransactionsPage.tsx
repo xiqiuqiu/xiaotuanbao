@@ -187,7 +187,7 @@ export function TransactionsPage() {
       if (!verifyTransaction) {
         throw new Error('未选择流水')
       }
-      return createVerification(buildVerifyFromTransactionPayload(verifyTransaction.id, values))
+      return createVerification(buildVerifyFromTransactionPayload(verifyTransaction, values))
     },
     onSuccess: () => {
       message.success('核销已创建')
