@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import { VerificationStatus, type FinanceVerificationSummary } from '@xiaotuanbao/shared'
@@ -26,13 +27,16 @@ export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'
   departureId?: string
   readOnly?: boolean
+  initialPaymentScheduleId?: string
 }
 
 export function VerificationsWorkspace({
   scope,
   departureId: lockedDepartureId,
   readOnly = false,
+  initialPaymentScheduleId,
 }: VerificationsWorkspaceProps) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<VerificationFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
@@ -43,7 +47,7 @@ export function VerificationsWorkspace({
   const listQueryKey = isDepartureScope ? 'departure-verifications' : 'finance-verifications'
 
   const { data: verificationsResult, isLoading } = useQuery({
-    queryKey: [listQueryKey, lockedDepartureId, page, pageSize],
+    queryKey: [listQueryKey, lockedDepartureId, initialPaymentScheduleId, page, pageSize],
     queryFn: () => {
       if (isDepartureScope) {
         if (!lockedDepartureId) {
@@ -51,10 +55,19 @@ export function VerificationsWorkspace({
         }
         return listDepartureVerifications(lockedDepartureId, { page, pageSize })
       }
-      return listVerifications({ page, pageSize })
+      return listVerifications({
+        page,
+        pageSize,
+        paymentScheduleId: initialPaymentScheduleId,
+      })
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
+
+  const clearPaymentScheduleFilter = useCallback(() => {
+    setPage(1)
+    void navigate({ to: '/finance/verification', search: {} })
+  }, [navigate])
 
   const createMutation = useMutation({
     mutationFn: (values: VerificationFormValues) =>
@@ -181,6 +194,17 @@ export function VerificationsWorkspace({
           >
             新建核销
           </Button>
+        </div>
+      ) : null}
+
+      {!isDepartureScope && initialPaymentScheduleId ? (
+        <div style={{ marginBottom: 16 }}>
+          <Space wrap>
+            <Typography.Text type="secondary">当前筛选：</Typography.Text>
+            <Tag closable onClose={clearPaymentScheduleFilter}>
+              账款节点 {initialPaymentScheduleId.slice(0, 8)}…
+            </Tag>
+          </Space>
         </div>
       ) : null}
 

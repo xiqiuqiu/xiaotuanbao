@@ -94,6 +94,7 @@ export { SourceOrderReceivableStatus } from './enums/source-order-receivable-sta
 export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
+  deriveSettlementLabel,
   isFinanceTouched,
   formatDepartureNo,
   formatScheduleNo,
@@ -102,6 +103,7 @@ export {
   assertCounterpartyMatch,
   CounterpartyMismatchError,
   type DeriveScheduleStateInput,
+  type SettlementLabelResult,
   type FinanceTouchedScheduleInput,
   type CounterpartySnapshot,
   PAYMENT_CHANNEL_OPTIONS,

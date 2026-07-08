@@ -1,4 +1,8 @@
 export { deriveScheduleState, type DeriveScheduleStateInput } from './derive-schedule-state'
+export {
+  deriveSettlementLabel,
+  type SettlementLabelResult,
+} from './derive-settlement-label'
 export { isFinanceTouched, type FinanceTouchedScheduleInput } from './is-finance-touched'
 export { formatDepartureNo } from './format-departure-no'
 export { formatScheduleNo } from './format-schedule-no'

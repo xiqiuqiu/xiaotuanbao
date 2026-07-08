@@ -1,7 +1,10 @@
 import { Typography } from 'antd'
+import { useSearch } from '@tanstack/react-router'
 import { VerificationsWorkspace } from '../components/VerificationsWorkspace'
 
 export function VerificationsPage() {
+  const search = useSearch({ strict: false }) as { paymentScheduleId?: string }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -15,7 +18,7 @@ export function VerificationsPage() {
         </div>
       </div>
 
-      <VerificationsWorkspace scope="global" />
+      <VerificationsWorkspace scope="global" initialPaymentScheduleId={search.paymentScheduleId} />
     </div>
   )
 }

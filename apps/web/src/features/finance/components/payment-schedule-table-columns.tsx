@@ -1,11 +1,16 @@
+import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { Button, Space, Tag, Typography } from 'antd'
+import { Button, Dropdown, Space, Tag, Typography } from 'antd'
+import { DownOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
-import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import {
+  PaymentScheduleStatus,
+  deriveSettlementLabel,
+  type PaymentScheduleSummary,
+} from '@xiaotuanbao/shared'
 import {
   COUNTERPARTY_TYPE_LABELS,
-  PAYMENT_SCHEDULE_STATUS_COLORS,
-  PAYMENT_SCHEDULE_STATUS_LABELS,
+  SETTLEMENT_LABEL_COLORS,
   catalogLabel,
   formatCents,
 } from '../catalog'
@@ -18,6 +23,10 @@ function canSettle(schedule: PaymentScheduleSummary): boolean {
   return isScheduleActionable(schedule) && schedule.unsettledAmountCents > 0
 }
 
+function hasVerificationRecords(schedule: PaymentScheduleSummary): boolean {
+  return schedule.settledAmountCents > 0
+}
+
 interface BuildPaymentScheduleColumnsOptions {
   isDepartureScope: boolean
   isReceivable: boolean
@@ -27,6 +36,7 @@ interface BuildPaymentScheduleColumnsOptions {
   onLink: (schedule: PaymentScheduleSummary) => void
   onEdit: (schedule: PaymentScheduleSummary) => void
   onCancel: (schedule: PaymentScheduleSummary) => void
+  onViewVerifications: (schedule: PaymentScheduleSummary) => void
 }
 
 export function buildPaymentScheduleColumns({
@@ -38,6 +48,7 @@ export function buildPaymentScheduleColumns({
   onLink,
   onEdit,
   onCancel,
+  onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
   return [
     {
@@ -91,13 +102,24 @@ export function buildPaymentScheduleColumns({
     },
     { title: '到期日', dataIndex: 'dueDate' },
     {
-      title: '状态',
-      dataIndex: 'status',
-      render: (status: string) => (
-        <Tag color={PAYMENT_SCHEDULE_STATUS_COLORS[status]}>
-          {catalogLabel(PAYMENT_SCHEDULE_STATUS_LABELS, status)}
-        </Tag>
-      ),
+      title: '结清进度',
+      key: 'settlementLabel',
+      render: (_, record) => {
+        const direction = isReceivable ? 'receivable' : 'payable'
+        const { label, isOverdue } = deriveSettlementLabel(
+          direction,
+          record.amountCents,
+          record.settledAmountCents,
+          record.status,
+        )
+
+        return (
+          <Space size={4} wrap>
+            <Tag color={SETTLEMENT_LABEL_COLORS[label] ?? 'default'}>{label}</Tag>
+            {isOverdue ? <Tag color="error">已逾期</Tag> : null}
+          </Space>
+        )
+      },
     },
     {
       title: '财务介入',
@@ -112,15 +134,16 @@ export function buildPaymentScheduleColumns({
           return null
         }
 
-        const actions: React.ReactNode[] = []
+        const primaryActions: React.ReactNode[] = []
+        const moreItems: NonNullable<MenuProps['items']> = []
 
         if (canSettle(record)) {
-          actions.push(
+          primaryActions.push(
             <Button key="confirm" type="link" onClick={() => onConfirm(record)}>
               {isReceivable ? '登记收款' : '登记付款'}
             </Button>,
           )
-          actions.push(
+          primaryActions.push(
             <Button key="link" type="link" onClick={() => onLink(record)}>
               匹配流水
             </Button>,
@@ -128,19 +151,43 @@ export function buildPaymentScheduleColumns({
         }
 
         if (isScheduleActionable(record)) {
-          actions.push(
-            <Button key="edit" type="link" onClick={() => onEdit(record)}>
-              编辑
-            </Button>,
-          )
-          actions.push(
-            <Button key="cancel" type="link" danger onClick={() => onCancel(record)}>
-              关闭节点
-            </Button>,
-          )
+          moreItems.push({
+            key: 'edit',
+            label: '编辑',
+            onClick: () => onEdit(record),
+          })
+          moreItems.push({
+            key: 'cancel',
+            label: '关闭节点',
+            danger: true,
+            onClick: () => onCancel(record),
+          })
         }
 
-        return actions.length > 0 ? <Space size={0} wrap>{actions}</Space> : '—'
+        if (hasVerificationRecords(record)) {
+          moreItems.push({
+            key: 'verifications',
+            label: '查看核销',
+            onClick: () => onViewVerifications(record),
+          })
+        }
+
+        if (primaryActions.length === 0 && moreItems.length === 0) {
+          return '—'
+        }
+
+        return (
+          <Space size={0} wrap>
+            {primaryActions}
+            {moreItems.length > 0 ? (
+              <Dropdown menu={{ items: moreItems }}>
+                <Button type="link" style={{ paddingInline: 0 }}>
+                  更多 <DownOutlined />
+                </Button>
+              </Dropdown>
+            ) : null}
+          </Space>
+        )
       },
     },
   ]

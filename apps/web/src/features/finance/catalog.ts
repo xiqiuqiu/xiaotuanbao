@@ -21,6 +21,16 @@ export function formatCents(cents: number): string {
   return `¥${(cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+export const SETTLEMENT_LABEL_COLORS: Record<string, string> = {
+  待收款: 'processing',
+  部分收款: 'gold',
+  已收清: 'success',
+  待付款: 'processing',
+  部分付款: 'gold',
+  已付清: 'success',
+  已关闭: 'default',
+}
+
 export const PAYMENT_SCHEDULE_STATUS_OPTIONS = [
   { value: PaymentScheduleStatus.PENDING, label: '待结清' },
   { value: PaymentScheduleStatus.OVERDUE, label: '已逾期' },

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Card, Form, Table } from 'antd'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listDepartures, getDeparture } from '@/services/departure.service'
@@ -76,6 +77,7 @@ export function PaymentScheduleWorkspace({
   departureId: lockedDepartureId,
   readOnly = false,
 }: PaymentScheduleWorkspaceProps) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const isReceivable = direction === 'receivable'
   const isDepartureScope = scope === 'departure'
@@ -258,6 +260,16 @@ export function PaymentScheduleWorkspace({
     [editForm],
   )
 
+  const openViewVerifications = useCallback(
+    (schedule: PaymentScheduleSummary) => {
+      void navigate({
+        to: '/finance/verification',
+        search: { paymentScheduleId: schedule.id },
+      })
+    },
+    [navigate],
+  )
+
   const resetFilters = useCallback(() => {
     if (scope === 'global') {
       setDepartureFilter(undefined)
@@ -279,6 +291,7 @@ export function PaymentScheduleWorkspace({
         onLink: openLink,
         onEdit: openEdit,
         onCancel: openCancel,
+        onViewVerifications: openViewVerifications,
       }),
     [
       departureMap,
@@ -288,6 +301,7 @@ export function PaymentScheduleWorkspace({
       openConfirm,
       openEdit,
       openLink,
+      openViewVerifications,
       readOnly,
     ],
   )
