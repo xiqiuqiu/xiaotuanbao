@@ -13,6 +13,7 @@ import {
   SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
+import { PaymentChannel } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, DEPARTURE_NO_REGEX, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Departure API (e2e)', () => {
@@ -1017,6 +1018,7 @@ describe('Departure API (e2e)', () => {
         .send({
           amountCents: 500000,
           transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
           counterpartyType: CounterpartyType.guest,
           counterpartyName: seeded.displayName,
         })
@@ -1051,6 +1053,7 @@ describe('Departure API (e2e)', () => {
         .send({
           amountCents: 1000000,
           transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
           counterpartyType: CounterpartyType.guest,
           counterpartyName: seeded.displayName,
         })
@@ -1061,6 +1064,7 @@ describe('Departure API (e2e)', () => {
         .send({
           amountCents: 360000,
           transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
           counterpartyType: CounterpartyType.supplier,
           counterpartyId: rmSupplierId,
         })
@@ -1115,6 +1119,7 @@ describe('Departure API (e2e)', () => {
         .send({
           amountCents: 1000000,
           transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
           counterpartyType: CounterpartyType.guest,
           counterpartyName: seeded.displayName,
         })
@@ -1125,6 +1130,7 @@ describe('Departure API (e2e)', () => {
         .send({
           amountCents: 360000,
           transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
           counterpartyType: CounterpartyType.supplier,
           counterpartyId: rmSupplierId,
         })

@@ -10,7 +10,7 @@ import {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import { PaymentChannel, PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs } from './helpers'
 
 describe('Source order generate receivables (e2e)', () => {
@@ -314,6 +314,7 @@ describe('Source order generate receivables (e2e)', () => {
       .send({
         amountCents: 1000000,
         transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.displayName,
       })

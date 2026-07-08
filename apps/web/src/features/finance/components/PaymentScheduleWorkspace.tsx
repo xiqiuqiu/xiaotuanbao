@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Card, Form, Table } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
+import { listDepartures, getDeparture } from '@/services/departure.service'
 import {
   listDeparturePayables,
   listDepartureReceivables,
@@ -140,13 +140,30 @@ export function PaymentScheduleWorkspace({
     enabled: !isDepartureScope,
   })
 
+  const { data: lockedDeparture } = useQuery({
+    queryKey: ['departure', lockedDepartureId, 'finance-schedule-map'],
+    queryFn: () => {
+      if (!lockedDepartureId) {
+        throw new Error('发团 ID 缺失')
+      }
+      return getDeparture(lockedDepartureId)
+    },
+    enabled: isDepartureScope && Boolean(lockedDepartureId),
+  })
+
   const departureMap = useMemo(() => {
     const map = new Map<string, { departureNo: string; name: string }>()
     for (const departure of departuresResult?.items ?? []) {
       map.set(departure.id, { departureNo: departure.departureNo, name: departure.name })
     }
+    if (lockedDeparture) {
+      map.set(lockedDeparture.id, {
+        departureNo: lockedDeparture.departureNo,
+        name: lockedDeparture.name,
+      })
+    }
     return map
-  }, [departuresResult?.items])
+  }, [departuresResult?.items, lockedDeparture])
 
   const filteredItems = useMemo(
     () =>
@@ -325,6 +342,7 @@ export function PaymentScheduleWorkspace({
       <PaymentScheduleActionDialogs
         isReceivable={isReceivable}
         activeSchedule={activeSchedule}
+        departureMap={departureMap}
         confirmOpen={confirmOpen}
         linkOpen={linkOpen}
         cancelOpen={cancelOpen}

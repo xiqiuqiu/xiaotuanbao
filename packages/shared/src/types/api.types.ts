@@ -405,6 +405,7 @@ export interface CreateFinanceVerificationDto {
 export interface ConfirmCollectionDto {
   amountCents: number
   transactionDate: string
+  paymentChannel: string
   counterpartyType?: string
   counterpartyId?: string
   counterpartyName?: string
@@ -414,6 +415,7 @@ export interface ConfirmCollectionDto {
 export interface ConfirmPaymentDto {
   amountCents: number
   transactionDate: string
+  paymentChannel: string
   counterpartyType?: string
   counterpartyId?: string
   counterpartyName?: string

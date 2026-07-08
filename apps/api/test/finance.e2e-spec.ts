@@ -28,6 +28,15 @@ describe('Finance API (e2e)', () => {
     }
   }
 
+  function confirmPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      amountCents: 50000,
+      transactionDate: '2026-07-07',
+      paymentChannel: PaymentChannel.BANK_TRANSFER,
+      ...overrides,
+    }
+  }
+
   beforeAll(async () => {
     app = await createTestApp()
     prisma = new PrismaClient()
@@ -295,7 +304,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
-      .send({ amountCents: 50000, transactionDate: '2026-07-07' })
+      .send(confirmPayload())
       .expect(201)
 
     const response = await authRequest(app, financeToken)
@@ -316,7 +325,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
-      .send({ amountCents: 30000, transactionDate: '2026-07-07' })
+      .send(confirmPayload({ amountCents: 30000 }))
       .expect(201)
 
     const partial = await authRequest(app, financeToken)
@@ -328,7 +337,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
-      .send({ amountCents: 20000, transactionDate: '2026-07-07' })
+      .send(confirmPayload({ amountCents: 20000 }))
       .expect(201)
 
     const settled = await authRequest(app, financeToken)
@@ -380,7 +389,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
-      .send({ amountCents: 50000, transactionDate: '2026-07-07' })
+      .send(confirmPayload())
       .expect(201)
 
     const verifications = await authRequest(app, financeToken)
@@ -421,10 +430,109 @@ describe('Finance API (e2e)', () => {
 
     const response = await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send(confirmPayload({ amountCents: 10000 }))
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('rejects confirm-collection without paymentChannel', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-缺通道收款` }))
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
       .send({ amountCents: 10000, transactionDate: '2026-07-07' })
       .expect(400)
 
     expect(response.body.code).toBe(400)
+  })
+
+  it('rejects confirm-payment without paymentChannel', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/payables')
+      .send(
+        schedulePayload({
+          title: `${testPrefix}-缺通道付款`,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyName: '测试供应商',
+        }),
+      )
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${created.body.data.id}/confirm-payment`)
+      .send({ amountCents: 10000, transactionDate: '2026-07-07' })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('confirms collection with paymentChannel on created transaction', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-通道收款`, amountCents: 40000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send(confirmPayload({ amountCents: 40000, paymentChannel: PaymentChannel.WECHAT }))
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .expect(200)
+
+    const transactionId = verifications.body.data.items[0].transactionId
+    const transaction = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${transactionId}`)
+      .expect(200)
+
+    expect(transaction.body.data.paymentChannel).toBe(PaymentChannel.WECHAT)
+    expect(transaction.body.data.direction).toBe('inflow')
+  })
+
+  it('confirms payment and settles payable with paymentChannel', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/payables')
+      .send(
+        schedulePayload({
+          title: `${testPrefix}-登记付款`,
+          amountCents: 35000,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyName: '测试供应商',
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${created.body.data.id}/confirm-payment`)
+      .send(confirmPayload({ amountCents: 35000, paymentChannel: PaymentChannel.ALIPAY }))
+      .expect(201)
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${created.body.data.id}`)
+      .expect(200)
+
+    expect(schedule.body.data.settledAmountCents).toBe(35000)
+    expect(schedule.body.data.unsettledAmountCents).toBe(0)
+    expect(schedule.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .expect(200)
+
+    const transactionId = verifications.body.data.items[0].transactionId
+    const transaction = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${transactionId}`)
+      .expect(200)
+
+    expect(transaction.body.data.paymentChannel).toBe(PaymentChannel.ALIPAY)
+    expect(transaction.body.data.direction).toBe('outflow')
   })
 
   it('rejects create transaction without paymentChannel', async () => {
@@ -506,7 +614,7 @@ describe('Finance API (e2e)', () => {
 
     const confirm = await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
-      .send({ amountCents: 10000, transactionDate: '2026-07-07' })
+      .send(confirmPayload({ amountCents: 10000 }))
       .expect(403)
 
     expect(confirm.body.code).toBe(403)

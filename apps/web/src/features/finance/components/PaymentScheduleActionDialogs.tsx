@@ -14,6 +14,7 @@ import type { EditScheduleFormValues } from '../utils/edit-schedule-form'
 interface PaymentScheduleActionDialogsProps {
   isReceivable: boolean
   activeSchedule: PaymentScheduleSummary | null
+  departureMap: Map<string, { departureNo: string; name: string }>
   confirmOpen: boolean
   linkOpen: boolean
   cancelOpen: boolean
@@ -40,6 +41,7 @@ interface PaymentScheduleActionDialogsProps {
 export function PaymentScheduleActionDialogs({
   isReceivable,
   activeSchedule,
+  departureMap,
   confirmOpen,
   linkOpen,
   cancelOpen,
@@ -63,6 +65,7 @@ export function PaymentScheduleActionDialogs({
         <ConfirmCollectionDrawer
           open={confirmOpen}
           schedule={activeSchedule}
+          departureMap={departureMap}
           loading={confirmMutation.isPending}
           form={confirmForm}
           onClose={onCloseConfirm}
@@ -72,6 +75,7 @@ export function PaymentScheduleActionDialogs({
         <ConfirmPaymentDrawer
           open={confirmOpen}
           schedule={activeSchedule}
+          departureMap={departureMap}
           loading={confirmMutation.isPending}
           form={confirmForm}
           onClose={onCloseConfirm}

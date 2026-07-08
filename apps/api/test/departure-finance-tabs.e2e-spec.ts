@@ -9,6 +9,7 @@ import {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
+import { PaymentChannel } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs } from './helpers'
 
 describe('Departure finance tabs (e2e)', () => {
@@ -163,6 +164,7 @@ describe('Departure finance tabs (e2e)', () => {
       .send({
         amountCents: 1000000,
         transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.displayName,
       })
@@ -206,6 +208,7 @@ describe('Departure finance tabs (e2e)', () => {
       .send({
         amountCents: 1000000,
         transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.displayName,
       })

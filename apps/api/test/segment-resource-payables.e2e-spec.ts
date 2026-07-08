@@ -10,7 +10,7 @@ import {
   SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import { PaymentChannel, PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs } from './helpers'
 
 describe('Segment resource generate payables (e2e)', () => {
@@ -280,6 +280,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .send({
         amountCents: 160000,
         transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
         counterpartyType: CounterpartyType.supplier,
         counterpartyId: supplierId,
       })

@@ -8,7 +8,10 @@ import {
   Min,
 } from 'class-validator'
 import { Type } from 'class-transformer'
-import { CounterpartyType as PrismaCounterpartyType } from '@prisma/client'
+import {
+  CounterpartyType as PrismaCounterpartyType,
+  PaymentChannel as PrismaPaymentChannel,
+} from '@prisma/client'
 
 export class ConfirmCollectionDto {
   @Type(() => Number)
@@ -18,6 +21,9 @@ export class ConfirmCollectionDto {
 
   @IsDateString()
   transactionDate!: string
+
+  @IsEnum(PrismaPaymentChannel)
+  paymentChannel!: PrismaPaymentChannel
 
   @IsOptional()
   @IsEnum(PrismaCounterpartyType)
@@ -44,6 +50,9 @@ export class ConfirmPaymentDto {
 
   @IsDateString()
   transactionDate!: string
+
+  @IsEnum(PrismaPaymentChannel)
+  paymentChannel!: PrismaPaymentChannel
 
   @IsOptional()
   @IsEnum(PrismaCounterpartyType)
