@@ -146,6 +146,16 @@ enum TransactionDirection {
   @@map("transaction_direction")
 }
 
+enum PaymentChannel {
+  cash
+  bank_transfer
+  wechat
+  alipay
+  other
+
+  @@map("payment_channel")
+}
+
 enum VerificationStatus {
   normal
   cancelled
@@ -533,6 +543,7 @@ model FinanceTransaction {
   organization     Organization         @relation(fields: [organizationId], references: [id])
   transactionNo    String               @map("transaction_no")
   direction        TransactionDirection
+  paymentChannel   PaymentChannel       @default(other) @map("payment_channel")
   amountCents      Int                  @map("amount_cents")
   transactionDate  DateTime             @map("transaction_date") @db.Date
   counterpartyType CounterpartyType     @map("counterparty_type")

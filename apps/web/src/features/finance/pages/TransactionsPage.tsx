@@ -9,6 +9,7 @@ import { listDepartures } from '@/services/departure.service'
 import { createTransaction, listTransactions, voidTransaction } from '@/services/finance.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
+  PAYMENT_CHANNEL_LABELS,
   TRANSACTION_DIRECTION_COLORS,
   TRANSACTION_DIRECTION_LABELS,
   catalogLabel,
@@ -114,6 +115,11 @@ export function TransactionsPage() {
             {catalogLabel(TRANSACTION_DIRECTION_LABELS, value)}
           </Tag>
         ),
+      },
+      {
+        title: '收付款通道',
+        dataIndex: 'paymentChannel',
+        render: (value: string) => catalogLabel(PAYMENT_CHANNEL_LABELS, value),
       },
       {
         title: '金额',

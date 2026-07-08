@@ -9,3 +9,4 @@ export {
   CounterpartyMismatchError,
   type CounterpartySnapshot,
 } from './assert-counterparty-match'
+export { PAYMENT_CHANNEL_OPTIONS, PAYMENT_CHANNEL_LABELS } from './payment-channel-catalog'

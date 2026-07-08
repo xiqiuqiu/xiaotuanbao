@@ -1,5 +1,7 @@
 import {
   CounterpartyType,
+  PAYMENT_CHANNEL_LABELS,
+  PAYMENT_CHANNEL_OPTIONS,
   PaymentScheduleStatus,
   TransactionDirection,
   VerificationStatus,
@@ -50,6 +52,8 @@ export const TRANSACTION_DIRECTION_COLORS: Record<string, string> = {
   [TransactionDirection.INFLOW]: 'green',
   [TransactionDirection.OUTFLOW]: 'orange',
 }
+
+export { PAYMENT_CHANNEL_OPTIONS, PAYMENT_CHANNEL_LABELS }
 
 export const COUNTERPARTY_TYPE_OPTIONS = [
   { value: CounterpartyType.PARTNER, label: '合作伙伴' },

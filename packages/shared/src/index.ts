@@ -84,6 +84,7 @@ export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
 export { CounterpartyType } from './enums/counterparty-type.enum'
 export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
 export { TransactionDirection } from './enums/transaction-direction.enum'
+export { PaymentChannel } from './enums/payment-channel.enum'
 export { VerificationStatus } from './enums/verification-status.enum'
 export { ResourceKind } from './enums/resource-kind.enum'
 export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
@@ -103,4 +104,6 @@ export {
   type DeriveScheduleStateInput,
   type FinanceTouchedScheduleInput,
   type CounterpartySnapshot,
+  PAYMENT_CHANNEL_OPTIONS,
+  PAYMENT_CHANNEL_LABELS,
 } from './finance'

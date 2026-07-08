@@ -3,8 +3,9 @@ import type {
   FinanceTransactionListResult,
   FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
-import { TransactionDirection } from '@xiaotuanbao/shared'
+import { TransactionDirection, PaymentChannel } from '@xiaotuanbao/shared'
 import {
+  PaymentChannel as PrismaPaymentChannel,
   TransactionDirection as PrismaTransactionDirection,
   type FinanceTransaction,
   type Prisma,
@@ -101,6 +102,7 @@ export class TransactionService {
         organizationId,
         transactionNo,
         direction: dto.direction,
+        paymentChannel: dto.paymentChannel,
         amountCents: dto.amountCents,
         transactionDate: parseDateOnly(dto.transactionDate),
         counterpartyType: dto.counterpartyType,
@@ -147,6 +149,21 @@ export class TransactionService {
     return this.toSummary(updated, 0)
   }
 
+  private toPaymentChannel(channel: PrismaPaymentChannel): PaymentChannel {
+    switch (channel) {
+      case PrismaPaymentChannel.cash:
+        return PaymentChannel.CASH
+      case PrismaPaymentChannel.bank_transfer:
+        return PaymentChannel.BANK_TRANSFER
+      case PrismaPaymentChannel.wechat:
+        return PaymentChannel.WECHAT
+      case PrismaPaymentChannel.alipay:
+        return PaymentChannel.ALIPAY
+      case PrismaPaymentChannel.other:
+        return PaymentChannel.OTHER
+    }
+  }
+
   private assertPositiveAmount(amountCents: number) {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
       throw new BadRequestException('金额必须大于 0')
@@ -178,6 +195,7 @@ export class TransactionService {
         transaction.direction === PrismaTransactionDirection.inflow
           ? TransactionDirection.INFLOW
           : TransactionDirection.OUTFLOW,
+      paymentChannel: this.toPaymentChannel(transaction.paymentChannel),
       amountCents: transaction.amountCents,
       allocatedAmountCents,
       unallocatedAmountCents: transaction.amountCents - allocatedAmountCents,

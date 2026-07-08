@@ -5,6 +5,7 @@ import {
   CounterpartyMismatchError,
 } from '@xiaotuanbao/shared'
 import {
+  PaymentChannel as PrismaPaymentChannel,
   PaymentScheduleDirection,
   TransactionDirection as PrismaTransactionDirection,
   type PaymentSchedule,
@@ -57,6 +58,7 @@ export class FinanceOperationsService {
         organizationId,
         {
           direction: PrismaTransactionDirection.inflow,
+          paymentChannel: PrismaPaymentChannel.other,
           amountCents: dto.amountCents,
           transactionDate: dto.transactionDate,
           counterpartyType: counterparty.counterpartyType,
@@ -115,6 +117,7 @@ export class FinanceOperationsService {
         organizationId,
         {
           direction: PrismaTransactionDirection.outflow,
+          paymentChannel: PrismaPaymentChannel.other,
           amountCents: dto.amountCents,
           transactionDate: dto.transactionDate,
           counterpartyType: counterparty.counterpartyType,

@@ -338,6 +338,7 @@ export interface FinanceTransactionSummary {
   id: string
   transactionNo: string
   direction: string
+  paymentChannel: string
   amountCents: number
   allocatedAmountCents: number
   unallocatedAmountCents: number
@@ -362,6 +363,7 @@ export interface FinanceTransactionListResult {
 
 export interface CreateFinanceTransactionDto {
   direction: string
+  paymentChannel: string
   amountCents: number
   transactionDate: string
   counterpartyType: string

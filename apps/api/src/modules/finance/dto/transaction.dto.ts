@@ -9,12 +9,16 @@ import {
 import { Type } from 'class-transformer'
 import {
   CounterpartyType as PrismaCounterpartyType,
+  PaymentChannel as PrismaPaymentChannel,
   TransactionDirection as PrismaTransactionDirection,
 } from '@prisma/client'
 
 export class CreateFinanceTransactionDto {
   @IsEnum(PrismaTransactionDirection)
   direction!: PrismaTransactionDirection
+
+  @IsEnum(PrismaPaymentChannel)
+  paymentChannel!: PrismaPaymentChannel
 
   @Type(() => Number)
   @IsInt()

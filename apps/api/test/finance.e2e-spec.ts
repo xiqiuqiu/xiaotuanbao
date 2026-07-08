@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import { CounterpartyType, PaymentScheduleDirection } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
+import { PaymentScheduleStatus, PaymentChannel } from '@xiaotuanbao/shared'
 import { authRequest, AR_AP_SCHEDULE_NO_REGEX, createTestApp, loginAs, TX_NO_REGEX, uniqueBusinessPrefix } from './helpers'
 
 describe('Finance API (e2e)', () => {
@@ -355,6 +355,7 @@ describe('Finance API (e2e)', () => {
       .post('/api/finance/transactions')
       .send({
         direction: 'inflow',
+        paymentChannel: PaymentChannel.WECHAT,
         amountCents: 10000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.supplier,
@@ -426,11 +427,27 @@ describe('Finance API (e2e)', () => {
     expect(response.body.code).toBe(400)
   })
 
+  it('rejects create transaction without paymentChannel', async () => {
+    const response = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        amountCents: 12000,
+        transactionDate: '2026-07-07',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyName: '缺少通道',
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
   it('creates transaction with TX number and filters by departureId', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
       .send({
         direction: 'inflow',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
         amountCents: 12000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.partner,
@@ -440,6 +457,7 @@ describe('Finance API (e2e)', () => {
       .expect(201)
 
     expect(response.body.data.transactionNo).toMatch(TX_NO_REGEX)
+    expect(response.body.data.paymentChannel).toBe(PaymentChannel.BANK_TRANSFER)
 
     const list = await authRequest(app, financeToken)
       .get('/api/finance/transactions')
@@ -452,6 +470,23 @@ describe('Finance API (e2e)', () => {
         (item: { departureId: string | null }) => item.departureId === otherDepartureId,
       ),
     ).toBe(true)
+  })
+
+  it('creates transaction without departureId when paymentChannel is provided', async () => {
+    const response = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'outflow',
+        paymentChannel: PaymentChannel.CASH,
+        amountCents: 8000,
+        transactionDate: '2026-07-07',
+        counterpartyType: CounterpartyType.manual,
+        counterpartyName: '无发团流水',
+      })
+      .expect(201)
+
+    expect(response.body.data.paymentChannel).toBe(PaymentChannel.CASH)
+    expect(response.body.data.departureId).toBeNull()
   })
 
   it('returns 403 for coordinator on GET /finance/receivables', async () => {
@@ -480,6 +515,7 @@ describe('Finance API (e2e)', () => {
       .post('/api/finance/transactions')
       .send({
         direction: 'inflow',
+        paymentChannel: PaymentChannel.OTHER,
         amountCents: 10000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.partner,

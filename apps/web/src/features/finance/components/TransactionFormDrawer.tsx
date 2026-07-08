@@ -1,9 +1,13 @@
 import { DatePicker, Drawer, Form, Input, InputNumber, Select, Space, Button } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
-import { CounterpartyType, TransactionDirection } from '@xiaotuanbao/shared'
+import { CounterpartyType, PaymentChannel, TransactionDirection } from '@xiaotuanbao/shared'
 import { listDepartures } from '@/services/departure.service'
-import { COUNTERPARTY_TYPE_OPTIONS, TRANSACTION_DIRECTION_OPTIONS } from '../catalog'
+import {
+  COUNTERPARTY_TYPE_OPTIONS,
+  PAYMENT_CHANNEL_OPTIONS,
+  TRANSACTION_DIRECTION_OPTIONS,
+} from '../catalog'
 import type { TransactionFormValues } from '../utils/transaction-form'
 
 interface TransactionFormDrawerProps {
@@ -53,6 +57,7 @@ export function TransactionFormDrawer({
         layout="vertical"
         initialValues={{
           direction: TransactionDirection.INFLOW,
+          paymentChannel: PaymentChannel.CASH,
           counterpartyType: CounterpartyType.PARTNER,
         }}
         onFinish={onSubmit}
@@ -63,6 +68,13 @@ export function TransactionFormDrawer({
           rules={[{ required: true, message: '请选择方向' }]}
         >
           <Select options={[...TRANSACTION_DIRECTION_OPTIONS]} />
+        </Form.Item>
+        <Form.Item
+          name="paymentChannel"
+          label="收付款通道"
+          rules={[{ required: true, message: '请选择收付款通道' }]}
+        >
+          <Select options={[...PAYMENT_CHANNEL_OPTIONS]} />
         </Form.Item>
         <Form.Item
           name="amountYuan"
