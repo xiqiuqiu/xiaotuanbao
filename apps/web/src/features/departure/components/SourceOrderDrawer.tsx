@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   Alert,
   Divider,
@@ -26,6 +26,7 @@ import {
 } from '../catalog'
 import {
   computeFormAmounts,
+  createEmptySourceOrderFormValues,
   formValuesToPayload,
   sourceOrderToFormValues,
   type SourceOrderFormValues,
@@ -87,17 +88,23 @@ export function SourceOrderDrawer({
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
-    () =>
-      editing
-        ? sourceOrderToFormValues(editing)
-        : {
-            guestCount: 1,
-            discountType: SourceOrderDiscountType.NONE,
-            collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-            unitPriceYuan: 0,
-          },
+    () => (editing ? sourceOrderToFormValues(editing) : createEmptySourceOrderFormValues()),
     [editing],
   )
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    form.resetFields()
+    form.setFieldsValue(initialValues)
+  }, [form, initialValues, open])
+
+  const handleClose = () => {
+    form.resetFields()
+    onClose()
+  }
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -114,14 +121,14 @@ export function SourceOrderDrawer({
       title={readOnly ? '查看客源单' : editing ? '编辑客源单' : '添加客源单'}
       open={open}
       width={560}
-      onClose={onClose}
+      onClose={handleClose}
       destroyOnClose
       footer={
         readOnly ? (
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={handleClose}>关闭</Button>
         ) : (
           <Space style={{ float: 'right' }}>
-            <Button onClick={onClose}>取消</Button>
+            <Button onClick={handleClose}>取消</Button>
             <Button type="primary" loading={loading} onClick={() => form.submit()}>
               保存
             </Button>

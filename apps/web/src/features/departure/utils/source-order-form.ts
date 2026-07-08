@@ -56,6 +56,15 @@ export function computeFormAmounts(values: Pick<
   }
 }
 
+export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
+  return {
+    guestCount: 1,
+    discountType: SourceOrderDiscountType.NONE,
+    collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+    unitPriceYuan: 0,
+  } as SourceOrderFormValues
+}
+
 export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderFormValues {
   return {
     partnerId: order.partnerId,

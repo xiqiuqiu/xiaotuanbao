@@ -75,7 +75,6 @@ export function CreateDepartureWizard() {
       const initialValues = createInfoFormValues(
         nextRouteValues,
         user.id,
-        user.name,
         startDate,
         '',
       )

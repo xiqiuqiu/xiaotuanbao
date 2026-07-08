@@ -29,7 +29,6 @@ export interface InfoStepValues {
 
 export type InfoFormValues = InfoStepValues & {
   dayCount: number
-  ownerName: string
 }
 
 export function createInitialRouteStepValues(): RouteStepValues {
@@ -146,7 +145,6 @@ export function buildCopyDeparturePayload(
 export function createInfoFormValues(
   route: RouteStepValues,
   ownerUserId: string,
-  ownerName: string,
   startDate: string,
   departureNo: string,
 ): InfoFormValues {
@@ -163,7 +161,6 @@ export function createInfoFormValues(
     endDate,
     dayCount: computeDayCount(startDate, endDate),
     ownerUserId,
-    ownerName,
     notes: undefined,
   }
 }

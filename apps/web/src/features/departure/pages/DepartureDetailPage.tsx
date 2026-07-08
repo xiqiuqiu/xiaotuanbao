@@ -93,10 +93,6 @@ export function DepartureDetailPage() {
   const amountReadOnly =
     departure.status === DepartureStatus.SETTLED ||
     departure.status === DepartureStatus.CLOSED
-  const overviewReadOnly =
-    readOnly ||
-    departure.status === DepartureStatus.SETTLED
-
   const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
 
   const tabItems: NonNullable<TabsProps['items']> = DEPARTURE_DETAIL_TABS.map((tab) => {
@@ -104,13 +100,7 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
-          <DepartureOverview
-            departure={departure}
-            readOnly={overviewReadOnly}
-            onUpdated={handleUpdated}
-          />
-        ),
+        children: <DepartureOverview departure={departure} />,
       }
     }
 
@@ -190,7 +180,7 @@ export function DepartureDetailPage() {
 
   return (
     <div>
-      <DepartureHeader departure={departure} />
+      <DepartureHeader departure={departure} onUpdated={handleUpdated} />
 
       <Tabs activeKey={activeTab} onChange={handleTabChange} items={tabItems} />
     </div>

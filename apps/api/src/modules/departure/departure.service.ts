@@ -445,8 +445,15 @@ export class DepartureService {
   }
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
-    const readModel = await this.departureReadModelService.getForDeparture(departure.id)
-    return this.toDepartureDetail(departure, readModel)
+    const [readModel, ownerNameMap] = await Promise.all([
+      this.departureReadModelService.getForDeparture(departure.id),
+      this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
+    ])
+    return this.toDepartureDetail(
+      departure,
+      readModel,
+      ownerNameMap.get(departure.ownerUserId),
+    )
   }
 
   private hasUpdateFields(dto: UpdateDepartureDto): boolean {
@@ -514,9 +521,10 @@ export class DepartureService {
   private toDepartureDetail(
     departure: Departure,
     readModel: DepartureReadModelAggregate,
+    ownerName?: string,
   ): DepartureDetail {
     return {
-      ...this.toDepartureSummary(departure, readModel),
+      ...this.toDepartureSummary(departure, readModel, ownerName),
       grossReceivableCents: readModel.grossReceivableCents,
       discountCents: readModel.discountCents,
       collectedCents: readModel.collectedCents,

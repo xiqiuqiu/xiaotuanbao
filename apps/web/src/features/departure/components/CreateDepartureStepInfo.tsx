@@ -3,6 +3,8 @@ import { Button, Card, Col, DatePicker, Form, Input, Row, Select, Space, Typogra
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
+import { useQuery } from '@tanstack/react-query'
+import { listEmployees } from '@/services/employee.service'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import {
@@ -31,6 +33,16 @@ export function CreateDepartureStepInfo({
 }: CreateDepartureStepInfoProps) {
   const defaultDayCount = route.defaultDayCount
   const copySummary = buildRouteSummary(route)
+  const { data: employeesResult } = useQuery({
+    queryKey: ['employees', 'create-departure'],
+    queryFn: () => listEmployees({ pageSize: 100 }),
+  })
+
+  const employeeOptions =
+    employeesResult?.items.map((employee) => ({
+      value: employee.id,
+      label: employee.name,
+    })) ?? []
 
   const handleStartDateChange = (value: Dayjs | null) => {
     const startDate = value?.format('YYYY-MM-DD')
@@ -152,11 +164,12 @@ export function CreateDepartureStepInfo({
             <Input readOnly />
           </Form.Item>
 
-          <Form.Item name="ownerName" label="发团负责人">
-            <Input readOnly />
-          </Form.Item>
-          <Form.Item name="ownerUserId" hidden>
-            <Input />
+          <Form.Item
+            name="ownerUserId"
+            label="发团负责人"
+            rules={[{ required: true, message: '请选择负责人' }]}
+          >
+            <Select options={employeeOptions} showSearch optionFilterProp="label" />
           </Form.Item>
 
           <Form.Item name="notes" label="备注">
