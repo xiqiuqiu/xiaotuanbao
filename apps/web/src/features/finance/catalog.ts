@@ -111,3 +111,8 @@ export const VERIFICATION_STATUS_COLORS: Record<string, string> = {
   [VerificationStatus.NORMAL]: 'success',
   [VerificationStatus.CANCELLED]: 'default',
 }
+
+export const VERIFICATION_DIRECTION_LABELS: Record<string, string> = {
+  receivable: '应收核销',
+  payable: '应付核销',
+}

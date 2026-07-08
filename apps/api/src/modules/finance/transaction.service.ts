@@ -1,13 +1,21 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type {
+  FinanceTransactionDetail,
   FinanceTransactionListResult,
   FinanceTransactionSummary,
+  FinanceTransactionVerificationSummary,
 } from '@xiaotuanbao/shared'
-import { deriveTransactionWriteoffStatus, TransactionDirection, PaymentChannel } from '@xiaotuanbao/shared'
+import {
+  deriveTransactionWriteoffStatus,
+  TransactionDirection,
+  PaymentChannel,
+  VerificationStatus,
+} from '@xiaotuanbao/shared'
 import {
   CounterpartyType as PrismaCounterpartyType,
   PaymentChannel as PrismaPaymentChannel,
   TransactionDirection as PrismaTransactionDirection,
+  VerificationStatus as PrismaVerificationStatus,
   type FinanceTransaction,
   type Prisma,
 } from '@prisma/client'
@@ -86,7 +94,7 @@ export class TransactionService {
     }
   }
 
-  async getById(organizationId: string, transactionId: string): Promise<FinanceTransactionSummary> {
+  async getById(organizationId: string, transactionId: string): Promise<FinanceTransactionDetail> {
     const transaction = await this.prisma.financeTransaction.findFirst({
       where: { id: transactionId, organizationId },
     })
@@ -96,7 +104,24 @@ export class TransactionService {
     }
 
     const allocated = await this.verificationService.getAllocatedAmountCents(transaction.id)
-    return this.toSummary(transaction, allocated)
+    const verifications = await this.prisma.financeVerification.findMany({
+      where: { transactionId, organizationId },
+      include: {
+        paymentSchedule: { select: { scheduleNo: true, direction: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const normalVerifications = verifications.filter(
+      (item) => item.status === PrismaVerificationStatus.normal,
+    )
+
+    return {
+      ...this.toSummary(transaction, allocated),
+      verificationCount: normalVerifications.length,
+      lastVerificationAt: normalVerifications[0]?.createdAt.toISOString() ?? null,
+      verifications: verifications.map((item) => this.toVerificationSummary(item)),
+    }
   }
 
   async create(
@@ -348,6 +373,32 @@ export class TransactionService {
       counterpartyType: dto.counterpartyType,
       counterpartyId: null,
       counterpartyName: dto.counterpartyName?.trim() || null,
+    }
+  }
+
+  private toVerificationSummary(verification: {
+    id: string
+    verificationNo: string
+    paymentScheduleId: string
+    amountCents: number
+    status: PrismaVerificationStatus
+    cancelledAt: Date | null
+    createdAt: Date
+    paymentSchedule: { scheduleNo: string; direction: string }
+  }): FinanceTransactionVerificationSummary {
+    return {
+      id: verification.id,
+      verificationNo: verification.verificationNo,
+      paymentScheduleId: verification.paymentScheduleId,
+      scheduleNo: verification.paymentSchedule.scheduleNo,
+      scheduleDirection: verification.paymentSchedule.direction,
+      amountCents: verification.amountCents,
+      status:
+        verification.status === PrismaVerificationStatus.normal
+          ? VerificationStatus.NORMAL
+          : VerificationStatus.CANCELLED,
+      cancelledAt: verification.cancelledAt?.toISOString() ?? null,
+      createdAt: verification.createdAt.toISOString(),
     }
   }
 

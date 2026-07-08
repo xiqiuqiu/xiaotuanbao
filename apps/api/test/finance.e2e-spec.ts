@@ -500,6 +500,29 @@ describe('Finance API (e2e)', () => {
 
     expect(linkedTransaction.body.data.allocatedAmountCents).toBe(50000)
     expect(linkedTransaction.body.data.unallocatedAmountCents).toBe(0)
+    expect(linkedTransaction.body.data.verificationCount).toBe(1)
+    expect(linkedTransaction.body.data.lastVerificationAt).toEqual(expect.any(String))
+    expect(linkedTransaction.body.data.verifications).toHaveLength(1)
+    expect(linkedTransaction.body.data.verifications[0].verificationNo).toMatch(CL_NO_REGEX)
+    expect(linkedTransaction.body.data.verifications[0].scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
+    expect(linkedTransaction.body.data.verifications[0].amountCents).toBe(50000)
+  })
+
+  it('returns empty verification aggregates for unallocated transaction detail', async () => {
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 30000 }))
+      .expect(201)
+
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${transaction.body.data.id}`)
+      .expect(200)
+
+    expect(detail.body.data.allocatedAmountCents).toBe(0)
+    expect(detail.body.data.unallocatedAmountCents).toBe(30000)
+    expect(detail.body.data.verificationCount).toBe(0)
+    expect(detail.body.data.lastVerificationAt).toBeNull()
+    expect(detail.body.data.verifications).toEqual([])
   })
 
   it('supports partial link-transaction with min default amount semantics', async () => {

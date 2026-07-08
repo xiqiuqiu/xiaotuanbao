@@ -354,6 +354,24 @@ export interface FinanceTransactionSummary {
   updatedAt: string
 }
 
+export interface FinanceTransactionVerificationSummary {
+  id: string
+  verificationNo: string
+  paymentScheduleId: string
+  scheduleNo: string
+  scheduleDirection: string
+  amountCents: number
+  status: string
+  cancelledAt: string | null
+  createdAt: string
+}
+
+export interface FinanceTransactionDetail extends FinanceTransactionSummary {
+  verificationCount: number
+  lastVerificationAt: string | null
+  verifications: FinanceTransactionVerificationSummary[]
+}
+
 export interface FinanceTransactionListResult {
   items: FinanceTransactionSummary[]
   total: number

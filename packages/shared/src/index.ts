@@ -33,6 +33,8 @@ export type {
   CreatePaymentScheduleDto,
   UpdatePaymentScheduleDto,
   FinanceTransactionSummary,
+  FinanceTransactionDetail,
+  FinanceTransactionVerificationSummary,
   FinanceTransactionListResult,
   CreateFinanceTransactionDto,
   UpdateFinanceTransactionDto,

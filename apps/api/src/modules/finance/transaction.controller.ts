@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import type {
+  FinanceTransactionDetail,
   FinanceTransactionListResult,
   FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
@@ -52,7 +53,7 @@ export class TransactionController {
   getById(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-  ): Promise<FinanceTransactionSummary> {
+  ): Promise<FinanceTransactionDetail> {
     return this.transactionService.getById(request.user.organizationId, id)
   }
 

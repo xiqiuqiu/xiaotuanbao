@@ -6,6 +6,7 @@ import type {
   CreateFinanceVerificationDto,
   FinanceTransactionListResult,
   FinanceTransactionSummary,
+  FinanceTransactionDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
   LinkTransactionDto,
@@ -112,6 +113,10 @@ export async function listTransactions(
   params: ListFinanceTransactionsParams,
 ): Promise<FinanceTransactionListResult> {
   return request.get<FinanceTransactionListResult>('/finance/transactions', { params })
+}
+
+export async function getTransaction(id: string): Promise<FinanceTransactionDetail> {
+  return request.get<FinanceTransactionDetail>(`/finance/transactions/${id}`)
 }
 
 export async function createTransaction(

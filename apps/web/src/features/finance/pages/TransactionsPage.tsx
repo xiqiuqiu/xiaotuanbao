@@ -6,6 +6,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus, TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import { createTransaction, listTransactions, updateTransaction, voidTransaction } from '@/services/finance.service'
+import { listDepartures } from '@/services/departure.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
@@ -23,6 +24,7 @@ import {
   type TransactionDateRange,
 } from '../components/TransactionFilters'
 import { TransactionFormDrawer } from '../components/TransactionFormDrawer'
+import { TransactionDetailDrawer } from '../components/TransactionDetailDrawer'
 import {
   VoidTransactionModal,
   type VoidTransactionFormValues,
@@ -52,6 +54,7 @@ export function TransactionsPage() {
   const [editingTransaction, setEditingTransaction] = useState<FinanceTransactionSummary | null>(null)
   const [voidModalOpen, setVoidModalOpen] = useState(false)
   const [voidingTransaction, setVoidingTransaction] = useState<FinanceTransactionSummary | null>(null)
+  const [detailTransactionId, setDetailTransactionId] = useState<string | null>(null)
   const [dateRange, setDateRange] = useState<TransactionDateRange>(() => {
     const [start, end] = getDefaultTransactionDateRange()
     return [start, end]
@@ -92,6 +95,27 @@ export function TransactionsPage() {
         pageSize,
       }),
   })
+
+  const { data: departuresResult } = useQuery({
+    queryKey: ['departures', 'transaction-detail-map'],
+    queryFn: () => listDepartures({ pageSize: 100 }),
+  })
+
+  const departureMap = useMemo(() => {
+    const map = new Map<string, { departureNo: string; name: string }>()
+    for (const departure of departuresResult?.items ?? []) {
+      map.set(departure.id, { departureNo: departure.departureNo, name: departure.name })
+    }
+    return map
+  }, [departuresResult?.items])
+
+  const handleOpenDetail = useCallback((id: string) => {
+    setDetailTransactionId(id)
+  }, [])
+
+  const handleCloseDetail = useCallback(() => {
+    setDetailTransactionId(null)
+  }, [])
 
   const createMutation = useMutation({
     mutationFn: (values: TransactionFormValues) =>
@@ -188,7 +212,11 @@ export function TransactionsPage() {
       {
         title: '流水号',
         dataIndex: 'transactionNo',
-        render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
+        render: (value: string, record) => (
+          <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => handleOpenDetail(record.id)}>
+            <Typography.Text code>{value}</Typography.Text>
+          </Button>
+        ),
       },
       {
         title: '收支方向',
@@ -261,7 +289,11 @@ export function TransactionsPage() {
         key: 'actions',
         render: (_, record) => {
           if (record.voidedAt) {
-            return '—'
+            return (
+              <Button type="link" onClick={() => handleOpenDetail(record.id)}>
+                查看
+              </Button>
+            )
           }
 
           const writeoff = deriveTransactionWriteoffStatus(
@@ -292,7 +324,7 @@ export function TransactionsPage() {
         },
       },
     ],
-    [handleEdit, handleOpenVoidModal],
+    [handleEdit, handleOpenDetail, handleOpenVoidModal],
   )
 
   return (
@@ -406,6 +438,13 @@ export function TransactionsPage() {
           }
           createMutation.mutate(values)
         }}
+      />
+
+      <TransactionDetailDrawer
+        open={Boolean(detailTransactionId)}
+        transactionId={detailTransactionId}
+        departureMap={departureMap}
+        onClose={handleCloseDetail}
       />
     </div>
   )
