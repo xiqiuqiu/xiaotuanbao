@@ -148,11 +148,11 @@ _Avoid_: 执行批次, Execution Batch, Day, 每日行程, 自营段, 拼出段
 
 **Segment Resource（行程段资源）**:
 挂在行程段下的成本费用行，统一承载自营资源与拼出。计调在段内添加用车、酒店、导游、门票、餐或拼出给同行，本质都是加一条资源；`resourceKind = 拼出` 时关联 Partner（承接方），其他种类关联 Supplier。一段内可有多条，种类可混合。触发生成应付时以资源行为来源，仅对手方不同。
-_Avoid_: 资源安排, Resource Item, 拼出记录, Segment Outsource, 执行方式
+_Avoid_: 资源安排（作实体名或独立 Tab）, Resource Item, 拼出记录, Segment Outsource, 执行方式
 
 **Execution Arrangement（执行安排）**:
-发团内行程段及段内资源（含自营与拼出）的规划工作区，是计调在确定客源和线路后的执行工作区。产品 UI 可称「行程段」「资源安排」；领域上资源与拼出是同一类对象的不同种类，不等于每日行程。
-_Avoid_: 行程, 资源配置, itinerary, 每日工作台
+发团详情中规划行程段与段内资源（含自营与拼出）的工作区；详情页 Tab 正式称「执行安排」。区内「行程段」指段导航（对应 Itinerary Segment），「资源安排」指资源主表（对应 Segment Resource 列表）——二者为工作区内称谓，不是独立 Tab。
+_Avoid_: 行程段/资源安排作独立详情 Tab, 行程, 资源配置, itinerary, 每日工作台
 
 **Payment Schedule（收付款节点）**:
 Organization 内的计划应收或计划应付，承载约定金额、到期日、往来对象与来源追溯。从客源单或行程段资源 **显式触发** 生成；保存源事实本身不产生收付款节点。结清状态从核销分配派生，不是发团或客源单的属性。产品 UI 在应付侧称 **应付单**、应收侧称 **应收单**；编号字段展示 `scheduleNo`（ADR-0003 格式）。
