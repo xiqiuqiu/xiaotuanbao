@@ -6,8 +6,12 @@ import type { SourceOrderSummary } from '@/types/api'
 
 export interface SourceOrderFormValues {
   partnerId: string
-  guestCount: number
-  unitPriceYuan: number
+  adultGuestCount: number
+  childGuestCount: number
+  /** Required when adultGuestCount > 0; omitted treated as 0 when count is 0. */
+  adultUnitPriceYuan?: number
+  /** Required when childGuestCount > 0; omitted treated as 0 when count is 0. */
+  childUnitPriceYuan?: number
   discountType: SourceOrderDiscountType
   discountYuan?: number
   discountNotes?: string
@@ -17,18 +21,17 @@ export interface SourceOrderFormValues {
   notes?: string
 }
 
-export interface SourceOrderFormAmountInput {
-  adultGuestCount: number
-  childGuestCount: number
-  /** Required when adultGuestCount > 0; omitted treated as 0 when count is 0. */
-  adultUnitPriceYuan?: number
-  /** Required when childGuestCount > 0; omitted treated as 0 when count is 0. */
-  childUnitPriceYuan?: number
-  discountType: SourceOrderDiscountType
-  discountYuan?: number
-  collectionMode: SourceOrderCollectionMode
-  partnerCollectedYuan?: number
-}
+export type SourceOrderFormAmountInput = Pick<
+  SourceOrderFormValues,
+  | 'adultGuestCount'
+  | 'childGuestCount'
+  | 'adultUnitPriceYuan'
+  | 'childUnitPriceYuan'
+  | 'discountType'
+  | 'discountYuan'
+  | 'collectionMode'
+  | 'partnerCollectedYuan'
+>
 
 function yuanToCents(yuan: number): number {
   return Math.round(yuan * 100)
@@ -47,6 +50,23 @@ function effectiveUnitPriceYuan(
     return 0
   }
   return unitPriceYuan ?? 0
+}
+
+/** Unit price cents for API: 0 when that guest count is 0 (ignore form price). */
+function unitPriceCentsForPayload(
+  guestCount: number,
+  unitPriceYuan: number | undefined,
+): number {
+  if (guestCount === 0) {
+    return 0
+  }
+  return yuanToCents(unitPriceYuan ?? 0)
+}
+
+export function totalGuestCount(
+  values: Partial<Pick<SourceOrderFormValues, 'adultGuestCount' | 'childGuestCount'>>,
+): number {
+  return (values.adultGuestCount ?? 0) + (values.childGuestCount ?? 0)
 }
 
 export function computeFormAmounts(values: SourceOrderFormAmountInput) {
@@ -87,45 +107,22 @@ export function computeFormAmounts(values: SourceOrderFormAmountInput) {
   }
 }
 
-/** Maps legacy single guestCount/unitPrice form to adult/child amount input (child = 0). */
-export function legacyFormValuesToAmountInput(
-  values: Pick<
-    SourceOrderFormValues,
-    | 'guestCount'
-    | 'unitPriceYuan'
-    | 'discountType'
-    | 'discountYuan'
-    | 'collectionMode'
-    | 'partnerCollectedYuan'
-  >,
-): SourceOrderFormAmountInput {
-  return {
-    adultGuestCount: values.guestCount,
-    childGuestCount: 0,
-    adultUnitPriceYuan: values.unitPriceYuan,
-    childUnitPriceYuan: 0,
-    discountType: values.discountType,
-    discountYuan: values.discountYuan,
-    collectionMode: values.collectionMode,
-    partnerCollectedYuan: values.partnerCollectedYuan,
-  }
-}
-
 export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
   return {
-    guestCount: 1,
+    adultGuestCount: 0,
+    childGuestCount: 0,
     discountType: SourceOrderDiscountType.NONE,
     collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-    unitPriceYuan: 0,
   } as SourceOrderFormValues
 }
 
 export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderFormValues {
   return {
     partnerId: order.partnerId,
-    // #69 will split adult/child fields in the drawer; until then map total as adults.
-    guestCount: order.guestCount,
-    unitPriceYuan: centsToYuan(order.adultUnitPriceCents),
+    adultGuestCount: order.adultGuestCount,
+    childGuestCount: order.childGuestCount,
+    adultUnitPriceYuan: centsToYuan(order.adultUnitPriceCents),
+    childUnitPriceYuan: centsToYuan(order.childUnitPriceCents),
     discountType: order.discountType as SourceOrderDiscountType,
     discountYuan: centsToYuan(order.discountCents),
     discountNotes: order.discountNotes ?? undefined,
@@ -137,14 +134,19 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
 }
 
 export function formValuesToPayload(values: SourceOrderFormValues) {
-  // #69 will collect adult/child in the drawer; until then send all guests as adults.
-  const amounts = computeFormAmounts(legacyFormValuesToAmountInput(values))
+  const amounts = computeFormAmounts(values)
   return {
     partnerId: values.partnerId,
-    adultGuestCount: values.guestCount,
-    childGuestCount: 0,
-    adultUnitPriceCents: yuanToCents(values.unitPriceYuan),
-    childUnitPriceCents: 0,
+    adultGuestCount: values.adultGuestCount,
+    childGuestCount: values.childGuestCount,
+    adultUnitPriceCents: unitPriceCentsForPayload(
+      values.adultGuestCount,
+      values.adultUnitPriceYuan,
+    ),
+    childUnitPriceCents: unitPriceCentsForPayload(
+      values.childGuestCount,
+      values.childUnitPriceYuan,
+    ),
     discountType: values.discountType,
     discountCents: amounts.discountCents,
     discountNotes: values.discountNotes,

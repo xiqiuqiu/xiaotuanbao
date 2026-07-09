@@ -1,11 +1,13 @@
 import { useEffect, useMemo } from 'react'
 import {
   Alert,
+  Col,
   Divider,
   Drawer,
   Form,
   Input,
   InputNumber,
+  Row,
   Select,
   Space,
   Typography,
@@ -28,8 +30,8 @@ import {
   computeFormAmounts,
   createEmptySourceOrderFormValues,
   formValuesToPayload,
-  legacyFormValuesToAmountInput,
   sourceOrderToFormValues,
+  totalGuestCount,
   type SourceOrderFormValues,
 } from '../utils/source-order-form'
 
@@ -46,20 +48,24 @@ interface SourceOrderDrawerProps {
 function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0] }) {
   const watched = Form.useWatch([], form)
   const amounts = useMemo(() => {
-    if (!watched?.guestCount || !watched?.unitPriceYuan) {
+    if (watched == null) {
       return null
     }
-    // #67: amount helper is adult/child; drawer fields stay legacy until #69
-    return computeFormAmounts(
-      legacyFormValuesToAmountInput({
-        guestCount: watched.guestCount,
-        unitPriceYuan: watched.unitPriceYuan,
-        discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
-        discountYuan: watched.discountYuan,
-        collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
-        partnerCollectedYuan: watched.partnerCollectedYuan,
-      }),
-    )
+    const adult = watched.adultGuestCount ?? 0
+    const child = watched.childGuestCount ?? 0
+    if (adult + child < 1) {
+      return null
+    }
+    return computeFormAmounts({
+      adultGuestCount: adult,
+      childGuestCount: child,
+      adultUnitPriceYuan: watched.adultUnitPriceYuan,
+      childUnitPriceYuan: watched.childUnitPriceYuan,
+      discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
+      discountYuan: watched.discountYuan,
+      collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
+      partnerCollectedYuan: watched.partnerCollectedYuan,
+    })
   }, [watched])
 
   if (!amounts) {
@@ -68,11 +74,32 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
 
   return (
     <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-      原始应收 {formatCents(amounts.grossReceivableCents)} · 结算金额{' '}
-      {formatCents(amounts.netReceivableCents)} · 我方代收{' '}
+      结算金额 {formatCents(amounts.netReceivableCents)} · 我方代收{' '}
       {formatCents(amounts.guestCollectCents)}
     </Typography.Paragraph>
   )
+}
+
+function unitPriceRequiredWhenCountPositive(countField: 'adultGuestCount' | 'childGuestCount') {
+  return ({ getFieldValue }: { getFieldValue: (name: string) => unknown }) => ({
+    validator(_: unknown, value: number | null | undefined) {
+      const count = Number(getFieldValue(countField) ?? 0)
+      if (count > 0 && (value === undefined || value === null)) {
+        return Promise.reject(new Error('请输入团款单价'))
+      }
+      return Promise.resolve()
+    },
+  })
+}
+
+function totalGuestCountAtLeastOne(getFieldValue: (name: string) => unknown) {
+  return async () => {
+    const adult = Number(getFieldValue('adultGuestCount') ?? 0)
+    const child = Number(getFieldValue('childGuestCount') ?? 0)
+    if (adult + child < 1) {
+      throw new Error('总人数必须大于0')
+    }
+  }
 }
 
 export function SourceOrderDrawer({
@@ -87,8 +114,27 @@ export function SourceOrderDrawer({
   const [form] = Form.useForm<SourceOrderFormValues>()
   const discountType = Form.useWatch('discountType', form)
   const collectionMode = Form.useWatch('collectionMode', form)
+  const adultGuestCount = Form.useWatch('adultGuestCount', form) ?? 0
+  const childGuestCount = Form.useWatch('childGuestCount', form) ?? 0
+  const adultUnitPriceYuan = Form.useWatch('adultUnitPriceYuan', form)
+  const childUnitPriceYuan = Form.useWatch('childUnitPriceYuan', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const lockAmounts = readOnly || amountReadOnly || amountFieldsLocked
+
+  const derivedTotalGuests = totalGuestCount({
+    adultGuestCount,
+    childGuestCount,
+  })
+  const derivedGrossYuan =
+    computeFormAmounts({
+      adultGuestCount: adultGuestCount ?? 0,
+      childGuestCount: childGuestCount ?? 0,
+      adultUnitPriceYuan,
+      childUnitPriceYuan,
+      discountType: discountType ?? SourceOrderDiscountType.NONE,
+      discountYuan: undefined,
+      collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+    }).grossReceivableCents / 100
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
@@ -175,36 +221,116 @@ export function SourceOrderDrawer({
             }))}
           />
         </Form.Item>
-        <Form.Item
-          name="guestCount"
-          label="客人人数"
-          rules={[{ required: true, message: '请输入客人人数' }]}
-        >
-          <InputNumber
-            min={1}
-            precision={0}
-            style={{ width: '100%' }}
-            disabled={lockAmounts}
-          />
-        </Form.Item>
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item
+              name="adultGuestCount"
+              label="成人人数"
+              rules={[
+                { required: true, message: '请输入成人人数' },
+                {
+                  type: 'number',
+                  min: 0,
+                  message: '成人人数不能为负数',
+                },
+                ({ getFieldValue }) => ({
+                  validator: totalGuestCountAtLeastOne(getFieldValue),
+                }),
+              ]}
+              dependencies={['childGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={0}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item
+              name="childGuestCount"
+              label="儿童人数"
+              rules={[
+                { required: true, message: '请输入儿童人数' },
+                {
+                  type: 'number',
+                  min: 0,
+                  message: '儿童人数不能为负数',
+                },
+                ({ getFieldValue }) => ({
+                  validator: totalGuestCountAtLeastOne(getFieldValue),
+                }),
+              ]}
+              dependencies={['adultGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={0}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item label="总人数">
+              <InputNumber
+                value={derivedTotalGuests}
+                precision={0}
+                style={{ width: '100%' }}
+                disabled
+              />
+            </Form.Item>
+          </Col>
+        </Row>
         <Form.Item name="notes" label="备注">
-          <Input.TextArea rows={2} placeholder="儿童、免票、特殊要求等" />
+          <Input.TextArea rows={2} placeholder="免票、特殊要求等" />
         </Form.Item>
 
         <Divider />
         <Typography.Title level={5}>团款与优惠</Typography.Title>
-        <Form.Item
-          name="unitPriceYuan"
-          label="原始团款单价（元）"
-          rules={[{ required: true, message: '请输入单价' }]}
-        >
-          <InputNumber
-            min={0}
-            precision={2}
-            style={{ width: '100%' }}
-            disabled={lockAmounts}
-          />
-        </Form.Item>
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item
+              name="adultUnitPriceYuan"
+              label="成人团款单价（元）"
+              rules={[unitPriceRequiredWhenCountPositive('adultGuestCount')]}
+              dependencies={['adultGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item
+              name="childUnitPriceYuan"
+              label="儿童团款单价（元）"
+              rules={[unitPriceRequiredWhenCountPositive('childGuestCount')]}
+              dependencies={['childGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item label="原始团款金额（元）">
+              <InputNumber
+                value={derivedGrossYuan}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled
+              />
+            </Form.Item>
+          </Col>
+        </Row>
         <Form.Item
           name="discountType"
           label="优惠方式"
@@ -230,7 +356,7 @@ export function SourceOrderDrawer({
           </Form.Item>
         ) : null}
         <Form.Item name="discountNotes" label="优惠备注">
-          <Input.TextArea rows={2} />
+          <Input.TextArea rows={2} placeholder="请输入优惠相关备注（选填）" />
         </Form.Item>
 
         <Divider />
@@ -260,7 +386,7 @@ export function SourceOrderDrawer({
           </Form.Item>
         ) : null}
         <Form.Item name="settlementNotes" label="结算说明">
-          <Input.TextArea rows={2} />
+          <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
         </Form.Item>
 
         <AmountPreview form={form} />
