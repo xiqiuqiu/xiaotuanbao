@@ -41,13 +41,14 @@
 ### 新建发团与常用路线
 
 11. 作为计调，我希望新建发团时先选择常用路线，以便从惯发线路快速起步。
-12. 作为计调，我希望选路线后勾选复制行程段、资源配置、参考价格，且客源与应收应付不可复制，以便高效建团又避免财务污染。
-13. 作为计调，我希望选路线建团后与模板脱钩，以便后续改模板不影响已建发团。
-14. 作为计调，我希望手动输入路线建团（不选模板），以便应对临时线路。
+12. 作为计调，我希望选常用路线建团时固定带出执行安排结构、资源金额为 0，且不复制客源与应收应付，以便高效建团又避免财务污染。（~~分层 copy / 参考价格勾选~~ 已由 ADR-0008 取代）
+13. 作为计调，我希望选路线建团后与常用路线脱钩，以便后续改/删常用路线不影响已建发团。
+14. 作为计调，我希望手动输入路线建团（不选常用路线、不带出执行安排），以便应对临时线路。
 15. 作为计调，我希望团名默认按路线名 + 出团日期生成、团号默认自动生成且均可改，以便减少录入。
 16. 作为计调，我希望选择路线后结束日期按默认天数自动计算，以便对齐团期。
-17. 作为计调，我希望在发团详情将当前结构「保存为常用路线」，以便沉淀可复用模板。
-18. 作为计调，我希望保存常用路线时不含客源、收付款节点与流水，以便模板只存结构与参考价。
+17. 作为计调，我希望在发团详情将当前结构「保存为常用路线」（仅名称 + 默认天数；无段不可存；组织内同名禁止），以便沉淀可复用结构。
+18. 作为计调，我希望保存常用路线时不含客源、收付款节点与流水，资源金额恒为 0，以便常用路线只存执行安排结构。
+18a. 作为计调，我希望在建团 Step 1 卡片上删除常用路线（确认后），以便清理过时目录；删除不影响已建发团。
 
 ### 发团详情与概览
 
@@ -76,7 +77,7 @@
 35. 作为计调，我希望按日期与目的地切分行程段（如喀纳斯段 7/1–7/3），以便按段规划成本。
 36. 作为计调，我希望行程段日期必须在发团日期范围内，以便团期一致。
 37. 作为计调，我希望从行程段列表一键进入资源安排并锁定当前段，以便资源不会误挂到其他段。
-38. 作为计调，我希望模板带入的行程段显示「模板带入」标签，以便识别来源。
+38. ~~作为计调，我希望模板带入的行程段显示「模板带入」标签~~ — **作废**（ADR-0008：复制进发团后即本团事实，不展示来源角标；`fromTemplate` 已删除）。
 39. 作为计调，我希望段内无资源或未生成应付时可删除行程段，有资源时不可删，以便保护已录入成本。
 40. 作为计调，我希望 **不设** 段级执行方式互斥——同一段可同时有自营资源与拼出，以便符合实际计调习惯。
 
@@ -154,7 +155,7 @@ Finance ──派生──► Departure Read Model（待收/待付/结清态）
 | ------ | ---- | ---- |
 | **主** | Finance HTTP E2E（`/api/finance/*` 或等价路径） | 节点 CRUD、登记收付、核销、finance-touched、编号 |
 | **主** | Departure HTTP E2E（`/api/departures/*`） | 建团、状态、客源/段/资源 CRUD、生成触发、权限 |
-| **次** | Route Template HTTP E2E | 模板 CRUD、copy-on-create 脱钩 |
+| **次** | Route Template HTTP E2E | 常用路线 CRUD、结构 copy-on-create 脱钩、金额 0 |
 | **次** | 前端关键页 smoke / 组件测试 | 列表列、抽屉校验、Tab 切换 |
 
 现有 Partner/Supplier E2E 在目录选择器 enforce 变更后须仍通过。
@@ -225,25 +226,25 @@ settled / pending_settlement / editing ──[OP 手动]──► closed（已�
 
 ### 常用路线（Route Template）
 
-独立表 `route_templates` + 子表 `route_template_segments`、`route_template_resources`（结构与发团段/资源平行，无客源/财务 FK）。
+独立表 `route_templates` + 子表 `route_template_segments`、`route_template_resources`（结构与发团段/资源平行，无客源/财务 FK）。定案见 ADR-0008。
 
 列表/卡片字段：`name`、`defaultDayCount`、`usageCount`（建团选用时 +1，供新建向导卡片展示）、`updatedAt`。
 
-**copy-on-create 规则**（勾选项默认全选除禁用项）：
+**copy-on-create 规则**（固定行为，**无**分层勾选 / copy 确认窗；~~参考价格作模板能力~~ 已作废）：
 
-| 复制 | 默认 |
+| 复制 | 行为 |
 | ---- | ---- |
-| 行程段结构 | ✓ |
-| 资源配置草稿（含拼出种类） | ✓ |
-| 参考价格 | ✓ |
-| 客源 | ✗ 禁用 |
-| 收付款节点 | ✗ 禁用 |
+| 行程段结构 | 恒复制 |
+| 段内资源草稿（含拼出种类） | 恒复制 |
+| 资源金额 | 恒为 0 |
+| 客源 | 不复制 |
+| 收付款节点 / 流水 | 不复制 |
 
-复制完成后 `departure.sourceTemplateId` 仅作追溯；后续改模板 **不** 影响已建发团。
+复制完成后 `departure.sourceTemplateId` 仅作追溯；后续改/删常用路线 **不** 影响已建发团。
 
-**保存为常用路线**（从发团详情）：反向快照段与资源；同样禁用客源/财务。
+**保存为常用路线**（从发团详情）：弹窗仅 **路线名称** + **默认天数**；固定快照段结构与段内资源草稿（金额 0）；无行程段不可存；有段无资源可存；组织内同名禁止。不保存客源/财务。第一版维护仅支持删除（建团选路线卡片 + 确认）；更新靠另存新名。
 
-API 建议：`GET/POST /route-templates`、`GET/PATCH /route-templates/:id`；建团 `POST /departures` body 含 `templateId` + copy flags。
+API：`GET/POST /route-templates`、`DELETE /route-templates/:id`；建团 `POST /departures` body 含 `templateId`（**不**接受 `copySegments` / `copyResources` / `copyReferencePrices`）。
 
 ### 客源单（Source Order）
 
@@ -279,7 +280,7 @@ API 建议：`GET/POST /route-templates`、`GET/PATCH /route-templates/:id`；�
 
 ### 行程段（Itinerary Segment）
 
-表 `itinerary_segments`：`departureId`、`name`、`startDate`、`endDate`、`dayCount`、`destination`、`notes`、`fromTemplate` boolean。
+表 `itinerary_segments`：`departureId`、`name`、`startDate`、`endDate`、`dayCount`、`destination`、`notes`。（~~`fromTemplate`~~ 已删除，见 ADR-0008 / #82）
 
 校验：日期 ⊆ 发团日期；end ≥ start。
 
@@ -441,7 +442,7 @@ packages/shared/src/enums/finance*.ts
 
 - 计调 CRUD 发团；财务 GET `/departures` → 403
 - 状态转换：editing → pending_settlement；closed 后 PATCH → 409
-- 模板建团：段/资源复制；无 source_order / payment_schedule
+- 常用路线建团：固定复制段/资源结构、金额 0；无 source_order / payment_schedule；拒绝 copy flags
 - 客源单：收款拆分校验；generate-receivables 双路径；0 金额不建节点
 - 资源：拼出必 Partner；generate-payable 一条一节点
 - 删除保护：有 schedule 的客源/资源不可删
@@ -523,12 +524,13 @@ Issue tracker 已配置：GitHub Issues（`docs/agents/issue-tracker.md`）。PR
 
 - [ ] 计调/企业管理员可访问 `/departure`；财务不可见且 API 403
 - [ ] 列表列、筛选、完成情况标签、Read Model 财务摘要符合 ider
-- [ ] 新建：选模板 copy 段/资源/参考价；不 copy 客源/财务；脱钩
-- [ ] 保存为常用路线：反向快照，禁用客源/财务
+- [ ] 新建：选常用路线固定带出执行安排结构、金额 0；无 copy 确认窗；不 copy 客源/财务；脱钩
+- [ ] 保存为常用路线：仅名称 + 默认天数；无段不可存；组织内同名禁止；金额 0；不存客源/财务
+- [ ] 建团 Step 1 卡片可删除常用路线（确认后）；删除不影响已建发团
 - [ ] 发团状态机与出团进度派生正确；关闭后只读
 - [ ] 客源单：收款拆分、自动命名、生成应收双路径、0 元不建节点
 - [ ] 客人名单与同步人数
-- [ ] 行程段：日期校验、模板带入标签、资源安排深链
+- [ ] 行程段：日期校验、无「模板」角标 / `fromTemplate`、资源安排深链
 - [ ] 资源：拼出→Partner、其他→Supplier；单条 generate-payable
 - [ ] 保存客源/资源 **不** 自动生成节点；显式触发
 - [ ] finance-touched 与来源差异警示符合 finance-handover-spec
