@@ -476,7 +476,6 @@ model ItinerarySegment {
   dayCount             Int               @map("day_count")
   destination  String?
   notes        String?
-  fromTemplate Boolean           @default(true) @map("from_template")
   resources            SegmentResource[]
 
   @@map("itinerary_segments")
@@ -495,7 +494,6 @@ model SegmentResource {
   title            String
   amountCents      Int              @map("amount_cents")
   notes            String?
-  fromTemplate     Boolean          @default(true) @map("from_template")
 
   @@map("segment_resources")
 }

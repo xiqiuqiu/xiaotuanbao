@@ -7,7 +7,6 @@ import {
   Empty,
   Row,
   Spin,
-  Tag,
   Typography,
   message,
   theme,
@@ -334,7 +333,6 @@ function SegmentNavItem({
       <div className={styles.segmentItemHeader}>
         <div className={styles.segmentItemTitle}>
           <span>{segment.name}</span>
-          {segment.fromTemplate ? <Tag style={{ marginInlineEnd: 0 }}>模板</Tag> : null}
         </div>
         {showEdit ? (
           <Button

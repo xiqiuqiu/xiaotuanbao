@@ -116,7 +116,6 @@ export class SegmentService {
         dayCount: computeDayCount(startDate, endDate),
         destination,
         notes: dto.notes?.trim() || null,
-        fromTemplate: false,
       },
       include: {
         resources: {
@@ -292,7 +291,6 @@ export class SegmentService {
       dayCount: segment.dayCount,
       destination: segment.destination,
       notes: segment.notes,
-      fromTemplate: segment.fromTemplate,
       resourceCount,
       outsourceCount,
       resourceAmountCents,

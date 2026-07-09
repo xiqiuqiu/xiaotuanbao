@@ -583,7 +583,6 @@ export interface ItinerarySegmentSummary {
   dayCount: number
   destination: string | null
   notes: string | null
-  fromTemplate: boolean
   resourceCount: number
   outsourceCount: number
   resourceAmountCents: number
@@ -633,7 +632,6 @@ export interface SegmentResourceSummary {
   title: string
   amountCents: number
   notes: string | null
-  fromTemplate: boolean
   hasPaymentSchedule: boolean
   payableStatus: string
   hasSourceAmountMismatch: boolean

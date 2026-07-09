@@ -10,7 +10,7 @@ vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({ tab: 'execution', segmentId: 'segment-1' }),
 }))
 
-const mockSegment: ItinerarySegmentSummary = {
+const mockSegment = {
   id: 'segment-1',
   departureId: 'departure-1',
   name: '西栅夜游',
@@ -19,12 +19,13 @@ const mockSegment: ItinerarySegmentSummary = {
   dayCount: 1,
   destination: '乌镇西栅',
   notes: null,
-  fromTemplate: false,
   resourceCount: 1,
   outsourceCount: 0,
   resourceAmountCents: 300000,
   payableStatus: 'not_generated',
-}
+  // Extra legacy field: UI must ignore even if a stale client still sends it.
+  fromTemplate: true,
+} as ItinerarySegmentSummary
 
 vi.mock('@/services/segment.service', () => ({
   listSegments: vi.fn(async () => ({
@@ -123,5 +124,12 @@ describe('ExecutionTab layout', () => {
     expect(row).toBe(resourceCol?.parentElement)
     expect(row?.className).toContain('ant-row')
     expect(row?.className).toContain('ant-row-no-wrap')
+  })
+
+  it('does not render 模板 badge on segment nav cards', async () => {
+    renderExecutionTab()
+
+    expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
+    expect(screen.queryByText('模板')).not.toBeInTheDocument()
   })
 })

@@ -797,13 +797,13 @@ describe('Departure API (e2e)', () => {
         endDate: '2026-08-03',
         dayCount: 3,
         destination: '喀纳斯',
-        fromTemplate: false,
         resourceCount: 0,
         outsourceCount: 0,
         resourceAmountCents: 0,
         payableStatus: 'not_generated',
       })
       expect(response.body.data).not.toHaveProperty('applicableGuestCount')
+      expect(response.body.data).not.toHaveProperty('fromTemplate')
     })
 
     it('lists segments with summary', async () => {
@@ -1012,7 +1012,6 @@ describe('Departure API (e2e)', () => {
           supplierId,
           title: '用车',
           amountCents: 360000,
-          fromTemplate: false,
         },
       })
 
@@ -1116,10 +1115,12 @@ describe('Departure API (e2e)', () => {
         resourceKind: ResourceKind.hotel,
         supplierId: supplier.id,
       })
+      expect(hotel.body.data).not.toHaveProperty('fromTemplate')
       expect(meal.body.data).toMatchObject({
         resourceKind: ResourceKind.meal,
         supplierId: supplier.id,
       })
+      expect(meal.body.data).not.toHaveProperty('fromTemplate')
     })
 
     it('rejects update when new resourceKind is not in supplier.categories', async () => {

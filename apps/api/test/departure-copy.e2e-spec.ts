@@ -149,7 +149,6 @@ describe('Departure copy & save template (e2e)', () => {
         supplierId,
         title: '喀纳斯酒店',
         amountCents: 120000,
-        fromTemplate: false,
       },
     })
 
@@ -269,22 +268,36 @@ describe('Departure copy & save template (e2e)', () => {
 
     const copiedDepartureId = response.body.data.id as string
 
+    const segmentsResponse = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/segments`)
+      .expect(200)
+    expect(segmentsResponse.body.data.items).toHaveLength(1)
+    expect(segmentsResponse.body.data.items[0].name).toBe('喀纳斯段')
+    expect(segmentsResponse.body.data.items[0]).not.toHaveProperty('fromTemplate')
+    expect(segmentsResponse.body.data.items[0].startDate).toBe('2026-09-01')
+
+    const segmentId = segmentsResponse.body.data.items[0].id as string
+    const resourcesResponse = await authRequest(app, coordinatorToken)
+      .get(`/api/segments/${segmentId}/resources`)
+      .expect(200)
+    expect(resourcesResponse.body.data.items).toHaveLength(1)
+    expect(resourcesResponse.body.data.items[0]).not.toHaveProperty('fromTemplate')
+    expect(resourcesResponse.body.data.items[0].amountCents).toBe(0)
+    expect(resourcesResponse.body.data.items[0].title).toBe('喀纳斯酒店')
+
     const segments = await prisma.itinerarySegment.findMany({
       where: { departureId: copiedDepartureId },
       orderBy: { startDate: 'asc' },
     })
     expect(segments).toHaveLength(1)
-    expect(segments[0].name).toBe('喀纳斯段')
-    expect(segments[0].fromTemplate).toBe(false)
-    expect(segments[0].startDate.toISOString().slice(0, 10)).toBe('2026-09-01')
+    expect(segments[0]).not.toHaveProperty('fromTemplate')
 
     const resources = await prisma.segmentResource.findMany({
       where: { segmentId: segments[0].id },
     })
     expect(resources).toHaveLength(1)
-    expect(resources[0].fromTemplate).toBe(false)
+    expect(resources[0]).not.toHaveProperty('fromTemplate')
     expect(resources[0].amountCents).toBe(0)
-    expect(resources[0].title).toBe('喀纳斯酒店')
 
     const sourceOrders = await prisma.sourceOrder.count({
       where: { departureId: copiedDepartureId },
