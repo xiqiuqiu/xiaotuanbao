@@ -748,6 +748,102 @@ describe('Departure API (e2e)', () => {
       expect(response.body.data.items[1].name).toBe('阿勒泰段')
     })
 
+    it('aggregates payableOverview and segment payableStatus from resource finance meta', async () => {
+      const departure = await createSegmentDeparture()
+
+      const segmentA = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      const segmentB = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(
+          segmentPayload({
+            name: '阿勒泰段',
+            startDate: '2026-08-04',
+            endDate: '2026-08-10',
+          }),
+        )
+        .expect(201)
+
+      const resourcePending = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.transport,
+          supplierId,
+          title: '喀纳斯用车',
+          amountCents: 100000,
+        })
+        .expect(201)
+
+      const resourcePaid = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId,
+          title: '喀纳斯酒店',
+          amountCents: 200000,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentB.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.guide,
+          supplierId,
+          title: '阿勒泰导游（未生成）',
+          amountCents: 50000,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${resourcePending.body.data.id}/generate-payable`)
+        .expect(201)
+
+      const paidGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${resourcePaid.body.data.id}/generate-payable`)
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${paidGenerated.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 200000,
+          transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.OTHER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplierId,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/segments`)
+        .expect(200)
+
+      expect(response.body.data.summary).toMatchObject({
+        segmentCount: 2,
+        resourceCount: 3,
+        payableOverview: 'partial',
+      })
+
+      const items = response.body.data.items as Array<{
+        id: string
+        payableStatus: string
+        resourceCount: number
+      }>
+      const itemA = items.find((item) => item.id === segmentA.body.data.id)
+      const itemB = items.find((item) => item.id === segmentB.body.data.id)
+
+      expect(itemA).toMatchObject({
+        resourceCount: 2,
+        payableStatus: 'partial',
+      })
+      expect(itemB).toMatchObject({
+        resourceCount: 1,
+        payableStatus: 'not_generated',
+      })
+    })
+
     it('returns 400 when end date is before start date', async () => {
       const departure = await createSegmentDeparture()
 

@@ -9,6 +9,7 @@
     "start:prod": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "pnpm typecheck",
+    "test": "jest --config jest.config.js",
     "test:e2e": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",

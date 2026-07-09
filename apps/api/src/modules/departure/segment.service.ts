@@ -16,20 +16,25 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
+import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import {
   computeDayCount,
   formatDateOnly,
   parseDateOnly,
 } from './departure-date.utils'
+import { aggregatePayableOverview } from './segment-payable-overview.utils'
 import { validateSegmentDates, validateSegmentFields } from './segment.validation'
 
 type SegmentWithResources = ItinerarySegment & {
-  resources: Pick<SegmentResource, 'amountCents' | 'resourceKind'>[]
+  resources: Pick<SegmentResource, 'id' | 'amountCents' | 'resourceKind'>[]
 }
 
 @Injectable()
 export class SegmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly financeBridge: DepartureFinanceBridgeService,
+  ) {}
 
   async listByDeparture(
     organizationId: string,
@@ -42,6 +47,7 @@ export class SegmentService {
       include: {
         resources: {
           select: {
+            id: true,
             amountCents: true,
             resourceKind: true,
           },
@@ -50,7 +56,17 @@ export class SegmentService {
       orderBy: [{ startDate: 'asc' }],
     })
 
-    const items = segments.map((segment) => this.toSegmentSummary(segment))
+    const resourceIds = segments.flatMap((segment) =>
+      segment.resources.map((resource) => resource.id),
+    )
+    const payableStatusByResourceId = await this.loadPayableStatusMap(
+      organizationId,
+      resourceIds,
+    )
+
+    const items = segments.map((segment) =>
+      this.toSegmentSummary(segment, payableStatusByResourceId),
+    )
 
     return {
       items,
@@ -59,7 +75,13 @@ export class SegmentService {
         segmentCount: items.length,
         totalDays: items.reduce((sum, item) => sum + item.dayCount, 0),
         resourceCount: items.reduce((sum, item) => sum + item.resourceCount, 0),
-        payableOverview: SegmentPayableStatus.NOT_GENERATED,
+        payableOverview: aggregatePayableOverview(
+          resourceIds.map(
+            (resourceId) =>
+              payableStatusByResourceId.get(resourceId) ??
+              SegmentPayableStatus.NOT_GENERATED,
+          ),
+        ),
       },
     }
   }
@@ -103,6 +125,7 @@ export class SegmentService {
       include: {
         resources: {
           select: {
+            id: true,
             amountCents: true,
             resourceKind: true,
           },
@@ -110,12 +133,16 @@ export class SegmentService {
       },
     })
 
-    return this.toSegmentSummary(created)
+    return this.toSegmentSummary(created, new Map())
   }
 
   async getById(organizationId: string, segmentId: string): Promise<ItinerarySegmentSummary> {
     const segment = await this.findSegmentOrThrow(organizationId, segmentId)
-    return this.toSegmentSummary(segment)
+    const payableStatusByResourceId = await this.loadPayableStatusMap(
+      organizationId,
+      segment.resources.map((resource) => resource.id),
+    )
+    return this.toSegmentSummary(segment, payableStatusByResourceId)
   }
 
   async update(
@@ -159,6 +186,7 @@ export class SegmentService {
       include: {
         resources: {
           select: {
+            id: true,
             amountCents: true,
             resourceKind: true,
           },
@@ -166,7 +194,11 @@ export class SegmentService {
       },
     })
 
-    return this.toSegmentSummary(updated)
+    const payableStatusByResourceId = await this.loadPayableStatusMap(
+      organizationId,
+      updated.resources.map((resource) => resource.id),
+    )
+    return this.toSegmentSummary(updated, payableStatusByResourceId)
   }
 
   async remove(organizationId: string, segmentId: string): Promise<void> {
@@ -202,6 +234,7 @@ export class SegmentService {
         departure: true,
         resources: {
           select: {
+            id: true,
             amountCents: true,
             resourceKind: true,
           },
@@ -232,7 +265,29 @@ export class SegmentService {
     }
   }
 
-  private toSegmentSummary(segment: SegmentWithResources): ItinerarySegmentSummary {
+  private async loadPayableStatusMap(
+    organizationId: string,
+    resourceIds: string[],
+  ): Promise<Map<string, SegmentPayableStatus>> {
+    const map = new Map<string, SegmentPayableStatus>()
+
+    await Promise.all(
+      resourceIds.map(async (resourceId) => {
+        const meta = await this.financeBridge.evaluateResourceFinanceMeta(
+          organizationId,
+          resourceId,
+        )
+        map.set(resourceId, meta.payableStatus)
+      }),
+    )
+
+    return map
+  }
+
+  private toSegmentSummary(
+    segment: SegmentWithResources,
+    payableStatusByResourceId: Map<string, SegmentPayableStatus>,
+  ): ItinerarySegmentSummary {
     const resourceCount = segment.resources.length
     const outsourceCount = segment.resources.filter(
       (resource) => resource.resourceKind === ResourceKind.OUTSOURCE,
@@ -240,6 +295,10 @@ export class SegmentService {
     const resourceAmountCents = segment.resources.reduce(
       (sum, resource) => sum + resource.amountCents,
       0,
+    )
+    const payableStatuses = segment.resources.map(
+      (resource) =>
+        payableStatusByResourceId.get(resource.id) ?? SegmentPayableStatus.NOT_GENERATED,
     )
 
     return {
@@ -256,7 +315,7 @@ export class SegmentService {
       resourceCount,
       outsourceCount,
       resourceAmountCents,
-      payableStatus: SegmentPayableStatus.NOT_GENERATED,
+      payableStatus: aggregatePayableOverview(payableStatuses),
     }
   }
 }
