@@ -591,7 +591,6 @@ export interface ItinerarySegmentSummary {
   endDate: string
   dayCount: number
   destination: string | null
-  applicableGuestCount: number
   notes: string | null
   fromTemplate: boolean
   resourceCount: number
@@ -618,7 +617,6 @@ export interface CreateItinerarySegmentDto {
   startDate: string
   endDate: string
   destination: string
-  applicableGuestCount?: number
   notes?: string
 }
 
@@ -627,7 +625,6 @@ export interface UpdateItinerarySegmentDto {
   startDate?: string
   endDate?: string
   destination?: string
-  applicableGuestCount?: number
   notes?: string | null
 }
 

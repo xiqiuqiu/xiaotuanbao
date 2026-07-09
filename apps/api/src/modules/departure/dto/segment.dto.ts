@@ -1,5 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
-import { Type } from 'class-transformer'
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class CreateItinerarySegmentDto {
   @IsString()
@@ -17,12 +16,6 @@ export class CreateItinerarySegmentDto {
   @IsString()
   @IsNotEmpty()
   destination!: string
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  applicableGuestCount?: number
 
   @IsOptional()
   @IsString()
@@ -49,12 +42,6 @@ export class UpdateItinerarySegmentDto {
   @IsString()
   @IsNotEmpty()
   destination?: string
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  applicableGuestCount?: number
 
   @IsOptional()
   @IsString()

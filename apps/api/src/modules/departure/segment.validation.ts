@@ -26,7 +26,6 @@ export function validateSegmentDates(input: SegmentDateValidationInput): void {
 export function validateSegmentFields(input: {
   name?: string
   destination?: string
-  applicableGuestCount?: number
 }): void {
   if (input.name !== undefined && !input.name.trim()) {
     throw new BadRequestException('请填写行程段名称')
@@ -34,9 +33,5 @@ export function validateSegmentFields(input: {
 
   if (input.destination !== undefined && !input.destination.trim()) {
     throw new BadRequestException('请填写目的地')
-  }
-
-  if (input.applicableGuestCount !== undefined && input.applicableGuestCount < 1) {
-    throw new BadRequestException('适用人数必须大于0')
   }
 }

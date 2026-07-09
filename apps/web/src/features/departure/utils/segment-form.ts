@@ -9,7 +9,6 @@ export interface SegmentFormValues {
   endDate: string
   dayCount: number
   destination: string
-  applicableGuestCount: number
   notes?: string
 }
 
@@ -20,7 +19,6 @@ export function segmentToFormValues(segment: ItinerarySegmentSummary): SegmentFo
     endDate: segment.endDate,
     dayCount: segment.dayCount,
     destination: segment.destination ?? '',
-    applicableGuestCount: segment.applicableGuestCount,
     notes: segment.notes ?? undefined,
   }
 }
@@ -28,7 +26,6 @@ export function segmentToFormValues(segment: ItinerarySegmentSummary): SegmentFo
 export function createDefaultSegmentFormValues(
   departureStartDate: string,
   departureEndDate: string,
-  defaultGuestCount: number,
 ): SegmentFormValues {
   return {
     name: '',
@@ -36,7 +33,6 @@ export function createDefaultSegmentFormValues(
     endDate: departureEndDate,
     dayCount: computeDayCount(departureStartDate, departureEndDate),
     destination: '',
-    applicableGuestCount: defaultGuestCount > 0 ? defaultGuestCount : 1,
   }
 }
 
@@ -46,7 +42,6 @@ export function formValuesToPayload(values: SegmentFormValues): CreateItineraryS
     startDate: values.startDate,
     endDate: values.endDate,
     destination: values.destination.trim(),
-    applicableGuestCount: values.applicableGuestCount,
     notes: values.notes?.trim() || undefined,
   }
 }

@@ -473,10 +473,9 @@ model ItinerarySegment {
   startDate            DateTime          @map("start_date") @db.Date
   endDate              DateTime          @map("end_date") @db.Date
   dayCount             Int               @map("day_count")
-  destination          String?
-  notes                String?
-  applicableGuestCount Int               @default(1) @map("applicable_guest_count")
-  fromTemplate         Boolean           @default(true) @map("from_template")
+  destination  String?
+  notes        String?
+  fromTemplate Boolean           @default(true) @map("from_template")
   resources            SegmentResource[]
 
   @@map("itinerary_segments")

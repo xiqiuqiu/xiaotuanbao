@@ -783,7 +783,7 @@ describe('Departure API (e2e)', () => {
       return createTestDeparture({ startDate: '2026-08-01', endDate: '2026-08-10' })
     }
 
-    it('creates segment with computed day count and default guest count', async () => {
+    it('creates segment with computed day count', async () => {
       const departure = await createSegmentDeparture()
 
       const response = await authRequest(app, coordinatorToken)
@@ -797,43 +797,13 @@ describe('Departure API (e2e)', () => {
         endDate: '2026-08-03',
         dayCount: 3,
         destination: '喀纳斯',
-        applicableGuestCount: 1,
         fromTemplate: false,
         resourceCount: 0,
         outsourceCount: 0,
         resourceAmountCents: 0,
         payableStatus: 'not_generated',
       })
-    })
-
-    it('defaults applicable guest count from source orders', async () => {
-      const departure = await createSegmentDeparture()
-      const partner = await prisma.partner.findFirst({
-        where: { organizationId, name: { startsWith: testPrefix } },
-      })
-      if (!partner) {
-        throw new Error('Partner not found')
-      }
-
-      await authRequest(app, coordinatorToken)
-        .post(`/api/departures/${departure.id}/source-orders`)
-        .send({
-          partnerId: partner.id,
-          adultGuestCount: 12,
-          childGuestCount: 0,
-          adultUnitPriceCents: 100000,
-          childUnitPriceCents: 0,
-          discountType: SourceOrderDiscountType.none,
-          collectionMode: SourceOrderCollectionMode.guest_only,
-        })
-        .expect(201)
-
-      const response = await authRequest(app, coordinatorToken)
-        .post(`/api/departures/${departure.id}/segments`)
-        .send(segmentPayload({ name: '阿勒泰段', startDate: '2026-08-04', endDate: '2026-08-10' }))
-        .expect(201)
-
-      expect(response.body.data.applicableGuestCount).toBe(12)
+      expect(response.body.data).not.toHaveProperty('applicableGuestCount')
     })
 
     it('lists segments with summary', async () => {
@@ -998,11 +968,11 @@ describe('Departure API (e2e)', () => {
 
       const response = await authRequest(app, coordinatorToken)
         .patch(`/api/segments/${created.body.data.id}`)
-        .send({ name: '喀纳斯修订段', applicableGuestCount: 8 })
+        .send({ name: '喀纳斯修订段', destination: '禾木' })
         .expect(200)
 
       expect(response.body.data.name).toBe('喀纳斯修订段')
-      expect(response.body.data.applicableGuestCount).toBe(8)
+      expect(response.body.data.destination).toBe('禾木')
     })
 
     it('deletes segment without resources', async () => {

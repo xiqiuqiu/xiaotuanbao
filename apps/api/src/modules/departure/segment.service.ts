@@ -96,7 +96,7 @@ export class SegmentService {
 
     const name = dto.name.trim()
     const destination = dto.destination.trim()
-    validateSegmentFields({ name, destination, applicableGuestCount: dto.applicableGuestCount })
+    validateSegmentFields({ name, destination })
 
     const startDate = parseDateOnly(dto.startDate)
     const endDate = parseDateOnly(dto.endDate)
@@ -107,9 +107,6 @@ export class SegmentService {
       departureEndDate: departure.endDate,
     })
 
-    const applicableGuestCount =
-      dto.applicableGuestCount ?? (await this.resolveDefaultApplicableGuestCount(departure.id))
-
     const created = await this.prisma.itinerarySegment.create({
       data: {
         departureId: departure.id,
@@ -118,7 +115,6 @@ export class SegmentService {
         endDate,
         dayCount: computeDayCount(startDate, endDate),
         destination,
-        applicableGuestCount,
         notes: dto.notes?.trim() || null,
         fromTemplate: false,
       },
@@ -156,7 +152,6 @@ export class SegmentService {
     validateSegmentFields({
       name: dto.name,
       destination: dto.destination,
-      applicableGuestCount: dto.applicableGuestCount,
     })
 
     const startDate = dto.startDate ? parseDateOnly(dto.startDate) : segment.startDate
@@ -178,9 +173,6 @@ export class SegmentService {
           ? { dayCount: computeDayCount(startDate, endDate) }
           : {}),
         ...(dto.destination !== undefined ? { destination: dto.destination.trim() } : {}),
-        ...(dto.applicableGuestCount !== undefined
-          ? { applicableGuestCount: dto.applicableGuestCount }
-          : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
       },
       include: {
@@ -249,16 +241,6 @@ export class SegmentService {
     return segment
   }
 
-  private async resolveDefaultApplicableGuestCount(departureId: string): Promise<number> {
-    const aggregate = await this.prisma.sourceOrder.aggregate({
-      where: { departureId },
-      _sum: { guestCount: true },
-    })
-
-    const totalGuests = aggregate._sum.guestCount ?? 0
-    return totalGuests > 0 ? totalGuests : 1
-  }
-
   private ensureDepartureEditable(departure: Departure) {
     if (departure.status === DepartureStatus.closed) {
       throw new ConflictException('发团已关闭，不可编辑')
@@ -309,7 +291,6 @@ export class SegmentService {
       endDate: formatDateOnly(segment.endDate),
       dayCount: segment.dayCount,
       destination: segment.destination,
-      applicableGuestCount: segment.applicableGuestCount,
       notes: segment.notes,
       fromTemplate: segment.fromTemplate,
       resourceCount,

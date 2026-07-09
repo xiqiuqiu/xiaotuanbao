@@ -5,7 +5,6 @@ import {
   Drawer,
   Form,
   Input,
-  InputNumber,
   Popconfirm,
   Space,
   Typography,
@@ -75,12 +74,8 @@ export function SegmentDrawer({
     () =>
       editing
         ? segmentToFormValues(editing)
-        : createDefaultSegmentFormValues(
-            departure.startDate,
-            departure.endDate,
-            departure.totalGuests,
-          ),
-    [departure.endDate, departure.startDate, departure.totalGuests, editing],
+        : createDefaultSegmentFormValues(departure.startDate, departure.endDate),
+    [departure.endDate, departure.startDate, editing],
   )
 
   useEffect(() => {
@@ -227,21 +222,6 @@ export function SegmentDrawer({
           rules={[{ required: true, whitespace: true, message: '请填写目的地' }]}
         >
           <Input placeholder="如喀纳斯" />
-        </Form.Item>
-
-        <Form.Item
-          label="适用人数"
-          name="applicableGuestCount"
-          rules={[
-            { required: true, message: '请填写适用人数' },
-            {
-              type: 'number',
-              min: 1,
-              message: '适用人数必须大于0',
-            },
-          ]}
-        >
-          <InputNumber min={1} precision={0} style={{ width: '100%' }} />
         </Form.Item>
 
         <Form.Item label="备注" name="notes">

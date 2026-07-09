@@ -29,7 +29,6 @@ const segment: ItinerarySegmentSummary = {
   endDate: '2026-07-14',
   dayCount: 1,
   destination: '乌镇西栅',
-  applicableGuestCount: 18,
   notes: null,
   fromTemplate: false,
   resourceCount: 1,

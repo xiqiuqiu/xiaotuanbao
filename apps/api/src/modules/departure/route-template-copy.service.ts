@@ -54,7 +54,6 @@ export class RouteTemplateCopyService {
           dayCount: dateRange.dayCount,
           destination: templateSegment.destination,
           notes: templateSegment.notes,
-          applicableGuestCount: 1,
           fromTemplate: true,
         },
       })
