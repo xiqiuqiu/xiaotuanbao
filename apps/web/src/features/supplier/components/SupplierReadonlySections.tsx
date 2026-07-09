@@ -9,9 +9,9 @@ import {
   INVOICE_TYPE_LABELS,
   SETTLEMENT_CYCLE_LABELS,
   SETTLEMENT_METHOD_LABELS,
-  formatSupplierCategories,
   catalogLabel,
 } from '../catalog'
+import { SupplierCategoryTags } from './SupplierCategoryTags'
 
 interface SupplierReadonlySectionsProps {
   supplier: SupplierSummary
@@ -45,7 +45,7 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
             { label: '供应商名称', children: supplier.name },
             {
               label: '供应商类别',
-              children: formatSupplierCategories(supplier.categories),
+              children: <SupplierCategoryTags categories={supplier.categories} />,
             },
             {
               label: '状态',

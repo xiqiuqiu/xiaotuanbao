@@ -8,6 +8,8 @@ import type { SupplierListResult, SupplierSummary } from '@xiaotuanbao/shared'
 import {
   normalizeSupplierCategories,
   InvalidSupplierCategoriesError,
+  RESOURCE_KIND_LABELS,
+  type ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -111,6 +113,7 @@ export class SupplierService {
     const name = dto.name.trim()
     await this.ensureNameAvailable(organizationId, name, supplier.id)
     const categories = this.requireCategories(dto.categories)
+    await this.ensureRemovedCategoriesNotInUse(supplier.id, supplier.categories, categories)
 
     const updated = await this.prisma.supplier.update({
       where: { id: supplier.id },
@@ -164,6 +167,38 @@ export class SupplierService {
       }
       throw error
     }
+  }
+
+  private async ensureRemovedCategoriesNotInUse(
+    supplierId: string,
+    previousCategories: readonly string[],
+    nextCategories: readonly string[],
+  ) {
+    const nextSet = new Set(nextCategories)
+    const removed = previousCategories.filter((kind) => !nextSet.has(kind))
+    if (removed.length === 0) {
+      return
+    }
+
+    const inUse = await this.prisma.segmentResource.findMany({
+      where: {
+        supplierId,
+        resourceKind: { in: removed as ResourceKind[] },
+      },
+      select: { resourceKind: true },
+      distinct: ['resourceKind'],
+    })
+
+    if (inUse.length === 0) {
+      return
+    }
+
+    const labels = inUse.map(
+      (row) => RESOURCE_KIND_LABELS[row.resourceKind as ResourceKind] ?? row.resourceKind,
+    )
+    throw new BadRequestException(
+      `供应商类别「${labels.join('、')}」仍被关联行程段资源使用，无法移除`,
+    )
   }
 
   private async findSupplierOrThrow(organizationId: string, supplierId: string) {

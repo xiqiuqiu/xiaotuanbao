@@ -7,7 +7,7 @@ import { SupplierReadonlySections } from './SupplierReadonlySections'
 const mockSupplier: SupplierSummary = {
   id: 'sup-1',
   name: '西湖国宾馆',
-  categories: [ResourceKind.HOTEL],
+  categories: [ResourceKind.HOTEL, ResourceKind.MEAL],
   status: DirectoryProfileStatus.ACTIVE,
   contactName: '张经理',
   contactPhone: '13800138000',
@@ -37,7 +37,9 @@ describe('SupplierReadonlySections', () => {
     expect(screen.getByText('收款账户信息')).toBeInTheDocument()
     expect(screen.getAllByText('备注').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('西湖国宾馆')).toBeInTheDocument()
-    expect(screen.getByText('酒店')).toBeInTheDocument()
+    expect(screen.getByText('酒店').closest('.ant-tag')).toBeTruthy()
+    expect(screen.getByText('餐').closest('.ant-tag')).toBeTruthy()
+    expect(screen.queryByText('酒店、餐')).not.toBeInTheDocument()
     expect(screen.getByText('张经理')).toBeInTheDocument()
     expect(screen.getByText('最大接待 200 人')).toBeInTheDocument()
   })

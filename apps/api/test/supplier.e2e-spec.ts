@@ -1,5 +1,9 @@
 import type { INestApplication } from '@nestjs/common'
-import { DirectoryProfileStatus, ResourceKind } from '@prisma/client'
+import {
+  CounterpartyType,
+  DirectoryProfileStatus,
+  ResourceKind,
+} from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
@@ -9,6 +13,7 @@ describe('Supplier API (e2e)', () => {
   let coordinatorToken: string
   let financeToken: string
   let organizationId: string
+  let ownerUserId: string
   const testSupplierPrefix = `e2e-supplier-${Date.now()}`
 
   beforeAll(async () => {
@@ -24,9 +29,28 @@ describe('Supplier API (e2e)', () => {
       throw new Error('Seed user wangjie not found')
     }
     organizationId = user.organizationId
+    ownerUserId = user.id
   })
 
   afterAll(async () => {
+    await prisma.segmentResource.deleteMany({
+      where: {
+        segment: {
+          departure: { organizationId, name: { startsWith: testSupplierPrefix } },
+        },
+      },
+    })
+    await prisma.itinerarySegment.deleteMany({
+      where: {
+        departure: { organizationId, name: { startsWith: testSupplierPrefix } },
+      },
+    })
+    await prisma.departure.deleteMany({
+      where: {
+        organizationId,
+        name: { startsWith: testSupplierPrefix },
+      },
+    })
     await prisma.supplier.deleteMany({
       where: {
         organizationId,
@@ -282,6 +306,177 @@ describe('Supplier API (e2e)', () => {
       status: DirectoryProfileStatus.disabled,
       contactName: '李经理',
     })
+  })
+
+  it('rejects empty categories on PATCH', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-patch-empty-categories`,
+        categories: [ResourceKind.hotel],
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${createResponse.body.data.id}`)
+      .send({
+        name: `${testSupplierPrefix}-patch-empty-categories`,
+        categories: [],
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+    expect(response.body.message).toContain('供应商类别不能为空')
+  })
+
+  it('rejects outsource as a supplier category on PATCH', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-patch-outsource`,
+        categories: [ResourceKind.hotel],
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${createResponse.body.data.id}`)
+      .send({
+        name: `${testSupplierPrefix}-patch-outsource`,
+        categories: [ResourceKind.hotel, ResourceKind.outsource],
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+    expect(response.body.message).toContain('拼出不得作为供应商类别')
+  })
+
+  it('rejects removing a category still used by segment resources', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-in-use-category`,
+        categories: [ResourceKind.hotel, ResourceKind.meal],
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+
+    const departure = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `TS${Date.now().toString().slice(-10)}`,
+        name: `${testSupplierPrefix}-in-use-departure`,
+        routeName: '测试线',
+        startDate: new Date('2026-08-01'),
+        endDate: new Date('2026-08-05'),
+        dayCount: 5,
+        ownerUserId,
+        departureType: 'combined',
+      },
+    })
+
+    const segment = await prisma.itinerarySegment.create({
+      data: {
+        departureId: departure.id,
+        name: '测试段',
+        startDate: new Date('2026-08-01'),
+        endDate: new Date('2026-08-03'),
+        dayCount: 3,
+        fromTemplate: false,
+      },
+    })
+
+    await prisma.segmentResource.create({
+      data: {
+        segmentId: segment.id,
+        resourceKind: ResourceKind.meal,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId,
+        title: '团队餐',
+        amountCents: 50000,
+        fromTemplate: false,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${supplierId}`)
+      .send({
+        name: `${testSupplierPrefix}-in-use-category`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+    expect(response.body.message).toContain('餐')
+    expect(response.body.message).toMatch(/仍被|无法移除/)
+
+    const kept = await prisma.supplier.findUniqueOrThrow({ where: { id: supplierId } })
+    expect(kept.categories).toEqual(
+      expect.arrayContaining([ResourceKind.hotel, ResourceKind.meal]),
+    )
+  })
+
+  it('allows removing a category not used by segment resources', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-unused-category`,
+        categories: [ResourceKind.hotel, ResourceKind.meal],
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+
+    const departure = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `TU${Date.now().toString().slice(-10)}`,
+        name: `${testSupplierPrefix}-unused-departure`,
+        routeName: '测试线',
+        startDate: new Date('2026-09-01'),
+        endDate: new Date('2026-09-05'),
+        dayCount: 5,
+        ownerUserId,
+        departureType: 'combined',
+      },
+    })
+
+    const segment = await prisma.itinerarySegment.create({
+      data: {
+        departureId: departure.id,
+        name: '测试段',
+        startDate: new Date('2026-09-01'),
+        endDate: new Date('2026-09-03'),
+        dayCount: 3,
+        fromTemplate: false,
+      },
+    })
+
+    await prisma.segmentResource.create({
+      data: {
+        segmentId: segment.id,
+        resourceKind: ResourceKind.hotel,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId,
+        title: '酒店',
+        amountCents: 80000,
+        fromTemplate: false,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${supplierId}`)
+      .send({
+        name: `${testSupplierPrefix}-unused-category`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(200)
+
+    expect(response.body.data.categories).toEqual([ResourceKind.hotel])
   })
 
   it('returns 409 when PATCH renames to an existing supplier name', async () => {

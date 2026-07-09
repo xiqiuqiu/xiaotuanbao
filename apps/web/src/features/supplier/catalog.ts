@@ -1,7 +1,6 @@
 import {
   InvoiceAvailable,
   InvoiceType,
-  RESOURCE_KIND_LABELS,
   RESOURCE_KIND_OPTIONS,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
   type SupplierAllowedResourceKind,
@@ -27,14 +26,6 @@ export const SUPPLIER_CATEGORY_OPTIONS = RESOURCE_KIND_OPTIONS.filter((item) =>
 export const SUPPLIER_CATEGORY_LABELS = Object.fromEntries(
   SUPPLIER_CATEGORY_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<SupplierAllowedResourceKind, string>
-
-/** Join supplier categories with unified labels, e.g. `酒店、餐`. */
-export function formatSupplierCategories(categories: readonly string[]): string {
-  if (!categories.length) return '—'
-  return categories
-    .map((kind) => RESOURCE_KIND_LABELS[kind as keyof typeof RESOURCE_KIND_LABELS] ?? kind)
-    .join('、')
-}
 
 export const INVOICE_AVAILABLE_OPTIONS = [
   { value: InvoiceAvailable.YES, label: '是' },

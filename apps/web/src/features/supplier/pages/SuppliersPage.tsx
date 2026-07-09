@@ -24,9 +24,9 @@ import {
   DIRECTORY_PROFILE_STATUS_LABELS,
   SETTLEMENT_CYCLE_LABELS,
   SETTLEMENT_METHOD_LABELS,
-  formatSupplierCategories,
   catalogLabel,
 } from '../catalog'
+import { SupplierCategoryTags } from '../components/SupplierCategoryTags'
 import {
   buildCreatePayload,
   buildUpdatePayload,
@@ -53,7 +53,9 @@ function buildColumns(
     {
       title: '类别',
       dataIndex: 'categories',
-      render: (categories: string[]) => formatSupplierCategories(categories ?? []),
+      render: (categories: string[]) => (
+        <SupplierCategoryTags categories={categories ?? []} />
+      ),
     },
     { title: '主联系人', dataIndex: 'contactName', render: (value) => value ?? '—' },
     { title: '联系方式', dataIndex: 'contactPhone', render: (value) => value ?? '—' },
