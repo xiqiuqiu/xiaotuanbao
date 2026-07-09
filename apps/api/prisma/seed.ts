@@ -15,7 +15,7 @@ import {
   PrismaClient,
   SettlementCycle,
   SettlementMethod,
-  SupplierCategory,
+  ResourceKind,
 } from '@prisma/client'
 import { hash } from 'bcryptjs'
 
@@ -173,7 +173,7 @@ async function seedDemoOrganization() {
 const DEMO_SUPPLIERS = [
   {
     name: '西湖国宾馆',
-    category: SupplierCategory.hotel,
+    categories: [ResourceKind.hotel, ResourceKind.meal],
     status: DirectoryProfileStatus.active,
     contactName: '李经理',
     contactPhone: '13805718801',
@@ -191,7 +191,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '楼外楼（孤山店）',
-    category: SupplierCategory.restaurant,
+    categories: [ResourceKind.meal],
     status: DirectoryProfileStatus.active,
     contactName: '王主管',
     contactPhone: '13905718802',
@@ -209,7 +209,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '杭州中亚旅汽',
-    category: SupplierCategory.transport,
+    categories: [ResourceKind.transport],
     status: DirectoryProfileStatus.active,
     contactName: '赵调度',
     contactPhone: '13705718803',
@@ -227,7 +227,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '张导游（西湖线）',
-    category: SupplierCategory.guide,
+    categories: [ResourceKind.guide],
     status: DirectoryProfileStatus.disabled,
     contactName: '张导',
     contactPhone: '13605718804',
@@ -239,7 +239,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '灵隐飞来峰',
-    category: SupplierCategory.scenic,
+    categories: [ResourceKind.scenic],
     status: DirectoryProfileStatus.active,
     contactName: '票务中心',
     contactPhone: '0571-87968665',
@@ -252,7 +252,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '宋城演艺',
-    category: SupplierCategory.entertainment,
+    categories: [ResourceKind.entertainment],
     status: DirectoryProfileStatus.active,
     contactName: '陈销售',
     contactPhone: '13505718805',
@@ -269,7 +269,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '浙江大地保险',
-    category: SupplierCategory.insurance,
+    categories: [ResourceKind.insurance],
     status: DirectoryProfileStatus.active,
     contactName: '周专员',
     contactPhone: '13405718806',
@@ -282,7 +282,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '千岛湖中心湖区票务',
-    category: SupplierCategory.ticket,
+    categories: [ResourceKind.ticket],
     status: DirectoryProfileStatus.active,
     contactName: '孙票务',
     contactPhone: '13305718807',
@@ -293,7 +293,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '河坊街丝绸馆（已合作终止）',
-    category: SupplierCategory.shop,
+    categories: [ResourceKind.shop],
     status: DirectoryProfileStatus.archived,
     contactName: '刘店长',
     contactPhone: '13205718808',
@@ -303,7 +303,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '黄山迎客松酒店',
-    category: SupplierCategory.hotel,
+    categories: [ResourceKind.hotel],
     status: DirectoryProfileStatus.active,
     contactName: '吴经理',
     contactPhone: '13105598809',
@@ -321,7 +321,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '乌镇西栅景区',
-    category: SupplierCategory.scenic,
+    categories: [ResourceKind.scenic],
     status: DirectoryProfileStatus.active,
     contactName: '钱对接',
     contactPhone: '13005718810',
@@ -335,7 +335,7 @@ const DEMO_SUPPLIERS = [
   },
   {
     name: '备用资源-其他类',
-    category: SupplierCategory.other,
+    categories: [ResourceKind.other],
     status: DirectoryProfileStatus.active,
     contactName: '计调自建',
     contactPhone: '12905718811',

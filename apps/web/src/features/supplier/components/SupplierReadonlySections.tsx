@@ -9,7 +9,7 @@ import {
   INVOICE_TYPE_LABELS,
   SETTLEMENT_CYCLE_LABELS,
   SETTLEMENT_METHOD_LABELS,
-  SUPPLIER_CATEGORY_LABELS,
+  formatSupplierCategories,
   catalogLabel,
 } from '../catalog'
 
@@ -45,7 +45,7 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
             { label: '供应商名称', children: supplier.name },
             {
               label: '供应商类别',
-              children: catalogLabel(SUPPLIER_CATEGORY_LABELS, supplier.category),
+              children: formatSupplierCategories(supplier.categories),
             },
             {
               label: '状态',

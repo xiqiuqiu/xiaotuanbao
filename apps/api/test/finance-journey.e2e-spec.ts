@@ -10,7 +10,6 @@ import {
   ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
-  SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentChannel, PaymentScheduleStatus } from '@xiaotuanbao/shared'
@@ -70,7 +69,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        category: SupplierCategory.transport,
+        categories: [ResourceKind.transport],
         status: DirectoryProfileStatus.active,
       },
     })

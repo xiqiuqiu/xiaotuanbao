@@ -73,7 +73,6 @@ export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-ke
 export { PRESET_ROLE_NAMES, PRESET_ROLE_MENU_KEYS, type PresetRoleName } from './constants/roles'
 export { UserStatus } from './enums/user-status.enum'
 export { DirectoryProfileStatus } from './enums/directory-profile-status.enum'
-export { SupplierCategory } from './enums/supplier-category.enum'
 export { SettlementMethod } from './enums/settlement-method.enum'
 export { SettlementCycle } from './enums/settlement-cycle.enum'
 export { InvoiceAvailable } from './enums/invoice-available.enum'
@@ -93,7 +92,17 @@ export { TransactionDirection } from './enums/transaction-direction.enum'
 export { TransactionWriteoffStatus } from './enums/transaction-writeoff-status.enum'
 export { PaymentChannel } from './enums/payment-channel.enum'
 export { VerificationStatus } from './enums/verification-status.enum'
-export { ResourceKind } from './enums/resource-kind.enum'
+export {
+  ResourceKind,
+  RESOURCE_KIND_OPTIONS,
+  RESOURCE_KIND_LABELS,
+  SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  type SupplierAllowedResourceKind,
+} from './enums/resource-kind.enum'
+export {
+  normalizeSupplierCategories,
+  InvalidSupplierCategoriesError,
+} from './supplier/normalize-supplier-categories'
 export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
 export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
 export { GuestGender } from './enums/guest-gender.enum'

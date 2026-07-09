@@ -22,21 +22,6 @@ enum DirectoryProfileStatus {
   @@map("directory_profile_status")
 }
 
-enum SupplierCategory {
-  restaurant
-  hotel
-  transport
-  guide
-  scenic
-  shop
-  entertainment
-  insurance
-  ticket
-  other
-
-  @@map("supplier_category")
-}
-
 enum SettlementMethod {
   cash
   prepay
@@ -169,6 +154,10 @@ enum ResourceKind {
   guide
   ticket
   meal
+  scenic
+  shop
+  entertainment
+  insurance
   outsource
   other
 
@@ -310,7 +299,7 @@ model Supplier {
   organizationId      String                 @map("organization_id")
   organization        Organization           @relation(fields: [organizationId], references: [id])
   name                String
-  category            SupplierCategory
+  categories          ResourceKind[]
   status              DirectoryProfileStatus @default(active)
   contactName         String?                @map("contact_name")
   contactPhone        String?                @map("contact_phone")

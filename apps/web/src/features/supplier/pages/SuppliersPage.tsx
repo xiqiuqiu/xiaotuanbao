@@ -7,7 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { SupplierSummary } from '@/types/api'
 import {
   DirectoryProfileStatus,
-  type SupplierCategory,
+  type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   archiveSupplier,
@@ -24,7 +24,7 @@ import {
   DIRECTORY_PROFILE_STATUS_LABELS,
   SETTLEMENT_CYCLE_LABELS,
   SETTLEMENT_METHOD_LABELS,
-  SUPPLIER_CATEGORY_LABELS,
+  formatSupplierCategories,
   catalogLabel,
 } from '../catalog'
 import {
@@ -52,8 +52,8 @@ function buildColumns(
     },
     {
       title: '类别',
-      dataIndex: 'category',
-      render: (category: string) => catalogLabel(SUPPLIER_CATEGORY_LABELS, category),
+      dataIndex: 'categories',
+      render: (categories: string[]) => formatSupplierCategories(categories ?? []),
     },
     { title: '主联系人', dataIndex: 'contactName', render: (value) => value ?? '—' },
     { title: '联系方式', dataIndex: 'contactPhone', render: (value) => value ?? '—' },
@@ -136,7 +136,7 @@ export function SuppliersPage() {
     queryFn: () =>
       listSuppliers({
         search: search || undefined,
-        category: categoryFilter as SupplierCategory | undefined,
+        category: categoryFilter as SupplierAllowedResourceKind | undefined,
         status: statusFilter,
         includeArchived,
         page,

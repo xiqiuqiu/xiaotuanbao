@@ -5,7 +5,7 @@ import {
   PartnerKind,
   PartnerType,
   PaymentScheduleDirection,
-  SupplierCategory,
+  ResourceKind,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
@@ -151,7 +151,7 @@ describe('Finance API (e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        category: SupplierCategory.transport,
+        categories: [ResourceKind.transport],
         status: DirectoryProfileStatus.active,
       },
     })
@@ -549,7 +549,7 @@ describe('Finance API (e2e)', () => {
         data: {
           organizationId: prefixlessOrgId,
           name: `${testPrefix}-noprefix-supplier`,
-          category: SupplierCategory.hotel,
+          categories: [ResourceKind.hotel],
           status: DirectoryProfileStatus.active,
         },
       })

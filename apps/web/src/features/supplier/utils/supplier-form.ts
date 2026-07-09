@@ -2,14 +2,14 @@ import type { SupplierSummary } from '@/types/api'
 import {
   DirectoryProfileStatus,
   InvoiceAvailable,
-  type SupplierCategory,
+  type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 import type { SupplierFormValues } from '../components/SupplierProfileSections'
 
 export function toFormValues(supplier: SupplierSummary): SupplierFormValues {
   return {
     name: supplier.name,
-    category: supplier.category as SupplierCategory,
+    categories: supplier.categories as SupplierAllowedResourceKind[],
     status: supplier.status as DirectoryProfileStatus,
     contactName: supplier.contactName ?? undefined,
     contactPhone: supplier.contactPhone ?? undefined,
@@ -35,7 +35,7 @@ export function buildCreatePayload(values: SupplierFormValues) {
 export function buildUpdatePayload(values: SupplierFormValues) {
   return {
     name: values.name,
-    category: values.category,
+    categories: values.categories,
     status: values.status ?? DirectoryProfileStatus.ACTIVE,
     contactName: values.contactName,
     contactPhone: values.contactPhone,

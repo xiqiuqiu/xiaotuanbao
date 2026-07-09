@@ -56,7 +56,7 @@ export type {
 export {
   UserStatus,
   DirectoryProfileStatus,
-  SupplierCategory,
+  ResourceKind,
   SettlementMethod,
   SettlementCycle,
   InvoiceAvailable,

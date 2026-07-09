@@ -1,27 +1,15 @@
-import { ResourceKind, SupplierCategory } from '@xiaotuanbao/shared'
-
-const RESOURCE_KIND_TO_SUPPLIER_CATEGORY: Partial<
-  Record<ResourceKind, SupplierCategory>
-> = {
-  [ResourceKind.TRANSPORT]: SupplierCategory.TRANSPORT,
-  [ResourceKind.HOTEL]: SupplierCategory.HOTEL,
-  [ResourceKind.GUIDE]: SupplierCategory.GUIDE,
-  [ResourceKind.TICKET]: SupplierCategory.TICKET,
-  [ResourceKind.MEAL]: SupplierCategory.RESTAURANT,
-  [ResourceKind.OTHER]: SupplierCategory.OTHER,
-}
+import { ResourceKind, type SupplierAllowedResourceKind } from '@xiaotuanbao/shared'
 
 /**
- * Maps a self-operated resource kind to the supplier category used when
- * filtering the supplier select in the resource drawer.
+ * Returns the supplier list filter key for a self-operated resource kind.
  * Returns undefined for outsource (partner path) or unset kind.
  */
-export function resolveSupplierFilterCategory(
+export function resolveSupplierFilterKind(
   resourceKind: ResourceKind | undefined,
-): SupplierCategory | undefined {
+): SupplierAllowedResourceKind | undefined {
   if (!resourceKind || resourceKind === ResourceKind.OUTSOURCE) {
     return undefined
   }
 
-  return RESOURCE_KIND_TO_SUPPLIER_CATEGORY[resourceKind]
+  return resourceKind as SupplierAllowedResourceKind
 }

@@ -559,12 +559,12 @@ async function main() {
 
   const suppliers = await prisma.supplier.findMany({
     where: { organizationId: organization.id, status: DirectoryProfileStatus.active },
-    select: { id: true, name: true, category: true },
+    select: { id: true, name: true, categories: true },
   })
 
-  const hotel = suppliers.find((item) => item.name.includes('国宾馆') || item.category === 'hotel')
-  const transport = suppliers.find((item) => item.category === 'transport')
-  const scenic = suppliers.find((item) => item.category === 'scenic')
+  const hotel = suppliers.find((item) => item.name.includes('国宾馆') || item.categories.includes('hotel'))
+  const transport = suppliers.find((item) => item.categories.includes('transport'))
+  const scenic = suppliers.find((item) => item.categories.includes('scenic'))
 
   if (!hotel || !transport || !scenic) {
     throw new Error('Required demo suppliers not found.')

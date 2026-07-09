@@ -84,7 +84,7 @@ export interface EmployeeListResult {
 export interface SupplierSummary {
   id: string
   name: string
-  category: string
+  categories: string[]
   status: 'active' | 'disabled' | 'archived'
   contactName: string | null
   contactPhone: string | null

@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common'
 import type { SupplierListResult, SupplierSummary } from '@xiaotuanbao/shared'
 import {
+  normalizeSupplierCategories,
+  InvalidSupplierCategoriesError,
+} from '@xiaotuanbao/shared'
+import {
   DirectoryProfileStatus,
   InvoiceAvailable,
   type Supplier,
@@ -40,7 +44,7 @@ export class SupplierService {
       organizationId,
       ...(!includeArchived ? { status: { not: DirectoryProfileStatus.archived } } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
-      ...(query.category ? { category: query.category } : {}),
+      ...(query.category ? { categories: { has: query.category } } : {}),
       ...(search
         ? {
             OR: [
@@ -78,12 +82,13 @@ export class SupplierService {
   async create(organizationId: string, dto: CreateSupplierDto): Promise<SupplierSummary> {
     const name = dto.name.trim()
     await this.ensureNameAvailable(organizationId, name)
+    const categories = this.requireCategories(dto.categories)
 
     const supplier = await this.prisma.supplier.create({
       data: {
         organizationId,
         name,
-        category: dto.category,
+        categories,
         status: DirectoryProfileStatus.active,
         ...this.toSupplierFieldData(dto),
       },
@@ -105,12 +110,13 @@ export class SupplierService {
 
     const name = dto.name.trim()
     await this.ensureNameAvailable(organizationId, name, supplier.id)
+    const categories = this.requireCategories(dto.categories)
 
     const updated = await this.prisma.supplier.update({
       where: { id: supplier.id },
       data: {
         name,
-        category: dto.category,
+        categories,
         status: dto.status,
         ...this.toSupplierFieldData(dto),
       },
@@ -147,6 +153,17 @@ export class SupplierService {
     })
 
     return this.toSupplierSummary(updated)
+  }
+
+  private requireCategories(categories: string[]) {
+    try {
+      return normalizeSupplierCategories(categories)
+    } catch (error) {
+      if (error instanceof InvalidSupplierCategoriesError) {
+        throw new BadRequestException(error.message)
+      }
+      throw error
+    }
   }
 
   private async findSupplierOrThrow(organizationId: string, supplierId: string) {
@@ -209,7 +226,7 @@ export class SupplierService {
     return {
       id: supplier.id,
       name: supplier.name,
-      category: supplier.category,
+      categories: supplier.categories,
       status: supplier.status,
       contactName: supplier.contactName,
       contactPhone: supplier.contactPhone,

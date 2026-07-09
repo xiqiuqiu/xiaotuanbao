@@ -7,7 +7,7 @@ import {
   PaymentScheduleDirection,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
-  SupplierCategory,
+  ResourceKind,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentChannel } from '@xiaotuanbao/shared'
@@ -160,7 +160,7 @@ describe('Departure finance tabs (e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-应付供应商`,
-        category: SupplierCategory.hotel,
+        categories: [ResourceKind.hotel],
         status: DirectoryProfileStatus.active,
       },
     })

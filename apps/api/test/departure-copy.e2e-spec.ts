@@ -9,7 +9,6 @@ import {
   ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
-  SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { authRequest, createTestApp, loginAs } from './helpers'
@@ -53,7 +52,7 @@ describe('Departure copy & save template (e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        category: SupplierCategory.hotel,
+        categories: [ResourceKind.hotel],
         status: DirectoryProfileStatus.active,
       },
     })

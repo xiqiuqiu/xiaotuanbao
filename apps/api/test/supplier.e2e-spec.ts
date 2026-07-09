@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
-import { DirectoryProfileStatus, SupplierCategory } from '@prisma/client'
+import { DirectoryProfileStatus, ResourceKind } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
@@ -47,7 +47,7 @@ describe('Supplier API (e2e)', () => {
   it('returns 403 for finance role on POST /suppliers', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/suppliers')
-      .send({ name: `${testSupplierPrefix}-finance-blocked`, category: SupplierCategory.other })
+      .send({ name: `${testSupplierPrefix}-finance-blocked`, categories: [ResourceKind.other] })
       .expect(403)
 
     expect(response.body.code).toBe(403)
@@ -62,13 +62,13 @@ describe('Supplier API (e2e)', () => {
         {
           organizationId,
           name: visibleName,
-          category: SupplierCategory.hotel,
+          categories: [ResourceKind.hotel],
           status: DirectoryProfileStatus.active,
         },
         {
           organizationId,
           name: archivedName,
-          category: SupplierCategory.restaurant,
+          categories: [ResourceKind.meal],
           status: DirectoryProfileStatus.archived,
         },
       ],
@@ -91,15 +91,77 @@ describe('Supplier API (e2e)', () => {
       .post('/api/suppliers')
       .send({
         name,
-        category: SupplierCategory.transport,
+        categories: [ResourceKind.transport],
       })
       .expect(201)
 
     expect(response.body.data).toMatchObject({
       name,
-      category: SupplierCategory.transport,
+      categories: [ResourceKind.transport],
       status: DirectoryProfileStatus.active,
     })
+  })
+
+  it('creates supplier with multiple categories', async () => {
+    const name = `${testSupplierPrefix}-multi-categories`
+
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name,
+        categories: [ResourceKind.hotel, ResourceKind.meal],
+      })
+      .expect(201)
+
+    expect(response.body.data.categories).toEqual([ResourceKind.hotel, ResourceKind.meal])
+  })
+
+  it('rejects empty categories', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-empty-categories`,
+        categories: [],
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('rejects outsource as a supplier category', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-outsource-category`,
+        categories: [ResourceKind.outsource],
+      })
+      .expect(400)
+
+    expect(response.body.code).toBe(400)
+  })
+
+  it('filters suppliers by category containment', async () => {
+    const hotelMealName = `${testSupplierPrefix}-filter-hotel-meal`
+    const transportName = `${testSupplierPrefix}-filter-transport`
+
+    await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({ name: hotelMealName, categories: [ResourceKind.hotel, ResourceKind.meal] })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({ name: transportName, categories: [ResourceKind.transport] })
+      .expect(201)
+
+    const mealFilter = await authRequest(app, coordinatorToken)
+      .get('/api/suppliers')
+      .query({ search: testSupplierPrefix, category: ResourceKind.meal, pageSize: 50 })
+      .expect(200)
+
+    const mealNames = mealFilter.body.data.items.map((item: { name: string }) => item.name)
+    expect(mealNames).toContain(hotelMealName)
+    expect(mealNames).not.toContain(transportName)
   })
 
   it('returns 409 when supplier name duplicates in same organization', async () => {
@@ -107,12 +169,12 @@ describe('Supplier API (e2e)', () => {
 
     await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
-      .send({ name, category: SupplierCategory.guide })
+      .send({ name, categories: [ResourceKind.guide] })
       .expect(201)
 
     const response = await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
-      .send({ name, category: SupplierCategory.scenic })
+      .send({ name, categories: [ResourceKind.scenic] })
       .expect(409)
 
     expect(response.body.code).toBe(409)
@@ -126,7 +188,7 @@ describe('Supplier API (e2e)', () => {
       data: {
         organizationId,
         name: archivedName,
-        category: SupplierCategory.other,
+        categories: [ResourceKind.other],
         status: DirectoryProfileStatus.archived,
       },
     })
@@ -145,7 +207,7 @@ describe('Supplier API (e2e)', () => {
       .post('/api/suppliers')
       .send({
         name: `${testSupplierPrefix}-get-by-id`,
-        category: SupplierCategory.hotel,
+        categories: [ResourceKind.hotel],
         contactName: '张经理',
         contactPhone: '13800138000',
       })
@@ -160,7 +222,7 @@ describe('Supplier API (e2e)', () => {
     expect(response.body.data).toMatchObject({
       id: supplierId,
       name: `${testSupplierPrefix}-get-by-id`,
-      category: SupplierCategory.hotel,
+      categories: [ResourceKind.hotel],
       contactName: '张经理',
       contactPhone: '13800138000',
     })
@@ -178,7 +240,7 @@ describe('Supplier API (e2e)', () => {
       data: {
         organizationId: otherOrg.id,
         name: `${testSupplierPrefix}-foreign`,
-        category: SupplierCategory.other,
+        categories: [ResourceKind.other],
         status: DirectoryProfileStatus.active,
       },
     })
@@ -198,7 +260,7 @@ describe('Supplier API (e2e)', () => {
       .post('/api/suppliers')
       .send({
         name: `${testSupplierPrefix}-patch`,
-        category: SupplierCategory.restaurant,
+        categories: [ResourceKind.meal],
       })
       .expect(201)
 
@@ -208,7 +270,7 @@ describe('Supplier API (e2e)', () => {
       .patch(`/api/suppliers/${supplierId}`)
       .send({
         name: `${testSupplierPrefix}-patch-updated`,
-        category: SupplierCategory.hotel,
+        categories: [ResourceKind.hotel],
         status: DirectoryProfileStatus.disabled,
         contactName: '李经理',
       })
@@ -216,7 +278,7 @@ describe('Supplier API (e2e)', () => {
 
     expect(response.body.data).toMatchObject({
       name: `${testSupplierPrefix}-patch-updated`,
-      category: SupplierCategory.hotel,
+      categories: [ResourceKind.hotel],
       status: DirectoryProfileStatus.disabled,
       contactName: '李经理',
     })
@@ -228,19 +290,19 @@ describe('Supplier API (e2e)', () => {
 
     await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
-      .send({ name: firstName, category: SupplierCategory.guide })
+      .send({ name: firstName, categories: [ResourceKind.guide] })
       .expect(201)
 
     const second = await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
-      .send({ name: secondName, category: SupplierCategory.guide })
+      .send({ name: secondName, categories: [ResourceKind.guide] })
       .expect(201)
 
     const response = await authRequest(app, coordinatorToken)
       .patch(`/api/suppliers/${second.body.data.id}`)
       .send({
         name: firstName,
-        category: SupplierCategory.guide,
+        categories: [ResourceKind.guide],
         status: DirectoryProfileStatus.active,
       })
       .expect(409)
@@ -253,7 +315,7 @@ describe('Supplier API (e2e)', () => {
       .post('/api/suppliers')
       .send({
         name: `${testSupplierPrefix}-archive`,
-        category: SupplierCategory.scenic,
+        categories: [ResourceKind.scenic],
       })
       .expect(201)
 
@@ -279,7 +341,7 @@ describe('Supplier API (e2e)', () => {
       data: {
         organizationId,
         name,
-        category: SupplierCategory.transport,
+        categories: [ResourceKind.transport],
         status: DirectoryProfileStatus.archived,
       },
     })

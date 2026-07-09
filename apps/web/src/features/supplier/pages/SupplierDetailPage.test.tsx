@@ -2,14 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SupplierCategory, DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { ResourceKind, DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { SupplierSummary } from '@/types/api'
 import { SupplierDetailPage } from './SupplierDetailPage'
 
 const mockSupplier: SupplierSummary = {
   id: 'sup-1',
   name: '西湖国宾馆',
-  category: SupplierCategory.HOTEL,
+  categories: [ResourceKind.HOTEL],
   status: DirectoryProfileStatus.ACTIVE,
   contactName: '张经理',
   contactPhone: '13800138000',

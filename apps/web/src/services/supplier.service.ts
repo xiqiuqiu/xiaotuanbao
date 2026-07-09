@@ -6,12 +6,13 @@ import type {
   InvoiceType,
   SettlementCycle,
   SettlementMethod,
-  SupplierCategory,
+  SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 
 export interface ListSuppliersParams {
   search?: string
-  category?: SupplierCategory
+  /** Filter suppliers whose categories contain this ResourceKind. */
+  category?: SupplierAllowedResourceKind
   status?: DirectoryProfileStatus
   includeArchived?: boolean
   page?: number
@@ -20,7 +21,7 @@ export interface ListSuppliersParams {
 
 export interface CreateSupplierPayload {
   name: string
-  category: SupplierCategory
+  categories: SupplierAllowedResourceKind[]
   contactName?: string
   contactPhone?: string
   settlementMethod?: SettlementMethod

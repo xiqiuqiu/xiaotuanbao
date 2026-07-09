@@ -1,13 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { SupplierCategory, DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { ResourceKind, DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { SupplierSummary } from '@/types/api'
 import { SupplierReadonlySections } from './SupplierReadonlySections'
 
 const mockSupplier: SupplierSummary = {
   id: 'sup-1',
   name: '西湖国宾馆',
-  category: SupplierCategory.HOTEL,
+  categories: [ResourceKind.HOTEL],
   status: DirectoryProfileStatus.ACTIVE,
   contactName: '张经理',
   contactPhone: '13800138000',

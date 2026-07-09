@@ -7,7 +7,6 @@ import {
   PartnerType,
   PaymentScheduleDirection,
   ResourceKind,
-  SupplierCategory,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentChannel, PaymentScheduleSourceType } from '@xiaotuanbao/shared'
@@ -54,7 +53,7 @@ describe('Segment resource generate payables (e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        category: SupplierCategory.transport,
+        categories: [ResourceKind.transport],
         status: DirectoryProfileStatus.active,
       },
     })

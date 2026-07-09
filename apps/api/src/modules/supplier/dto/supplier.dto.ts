@@ -1,4 +1,7 @@
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -13,18 +16,29 @@ import {
   DirectoryProfileStatus,
   InvoiceAvailable,
   InvoiceType,
+  ResourceKind,
   SettlementCycle,
   SettlementMethod,
-  SupplierCategory,
 } from '@prisma/client'
+import {
+  SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  type SupplierAllowedResourceKind,
+} from '@xiaotuanbao/shared'
 
 export class CreateSupplierDto {
   @IsString()
   @IsNotEmpty()
   name!: string
 
-  @IsEnum(SupplierCategory)
-  category!: SupplierCategory
+  @IsArray()
+  @ArrayMinSize(1, { message: '供应商类别不能为空' })
+  @ArrayUnique()
+  @IsEnum(ResourceKind, { each: true })
+  @IsIn([...SUPPLIER_ALLOWED_RESOURCE_KINDS], {
+    each: true,
+    message: '拼出不得作为供应商类别',
+  })
+  categories!: SupplierAllowedResourceKind[]
 
   @IsOptional()
   @IsString()
@@ -89,8 +103,15 @@ export class UpdateSupplierDto {
   @IsNotEmpty()
   name!: string
 
-  @IsEnum(SupplierCategory)
-  category!: SupplierCategory
+  @IsArray()
+  @ArrayMinSize(1, { message: '供应商类别不能为空' })
+  @ArrayUnique()
+  @IsEnum(ResourceKind, { each: true })
+  @IsIn([...SUPPLIER_ALLOWED_RESOURCE_KINDS], {
+    each: true,
+    message: '拼出不得作为供应商类别',
+  })
+  categories!: SupplierAllowedResourceKind[]
 
   @IsIn(EDITABLE_SUPPLIER_STATUSES)
   status!: (typeof EDITABLE_SUPPLIER_STATUSES)[number]
@@ -153,9 +174,11 @@ export class ListSuppliersQueryDto {
   @IsString()
   search?: string
 
+  /** Filter suppliers whose categories contain this ResourceKind. */
   @IsOptional()
-  @IsEnum(SupplierCategory)
-  category?: SupplierCategory
+  @IsEnum(ResourceKind)
+  @IsIn([...SUPPLIER_ALLOWED_RESOURCE_KINDS])
+  category?: SupplierAllowedResourceKind
 
   @IsOptional()
   @IsEnum(DirectoryProfileStatus)

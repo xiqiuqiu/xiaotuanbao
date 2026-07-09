@@ -7,7 +7,7 @@ import {
   type InvoiceType,
   type SettlementCycle,
   type SettlementMethod,
-  type SupplierCategory,
+  type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   DIRECTORY_PROFILE_STATUS_OPTIONS,
@@ -20,7 +20,7 @@ import {
 
 export interface SupplierFormValues {
   name: string
-  category: SupplierCategory
+  categories: SupplierAllowedResourceKind[]
   status?: DirectoryProfileStatus
   contactName?: string
   contactPhone?: string
@@ -58,10 +58,14 @@ export function SupplierProfileSections({ form, showStatus = false }: SupplierPr
         </Form.Item>
         <Form.Item
           label="供应商类别"
-          name="category"
-          rules={[{ required: true, message: '请选择供应商类别' }]}
+          name="categories"
+          rules={[{ required: true, type: 'array', min: 1, message: '请选择供应商类别' }]}
         >
-          <Select options={[...SUPPLIER_CATEGORY_OPTIONS]} placeholder="请选择类别" />
+          <Select
+            mode="multiple"
+            options={[...SUPPLIER_CATEGORY_OPTIONS]}
+            placeholder="请选择类别（可多选）"
+          />
         </Form.Item>
         {showStatus ? (
           <Form.Item label="状态" name="status" rules={[{ required: true, message: '请选择状态' }]}>

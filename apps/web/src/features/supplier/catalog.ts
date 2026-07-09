@@ -1,7 +1,10 @@
 import {
   InvoiceAvailable,
   InvoiceType,
-  SupplierCategory,
+  RESOURCE_KIND_LABELS,
+  RESOURCE_KIND_OPTIONS,
+  SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 
 export {
@@ -14,22 +17,24 @@ export {
   catalogLabel,
 } from '../directory/catalog'
 
-export const SUPPLIER_CATEGORY_OPTIONS = [
-  { value: SupplierCategory.RESTAURANT, label: '餐厅' },
-  { value: SupplierCategory.HOTEL, label: '酒店' },
-  { value: SupplierCategory.TRANSPORT, label: '车队' },
-  { value: SupplierCategory.GUIDE, label: '导游' },
-  { value: SupplierCategory.SCENIC, label: '景区' },
-  { value: SupplierCategory.SHOP, label: '购物店' },
-  { value: SupplierCategory.ENTERTAINMENT, label: '演出' },
-  { value: SupplierCategory.INSURANCE, label: '保险' },
-  { value: SupplierCategory.TICKET, label: '票务' },
-  { value: SupplierCategory.OTHER, label: '其他' },
-] as const
+export type { SupplierAllowedResourceKind }
+
+/** Supplier-allowed resource kinds with unified labels (用车/餐/门票). */
+export const SUPPLIER_CATEGORY_OPTIONS = RESOURCE_KIND_OPTIONS.filter((item) =>
+  (SUPPLIER_ALLOWED_RESOURCE_KINDS as readonly string[]).includes(item.value),
+)
 
 export const SUPPLIER_CATEGORY_LABELS = Object.fromEntries(
   SUPPLIER_CATEGORY_OPTIONS.map((item) => [item.value, item.label]),
-) as Record<SupplierCategory, string>
+) as Record<SupplierAllowedResourceKind, string>
+
+/** Join supplier categories with unified labels, e.g. `酒店、餐`. */
+export function formatSupplierCategories(categories: readonly string[]): string {
+  if (!categories.length) return '—'
+  return categories
+    .map((kind) => RESOURCE_KIND_LABELS[kind as keyof typeof RESOURCE_KIND_LABELS] ?? kind)
+    .join('、')
+}
 
 export const INVOICE_AVAILABLE_OPTIONS = [
   { value: InvoiceAvailable.YES, label: '是' },

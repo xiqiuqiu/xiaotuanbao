@@ -24,7 +24,7 @@ import {
   resourceToFormValues,
   type ResourceFormValues,
 } from '../utils/resource-form'
-import { resolveSupplierFilterCategory } from '../utils/resource-supplier-filter'
+import { resolveSupplierFilterKind } from '../utils/resource-supplier-filter'
 
 interface ResourceDrawerProps {
   open: boolean
@@ -51,7 +51,7 @@ export function ResourceDrawer({
   const resourceKind = Form.useWatch('resourceKind', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const outsource = isOutsourceKind(resourceKind)
-  const supplierCategory = resolveSupplierFilterCategory(resourceKind)
+  const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
@@ -84,14 +84,14 @@ export function ResourceDrawer({
   })
 
   const { data: suppliersResult } = useQuery({
-    queryKey: ['suppliers', 'resource-select', supplierCategory],
+    queryKey: ['suppliers', 'resource-select', supplierFilterKind],
     queryFn: () =>
       listSuppliers({
         status: DirectoryProfileStatus.ACTIVE,
-        category: supplierCategory,
+        category: supplierFilterKind,
         pageSize: 100,
       }),
-    enabled: open && !outsource && Boolean(supplierCategory),
+    enabled: open && !outsource && Boolean(supplierFilterKind),
   })
 
   return (
