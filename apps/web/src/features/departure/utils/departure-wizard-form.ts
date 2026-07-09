@@ -10,9 +10,6 @@ export interface RouteStepValues {
   templateId?: string
   copyFromDepartureId?: string
   sourceDepartureNo?: string
-  copySegments?: boolean
-  copyResources?: boolean
-  copyReferencePrices?: boolean
   previewSegmentCount?: number
   previewResourceCount?: number
 }

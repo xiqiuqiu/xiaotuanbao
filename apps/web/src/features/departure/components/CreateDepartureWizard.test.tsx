@@ -9,6 +9,8 @@ import type { DepartureSummary } from '@/types/api'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
+let mockSearch: { copyFrom?: string } = {}
+
 const mockUser = {
   id: 'user-1',
   username: 'wangjie',
@@ -23,7 +25,7 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to}>{children}</a>
   ),
   useNavigate: () => mockNavigate,
-  useSearch: () => ({}),
+  useSearch: () => mockSearch,
 }))
 
 vi.mock('@/app/store/auth.store', () => ({
@@ -34,6 +36,12 @@ vi.mock('@/app/store/auth.store', () => ({
 vi.mock('@/services/departure.service', () => ({
   previewDepartureNo: vi.fn(),
   createDeparture: vi.fn(),
+  copyDeparture: vi.fn(),
+  getDeparture: vi.fn(),
+}))
+
+vi.mock('@/services/segment.service', () => ({
+  listSegments: vi.fn(),
 }))
 
 vi.mock('@/services/route-template.service', () => ({
@@ -46,8 +54,14 @@ vi.mock('@/services/employee.service', () => ({
   listEmployees: vi.fn(),
 }))
 
-import { createDeparture, previewDepartureNo } from '@/services/departure.service'
+import {
+  copyDeparture,
+  createDeparture,
+  getDeparture,
+  previewDepartureNo,
+} from '@/services/departure.service'
 import { listEmployees } from '@/services/employee.service'
+import { listSegments } from '@/services/segment.service'
 import {
   deleteRouteTemplate,
   getRouteTemplate,
@@ -106,11 +120,14 @@ describe('CreateDepartureWizard', () => {
     cleanup()
     vi.clearAllMocks()
     Modal.destroyAll()
+    mockSearch = {}
   })
 
   beforeEach(() => {
+    mockSearch = {}
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
+    vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
     vi.mocked(listEmployees).mockResolvedValue({
@@ -161,9 +178,38 @@ describe('CreateDepartureWizard', () => {
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
     expect(screen.queryByText('无模板复制项')).not.toBeInTheDocument()
+    expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
   })
 
-  it('opens copy modal for template tab before entering step 2', async () => {
+  it('creates manual departure without templateId or structure summary', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+
+    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await screen.findByLabelText('团名')
+
+    expect(screen.queryByText(/将复制/)).not.toBeInTheDocument()
+    expect(screen.queryByText('无模板复制项')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(createDeparture).toHaveBeenCalled()
+    })
+
+    const payload = vi.mocked(createDeparture).mock.calls[0]?.[0]
+    expect(payload).toMatchObject({
+      routeName: '喀纳斯阿勒泰10日线',
+    })
+    expect(payload).not.toHaveProperty('templateId')
+    expect(payload).not.toHaveProperty('copySegments')
+    expect(payload).not.toHaveProperty('copyResources')
+    expect(payload).not.toHaveProperty('copyReferencePrices')
+  })
+
+  it('enters step 2 from template tab without copy modal and shows structure summary', async () => {
     vi.mocked(listRouteTemplates).mockResolvedValue([
       {
         id: 'template-1',
@@ -181,8 +227,105 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByText('西安-青海湖-茶卡6日游'))
     await user.click(screen.getByRole('button', { name: '下一步' }))
 
-    expect(await screen.findByText('复制行程段')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '使用该路线建团' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '使用该路线建团' })).not.toBeInTheDocument()
+    expect(screen.getByText('将复制 2 段行程、5 项资源草稿')).toBeInTheDocument()
+  })
+
+  it('creates departure from template without copy flags', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      {
+        id: 'template-1',
+        name: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        usageCount: 3,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
+    await user.click(screen.getByText('西安-青海湖-茶卡6日游'))
+    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await screen.findByLabelText('团名')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(createDeparture).toHaveBeenCalled()
+    })
+
+    const payload = vi.mocked(createDeparture).mock.calls[0]?.[0]
+    expect(payload).toMatchObject({
+      templateId: 'template-1',
+      routeName: '西安-青海湖-茶卡6日游',
+    })
+    expect(payload).not.toHaveProperty('copySegments')
+    expect(payload).not.toHaveProperty('copyResources')
+    expect(payload).not.toHaveProperty('copyReferencePrices')
+  })
+
+  it('enters copy mode without copy modal and creates without copy flags', async () => {
+    mockSearch = { copyFrom: 'source-departure-1' }
+    let resolveDeparture: (value: Awaited<ReturnType<typeof getDeparture>>) => void = () => {}
+    vi.mocked(getDeparture).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDeparture = resolve
+        }),
+    )
+    vi.mocked(listSegments).mockResolvedValue({
+      items: [],
+      summary: {
+        segmentCount: 3,
+        totalDays: 10,
+        resourceCount: 7,
+        payableOverview: '应付未生成',
+      },
+      total: 0,
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+
+    expect(screen.getByText('正在加载源发团…')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '常用路线' })).not.toBeInTheDocument()
+    expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /创建发团/ })).toBeDisabled()
+
+    resolveDeparture({
+      ...mockDeparture,
+      id: 'source-departure-1',
+      departureNo: 'XTB2026060009',
+      routeName: '喀纳斯阿勒泰10日线',
+      dayCount: 10,
+      grossReceivableCents: 0,
+      discountCents: 0,
+      collectedCents: 0,
+      uncollectedCents: 0,
+      paidCents: 0,
+      unpaidCents: 0,
+      isFinanciallySettled: false,
+    })
+
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
+    expect(screen.queryByText('复制已有发团')).not.toBeInTheDocument()
+    expect(screen.getByText('复制自发团 XTB2026060009，不含客源与财务')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(copyDeparture).toHaveBeenCalled()
+    })
+
+    expect(vi.mocked(copyDeparture).mock.calls[0]?.[0]).toBe('source-departure-1')
+    const payload = vi.mocked(copyDeparture).mock.calls[0]?.[1]
+    expect(payload).not.toHaveProperty('copySegments')
+    expect(payload).not.toHaveProperty('copyResources')
+    expect(payload).not.toHaveProperty('copyReferencePrices')
   })
 
   it('removes route template card from list after confirmed delete', async () => {
