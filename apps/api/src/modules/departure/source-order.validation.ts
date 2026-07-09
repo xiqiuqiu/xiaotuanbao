@@ -7,12 +7,18 @@ import { computeSourceOrderAmounts, type SourceOrderAmountInput } from './source
 
 export interface SourceOrderValidationInput {
   partnerId?: string
-  guestCount: number
-  unitPriceCents: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
   partnerCollectedCents: number
+}
+
+function isMissingUnitPrice(unitPriceCents: number | null | undefined): boolean {
+  return unitPriceCents === undefined || unitPriceCents === null
 }
 
 export function validateSourceOrderInput(input: SourceOrderValidationInput): void {
@@ -20,12 +26,32 @@ export function validateSourceOrderInput(input: SourceOrderValidationInput): voi
     throw new BadRequestException('请选择客户')
   }
 
-  if (input.guestCount < 1) {
-    throw new BadRequestException('客人人数必须大于0')
+  if (input.adultGuestCount < 0) {
+    throw new BadRequestException('成人人数不能为负数')
   }
 
-  if (input.unitPriceCents < 0) {
-    throw new BadRequestException('原始团款单价不能为负数')
+  if (input.childGuestCount < 0) {
+    throw new BadRequestException('儿童人数不能为负数')
+  }
+
+  if (input.adultGuestCount + input.childGuestCount < 1) {
+    throw new BadRequestException('总人数必须大于0')
+  }
+
+  if (input.adultGuestCount > 0 && isMissingUnitPrice(input.adultUnitPriceCents)) {
+    throw new BadRequestException('成人团款单价不能为空')
+  }
+
+  if (input.childGuestCount > 0 && isMissingUnitPrice(input.childUnitPriceCents)) {
+    throw new BadRequestException('儿童团款单价不能为空')
+  }
+
+  if (input.adultUnitPriceCents != null && input.adultUnitPriceCents < 0) {
+    throw new BadRequestException('成人团款单价不能为负数')
+  }
+
+  if (input.childUnitPriceCents != null && input.childUnitPriceCents < 0) {
+    throw new BadRequestException('儿童团款单价不能为负数')
   }
 
   const amounts = computeSourceOrderAmounts(input as SourceOrderAmountInput)

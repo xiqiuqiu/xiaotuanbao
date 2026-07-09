@@ -17,6 +17,19 @@ export interface SourceOrderFormValues {
   notes?: string
 }
 
+export interface SourceOrderFormAmountInput {
+  adultGuestCount: number
+  childGuestCount: number
+  /** Required when adultGuestCount > 0; omitted treated as 0 when count is 0. */
+  adultUnitPriceYuan?: number
+  /** Required when childGuestCount > 0; omitted treated as 0 when count is 0. */
+  childUnitPriceYuan?: number
+  discountType: SourceOrderDiscountType
+  discountYuan?: number
+  collectionMode: SourceOrderCollectionMode
+  partnerCollectedYuan?: number
+}
+
 function yuanToCents(yuan: number): number {
   return Math.round(yuan * 100)
 }
@@ -25,11 +38,29 @@ function centsToYuan(cents: number): number {
   return cents / 100
 }
 
-export function computeFormAmounts(values: Pick<
-  SourceOrderFormValues,
-  'guestCount' | 'unitPriceYuan' | 'discountType' | 'discountYuan' | 'collectionMode' | 'partnerCollectedYuan'
->) {
-  const grossReceivableCents = yuanToCents(values.unitPriceYuan) * values.guestCount
+/** Effective unit price: when count is 0, treat missing/any price as 0. */
+function effectiveUnitPriceYuan(
+  guestCount: number,
+  unitPriceYuan: number | undefined,
+): number {
+  if (guestCount === 0) {
+    return 0
+  }
+  return unitPriceYuan ?? 0
+}
+
+export function computeFormAmounts(values: SourceOrderFormAmountInput) {
+  const adultUnitPriceYuan = effectiveUnitPriceYuan(
+    values.adultGuestCount,
+    values.adultUnitPriceYuan,
+  )
+  const childUnitPriceYuan = effectiveUnitPriceYuan(
+    values.childGuestCount,
+    values.childUnitPriceYuan,
+  )
+  const grossReceivableCents =
+    yuanToCents(adultUnitPriceYuan) * values.adultGuestCount +
+    yuanToCents(childUnitPriceYuan) * values.childGuestCount
   const discountCents =
     values.discountType === SourceOrderDiscountType.LUMP_SUM
       ? yuanToCents(values.discountYuan ?? 0)
@@ -53,6 +84,30 @@ export function computeFormAmounts(values: Pick<
     netReceivableCents,
     partnerCollectedCents,
     guestCollectCents,
+  }
+}
+
+/** Maps legacy single guestCount/unitPrice form to adult/child amount input (child = 0). */
+export function legacyFormValuesToAmountInput(
+  values: Pick<
+    SourceOrderFormValues,
+    | 'guestCount'
+    | 'unitPriceYuan'
+    | 'discountType'
+    | 'discountYuan'
+    | 'collectionMode'
+    | 'partnerCollectedYuan'
+  >,
+): SourceOrderFormAmountInput {
+  return {
+    adultGuestCount: values.guestCount,
+    childGuestCount: 0,
+    adultUnitPriceYuan: values.unitPriceYuan,
+    childUnitPriceYuan: 0,
+    discountType: values.discountType,
+    discountYuan: values.discountYuan,
+    collectionMode: values.collectionMode,
+    partnerCollectedYuan: values.partnerCollectedYuan,
   }
 }
 
@@ -81,7 +136,8 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
 }
 
 export function formValuesToPayload(values: SourceOrderFormValues) {
-  const amounts = computeFormAmounts(values)
+  // #67: amount helper is adult/child; HTTP payload still guestCount×unitPrice until #68/#69
+  const amounts = computeFormAmounts(legacyFormValuesToAmountInput(values))
   return {
     partnerId: values.partnerId,
     guestCount: values.guestCount,

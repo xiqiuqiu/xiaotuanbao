@@ -114,13 +114,15 @@ export class SourceOrderService {
 
     const partner = await this.ensureSelectablePartner(organizationId, dto.partnerId)
     const normalized = this.normalizeInput(dto)
+    // #67: pure-function seam uses adult/child; HTTP/DB still guestCount×unitPrice until #68
+    const amountInput = this.toAdultChildAmountInput(normalized)
 
     validateSourceOrderInput({
       partnerId: partner.id,
-      ...normalized,
+      ...amountInput,
     })
 
-    const amounts = computeSourceOrderAmounts(normalized)
+    const amounts = computeSourceOrderAmounts(amountInput)
     const displayName = await this.generateDisplayName(
       departure,
       partner.name,
@@ -197,13 +199,15 @@ export class SourceOrderService {
         dto.partnerCollectedCents ??
         (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
     }, order)
+    // #67: pure-function seam uses adult/child; HTTP/DB still guestCount×unitPrice until #68
+    const amountInput = this.toAdultChildAmountInput(normalized)
 
     validateSourceOrderInput({
       partnerId: partner.id,
-      ...normalized,
+      ...amountInput,
     })
 
-    const amounts = computeSourceOrderAmounts(normalized)
+    const amounts = computeSourceOrderAmounts(amountInput)
 
     await this.financeBridge.assertAmountFieldsEditable(
       organizationId,
@@ -366,7 +370,16 @@ export class SourceOrderService {
     const discountCents =
       discountType === 'lump_sum' ? Math.max(dto.discountCents ?? 0, 0) : 0
     const collectionMode = dto.collectionMode
-    const gross = dto.unitPriceCents * dto.guestCount
+    // Legacy single price: treat all guests as adults until #68 migrates fields
+    const amountInput = this.toAdultChildAmountInput({
+      guestCount: dto.guestCount,
+      unitPriceCents: dto.unitPriceCents,
+      discountType,
+      discountCents,
+      collectionMode,
+      partnerCollectedCents: 0,
+    })
+    const gross = computeSourceOrderAmounts(amountInput).grossReceivableCents
     const net = gross - discountCents
 
     let partnerCollectedCents = 0
@@ -386,6 +399,27 @@ export class SourceOrderService {
       discountCents,
       collectionMode,
       partnerCollectedCents,
+    }
+  }
+
+  /** Maps legacy guestCount/unitPrice to adult/child amount input (child = 0). */
+  private toAdultChildAmountInput(normalized: {
+    guestCount: number
+    unitPriceCents: number
+    discountType: CreateSourceOrderDto['discountType']
+    discountCents: number
+    collectionMode: CreateSourceOrderDto['collectionMode']
+    partnerCollectedCents: number
+  }) {
+    return {
+      adultGuestCount: normalized.guestCount,
+      childGuestCount: 0,
+      adultUnitPriceCents: normalized.unitPriceCents,
+      childUnitPriceCents: 0,
+      discountType: normalized.discountType,
+      discountCents: normalized.discountCents,
+      collectionMode: normalized.collectionMode,
+      partnerCollectedCents: normalized.partnerCollectedCents,
     }
   }
 

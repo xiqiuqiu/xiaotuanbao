@@ -1,8 +1,12 @@
 import type { SourceOrderCollectionMode, SourceOrderDiscountType } from '@prisma/client'
 
 export interface SourceOrderAmountInput {
-  guestCount: number
-  unitPriceCents: number
+  adultGuestCount: number
+  childGuestCount: number
+  /** Required when adultGuestCount > 0; omitted/null treated as 0 when count is 0. */
+  adultUnitPriceCents?: number | null
+  /** Required when childGuestCount > 0; omitted/null treated as 0 when count is 0. */
+  childUnitPriceCents?: number | null
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
@@ -17,8 +21,28 @@ export interface SourceOrderAmounts {
   guestCollectCents: number
 }
 
+/** Effective unit price: when count is 0, treat missing/any price as 0. */
+function effectiveUnitPriceCents(
+  guestCount: number,
+  unitPriceCents: number | null | undefined,
+): number {
+  if (guestCount === 0) {
+    return 0
+  }
+  return unitPriceCents ?? 0
+}
+
 export function computeSourceOrderAmounts(input: SourceOrderAmountInput): SourceOrderAmounts {
-  const grossReceivableCents = input.unitPriceCents * input.guestCount
+  const adultUnitPriceCents = effectiveUnitPriceCents(
+    input.adultGuestCount,
+    input.adultUnitPriceCents,
+  )
+  const childUnitPriceCents = effectiveUnitPriceCents(
+    input.childGuestCount,
+    input.childUnitPriceCents,
+  )
+  const grossReceivableCents =
+    adultUnitPriceCents * input.adultGuestCount + childUnitPriceCents * input.childGuestCount
   const discountCents =
     input.discountType === 'lump_sum' ? Math.max(input.discountCents, 0) : 0
   const netReceivableCents = grossReceivableCents - discountCents

@@ -28,6 +28,7 @@ import {
   computeFormAmounts,
   createEmptySourceOrderFormValues,
   formValuesToPayload,
+  legacyFormValuesToAmountInput,
   sourceOrderToFormValues,
   type SourceOrderFormValues,
 } from '../utils/source-order-form'
@@ -48,14 +49,17 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
     if (!watched?.guestCount || !watched?.unitPriceYuan) {
       return null
     }
-    return computeFormAmounts({
-      guestCount: watched.guestCount,
-      unitPriceYuan: watched.unitPriceYuan,
-      discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
-      discountYuan: watched.discountYuan,
-      collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
-      partnerCollectedYuan: watched.partnerCollectedYuan,
-    })
+    // #67: amount helper is adult/child; drawer fields stay legacy until #69
+    return computeFormAmounts(
+      legacyFormValuesToAmountInput({
+        guestCount: watched.guestCount,
+        unitPriceYuan: watched.unitPriceYuan,
+        discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
+        discountYuan: watched.discountYuan,
+        collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
+        partnerCollectedYuan: watched.partnerCollectedYuan,
+      }),
+    )
   }, [watched])
 
   if (!amounts) {
