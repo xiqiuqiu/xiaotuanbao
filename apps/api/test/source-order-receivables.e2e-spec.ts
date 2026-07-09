@@ -392,4 +392,82 @@ describe('Source order generate receivables (e2e)', () => {
 
     expect(response.body.message).toBe('发团已关闭，不可生成应收')
   })
+
+  it('returns closed receivable status after all schedules are cancelled, distinct from not_generated', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.split,
+      partnerCollectedCents: 300000,
+    })
+
+    const before = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrder.id}`)
+      .expect(200)
+
+    expect(before.body.data).toMatchObject({
+      hasPaymentSchedule: false,
+      receivableStatus: 'not_generated',
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(201)
+
+    const scheduleIds = (
+      generated.body.data.schedules as Array<{ id: string }>
+    ).map((item) => item.id)
+
+    for (const scheduleId of scheduleIds) {
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
+        .send({ cancelReason: '测试关闭全部路径' })
+        .expect(201)
+    }
+
+    const after = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrder.id}`)
+      .expect(200)
+
+    expect(after.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      receivableStatus: 'closed',
+      amountFieldsLocked: true,
+    })
+    expect(after.body.data.receivableStatus).not.toBe('not_generated')
+  })
+
+  it('keeps receivable status from remaining active schedules when only one path is cancelled', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.split,
+      partnerCollectedCents: 300000,
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(201)
+
+    const customerSchedule = (
+      generated.body.data.schedules as Array<{ id: string; sourceType: string }>
+    ).find(
+      (item) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    )
+    expect(customerSchedule).toBeDefined()
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${customerSchedule!.id}/cancel`)
+      .send({ cancelReason: '仅关闭客户补款路径' })
+      .expect(201)
+
+    const fetched = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrder.id}`)
+      .expect(200)
+
+    expect(fetched.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      receivableStatus: 'pending',
+    })
+    expect(fetched.body.data.receivableStatus).not.toBe('closed')
+  })
 })

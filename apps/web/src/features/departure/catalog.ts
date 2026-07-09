@@ -120,6 +120,7 @@ export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   [SourceOrderReceivableStatus.PENDING]: '待收',
   [SourceOrderReceivableStatus.PARTIAL]: '部分收款',
   [SourceOrderReceivableStatus.COLLECTED]: '已收齐',
+  [SourceOrderReceivableStatus.CLOSED]: '已关闭',
 }
 
 export const GUEST_GENDER_OPTIONS = [
@@ -137,6 +138,7 @@ export const SEGMENT_PAYABLE_STATUS_LABELS: Record<string, string> = {
   [SegmentPayableStatus.PENDING]: '待付',
   [SegmentPayableStatus.PARTIAL]: '部分付款',
   [SegmentPayableStatus.PAID]: '已付清',
+  [SegmentPayableStatus.CLOSED]: '已关闭',
 }
 
 export const SEGMENT_PAYABLE_OVERVIEW_LABELS: Record<string, string> = {
@@ -144,5 +146,6 @@ export const SEGMENT_PAYABLE_OVERVIEW_LABELS: Record<string, string> = {
   [SegmentPayableStatus.PENDING]: '应付待付',
   [SegmentPayableStatus.PARTIAL]: '应付部分付款',
   [SegmentPayableStatus.PAID]: '应付已付清',
+  [SegmentPayableStatus.CLOSED]: '应付已关闭',
 }
 

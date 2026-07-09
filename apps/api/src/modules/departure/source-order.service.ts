@@ -16,6 +16,7 @@ import {
 import {
   DepartureStatus,
   DirectoryProfileStatus,
+  PaymentScheduleDirection,
   type Departure,
   type Partner,
   type Prisma,
@@ -283,7 +284,7 @@ export class SourceOrderService {
       where: {
         organizationId,
         sourceId: order.id,
-        cancelledAt: null,
+        direction: PaymentScheduleDirection.receivable,
       },
     })
 

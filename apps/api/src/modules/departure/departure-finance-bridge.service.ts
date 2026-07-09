@@ -224,7 +224,7 @@ export class DepartureFinanceBridgeService {
         select: { partnerCollectedCents: true, guestCollectCents: true },
       }))
 
-    const schedules = await this.loadActiveReceivableSchedules(organizationId, sourceOrderId)
+    const schedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
     if (schedules.length === 0) {
       return {
         hasSchedule: false,
@@ -234,13 +234,23 @@ export class DepartureFinanceBridgeService {
       }
     }
 
+    const activeSchedules = schedules.filter((schedule) => schedule.cancelledAt == null)
+    if (activeSchedules.length === 0) {
+      return {
+        hasSchedule: true,
+        receivableStatus: SourceOrderReceivableStatus.CLOSED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: true,
+      }
+    }
+
     const settledMap = await this.verificationService.batchGetSettledAmounts(
-      schedules.map((schedule) => schedule.id),
+      activeSchedules.map((schedule) => schedule.id),
     )
 
     let hasSourceAmountMismatch = false
     let amountFieldsLocked = false
-    const scheduleStates = schedules.map((schedule) => {
+    const scheduleStates = activeSchedules.map((schedule) => {
       const settledAmountCents = settledMap.get(schedule.id) ?? 0
       const touched = isFinanceTouched(schedule, settledAmountCents)
       if (touched) {
@@ -503,13 +513,24 @@ export class DepartureFinanceBridgeService {
         },
       }))
 
-    const schedule = await this.findActivePayableSchedule(organizationId, resourceId)
+    const schedule =
+      (await this.findActivePayableSchedule(organizationId, resourceId)) ??
+      (await this.findCancelledPayableSchedule(organizationId, resourceId))
     if (!schedule) {
       return {
         hasSchedule: false,
         payableStatus: SegmentPayableStatus.NOT_GENERATED,
         hasSourceAmountMismatch: false,
         amountFieldsLocked: false,
+      }
+    }
+
+    if (schedule.cancelledAt != null) {
+      return {
+        hasSchedule: true,
+        payableStatus: SegmentPayableStatus.CLOSED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: true,
       }
     }
 
@@ -624,6 +645,22 @@ export class DepartureFinanceBridgeService {
     })
   }
 
+  private async findCancelledPayableSchedule(
+    organizationId: string,
+    resourceId: string,
+  ): Promise<PaymentSchedule | null> {
+    return this.prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: resourceId,
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        direction: PaymentScheduleDirection.payable,
+        cancelledAt: { not: null },
+      },
+      orderBy: { cancelledAt: 'desc' },
+    })
+  }
+
   private async loadSegmentResourceOrThrow(
     organizationId: string,
     resourceId: string,
@@ -725,6 +762,19 @@ export class DepartureFinanceBridgeService {
         sourceId: sourceOrderId,
         direction: PaymentScheduleDirection.receivable,
         cancelledAt: null,
+      },
+    })
+  }
+
+  private async loadReceivableSchedules(
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<PaymentSchedule[]> {
+    return this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        sourceId: sourceOrderId,
+        direction: PaymentScheduleDirection.receivable,
       },
     })
   }

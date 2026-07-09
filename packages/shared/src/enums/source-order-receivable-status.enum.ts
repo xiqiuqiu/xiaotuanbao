@@ -3,4 +3,5 @@ export enum SourceOrderReceivableStatus {
   PENDING = 'pending',
   PARTIAL = 'partial',
   COLLECTED = 'collected',
+  CLOSED = 'closed',
 }

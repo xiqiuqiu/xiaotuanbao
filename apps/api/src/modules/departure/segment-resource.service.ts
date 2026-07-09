@@ -15,6 +15,7 @@ import {
 import {
   DepartureStatus,
   DirectoryProfileStatus,
+  PaymentScheduleDirection,
   ResourceKind,
   type Departure,
   type ItinerarySegment,
@@ -229,7 +230,7 @@ export class SegmentResourceService {
       where: {
         organizationId,
         sourceId: resource.id,
-        cancelledAt: null,
+        direction: PaymentScheduleDirection.payable,
       },
     })
 

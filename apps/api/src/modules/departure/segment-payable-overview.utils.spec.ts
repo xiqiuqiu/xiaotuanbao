@@ -2,7 +2,7 @@ import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import { aggregatePayableOverview } from './segment-payable-overview.utils'
 
 describe('aggregatePayableOverview', () => {
-  const { NOT_GENERATED, PENDING, PARTIAL, PAID } = SegmentPayableStatus
+  const { NOT_GENERATED, PENDING, PARTIAL, PAID, CLOSED } = SegmentPayableStatus
 
   it('returns not_generated for empty list', () => {
     expect(aggregatePayableOverview([])).toBe(NOT_GENERATED)
@@ -10,6 +10,10 @@ describe('aggregatePayableOverview', () => {
 
   it('returns not_generated when all resources are not_generated', () => {
     expect(aggregatePayableOverview([NOT_GENERATED, NOT_GENERATED])).toBe(NOT_GENERATED)
+  })
+
+  it('returns closed when all resources are closed', () => {
+    expect(aggregatePayableOverview([CLOSED, CLOSED])).toBe(CLOSED)
   })
 
   it('returns paid when all resources are paid', () => {
@@ -30,5 +34,12 @@ describe('aggregatePayableOverview', () => {
     expect(aggregatePayableOverview([NOT_GENERATED, PENDING])).toBe(PARTIAL)
     expect(aggregatePayableOverview([NOT_GENERATED, PAID])).toBe(PARTIAL)
     expect(aggregatePayableOverview([NOT_GENERATED, PENDING, PAID])).toBe(PARTIAL)
+  })
+
+  it('ignores closed resources when deriving settlement progress', () => {
+    expect(aggregatePayableOverview([CLOSED, PENDING])).toBe(PENDING)
+    expect(aggregatePayableOverview([CLOSED, PAID])).toBe(PAID)
+    expect(aggregatePayableOverview([CLOSED, NOT_GENERATED])).toBe(NOT_GENERATED)
+    expect(aggregatePayableOverview([CLOSED, PENDING, PAID])).toBe(PARTIAL)
   })
 })

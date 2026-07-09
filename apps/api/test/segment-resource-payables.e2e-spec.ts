@@ -368,4 +368,41 @@ describe('Segment resource generate payables (e2e)', () => {
 
     expect(response.body.message).toBe('发团已关闭，不可生成应付')
   })
+
+  it('returns closed payable status after schedule is cancelled, distinct from not_generated', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+
+    const before = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.id}`)
+      .expect(200)
+
+    expect(before.body.data).toMatchObject({
+      hasPaymentSchedule: false,
+      payableStatus: 'not_generated',
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+
+    const scheduleId = generated.body.data.schedule.id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
+      .send({ cancelReason: '测试关闭应付' })
+      .expect(201)
+
+    const after = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.id}`)
+      .expect(200)
+
+    expect(after.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      payableStatus: 'closed',
+      amountFieldsLocked: true,
+    })
+    expect(after.body.data.payableStatus).not.toBe('not_generated')
+  })
 })

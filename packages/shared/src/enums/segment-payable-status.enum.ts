@@ -3,4 +3,5 @@ export enum SegmentPayableStatus {
   PENDING = 'pending',
   PARTIAL = 'partial',
   PAID = 'paid',
+  CLOSED = 'closed',
 }
