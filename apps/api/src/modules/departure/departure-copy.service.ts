@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreateRouteTemplateFromDepartureDto } from './dto/route-template.dto'
@@ -103,6 +103,10 @@ export class DepartureCopyService {
   ): Promise<RouteTemplateDetailSummary> {
     const sourceDeparture = await this.findForCopy(organizationId, departureId)
     const segments = sourceDeparture.itinerarySegments
+
+    if (segments.length === 0) {
+      throw new BadRequestException('当前发团没有行程段，无法保存为常用路线')
+    }
 
     const templateSegments = segments.map((segment, sortOrder) => ({
       sortOrder,

@@ -359,6 +359,7 @@ model RouteTemplate {
   updatedAt       DateTime               @updatedAt @map("updated_at")
   segments        RouteTemplateSegment[]
 
+  @@unique([organizationId, name])
   @@map("route_templates")
 }
 

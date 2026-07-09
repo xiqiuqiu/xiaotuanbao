@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreateRouteTemplateDto } from './dto/route-template.dto'
 
@@ -71,45 +72,59 @@ export class RouteTemplateService {
     organizationId: string,
     dto: CreateRouteTemplateDto,
   ): Promise<RouteTemplateDetailSummary> {
-    const template = await this.prisma.routeTemplate.create({
-      data: {
-        organizationId,
-        name: dto.name.trim(),
-        defaultDayCount: dto.defaultDayCount,
-        notes: dto.notes?.trim() || null,
-        segments: dto.segments?.length
-          ? {
-              create: dto.segments.map((segment) => ({
-                sortOrder: segment.sortOrder,
-                name: segment.name.trim(),
-                dayCount: segment.dayCount,
-                destination: segment.destination?.trim() || null,
-                notes: segment.notes?.trim() || null,
-                resources: segment.resources?.length
-                  ? {
-                      create: segment.resources.map((resource) => ({
-                        resourceKind: resource.resourceKind,
-                        counterpartyType: resource.counterpartyType,
-                        partnerId: resource.partnerId ?? null,
-                        supplierId: resource.supplierId ?? null,
-                        title: resource.title.trim(),
-                        amountCents: 0,
-                        notes: resource.notes?.trim() || null,
-                      })),
-                    }
-                  : undefined,
-              })),
-            }
-          : undefined,
-      },
-      include: {
-        segments: {
-          include: {
-            resources: true,
+    const name = dto.name.trim()
+    await this.ensureNameAvailable(organizationId, name)
+
+    let template
+    try {
+      template = await this.prisma.routeTemplate.create({
+        data: {
+          organizationId,
+          name,
+          defaultDayCount: dto.defaultDayCount,
+          notes: dto.notes?.trim() || null,
+          segments: dto.segments?.length
+            ? {
+                create: dto.segments.map((segment) => ({
+                  sortOrder: segment.sortOrder,
+                  name: segment.name.trim(),
+                  dayCount: segment.dayCount,
+                  destination: segment.destination?.trim() || null,
+                  notes: segment.notes?.trim() || null,
+                  resources: segment.resources?.length
+                    ? {
+                        create: segment.resources.map((resource) => ({
+                          resourceKind: resource.resourceKind,
+                          counterpartyType: resource.counterpartyType,
+                          partnerId: resource.partnerId ?? null,
+                          supplierId: resource.supplierId ?? null,
+                          title: resource.title.trim(),
+                          amountCents: 0,
+                          notes: resource.notes?.trim() || null,
+                        })),
+                      }
+                    : undefined,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          segments: {
+            include: {
+              resources: true,
+            },
           },
         },
-      },
-    })
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('常用路线名称已存在，请改名后另存')
+      }
+      throw error
+    }
 
     const segmentCount = template.segments.length
     const resourceCount = template.segments.reduce(
@@ -151,6 +166,16 @@ export class RouteTemplateService {
 
     if (result.count === 0) {
       throw new NotFoundException('常用路线不存在')
+    }
+  }
+
+  private async ensureNameAvailable(organizationId: string, name: string) {
+    const existing = await this.prisma.routeTemplate.findFirst({
+      where: { organizationId, name },
+    })
+
+    if (existing) {
+      throw new ConflictException('常用路线名称已存在，请改名后另存')
     }
   }
 
