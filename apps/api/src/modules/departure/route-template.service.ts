@@ -144,6 +144,16 @@ export class RouteTemplateService {
     return template
   }
 
+  async remove(organizationId: string, id: string): Promise<void> {
+    const result = await this.prisma.routeTemplate.deleteMany({
+      where: { id, organizationId },
+    })
+
+    if (result.count === 0) {
+      throw new NotFoundException('常用路线不存在')
+    }
+  }
+
   private toCardSummary(template: {
     id: string
     name: string

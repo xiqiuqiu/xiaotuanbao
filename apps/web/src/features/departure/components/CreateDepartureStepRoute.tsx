@@ -1,7 +1,22 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Card, Col, Empty, Form, Input, InputNumber, Row, Spin, Tabs, Typography } from 'antd'
-import { listRouteTemplates } from '@/services/route-template.service'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Button,
+  Card,
+  Col,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Spin,
+  Tabs,
+  Typography,
+  message,
+} from 'antd'
+import { DeleteOutlined } from '@ant-design/icons'
+import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 import styles from './CreateDepartureStepRoute.module.css'
 
@@ -11,6 +26,7 @@ interface CreateDepartureStepRouteProps {
 }
 
 export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureStepRouteProps) {
+  const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
   const [activeTab, setActiveTab] = useState<'template' | 'manual'>(
     values.mode === 'copy' ? 'template' : values.mode,
@@ -30,6 +46,42 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
     const dayLabel = values.defaultDayCount ? `（${values.defaultDayCount} 天）` : ''
     return `${values.routeName}${dayLabel}`
   }, [values.defaultDayCount, values.routeName, values.templateId])
+
+  const handleClearTemplate = () => {
+    onChange({
+      mode: 'template',
+      routeName: '',
+      defaultDayCount: undefined,
+      templateId: undefined,
+      previewSegmentCount: undefined,
+      previewResourceCount: undefined,
+    })
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteRouteTemplate,
+    onSuccess: (_result, templateId) => {
+      message.success('已删除常用路线')
+      if (values.templateId === templateId) {
+        handleClearTemplate()
+      }
+      void queryClient.invalidateQueries({ queryKey: ['route-templates'] })
+    },
+    onError: (error: Error) => {
+      message.error(error.message || '删除失败')
+    },
+  })
+
+  const handleDeleteTemplate = (template: { id: string; name: string }) => {
+    Modal.confirm({
+      title: '确认删除该常用路线？',
+      content: `删除「${template.name}」后不影响已用该路线建出的发团及其执行安排。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: () => deleteMutation.mutateAsync(template.id),
+    })
+  }
 
   const handleTabChange = (key: string) => {
     const mode = key as 'template' | 'manual'
@@ -72,17 +124,6 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
     })
   }
 
-  const handleClearTemplate = () => {
-    onChange({
-      mode: 'template',
-      routeName: '',
-      defaultDayCount: undefined,
-      templateId: undefined,
-      previewSegmentCount: undefined,
-      previewResourceCount: undefined,
-    })
-  }
-
   return (
     <div>
       <Tabs
@@ -119,11 +160,29 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                             onClick={() => handleSelectTemplate(template)}
                             style={{
                               borderColor: selected ? '#1677ff' : undefined,
-                              boxShadow: selected ? '0 0 0 2px rgba(22, 119, 255, 0.15)' : undefined,
+                              boxShadow: selected
+                                ? '0 0 0 2px rgba(22, 119, 255, 0.15)'
+                                : undefined,
                             }}
                           >
-                            <Typography.Text strong>{template.name}</Typography.Text>
-                            <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 8 }}>
+                            <div className={styles.templateCardHeader}>
+                              <Typography.Text strong>{template.name}</Typography.Text>
+                              <Button
+                                type="link"
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                aria-label={`删除常用路线 ${template.name}`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleDeleteTemplate(template)
+                                }}
+                              />
+                            </div>
+                            <Typography.Paragraph
+                              type="secondary"
+                              style={{ marginBottom: 0, marginTop: 8 }}
+                            >
                               {template.defaultDayCount} 天 · 已使用 {template.usageCount} 次
                             </Typography.Paragraph>
                           </Card>
@@ -135,9 +194,7 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
 
                 {selectedTemplateLabel ? (
                   <div className={styles.selectedTemplateBanner}>
-                    <Typography.Text>
-                      已选：{selectedTemplateLabel}
-                    </Typography.Text>
+                    <Typography.Text>已选：{selectedTemplateLabel}</Typography.Text>
                     <Typography.Link onClick={handleClearTemplate}>清除</Typography.Link>
                   </div>
                 ) : null}

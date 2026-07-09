@@ -8,3 +8,10 @@
   align-items: center;
   gap: 16px;
 }
+
+.templateCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}

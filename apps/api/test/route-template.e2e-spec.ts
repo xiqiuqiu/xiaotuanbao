@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import { CounterpartyType, DepartureRouteSource, ResourceKind } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Route Template API (e2e)', () => {
   let app: INestApplication
@@ -293,5 +293,108 @@ describe('Route Template API (e2e)', () => {
       segmentCount: 2,
       resourceCount: 3,
     })
+  })
+
+  it('deletes a used route template without affecting existing departure arrangement', async () => {
+    const template = await createTemplate()
+
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-after-delete`,
+        routeName: `${testPrefix}-喀纳斯阿勒泰10日线`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+        templateId: template.id,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+    expect(createResponse.body.data.sourceTemplateId).toBe(template.id)
+
+    const segmentsBefore = await prisma.itinerarySegment.findMany({
+      where: { departureId },
+      orderBy: { startDate: 'asc' },
+    })
+    expect(segmentsBefore).toHaveLength(2)
+
+    const resourcesBefore = await prisma.segmentResource.findMany({
+      where: { segmentId: { in: segmentsBefore.map((segment) => segment.id) } },
+    })
+    expect(resourcesBefore).toHaveLength(3)
+
+    await authRequest(app, coordinatorToken)
+      .delete(`/api/route-templates/${template.id}`)
+      .expect(200)
+
+    await authRequest(app, coordinatorToken)
+      .get(`/api/route-templates/${template.id}`)
+      .expect(404)
+
+    const listResponse = await authRequest(app, coordinatorToken)
+      .get('/api/route-templates')
+      .query({ keyword: testPrefix })
+      .expect(200)
+    expect(
+      (listResponse.body.data as Array<{ id: string }>).some((item) => item.id === template.id),
+    ).toBe(false)
+
+    const departure = await prisma.departure.findUnique({ where: { id: departureId } })
+    expect(departure).toMatchObject({
+      id: departureId,
+      sourceTemplateId: template.id,
+      routeSource: DepartureRouteSource.template,
+    })
+
+    const segmentsAfter = await prisma.itinerarySegment.findMany({
+      where: { departureId },
+      orderBy: { startDate: 'asc' },
+    })
+    expect(segmentsAfter).toHaveLength(2)
+    expect(segmentsAfter.map((segment) => segment.name)).toEqual(['喀纳斯', '阿勒泰'])
+
+    const resourcesAfter = await prisma.segmentResource.findMany({
+      where: { segmentId: { in: segmentsAfter.map((segment) => segment.id) } },
+    })
+    expect(resourcesAfter).toHaveLength(3)
+    expect(resourcesAfter.map((resource) => resource.title).sort()).toEqual(
+      ['区间车', '喀纳斯酒店', '拼出接待'].sort(),
+    )
+
+    const templateRow = await prisma.routeTemplate.findUnique({ where: { id: template.id } })
+    expect(templateRow).toBeNull()
+  })
+
+  it('returns 404 when deleting a route template from another organization', async () => {
+    const template = await createTemplate()
+
+    const otherOrg = await prisma.organization.create({
+      data: {
+        name: `${testPrefix}-other-org`,
+        businessPrefix: uniqueBusinessPrefix(`${testPrefix}-other`),
+      },
+    })
+
+    try {
+      await prisma.routeTemplate.update({
+        where: { id: template.id },
+        data: { organizationId: otherOrg.id },
+      })
+
+      await authRequest(app, coordinatorToken)
+        .delete(`/api/route-templates/${template.id}`)
+        .expect(404)
+
+      const stillThere = await prisma.routeTemplate.findUnique({ where: { id: template.id } })
+      expect(stillThere).not.toBeNull()
+    } finally {
+      await prisma.routeTemplateResource.deleteMany({
+        where: { templateSegment: { templateId: template.id } },
+      })
+      await prisma.routeTemplateSegment.deleteMany({ where: { templateId: template.id } })
+      await prisma.routeTemplate.deleteMany({ where: { id: template.id } })
+      await prisma.organization.delete({ where: { id: otherOrg.id } })
+    }
   })
 })

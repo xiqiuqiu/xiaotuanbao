@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -61,5 +61,15 @@ export class RouteTemplateController {
     @Body() dto: CreateRouteTemplateDto,
   ): Promise<RouteTemplateDetailSummary> {
     return this.routeTemplateService.create(request.user.organizationId, dto)
+  }
+
+  @Delete(':id')
+  @RequireMenu('/departure')
+  async remove(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<{ success: true }> {
+    await this.routeTemplateService.remove(request.user.organizationId, id)
+    return { success: true }
   }
 }

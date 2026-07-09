@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Modal } from 'antd'
+import { ConfigProvider, Modal } from 'antd'
+import zhCN from 'antd/locale/zh_CN'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
@@ -38,6 +39,7 @@ vi.mock('@/services/departure.service', () => ({
 vi.mock('@/services/route-template.service', () => ({
   listRouteTemplates: vi.fn(),
   getRouteTemplate: vi.fn(),
+  deleteRouteTemplate: vi.fn(),
 }))
 
 vi.mock('@/services/employee.service', () => ({
@@ -46,7 +48,11 @@ vi.mock('@/services/employee.service', () => ({
 
 import { createDeparture, previewDepartureNo } from '@/services/departure.service'
 import { listEmployees } from '@/services/employee.service'
-import { getRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
+import {
+  deleteRouteTemplate,
+  getRouteTemplate,
+  listRouteTemplates,
+} from '@/services/route-template.service'
 
 const mockDeparture: DepartureSummary = {
   id: 'departure-1',
@@ -88,7 +94,9 @@ function renderWizard() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <CreateDepartureWizard />
+      <ConfigProvider locale={zhCN}>
+        <CreateDepartureWizard />
+      </ConfigProvider>
     </QueryClientProvider>,
   )
 }
@@ -104,6 +112,7 @@ describe('CreateDepartureWizard', () => {
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(listRouteTemplates).mockResolvedValue([])
+    vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
     vi.mocked(listEmployees).mockResolvedValue({
       items: [
         {
@@ -151,7 +160,7 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
-    expect(screen.getByText('无模板复制项')).toBeInTheDocument()
+    expect(screen.queryByText('无模板复制项')).not.toBeInTheDocument()
   })
 
   it('opens copy modal for template tab before entering step 2', async () => {
@@ -174,6 +183,74 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByText('复制行程段')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '使用该路线建团' })).toBeInTheDocument()
+  })
+
+  it('removes route template card from list after confirmed delete', async () => {
+    vi.mocked(listRouteTemplates)
+      .mockResolvedValueOnce([
+        {
+          id: 'template-1',
+          name: '西安-青海湖-茶卡6日游',
+          defaultDayCount: 6,
+          usageCount: 3,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'template-2',
+          name: '喀纳斯阿勒泰10日线',
+          defaultDayCount: 10,
+          usageCount: 1,
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValue([
+        {
+          id: 'template-2',
+          name: '喀纳斯阿勒泰10日线',
+          defaultDayCount: 10,
+          usageCount: 1,
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ])
+    vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
+
+    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
+    let confirmConfig: ConfirmConfig | undefined
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      confirmConfig = config
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+        then: undefined,
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    try {
+      const user = userEvent.setup()
+      renderWizard()
+
+      expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
+      expect(screen.getByText('喀纳斯阿勒泰10日线')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: '删除常用路线 西安-青海湖-茶卡6日游' }))
+
+      expect(confirmConfig).toMatchObject({
+        title: '确认删除该常用路线？',
+        content: '删除「西安-青海湖-茶卡6日游」后不影响已用该路线建出的发团及其执行安排。',
+        okText: '删除',
+        okType: 'danger',
+      })
+
+      await confirmConfig?.onOk?.()
+
+      expect(vi.mocked(deleteRouteTemplate).mock.calls[0]?.[0]).toBe('template-1')
+      await waitFor(() => {
+        expect(screen.queryByText('西安-青海湖-茶卡6日游')).not.toBeInTheDocument()
+      })
+      expect(screen.getByText('喀纳斯阿勒泰10日线')).toBeInTheDocument()
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 
   it('validates required fields before creating departure', async () => {

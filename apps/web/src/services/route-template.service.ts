@@ -26,3 +26,7 @@ export async function saveRouteTemplateFromDeparture(
     payload,
   )
 }
+
+export async function deleteRouteTemplate(id: string): Promise<{ success: true }> {
+  return request.delete<{ success: true }>(`/route-templates/${id}`)
+}
