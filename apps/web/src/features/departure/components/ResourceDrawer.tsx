@@ -24,6 +24,7 @@ import {
   resourceToFormValues,
   type ResourceFormValues,
 } from '../utils/resource-form'
+import { resolveSupplierFilterCategory } from '../utils/resource-supplier-filter'
 
 interface ResourceDrawerProps {
   open: boolean
@@ -50,6 +51,7 @@ export function ResourceDrawer({
   const resourceKind = Form.useWatch('resourceKind', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const outsource = isOutsourceKind(resourceKind)
+  const supplierCategory = resolveSupplierFilterCategory(resourceKind)
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
@@ -82,13 +84,14 @@ export function ResourceDrawer({
   })
 
   const { data: suppliersResult } = useQuery({
-    queryKey: ['suppliers', 'resource-select'],
+    queryKey: ['suppliers', 'resource-select', supplierCategory],
     queryFn: () =>
       listSuppliers({
         status: DirectoryProfileStatus.ACTIVE,
+        category: supplierCategory,
         pageSize: 100,
       }),
-    enabled: open && !outsource && Boolean(resourceKind),
+    enabled: open && !outsource && Boolean(supplierCategory),
   })
 
   return (
@@ -100,9 +103,11 @@ export function ResourceDrawer({
       onClose={handleClose}
       footer={
         readOnly ? (
-          <Button onClick={handleClose}>关闭</Button>
+          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+            <Button onClick={handleClose}>关闭</Button>
+          </Space>
         ) : (
-          <Space style={{ float: 'right' }}>
+          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
             <Button onClick={handleClose}>取消</Button>
             <Button type="primary" loading={loading} onClick={() => form.submit()}>
               保存

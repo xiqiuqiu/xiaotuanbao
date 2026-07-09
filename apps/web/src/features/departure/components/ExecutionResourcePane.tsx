@@ -1,8 +1,20 @@
 import { useState } from 'react'
-import { Button, Empty, Popconfirm, Space, Spin, Table, Typography, message } from 'antd'
+import {
+  Alert,
+  Button,
+  Empty,
+  Popconfirm,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Typography,
+  message,
+} from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type {
   DepartureDetail,
   ItinerarySegmentSummary,
@@ -24,6 +36,23 @@ import {
 import { formValuesToPayload } from '../utils/resource-form'
 import { ResourceDrawer } from './ResourceDrawer'
 
+function payableStatusTagColor(status: string): string | undefined {
+  switch (status) {
+    case SegmentPayableStatus.PAID:
+      return 'success'
+    case SegmentPayableStatus.PARTIAL:
+      return 'warning'
+    case SegmentPayableStatus.PENDING:
+      return 'processing'
+    default:
+      return 'default'
+  }
+}
+
+function mutationErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 interface ExecutionResourcePaneProps {
   departure: DepartureDetail
   segment: ItinerarySegmentSummary
@@ -43,13 +72,12 @@ export function ExecutionResourcePane({
   const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
 
-  const { data: listResult, isLoading } = useQuery({
+  const { data: listResult, isLoading, isError, refetch } = useQuery({
     queryKey: ['segment-resources', segment.id],
     queryFn: () => listSegmentResources(segment.id),
   })
 
   const resources = listResult?.items ?? []
-  const resourceCount = isLoading ? segment.resourceCount : resources.length
 
   const invalidateResourceQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['segment-resources', segment.id] })
@@ -87,6 +115,9 @@ export function ExecutionResourcePane({
       closeDrawer()
       invalidateResourceQueries()
     },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '保存资源失败'))
+    },
   })
 
   const deleteMutation = useMutation({
@@ -94,6 +125,9 @@ export function ExecutionResourcePane({
     onSuccess: () => {
       message.success('资源已删除')
       invalidateResourceQueries()
+    },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '删除资源失败'))
     },
   })
 
@@ -106,6 +140,9 @@ export function ExecutionResourcePane({
           : '应付已生成',
       )
       invalidateResourceQueries()
+    },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '生成应付失败'))
     },
   })
 
@@ -137,7 +174,11 @@ export function ExecutionResourcePane({
       title: '应付状态',
       dataIndex: 'payableStatus',
       width: 100,
-      render: (value: string) => catalogLabel(SEGMENT_PAYABLE_STATUS_LABELS, value),
+      render: (value: string) => (
+        <Tag color={payableStatusTagColor(value)}>
+          {catalogLabel(SEGMENT_PAYABLE_STATUS_LABELS, value)}
+        </Tag>
+      ),
     },
     {
       title: '备注',
@@ -198,26 +239,33 @@ export function ExecutionResourcePane({
       <div
         style={{
           display: 'flex',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 12,
+          gap: 16,
           marginBottom: 16,
         }}
       >
-        <div>
-          <Typography.Text strong>资源安排</Typography.Text>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
-            {segment.name} · 适用 {segment.applicableGuestCount} 人 · {resourceCount} 项
-          </Typography.Paragraph>
-        </div>
-        {!mutationLocked && !isLoading && resources.length > 0 ? (
+        <Typography.Text strong>资源安排</Typography.Text>
+        {!mutationLocked && !isLoading && !isError && resources.length > 0 ? (
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             添加资源
           </Button>
         ) : null}
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="资源列表加载失败"
+          description="请稍后重试，或检查网络后再次加载。"
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              重试
+            </Button>
+          }
+        />
+      ) : isLoading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
           <Spin />
         </div>

@@ -252,19 +252,18 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         onDraftChange={(draft) => dispatchFilters({ type: 'SET_DRAFT', draft })}
         onApply={() => dispatchFilters({ type: 'APPLY' })}
         onReset={() => dispatchFilters({ type: 'RESET' })}
+        extra={
+          !readOnly ? (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
+            >
+              添加客源单
+            </Button>
+          ) : undefined
+        }
       />
-
-      {!readOnly ? (
-        <div style={{ marginBottom: 16 }}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
-          >
-            添加客源单
-          </Button>
-        </div>
-      ) : null}
 
       <Table
         rowKey="id"

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Empty, Spin, Tag, Typography, message, theme } from 'antd'
+import { Alert, Button, Card, Empty, Space, Spin, Tag, Typography, message, theme } from 'antd'
 import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -55,7 +55,7 @@ export function ExecutionTab({
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const mutationLocked = readOnly || amountReadOnly
 
-  const { data: listResult, isLoading } = useQuery({
+  const { data: listResult, isLoading, isError, refetch } = useQuery({
     queryKey: ['segments', departure.id],
     queryFn: () => listSegments(departure.id),
   })
@@ -78,7 +78,7 @@ export function ExecutionTab({
   }
 
   useEffect(() => {
-    if (isLoading || selectedSegmentId === segmentId) {
+    if (isLoading || isError || selectedSegmentId === segmentId) {
       return
     }
 
@@ -91,7 +91,7 @@ export function ExecutionTab({
       },
       replace: true,
     })
-  }, [departure.id, isLoading, navigate, segmentId, selectedSegmentId])
+  }, [departure.id, isError, isLoading, navigate, segmentId, selectedSegmentId])
 
   const invalidateSegments = () => {
     void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
@@ -131,6 +131,9 @@ export function ExecutionTab({
       invalidateSegments()
       navigateExecution(saved.id)
     },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '保存行程段失败')
+    },
   })
 
   const deleteMutation = useMutation({
@@ -142,6 +145,9 @@ export function ExecutionTab({
       invalidateSegments()
       navigateExecution(nextSegmentId)
     },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '删除行程段失败')
+    },
   })
 
   if (isLoading) {
@@ -149,6 +155,22 @@ export function ExecutionTab({
       <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
         <Spin />
       </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        message="行程段加载失败"
+        description="请稍后重试，或检查网络后再次加载。"
+        action={
+          <Button size="small" onClick={() => void refetch()}>
+            重试
+          </Button>
+        }
+      />
     )
   }
 
@@ -197,22 +219,24 @@ export function ExecutionTab({
             ) : null}
           </div>
 
-          <div style={{ flex: 1, overflow: 'auto' }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
             {segments.length === 0 ? (
-              <Typography.Paragraph type="secondary" style={{ margin: 16, marginBottom: 0 }}>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                 暂无行程段
               </Typography.Paragraph>
             ) : (
-              segments.map((segment) => (
-                <SegmentNavItem
-                  key={segment.id}
-                  segment={segment}
-                  selected={segment.id === selectedSegmentId}
-                  showEdit={!mutationLocked}
-                  onSelect={() => navigateExecution(segment.id)}
-                  onEdit={() => openEdit(segment)}
-                />
-              ))
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                {segments.map((segment) => (
+                  <SegmentNavItem
+                    key={segment.id}
+                    segment={segment}
+                    selected={segment.id === selectedSegmentId}
+                    showEdit={!mutationLocked}
+                    onSelect={() => navigateExecution(segment.id)}
+                    onEdit={() => openEdit(segment)}
+                  />
+                ))}
+              </Space>
             )}
           </div>
         </aside>
@@ -274,65 +298,49 @@ function SegmentNavItem({
   onEdit: () => void
 }) {
   const { token } = theme.useToken()
+  const dateRange = formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)
+  const description = [dateRange, segment.destination].filter(Boolean).join(' · ')
 
   return (
-    <div
+    <Card
+      size="small"
+      hoverable
+      onClick={onSelect}
       style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 4,
-        borderLeft: selected
-          ? `2px solid ${token.colorPrimary}`
-          : '2px solid transparent',
-        background: selected ? token.colorPrimaryBg : 'transparent',
-        paddingRight: 8,
+        borderColor: selected ? token.colorPrimary : undefined,
+        background: selected ? token.colorPrimaryBg : undefined,
       }}
+      title={
+        <Space size={4} wrap>
+          <span>{segment.name}</span>
+          {segment.fromTemplate ? <Tag style={{ marginInlineEnd: 0 }}>模板</Tag> : null}
+        </Space>
+      }
+      extra={
+        showEdit ? (
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            aria-label={`编辑${segment.name}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onEdit()
+            }}
+          />
+        ) : null
+      }
     >
-      <button
-        type="button"
-        onClick={onSelect}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: 'block',
-          textAlign: 'left',
-          border: 'none',
-          background: 'transparent',
-          padding: '12px 8px 12px 16px',
-          cursor: 'pointer',
-        }}
-      >
-        <Typography.Text strong style={{ display: 'block' }}>
-          {segment.name}
-          {segment.fromTemplate ? (
-            <>
-              {' '}
-              <Tag style={{ marginInlineEnd: 0 }}>模板</Tag>
-            </>
-          ) : null}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-          {formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)}
-        </Typography.Text>
-        {segment.destination ? (
-          <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-            {segment.destination}
-          </Typography.Text>
-        ) : null}
-        <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-          {formatResourceOverview(segment)}
-        </Typography.Text>
-      </button>
-      {showEdit ? (
-        <Button
-          type="text"
-          size="small"
-          icon={<EditOutlined />}
-          aria-label={`编辑${segment.name}`}
-          onClick={onEdit}
-          style={{ marginTop: 8 }}
-        />
-      ) : null}
-    </div>
+      <Card.Meta
+        description={
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <Typography.Text type="secondary">{description}</Typography.Text>
+            <Typography.Text type="secondary">
+              {formatResourceOverview(segment)}
+            </Typography.Text>
+          </Space>
+        }
+      />
+    </Card>
   )
 }

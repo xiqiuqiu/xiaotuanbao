@@ -46,7 +46,7 @@ export type VerificationsWorkspaceProps = {
   readOnly?: boolean
   initialPaymentScheduleId?: string
   initialTransactionId?: string
-  /** When set, renders the standard list page header (title + secondary + primary). */
+  /** When set, renders the standard list page header (title + secondary). */
   pageHeader?: {
     title: string
     description: string
@@ -456,20 +456,13 @@ export function VerificationsWorkspace({
   return (
     <div>
       {pageHeader ? (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div>
-            <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-              {pageHeader.title}
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              {pageHeader.description}
-            </Typography.Paragraph>
-          </div>
-          {createButton}
-        </div>
-      ) : createButton ? (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          {createButton}
+        <div style={{ marginBottom: 16 }}>
+          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
+            {pageHeader.title}
+          </Typography.Title>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            {pageHeader.description}
+          </Typography.Paragraph>
         </div>
       ) : null}
 
@@ -500,6 +493,7 @@ export function VerificationsWorkspace({
           dispatchList({ type: 'setDepartureKeyword', value })
         }}
         onReset={handleResetFilters}
+        extra={createButton}
       />
 
       {!isDepartureScope && (initialPaymentScheduleId || initialTransactionId) ? (
