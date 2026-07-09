@@ -187,8 +187,7 @@ Departure 接口 `@RequireMenu('/departure')`；Finance mutation 接口 `@Requir
 | `/departure/$departureId` | 详情页（Tab）；query `tab` 切换 |
 | `/departure/$departureId?tab=overview` | 概览 |
 | `/departure/$departureId?tab=sourceOrders` | 客源管理 |
-| `/departure/$departureId?tab=segments` | 行程段 |
-| `/departure/$departureId?tab=resources&segmentId=` | 资源安排（锁定段） |
+| `/departure/$departureId?tab=execution&segmentId=` | 执行安排（行程段 × 资源同屏；`segmentId` 可选） |
 | `/departure/$departureId?tab=receivables` | 应收（Finance scope） |
 | `/departure/$departureId?tab=payables` | 应付 |
 | `/departure/$departureId?tab=verifications` | 核销记录 |
