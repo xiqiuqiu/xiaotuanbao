@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Button, Empty, Spin, Tag, Typography, message, theme } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
-import { createSegment, listSegments } from '@/services/segment.service'
+import {
+  createSegment,
+  deleteSegment,
+  listSegments,
+  updateSegment,
+} from '@/services/segment.service'
 import { listSegmentResources } from '@/services/segment-resource.service'
-import { resolveSelectedSegmentId } from '../utils/execution-segment-selection'
+import {
+  resolveAdjacentSegmentId,
+  resolveSelectedSegmentId,
+} from '../utils/execution-segment-selection'
 import {
   formatResourceOverview,
   formValuesToPayload,
@@ -45,6 +53,7 @@ export function ExecutionTab({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const mutationLocked = readOnly || amountReadOnly
 
   const { data: listResult, isLoading } = useQuery({
@@ -91,15 +100,54 @@ export function ExecutionTab({
     enabled: Boolean(selectedSegmentId),
   })
 
+  const invalidateSegments = () => {
+    void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+    void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+  }
+
+  const closeDrawer = () => {
+    setDrawerOpen(false)
+    setEditingSegment(null)
+  }
+
+  const openCreate = () => {
+    setEditingSegment(null)
+    setDrawerOpen(true)
+  }
+
+  const openEdit = (segment: ItinerarySegmentSummary) => {
+    setEditingSegment(segment)
+    setDrawerOpen(true)
+  }
+
   const saveMutation = useMutation({
-    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) =>
-      createSegment(departure.id, payload),
-    onSuccess: (created) => {
-      message.success('行程段已添加')
-      setDrawerOpen(false)
-      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
-      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-      navigateExecution(created.id)
+    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
+      if (editingSegment) {
+        return updateSegment(editingSegment.id, payload)
+      }
+      return createSegment(departure.id, payload)
+    },
+    onSuccess: (saved) => {
+      if (editingSegment) {
+        message.success('行程段已更新')
+      } else {
+        message.success('行程段已添加')
+        message.info('请在本段「资源安排」中添加用车、酒店、拼出等资源')
+      }
+      closeDrawer()
+      invalidateSegments()
+      navigateExecution(saved.id)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteSegment(id),
+    onSuccess: (_result, deletedId) => {
+      const nextSegmentId = resolveAdjacentSegmentId(segments, deletedId)
+      message.success('行程段已删除')
+      closeDrawer()
+      invalidateSegments()
+      navigateExecution(nextSegmentId)
     },
   })
 
@@ -151,7 +199,7 @@ export function ExecutionTab({
                 type="text"
                 size="small"
                 icon={<PlusOutlined />}
-                onClick={() => setDrawerOpen(true)}
+                onClick={openCreate}
               >
                 添加
               </Button>
@@ -169,7 +217,9 @@ export function ExecutionTab({
                   key={segment.id}
                   segment={segment}
                   selected={segment.id === selectedSegmentId}
+                  showEdit={!mutationLocked}
                   onSelect={() => navigateExecution(segment.id)}
+                  onEdit={() => openEdit(segment)}
                 />
               ))
             )}
@@ -183,7 +233,7 @@ export function ExecutionTab({
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  onClick={() => setDrawerOpen(true)}
+                  onClick={openCreate}
                 >
                   添加行程段
                 </Button>
@@ -227,11 +277,17 @@ export function ExecutionTab({
       <SegmentDrawer
         open={drawerOpen}
         departure={departure}
-        editing={null}
+        editing={editingSegment}
         readOnly={mutationLocked}
         loading={saveMutation.isPending}
-        onClose={() => setDrawerOpen(false)}
+        deleting={deleteMutation.isPending}
+        onClose={closeDrawer}
         onSubmit={(values) => saveMutation.mutate(values)}
+        onDelete={
+          editingSegment
+            ? () => deleteMutation.mutate(editingSegment.id)
+            : undefined
+        }
       />
     </div>
   )
@@ -259,51 +315,76 @@ function ResourcePaneHeader({
 function SegmentNavItem({
   segment,
   selected,
+  showEdit,
   onSelect,
+  onEdit,
 }: {
   segment: ItinerarySegmentSummary
   selected: boolean
+  showEdit: boolean
   onSelect: () => void
+  onEdit: () => void
 }) {
   const { token } = theme.useToken()
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <div
       style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        border: 'none',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 4,
         borderLeft: selected
           ? `2px solid ${token.colorPrimary}`
           : '2px solid transparent',
         background: selected ? token.colorPrimaryBg : 'transparent',
-        padding: '12px 16px',
-        cursor: 'pointer',
+        paddingRight: 8,
       }}
     >
-      <Typography.Text strong style={{ display: 'block' }}>
-        {segment.name}
-        {segment.fromTemplate ? (
-          <>
-            {' '}
-            <Tag style={{ marginInlineEnd: 0 }}>模板</Tag>
-          </>
-        ) : null}
-      </Typography.Text>
-      <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-        {formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)}
-      </Typography.Text>
-      {segment.destination ? (
-        <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-          {segment.destination}
+      <button
+        type="button"
+        onClick={onSelect}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'block',
+          textAlign: 'left',
+          border: 'none',
+          background: 'transparent',
+          padding: '12px 8px 12px 16px',
+          cursor: 'pointer',
+        }}
+      >
+        <Typography.Text strong style={{ display: 'block' }}>
+          {segment.name}
+          {segment.fromTemplate ? (
+            <>
+              {' '}
+              <Tag style={{ marginInlineEnd: 0 }}>模板</Tag>
+            </>
+          ) : null}
         </Typography.Text>
+        <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
+          {formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)}
+        </Typography.Text>
+        {segment.destination ? (
+          <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
+            {segment.destination}
+          </Typography.Text>
+        ) : null}
+        <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
+          {formatResourceOverview(segment)}
+        </Typography.Text>
+      </button>
+      {showEdit ? (
+        <Button
+          type="text"
+          size="small"
+          icon={<EditOutlined />}
+          aria-label={`编辑${segment.name}`}
+          onClick={onEdit}
+          style={{ marginTop: 8 }}
+        />
       ) : null}
-      <Typography.Text type="secondary" style={{ display: 'block', fontSize: token.fontSizeSM }}>
-        {formatResourceOverview(segment)}
-      </Typography.Text>
-    </button>
+    </div>
   )
 }
