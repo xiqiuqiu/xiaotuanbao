@@ -384,7 +384,6 @@ describe('Supplier API (e2e)', () => {
         startDate: new Date('2026-08-01'),
         endDate: new Date('2026-08-03'),
         dayCount: 3,
-        fromTemplate: false,
       },
     })
 
@@ -396,7 +395,6 @@ describe('Supplier API (e2e)', () => {
         supplierId,
         title: '团队餐',
         amountCents: 50000,
-        fromTemplate: false,
       },
     })
 
@@ -451,7 +449,6 @@ describe('Supplier API (e2e)', () => {
         startDate: new Date('2026-09-01'),
         endDate: new Date('2026-09-03'),
         dayCount: 3,
-        fromTemplate: false,
       },
     })
 
@@ -463,7 +460,6 @@ describe('Supplier API (e2e)', () => {
         supplierId,
         title: '酒店',
         amountCents: 80000,
-        fromTemplate: false,
       },
     })
 

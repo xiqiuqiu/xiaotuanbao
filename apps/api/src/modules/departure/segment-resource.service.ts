@@ -132,7 +132,6 @@ export class SegmentResourceService {
         title: dto.title?.trim() || '',
         amountCents: dto.amountCents,
         notes: dto.notes?.trim() || null,
-        fromTemplate: false,
       },
       include: {
         partner: true,
@@ -388,7 +387,6 @@ export class SegmentResourceService {
       title: resource.title,
       amountCents: resource.amountCents,
       notes: resource.notes,
-      fromTemplate: resource.fromTemplate,
       hasPaymentSchedule: meta?.hasSchedule ?? false,
       payableStatus: meta?.payableStatus ?? SegmentPayableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: meta?.hasSourceAmountMismatch ?? false,

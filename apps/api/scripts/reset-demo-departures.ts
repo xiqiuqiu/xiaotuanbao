@@ -382,7 +382,6 @@ async function seedDemoDepartures(
             endDate: parseDate(segment.endDate),
             dayCount: segment.dayCount,
             destination: segment.destination,
-            fromTemplate: departureData.routeSource === DepartureRouteSource.template,
             resources: {
               create: segment.resources.map((resource) => ({
                 resourceKind: resource.resourceKind,
@@ -390,7 +389,6 @@ async function seedDemoDepartures(
                 supplierId: resource.supplierId,
                 title: resource.title,
                 amountCents: resource.amountCents,
-                fromTemplate: departureData.routeSource === DepartureRouteSource.template,
               })),
             },
           })),

@@ -30,7 +30,6 @@ const mockSegment: ItinerarySegmentSummary = {
   dayCount: 1,
   destination: '乌镇西栅',
   notes: null,
-  fromTemplate: false,
   resourceCount: 1,
   outsourceCount: 0,
   resourceAmountCents: 300000,

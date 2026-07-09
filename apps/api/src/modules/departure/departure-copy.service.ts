@@ -72,7 +72,6 @@ export class DepartureCopyService {
           dayCount: dateRange.dayCount,
           destination: sourceSegment.destination,
           notes: sourceSegment.notes,
-          fromTemplate: false,
         },
       })
 
@@ -90,7 +89,6 @@ export class DepartureCopyService {
           title: resource.title,
           amountCents: 0,
           notes: resource.notes,
-          fromTemplate: false,
         })),
       })
     }
