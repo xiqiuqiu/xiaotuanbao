@@ -1,6 +1,7 @@
 import type { ColumnsType } from 'antd/es/table'
 import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { UseMutationResult } from '@tanstack/react-query'
+import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import {
   SOURCE_ORDER_COLLECTION_LABELS,
@@ -16,6 +17,11 @@ interface BuildSourceOrdersColumnsOptions {
   onView: (record: SourceOrderSummary) => void
   onEdit: (record: SourceOrderSummary) => void
   onOpenGuests: (record: SourceOrderSummary) => void
+  onViewReceivables: (record: SourceOrderSummary) => void
+}
+
+function canGenerateReceivable(record: SourceOrderSummary): boolean {
+  return record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED
 }
 
 export function buildSourceOrdersColumns({
@@ -25,6 +31,7 @@ export function buildSourceOrdersColumns({
   onView,
   onEdit,
   onOpenGuests,
+  onViewReceivables,
 }: BuildSourceOrdersColumnsOptions): ColumnsType<SourceOrderSummary> {
   return [
     { title: '客户', dataIndex: 'partnerName', width: 140 },
@@ -83,42 +90,55 @@ export function buildSourceOrdersColumns({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 220,
-      render: (_: unknown, record: SourceOrderSummary) => (
-        <Space size="small" wrap>
-          <Button type="link" size="small" onClick={() => onView(record)}>
-            查看
-          </Button>
-          {!readOnly ? (
-            <>
-              <Button type="link" size="small" onClick={() => onEdit(record)}>
-                编辑
+      width: 280,
+      render: (_: unknown, record: SourceOrderSummary) => {
+        const allowGenerate = canGenerateReceivable(record)
+
+        return (
+          <Space size="small" wrap>
+            <Button type="link" size="small" onClick={() => onView(record)}>
+              查看
+            </Button>
+            {!allowGenerate ? (
+              <Button type="link" size="small" onClick={() => onViewReceivables(record)}>
+                查看应收
               </Button>
-              <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
-                客人名单
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                loading={generateMutation.isPending && generateMutation.variables === record.id}
-                onClick={() => generateMutation.mutate(record.id)}
-              >
-                生成应收
-              </Button>
-              {!record.hasPaymentSchedule ? (
-                <Popconfirm
-                  title="确认删除该客源单？"
-                  onConfirm={() => deleteMutation.mutate(record.id)}
-                >
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
-                </Popconfirm>
-              ) : null}
-            </>
-          ) : null}
-        </Space>
-      ),
+            ) : null}
+            {!readOnly ? (
+              <>
+                <Button type="link" size="small" onClick={() => onEdit(record)}>
+                  编辑
+                </Button>
+                <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
+                  客人名单
+                </Button>
+                {allowGenerate ? (
+                  <>
+                    <Button
+                      type="link"
+                      size="small"
+                      loading={
+                        generateMutation.isPending && generateMutation.variables === record.id
+                      }
+                      onClick={() => generateMutation.mutate(record.id)}
+                    >
+                      生成应收
+                    </Button>
+                    <Popconfirm
+                      title="确认删除该客源单？"
+                      onConfirm={() => deleteMutation.mutate(record.id)}
+                    >
+                      <Button type="link" size="small" danger>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </Space>
+        )
+      },
     },
   ]
 }

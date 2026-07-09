@@ -1,0 +1,15 @@
+@keyframes scheduleRowLocateFlash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+
+  50% {
+    background-color: var(--schedule-locate-bg);
+  }
+}
+
+.locateFlash > td {
+  /* Two Slow (0.3s) pulses — locate reminder, not selection. */
+  animation: scheduleRowLocateFlash 0.3s ease-in-out 2;
+}

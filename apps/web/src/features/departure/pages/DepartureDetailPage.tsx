@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { Spin, Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -49,6 +50,22 @@ export function DepartureDetailPage() {
       },
     })
   }
+
+  const clearHighlightSourceOrder = useCallback(() => {
+    if (!departureId || !search.highlightSourceOrderId) {
+      return
+    }
+
+    navigate({
+      to: '/departure/$departureId',
+      params: { departureId },
+      search: {
+        tab: activeTab,
+        ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+      },
+      replace: true,
+    })
+  }, [activeTab, departureId, navigate, search.highlightSourceOrderId, search.segmentId])
 
   const handleUpdated = () => {
     queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
@@ -136,6 +153,8 @@ export function DepartureDetailPage() {
             direction="receivable"
             departureId={departure.id}
             readOnly={financeReadOnly}
+            highlightSourceOrderId={search.highlightSourceOrderId}
+            onHighlightConsumed={clearHighlightSourceOrder}
           />
         ),
       }

@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Card, Form, Table } from 'antd'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Card, Form, Table, theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listDepartures, getDeparture } from '@/services/departure.service'
+import { matchesSourceOrderSchedule } from '@/features/departure/utils/matches-source-order-schedule'
 import {
   listDeparturePayables,
   listDepartureReceivables,
@@ -28,12 +29,19 @@ import {
 } from '../utils/edit-schedule-form'
 import type { CreateVerificationFormValues } from '../utils/verification-form'
 import type { CancelScheduleFormValues } from './CancelScheduleModal'
+import styles from './PaymentScheduleWorkspace.module.css'
+
+/** Two Slow (0.3s) animation iterations. */
+const LOCATE_FLASH_MS = 600
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
   direction: 'receivable' | 'payable'
   departureId?: string
   readOnly?: boolean
+  /** One-shot locate: flash rows for this source order, then clear via onHighlightConsumed. */
+  highlightSourceOrderId?: string
+  onHighlightConsumed?: () => void
 }
 
 function applyClientFilters(
@@ -75,6 +83,9 @@ interface PaymentScheduleTableProps {
   page: number
   pageSize: number
   total: number
+  locateSourceOrderId?: string
+  locateFlashActive: boolean
+  locateBg: string
   onPageChange: (page: number, pageSize: number) => void
 }
 
@@ -85,6 +96,9 @@ function PaymentScheduleTable({
   page,
   pageSize,
   total,
+  locateSourceOrderId,
+  locateFlashActive,
+  locateBg,
   onPageChange,
 }: PaymentScheduleTableProps) {
   return (
@@ -95,6 +109,14 @@ function PaymentScheduleTable({
         columns={columns}
         dataSource={items}
         scroll={{ x: 'max-content' }}
+        style={{ ['--schedule-locate-bg' as string]: locateBg }}
+        rowClassName={(record) =>
+          locateFlashActive &&
+          locateSourceOrderId &&
+          matchesSourceOrderSchedule(record, locateSourceOrderId)
+            ? styles.locateFlash
+            : ''
+        }
         pagination={{
           current: page,
           pageSize,
@@ -113,9 +135,12 @@ export function PaymentScheduleWorkspace({
   direction,
   departureId: lockedDepartureId,
   readOnly = false,
+  highlightSourceOrderId,
+  onHighlightConsumed,
 }: PaymentScheduleWorkspaceProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { token } = theme.useToken()
   const isReceivable = direction === 'receivable'
   const isDepartureScope = scope === 'departure'
   const listQueryKey = isReceivable ? 'finance-receivables' : 'finance-payables'
@@ -140,18 +165,24 @@ export function PaymentScheduleWorkspace({
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [locateFlashActive, setLocateFlashActive] = useState(false)
+  const [locateSourceOrderId, setLocateSourceOrderId] = useState<string | undefined>()
+  const locateFlashStartedForRef = useRef<string | null>(null)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
-  const fetchPageSize = hasClientFilters ? 100 : pageSize
+  const locatingSourceOrder =
+    isReceivable && isDepartureScope && Boolean(locateSourceOrderId)
+  const useExpandedFetch = hasClientFilters || locatingSourceOrder
+  const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
-  const { data: schedulesResult, isLoading } = useQuery({
+  const { data: schedulesResult, isLoading, isFetching } = useQuery({
     queryKey: [
       isDepartureScope ? departureListQueryKey : listQueryKey,
       effectiveDepartureId,
       page,
       fetchPageSize,
-      hasClientFilters,
+      useExpandedFetch,
     ],
     queryFn: () => {
       if (isDepartureScope) {
@@ -160,7 +191,7 @@ export function PaymentScheduleWorkspace({
         }
         const listFn = isReceivable ? listDepartureReceivables : listDeparturePayables
         return listFn(lockedDepartureId, {
-          page: hasClientFilters ? 1 : page,
+          page: useExpandedFetch ? 1 : page,
           pageSize: fetchPageSize,
         })
       }
@@ -172,6 +203,71 @@ export function PaymentScheduleWorkspace({
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
+
+  useEffect(() => {
+    if (!highlightSourceOrderId) {
+      return
+    }
+    if (locateFlashStartedForRef.current === highlightSourceOrderId) {
+      return
+    }
+    locateFlashStartedForRef.current = highlightSourceOrderId
+    setLocateSourceOrderId(highlightSourceOrderId)
+  }, [highlightSourceOrderId])
+
+  useEffect(() => {
+    if (
+      !locateSourceOrderId ||
+      isLoading ||
+      isFetching ||
+      !schedulesResult ||
+      locateFlashActive
+    ) {
+      return
+    }
+
+    const items = applyClientFilters(
+      schedulesResult.items,
+      keyword,
+      statusFilter,
+      dueDateRange,
+    )
+    const firstMatchIndex = items.findIndex((item) =>
+      matchesSourceOrderSchedule(item, locateSourceOrderId),
+    )
+    if (firstMatchIndex >= 0) {
+      setPage(Math.floor(firstMatchIndex / pageSize) + 1)
+    }
+    setLocateFlashActive(true)
+  }, [
+    dueDateRange,
+    isFetching,
+    isLoading,
+    keyword,
+    locateFlashActive,
+    locateSourceOrderId,
+    pageSize,
+    schedulesResult,
+    statusFilter,
+  ])
+
+  useEffect(() => {
+    if (!locateFlashActive) {
+      return
+    }
+
+    const clearFlashTimer = window.setTimeout(() => {
+      setLocateFlashActive(false)
+      setLocateSourceOrderId(undefined)
+      locateFlashStartedForRef.current = null
+      setPage(1)
+      onHighlightConsumed?.()
+    }, LOCATE_FLASH_MS)
+
+    return () => {
+      window.clearTimeout(clearFlashTimer)
+    }
+  }, [locateFlashActive, onHighlightConsumed])
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-schedule-map'],
@@ -210,11 +306,13 @@ export function PaymentScheduleWorkspace({
     [schedulesResult?.items, keyword, statusFilter, dueDateRange],
   )
 
-  const tableItems = hasClientFilters
+  const tableItems = useExpandedFetch
     ? filteredItems.slice((page - 1) * pageSize, page * pageSize)
     : filteredItems
 
-  const tableTotal = hasClientFilters ? filteredItems.length : (schedulesResult?.total ?? 0)
+  const tableTotal = useExpandedFetch
+    ? filteredItems.length
+    : (schedulesResult?.total ?? 0)
 
   const closeConfirm = useCallback(() => {
     confirmForm.resetFields()
@@ -372,6 +470,9 @@ export function PaymentScheduleWorkspace({
         page={page}
         pageSize={pageSize}
         total={tableTotal}
+        locateSourceOrderId={locateSourceOrderId}
+        locateFlashActive={locateFlashActive}
+        locateBg={token.colorPrimaryBg}
         onPageChange={(nextPage, nextPageSize) => {
           setPage(nextPage)
           setPageSize(nextPageSize)

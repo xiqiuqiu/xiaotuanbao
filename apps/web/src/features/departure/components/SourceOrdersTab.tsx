@@ -2,6 +2,7 @@ import { useCallback, useMemo, useReducer } from 'react'
 import { Button, Table, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import { listPartners } from '@/services/partner.service'
@@ -130,6 +131,7 @@ function drawerReducer(state: DrawerState, action: DrawerAction): DrawerState {
 
 export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }: SourceOrdersTabProps) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [filters, dispatchFilters] = useReducer(filterReducer, {
     draft: EMPTY_SOURCE_ORDER_FILTERS,
     applied: EMPTY_SOURCE_ORDER_FILTERS,
@@ -190,6 +192,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       )
       void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
       void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
     },
   })
 
@@ -205,6 +209,20 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     dispatchDrawer({ type: 'OPEN_GUESTS', order })
   }, [])
 
+  const onViewReceivables = useCallback(
+    (order: SourceOrderSummary) => {
+      void navigate({
+        to: '/departure/$departureId',
+        params: { departureId: departure.id },
+        search: {
+          tab: 'receivables',
+          highlightSourceOrderId: order.id,
+        },
+      })
+    },
+    [departure.id, navigate],
+  )
+
   const columns = useMemo(
     () =>
       buildSourceOrdersColumns({
@@ -214,8 +232,17 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         onView,
         onEdit,
         onOpenGuests,
+        onViewReceivables,
       }),
-    [deleteMutation, generateMutation, onEdit, onOpenGuests, onView, readOnly],
+    [
+      deleteMutation,
+      generateMutation,
+      onEdit,
+      onOpenGuests,
+      onView,
+      onViewReceivables,
+      readOnly,
+    ],
   )
 
   const partnerOptions =
