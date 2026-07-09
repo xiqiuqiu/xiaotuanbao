@@ -199,10 +199,17 @@ export function ResourceDrawer({
         <Form.Item
           name="amountYuan"
           label="资源金额（元）"
-          rules={[{ required: true, message: '请填写资源金额' }]}
+          rules={[
+            { required: true, message: '请填写资源金额' },
+            {
+              type: 'number',
+              min: 0,
+              message: '资源金额不能小于0',
+            },
+          ]}
         >
           <InputNumber
-            min={0.01}
+            min={0}
             precision={2}
             style={{ width: '100%' }}
             disabled={readOnly || amountReadOnly || amountFieldsLocked}

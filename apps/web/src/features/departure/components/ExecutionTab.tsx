@@ -11,7 +11,6 @@ import {
   listSegments,
   updateSegment,
 } from '@/services/segment.service'
-import { listSegmentResources } from '@/services/segment-resource.service'
 import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
@@ -20,7 +19,7 @@ import {
   formatResourceOverview,
   formValuesToPayload,
 } from '../utils/segment-form'
-import { RESOURCE_KIND_LABELS, catalogLabel, formatCents } from '../catalog'
+import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { ExecutionSummaryBar } from './ExecutionSummaryBar'
 import { SegmentDrawer } from './SegmentDrawer'
 
@@ -94,12 +93,6 @@ export function ExecutionTab({
     })
   }, [departure.id, isLoading, navigate, segmentId, selectedSegmentId])
 
-  const { data: resourceList, isLoading: resourcesLoading } = useQuery({
-    queryKey: ['segment-resources', selectedSegmentId],
-    queryFn: () => listSegmentResources(selectedSegmentId!),
-    enabled: Boolean(selectedSegmentId),
-  })
-
   const invalidateSegments = () => {
     void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
@@ -158,8 +151,6 @@ export function ExecutionTab({
       </div>
     )
   }
-
-  const resources = resourceList?.items ?? []
 
   return (
     <div>
@@ -239,37 +230,13 @@ export function ExecutionTab({
                 </Button>
               ) : null}
             </Empty>
-          ) : selectedSegment && resourcesLoading ? (
-            <div>
-              <ResourcePaneHeader segment={selectedSegment} />
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-                <Spin />
-              </div>
-            </div>
-          ) : selectedSegment && resources.length === 0 ? (
-            <div>
-              <ResourcePaneHeader segment={selectedSegment} resourceCount={0} />
-              <Empty description="本段暂无资源" style={{ padding: '48px 0' }} />
-            </div>
           ) : selectedSegment ? (
-            <div>
-              <ResourcePaneHeader
-                segment={selectedSegment}
-                resourceCount={resources.length}
-              />
-              <ul style={{ margin: 0, paddingLeft: 20 }}>
-                {resources.map((resource) => (
-                  <li key={resource.id}>
-                    <Typography.Text>
-                      {catalogLabel(RESOURCE_KIND_LABELS, resource.resourceKind)}
-                      {' · '}
-                      {resource.title}
-                      {resource.amountCents > 0 ? ` · ${formatCents(resource.amountCents)}` : null}
-                    </Typography.Text>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ExecutionResourcePane
+              departure={departure}
+              segment={selectedSegment}
+              readOnly={readOnly}
+              amountReadOnly={amountReadOnly}
+            />
           ) : null}
         </main>
       </div>
@@ -289,25 +256,6 @@ export function ExecutionTab({
             : undefined
         }
       />
-    </div>
-  )
-}
-
-function ResourcePaneHeader({
-  segment,
-  resourceCount,
-}: {
-  segment: ItinerarySegmentSummary
-  resourceCount?: number
-}) {
-  const count = resourceCount ?? segment.resourceCount
-
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <Typography.Text strong>资源安排</Typography.Text>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0, marginTop: 4 }}>
-        {segment.name} · 适用 {segment.applicableGuestCount} 人 · {count} 项
-      </Typography.Paragraph>
     </div>
   )
 }
