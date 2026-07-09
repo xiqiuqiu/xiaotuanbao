@@ -641,7 +641,7 @@ describe('Departure API (e2e)', () => {
         data: {
           organizationId,
           name: `${testPrefix}-segment-supplier`,
-          categories: [ResourceKind.transport],
+          categories: [ResourceKind.transport, ResourceKind.hotel, ResourceKind.guide],
           status: DirectoryProfileStatus.active,
         },
       })
@@ -943,6 +943,148 @@ describe('Departure API (e2e)', () => {
         .expect(409)
 
       expect(createResponse.body.message).toBe('发团已关闭，不可编辑')
+    })
+  })
+
+  describe('Segment resources · supplier category match (issue #64)', () => {
+    async function createResourceSegment() {
+      const departure = await createTestDeparture({
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+      })
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '喀纳斯段',
+          startDate: '2026-08-01',
+          endDate: '2026-08-03',
+          destination: '喀纳斯',
+        })
+        .expect(201)
+      return segment.body.data.id as string
+    }
+
+    it('rejects create when resourceKind is not in supplier.categories', async () => {
+      const segmentId = await createResourceSegment()
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-kind-mismatch-supplier`,
+          categories: [ResourceKind.transport],
+          status: DirectoryProfileStatus.active,
+        },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentId}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: supplier.id,
+          title: '酒店费',
+          amountCents: 100000,
+        })
+        .expect(400)
+
+      expect(response.body.message).toBe('资源种类「酒店」不属于该供应商的类别集合')
+    })
+
+    it('allows the same hotel+meal supplier for both hotel and meal resources', async () => {
+      const segmentId = await createResourceSegment()
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-hotel-meal-supplier`,
+          categories: [ResourceKind.hotel, ResourceKind.meal],
+          status: DirectoryProfileStatus.active,
+        },
+      })
+
+      const hotel = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentId}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: supplier.id,
+          title: '酒店费',
+          amountCents: 200000,
+        })
+        .expect(201)
+
+      const meal = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentId}/resources`)
+        .send({
+          resourceKind: ResourceKind.meal,
+          supplierId: supplier.id,
+          title: '餐费',
+          amountCents: 80000,
+        })
+        .expect(201)
+
+      expect(hotel.body.data).toMatchObject({
+        resourceKind: ResourceKind.hotel,
+        supplierId: supplier.id,
+      })
+      expect(meal.body.data).toMatchObject({
+        resourceKind: ResourceKind.meal,
+        supplierId: supplier.id,
+      })
+    })
+
+    it('rejects update when new resourceKind is not in supplier.categories', async () => {
+      const segmentId = await createResourceSegment()
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-kind-update-supplier`,
+          categories: [ResourceKind.hotel, ResourceKind.meal],
+          status: DirectoryProfileStatus.active,
+        },
+      })
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentId}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: supplier.id,
+          title: '酒店费',
+          amountCents: 100000,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .patch(`/api/segment-resources/${created.body.data.id}`)
+        .send({ resourceKind: ResourceKind.transport })
+        .expect(400)
+
+      expect(response.body.message).toBe('资源种类「用车」不属于该供应商的类别集合')
+    })
+
+    it('still creates outsource resources with partner (no supplier category check)', async () => {
+      const segmentId = await createResourceSegment()
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-outsource-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentId}/resources`)
+        .send({
+          resourceKind: ResourceKind.outsource,
+          partnerId: partner.id,
+          title: '拼出阿勒泰',
+          amountCents: 150000,
+        })
+        .expect(201)
+
+      expect(response.body.data).toMatchObject({
+        resourceKind: ResourceKind.outsource,
+        partnerId: partner.id,
+        supplierId: null,
+      })
     })
   })
 

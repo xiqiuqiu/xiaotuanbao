@@ -4,12 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type {
-  GeneratePayableResult,
-  SegmentResourceListResult,
-  SegmentResourceSummary,
+import {
+  RESOURCE_KIND_LABELS,
+  SegmentPayableStatus,
+  type GeneratePayableResult,
+  type ResourceKind as SharedResourceKind,
+  type SegmentResourceListResult,
+  type SegmentResourceSummary,
 } from '@xiaotuanbao/shared'
-import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import {
   DepartureStatus,
   DirectoryProfileStatus,
@@ -112,7 +114,11 @@ export class SegmentResourceService {
     if (dto.resourceKind === ResourceKind.outsource) {
       await this.ensureSelectablePartner(organizationId, counterparty.partnerId!)
     } else {
-      await this.ensureSelectableSupplier(organizationId, counterparty.supplierId!)
+      await this.ensureSelectableSupplier(
+        organizationId,
+        counterparty.supplierId!,
+        dto.resourceKind,
+      )
     }
 
     const created = await this.prisma.segmentResource.create({
@@ -175,7 +181,11 @@ export class SegmentResourceService {
     if (resourceKind === ResourceKind.outsource) {
       await this.ensureSelectablePartner(organizationId, counterparty.partnerId!)
     } else {
-      await this.ensureSelectableSupplier(organizationId, counterparty.supplierId!)
+      await this.ensureSelectableSupplier(
+        organizationId,
+        counterparty.supplierId!,
+        resourceKind,
+      )
     }
 
     const nextAmountCents = dto.amountCents ?? resource.amountCents
@@ -322,7 +332,11 @@ export class SegmentResourceService {
     return partner
   }
 
-  private async ensureSelectableSupplier(organizationId: string, supplierId: string) {
+  private async ensureSelectableSupplier(
+    organizationId: string,
+    supplierId: string,
+    resourceKind: ResourceKind,
+  ) {
     const supplier = await this.prisma.supplier.findFirst({
       where: { id: supplierId, organizationId },
     })
@@ -333,6 +347,12 @@ export class SegmentResourceService {
 
     if (supplier.status !== DirectoryProfileStatus.active) {
       throw new BadRequestException('供应商不可用，请选择有效供应商')
+    }
+
+    if (!supplier.categories.includes(resourceKind)) {
+      const label =
+        RESOURCE_KIND_LABELS[resourceKind as SharedResourceKind] ?? resourceKind
+      throw new BadRequestException(`资源种类「${label}」不属于该供应商的类别集合`)
     }
 
     return supplier

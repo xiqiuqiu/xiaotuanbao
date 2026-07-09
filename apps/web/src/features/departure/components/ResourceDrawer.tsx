@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Alert,
   Button,
@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
-import { listSuppliers } from '@/services/supplier.service'
+import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import { RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import {
@@ -24,7 +24,10 @@ import {
   resourceToFormValues,
   type ResourceFormValues,
 } from '../utils/resource-form'
-import { resolveSupplierFilterKind } from '../utils/resource-supplier-filter'
+import {
+  resolveSupplierFilterKind,
+  resolveSupplierIdAfterKindChange,
+} from '../utils/resource-supplier-filter'
 
 interface ResourceDrawerProps {
   open: boolean
@@ -52,6 +55,7 @@ export function ResourceDrawer({
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const outsource = isOutsourceKind(resourceKind)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
+  const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(new Map())
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
@@ -93,6 +97,29 @@ export function ResourceDrawer({
       }),
     enabled: open && !outsource && Boolean(supplierFilterKind),
   })
+
+  const editingSupplierId = editing?.supplierId ?? undefined
+  const { data: editingSupplier } = useQuery({
+    queryKey: ['suppliers', 'resource-edit', editingSupplierId],
+    queryFn: () => getSupplier(editingSupplierId!),
+    enabled: open && Boolean(editingSupplierId),
+  })
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    supplierCategoriesByIdRef.current = new Map()
+  }, [open, formKey])
+
+  useEffect(() => {
+    if (editingSupplier) {
+      supplierCategoriesByIdRef.current.set(editingSupplier.id, editingSupplier.categories)
+    }
+    for (const item of suppliersResult?.items ?? []) {
+      supplierCategoriesByIdRef.current.set(item.id, item.categories)
+    }
+  }, [editingSupplier, suppliersResult])
 
   return (
     <Drawer
@@ -152,10 +179,17 @@ export function ResourceDrawer({
               label: item.label,
             }))}
             disabled={readOnly || amountFieldsLocked}
-            onChange={() => {
+            onChange={(nextKind) => {
+              const currentSupplierId = form.getFieldValue('supplierId') as string | undefined
               form.setFieldsValue({
                 partnerId: undefined,
-                supplierId: undefined,
+                supplierId: resolveSupplierIdAfterKindChange({
+                  nextKind,
+                  currentSupplierId,
+                  currentSupplierCategories: currentSupplierId
+                    ? supplierCategoriesByIdRef.current.get(currentSupplierId)
+                    : undefined,
+                }),
               })
             }}
           />
