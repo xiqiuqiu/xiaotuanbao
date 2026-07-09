@@ -143,14 +143,23 @@ export class DepartureFinanceBridgeService {
     organizationId: string,
     order: SourceOrderWithRelations,
   ): Promise<SourceOrderFinanceMeta> {
-    const schedules = await this.loadActiveReceivableSchedules(organizationId, order.id)
+    const allSchedules = await this.loadReceivableSchedules(organizationId, order.id)
+    if (allSchedules.length === 0) {
+      return this.evaluateFinanceMeta(organizationId, order.id, order)
+    }
 
-    for (const schedule of schedules) {
+    const activeSchedules = allSchedules.filter((schedule) => schedule.cancelledAt == null)
+    let anyTouched = false
+
+    for (const schedule of activeSchedules) {
       const expectedAmount = this.getExpectedAmountForSchedule(schedule.sourceType, order)
       const settledAmountCents = await this.verificationService.getSettledAmountCents(
         schedule.id,
       )
       const touched = isFinanceTouched(schedule, settledAmountCents)
+      if (touched) {
+        anyTouched = true
+      }
 
       if (touched || expectedAmount <= 0 || schedule.amountCents === expectedAmount) {
         continue
@@ -162,6 +171,36 @@ export class DepartureFinanceBridgeService {
         schedule.id,
         { amountCents: expectedAmount },
       )
+    }
+
+    if (activeSchedules.length > 0 && !anyTouched) {
+      const existingActiveSourceTypes = new Set(
+        activeSchedules.map((schedule) => schedule.sourceType),
+      )
+      const dueDate = formatDateOnly(order.departure.endDate)
+
+      for (const path of this.buildReceivablePaths(order)) {
+        if (path.amountCents <= 0 || existingActiveSourceTypes.has(path.sourceType)) {
+          continue
+        }
+
+        await this.paymentScheduleService.create(
+          organizationId,
+          PaymentScheduleDirection.receivable,
+          {
+            departureId: order.departureId,
+            title: path.title,
+            amountCents: path.amountCents,
+            dueDate,
+            counterpartyType: path.counterpartyType,
+            counterpartyId: path.counterpartyId,
+            counterpartyName: path.counterpartyName,
+            sourceType: path.sourceType,
+            sourceId: order.id,
+          },
+        )
+        existingActiveSourceTypes.add(path.sourceType)
+      }
     }
 
     return this.evaluateFinanceMeta(organizationId, order.id, order)
@@ -646,20 +685,6 @@ export class DepartureFinanceBridgeService {
       return order.guestCollectCents
     }
     return 0
-  }
-
-  private async loadActiveReceivableSchedules(
-    organizationId: string,
-    sourceOrderId: string,
-  ): Promise<PaymentSchedule[]> {
-    return this.prisma.paymentSchedule.findMany({
-      where: {
-        organizationId,
-        sourceId: sourceOrderId,
-        direction: PaymentScheduleDirection.receivable,
-        cancelledAt: null,
-      },
-    })
   }
 
   private async loadReceivableSchedules(
