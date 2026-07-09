@@ -115,16 +115,13 @@ export function buildCreateDeparturePayload(
 
   if (route.mode === 'template' && route.templateId) {
     payload.templateId = route.templateId
-    payload.copySegments = route.copySegments ?? true
-    payload.copyResources = route.copyResources ?? true
-    payload.copyReferencePrices = route.copyReferencePrices ?? true
   }
 
   return payload
 }
 
 export function buildCopyDeparturePayload(
-  route: RouteStepValues,
+  _route: RouteStepValues,
   info: InfoStepValues,
 ): CopyDepartureDto {
   return {
@@ -134,9 +131,6 @@ export function buildCopyDeparturePayload(
     ownerUserId: info.ownerUserId,
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
-    copySegments: route.copySegments ?? true,
-    copyResources: route.copyResources ?? true,
-    copyReferencePrices: route.copyReferencePrices ?? true,
   }
 }
 

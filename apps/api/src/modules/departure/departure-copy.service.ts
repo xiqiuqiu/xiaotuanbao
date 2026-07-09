@@ -1,10 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import type {
-  CreateRouteTemplateFromDepartureDto,
-  RouteTemplateCopyFlags,
-} from './dto/route-template.dto'
+import type { CreateRouteTemplateFromDepartureDto } from './dto/route-template.dto'
 import { allocateSegmentDates } from './route-template-date.utils'
 import type { RouteTemplateDetailSummary } from './route-template.service'
 import { RouteTemplateService } from './route-template.service'
@@ -15,7 +12,6 @@ export interface CopyFromDepartureParams {
   sourceDepartureId: string
   targetDepartureId: string
   targetStartDate: Date
-  flags?: RouteTemplateCopyFlags
 }
 
 @Injectable()
@@ -50,16 +46,7 @@ export class DepartureCopyService {
       sourceDepartureId,
       targetDepartureId,
       targetStartDate,
-      flags = {},
     } = params
-
-    const copySegments = flags.copySegments ?? true
-    const copyResources = flags.copyResources ?? true
-    const copyReferencePrices = flags.copyReferencePrices ?? true
-
-    if (!copySegments) {
-      return
-    }
 
     const sourceDeparture = await this.findForCopy(organizationId, sourceDepartureId)
     const segments = sourceDeparture.itinerarySegments
@@ -89,7 +76,7 @@ export class DepartureCopyService {
         },
       })
 
-      if (!copyResources || sourceSegment.resources.length === 0) {
+      if (sourceSegment.resources.length === 0) {
         continue
       }
 
@@ -101,7 +88,7 @@ export class DepartureCopyService {
           partnerId: resource.partnerId,
           supplierId: resource.supplierId,
           title: resource.title,
-          amountCents: copyReferencePrices ? resource.amountCents : 0,
+          amountCents: 0,
           notes: resource.notes,
           fromTemplate: false,
         })),
@@ -114,34 +101,28 @@ export class DepartureCopyService {
     departureId: string,
     dto: CreateRouteTemplateFromDepartureDto,
   ): Promise<RouteTemplateDetailSummary> {
-    const copySegments = dto.copySegments ?? true
-    const copyResources = dto.copyResources ?? true
-    const copyReferencePrices = dto.copyReferencePrices ?? true
-
     const sourceDeparture = await this.findForCopy(organizationId, departureId)
     const segments = sourceDeparture.itinerarySegments
 
-    const templateSegments = copySegments
-      ? segments.map((segment, sortOrder) => ({
-          sortOrder,
-          name: segment.name,
-          dayCount: segment.dayCount,
-          destination: segment.destination ?? undefined,
-          notes: segment.notes ?? undefined,
-          resources:
-            copyResources && segment.resources.length > 0
-              ? segment.resources.map((resource) => ({
-                  resourceKind: resource.resourceKind,
-                  counterpartyType: resource.counterpartyType,
-                  partnerId: resource.partnerId ?? undefined,
-                  supplierId: resource.supplierId ?? undefined,
-                  title: resource.title,
-                  amountCents: copyReferencePrices ? resource.amountCents : 0,
-                  notes: resource.notes ?? undefined,
-                }))
-              : undefined,
-        }))
-      : undefined
+    const templateSegments = segments.map((segment, sortOrder) => ({
+      sortOrder,
+      name: segment.name,
+      dayCount: segment.dayCount,
+      destination: segment.destination ?? undefined,
+      notes: segment.notes ?? undefined,
+      resources:
+        segment.resources.length > 0
+          ? segment.resources.map((resource) => ({
+              resourceKind: resource.resourceKind,
+              counterpartyType: resource.counterpartyType,
+              partnerId: resource.partnerId ?? undefined,
+              supplierId: resource.supplierId ?? undefined,
+              title: resource.title,
+              amountCents: 0,
+              notes: resource.notes ?? undefined,
+            }))
+          : undefined,
+    }))
 
     return this.routeTemplateService.create(organizationId, {
       name: dto.name.trim(),

@@ -572,14 +572,27 @@ describe('Finance journeys (cross-module e2e)', () => {
         endDate: '2026-08-10',
         ownerUserId,
         templateId: template.body.data.id,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
       })
       .expect(201)
 
     expect(departure.body.data.routeSource).toBe(DepartureRouteSource.template)
     expect(departure.body.data.sourceTemplateId).toBe(template.body.data.id)
+
+    const seededResources = await prisma.segmentResource.findMany({
+      where: {
+        segment: { departureId: departure.body.data.id },
+      },
+    })
+    expect(seededResources).toHaveLength(2)
+    expect(seededResources.every((resource) => resource.amountCents === 0)).toBe(true)
+
+    for (const resource of seededResources) {
+      const amountCents = resource.title === '用车' ? 200000 : 150000
+      await prisma.segmentResource.update({
+        where: { id: resource.id },
+        data: { amountCents },
+      })
+    }
 
     const beforeFinance = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.body.data.id}`)
@@ -1005,9 +1018,6 @@ describe('Finance journeys (cross-module e2e)', () => {
         startDate: '2026-09-01',
         endDate: '2026-09-10',
         ownerUserId,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
       })
       .expect(201)
 
@@ -1052,6 +1062,13 @@ describe('Finance journeys (cross-module e2e)', () => {
     if (!resource) {
       throw new Error('Copied resource not found')
     }
+    expect(resource.amountCents).toBe(0)
+
+    const copiedResourceAmountCents = 88000
+    await prisma.segmentResource.update({
+      where: { id: resource.id },
+      data: { amountCents: copiedResourceAmountCents },
+    })
 
     const receivable = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${newSourceOrder.body.data.id}/generate-receivables`)
@@ -1074,7 +1091,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     await authRequest(app, financeToken)
       .post(`/api/finance/payables/${payable.body.data.schedule.id}/confirm-payment`)
       .send({
-        amountCents: resource.amountCents,
+        amountCents: copiedResourceAmountCents,
         transactionDate: '2026-09-02',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.supplier,

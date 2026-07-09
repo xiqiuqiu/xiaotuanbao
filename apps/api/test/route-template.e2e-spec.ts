@@ -158,9 +158,17 @@ describe('Route Template API (e2e)', () => {
     expect(response.body.code).toBe(403)
   })
 
-  it('creates departure from template with copied segments and resources', async () => {
+  it('creates departure from template with structure and zero resource amounts', async () => {
     const template = await createTemplate()
     expect(template.usageCount).toBe(0)
+
+    const templateResources = await prisma.routeTemplateResource.findMany({
+      where: {
+        templateSegment: { templateId: template.id },
+      },
+    })
+    expect(templateResources).toHaveLength(3)
+    expect(templateResources.every((resource) => resource.amountCents === 0)).toBe(true)
 
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
@@ -171,9 +179,6 @@ describe('Route Template API (e2e)', () => {
         endDate: '2026-08-10',
         ownerUserId,
         templateId: template.id,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
       })
       .expect(201)
 
@@ -200,7 +205,10 @@ describe('Route Template API (e2e)', () => {
       where: { segmentId: { in: segments.map((segment) => segment.id) } },
     })
     expect(resources).toHaveLength(3)
-    expect(resources.every((resource) => resource.amountCents > 0)).toBe(true)
+    expect(resources.every((resource) => resource.amountCents === 0)).toBe(true)
+    expect(resources.map((resource) => resource.title).sort()).toEqual(
+      ['区间车', '喀纳斯酒店', '拼出接待'].sort(),
+    )
 
     const paymentSchedules = await prisma.paymentSchedule.count({
       where: { departureId },
@@ -213,28 +221,26 @@ describe('Route Template API (e2e)', () => {
     expect(updatedTemplate?.usageCount).toBe(1)
   })
 
-  it('zeros reference prices when copyReferencePrices is false', async () => {
+  it('rejects create-from-template when copy flags are present', async () => {
     const template = await createTemplate()
     const response = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        name: `${testPrefix}-no-price`,
+        name: `${testPrefix}-flags-rejected`,
         routeName: `${testPrefix}-喀纳斯阿勒泰10日线`,
         startDate: '2026-08-01',
         endDate: '2026-08-10',
         ownerUserId,
         templateId: template.id,
-        copyReferencePrices: false,
+        copySegments: true,
+        copyResources: true,
+        copyReferencePrices: true,
       })
-      .expect(201)
+      .expect(400)
 
-    const resources = await prisma.segmentResource.findMany({
-      where: {
-        segment: { departureId: response.body.data.id },
-      },
-    })
-    expect(resources.length).toBeGreaterThan(0)
-    expect(resources.every((resource) => resource.amountCents === 0)).toBe(true)
+    expect(String(response.body.message)).toContain('copySegments')
+    expect(String(response.body.message)).toContain('copyResources')
+    expect(String(response.body.message)).toContain('copyReferencePrices')
   })
 
   it('keeps departure segments unchanged after template segment rename', async () => {

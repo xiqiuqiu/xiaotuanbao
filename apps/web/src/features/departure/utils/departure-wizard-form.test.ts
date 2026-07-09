@@ -79,7 +79,7 @@ describe('departure-wizard-form', () => {
     })
   })
 
-  it('includes template copy flags in create payload', () => {
+  it('includes templateId without copy flags in create payload', () => {
     const payload = buildCreateDeparturePayload(
       {
         mode: 'template',
@@ -100,11 +100,18 @@ describe('departure-wizard-form', () => {
       },
     )
 
-    expect(payload).toMatchObject({
+    expect(payload).toEqual({
+      name: '西安-青海湖-茶卡6日游 8月1日团',
+      routeName: '西安-青海湖-茶卡6日游',
+      startDate: '2026-08-01',
+      endDate: '2026-08-06',
+      ownerUserId: 'user-1',
+      departureType: DepartureType.COMBINED,
+      notes: undefined,
       templateId: 'template-1',
-      copySegments: true,
-      copyResources: false,
-      copyReferencePrices: true,
     })
+    expect(payload).not.toHaveProperty('copySegments')
+    expect(payload).not.toHaveProperty('copyResources')
+    expect(payload).not.toHaveProperty('copyReferencePrices')
   })
 })

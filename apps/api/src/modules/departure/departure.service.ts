@@ -191,11 +191,6 @@ export class DepartureService {
           departureId: created.id,
           departureStartDate: startDate,
           templateId,
-          flags: {
-            copySegments: dto.copySegments,
-            copyResources: dto.copyResources,
-            copyReferencePrices: dto.copyReferencePrices,
-          },
         })
 
         await tx.routeTemplate.update({
@@ -264,11 +259,6 @@ export class DepartureService {
         sourceDepartureId,
         targetDepartureId: created.id,
         targetStartDate: startDate,
-        flags: {
-          copySegments: dto.copySegments,
-          copyResources: dto.copyResources,
-          copyReferencePrices: dto.copyReferencePrices,
-        },
       })
 
       return created

@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
-import type { RouteTemplateCopyFlags } from './dto/route-template.dto'
 import { allocateSegmentDates } from './route-template-date.utils'
 import { RouteTemplateService } from './route-template.service'
 
@@ -10,7 +9,6 @@ export interface CopyToDepartureParams {
   departureId: string
   departureStartDate: Date
   templateId: string
-  flags?: RouteTemplateCopyFlags
 }
 
 @Injectable()
@@ -24,16 +22,7 @@ export class RouteTemplateCopyService {
       departureId,
       departureStartDate,
       templateId,
-      flags = {},
     } = params
-
-    const copySegments = flags.copySegments ?? true
-    const copyResources = flags.copyResources ?? true
-    const copyReferencePrices = flags.copyReferencePrices ?? true
-
-    if (!copySegments) {
-      return
-    }
 
     const template = await this.routeTemplateService.findForCopy(organizationId, templateId)
 
@@ -58,7 +47,7 @@ export class RouteTemplateCopyService {
         },
       })
 
-      if (!copyResources || templateSegment.resources.length === 0) {
+      if (templateSegment.resources.length === 0) {
         continue
       }
 
@@ -70,7 +59,7 @@ export class RouteTemplateCopyService {
           partnerId: resource.partnerId,
           supplierId: resource.supplierId,
           title: resource.title,
-          amountCents: copyReferencePrices ? resource.amountCents : 0,
+          amountCents: 0,
           notes: resource.notes,
           fromTemplate: true,
         })),

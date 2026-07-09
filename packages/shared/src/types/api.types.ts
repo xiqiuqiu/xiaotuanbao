@@ -193,9 +193,6 @@ export interface CreateDepartureDto {
   departureType?: string
   notes?: string
   templateId?: string
-  copySegments?: boolean
-  copyResources?: boolean
-  copyReferencePrices?: boolean
 }
 
 export interface CopyDepartureDto {
@@ -205,9 +202,6 @@ export interface CopyDepartureDto {
   ownerUserId: string
   departureType?: string
   notes?: string
-  copySegments?: boolean
-  copyResources?: boolean
-  copyReferencePrices?: boolean
 }
 
 export interface UpdateDepartureDto {
@@ -277,9 +271,6 @@ export interface CreateRouteTemplateDto {
 export interface CreateRouteTemplateFromDepartureDto {
   name: string
   defaultDayCount: number
-  copySegments?: boolean
-  copyResources?: boolean
-  copyReferencePrices?: boolean
 }
 
 export interface PaymentScheduleSummary {

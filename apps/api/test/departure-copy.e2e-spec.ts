@@ -187,7 +187,7 @@ describe('Departure copy & save template (e2e)', () => {
     return { departureId, segmentId, sourceOrderId }
   }
 
-  it('saves route template from departure without finance data', async () => {
+  it('saves route template from departure with structure and zero amounts', async () => {
     const { departureId } = await createRichDeparture('save-src')
 
     const response = await authRequest(app, coordinatorToken)
@@ -195,9 +195,6 @@ describe('Departure copy & save template (e2e)', () => {
       .send({
         name: `${testPrefix}-saved-route`,
         defaultDayCount: 10,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
       })
       .expect(201)
 
@@ -217,7 +214,8 @@ describe('Departure copy & save template (e2e)', () => {
     expect(templateSegments).toHaveLength(1)
     expect(templateSegments[0].name).toBe('喀纳斯段')
     expect(templateSegments[0].resources).toHaveLength(1)
-    expect(templateSegments[0].resources[0].amountCents).toBe(120000)
+    expect(templateSegments[0].resources[0].amountCents).toBe(0)
+    expect(templateSegments[0].resources[0].title).toBe('喀纳斯酒店')
 
     const sourceDepartureSourceOrders = await prisma.sourceOrder.count({
       where: { departureId },
@@ -230,7 +228,26 @@ describe('Departure copy & save template (e2e)', () => {
     expect(sourceDepartureSchedules).toBe(1)
   })
 
-  it('copies departure with segments and resources but without finance', async () => {
+  it('rejects save-from-departure when copy flags are present', async () => {
+    const { departureId } = await createRichDeparture('save-flags')
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `${testPrefix}-saved-flags`,
+        defaultDayCount: 10,
+        copySegments: true,
+        copyResources: true,
+        copyReferencePrices: true,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('copySegments')
+    expect(String(response.body.message)).toContain('copyResources')
+    expect(String(response.body.message)).toContain('copyReferencePrices')
+  })
+
+  it('copies departure with structure, zero amounts, and without finance', async () => {
     const { departureId } = await createRichDeparture('copy-src')
 
     const response = await authRequest(app, coordinatorToken)
@@ -240,9 +257,6 @@ describe('Departure copy & save template (e2e)', () => {
         startDate: '2026-09-01',
         endDate: '2026-09-10',
         ownerUserId,
-        copySegments: true,
-        copyResources: true,
-        copyReferencePrices: true,
       })
       .expect(201)
 
@@ -269,7 +283,8 @@ describe('Departure copy & save template (e2e)', () => {
     })
     expect(resources).toHaveLength(1)
     expect(resources[0].fromTemplate).toBe(false)
-    expect(resources[0].amountCents).toBe(120000)
+    expect(resources[0].amountCents).toBe(0)
+    expect(resources[0].title).toBe('喀纳斯酒店')
 
     const sourceOrders = await prisma.sourceOrder.count({
       where: { departureId: copiedDepartureId },
@@ -280,6 +295,27 @@ describe('Departure copy & save template (e2e)', () => {
       where: { departureId: copiedDepartureId },
     })
     expect(paymentSchedules).toBe(0)
+  })
+
+  it('rejects departure copy when copy flags are present', async () => {
+    const { departureId } = await createRichDeparture('copy-flags')
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-copied-flags`,
+        startDate: '2026-09-01',
+        endDate: '2026-09-10',
+        ownerUserId,
+        copySegments: true,
+        copyResources: true,
+        copyReferencePrices: true,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('copySegments')
+    expect(String(response.body.message)).toContain('copyResources')
+    expect(String(response.body.message)).toContain('copyReferencePrices')
   })
 
   it('keeps copied departure unchanged after source segment rename', async () => {

@@ -40,9 +40,6 @@ export function SaveAsRouteTemplateModal({
       saveRouteTemplateFromDeparture(departure.id, {
         name: values.name.trim(),
         defaultDayCount: values.defaultDayCount,
-        copySegments: values.copySegments,
-        copyResources: values.copyResources,
-        copyReferencePrices: values.copyReferencePrices,
       }),
     onSuccess: () => {
       message.success('常用路线已保存，可在新建发团时选用')

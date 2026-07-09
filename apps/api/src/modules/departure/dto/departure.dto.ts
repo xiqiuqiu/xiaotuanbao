@@ -1,5 +1,4 @@
 import {
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -45,18 +44,6 @@ export class CreateDepartureDto {
   @IsOptional()
   @IsString()
   templateId?: string
-
-  @IsOptional()
-  @IsBoolean()
-  copySegments?: boolean
-
-  @IsOptional()
-  @IsBoolean()
-  copyResources?: boolean
-
-  @IsOptional()
-  @IsBoolean()
-  copyReferencePrices?: boolean
 }
 
 export class ListDeparturesQueryDto {
@@ -169,16 +156,4 @@ export class CopyDepartureDto {
   @IsOptional()
   @IsString()
   notes?: string
-
-  @IsOptional()
-  @IsBoolean()
-  copySegments?: boolean
-
-  @IsOptional()
-  @IsBoolean()
-  copyResources?: boolean
-
-  @IsOptional()
-  @IsBoolean()
-  copyReferencePrices?: boolean
 }

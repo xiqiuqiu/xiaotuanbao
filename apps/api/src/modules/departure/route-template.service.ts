@@ -93,7 +93,7 @@ export class RouteTemplateService {
                         partnerId: resource.partnerId ?? null,
                         supplierId: resource.supplierId ?? null,
                         title: resource.title.trim(),
-                        amountCents: resource.amountCents,
+                        amountCents: 0,
                         notes: resource.notes?.trim() || null,
                       })),
                     }
