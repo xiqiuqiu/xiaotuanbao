@@ -99,11 +99,14 @@ describe('Route Template API (e2e)', () => {
     await app.close()
   })
 
+  let templateSeq = 0
+
   async function createTemplate() {
+    templateSeq += 1
     const response = await authRequest(app, coordinatorToken)
       .post('/api/route-templates')
       .send({
-        name: `${testPrefix}-喀纳斯阿勒泰10日线`,
+        name: `${testPrefix}-喀纳斯阿勒泰10日线-${templateSeq}`,
         defaultDayCount: 10,
         segments: [
           {
@@ -364,6 +367,197 @@ describe('Route Template API (e2e)', () => {
 
     const templateRow = await prisma.routeTemplate.findUnique({ where: { id: template.id } })
     expect(templateRow).toBeNull()
+  })
+
+  it('rejects save-from-departure when departure has no segments', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-no-segments`,
+        routeName: `${testPrefix}-空路线`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `${testPrefix}-no-seg-template`,
+        defaultDayCount: 10,
+      })
+      .expect(400)
+
+    expect(String(response.body.message)).toContain('行程段')
+  })
+
+  it('rejects save-from-departure when trimmed name already exists in organization', async () => {
+    const existingName = `${testPrefix}-dup-name-target`
+    await authRequest(app, coordinatorToken)
+      .post('/api/route-templates')
+      .send({
+        name: existingName,
+        defaultDayCount: 5,
+        segments: [
+          {
+            sortOrder: 0,
+            name: '段1',
+            dayCount: 5,
+          },
+        ],
+      })
+      .expect(201)
+
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-dup-name-src`,
+        routeName: existingName,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '喀纳斯',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `  ${existingName}  `,
+        defaultDayCount: 10,
+      })
+      .expect(409)
+
+    expect(String(response.body.message)).toMatch(/名称已存在|改名/)
+  })
+
+  it('saves template from departure with segments but no resources', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-seg-only`,
+        routeName: `${testPrefix}-仅行程段`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '喀纳斯',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '阿勒泰',
+        startDate: '2026-08-04',
+        endDate: '2026-08-10',
+        destination: '阿勒泰',
+      })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `${testPrefix}-seg-only-template`,
+        defaultDayCount: 10,
+      })
+      .expect(201)
+
+    expect(response.body.data).toMatchObject({
+      name: `${testPrefix}-seg-only-template`,
+      defaultDayCount: 10,
+      segmentCount: 2,
+      resourceCount: 0,
+    })
+
+    const templateId = response.body.data.id as string
+    const templateResources = await prisma.routeTemplateResource.findMany({
+      where: { templateSegment: { templateId } },
+    })
+    expect(templateResources).toHaveLength(0)
+  })
+
+  it('saves template from departure with resources forced to zero amounts', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-with-resource`,
+        routeName: `${testPrefix}-有资源`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    const segmentResponse = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '喀纳斯',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    const segmentId = segmentResponse.body.data.id as string
+
+    await prisma.segmentResource.create({
+      data: {
+        segmentId,
+        resourceKind: ResourceKind.hotel,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId,
+        title: '喀纳斯酒店',
+        amountCents: 120000,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `${testPrefix}-with-resource-template`,
+        defaultDayCount: 10,
+      })
+      .expect(201)
+
+    expect(response.body.data).toMatchObject({
+      segmentCount: 1,
+      resourceCount: 1,
+    })
+
+    const templateId = response.body.data.id as string
+    const templateResources = await prisma.routeTemplateResource.findMany({
+      where: { templateSegment: { templateId } },
+    })
+    expect(templateResources).toHaveLength(1)
+    expect(templateResources[0].amountCents).toBe(0)
+    expect(templateResources[0].title).toBe('喀纳斯酒店')
   })
 
   it('returns 404 when deleting a route template from another organization', async () => {
