@@ -114,15 +114,14 @@ export class SourceOrderService {
 
     const partner = await this.ensureSelectablePartner(organizationId, dto.partnerId)
     const normalized = this.normalizeInput(dto)
-    // #67: pure-function seam uses adult/child; HTTP/DB still guestCount×unitPrice until #68
-    const amountInput = this.toAdultChildAmountInput(normalized)
 
     validateSourceOrderInput({
       partnerId: partner.id,
-      ...amountInput,
+      ...normalized,
     })
 
-    const amounts = computeSourceOrderAmounts(amountInput)
+    const amounts = computeSourceOrderAmounts(normalized)
+    const guestCount = normalized.adultGuestCount + normalized.childGuestCount
     const displayName = await this.generateDisplayName(
       departure,
       partner.name,
@@ -134,8 +133,11 @@ export class SourceOrderService {
         departureId: departure.id,
         partnerId: partner.id,
         displayName,
-        guestCount: normalized.guestCount,
-        unitPriceCents: normalized.unitPriceCents,
+        guestCount,
+        adultGuestCount: normalized.adultGuestCount,
+        childGuestCount: normalized.childGuestCount,
+        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
         grossReceivableCents: amounts.grossReceivableCents,
         discountType: normalized.discountType,
         discountCents: amounts.discountCents,
@@ -189,33 +191,45 @@ export class SourceOrderService {
         ? await this.ensureSelectablePartner(organizationId, partnerId)
         : order.partner
 
-    const normalized = this.normalizeInput({
-      guestCount: dto.guestCount ?? order.guestCount,
-      unitPriceCents: dto.unitPriceCents ?? order.unitPriceCents,
-      discountType: dto.discountType ?? order.discountType,
-      discountCents: dto.discountCents ?? order.discountCents,
-      collectionMode: dto.collectionMode ?? order.collectionMode,
-      partnerCollectedCents:
-        dto.partnerCollectedCents ??
-        (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
-    }, order)
-    // #67: pure-function seam uses adult/child; HTTP/DB still guestCount×unitPrice until #68
-    const amountInput = this.toAdultChildAmountInput(normalized)
+    const normalized = this.normalizeInput(
+      {
+        adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
+        childGuestCount: dto.childGuestCount ?? order.childGuestCount,
+        adultUnitPriceCents:
+          dto.adultUnitPriceCents !== undefined
+            ? dto.adultUnitPriceCents
+            : order.adultUnitPriceCents,
+        childUnitPriceCents:
+          dto.childUnitPriceCents !== undefined
+            ? dto.childUnitPriceCents
+            : order.childUnitPriceCents,
+        discountType: dto.discountType ?? order.discountType,
+        discountCents: dto.discountCents ?? order.discountCents,
+        collectionMode: dto.collectionMode ?? order.collectionMode,
+        partnerCollectedCents:
+          dto.partnerCollectedCents ??
+          (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
+      },
+      order,
+    )
 
     validateSourceOrderInput({
       partnerId: partner.id,
-      ...amountInput,
+      ...normalized,
     })
 
-    const amounts = computeSourceOrderAmounts(amountInput)
+    const amounts = computeSourceOrderAmounts(normalized)
+    const guestCount = normalized.adultGuestCount + normalized.childGuestCount
 
     await this.financeBridge.assertAmountFieldsEditable(
       organizationId,
       order.id,
       order,
       {
-        guestCount: normalized.guestCount,
-        unitPriceCents: normalized.unitPriceCents,
+        adultGuestCount: normalized.adultGuestCount,
+        childGuestCount: normalized.childGuestCount,
+        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
         discountType: normalized.discountType,
         discountCents: amounts.discountCents,
         collectionMode: normalized.collectionMode,
@@ -233,8 +247,11 @@ export class SourceOrderService {
       data: {
         partnerId: partner.id,
         displayName,
-        guestCount: normalized.guestCount,
-        unitPriceCents: normalized.unitPriceCents,
+        guestCount,
+        adultGuestCount: normalized.adultGuestCount,
+        childGuestCount: normalized.childGuestCount,
+        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
         grossReceivableCents: amounts.grossReceivableCents,
         discountType: normalized.discountType,
         discountCents: amounts.discountCents,
@@ -355,30 +372,37 @@ export class SourceOrderService {
   }
 
   private normalizeInput(
-    dto: Pick<
-      CreateSourceOrderDto,
-      | 'guestCount'
-      | 'unitPriceCents'
-      | 'discountType'
-      | 'discountCents'
-      | 'collectionMode'
-      | 'partnerCollectedCents'
-    >,
+    dto: {
+      adultGuestCount: number
+      childGuestCount: number
+      adultUnitPriceCents?: number | null
+      childUnitPriceCents?: number | null
+      discountType: CreateSourceOrderDto['discountType']
+      discountCents?: number
+      collectionMode: CreateSourceOrderDto['collectionMode']
+      partnerCollectedCents?: number
+    },
     existing?: SourceOrder,
   ) {
     const discountType = dto.discountType
     const discountCents =
       discountType === 'lump_sum' ? Math.max(dto.discountCents ?? 0, 0) : 0
     const collectionMode = dto.collectionMode
-    // Legacy single price: treat all guests as adults until #68 migrates fields
-    const amountInput = this.toAdultChildAmountInput({
-      guestCount: dto.guestCount,
-      unitPriceCents: dto.unitPriceCents,
+    const adultUnitPriceCents =
+      dto.adultGuestCount === 0 ? (dto.adultUnitPriceCents ?? 0) : dto.adultUnitPriceCents
+    const childUnitPriceCents =
+      dto.childGuestCount === 0 ? (dto.childUnitPriceCents ?? 0) : dto.childUnitPriceCents
+
+    const amountInput = {
+      adultGuestCount: dto.adultGuestCount,
+      childGuestCount: dto.childGuestCount,
+      adultUnitPriceCents,
+      childUnitPriceCents,
       discountType,
       discountCents,
       collectionMode,
       partnerCollectedCents: 0,
-    })
+    }
     const gross = computeSourceOrderAmounts(amountInput).grossReceivableCents
     const net = gross - discountCents
 
@@ -393,33 +417,14 @@ export class SourceOrderService {
     }
 
     return {
-      guestCount: dto.guestCount,
-      unitPriceCents: dto.unitPriceCents,
+      adultGuestCount: dto.adultGuestCount,
+      childGuestCount: dto.childGuestCount,
+      adultUnitPriceCents,
+      childUnitPriceCents,
       discountType,
       discountCents,
       collectionMode,
       partnerCollectedCents,
-    }
-  }
-
-  /** Maps legacy guestCount/unitPrice to adult/child amount input (child = 0). */
-  private toAdultChildAmountInput(normalized: {
-    guestCount: number
-    unitPriceCents: number
-    discountType: CreateSourceOrderDto['discountType']
-    discountCents: number
-    collectionMode: CreateSourceOrderDto['collectionMode']
-    partnerCollectedCents: number
-  }) {
-    return {
-      adultGuestCount: normalized.guestCount,
-      childGuestCount: 0,
-      adultUnitPriceCents: normalized.unitPriceCents,
-      childUnitPriceCents: 0,
-      discountType: normalized.discountType,
-      discountCents: normalized.discountCents,
-      collectionMode: normalized.collectionMode,
-      partnerCollectedCents: normalized.partnerCollectedCents,
     }
   }
 
@@ -533,7 +538,10 @@ export class SourceOrderService {
       partnerName: order.partner.name,
       displayName: order.displayName,
       guestCount: order.guestCount,
-      unitPriceCents: order.unitPriceCents,
+      adultGuestCount: order.adultGuestCount,
+      childGuestCount: order.childGuestCount,
+      adultUnitPriceCents: order.adultUnitPriceCents,
+      childUnitPriceCents: order.childUnitPriceCents,
       grossReceivableCents: order.grossReceivableCents,
       discountType: order.discountType,
       discountCents: order.discountCents,

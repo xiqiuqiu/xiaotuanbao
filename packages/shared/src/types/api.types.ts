@@ -485,7 +485,10 @@ export interface SourceOrderSummary {
   partnerName: string
   displayName: string
   guestCount: number
-  unitPriceCents: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents: number
+  childUnitPriceCents: number
   grossReceivableCents: number
   discountType: string
   discountCents: number
@@ -527,8 +530,10 @@ export interface SourceOrderListResult {
 
 export interface CreateSourceOrderDto {
   partnerId: string
-  guestCount: number
-  unitPriceCents: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
   discountType: string
   discountCents?: number
   discountNotes?: string
@@ -540,8 +545,10 @@ export interface CreateSourceOrderDto {
 
 export interface UpdateSourceOrderDto {
   partnerId?: string
-  guestCount?: number
-  unitPriceCents?: number
+  adultGuestCount?: number
+  childGuestCount?: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
   discountType?: string
   discountCents?: number
   discountNotes?: string | null

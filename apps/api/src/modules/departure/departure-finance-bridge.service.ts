@@ -293,8 +293,10 @@ export class DepartureFinanceBridgeService {
     sourceOrderId: string,
     order: Pick<
       SourceOrder,
-      | 'guestCount'
-      | 'unitPriceCents'
+      | 'adultGuestCount'
+      | 'childGuestCount'
+      | 'adultUnitPriceCents'
+      | 'childUnitPriceCents'
       | 'discountType'
       | 'discountCents'
       | 'collectionMode'
@@ -302,8 +304,10 @@ export class DepartureFinanceBridgeService {
     >,
     nextAmounts: Pick<
       SourceOrder,
-      | 'guestCount'
-      | 'unitPriceCents'
+      | 'adultGuestCount'
+      | 'childGuestCount'
+      | 'adultUnitPriceCents'
+      | 'childUnitPriceCents'
       | 'discountType'
       | 'discountCents'
       | 'collectionMode'
@@ -311,8 +315,10 @@ export class DepartureFinanceBridgeService {
     >,
   ): Promise<void> {
     const amountChanged =
-      order.guestCount !== nextAmounts.guestCount ||
-      order.unitPriceCents !== nextAmounts.unitPriceCents ||
+      order.adultGuestCount !== nextAmounts.adultGuestCount ||
+      order.childGuestCount !== nextAmounts.childGuestCount ||
+      order.adultUnitPriceCents !== nextAmounts.adultUnitPriceCents ||
+      order.childUnitPriceCents !== nextAmounts.childUnitPriceCents ||
       order.discountType !== nextAmounts.discountType ||
       order.discountCents !== nextAmounts.discountCents ||
       order.collectionMode !== nextAmounts.collectionMode ||

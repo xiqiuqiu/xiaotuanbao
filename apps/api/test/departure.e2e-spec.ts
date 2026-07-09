@@ -432,8 +432,10 @@ describe('Departure API (e2e)', () => {
     function sourceOrderPayload(overrides: Record<string, unknown> = {}) {
       return {
         partnerId,
-        guestCount: 10,
-        unitPriceCents: 100000,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
         ...overrides,
@@ -454,6 +456,10 @@ describe('Departure API (e2e)', () => {
 
       expect(response.body.data).toMatchObject({
         partnerId,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         guestCount: 10,
         grossReceivableCents: 1000000,
         netReceivableCents: 1000000,
@@ -464,6 +470,88 @@ describe('Departure API (e2e)', () => {
         hasPaymentSchedule: false,
       })
       expect(response.body.data.displayName).toBe(`${testPrefix}-partner 7月1日发客`)
+    })
+
+    it('derives guestCount and gross from adult/child pricing (2×1200 + 1×800)', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            adultGuestCount: 2,
+            childGuestCount: 1,
+            adultUnitPriceCents: 120000,
+            childUnitPriceCents: 80000,
+          }),
+        )
+        .expect(201)
+
+      expect(response.body.data).toMatchObject({
+        adultGuestCount: 2,
+        childGuestCount: 1,
+        adultUnitPriceCents: 120000,
+        childUnitPriceCents: 80000,
+        guestCount: 3,
+        grossReceivableCents: 320000,
+        netReceivableCents: 320000,
+        guestCollectCents: 320000,
+      })
+      expect(response.body.data).not.toHaveProperty('unitPriceCents')
+    })
+
+    it('rejects total guest count less than 1', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            adultGuestCount: 0,
+            childGuestCount: 0,
+            adultUnitPriceCents: undefined,
+            childUnitPriceCents: undefined,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.message).toBe('总人数必须大于0')
+    })
+
+    it('rejects missing adult unit price when adult count > 0', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            adultGuestCount: 2,
+            childGuestCount: 0,
+            childUnitPriceCents: 0,
+            adultUnitPriceCents: undefined,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.message).toBe('成人团款单价不能为空')
+    })
+
+    it('rejects missing child unit price when child count > 0', async () => {
+      const departure = await createSourceOrderDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send(
+          sourceOrderPayload({
+            adultGuestCount: 0,
+            childGuestCount: 1,
+            adultUnitPriceCents: 0,
+            childUnitPriceCents: undefined,
+          }),
+        )
+        .expect(400)
+
+      expect(response.body.message).toBe('儿童团款单价不能为空')
     })
 
     it('auto-generates displayName sequence for same partner', async () => {
@@ -532,7 +620,7 @@ describe('Departure API (e2e)', () => {
         .post(`/api/departures/${departure.id}/source-orders`)
         .send(
           sourceOrderPayload({
-            guestCount: 5,
+            adultGuestCount: 5,
             discountType: SourceOrderDiscountType.lump_sum,
             discountCents: 50000,
           }),
@@ -558,7 +646,7 @@ describe('Departure API (e2e)', () => {
 
       const created = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/source-orders`)
-        .send(sourceOrderPayload({ guestCount: 1 }))
+        .send(sourceOrderPayload({ adultGuestCount: 1 }))
         .expect(201)
 
       const sourceOrderId = created.body.data.id as string
@@ -731,8 +819,10 @@ describe('Departure API (e2e)', () => {
         .post(`/api/departures/${departure.id}/source-orders`)
         .send({
           partnerId: partner.id,
-          guestCount: 12,
-          unitPriceCents: 100000,
+          adultGuestCount: 12,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
           discountType: SourceOrderDiscountType.none,
           collectionMode: SourceOrderCollectionMode.guest_only,
         })
@@ -1168,8 +1258,10 @@ describe('Departure API (e2e)', () => {
         .post(`/api/departures/${departureId}/source-orders`)
         .send({
           partnerId: rmPartnerId,
-          guestCount: 10,
-          unitPriceCents: 100000,
+          adultGuestCount: 10,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
           discountType: SourceOrderDiscountType.none,
           collectionMode: SourceOrderCollectionMode.guest_only,
         })

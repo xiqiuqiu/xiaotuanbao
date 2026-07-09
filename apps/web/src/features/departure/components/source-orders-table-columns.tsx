@@ -32,7 +32,7 @@ export function buildSourceOrdersColumns({
     { title: '客人人数', dataIndex: 'guestCount', width: 90 },
     {
       title: '原始团款单价',
-      dataIndex: 'unitPriceCents',
+      dataIndex: 'adultUnitPriceCents',
       width: 120,
       render: (value: number) => formatCents(value),
     },

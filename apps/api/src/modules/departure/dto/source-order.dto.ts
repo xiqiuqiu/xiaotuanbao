@@ -39,13 +39,27 @@ export class CreateSourceOrderDto {
 
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  guestCount!: number
+  @Min(0)
+  adultGuestCount!: number
 
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  unitPriceCents!: number
+  childGuestCount!: number
+
+  /** Required by domain when adultGuestCount > 0; optional when count is 0. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  adultUnitPriceCents?: number | null
+
+  /** Required by domain when childGuestCount > 0; optional when count is 0. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  childUnitPriceCents?: number | null
 
   @IsEnum(PrismaDiscountType)
   discountType!: PrismaDiscountType
@@ -87,14 +101,26 @@ export class UpdateSourceOrderDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  guestCount?: number
+  @Min(0)
+  adultGuestCount?: number
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  unitPriceCents?: number
+  childGuestCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  adultUnitPriceCents?: number | null
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  childUnitPriceCents?: number | null
 
   @IsOptional()
   @IsEnum(PrismaDiscountType)

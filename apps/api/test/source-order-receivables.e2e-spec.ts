@@ -122,8 +122,10 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId,
-        guestCount: 10,
-        unitPriceCents: 100000,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
         ...overrides,
@@ -322,7 +324,7 @@ describe('Source order generate receivables (e2e)', () => {
 
     const blocked = await authRequest(app, coordinatorToken)
       .patch(`/api/source-orders/${sourceOrder.id}`)
-      .send({ unitPriceCents: 90000 })
+      .send({ adultUnitPriceCents: 90000 })
       .expect(400)
 
     expect(blocked.body.message).toBe('当前客源单已发生收款，不允许修改金额')
@@ -330,7 +332,7 @@ describe('Source order generate receivables (e2e)', () => {
     await prisma.sourceOrder.update({
       where: { id: sourceOrder.id },
       data: {
-        unitPriceCents: 90000,
+        adultUnitPriceCents: 90000,
         grossReceivableCents: 900000,
         netReceivableCents: 900000,
         guestCollectCents: 900000,

@@ -193,8 +193,10 @@ async function seedDemoDepartures(
         },
       ],
       sourceOrder: {
-        guestCount: 32,
-        unitPriceCents: 458000,
+        adultGuestCount: 32,
+        childGuestCount: 0,
+        adultUnitPriceCents: 458000,
+        childUnitPriceCents: 0,
         collectionMode: SourceOrderCollectionMode.guest_only,
       },
     },
@@ -217,7 +219,7 @@ async function seedDemoDepartures(
           destination: '西湖',
           resources: [
             {
-              resourceKind: ResourceKind.ticket,
+              resourceKind: ResourceKind.scenic,
               counterpartyType: CounterpartyType.supplier,
               supplierId: supplierIds.scenic,
               title: '灵隐飞来峰团队票',
@@ -240,7 +242,7 @@ async function seedDemoDepartures(
           destination: '宋城',
           resources: [
             {
-              resourceKind: ResourceKind.ticket,
+              resourceKind: ResourceKind.scenic,
               counterpartyType: CounterpartyType.supplier,
               supplierId: supplierIds.scenic,
               title: '千古情团队票',
@@ -288,8 +290,10 @@ async function seedDemoDepartures(
         },
       ],
       sourceOrder: {
-        guestCount: 18,
-        unitPriceCents: 128000,
+        adultGuestCount: 18,
+        childGuestCount: 0,
+        adultUnitPriceCents: 128000,
+        childUnitPriceCents: 0,
         collectionMode: SourceOrderCollectionMode.partner_settled,
       },
     },
@@ -313,7 +317,7 @@ async function seedDemoDepartures(
           destination: '千岛湖',
           resources: [
             {
-              resourceKind: ResourceKind.ticket,
+              resourceKind: ResourceKind.scenic,
               counterpartyType: CounterpartyType.supplier,
               supplierId: supplierIds.scenic,
               title: '中心湖区船票联票',
@@ -395,7 +399,10 @@ async function seedDemoDepartures(
     })
 
     if (sourceOrder) {
-      const grossReceivableCents = sourceOrder.guestCount * sourceOrder.unitPriceCents
+      const guestCount = sourceOrder.adultGuestCount + sourceOrder.childGuestCount
+      const grossReceivableCents =
+        sourceOrder.adultGuestCount * sourceOrder.adultUnitPriceCents +
+        sourceOrder.childGuestCount * sourceOrder.childUnitPriceCents
       const partnerCollectedCents =
         sourceOrder.collectionMode === SourceOrderCollectionMode.partner_settled
           ? grossReceivableCents
@@ -410,8 +417,11 @@ async function seedDemoDepartures(
           departureId: departure.id,
           partnerId,
           displayName: `${demo.routeName} 客源单`,
-          guestCount: sourceOrder.guestCount,
-          unitPriceCents: sourceOrder.unitPriceCents,
+          guestCount,
+          adultGuestCount: sourceOrder.adultGuestCount,
+          childGuestCount: sourceOrder.childGuestCount,
+          adultUnitPriceCents: sourceOrder.adultUnitPriceCents,
+          childUnitPriceCents: sourceOrder.childUnitPriceCents,
           grossReceivableCents,
           discountType: SourceOrderDiscountType.none,
           discountCents: 0,
@@ -483,7 +493,7 @@ async function seedDemoDepartures(
           destination: '西湖',
           resources: [
             {
-              resourceKind: ResourceKind.ticket,
+              resourceKind: ResourceKind.scenic,
               counterpartyType: CounterpartyType.supplier,
               supplierId: supplierIds.scenic,
               title: '灵隐飞来峰团队票',

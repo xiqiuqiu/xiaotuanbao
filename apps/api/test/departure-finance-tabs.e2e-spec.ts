@@ -121,8 +121,10 @@ describe('Departure finance tabs (e2e)', () => {
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId,
-        guestCount: 10,
-        unitPriceCents: 100000,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })

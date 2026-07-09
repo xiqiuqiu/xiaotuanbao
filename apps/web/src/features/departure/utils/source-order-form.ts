@@ -123,8 +123,9 @@ export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
 export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderFormValues {
   return {
     partnerId: order.partnerId,
+    // #69 will split adult/child fields in the drawer; until then map total as adults.
     guestCount: order.guestCount,
-    unitPriceYuan: centsToYuan(order.unitPriceCents),
+    unitPriceYuan: centsToYuan(order.adultUnitPriceCents),
     discountType: order.discountType as SourceOrderDiscountType,
     discountYuan: centsToYuan(order.discountCents),
     discountNotes: order.discountNotes ?? undefined,
@@ -136,12 +137,14 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
 }
 
 export function formValuesToPayload(values: SourceOrderFormValues) {
-  // #67: amount helper is adult/child; HTTP payload still guestCount×unitPrice until #68/#69
+  // #69 will collect adult/child in the drawer; until then send all guests as adults.
   const amounts = computeFormAmounts(legacyFormValuesToAmountInput(values))
   return {
     partnerId: values.partnerId,
-    guestCount: values.guestCount,
-    unitPriceCents: yuanToCents(values.unitPriceYuan),
+    adultGuestCount: values.guestCount,
+    childGuestCount: 0,
+    adultUnitPriceCents: yuanToCents(values.unitPriceYuan),
+    childUnitPriceCents: 0,
     discountType: values.discountType,
     discountCents: amounts.discountCents,
     discountNotes: values.discountNotes,

@@ -141,7 +141,7 @@ describe('Seed demo business loop', () => {
             destination: '西湖',
             resources: [
               {
-                resourceKind: ResourceKind.ticket,
+                resourceKind: ResourceKind.scenic,
                 counterpartyType: CounterpartyType.supplier,
                 supplierId: suppliers.scenic.id,
                 title: '灵隐飞来峰团队票',
@@ -185,8 +185,10 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${hangzhou.body.data.id}/source-orders`)
       .send({
         partnerId: partners.eastChina.id,
-        guestCount: 20,
-        unitPriceCents: 68000,
+        adultGuestCount: 20,
+        childGuestCount: 0,
+        adultUnitPriceCents: 68000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })
@@ -205,7 +207,7 @@ describe('Seed demo business loop', () => {
     const hangzhouScenicResource = await authRequest(app, coordinatorToken)
       .post(`/api/segments/${hangzhouSegment.body.data.id}/resources`)
       .send({
-        resourceKind: ResourceKind.ticket,
+        resourceKind: ResourceKind.scenic,
         supplierId: suppliers.scenic.id,
         title: '灵隐飞来峰团队票',
         amountCents: 90000,
@@ -301,8 +303,10 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${huangshan.body.data.id}/source-orders`)
       .send({
         partnerId: partners.zhejiang.id,
-        guestCount: 18,
-        unitPriceCents: 128000,
+        adultGuestCount: 18,
+        childGuestCount: 0,
+        adultUnitPriceCents: 128000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.partner_settled,
       })
@@ -407,8 +411,10 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${wuzhen.body.data.id}/source-orders`)
       .send({
         partnerId: partners.suzhou.id,
-        guestCount: 25,
-        unitPriceCents: 98000,
+        adultGuestCount: 25,
+        childGuestCount: 0,
+        adultUnitPriceCents: 98000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })
@@ -427,7 +433,7 @@ describe('Seed demo business loop', () => {
     await authRequest(app, coordinatorToken)
       .post(`/api/segments/${wuzhenSegment.body.data.id}/resources`)
       .send({
-        resourceKind: ResourceKind.ticket,
+        resourceKind: ResourceKind.scenic,
         supplierId: suppliers.wuzhen.id,
         title: '西栅团队票',
         amountCents: 300000,

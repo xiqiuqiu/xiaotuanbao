@@ -180,8 +180,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId,
-        guestCount: 10,
-        unitPriceCents: 100000,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })
@@ -440,8 +442,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departure.id}/source-orders`)
       .send({
         partnerId,
-        guestCount: 10,
-        unitPriceCents: 100000,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
         partnerCollectedCents: 400000,
@@ -588,8 +592,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${departure.body.data.id}/source-orders`)
       .send({
         partnerId,
-        guestCount: 5,
-        unitPriceCents: 100000,
+        adultGuestCount: 5,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.partner_settled,
       })
@@ -1031,8 +1037,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .post(`/api/departures/${copied.body.data.id}/source-orders`)
       .send({
         partnerId,
-        guestCount: 4,
-        unitPriceCents: 80000,
+        adultGuestCount: 4,
+        childGuestCount: 0,
+        adultUnitPriceCents: 80000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })
@@ -1106,14 +1114,14 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const blocked = await authRequest(app, coordinatorToken)
       .patch(`/api/source-orders/${ops.sourceOrderId}`)
-      .send({ unitPriceCents: 90000 })
+      .send({ adultUnitPriceCents: 90000 })
       .expect(400)
     expect(blocked.body.message).toBe('当前客源单已发生收款，不允许修改金额')
 
     await prisma.sourceOrder.update({
       where: { id: ops.sourceOrderId },
       data: {
-        unitPriceCents: 90000,
+        adultUnitPriceCents: 90000,
         grossReceivableCents: 900000,
         netReceivableCents: 900000,
         guestCollectCents: 900000,

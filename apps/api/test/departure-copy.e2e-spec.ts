@@ -157,8 +157,10 @@ describe('Departure copy & save template (e2e)', () => {
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId,
-        guestCount: 8,
-        unitPriceCents: 100000,
+        adultGuestCount: 8,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.guest_only,
       })
