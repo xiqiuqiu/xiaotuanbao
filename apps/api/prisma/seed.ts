@@ -341,7 +341,7 @@ const DEMO_SUPPLIERS = [
     contactPhone: '12905718811',
     businessNotes: '杂项资源占位，字段最少便于测轻量创建对比',
   },
-] as const
+]
 
 async function seedDemoSuppliers(organizationId: string) {
   for (const supplier of DEMO_SUPPLIERS) {
@@ -483,7 +483,7 @@ const DEMO_PARTNERS = [
     contactPhone: '13801668810',
     settlementNotes: '字段最少，便于测轻量创建',
   },
-] as const
+]
 
 async function seedDemoPartners(organizationId: string) {
   for (const partner of DEMO_PARTNERS) {

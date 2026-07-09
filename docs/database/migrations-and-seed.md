@@ -38,6 +38,8 @@ pnpm docker:migrate
 
 `migrate deploy` 仅 apply 已有 migration，不生成新文件。
 
+生产 API 镜像只安装 runtime 依赖（含 Prisma CLI，供启动时 migrate）；`docker:seed` 走编译后的 `dist/prisma/seed.js`，不依赖 `tsx`。
+
 ## Seed 初始化
 
 ```bash

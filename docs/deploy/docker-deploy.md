@@ -39,7 +39,7 @@ pnpm docker:seed
 | 容器 | 镜像/构建 | 端口 | 说明 |
 | ---- | --------- | ---- | ---- |
 | `xiaotuanbao-caddy` | caddy:2 | 80, 443 | 唯一公网入口 |
-| `xiaotuanbao-api` | apps/api/Dockerfile | 内网 3000 | NestJS，启动时自动 migrate |
+| `xiaotuanbao-api` | apps/api/Dockerfile | 内网 3000 | NestJS（prod 依赖），启动时自动 migrate |
 | `xiaotuanbao-postgres` | postgres:16 | 内网 5432 | 数据持久化 |
 | `xiaotuanbao-web` | apps/web/Dockerfile | — | 一次性构建，复制 dist 到 volume |
 
