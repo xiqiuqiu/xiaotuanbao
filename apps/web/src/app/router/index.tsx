@@ -79,12 +79,17 @@ const departureDetailRoute = createRoute({
     tab?: string
     segmentId?: string
     highlightSourceOrderId?: string
+    highlightSegmentResourceId?: string
   } => ({
     tab: typeof search.tab === 'string' ? search.tab : undefined,
     segmentId: typeof search.segmentId === 'string' ? search.segmentId : undefined,
     highlightSourceOrderId:
       typeof search.highlightSourceOrderId === 'string'
         ? search.highlightSourceOrderId
+        : undefined,
+    highlightSegmentResourceId:
+      typeof search.highlightSegmentResourceId === 'string'
+        ? search.highlightSegmentResourceId
         : undefined,
   }),
   component: DepartureDetailPage,

@@ -51,8 +51,11 @@ export function DepartureDetailPage() {
     })
   }
 
-  const clearHighlightSourceOrder = useCallback(() => {
-    if (!departureId || !search.highlightSourceOrderId) {
+  const clearFinanceHighlight = useCallback(() => {
+    if (
+      !departureId ||
+      (!search.highlightSourceOrderId && !search.highlightSegmentResourceId)
+    ) {
       return
     }
 
@@ -65,7 +68,14 @@ export function DepartureDetailPage() {
       },
       replace: true,
     })
-  }, [activeTab, departureId, navigate, search.highlightSourceOrderId, search.segmentId])
+  }, [
+    activeTab,
+    departureId,
+    navigate,
+    search.highlightSegmentResourceId,
+    search.highlightSourceOrderId,
+    search.segmentId,
+  ])
 
   const handleUpdated = () => {
     queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
@@ -154,7 +164,7 @@ export function DepartureDetailPage() {
             departureId={departure.id}
             readOnly={financeReadOnly}
             highlightSourceOrderId={search.highlightSourceOrderId}
-            onHighlightConsumed={clearHighlightSourceOrder}
+            onHighlightConsumed={clearFinanceHighlight}
           />
         ),
       }
@@ -170,6 +180,8 @@ export function DepartureDetailPage() {
             direction="payable"
             departureId={departure.id}
             readOnly={financeReadOnly}
+            highlightSegmentResourceId={search.highlightSegmentResourceId}
+            onHighlightConsumed={clearFinanceHighlight}
           />
         ),
       }

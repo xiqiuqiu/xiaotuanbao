@@ -12,10 +12,11 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 const listDepartureReceivables = vi.fn()
+const listDeparturePayables = vi.fn()
 
 vi.mock('@/services/finance.service', () => ({
   listDepartureReceivables: (...args: unknown[]) => listDepartureReceivables(...args),
-  listDeparturePayables: vi.fn(),
+  listDeparturePayables: (...args: unknown[]) => listDeparturePayables(...args),
   listReceivables: vi.fn(),
   listPayables: vi.fn(),
 }))
@@ -58,7 +59,7 @@ function schedule(
   }
 }
 
-function renderWorkspace(highlightSourceOrderId?: string) {
+function renderReceivableWorkspace(highlightSourceOrderId?: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -81,10 +82,34 @@ function renderWorkspace(highlightSourceOrderId?: string) {
   return { onHighlightConsumed }
 }
 
+function renderPayableWorkspace(highlightSegmentResourceId?: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const onHighlightConsumed = vi.fn()
+
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ConfigProvider>
+        <PaymentScheduleWorkspace
+          scope="departure"
+          direction="payable"
+          departureId="departure-1"
+          highlightSegmentResourceId={highlightSegmentResourceId}
+          onHighlightConsumed={onHighlightConsumed}
+        />
+      </ConfigProvider>
+    </QueryClientProvider>,
+  )
+
+  return { onHighlightConsumed }
+}
+
 describe('PaymentScheduleWorkspace locate highlight', () => {
   afterEach(() => {
     cleanup()
     listDepartureReceivables.mockReset()
+    listDeparturePayables.mockReset()
   })
 
   it('marks matching source-order rows with locate flash class', async () => {
@@ -113,7 +138,7 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
       pageSize: 10,
     })
 
-    renderWorkspace('order-1')
+    renderReceivableWorkspace('order-1')
 
     await waitFor(() => {
       expect(screen.getByText('AR2026070001')).toBeTruthy()
@@ -122,6 +147,65 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
     const matched = screen.getByText('AR2026070001').closest('tr')
     const other = screen.getByText('AR2026070002').closest('tr')
     const closed = screen.getByText('AR2026070003').closest('tr')
+
+    expect(matched?.className).toContain(styles.locateFlash)
+    expect(closed?.className).toContain(styles.locateFlash)
+    expect(other?.className).not.toContain(styles.locateFlash)
+  })
+
+  it('marks matching segment-resource payable rows with locate flash class', async () => {
+    listDeparturePayables.mockResolvedValue({
+      items: [
+        schedule({
+          id: 'payable-1',
+          direction: 'payable',
+          scheduleNo: 'AP2026070001',
+          title: '西栅团队票',
+          counterpartyType: 'supplier',
+          counterpartyId: 'supplier-1',
+          counterpartyName: '乌镇西栅景区',
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: 'resource-1',
+        }),
+        schedule({
+          id: 'payable-2',
+          direction: 'payable',
+          scheduleNo: 'AP2026070002',
+          title: '酒店房费',
+          counterpartyType: 'supplier',
+          counterpartyId: 'supplier-2',
+          counterpartyName: '乌镇酒店',
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: 'resource-2',
+        }),
+        schedule({
+          id: 'payable-3',
+          direction: 'payable',
+          scheduleNo: 'AP2026070003',
+          title: '西栅团队票（已关闭）',
+          counterpartyType: 'supplier',
+          counterpartyId: 'supplier-1',
+          counterpartyName: '乌镇西栅景区',
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: 'resource-1',
+          status: PaymentScheduleStatus.CANCELLED,
+          cancelledAt: '2026-07-02T00:00:00.000Z',
+        }),
+      ],
+      total: 3,
+      page: 1,
+      pageSize: 10,
+    })
+
+    renderPayableWorkspace('resource-1')
+
+    await waitFor(() => {
+      expect(screen.getByText('AP2026070001')).toBeTruthy()
+    })
+
+    const matched = screen.getByText('AP2026070001').closest('tr')
+    const other = screen.getByText('AP2026070002').closest('tr')
+    const closed = screen.getByText('AP2026070003').closest('tr')
 
     expect(matched?.className).toContain(styles.locateFlash)
     expect(closed?.className).toContain(styles.locateFlash)

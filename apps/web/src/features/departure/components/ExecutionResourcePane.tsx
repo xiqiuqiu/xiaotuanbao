@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   Alert,
   Button,
@@ -13,6 +13,7 @@ import {
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type {
@@ -35,6 +36,10 @@ import {
 } from '../catalog'
 import { formValuesToPayload } from '../utils/resource-form'
 import { ResourceDrawer } from './ResourceDrawer'
+
+function canGeneratePayable(record: SegmentResourceSummary): boolean {
+  return record.payableStatus === SegmentPayableStatus.NOT_GENERATED
+}
 
 function payableStatusTagColor(status: string): string | undefined {
   switch (status) {
@@ -66,6 +71,7 @@ export function ExecutionResourcePane({
   readOnly,
   amountReadOnly = false,
 }: ExecutionResourcePaneProps) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const mutationLocked = readOnly || amountReadOnly
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -140,11 +146,27 @@ export function ExecutionResourcePane({
           : '应付已生成',
       )
       invalidateResourceQueries()
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
     },
     onError: (error) => {
       message.error(mutationErrorMessage(error, '生成应付失败'))
     },
   })
+
+  const onViewPayables = useCallback(
+    (resource: SegmentResourceSummary) => {
+      void navigate({
+        to: '/departure/$departureId',
+        params: { departureId: departure.id },
+        search: {
+          tab: 'payables',
+          highlightSegmentResourceId: resource.id,
+        },
+      })
+    },
+    [departure.id, navigate],
+  )
 
   const columns: ColumnsType<SegmentResourceSummary> = [
     {
@@ -188,49 +210,48 @@ export function ExecutionResourcePane({
     },
     {
       title: '操作',
-      width: 220,
+      width: 260,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size={0} wrap>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => openEdit(record, record.amountFieldsLocked)}
-          >
-            {mutationLocked || record.amountFieldsLocked ? '查看' : '编辑'}
-          </Button>
-          {!mutationLocked && !record.hasPaymentSchedule ? (
+      render: (_, record) => {
+        const allowGenerate = canGeneratePayable(record)
+
+        return (
+          <Space size={0} wrap>
             <Button
               type="link"
               size="small"
-              onClick={() => generateMutation.mutate(record.id)}
-              loading={generateMutation.isPending && generateMutation.variables === record.id}
+              onClick={() => openEdit(record, record.amountFieldsLocked)}
             >
-              生成应付
+              {mutationLocked || record.amountFieldsLocked ? '查看' : '编辑'}
             </Button>
-          ) : null}
-          {!mutationLocked && record.hasPaymentSchedule && !record.amountFieldsLocked ? (
-            <Button
-              type="link"
-              size="small"
-              onClick={() => generateMutation.mutate(record.id)}
-              loading={generateMutation.isPending && generateMutation.variables === record.id}
-            >
-              重新生成
-            </Button>
-          ) : null}
-          {!mutationLocked && !record.hasPaymentSchedule ? (
-            <Popconfirm
-              title="确定删除该资源？"
-              onConfirm={() => deleteMutation.mutate(record.id)}
-            >
-              <Button type="link" size="small" danger>
-                删除
+            {!allowGenerate ? (
+              <Button type="link" size="small" onClick={() => onViewPayables(record)}>
+                查看应付
               </Button>
-            </Popconfirm>
-          ) : null}
-        </Space>
-      ),
+            ) : null}
+            {!mutationLocked && allowGenerate ? (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => generateMutation.mutate(record.id)}
+                loading={generateMutation.isPending && generateMutation.variables === record.id}
+              >
+                生成应付
+              </Button>
+            ) : null}
+            {!mutationLocked && allowGenerate ? (
+              <Popconfirm
+                title="确定删除该资源？"
+                onConfirm={() => deleteMutation.mutate(record.id)}
+              >
+                <Button type="link" size="small" danger>
+                  删除
+                </Button>
+              </Popconfirm>
+            ) : null}
+          </Space>
+        )
+      },
     },
   ]
 

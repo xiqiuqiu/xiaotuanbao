@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -6,6 +7,11 @@ import type { DepartureDetail, ItinerarySegmentSummary, SegmentResourceSummary }
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 
 const listSegmentResources = vi.fn()
+const navigate = vi.fn()
+
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => navigate,
+}))
 
 vi.mock('@/services/segment-resource.service', () => ({
   listSegmentResources: (...args: unknown[]) => listSegmentResources(...args),
@@ -45,15 +51,20 @@ function baseResource(
   return {
     id: 'resource-1',
     segmentId: 'segment-1',
+    departureId: 'departure-1',
     resourceKind: 'ticket',
     counterpartyType: 'supplier',
-    counterpartyId: 'supplier-1',
+    partnerId: null,
+    partnerName: null,
+    supplierId: 'supplier-1',
+    supplierName: '乌镇西栅景区',
     counterpartyName: '乌镇西栅景区',
     title: '西栅团队票',
     amountCents: 300000,
-    payableStatus: 'not_generated',
     notes: null,
+    fromTemplate: false,
     hasPaymentSchedule: false,
+    payableStatus: 'not_generated',
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
     ...overrides,
@@ -81,6 +92,7 @@ describe('ExecutionResourcePane action buttons', () => {
   afterEach(() => {
     cleanup()
     listSegmentResources.mockReset()
+    navigate.mockReset()
   })
 
   it('shows 生成应付 when payable has not been created', async () => {
@@ -88,10 +100,13 @@ describe('ExecutionResourcePane action buttons', () => {
     renderPane()
 
     expect(await screen.findByRole('button', { name: '生成应付' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看应付' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
   })
 
-  it('shows 查看 instead of 生成应付 / 重新生成 after payable is created', async () => {
+  it('shows 查看应付 instead of 生成应付 / 重新生成 after payable is created', async () => {
     listSegmentResources.mockResolvedValue({
       items: [
         baseResource({
@@ -104,9 +119,58 @@ describe('ExecutionResourcePane action buttons', () => {
     renderPane()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
     })
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '生成应付' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+  })
+
+  it('shows 查看应付 for closed payable status and keeps 查看', async () => {
+    listSegmentResources.mockResolvedValue({
+      items: [
+        baseResource({
+          payableStatus: 'closed',
+          hasPaymentSchedule: true,
+          amountFieldsLocked: true,
+        }),
+      ],
+    })
+    renderPane()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
+    })
+    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '生成应付' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+  })
+
+  it('navigates to payables tab with locate intent when 查看应付 is clicked', async () => {
+    const user = userEvent.setup()
+    listSegmentResources.mockResolvedValue({
+      items: [
+        baseResource({
+          payableStatus: 'partial',
+          hasPaymentSchedule: true,
+        }),
+      ],
+    })
+    renderPane()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
+    })
+    await user.click(screen.getByRole('button', { name: '查看应付' }))
+
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure/$departureId',
+      params: { departureId: 'departure-1' },
+      search: {
+        tab: 'payables',
+        highlightSegmentResourceId: 'resource-1',
+      },
+    })
   })
 })

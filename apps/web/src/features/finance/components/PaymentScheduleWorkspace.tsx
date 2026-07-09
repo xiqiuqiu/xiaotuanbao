@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listDepartures, getDeparture } from '@/services/departure.service'
+import { matchesSegmentResourceSchedule } from '@/features/departure/utils/matches-segment-resource-schedule'
 import { matchesSourceOrderSchedule } from '@/features/departure/utils/matches-source-order-schedule'
 import {
   listDeparturePayables,
@@ -41,7 +42,23 @@ export type PaymentScheduleWorkspaceProps = {
   readOnly?: boolean
   /** One-shot locate: flash rows for this source order, then clear via onHighlightConsumed. */
   highlightSourceOrderId?: string
+  /** One-shot locate: flash rows for this segment resource, then clear via onHighlightConsumed. */
+  highlightSegmentResourceId?: string
   onHighlightConsumed?: () => void
+}
+
+function matchesLocateTarget(
+  schedule: PaymentScheduleSummary,
+  locateSourceOrderId?: string,
+  locateSegmentResourceId?: string,
+): boolean {
+  if (locateSourceOrderId) {
+    return matchesSourceOrderSchedule(schedule, locateSourceOrderId)
+  }
+  if (locateSegmentResourceId) {
+    return matchesSegmentResourceSchedule(schedule, locateSegmentResourceId)
+  }
+  return false
 }
 
 function applyClientFilters(
@@ -84,6 +101,7 @@ interface PaymentScheduleTableProps {
   pageSize: number
   total: number
   locateSourceOrderId?: string
+  locateSegmentResourceId?: string
   locateFlashActive: boolean
   locateBg: string
   onPageChange: (page: number, pageSize: number) => void
@@ -97,6 +115,7 @@ function PaymentScheduleTable({
   pageSize,
   total,
   locateSourceOrderId,
+  locateSegmentResourceId,
   locateFlashActive,
   locateBg,
   onPageChange,
@@ -112,8 +131,7 @@ function PaymentScheduleTable({
         style={{ ['--schedule-locate-bg' as string]: locateBg }}
         rowClassName={(record) =>
           locateFlashActive &&
-          locateSourceOrderId &&
-          matchesSourceOrderSchedule(record, locateSourceOrderId)
+          matchesLocateTarget(record, locateSourceOrderId, locateSegmentResourceId)
             ? styles.locateFlash
             : ''
         }
@@ -136,6 +154,7 @@ export function PaymentScheduleWorkspace({
   departureId: lockedDepartureId,
   readOnly = false,
   highlightSourceOrderId,
+  highlightSegmentResourceId,
   onHighlightConsumed,
 }: PaymentScheduleWorkspaceProps) {
   const navigate = useNavigate()
@@ -167,13 +186,16 @@ export function PaymentScheduleWorkspace({
   const [editOpen, setEditOpen] = useState(false)
   const [locateFlashActive, setLocateFlashActive] = useState(false)
   const [locateSourceOrderId, setLocateSourceOrderId] = useState<string | undefined>()
+  const [locateSegmentResourceId, setLocateSegmentResourceId] = useState<string | undefined>()
   const locateFlashStartedForRef = useRef<string | null>(null)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
-  const locatingSourceOrder =
-    isReceivable && isDepartureScope && Boolean(locateSourceOrderId)
-  const useExpandedFetch = hasClientFilters || locatingSourceOrder
+  const locatingFinanceRow =
+    isDepartureScope &&
+    ((isReceivable && Boolean(locateSourceOrderId)) ||
+      (!isReceivable && Boolean(locateSegmentResourceId)))
+  const useExpandedFetch = hasClientFilters || locatingFinanceRow
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
   const { data: schedulesResult, isLoading, isFetching } = useQuery({
@@ -205,19 +227,25 @@ export function PaymentScheduleWorkspace({
   })
 
   useEffect(() => {
-    if (!highlightSourceOrderId) {
+    const highlightId = isReceivable ? highlightSourceOrderId : highlightSegmentResourceId
+    if (!highlightId) {
       return
     }
-    if (locateFlashStartedForRef.current === highlightSourceOrderId) {
+    if (locateFlashStartedForRef.current === highlightId) {
       return
     }
-    locateFlashStartedForRef.current = highlightSourceOrderId
-    setLocateSourceOrderId(highlightSourceOrderId)
-  }, [highlightSourceOrderId])
+    locateFlashStartedForRef.current = highlightId
+    if (isReceivable) {
+      setLocateSourceOrderId(highlightId)
+    } else {
+      setLocateSegmentResourceId(highlightId)
+    }
+  }, [highlightSegmentResourceId, highlightSourceOrderId, isReceivable])
 
   useEffect(() => {
+    const locateId = locateSourceOrderId ?? locateSegmentResourceId
     if (
-      !locateSourceOrderId ||
+      !locateId ||
       isLoading ||
       isFetching ||
       !schedulesResult ||
@@ -233,7 +261,7 @@ export function PaymentScheduleWorkspace({
       dueDateRange,
     )
     const firstMatchIndex = items.findIndex((item) =>
-      matchesSourceOrderSchedule(item, locateSourceOrderId),
+      matchesLocateTarget(item, locateSourceOrderId, locateSegmentResourceId),
     )
     if (firstMatchIndex >= 0) {
       setPage(Math.floor(firstMatchIndex / pageSize) + 1)
@@ -245,6 +273,7 @@ export function PaymentScheduleWorkspace({
     isLoading,
     keyword,
     locateFlashActive,
+    locateSegmentResourceId,
     locateSourceOrderId,
     pageSize,
     schedulesResult,
@@ -259,6 +288,7 @@ export function PaymentScheduleWorkspace({
     const clearFlashTimer = window.setTimeout(() => {
       setLocateFlashActive(false)
       setLocateSourceOrderId(undefined)
+      setLocateSegmentResourceId(undefined)
       locateFlashStartedForRef.current = null
       setPage(1)
       onHighlightConsumed?.()
@@ -471,6 +501,7 @@ export function PaymentScheduleWorkspace({
         pageSize={pageSize}
         total={tableTotal}
         locateSourceOrderId={locateSourceOrderId}
+        locateSegmentResourceId={locateSegmentResourceId}
         locateFlashActive={locateFlashActive}
         locateBg={token.colorPrimaryBg}
         onPageChange={(nextPage, nextPageSize) => {
