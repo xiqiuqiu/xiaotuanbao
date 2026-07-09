@@ -230,7 +230,7 @@ describe('Source order generate receivables (e2e)', () => {
     })
   })
 
-  it('is idempotent when generating receivables twice', async () => {
+  it('rejects generate receivables when finance trace already exists', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
@@ -243,9 +243,9 @@ describe('Source order generate receivables (e2e)', () => {
 
     const second = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
-      .expect(201)
+      .expect(409)
 
-    expect(second.body.data.schedules).toHaveLength(2)
+    expect(second.body.message).toBe('当前客源单已生成应收，不能再次生成')
 
     const count = await prisma.paymentSchedule.count({
       where: {
@@ -299,7 +299,7 @@ describe('Source order generate receivables (e2e)', () => {
     expect(guestSchedule?.amountCents).toBe(600000)
   })
 
-  it('blocks amount patch after finance touch and flags mismatch on regenerate', async () => {
+  it('blocks amount patch after finance touch and rejects regenerate', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.guest_only,
@@ -341,10 +341,9 @@ describe('Source order generate receivables (e2e)', () => {
 
     const regenerated = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
-      .expect(201)
+      .expect(409)
 
-    expect(regenerated.body.data.sourceAmountMismatch).toBe(true)
-    expect(regenerated.body.data.schedules[0].amountCents).toBe(1000000)
+    expect(regenerated.body.message).toBe('当前客源单已生成应收，不能再次生成')
 
     const fetched = await authRequest(app, coordinatorToken)
       .get(`/api/source-orders/${sourceOrder.id}`)
@@ -352,6 +351,11 @@ describe('Source order generate receivables (e2e)', () => {
 
     expect(fetched.body.data.hasSourceAmountMismatch).toBe(true)
     expect(fetched.body.data.amountFieldsLocked).toBe(true)
+
+    const schedule = await prisma.paymentSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+    })
+    expect(schedule.amountCents).toBe(1000000)
   })
 
   it('allows coordinator to generate receivables but not create finance receivables directly', async () => {
@@ -434,6 +438,12 @@ describe('Source order generate receivables (e2e)', () => {
       amountFieldsLocked: true,
     })
     expect(after.body.data.receivableStatus).not.toBe('not_generated')
+
+    const rejected = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(409)
+
+    expect(rejected.body.message).toBe('当前客源单已生成应收，不能再次生成')
   })
 
   it('keeps receivable status from remaining active schedules when only one path is cancelled', async () => {

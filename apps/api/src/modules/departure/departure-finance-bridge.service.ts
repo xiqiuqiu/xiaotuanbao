@@ -98,9 +98,13 @@ export class DepartureFinanceBridgeService {
     const order = await this.loadSourceOrderOrThrow(organizationId, sourceOrderId)
     this.ensureDepartureOpen(order.departure)
 
+    const existingSchedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
+    if (existingSchedules.length > 0) {
+      throw new ConflictException('当前客源单已生成应收，不能再次生成')
+    }
+
     const paths = this.buildReceivablePaths(order)
     const schedules: PaymentScheduleSummary[] = []
-    let sourceAmountMismatch = false
     const dueDate = formatDateOnly(order.departure.endDate)
 
     for (const path of paths) {
@@ -108,79 +112,30 @@ export class DepartureFinanceBridgeService {
         continue
       }
 
-      const existing = await this.findActiveSchedule(
+      const created = await this.paymentScheduleService.create(
         organizationId,
-        sourceOrderId,
-        path.sourceType,
+        PaymentScheduleDirection.receivable,
+        {
+          departureId: order.departureId,
+          title: path.title,
+          amountCents: path.amountCents,
+          dueDate,
+          counterpartyType: path.counterpartyType,
+          counterpartyId: path.counterpartyId,
+          counterpartyName: path.counterpartyName,
+          sourceType: path.sourceType,
+          sourceId: sourceOrderId,
+        },
       )
-
-      if (!existing) {
-        const created = await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.receivable,
-          {
-            departureId: order.departureId,
-            title: path.title,
-            amountCents: path.amountCents,
-            dueDate,
-            counterpartyType: path.counterpartyType,
-            counterpartyId: path.counterpartyId,
-            counterpartyName: path.counterpartyName,
-            sourceType: path.sourceType,
-            sourceId: sourceOrderId,
-          },
-        )
-        schedules.push(created)
-        continue
-      }
-
-      const settledAmountCents = await this.verificationService.getSettledAmountCents(
-        existing.id,
-      )
-      const touched = isFinanceTouched(existing, settledAmountCents)
-
-      if (touched) {
-        if (existing.amountCents !== path.amountCents) {
-          sourceAmountMismatch = true
-        }
-        schedules.push(
-          await this.paymentScheduleService.getById(
-            organizationId,
-            PaymentScheduleDirection.receivable,
-            existing.id,
-          ),
-        )
-        continue
-      }
-
-      if (existing.amountCents !== path.amountCents) {
-        const updated = await this.paymentScheduleService.update(
-          organizationId,
-          PaymentScheduleDirection.receivable,
-          existing.id,
-          { amountCents: path.amountCents },
-        )
-        schedules.push(updated)
-      } else {
-        schedules.push(
-          await this.paymentScheduleService.getById(
-            organizationId,
-            PaymentScheduleDirection.receivable,
-            existing.id,
-          ),
-        )
-      }
+      schedules.push(created)
     }
 
     const financeMeta = await this.evaluateFinanceMeta(organizationId, sourceOrderId, order)
-    if (financeMeta.hasSourceAmountMismatch) {
-      sourceAmountMismatch = true
-    }
 
     return {
       schedules,
       sourceOrder: toSourceOrderSummary(order, financeMeta),
-      sourceAmountMismatch,
+      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
     }
   }
 
@@ -358,96 +313,39 @@ export class DepartureFinanceBridgeService {
       throw new BadRequestException('资源金额须大于 0 才能生成应付')
     }
 
+    const existingTrace = await this.findAnyPayableSchedule(organizationId, resourceId)
+    if (existingTrace) {
+      throw new ConflictException('当前资源已生成应付，不能再次生成')
+    }
+
     const spec = this.buildPayableSpec(resource)
     const dueDate = formatDateOnly(resource.segment.departure.endDate)
-    let sourceAmountMismatch = false
 
-    const existing = await this.findActivePayableSchedule(organizationId, resourceId)
-
-    let schedule: PaymentScheduleSummary
-    if (!existing) {
-      schedule = await this.paymentScheduleService.create(
-        organizationId,
-        PaymentScheduleDirection.payable,
-        {
-          departureId: resource.segment.departure.id,
-          title: spec.title,
-          amountCents: spec.amountCents,
-          dueDate,
-          counterpartyType: spec.counterpartyType,
-          counterpartyId: spec.counterpartyId,
-          counterpartyName: spec.counterpartyName,
-          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-          sourceId: resourceId,
-        },
-      )
-    } else {
-      const settledAmountCents = await this.verificationService.getSettledAmountCents(
-        existing.id,
-      )
-      const touched = isFinanceTouched(existing, settledAmountCents)
-
-      if (touched) {
-        if (
-          existing.amountCents !== spec.amountCents ||
-          existing.counterpartyType !== spec.counterpartyType ||
-          existing.counterpartyId !== (spec.counterpartyId ?? null)
-        ) {
-          sourceAmountMismatch = true
-        }
-        schedule = await this.paymentScheduleService.getById(
-          organizationId,
-          PaymentScheduleDirection.payable,
-          existing.id,
-        )
-      } else {
-        const updates: {
-          amountCents?: number
-          counterpartyType?: CounterpartyType
-          counterpartyId?: string
-          counterpartyName?: string | null
-        } = {}
-
-        if (existing.amountCents !== spec.amountCents) {
-          updates.amountCents = spec.amountCents
-        }
-        if (existing.counterpartyType !== spec.counterpartyType) {
-          updates.counterpartyType = spec.counterpartyType
-        }
-        if (existing.counterpartyId !== (spec.counterpartyId ?? null)) {
-          updates.counterpartyId = spec.counterpartyId
-          updates.counterpartyName = spec.counterpartyName ?? null
-        }
-
-        if (Object.keys(updates).length > 0) {
-          schedule = await this.paymentScheduleService.update(
-            organizationId,
-            PaymentScheduleDirection.payable,
-            existing.id,
-            updates,
-          )
-        } else {
-          schedule = await this.paymentScheduleService.getById(
-            organizationId,
-            PaymentScheduleDirection.payable,
-            existing.id,
-          )
-        }
-      }
-    }
+    const schedule = await this.paymentScheduleService.create(
+      organizationId,
+      PaymentScheduleDirection.payable,
+      {
+        departureId: resource.segment.departure.id,
+        title: spec.title,
+        amountCents: spec.amountCents,
+        dueDate,
+        counterpartyType: spec.counterpartyType,
+        counterpartyId: spec.counterpartyId,
+        counterpartyName: spec.counterpartyName,
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        sourceId: resourceId,
+      },
+    )
 
     const financeMeta = await this.evaluateResourceFinanceMeta(
       organizationId,
       resourceId,
       resource,
     )
-    if (financeMeta.hasSourceAmountMismatch) {
-      sourceAmountMismatch = true
-    }
 
     return {
       schedule,
-      sourceAmountMismatch,
+      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
     }
   }
 
@@ -661,6 +559,20 @@ export class DepartureFinanceBridgeService {
     })
   }
 
+  private async findAnyPayableSchedule(
+    organizationId: string,
+    resourceId: string,
+  ): Promise<PaymentSchedule | null> {
+    return this.prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: resourceId,
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        direction: PaymentScheduleDirection.payable,
+      },
+    })
+  }
+
   private async loadSegmentResourceOrThrow(
     organizationId: string,
     resourceId: string,
@@ -734,22 +646,6 @@ export class DepartureFinanceBridgeService {
       return order.guestCollectCents
     }
     return 0
-  }
-
-  private async findActiveSchedule(
-    organizationId: string,
-    sourceOrderId: string,
-    sourceType: PaymentScheduleSourceType,
-  ): Promise<PaymentSchedule | null> {
-    return this.prisma.paymentSchedule.findFirst({
-      where: {
-        organizationId,
-        sourceId: sourceOrderId,
-        sourceType,
-        direction: PaymentScheduleDirection.receivable,
-        cancelledAt: null,
-      },
-    })
   }
 
   private async loadActiveReceivableSchedules(

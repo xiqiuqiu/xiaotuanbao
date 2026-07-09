@@ -1130,10 +1130,8 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const regenerated = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${ops.sourceOrderId}/generate-receivables`)
-      .expect(201)
-    expect(regenerated.body.data.sourceAmountMismatch).toBe(true)
-    expect(regenerated.body.data.schedules[0].amountCents).toBe(1000000)
-    expect(regenerated.body.data.schedules[0].id).toBe(schedules.receivableScheduleId)
+      .expect(409)
+    expect(regenerated.body.message).toBe('当前客源单已生成应收，不能再次生成')
 
     const sourceOrder = await authRequest(app, coordinatorToken)
       .get(`/api/source-orders/${ops.sourceOrderId}`)

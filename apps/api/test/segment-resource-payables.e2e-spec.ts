@@ -210,7 +210,7 @@ describe('Segment resource generate payables (e2e)', () => {
     })
   })
 
-  it('is idempotent when generating payables twice', async () => {
+  it('rejects generate payable when finance trace already exists', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id)
@@ -219,9 +219,11 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(201)
 
-    await authRequest(app, coordinatorToken)
+    const second = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
-      .expect(201)
+      .expect(409)
+
+    expect(second.body.message).toBe('当前资源已生成应付，不能再次生成')
 
     const count = await prisma.paymentSchedule.count({
       where: {
@@ -263,7 +265,7 @@ describe('Segment resource generate payables (e2e)', () => {
     expect(schedule?.amountCents).toBe(200000)
   })
 
-  it('blocks amount patch after finance touch and flags mismatch on regenerate', async () => {
+  it('blocks amount patch after finance touch and rejects regenerate', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id)
@@ -299,10 +301,9 @@ describe('Segment resource generate payables (e2e)', () => {
 
     const regenerated = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
-      .expect(201)
+      .expect(409)
 
-    expect(regenerated.body.data.sourceAmountMismatch).toBe(true)
-    expect(regenerated.body.data.schedule.amountCents).toBe(160000)
+    expect(regenerated.body.message).toBe('当前资源已生成应付，不能再次生成')
 
     const fetched = await authRequest(app, coordinatorToken)
       .get(`/api/segment-resources/${resource.id}`)
@@ -310,6 +311,11 @@ describe('Segment resource generate payables (e2e)', () => {
 
     expect(fetched.body.data.hasSourceAmountMismatch).toBe(true)
     expect(fetched.body.data.amountFieldsLocked).toBe(true)
+
+    const schedule = await prisma.paymentSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+    })
+    expect(schedule.amountCents).toBe(160000)
   })
 
   it('rejects delete when resource has an active payable schedule', async () => {
@@ -404,5 +410,11 @@ describe('Segment resource generate payables (e2e)', () => {
       amountFieldsLocked: true,
     })
     expect(after.body.data.payableStatus).not.toBe('not_generated')
+
+    const rejected = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(409)
+
+    expect(rejected.body.message).toBe('当前资源已生成应付，不能再次生成')
   })
 })
