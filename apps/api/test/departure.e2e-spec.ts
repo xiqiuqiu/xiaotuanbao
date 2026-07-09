@@ -553,7 +553,7 @@ describe('Departure API (e2e)', () => {
       })
     })
 
-    it('manages guest list and syncs guest count', async () => {
+    it('manages guest list without writing back source order guest count', async () => {
       const departure = await createSourceOrderDeparture()
 
       const created = await authRequest(app, coordinatorToken)
@@ -568,16 +568,49 @@ describe('Departure API (e2e)', () => {
         .send({ name: '张三', phone: '13800000000', gender: 'male' })
         .expect(201)
 
-      await authRequest(app, coordinatorToken)
+      const secondGuest = await authRequest(app, coordinatorToken)
         .post(`/api/source-orders/${sourceOrderId}/guests`)
         .send({ name: '李四' })
         .expect(201)
 
-      const synced = await authRequest(app, coordinatorToken)
+      await authRequest(app, coordinatorToken)
         .post(`/api/source-orders/${sourceOrderId}/sync-guest-count`)
-        .expect(201)
+        .expect(404)
 
-      expect(synced.body.data.guestCount).toBe(2)
+      const afterCreate = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/source-orders`)
+        .expect(200)
+
+      expect(afterCreate.body.data.items[0].guestCount).toBe(1)
+      expect(afterCreate.body.data.items[0].id).toBe(sourceOrderId)
+
+      const guestsAfterCreate = await authRequest(app, coordinatorToken)
+        .get(`/api/source-orders/${sourceOrderId}/guests`)
+        .expect(200)
+
+      expect(guestsAfterCreate.body.data).toHaveLength(2)
+
+      await authRequest(app, coordinatorToken)
+        .patch(`/api/source-orders/${sourceOrderId}/guests/${secondGuest.body.data.id}`)
+        .send({ name: '李四改' })
+        .expect(200)
+
+      await authRequest(app, coordinatorToken)
+        .delete(`/api/source-orders/${sourceOrderId}/guests/${secondGuest.body.data.id}`)
+        .expect(200)
+
+      const afterDelete = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/source-orders`)
+        .expect(200)
+
+      expect(afterDelete.body.data.items[0].guestCount).toBe(1)
+
+      const guestsAfterDelete = await authRequest(app, coordinatorToken)
+        .get(`/api/source-orders/${sourceOrderId}/guests`)
+        .expect(200)
+
+      expect(guestsAfterDelete.body.data).toHaveLength(1)
+      expect(guestsAfterDelete.body.data[0].name).toBe('张三')
     })
 
     it('deletes source order without payment schedule', async () => {

@@ -18,7 +18,6 @@ import {
   createSourceOrderGuest,
   deleteSourceOrderGuest,
   listSourceOrderGuests,
-  syncSourceOrderGuestCount,
   updateSourceOrderGuest,
 } from '@/services/source-order.service'
 import { GUEST_GENDER_OPTIONS, GUEST_GENDER_LABELS, catalogLabel } from '../catalog'
@@ -28,7 +27,6 @@ interface SourceOrderGuestDrawerProps {
   sourceOrder: SourceOrderSummary | null
   readOnly: boolean
   onClose: () => void
-  onSynced: () => void
 }
 
 interface GuestFormValues {
@@ -43,7 +41,6 @@ export function SourceOrderGuestDrawer({
   sourceOrder,
   readOnly,
   onClose,
-  onSynced,
 }: SourceOrderGuestDrawerProps) {
   if (!open || !sourceOrder) {
     return <Drawer open={open} onClose={onClose} />
@@ -56,7 +53,6 @@ export function SourceOrderGuestDrawer({
       sourceOrder={sourceOrder}
       readOnly={readOnly}
       onClose={onClose}
-      onSynced={onSynced}
     />
   )
 }
@@ -66,7 +62,6 @@ interface SourceOrderGuestDrawerPanelProps {
   sourceOrder: SourceOrderSummary
   readOnly: boolean
   onClose: () => void
-  onSynced: () => void
 }
 
 function SourceOrderGuestDrawerPanel({
@@ -74,7 +69,6 @@ function SourceOrderGuestDrawerPanel({
   sourceOrder,
   readOnly,
   onClose,
-  onSynced,
 }: SourceOrderGuestDrawerPanelProps) {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<GuestFormValues>()
@@ -99,7 +93,6 @@ function SourceOrderGuestDrawerPanel({
       setEditingGuest(null)
       form.resetFields()
       void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
-      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
     },
   })
 
@@ -108,17 +101,6 @@ function SourceOrderGuestDrawerPanel({
     onSuccess: () => {
       message.success('客人已删除')
       void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
-      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
-    },
-  })
-
-  const syncMutation = useMutation({
-    mutationFn: () => syncSourceOrderGuestCount(sourceOrderId),
-    onSuccess: () => {
-      message.success('已同步客人人数')
-      void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
-      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
-      onSynced()
     },
   })
 
@@ -180,17 +162,6 @@ function SourceOrderGuestDrawerPanel({
       width={720}
       onClose={onClose}
       destroyOnClose
-      extra={
-        readOnly ? null : (
-          <Button
-            loading={syncMutation.isPending}
-            onClick={() => syncMutation.mutate()}
-            disabled={guests.length === 0}
-          >
-            同步人数
-          </Button>
-        )
-      }
     >
       {!readOnly ? (
         <Form

@@ -84,9 +84,3 @@ export async function deleteSourceOrderGuest(
 ): Promise<void> {
   await request.delete(`/source-orders/${sourceOrderId}/guests/${guestId}`)
 }
-
-export async function syncSourceOrderGuestCount(
-  sourceOrderId: string,
-): Promise<SourceOrderSummary> {
-  return request.post<SourceOrderSummary>(`/source-orders/${sourceOrderId}/sync-guest-count`)
-}

@@ -289,10 +289,6 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         sourceOrder={drawer.guestOrder}
         readOnly={readOnly}
         onClose={() => dispatchDrawer({ type: 'CLOSE_GUEST_DRAWER' })}
-        onSynced={() => {
-          void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
-          void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-        }}
       />
     </div>
   )

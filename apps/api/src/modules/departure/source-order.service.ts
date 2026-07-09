@@ -350,24 +350,6 @@ export class SourceOrderService {
     await this.prisma.sourceOrderGuest.delete({ where: { id: guest.id } })
   }
 
-  async syncGuestCount(
-    organizationId: string,
-    sourceOrderId: string,
-  ): Promise<SourceOrderSummary> {
-    const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureEditable(order.departure)
-
-    const guestCount = await this.prisma.sourceOrderGuest.count({
-      where: { sourceOrderId: order.id },
-    })
-
-    if (guestCount < 1) {
-      throw new BadRequestException('客人名单为空，无法同步人数')
-    }
-
-    return this.update(organizationId, sourceOrderId, { guestCount })
-  }
-
   private normalizeInput(
     dto: Pick<
       CreateSourceOrderDto,

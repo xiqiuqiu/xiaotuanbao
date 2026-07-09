@@ -132,15 +132,6 @@ export class SourceOrderController {
     return { success: true }
   }
 
-  @Post('source-orders/:id/sync-guest-count')
-  @RequireMenu('/departure')
-  syncGuestCount(
-    @Req() request: { user: { organizationId: string } },
-    @Param('id') id: string,
-  ): Promise<SourceOrderSummary> {
-    return this.sourceOrderService.syncGuestCount(request.user.organizationId, id)
-  }
-
   @Post('source-orders/:id/generate-receivables')
   @RequireMenu('/departure')
   generateReceivables(
