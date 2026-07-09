@@ -39,10 +39,10 @@ echo "==> IMAGE_TAG=$IMAGE_TAG GIT_REF=$GIT_REF"
 if [[ -d .git ]]; then
   echo "==> syncing git ref $GIT_REF"
   git fetch --tags --prune origin
-  if git rev-parse --verify --quiet "$GIT_REF^{commit}" >/dev/null; then
-    git checkout --force --detach "$GIT_REF"
-  elif git rev-parse --verify --quiet "origin/$GIT_REF" >/dev/null; then
+  if git rev-parse --verify --quiet "origin/$GIT_REF" >/dev/null; then
     git checkout --force --detach "origin/$GIT_REF"
+  elif git rev-parse --verify --quiet "$GIT_REF^{commit}" >/dev/null; then
+    git checkout --force --detach "$GIT_REF"
   else
     echo "error: cannot resolve git ref: $GIT_REF" >&2
     exit 1
