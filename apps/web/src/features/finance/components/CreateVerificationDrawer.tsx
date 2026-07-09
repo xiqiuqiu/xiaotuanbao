@@ -46,9 +46,8 @@ import {
   matchesCounterparty,
 } from '../utils/verification-candidates'
 import {
-  emptyCreateVerificationFormValues,
+  getInitialVerificationValues,
   transactionAndScheduleToFormValues,
-  directionFromTransaction,
   type CreateVerificationFormValues,
   type VerificationDirection,
 } from '../utils/verification-form'
@@ -208,50 +207,6 @@ function buildScheduleColumns(
     },
     { title: '到期日', dataIndex: 'dueDate' },
   ]
-}
-
-function getInitialVerificationValues({
-  lockedDepartureId,
-  initialTransaction,
-  initialSchedule,
-}: {
-  lockedDepartureId?: string
-  initialTransaction?: FinanceTransactionSummary
-  initialSchedule?: PaymentScheduleSummary
-}): CreateVerificationFormValues {
-  const initialValues = emptyCreateVerificationFormValues({
-    ...(lockedDepartureId ? { departureId: lockedDepartureId } : {}),
-  })
-
-  if (initialTransaction) {
-    initialValues.transactionId = initialTransaction.id
-    initialValues.direction = directionFromTransaction(initialTransaction)
-    if (initialTransaction.departureId && !lockedDepartureId) {
-      initialValues.departureId = initialTransaction.departureId
-    }
-  }
-
-  if (initialSchedule) {
-    initialValues.paymentScheduleId = initialSchedule.id
-    initialValues.direction =
-      initialSchedule.direction === 'receivable' ? 'receivable' : 'payable'
-    if (initialSchedule.departureId && !lockedDepartureId) {
-      initialValues.departureId = initialSchedule.departureId
-    }
-  }
-
-  if (
-    initialTransaction &&
-    initialSchedule &&
-    matchesCounterparty(initialTransaction, initialSchedule)
-  ) {
-    return {
-      ...initialValues,
-      ...transactionAndScheduleToFormValues(initialTransaction, initialSchedule),
-    }
-  }
-
-  return initialValues
 }
 
 interface VerificationBasicsSectionProps {
