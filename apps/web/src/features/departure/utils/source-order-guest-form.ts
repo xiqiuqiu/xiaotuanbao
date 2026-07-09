@@ -1,8 +1,8 @@
-import type { Rule } from 'antd/es/form'
+import type { RuleObject } from 'antd/es/form'
 
 export type GuestFormFieldName = 'name' | 'phone' | 'gender' | 'notes'
 
-export const guestFormFieldRules: Record<GuestFormFieldName, Rule[]> = {
+export const guestFormFieldRules: Record<GuestFormFieldName, RuleObject[]> = {
   name: [{ required: true, message: '请输入姓名' }],
   phone: [],
   gender: [],

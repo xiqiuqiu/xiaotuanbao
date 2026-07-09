@@ -5,8 +5,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
 import { ExecutionTab } from './ExecutionTab'
 
+type SearchState = {
+  tab: string
+  segmentId?: string
+  highlightSegmentResourceId?: string
+}
+
 const navigate = vi.fn()
-const useSearch = vi.fn(() => ({ tab: 'execution', segmentId: 'segment-1' }))
+const useSearch = vi.fn(
+  (..._args: unknown[]): SearchState => ({ tab: 'execution', segmentId: 'segment-1' }),
+)
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
