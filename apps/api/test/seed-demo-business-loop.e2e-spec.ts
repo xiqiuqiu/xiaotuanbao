@@ -13,8 +13,25 @@ import { PaymentChannel } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { clearBusinessData, countBusinessData } from '../scripts/business-data-utils'
 
+/** 本地日历日偏移，避免 UTC 切日导致业务日落在默认近 30 天窗外。 */
+function dateOffset(daysFromToday: number): string {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + daysFromToday)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatMdLabel(isoDate: string): string {
+  const [, month, day] = isoDate.split('-')
+  return `${Number(month)}月${Number(day)}日`
+}
+
 /**
  * 写入一套覆盖完整业务闭环的演示数据。
+ * 发团/流水/核销业务日相对「今天」生成，确保落在流水/核销页默认近 30 天筛选内。
  * 运行：pnpm --filter api db:seed-demo-loop
  */
 describe('Seed demo business loop', () => {
@@ -92,9 +109,23 @@ describe('Seed demo business loop', () => {
   })
 
   it('seeds three departures covering the full finance closed loop', async () => {
+    // 相对今天：已结清团偏早、待匹配团偏近、未触发财务团略靠后；流水/核销日均落在默认近 30 天内。
+    const hangzhouDay = dateOffset(-14)
+    const hangzhouEnd = dateOffset(-13)
+    const huangshanDay = dateOffset(-7)
+    const huangshanMid = dateOffset(-6)
+    const huangshanEnd = dateOffset(-5)
+    const wuzhenDay = dateOffset(5)
+    const wuzhenEnd = dateOffset(6)
+    const defaultRangeStart = dateOffset(-30)
+    const defaultRangeEnd = dateOffset(0)
+
     console.log('Clearing existing business data...')
     const deleted = await clearBusinessData(prisma)
     console.log('Cleared:', deleted)
+    console.log(
+      `Relative dates: hangzhou=${hangzhouDay}, huangshan=${huangshanDay}..${huangshanEnd}, wuzhen=${wuzhenDay}`,
+    )
 
     await authRequest(app, coordinatorToken)
       .post('/api/route-templates')
@@ -140,10 +171,10 @@ describe('Seed demo business loop', () => {
     const hangzhou = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        name: '杭州西湖文化2日线 9月1日团',
+        name: `杭州西湖文化2日线 ${formatMdLabel(hangzhouDay)}团`,
         routeName: '杭州西湖文化2日线',
-        startDate: '2026-09-01',
-        endDate: '2026-09-02',
+        startDate: hangzhouDay,
+        endDate: hangzhouEnd,
         ownerUserId,
         departureType: DepartureType.independent,
         notes: '演示：应收应付全部结清，可走发团状态 → 已结清',
@@ -165,8 +196,8 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${hangzhou.body.data.id}/segments`)
       .send({
         name: '西湖环湖',
-        startDate: '2026-09-01',
-        endDate: '2026-09-01',
+        startDate: hangzhouDay,
+        endDate: hangzhouDay,
         destination: '西湖',
       })
       .expect(201)
@@ -209,7 +240,7 @@ describe('Seed demo business loop', () => {
       .post(`/api/finance/receivables/${hangzhouReceivableId}/confirm-collection`)
       .send({
         amountCents: 1360000,
-        transactionDate: '2026-09-01',
+        transactionDate: hangzhouDay,
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.guest,
         counterpartyName: hangzhouSourceOrder.body.data.displayName,
@@ -220,7 +251,7 @@ describe('Seed demo business loop', () => {
       .post(`/api/finance/payables/${hangzhouScenicPayableId}/confirm-payment`)
       .send({
         amountCents: 90000,
-        transactionDate: '2026-09-01',
+        transactionDate: hangzhouDay,
         paymentChannel: PaymentChannel.WECHAT,
         counterpartyType: CounterpartyType.supplier,
         counterpartyId: suppliers.scenic.id,
@@ -231,7 +262,7 @@ describe('Seed demo business loop', () => {
       .post(`/api/finance/payables/${hangzhouMealPayableId}/confirm-payment`)
       .send({
         amountCents: 160000,
-        transactionDate: '2026-09-01',
+        transactionDate: hangzhouDay,
         paymentChannel: PaymentChannel.CASH,
         counterpartyType: CounterpartyType.supplier,
         counterpartyId: suppliers.restaurant.id,
@@ -256,10 +287,10 @@ describe('Seed demo business loop', () => {
     const huangshan = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        name: '黄山徽州3日线 9月10日团',
+        name: `黄山徽州3日线 ${formatMdLabel(huangshanDay)}团`,
         routeName: '黄山徽州3日线',
-        startDate: '2026-09-10',
-        endDate: '2026-09-12',
+        startDate: huangshanDay,
+        endDate: huangshanEnd,
         ownerUserId,
         departureType: DepartureType.combined,
         notes: '演示：部分收款 + 匹配流水（预置未核销流水）',
@@ -281,8 +312,8 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${huangshan.body.data.id}/segments`)
       .send({
         name: '黄山登山',
-        startDate: '2026-09-10',
-        endDate: '2026-09-11',
+        startDate: huangshanDay,
+        endDate: huangshanMid,
         destination: '黄山',
       })
       .expect(201)
@@ -310,7 +341,7 @@ describe('Seed demo business loop', () => {
       .post(`/api/finance/receivables/${huangshanReceivableId}/confirm-collection`)
       .send({
         amountCents: 1500000,
-        transactionDate: '2026-09-10',
+        transactionDate: huangshanDay,
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.partner,
         counterpartyId: partners.zhejiang.id,
@@ -323,7 +354,7 @@ describe('Seed demo business loop', () => {
         direction: 'inflow',
         paymentChannel: PaymentChannel.WECHAT,
         amountCents: 804000,
-        transactionDate: '2026-09-11',
+        transactionDate: huangshanMid,
         counterpartyType: CounterpartyType.partner,
         counterpartyId: partners.zhejiang.id,
         departureId: huangshan.body.data.id,
@@ -337,7 +368,7 @@ describe('Seed demo business loop', () => {
         direction: 'outflow',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         amountCents: 52000,
-        transactionDate: '2026-09-12',
+        transactionDate: huangshanEnd,
         counterpartyType: CounterpartyType.supplier,
         counterpartyId: suppliers.hotel.id,
         departureId: huangshan.body.data.id,
@@ -362,10 +393,10 @@ describe('Seed demo business loop', () => {
     const wuzhen = await authRequest(app, coordinatorToken)
       .post('/api/departures')
       .send({
-        name: '乌镇西栅2日线 10月1日团',
+        name: `乌镇西栅2日线 ${formatMdLabel(wuzhenDay)}团`,
         routeName: '乌镇西栅2日线',
-        startDate: '2026-10-01',
-        endDate: '2026-10-02',
+        startDate: wuzhenDay,
+        endDate: wuzhenEnd,
         ownerUserId,
         departureType: DepartureType.combined,
         notes: '演示：编辑中，可手动触发「生成应收/应付」',
@@ -387,8 +418,8 @@ describe('Seed demo business loop', () => {
       .post(`/api/departures/${wuzhen.body.data.id}/segments`)
       .send({
         name: '西栅夜游',
-        startDate: '2026-10-01',
-        endDate: '2026-10-01',
+        startDate: wuzhenDay,
+        endDate: wuzhenDay,
         destination: '乌镇西栅',
       })
       .expect(201)
@@ -415,5 +446,24 @@ describe('Seed demo business loop', () => {
     expect(after.financeVerifications).toBe(4)
     expect(after.financeTransactions).toBe(6)
     expect(after.paymentSchedules).toBe(5)
+
+    const txOutsideDefaultRange = await prisma.financeTransaction.count({
+      where: {
+        OR: [
+          { transactionDate: { lt: new Date(defaultRangeStart) } },
+          { transactionDate: { gt: new Date(defaultRangeEnd) } },
+        ],
+      },
+    })
+    const vrOutsideDefaultRange = await prisma.financeVerification.count({
+      where: {
+        OR: [
+          { verificationDate: { lt: new Date(defaultRangeStart) } },
+          { verificationDate: { gt: new Date(defaultRangeEnd) } },
+        ],
+      },
+    })
+    expect(txOutsideDefaultRange).toBe(0)
+    expect(vrOutsideDefaultRange).toBe(0)
   })
 })

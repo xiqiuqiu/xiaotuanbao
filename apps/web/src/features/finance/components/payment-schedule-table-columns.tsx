@@ -1,6 +1,6 @@
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { Button, Dropdown, Space, Tag, Typography } from 'antd'
+import { Button, Dropdown, Space, Tag, Tooltip, Typography } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
@@ -61,7 +61,7 @@ export function buildPaymentScheduleColumns({
       ? []
       : [
           {
-            title: '发团',
+            title: '关联发团',
             dataIndex: 'departureId',
             render: (departureId: string) => {
               const departure = departureMap.get(departureId)
@@ -69,9 +69,11 @@ export function buildPaymentScheduleColumns({
                 return '—'
               }
               return (
-                <Link to="/departure/$departureId" params={{ departureId }}>
-                  {departure.departureNo} · {departure.name}
-                </Link>
+                <Tooltip title={departure.name}>
+                  <Link to="/departure/$departureId" params={{ departureId }}>
+                    {departure.departureNo}
+                  </Link>
+                </Tooltip>
               )
             },
           },
@@ -129,6 +131,7 @@ export function buildPaymentScheduleColumns({
     {
       title: '操作',
       key: 'actions',
+      fixed: 'right',
       render: (_, record) => {
         if (readOnly) {
           return null

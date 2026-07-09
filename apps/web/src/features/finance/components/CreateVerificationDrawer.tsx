@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import {
+  Alert,
   Button,
   Card,
   Col,
@@ -323,6 +324,7 @@ interface TransactionSelectionSectionProps {
   selectedTransaction: FinanceTransactionSummary | null
   searchKeyword: string
   loading: boolean
+  loadError: boolean
   columns: ColumnsType<FinanceTransactionSummary>
   candidateTransactions: FinanceTransactionSummary[]
   selectedTransactionId?: string
@@ -336,6 +338,7 @@ function TransactionSelectionSection({
   selectedTransaction,
   searchKeyword,
   loading,
+  loadError,
   columns,
   candidateTransactions,
   selectedTransactionId,
@@ -380,6 +383,8 @@ function TransactionSelectionSection({
             </Descriptions.Item>
           </Descriptions>
         </Card>
+      ) : loadError ? (
+        <Alert type="error" showIcon message="流水候选加载失败，请关闭抽屉后重试" />
       ) : (
         <>
           <Input.Search
@@ -389,7 +394,7 @@ function TransactionSelectionSection({
             onChange={(event) => onSearchKeywordChange(event.target.value)}
             onSearch={(value) => onSearchKeywordChange(value)}
             onPressEnter={(event) => event.preventDefault()}
-            style={{ marginBottom: 12 }}
+            style={{ marginBottom: 16 }}
           />
           <Table
             rowKey="id"
@@ -417,6 +422,7 @@ interface ScheduleSelectionSectionProps {
   selectedTransaction: FinanceTransactionSummary | null
   searchKeyword: string
   loading: boolean
+  loadError: boolean
   columns: ColumnsType<PaymentScheduleSummary>
   candidateSchedules: PaymentScheduleSummary[]
   selectedScheduleId?: string
@@ -428,6 +434,7 @@ function ScheduleSelectionSection({
   selectedTransaction,
   searchKeyword,
   loading,
+  loadError,
   columns,
   candidateSchedules,
   selectedScheduleId,
@@ -439,6 +446,8 @@ function ScheduleSelectionSection({
       <Typography.Title level={5}>③ 可匹配收付款节点</Typography.Title>
       {!selectedTransaction ? (
         <Typography.Text type="secondary">请先选择流水</Typography.Text>
+      ) : loadError ? (
+        <Alert type="error" showIcon message="收付款节点候选加载失败，请关闭抽屉后重试" />
       ) : (
         <>
           <Input.Search
@@ -448,7 +457,7 @@ function ScheduleSelectionSection({
             onChange={(event) => onSearchKeywordChange(event.target.value)}
             onSearch={(value) => onSearchKeywordChange(value)}
             onPressEnter={(event) => event.preventDefault()}
-            style={{ marginBottom: 12 }}
+            style={{ marginBottom: 16 }}
           />
           <Table
             rowKey="id"
@@ -635,7 +644,11 @@ export function CreateVerificationDrawer({
     [departuresResult?.items],
   )
 
-  const { data: transactionsResult, isLoading: transactionsLoading } = useQuery({
+  const {
+    data: transactionsResult,
+    isLoading: transactionsLoading,
+    isError: transactionsError,
+  } = useQuery({
     queryKey: ['finance-transactions', 'create-verification', effectiveDepartureId],
     queryFn: () =>
       listTransactions({
@@ -647,7 +660,11 @@ export function CreateVerificationDrawer({
 
   const isReceivable = direction === 'receivable'
 
-  const { data: schedulesResult, isLoading: schedulesLoading } = useQuery({
+  const {
+    data: schedulesResult,
+    isLoading: schedulesLoading,
+    isError: schedulesError,
+  } = useQuery({
     queryKey: [
       isReceivable ? 'finance-receivables' : 'finance-payables',
       'create-verification',
@@ -840,6 +857,7 @@ export function CreateVerificationDrawer({
           selectedTransaction={selectedTransaction}
           searchKeyword={transactionSearchKeyword}
           loading={transactionsLoading}
+          loadError={transactionsError}
           columns={transactionColumns}
           candidateTransactions={candidateTransactions}
           selectedTransactionId={selectedTransactionId}
@@ -854,6 +872,7 @@ export function CreateVerificationDrawer({
           selectedTransaction={selectedTransaction}
           searchKeyword={scheduleSearchKeyword}
           loading={schedulesLoading}
+          loadError={schedulesError}
           columns={scheduleColumns}
           candidateSchedules={candidateSchedules}
           selectedScheduleId={selectedScheduleId}

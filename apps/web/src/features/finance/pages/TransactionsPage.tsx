@@ -146,6 +146,7 @@ function buildTransactionColumns({
     {
       title: '操作',
       key: 'actions',
+      fixed: 'right',
       render: (_, record) => {
         if (record.voidedAt) {
           return (

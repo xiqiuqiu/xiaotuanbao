@@ -46,6 +46,11 @@ export type VerificationsWorkspaceProps = {
   readOnly?: boolean
   initialPaymentScheduleId?: string
   initialTransactionId?: string
+  /** When set, renders the standard list page header (title + secondary + primary). */
+  pageHeader?: {
+    title: string
+    description: string
+  }
 }
 
 type VerificationListState = {
@@ -203,6 +208,7 @@ function buildVerificationColumns({
     {
       title: '操作',
       key: 'actions',
+      fixed: 'right',
       render: (_: unknown, record: FinanceVerificationListItem) => (
         <Space>
           <Button type="link" onClick={() => onOpenDetail(record.id)}>
@@ -265,6 +271,7 @@ export function VerificationsWorkspace({
   readOnly = false,
   initialPaymentScheduleId,
   initialTransactionId,
+  pageHeader,
 }: VerificationsWorkspaceProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -434,19 +441,35 @@ export function VerificationsWorkspace({
     [handleOpenCancelModal, handleOpenDetail, readOnly],
   )
 
+  const createButton = !readOnly ? (
+    <Button
+      type="primary"
+      icon={<PlusOutlined />}
+      onClick={() => {
+        setModalOpen(true)
+      }}
+    >
+      新增核销
+    </Button>
+  ) : null
+
   return (
     <div>
-      {!readOnly ? (
+      {pageHeader ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
+              {pageHeader.title}
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+              {pageHeader.description}
+            </Typography.Paragraph>
+          </div>
+          {createButton}
+        </div>
+      ) : createButton ? (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setModalOpen(true)
-            }}
-          >
-            新增核销
-          </Button>
+          {createButton}
         </div>
       ) : null}
 

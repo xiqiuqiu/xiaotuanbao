@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -19,7 +19,7 @@ import { formatLastLogin } from './employees/formatLastLogin'
 
 function buildColumns(
   onEdit: (employee: EmployeeSummary) => void,
-  onDisable: (employeeId: string) => void,
+  onDisable: (employee: EmployeeSummary) => void,
 ): ColumnsType<EmployeeSummary> {
   return [
     {
@@ -56,7 +56,7 @@ function buildColumns(
             编辑
           </Button>
           {record.status === UserStatus.ENABLED ? (
-            <Button type="link" danger onClick={() => onDisable(record.id)}>
+            <Button type="link" danger onClick={() => onDisable(record)}>
               停用
             </Button>
           ) : null}
@@ -173,11 +173,21 @@ export function EmployeesPage() {
       message.success('员工已停用')
       queryClient.invalidateQueries({ queryKey: ['employees'] })
     },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '停用失败')
+    },
   })
 
   const handleDisable = useCallback(
-    (employeeId: string) => {
-      disableMutation.mutate(employeeId)
+    (employee: EmployeeSummary) => {
+      Modal.confirm({
+        title: '确认停用员工？',
+        content: `停用后「${employee.name}」将无法登录，可在编辑中重新启用。`,
+        okText: '停用',
+        okType: 'danger',
+        cancelText: '取消',
+        onOk: () => disableMutation.mutateAsync(employee.id),
+      })
     },
     [disableMutation],
   )

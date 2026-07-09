@@ -94,6 +94,7 @@ function PaymentScheduleTable({
         loading={loading}
         columns={columns}
         dataSource={items}
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: page,
           pageSize,

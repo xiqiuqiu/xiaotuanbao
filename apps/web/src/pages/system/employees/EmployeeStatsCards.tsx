@@ -1,4 +1,4 @@
-import { Card, Col, Row, Statistic } from 'antd'
+import { Card, Col, Row, Statistic, theme } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
 import type { EmployeeListStats } from '@/types/api'
 
@@ -7,6 +7,8 @@ interface EmployeeStatsCardsProps {
 }
 
 export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
+  const { token } = theme.useToken()
+
   return (
     <Row gutter={16} style={{ marginBottom: 16 }}>
       <Col span={6}>
@@ -16,12 +18,20 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
       </Col>
       <Col span={6}>
         <Card>
-          <Statistic title="启用" value={stats?.enabled ?? 0} valueStyle={{ color: '#3f8600' }} />
+          <Statistic
+            title="启用"
+            value={stats?.enabled ?? 0}
+            valueStyle={{ color: token.colorSuccess }}
+          />
         </Card>
       </Col>
       <Col span={6}>
         <Card>
-          <Statistic title="停用" value={stats?.disabled ?? 0} valueStyle={{ color: '#cf1322' }} />
+          <Statistic
+            title="停用"
+            value={stats?.disabled ?? 0}
+            valueStyle={{ color: token.colorError }}
+          />
         </Card>
       </Col>
       <Col span={6}>
