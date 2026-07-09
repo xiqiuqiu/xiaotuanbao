@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
@@ -29,14 +29,16 @@ import {
 } from './CancelVerificationModal'
 import {
   VerificationFilters,
-  getDefaultVerificationDateRange,
-  type VerificationDateRange,
 } from './VerificationFilters'
 import { VerificationDetailDrawer } from './VerificationDetailDrawer'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
 } from '../utils/verification-form'
+import {
+  getDefaultVerificationDateRange,
+  type VerificationDateRange,
+} from '../utils/date-ranges'
 
 export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -46,12 +48,215 @@ export type VerificationsWorkspaceProps = {
   initialTransactionId?: string
 }
 
+type VerificationListState = {
+  page: number
+  pageSize: number
+  dateRange: VerificationDateRange
+  direction?: string
+  status?: string
+  transactionNo: string
+  scheduleNo: string
+  departureKeyword: string
+}
+
+type VerificationListAction =
+  | { type: 'setDateRange'; value: VerificationDateRange }
+  | { type: 'setDirection'; value?: string }
+  | { type: 'setStatus'; value?: string }
+  | { type: 'setTransactionNo'; value: string }
+  | { type: 'setScheduleNo'; value: string }
+  | { type: 'setDepartureKeyword'; value: string }
+  | { type: 'setPage'; value: number }
+  | { type: 'setPageSize'; value: number }
+  | { type: 'resetFilters' }
+
+function createInitialVerificationListState(): VerificationListState {
+  return {
+    page: 1,
+    pageSize: 10,
+    dateRange: getDefaultVerificationDateRange(),
+    direction: undefined,
+    status: undefined,
+    transactionNo: '',
+    scheduleNo: '',
+    departureKeyword: '',
+  }
+}
+
+function verificationListReducer(
+  state: VerificationListState,
+  action: VerificationListAction,
+): VerificationListState {
+  switch (action.type) {
+    case 'setDateRange':
+      return { ...state, dateRange: action.value, page: 1 }
+    case 'setDirection':
+      return { ...state, direction: action.value, page: 1 }
+    case 'setStatus':
+      return { ...state, status: action.value, page: 1 }
+    case 'setTransactionNo':
+      return { ...state, transactionNo: action.value, page: 1 }
+    case 'setScheduleNo':
+      return { ...state, scheduleNo: action.value, page: 1 }
+    case 'setDepartureKeyword':
+      return { ...state, departureKeyword: action.value, page: 1 }
+    case 'setPage':
+      return { ...state, page: action.value }
+    case 'setPageSize':
+      return { ...state, pageSize: action.value }
+    case 'resetFilters':
+      return createInitialVerificationListState()
+    default:
+      return state
+  }
+}
+
 function formatCounterpartyLabel(
   counterpartyType: string,
   counterpartyName: string | null,
 ): string {
   const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
   return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
+}
+
+function buildVerificationColumns({
+  readOnly,
+  onOpenDetail,
+  onOpenCancelModal,
+}: {
+  readOnly: boolean
+  onOpenDetail: (verificationId: string) => void
+  onOpenCancelModal: (verification: FinanceVerificationListItem) => void
+}): ColumnsType<FinanceVerificationListItem> {
+  return [
+    {
+      title: '核销单号',
+      dataIndex: 'verificationNo',
+      render: (value: string, record) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => onOpenDetail(record.id)}>
+          <Typography.Text code>{value}</Typography.Text>
+        </Button>
+      ),
+    },
+    {
+      title: '核销日期',
+      dataIndex: 'verificationDate',
+    },
+    {
+      title: '核销方向',
+      dataIndex: 'direction',
+      render: (value: string) => catalogLabel(VERIFICATION_DIRECTION_LABELS, value),
+    },
+    {
+      title: '往来对象',
+      key: 'counterparty',
+      render: (_: unknown, record) =>
+        formatCounterpartyLabel(record.counterpartyType, record.counterpartyName),
+    },
+    {
+      title: '关联发团',
+      dataIndex: 'departureNo',
+      render: (value: string, record) => (
+        <Tooltip title={record.departureName}>
+          <span>{value}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      title: '流水号',
+      dataIndex: 'transactionNo',
+      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
+    },
+    {
+      title: '收付款节点编号',
+      dataIndex: 'scheduleNo',
+      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
+    },
+    {
+      title: '本次核销金额',
+      dataIndex: 'amountCents',
+      render: (value: number) => formatCents(value),
+    },
+    {
+      title: '核销后未结金额',
+      dataIndex: 'billUnsettledAfterCents',
+      render: (value: number) => formatCents(value),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      render: (itemStatus: string) => (
+        <Tag color={VERIFICATION_STATUS_COLORS[itemStatus]}>
+          {catalogLabel(VERIFICATION_STATUS_LABELS, itemStatus)}
+        </Tag>
+      ),
+    },
+    {
+      title: '核销人',
+      dataIndex: 'createdByName',
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      render: (value: string) => new Date(value).toLocaleString('zh-CN'),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_: unknown, record: FinanceVerificationListItem) => (
+        <Space>
+          <Button type="link" onClick={() => onOpenDetail(record.id)}>
+            查看
+          </Button>
+          {!readOnly && record.status === VerificationStatus.NORMAL ? (
+            <Button type="link" danger onClick={() => onOpenCancelModal(record)}>
+              撤销核销
+            </Button>
+          ) : null}
+        </Space>
+      ),
+    },
+  ]
+}
+
+interface VerificationTableProps {
+  loading: boolean
+  columns: ColumnsType<FinanceVerificationListItem>
+  items: FinanceVerificationListItem[]
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number, pageSize: number) => void
+}
+
+function VerificationTable({
+  loading,
+  columns,
+  items,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: VerificationTableProps) {
+  return (
+    <Card>
+      <Table
+        rowKey="id"
+        loading={loading}
+        columns={columns}
+        dataSource={items}
+        scroll={{ x: 'max-content' }}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          showTotal: (count) => `共 ${count} 条`,
+          onChange: onPageChange,
+        }}
+      />
+    </Card>
+  )
 }
 
 export function VerificationsWorkspace({
@@ -71,16 +276,21 @@ export function VerificationsWorkspace({
   const [detailVerificationId, setDetailVerificationId] = useState<string | null>(null)
   const [cancellingVerification, setCancellingVerification] =
     useState<FinanceVerificationListItem | null>(null)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
-  const [dateRange, setDateRange] = useState<VerificationDateRange>(
-    getDefaultVerificationDateRange(),
+  const [listState, dispatchList] = useReducer(
+    verificationListReducer,
+    undefined,
+    createInitialVerificationListState,
   )
-  const [direction, setDirection] = useState<string | undefined>()
-  const [status, setStatus] = useState<string | undefined>()
-  const [transactionNo, setTransactionNo] = useState('')
-  const [scheduleNo, setScheduleNo] = useState('')
-  const [departureKeyword, setDepartureKeyword] = useState('')
+  const {
+    page,
+    pageSize,
+    dateRange,
+    direction,
+    status,
+    transactionNo,
+    scheduleNo,
+    departureKeyword,
+  } = listState
 
   const isDepartureScope = scope === 'departure'
   const listQueryKey = isDepartureScope ? 'departure-verifications' : 'finance-verifications'
@@ -142,17 +352,11 @@ export function VerificationsWorkspace({
   }, [])
 
   const handleResetFilters = useCallback(() => {
-    setDateRange(getDefaultVerificationDateRange())
-    setDirection(undefined)
-    setStatus(undefined)
-    setTransactionNo('')
-    setScheduleNo('')
-    setDepartureKeyword('')
-    setPage(1)
+    dispatchList({ type: 'resetFilters' })
   }, [])
 
   const clearPaymentScheduleFilter = useCallback(() => {
-    setPage(1)
+    dispatchList({ type: 'setPage', value: 1 })
     void navigate({
       to: '/finance/verification',
       search: { transactionId: initialTransactionId },
@@ -160,7 +364,7 @@ export function VerificationsWorkspace({
   }, [initialTransactionId, navigate])
 
   const clearTransactionFilter = useCallback(() => {
-    setPage(1)
+    dispatchList({ type: 'setPage', value: 1 })
     void navigate({
       to: '/finance/verification',
       search: { paymentScheduleId: initialPaymentScheduleId },
@@ -220,96 +424,13 @@ export function VerificationsWorkspace({
     cancelForm.resetFields()
   }, [cancelForm])
 
-  const columns = useMemo<ColumnsType<FinanceVerificationListItem>>(
-    () => [
-      {
-        title: '核销单号',
-        dataIndex: 'verificationNo',
-        render: (value: string, record) => (
-          <Button type="link" style={{ padding: 0 }} onClick={() => handleOpenDetail(record.id)}>
-            <Typography.Text code>{value}</Typography.Text>
-          </Button>
-        ),
-      },
-      {
-        title: '核销日期',
-        dataIndex: 'verificationDate',
-      },
-      {
-        title: '核销方向',
-        dataIndex: 'direction',
-        render: (value: string) => catalogLabel(VERIFICATION_DIRECTION_LABELS, value),
-      },
-      {
-        title: '往来对象',
-        key: 'counterparty',
-        render: (_: unknown, record) =>
-          formatCounterpartyLabel(record.counterpartyType, record.counterpartyName),
-      },
-      {
-        title: '关联发团',
-        dataIndex: 'departureNo',
-        render: (value: string, record) => (
-          <Tooltip title={record.departureName}>
-            <span>{value}</span>
-          </Tooltip>
-        ),
-      },
-      {
-        title: '流水号',
-        dataIndex: 'transactionNo',
-        render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
-      },
-      {
-        title: '收付款节点编号',
-        dataIndex: 'scheduleNo',
-        render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
-      },
-      {
-        title: '本次核销金额',
-        dataIndex: 'amountCents',
-        render: (value: number) => formatCents(value),
-      },
-      {
-        title: '核销后未结金额',
-        dataIndex: 'billUnsettledAfterCents',
-        render: (value: number) => formatCents(value),
-      },
-      {
-        title: '状态',
-        dataIndex: 'status',
-        render: (itemStatus: string) => (
-          <Tag color={VERIFICATION_STATUS_COLORS[itemStatus]}>
-            {catalogLabel(VERIFICATION_STATUS_LABELS, itemStatus)}
-          </Tag>
-        ),
-      },
-      {
-        title: '核销人',
-        dataIndex: 'createdByName',
-      },
-      {
-        title: '创建时间',
-        dataIndex: 'createdAt',
-        render: (value: string) => new Date(value).toLocaleString('zh-CN'),
-      },
-      {
-        title: '操作',
-        key: 'actions',
-        render: (_: unknown, record: FinanceVerificationListItem) => (
-          <Space>
-            <Button type="link" onClick={() => handleOpenDetail(record.id)}>
-              查看
-            </Button>
-            {!readOnly && record.status === VerificationStatus.NORMAL ? (
-              <Button type="link" danger onClick={() => handleOpenCancelModal(record)}>
-                撤销核销
-              </Button>
-            ) : null}
-          </Space>
-        ),
-      },
-    ],
+  const columns = useMemo(
+    () =>
+      buildVerificationColumns({
+        readOnly,
+        onOpenDetail: handleOpenDetail,
+        onOpenCancelModal: handleOpenCancelModal,
+      }),
     [handleOpenCancelModal, handleOpenDetail, readOnly],
   )
 
@@ -338,28 +459,22 @@ export function VerificationsWorkspace({
         scheduleNo={scheduleNo}
         departureKeyword={departureKeyword}
         onDateRangeChange={(value) => {
-          setDateRange(value)
-          setPage(1)
+          dispatchList({ type: 'setDateRange', value })
         }}
         onDirectionChange={(value) => {
-          setDirection(value)
-          setPage(1)
+          dispatchList({ type: 'setDirection', value })
         }}
         onStatusChange={(value) => {
-          setStatus(value)
-          setPage(1)
+          dispatchList({ type: 'setStatus', value })
         }}
         onTransactionNoChange={(value) => {
-          setTransactionNo(value)
-          setPage(1)
+          dispatchList({ type: 'setTransactionNo', value })
         }}
         onScheduleNoChange={(value) => {
-          setScheduleNo(value)
-          setPage(1)
+          dispatchList({ type: 'setScheduleNo', value })
         }}
         onDepartureKeywordChange={(value) => {
-          setDepartureKeyword(value)
-          setPage(1)
+          dispatchList({ type: 'setDepartureKeyword', value })
         }}
         onReset={handleResetFilters}
       />
@@ -382,26 +497,18 @@ export function VerificationsWorkspace({
         </div>
       ) : null}
 
-      <Card>
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={verificationsResult?.items ?? []}
-          scroll={{ x: 'max-content' }}
-          pagination={{
-            current: page,
-            pageSize,
-            total: verificationsResult?.total ?? 0,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
-            onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
-            },
-          }}
-        />
-      </Card>
+      <VerificationTable
+        loading={isLoading}
+        columns={columns}
+        items={verificationsResult?.items ?? []}
+        page={page}
+        pageSize={pageSize}
+        total={verificationsResult?.total ?? 0}
+        onPageChange={(nextPage, nextPageSize) => {
+          dispatchList({ type: 'setPage', value: nextPage })
+          dispatchList({ type: 'setPageSize', value: nextPageSize })
+        }}
+      />
 
       <VerificationDetailDrawer
         open={detailDrawerOpen}
@@ -409,8 +516,9 @@ export function VerificationsWorkspace({
         onClose={handleCloseDetail}
       />
 
-      {!readOnly ? (
+      {!readOnly && modalOpen ? (
         <CreateVerificationDrawer
+          key="create-verification"
           open={modalOpen}
           loading={createMutation.isPending}
           form={form}

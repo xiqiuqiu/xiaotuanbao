@@ -85,15 +85,18 @@ export function PaymentScheduleActionDialogs({
         />
       )}
 
-      <CreateVerificationDrawer
-        open={verifyOpen}
-        initialSchedule={activeSchedule ?? undefined}
-        lockedDepartureId={lockedDepartureId ?? activeSchedule?.departureId}
-        loading={verifyCreateMutation.isPending}
-        form={verifyForm}
-        onClose={onCloseVerify}
-        onSubmit={(values) => verifyCreateMutation.mutate(values)}
-      />
+      {verifyOpen && activeSchedule ? (
+        <CreateVerificationDrawer
+          key={activeSchedule.id}
+          open={verifyOpen}
+          initialSchedule={activeSchedule}
+          lockedDepartureId={lockedDepartureId ?? activeSchedule.departureId}
+          loading={verifyCreateMutation.isPending}
+          form={verifyForm}
+          onClose={onCloseVerify}
+          onSubmit={(values) => verifyCreateMutation.mutate(values)}
+        />
+      ) : null}
 
       <CancelScheduleModal
         open={cancelOpen}

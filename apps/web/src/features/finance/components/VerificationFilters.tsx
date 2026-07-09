@@ -1,15 +1,10 @@
-import dayjs from 'dayjs'
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
+import dayjs from 'dayjs'
 import {
   VERIFICATION_DIRECTION_OPTIONS,
   VERIFICATION_STATUS_OPTIONS,
 } from '../catalog'
-
-export type VerificationDateRange = [string | undefined, string | undefined] | null
-
-export function getDefaultVerificationDateRange(): [string, string] {
-  return [dayjs().subtract(30, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
-}
+import type { VerificationDateRange } from '../utils/date-ranges'
 
 interface VerificationFiltersProps {
   scope: 'global' | 'departure'

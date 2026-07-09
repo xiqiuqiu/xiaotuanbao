@@ -68,6 +68,45 @@ function applyClientFilters(
   })
 }
 
+interface PaymentScheduleTableProps {
+  loading: boolean
+  columns: ReturnType<typeof buildPaymentScheduleColumns>
+  items: PaymentScheduleSummary[]
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number, pageSize: number) => void
+}
+
+function PaymentScheduleTable({
+  loading,
+  columns,
+  items,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: PaymentScheduleTableProps) {
+  return (
+    <Card>
+      <Table
+        rowKey="id"
+        loading={loading}
+        columns={columns}
+        dataSource={items}
+        pagination={{
+          current: page,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          showTotal: (count) => `共 ${count} 条`,
+          onChange: onPageChange,
+        }}
+      />
+    </Card>
+  )
+}
+
 export function PaymentScheduleWorkspace({
   scope,
   direction,
@@ -325,25 +364,18 @@ export function PaymentScheduleWorkspace({
         onReset={resetFilters}
       />
 
-      <Card>
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={tableItems}
-          pagination={{
-            current: page,
-            pageSize,
-            total: tableTotal,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
-            onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
-            },
-          }}
-        />
-      </Card>
+      <PaymentScheduleTable
+        loading={isLoading}
+        columns={columns}
+        items={tableItems}
+        page={page}
+        pageSize={pageSize}
+        total={tableTotal}
+        onPageChange={(nextPage, nextPageSize) => {
+          setPage(nextPage)
+          setPageSize(nextPageSize)
+        }}
+      />
 
       <PaymentScheduleActionDialogs
         isReceivable={isReceivable}

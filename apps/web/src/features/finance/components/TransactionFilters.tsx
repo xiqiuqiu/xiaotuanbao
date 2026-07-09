@@ -1,19 +1,14 @@
-import dayjs from 'dayjs'
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
+import dayjs from 'dayjs'
 import { listDepartures } from '@/services/departure.service'
 import {
   TRANSACTION_DIRECTION_OPTIONS,
   TRANSACTION_STATUS_OPTIONS,
   TRANSACTION_WRITEOFF_STATUS_OPTIONS,
 } from '../catalog'
-
-export type TransactionDateRange = [string | undefined, string | undefined] | null
-
-export function getDefaultTransactionDateRange(): [string, string] {
-  return [dayjs().subtract(30, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
-}
+import type { TransactionDateRange } from '../utils/date-ranges'
 
 interface TransactionFiltersProps {
   dateRange: TransactionDateRange
