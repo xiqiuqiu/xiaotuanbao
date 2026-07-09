@@ -170,6 +170,7 @@ describe('ExecutionResourcePane action buttons', () => {
       search: {
         tab: 'payables',
         highlightSegmentResourceId: 'resource-1',
+        segmentId: 'segment-1',
       },
     })
   })

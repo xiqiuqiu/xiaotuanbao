@@ -14,7 +14,7 @@ import {
 } from 'antd'
 import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
 import {
@@ -63,6 +63,7 @@ export function ExecutionTab({
 }: ExecutionTabProps) {
   const { token } = theme.useToken()
   const navigate = useNavigate()
+  const search = useSearch({ strict: false })
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
@@ -91,6 +92,12 @@ export function ExecutionTab({
   }
 
   useEffect(() => {
+    // Only canonicalize segmentId while execution owns the URL. Otherwise a
+    // still-mounted pane (destroyOnHidden lag) can yank "查看应付" back here
+    // after search drops segmentId.
+    if (search.tab !== 'execution') {
+      return
+    }
     if (isLoading || isError || selectedSegmentId === segmentId) {
       return
     }
@@ -104,7 +111,15 @@ export function ExecutionTab({
       },
       replace: true,
     })
-  }, [departure.id, isError, isLoading, navigate, segmentId, selectedSegmentId])
+  }, [
+    departure.id,
+    isError,
+    isLoading,
+    navigate,
+    search.tab,
+    segmentId,
+    selectedSegmentId,
+  ])
 
   const invalidateSegments = () => {
     void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })

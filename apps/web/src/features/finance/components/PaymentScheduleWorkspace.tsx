@@ -32,8 +32,8 @@ import type { CreateVerificationFormValues } from '../utils/verification-form'
 import type { CancelScheduleFormValues } from './CancelScheduleModal'
 import styles from './PaymentScheduleWorkspace.module.css'
 
-/** Two Slow (0.3s) animation iterations. */
-const LOCATE_FLASH_MS = 600
+/** Two gentle (0.85s) animation iterations. */
+const LOCATE_FLASH_MS = 1700
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'

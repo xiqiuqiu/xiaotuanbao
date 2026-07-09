@@ -4,12 +4,22 @@
     background-color: transparent;
   }
 
-  50% {
-    background-color: var(--schedule-locate-bg);
+  35%,
+  65% {
+    /* Soft peak — avoid full-strength primary flash. */
+    background-color: color-mix(in srgb, var(--schedule-locate-bg) 72%, transparent);
   }
 }
 
-.locateFlash > td {
-  /* Two Slow (0.3s) pulses — locate reminder, not selection. */
-  animation: scheduleRowLocateFlash 0.3s ease-in-out 2;
+/* Only flash scrollable body cells. Animating fixed cells (or all tds)
+   promotes stacking and briefly reveals content under the sticky 操作 column.
+   Ant Design class names must stay :global — CSS Modules would hash them. */
+.locateFlash > td:not(:global(.ant-table-cell-fix)) {
+  animation: scheduleRowLocateFlash 0.85s cubic-bezier(0.45, 0, 0.55, 1) 2;
+}
+
+.locateFlash > td:global(.ant-table-cell-fix) {
+  /* Keep sticky 操作 above animated body cells for the flash duration. */
+  z-index: 3;
+  background-color: var(--ant-color-bg-container, #fff);
 }

@@ -162,10 +162,11 @@ export function ExecutionResourcePane({
         search: {
           tab: 'payables',
           highlightSegmentResourceId: resource.id,
+          ...(segment.id ? { segmentId: segment.id } : {}),
         },
       })
     },
-    [departure.id, navigate],
+    [departure.id, navigate, segment.id],
   )
 
   const columns: ColumnsType<SegmentResourceSummary> = [

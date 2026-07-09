@@ -7,6 +7,7 @@ import { ExecutionTab } from './ExecutionTab'
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  useSearch: () => ({ tab: 'execution', segmentId: 'segment-1' }),
 }))
 
 const mockSegment: ItinerarySegmentSummary = {
