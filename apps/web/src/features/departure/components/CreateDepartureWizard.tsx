@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Button, Card, Form, Space, Steps, Typography, message } from 'antd'
+import { Button, Card, Form, Space, Spin, Steps, Typography, message } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -8,10 +8,6 @@ import { copyDeparture, createDeparture, previewDepartureNo } from '@/services/d
 import { getRouteTemplate } from '@/services/route-template.service'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
-import {
-  CreateDepartureCopyModal,
-  type TemplateCopyModalState,
-} from './CreateDepartureCopyModal'
 import { useCopyFromDepartureSearch } from '../hooks/useCopyFromDepartureSearch'
 import {
   buildCopyDeparturePayload,
@@ -31,30 +27,17 @@ export function CreateDepartureWizard() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
   const search = useSearch({ strict: false }) as { copyFrom?: string }
+  const copyFromId = search.copyFrom?.trim()
 
   const [currentStep, setCurrentStep] = useState(0)
   const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
-  const [initializingStep2, setInitializingStep2] = useState(false)
-  const [copyModalOpen, setCopyModalOpen] = useState(false)
-  const [copyModalMode, setCopyModalMode] = useState<'template' | 'departure'>('template')
-  const [copyModalValues, setCopyModalValues] = useState<TemplateCopyModalState>({
-    copySegments: true,
-    copyResources: true,
-    copyReferencePrices: true,
-  })
+  const [initializingStep2, setInitializingStep2] = useState(() => Boolean(copyFromId))
   const [infoForm] = Form.useForm<InfoFormValues>()
 
   const isCopyMode = routeValues.mode === 'copy'
   const canProceed = canProceedFromRouteStep(routeValues)
-
-  useCopyFromDepartureSearch({
-    copyFrom: search.copyFrom,
-    navigate,
-    setRouteValues,
-    setCopyModalMode,
-    setCopyModalValues,
-    setCopyModalOpen,
-  })
+  const awaitingCopySource = Boolean(copyFromId) && !isCopyMode
+  const showCopyBootstrap = awaitingCopySource || (isCopyMode && (initializingStep2 || currentStep === 0))
 
   const loadDepartureNo = useCallback(async () => {
     const result = await previewDepartureNo()
@@ -62,68 +45,60 @@ export function CreateDepartureWizard() {
     return result.departureNo
   }, [infoForm])
 
-  const goToInfoStep = async (nextRouteValues: RouteStepValues = routeValues) => {
-    if (!user) {
-      message.error('请先登录')
-      return
-    }
+  const enterInfoStep = useCallback(
+    async (nextRouteValues: RouteStepValues) => {
+      if (!user) {
+        message.error('请先登录')
+        return
+      }
 
-    setInitializingStep2(true)
-    try {
-      const startDate = getShanghaiTodayString()
-      const initialValues = createInfoFormValues(
-        nextRouteValues,
-        user.id,
-        startDate,
-        '',
-      )
-      infoForm.setFieldsValue(initialValues)
-      await loadDepartureNo()
-      setCurrentStep(1)
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '团号预生成失败')
-    } finally {
-      setInitializingStep2(false)
-    }
-  }
+      setInitializingStep2(true)
+      try {
+        const startDate = getShanghaiTodayString()
+        const initialValues = createInfoFormValues(
+          nextRouteValues,
+          user.id,
+          startDate,
+          '',
+        )
+        infoForm.setFieldsValue(initialValues)
+        await loadDepartureNo()
+        setCurrentStep(1)
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '团号预生成失败')
+      } finally {
+        setInitializingStep2(false)
+      }
+    },
+    [infoForm, loadDepartureNo, user],
+  )
+
+  useCopyFromDepartureSearch({
+    copyFrom: copyFromId,
+    navigate,
+    setRouteValues,
+    enterInfoStep,
+    onLoadError: () => setInitializingStep2(false),
+  })
 
   const handleRouteStepNext = async () => {
     if (routeValues.mode === 'template' && routeValues.templateId) {
       try {
         const detail = await getRouteTemplate(routeValues.templateId)
-        setRouteValues((current) => ({
-          ...current,
+        const nextRouteValues: RouteStepValues = {
+          ...routeValues,
           previewSegmentCount: detail.segmentCount,
           previewResourceCount: detail.resourceCount,
-        }))
+        }
+        setRouteValues(nextRouteValues)
+        await enterInfoStep(nextRouteValues)
       } catch (error) {
         message.error(error instanceof Error ? error.message : '加载路线详情失败')
-        return
       }
-
-      setCopyModalMode('template')
-      setCopyModalValues({
-        copySegments: routeValues.copySegments ?? true,
-        copyResources: routeValues.copyResources ?? true,
-        copyReferencePrices: routeValues.copyReferencePrices ?? true,
-      })
-      setCopyModalOpen(true)
       return
     }
 
-    await goToInfoStep()
-  }
-
-  const handleConfirmCopy = async () => {
-    const nextRouteValues: RouteStepValues = {
-      ...routeValues,
-      copySegments: copyModalValues.copySegments,
-      copyResources: copyModalValues.copyResources,
-      copyReferencePrices: copyModalValues.copyReferencePrices,
-    }
-    setRouteValues(nextRouteValues)
-    setCopyModalOpen(false)
-    await goToInfoStep(nextRouteValues)
+    await enterInfoStep(routeValues)
   }
 
   const createMutation = useMutation({
@@ -160,11 +135,6 @@ export function CreateDepartureWizard() {
     }
   }
 
-  const copyModalTitle =
-    copyModalMode === 'departure' ? '复制已有发团' : '使用该路线建团'
-  const copyModalOkText =
-    copyModalMode === 'departure' ? '继续填写信息' : '使用该路线建团'
-
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -174,19 +144,27 @@ export function CreateDepartureWizard() {
           </Button>
         </Link>
         <Typography.Title level={4} style={{ marginTop: 8, marginBottom: 4 }}>
-          {isCopyMode ? '复制发团' : '新建发团'}
+          {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          {isCopyMode ? '基于已有发团复制行程与资源，重新填写团期信息' : '先选择路线，再填写发团基础信息'}
+          {isCopyMode || copyFromId
+            ? '基于已有发团复制行程与资源，重新填写团期信息'
+            : '先选择路线，再填写发团基础信息'}
         </Typography.Paragraph>
       </div>
 
       <Card>
-        {!isCopyMode ? (
+        {!isCopyMode && !copyFromId ? (
           <Steps current={currentStep} items={STEP_ITEMS} style={{ marginBottom: 32 }} />
         ) : null}
 
-        {!isCopyMode && currentStep === 0 ? (
+        {showCopyBootstrap ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+            <Spin tip="正在加载源发团…">
+              <div style={{ minHeight: 80 }} />
+            </Spin>
+          </div>
+        ) : !isCopyMode && currentStep === 0 ? (
           <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
         ) : (
           <CreateDepartureStepInfo
@@ -205,12 +183,12 @@ export function CreateDepartureWizard() {
           }}
         >
           <div>
-            {!isCopyMode && currentStep === 1 ? (
+            {!isCopyMode && !copyFromId && currentStep === 1 ? (
               <Button onClick={() => setCurrentStep(0)}>上一步</Button>
             ) : null}
           </div>
           <Space>
-            {!isCopyMode && currentStep === 0 ? (
+            {!isCopyMode && !copyFromId && currentStep === 0 ? (
               <Button
                 type="primary"
                 disabled={!canProceed}
@@ -223,6 +201,7 @@ export function CreateDepartureWizard() {
               <Button
                 type="primary"
                 loading={createMutation.isPending}
+                disabled={showCopyBootstrap || initializingStep2}
                 onClick={() => void handleCreate()}
               >
                 创建发团
@@ -231,23 +210,6 @@ export function CreateDepartureWizard() {
           </Space>
         </div>
       </Card>
-
-      <CreateDepartureCopyModal
-        open={copyModalOpen}
-        mode={copyModalMode}
-        values={copyModalValues}
-        title={copyModalTitle}
-        okText={copyModalOkText}
-        confirmLoading={initializingStep2}
-        onCancel={() => {
-          setCopyModalOpen(false)
-          if (copyModalMode === 'departure') {
-            navigate({ to: '/departure' })
-          }
-        }}
-        onConfirm={() => void handleConfirmCopy()}
-        onChange={setCopyModalValues}
-      />
     </div>
   )
 }

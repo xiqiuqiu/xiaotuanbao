@@ -3,25 +3,22 @@ import { message } from 'antd'
 import type { NavigateOptions } from '@tanstack/react-router'
 import { getDeparture } from '@/services/departure.service'
 import { listSegments } from '@/services/segment.service'
-import type { TemplateCopyModalState } from '../components/CreateDepartureCopyModal'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 
 interface UseCopyFromDepartureSearchOptions {
   copyFrom?: string
   navigate: (options: NavigateOptions) => void
   setRouteValues: React.Dispatch<React.SetStateAction<RouteStepValues>>
-  setCopyModalMode: React.Dispatch<React.SetStateAction<'template' | 'departure'>>
-  setCopyModalValues: React.Dispatch<React.SetStateAction<TemplateCopyModalState>>
-  setCopyModalOpen: React.Dispatch<React.SetStateAction<boolean>>
+  enterInfoStep: (routeValues: RouteStepValues) => void | Promise<void>
+  onLoadError?: () => void
 }
 
 export function useCopyFromDepartureSearch({
   copyFrom,
   navigate,
   setRouteValues,
-  setCopyModalMode,
-  setCopyModalValues,
-  setCopyModalOpen,
+  enterInfoStep,
+  onLoadError,
 }: UseCopyFromDepartureSearchOptions) {
   const copyFromInitialized = useRef(false)
 
@@ -40,7 +37,7 @@ export function useCopyFromDepartureSearch({
           listSegments(copyFromDepartureId),
         ])
 
-        setRouteValues({
+        const nextRouteValues: RouteStepValues = {
           mode: 'copy',
           routeName: departure.routeName,
           defaultDayCount: departure.dayCount,
@@ -48,28 +45,14 @@ export function useCopyFromDepartureSearch({
           sourceDepartureNo: departure.departureNo,
           previewSegmentCount: segmentList.summary.segmentCount,
           previewResourceCount: segmentList.summary.resourceCount,
-          copySegments: true,
-          copyResources: true,
-          copyReferencePrices: true,
-        })
-        setCopyModalMode('departure')
-        setCopyModalValues({
-          copySegments: true,
-          copyResources: true,
-          copyReferencePrices: true,
-        })
-        setCopyModalOpen(true)
+        }
+        setRouteValues(nextRouteValues)
+        await enterInfoStep(nextRouteValues)
       } catch (error) {
+        onLoadError?.()
         message.error(error instanceof Error ? error.message : '加载源发团失败')
         navigate({ to: '/departure/new', search: {} })
       }
     })()
-  }, [
-    copyFrom,
-    navigate,
-    setCopyModalMode,
-    setCopyModalOpen,
-    setCopyModalValues,
-    setRouteValues,
-  ])
+  }, [copyFrom, enterInfoStep, navigate, onLoadError, setRouteValues])
 }

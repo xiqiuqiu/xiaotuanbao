@@ -86,9 +86,6 @@ describe('departure-wizard-form', () => {
         routeName: '西安-青海湖-茶卡6日游',
         defaultDayCount: 6,
         templateId: 'template-1',
-        copySegments: true,
-        copyResources: false,
-        copyReferencePrices: true,
       },
       {
         name: '西安-青海湖-茶卡6日游 8月1日团',
