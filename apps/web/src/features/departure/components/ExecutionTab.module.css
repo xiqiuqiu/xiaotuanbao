@@ -1,0 +1,78 @@
+.segmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 280px;
+}
+
+.segmentItem {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid var(--execution-item-border, transparent);
+  border-radius: var(--execution-radius, 6px);
+  background: var(--execution-item-bg, transparent);
+  transition:
+    background-color 0.1s,
+    border-color 0.1s;
+}
+
+.segmentItem:hover {
+  background: var(--execution-fill-hover, rgba(0, 0, 0, 0.04));
+}
+
+.segmentItemSelected,
+.segmentItemSelected:hover {
+  background: var(--execution-primary-bg, #e6f4ff);
+  border-color: var(--execution-primary-border, #91caff);
+}
+
+.segmentItemHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.segmentItemTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  font-weight: var(--execution-font-strong, 600);
+  color: var(--execution-text, rgba(0, 0, 0, 0.88));
+  line-height: 1.4;
+}
+
+.segmentItemEdit {
+  flex-shrink: 0;
+  margin-inline: -4px -6px;
+  opacity: 0.45;
+}
+
+.segmentItem:hover .segmentItemEdit,
+.segmentItemSelected .segmentItemEdit {
+  opacity: 1;
+}
+
+.segmentItemMeta {
+  display: block;
+  color: var(--execution-text-secondary, rgba(0, 0, 0, 0.65));
+  font-size: var(--execution-font-sm, 12px);
+  line-height: 1.5;
+}
+
+.segmentItemOverview {
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--execution-border, #f0f0f0);
+  color: var(--execution-text-tertiary, rgba(0, 0, 0, 0.45));
+  font-size: var(--execution-font-sm, 12px);
+  line-height: 1.5;
+}

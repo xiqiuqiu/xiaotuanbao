@@ -1,5 +1,17 @@
-import { useEffect, useState } from 'react'
-import { Alert, Button, Card, Empty, Space, Spin, Tag, Typography, message, theme } from 'antd'
+import { useEffect, useState, type CSSProperties } from 'react'
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Row,
+  Spin,
+  Tag,
+  Typography,
+  message,
+  theme,
+} from 'antd'
 import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -22,6 +34,7 @@ import {
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { ExecutionSummaryBar } from './ExecutionSummaryBar'
 import { SegmentDrawer } from './SegmentDrawer'
+import styles from './ExecutionTab.module.css'
 
 interface ExecutionTabProps {
   departure: DepartureDetail
@@ -174,59 +187,51 @@ export function ExecutionTab({
     )
   }
 
+  const segmentTokenStyle = {
+    '--execution-border': token.colorBorderSecondary,
+    '--execution-fill-hover': token.colorFillTertiary,
+    '--execution-primary-bg': token.colorPrimaryBg,
+    '--execution-primary-border': token.colorPrimaryBorder,
+            '--execution-item-bg': token.colorBgContainer,
+            '--execution-item-border': token.colorBorderSecondary,
+    '--execution-radius': `${token.borderRadiusLG}px`,
+    '--execution-font-sm': `${token.fontSizeSM}px`,
+    '--execution-font-strong': String(token.fontWeightStrong),
+    '--execution-text': token.colorText,
+    '--execution-text-secondary': token.colorTextSecondary,
+    '--execution-text-tertiary': token.colorTextTertiary,
+  } as CSSProperties
+
   return (
     <div>
       {listResult?.summary ? <ExecutionSummaryBar summary={listResult.summary} /> : null}
 
-      <div
-        style={{
-          display: 'flex',
-          minHeight: 360,
-          border: `1px solid ${token.colorBorderSecondary}`,
-          borderRadius: token.borderRadiusLG,
-          overflow: 'hidden',
-        }}
-      >
-        <aside
-          style={{
-            width: 280,
-            flexShrink: 0,
-            borderRight: `1px solid ${token.colorBorderSecondary}`,
-            background: token.colorBgContainer,
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              borderBottom: `1px solid ${token.colorBorderSecondary}`,
-            }}
+      <Row gutter={16} wrap={false} align="stretch">
+        <Col flex="280px" style={{ maxWidth: 280 }}>
+          <Card
+            title="行程段"
+            extra={
+              !mutationLocked ? (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  onClick={openCreate}
+                >
+                  添加
+                </Button>
+              ) : null
+            }
+            styles={{ body: { padding: 12 } }}
+            style={{ height: '100%', minHeight: 360 }}
           >
-            <Typography.Text strong>行程段</Typography.Text>
-            {!mutationLocked ? (
-              <Button
-                type="text"
-                size="small"
-                icon={<PlusOutlined />}
-                onClick={openCreate}
-              >
-                添加
-              </Button>
-            ) : null}
-          </div>
-
-          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
-            {segments.length === 0 ? (
-              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                暂无行程段
-              </Typography.Paragraph>
-            ) : (
-              <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                {segments.map((segment) => (
+            <div className={styles.segmentList} style={segmentTokenStyle}>
+              {segments.length === 0 ? (
+                <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  暂无行程段
+                </Typography.Paragraph>
+              ) : (
+                segments.map((segment) => (
                   <SegmentNavItem
                     key={segment.id}
                     segment={segment}
@@ -235,35 +240,33 @@ export function ExecutionTab({
                     onSelect={() => navigateExecution(segment.id)}
                     onEdit={() => openEdit(segment)}
                   />
-                ))}
-              </Space>
-            )}
-          </div>
-        </aside>
+                ))
+              )}
+            </div>
+          </Card>
+        </Col>
 
-        <main style={{ flex: 1, padding: 16, minWidth: 0 }}>
-          {segments.length === 0 ? (
-            <Empty description="请先添加行程段" style={{ padding: '48px 0' }}>
-              {!mutationLocked ? (
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={openCreate}
-                >
-                  添加行程段
-                </Button>
-              ) : null}
-            </Empty>
-          ) : selectedSegment ? (
-            <ExecutionResourcePane
-              departure={departure}
-              segment={selectedSegment}
-              readOnly={readOnly}
-              amountReadOnly={amountReadOnly}
-            />
-          ) : null}
-        </main>
-      </div>
+        <Col flex="auto" style={{ minWidth: 0 }}>
+          <Card style={{ height: '100%', minHeight: 360 }}>
+            {segments.length === 0 ? (
+              <Empty description="请先添加行程段" style={{ padding: '48px 0' }}>
+                {!mutationLocked ? (
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                    添加行程段
+                  </Button>
+                ) : null}
+              </Empty>
+            ) : selectedSegment ? (
+              <ExecutionResourcePane
+                departure={departure}
+                segment={selectedSegment}
+                readOnly={readOnly}
+                amountReadOnly={amountReadOnly}
+              />
+            ) : null}
+          </Card>
+        </Col>
+      </Row>
 
       <SegmentDrawer
         open={drawerOpen}
@@ -297,30 +300,32 @@ function SegmentNavItem({
   onSelect: () => void
   onEdit: () => void
 }) {
-  const { token } = theme.useToken()
   const dateRange = formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)
-  const description = [dateRange, segment.destination].filter(Boolean).join(' · ')
+  const meta = [dateRange, segment.destination].filter(Boolean).join(' · ')
 
   return (
-    <Card
-      size="small"
-      hoverable
+    <div
+      role="button"
+      tabIndex={0}
+      className={`${styles.segmentItem}${selected ? ` ${styles.segmentItemSelected}` : ''}`}
       onClick={onSelect}
-      style={{
-        borderColor: selected ? token.colorPrimary : undefined,
-        background: selected ? token.colorPrimaryBg : undefined,
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
+        }
       }}
-      title={
-        <Space size={4} wrap>
+    >
+      <div className={styles.segmentItemHeader}>
+        <div className={styles.segmentItemTitle}>
           <span>{segment.name}</span>
           {segment.fromTemplate ? <Tag style={{ marginInlineEnd: 0 }}>模板</Tag> : null}
-        </Space>
-      }
-      extra={
-        showEdit ? (
+        </div>
+        {showEdit ? (
           <Button
             type="text"
             size="small"
+            className={styles.segmentItemEdit}
             icon={<EditOutlined />}
             aria-label={`编辑${segment.name}`}
             onClick={(event) => {
@@ -328,19 +333,10 @@ function SegmentNavItem({
               onEdit()
             }}
           />
-        ) : null
-      }
-    >
-      <Card.Meta
-        description={
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            <Typography.Text type="secondary">{description}</Typography.Text>
-            <Typography.Text type="secondary">
-              {formatResourceOverview(segment)}
-            </Typography.Text>
-          </Space>
-        }
-      />
-    </Card>
+        ) : null}
+      </div>
+      <span className={styles.segmentItemMeta}>{meta}</span>
+      <span className={styles.segmentItemOverview}>{formatResourceOverview(segment)}</span>
+    </div>
   )
 }
