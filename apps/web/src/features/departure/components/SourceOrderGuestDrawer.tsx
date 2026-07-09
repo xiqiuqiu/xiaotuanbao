@@ -1,15 +1,20 @@
 import { useState } from 'react'
+import { PlusOutlined, TeamOutlined } from '@ant-design/icons'
 import {
+  Alert,
   Button,
+  Col,
   Drawer,
   Form,
   Input,
   Popconfirm,
+  Row,
   Select,
   Space,
   Table,
   Typography,
   message,
+  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -21,6 +26,10 @@ import {
   updateSourceOrderGuest,
 } from '@/services/source-order.service'
 import { GUEST_GENDER_OPTIONS, GUEST_GENDER_LABELS, catalogLabel } from '../catalog'
+import {
+  formatGuestCountContrast,
+  guestFormFieldRules,
+} from '../utils/source-order-guest-form'
 
 interface SourceOrderGuestDrawerProps {
   open: boolean
@@ -70,6 +79,7 @@ function SourceOrderGuestDrawerPanel({
   readOnly,
   onClose,
 }: SourceOrderGuestDrawerPanelProps) {
+  const { token } = theme.useToken()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<GuestFormValues>()
   const [editingGuest, setEditingGuest] = useState<SourceOrderGuestSummary | null>(null)
@@ -157,38 +167,68 @@ function SourceOrderGuestDrawerPanel({
 
   return (
     <Drawer
-      title={`客人名单 · ${sourceOrder.displayName}`}
+      title={
+        <Space size={8} align="baseline" wrap>
+          <Typography.Text strong style={{ fontSize: token.fontSizeLG }}>
+            客人名单
+          </Typography.Text>
+          <Typography.Text type="secondary">{sourceOrder.displayName}</Typography.Text>
+        </Space>
+      }
       open={open}
       width={720}
       onClose={onClose}
       destroyOnClose
     >
+      <Alert
+        type="info"
+        showIcon
+        icon={<TeamOutlined />}
+        message={formatGuestCountContrast(guests.length, sourceOrder.guestCount)}
+        style={{ marginBottom: 16 }}
+      />
+
       {!readOnly ? (
         <Form
           form={form}
-          layout="inline"
+          layout="vertical"
           style={{ marginBottom: 16 }}
           onFinish={(values) => saveMutation.mutate(values)}
         >
-          <Form.Item
-            name="name"
-            rules={[{ required: true, message: '请输入姓名' }]}
-            style={{ minWidth: 120 }}
-          >
-            <Input placeholder="姓名" />
-          </Form.Item>
-          <Form.Item name="phone">
-            <Input placeholder="手机号" style={{ width: 140 }} />
-          </Form.Item>
-          <Form.Item name="gender" initialValue="unknown">
-            <Select style={{ width: 100 }} options={[...GUEST_GENDER_OPTIONS]} />
-          </Form.Item>
-          <Form.Item name="notes">
-            <Input placeholder="备注" style={{ width: 160 }} />
-          </Form.Item>
-          <Form.Item>
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name="name" label="姓名" rules={guestFormFieldRules.name}>
+                <Input placeholder="请输入姓名" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="phone" label="手机号" rules={guestFormFieldRules.phone}>
+                <Input placeholder="请输入手机号" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="gender" label="性别" rules={guestFormFieldRules.gender}>
+                <Select
+                  allowClear
+                  placeholder="请选择性别"
+                  options={[...GUEST_GENDER_OPTIONS]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="notes" label="备注" rules={guestFormFieldRules.notes}>
+                <Input placeholder="请输入备注（选填）" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item style={{ marginBottom: 0 }}>
             <Space>
-              <Button type="primary" htmlType="submit" loading={saveMutation.isPending}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                icon={editingGuest ? undefined : <PlusOutlined />}
+                loading={saveMutation.isPending}
+              >
                 {editingGuest ? '保存' : '添加'}
               </Button>
               {editingGuest ? (
@@ -206,10 +246,6 @@ function SourceOrderGuestDrawerPanel({
         </Form>
       ) : null}
 
-      <Typography.Paragraph type="secondary">
-        当前名单 {guests.length} 人 · 客源单人数 {sourceOrder.guestCount} 人
-      </Typography.Paragraph>
-
       <Table
         rowKey="id"
         loading={isLoading}
@@ -217,6 +253,7 @@ function SourceOrderGuestDrawerPanel({
         dataSource={guests}
         pagination={false}
         size="small"
+        locale={{ emptyText: '暂无数据' }}
       />
     </Drawer>
   )
