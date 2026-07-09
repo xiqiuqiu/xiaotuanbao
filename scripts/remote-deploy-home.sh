@@ -20,6 +20,8 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.home.yml)
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8088/api/health}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_SLEEP_SEC="${HEALTH_SLEEP_SEC:-2}"
+PULL_TIMEOUT="${PULL_TIMEOUT:-10m}"
+PUBLIC_PULL_TIMEOUT="${PUBLIC_PULL_TIMEOUT:-5m}"
 
 cd "$DEPLOY_DIR"
 
@@ -53,11 +55,15 @@ fi
 
 export IMAGE_TAG
 
-echo "==> pulling images"
-"${COMPOSE[@]}" pull
+echo "==> pulling app images"
+timeout "$PULL_TIMEOUT" "${COMPOSE[@]}" pull api web
+
+echo "==> ensuring base images"
+docker image inspect caddy:2 >/dev/null 2>&1 || timeout "$PUBLIC_PULL_TIMEOUT" docker pull caddy:2
+docker image inspect postgres:16 >/dev/null 2>&1 || timeout "$PUBLIC_PULL_TIMEOUT" docker pull postgres:16
 
 echo "==> starting stack"
-"${COMPOSE[@]}" up -d --remove-orphans
+"${COMPOSE[@]}" up -d --pull never --remove-orphans
 
 echo "==> waiting for health: $HEALTH_URL"
 ok=0
