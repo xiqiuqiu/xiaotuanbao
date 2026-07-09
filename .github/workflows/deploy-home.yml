@@ -144,4 +144,4 @@ jobs:
             -o BatchMode=yes \
             -o ConnectTimeout=30 \
             "root@${HOST}" \
-            "cd /mnt/mydata/xiaotuanbao && IMAGE_TAG='${IMAGE_TAG}' GIT_REF='${GIT_REF}' ./scripts/remote-deploy-home.sh"
+            "cd /mnt/mydata/xiaotuanbao && perl -0pi -e 's/\r\n/\n/g' ./scripts/remote-deploy-home.sh && IMAGE_TAG='${IMAGE_TAG}' GIT_REF='${GIT_REF}' ./scripts/remote-deploy-home.sh"
