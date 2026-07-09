@@ -1,0 +1,19 @@
+# Home server overlay: pull prebuilt GHCR images, bind Caddy to loopback:8088.
+# Usage:
+#   IMAGE_TAG=v0.1.0 docker compose -f docker-compose.yml -f docker-compose.home.yml pull
+#   IMAGE_TAG=v0.1.0 docker compose -f docker-compose.yml -f docker-compose.home.yml up -d
+
+services:
+  web:
+    image: ghcr.io/xiqiuqiu/xiaotuanbao-web:${IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  api:
+    image: ghcr.io/xiqiuqiu/xiaotuanbao-api:${IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  caddy:
+    ports: !override
+      - "127.0.0.1:8088:80"

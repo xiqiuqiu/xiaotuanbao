@@ -11,6 +11,7 @@
 | 查环境变量含义 | [环境变量说明](./deploy/environment-variables.md) |
 | 日常运维（重启、更新、备份） | [运维操作手册](./deploy/operations.md) |
 | 了解 Caddy 代理规则 | [Caddy 配置说明](./deploy/caddy.md) |
+| 家庭服务器 CI/CD（GHCR + Tailscale） | [家庭服务器 CI/CD](./deploy/home-ci.md) |
 | 数据库迁移与 seed | [数据库迁移与 Seed](./database/migrations-and-seed.md) |
 | 当前 Prisma 模型 | [Prisma 模型说明](./database/prisma-models.md) |
 | API 约定与已有接口 | [API 概览](./api/overview.md) |
@@ -31,6 +32,7 @@ docs/
     docker-deploy.md                 Docker 全栈部署
     environment-variables.md         环境变量
     caddy.md                         Caddy 配置
+    home-ci.md                       家庭服务器 CI/CD
     operations.md                    运维操作
   database/
     migrations-and-seed.md           迁移与初始化
