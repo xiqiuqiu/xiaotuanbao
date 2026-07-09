@@ -63,8 +63,7 @@ export const DEPARTURE_PROGRESS_COLORS: Record<string, string> = {
 export const DEPARTURE_DETAIL_TABS = [
   { key: 'overview', label: '概览' },
   { key: 'sourceOrders', label: '客源管理' },
-  { key: 'segments', label: '行程段' },
-  { key: 'resources', label: '资源安排' },
+  { key: 'execution', label: '执行安排' },
   { key: 'receivables', label: '应收管理' },
   { key: 'payables', label: '应付管理' },
   { key: 'verifications', label: '核销记录' },

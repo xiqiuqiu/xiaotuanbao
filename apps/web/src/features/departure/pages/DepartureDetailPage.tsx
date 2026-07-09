@@ -11,8 +11,7 @@ import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
-import { SegmentTab } from '../components/SegmentTab'
-import { ResourcesTab } from '../components/ResourcesTab'
+import { ExecutionTab } from '../components/ExecutionTab'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
@@ -112,20 +111,12 @@ export function DepartureDetailPage() {
       }
     }
 
-    if (tab.key === 'segments') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: <SegmentTab departure={departure} readOnly={readOnly} />,
-      }
-    }
-
-    if (tab.key === 'resources') {
+    if (tab.key === 'execution') {
       return {
         key: tab.key,
         label: tab.label,
         children: (
-          <ResourcesTab
+          <ExecutionTab
             departure={departure}
             segmentId={search.segmentId}
             readOnly={readOnly}
@@ -182,7 +173,12 @@ export function DepartureDetailPage() {
     <div>
       <DepartureHeader departure={departure} onUpdated={handleUpdated} />
 
-      <Tabs activeKey={activeTab} onChange={handleTabChange} items={tabItems} />
+      <Tabs
+        activeKey={activeTab}
+        onChange={handleTabChange}
+        items={tabItems}
+        destroyOnHidden
+      />
     </div>
   )
 }
