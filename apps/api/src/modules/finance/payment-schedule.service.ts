@@ -181,93 +181,112 @@ export class PaymentScheduleService {
     scheduleId: string,
     dto: UpdatePaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '编辑收付款节点',
-    )
-
-    if (schedule.cancelledAt) {
-      throw new BadRequestException('已关闭节点不可编辑')
-    }
-
     if (!this.hasUpdateFields(dto)) {
       throw new BadRequestException('请至少提供一个待更新字段')
     }
 
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
-    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
-    const data: Prisma.PaymentScheduleUpdateInput = {}
-    let financeAdjusted = false
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM payment_schedules
+        WHERE id = ${scheduleId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
 
-    if (dto.title !== undefined) {
-      const title = dto.title.trim()
-      if (!title) {
-        throw new BadRequestException('节点标题不能为空')
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: scheduleId, organizationId, direction },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
       }
-      data.title = title
-    }
 
-    if (dto.amountCents !== undefined) {
-      this.assertPositiveAmount(dto.amountCents)
-      if (touched) {
-        throw new BadRequestException('财务已介入的节点不可修改金额')
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        schedule.departureId,
+        '编辑收付款节点',
+      )
+      if (schedule.cancelledAt) {
+        throw new BadRequestException('已关闭节点不可编辑')
       }
-      data.amountCents = dto.amountCents
-      financeAdjusted = true
-    }
 
-    if (dto.dueDate !== undefined) {
-      if (touched) {
-        throw new BadRequestException('财务已介入的节点不可修改到期日')
+      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id, tx),
+        this.verificationService.hasVerificationHistory(schedule.id, tx),
+      ])
+      const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
+      const data: Prisma.PaymentScheduleUpdateInput = {}
+      let financeAdjusted = false
+
+      if (dto.title !== undefined) {
+        const title = dto.title.trim()
+        if (!title) {
+          throw new BadRequestException('节点标题不能为空')
+        }
+        data.title = title
       }
-      data.dueDate = parseDateOnly(dto.dueDate)
-      financeAdjusted = true
-    }
-
-    if (dto.counterpartyType !== undefined) {
-      if (touched) {
-        throw new BadRequestException('财务已介入的节点不可修改往来类型')
+      if (dto.amountCents !== undefined) {
+        this.assertPositiveAmount(dto.amountCents)
+        if (touched) {
+          throw new BadRequestException('财务已介入的节点不可修改金额')
+        }
+        data.amountCents = dto.amountCents
+        financeAdjusted = true
       }
-      data.counterpartyType = dto.counterpartyType
-      financeAdjusted = true
-    }
-
-    if (dto.counterpartyId !== undefined) {
-      if (touched) {
-        throw new BadRequestException('财务已介入的节点不可修改往来对象')
+      if (dto.dueDate !== undefined) {
+        if (touched) {
+          throw new BadRequestException('财务已介入的节点不可修改到期日')
+        }
+        data.dueDate = parseDateOnly(dto.dueDate)
+        financeAdjusted = true
       }
-      data.counterpartyId = dto.counterpartyId?.trim() || null
-      financeAdjusted = true
-    }
-
-    if (dto.counterpartyName !== undefined) {
-      if (touched) {
-        throw new BadRequestException('财务已介入的节点不可修改往来名称')
+      if (dto.counterpartyType !== undefined) {
+        if (touched) {
+          throw new BadRequestException('财务已介入的节点不可修改往来类型')
+        }
+        data.counterpartyType = dto.counterpartyType
+        financeAdjusted = true
       }
-      data.counterpartyName = dto.counterpartyName?.trim() || null
-      financeAdjusted = true
-    }
+      if (dto.counterpartyId !== undefined) {
+        if (touched) {
+          throw new BadRequestException('财务已介入的节点不可修改往来对象')
+        }
+        data.counterpartyId = dto.counterpartyId?.trim() || null
+        financeAdjusted = true
+      }
+      if (dto.counterpartyName !== undefined) {
+        if (touched) {
+          throw new BadRequestException('财务已介入的节点不可修改往来名称')
+        }
+        data.counterpartyName = dto.counterpartyName?.trim() || null
+        financeAdjusted = true
+      }
+      if (financeAdjusted) {
+        data.amountAdjustedAt = new Date()
+      }
 
-    if (financeAdjusted) {
-      data.amountAdjustedAt = new Date()
-    }
-
-    const updated = await this.prisma.paymentSchedule.update({
-      where: { id: schedule.id },
-      data,
+      const updated = await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data,
+      })
+      return {
+        updated,
+        settledAmountCents,
+        hasVerificationHistory,
+        departureId: schedule.departureId,
+      }
     })
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,
-      schedule.departureId,
+      result.departureId,
     )
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
+    return this.toSummary(
+      result.updated,
+      result.settledAmountCents,
+      result.hasVerificationHistory,
+      departureStatus,
+    )
   }
 
   async cancel(
@@ -276,27 +295,6 @@ export class PaymentScheduleService {
     userId: string,
     dto: CancelPaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.prisma.paymentSchedule.findFirst({
-      where: { id: scheduleId, organizationId },
-    })
-
-    if (!schedule) {
-      throw new NotFoundException('收付款节点不存在')
-    }
-
-    const menuKey =
-      schedule.direction === PaymentScheduleDirection.receivable
-        ? '/finance/receivable'
-        : '/finance/payable'
-    const menuKeys = await this.authService.getMenuKeysForUser(userId)
-    if (!menuKeys.includes(menuKey)) {
-      throw new ForbiddenException('无权访问')
-    }
-
-    if (schedule.cancelledAt) {
-      throw new BadRequestException('节点已关闭')
-    }
-
     const cancelReason = dto.cancelReason?.trim()
     if (!cancelReason) {
       throw new BadRequestException('关闭说明不能为空')
@@ -305,23 +303,50 @@ export class PaymentScheduleService {
       throw new BadRequestException('关闭处置类型不能为空')
     }
 
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '关闭收付款节点',
-    )
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM payment_schedules
+        WHERE id = ${scheduleId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
 
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
-    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
-    if (unsettledAmountCents <= 0) {
-      throw new BadRequestException('已结清节点不可关闭')
-    }
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: scheduleId, organizationId },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
+      }
 
-    const cancelledAt = new Date()
-    const updated = await this.prisma.$transaction(async (tx) => {
+      const menuKey =
+        schedule.direction === PaymentScheduleDirection.receivable
+          ? '/finance/receivable'
+          : '/finance/payable'
+      const menuKeys = await this.authService.getMenuKeysForUser(userId)
+      if (!menuKeys.includes(menuKey)) {
+        throw new ForbiddenException('无权访问')
+      }
+      if (schedule.cancelledAt) {
+        throw new BadRequestException('节点已关闭')
+      }
+
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        schedule.departureId,
+        '关闭收付款节点',
+      )
+
+      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id, tx),
+        this.verificationService.hasVerificationHistory(schedule.id, tx),
+      ])
+      const unsettledAmountCents = schedule.amountCents - settledAmountCents
+      if (unsettledAmountCents <= 0) {
+        throw new BadRequestException('已结清节点不可关闭')
+      }
+
+      const cancelledAt = new Date()
       const closed = await tx.paymentSchedule.update({
         where: { id: schedule.id },
         data: {
@@ -347,14 +372,24 @@ export class PaymentScheduleService {
         },
       })
 
-      return closed
+      return {
+        updated: closed,
+        settledAmountCents,
+        hasVerificationHistory,
+        departureId: schedule.departureId,
+      }
     })
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,
-      schedule.departureId,
+      result.departureId,
     )
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
+    return this.toSummary(
+      result.updated,
+      result.settledAmountCents,
+      result.hasVerificationHistory,
+      departureStatus,
+    )
   }
 
   async reopen(
@@ -363,46 +398,52 @@ export class PaymentScheduleService {
     userId: string,
     dto: ReopenPaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.prisma.paymentSchedule.findFirst({
-      where: { id: scheduleId, organizationId },
-    })
-
-    if (!schedule) {
-      throw new NotFoundException('收付款节点不存在')
-    }
-
-    const menuKey =
-      schedule.direction === PaymentScheduleDirection.receivable
-        ? '/finance/receivable'
-        : '/finance/payable'
-    const menuKeys = await this.authService.getMenuKeysForUser(userId)
-    if (!menuKeys.includes(menuKey)) {
-      throw new ForbiddenException('无权访问')
-    }
-
-    if (!schedule.cancelledAt) {
-      throw new BadRequestException('仅已关闭节点可以重新打开')
-    }
-
     const reopenReason = dto.reopenReason?.trim()
     if (!reopenReason) {
       throw new BadRequestException('重新打开原因不能为空')
     }
 
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '重新打开收付款节点，请先解除归档',
-    )
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM payment_schedules
+        WHERE id = ${scheduleId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
 
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
-    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
-    const operatedAt = new Date()
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: scheduleId, organizationId },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
+      }
 
-    const { reopened, departureStatus } = await this.prisma.$transaction(async (tx) => {
+      const menuKey =
+        schedule.direction === PaymentScheduleDirection.receivable
+          ? '/finance/receivable'
+          : '/finance/payable'
+      const menuKeys = await this.authService.getMenuKeysForUser(userId)
+      if (!menuKeys.includes(menuKey)) {
+        throw new ForbiddenException('无权访问')
+      }
+      if (!schedule.cancelledAt) {
+        throw new BadRequestException('仅已关闭节点可以重新打开')
+      }
+
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        schedule.departureId,
+        '重新打开收付款节点，请先解除归档',
+      )
+
+      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id, tx),
+        this.verificationService.hasVerificationHistory(schedule.id, tx),
+      ])
+      const unsettledAmountCents = schedule.amountCents - settledAmountCents
+      const operatedAt = new Date()
+
       const updated = await tx.paymentSchedule.update({
         where: { id: schedule.id },
         data: {
@@ -438,10 +479,20 @@ export class PaymentScheduleService {
           confirmDepartureSettlementReversal: dto.confirmDepartureSettlementReversal,
         })
 
-      return { reopened: updated, departureStatus: nextDepartureStatus }
+      return {
+        reopened: updated,
+        settledAmountCents,
+        hasVerificationHistory,
+        departureStatus: nextDepartureStatus,
+      }
     })
 
-    return this.toSummary(reopened, settledAmountCents, hasVerificationHistory, departureStatus)
+    return this.toSummary(
+      result.reopened,
+      result.settledAmountCents,
+      result.hasVerificationHistory,
+      result.departureStatus,
+    )
   }
 
   async adjustAmount(
@@ -450,42 +501,6 @@ export class PaymentScheduleService {
     userId: string,
     dto: AdjustPaymentScheduleAmountDto,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.prisma.paymentSchedule.findFirst({
-      where: { id: scheduleId, organizationId },
-    })
-
-    if (!schedule) {
-      throw new NotFoundException('收付款节点不存在')
-    }
-
-    const menuKey =
-      schedule.direction === PaymentScheduleDirection.receivable
-        ? '/finance/receivable'
-        : '/finance/payable'
-    const menuKeys = await this.authService.getMenuKeysForUser(userId)
-    if (!menuKeys.includes(menuKey)) {
-      throw new ForbiddenException('无权访问')
-    }
-
-    const isPayableResource =
-      schedule.direction === PaymentScheduleDirection.payable &&
-      schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
-      Boolean(schedule.sourceId)
-
-    const isReceivableSourcePath =
-      schedule.direction === PaymentScheduleDirection.receivable &&
-      (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
-      Boolean(schedule.sourceId)
-
-    if (!isPayableResource && !isReceivableSourcePath) {
-      throw new BadRequestException('仅资源应付或客源应收节点可调整约定金额')
-    }
-
-    if (schedule.cancelledAt) {
-      throw new BadRequestException('已关闭节点不可调整约定金额')
-    }
-
     this.assertPositiveAmount(dto.amountCents)
 
     const adjustReason = dto.adjustReason?.trim()
@@ -493,31 +508,76 @@ export class PaymentScheduleService {
       throw new BadRequestException('调整原因不能为空')
     }
 
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '调整约定金额',
-    )
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM payment_schedules
+        WHERE id = ${scheduleId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
 
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: scheduleId, organizationId },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
+      }
 
-    if (settledAmountCents > 0) {
-      throw new BadRequestException('仍有有效核销时不可调整约定金额，请先撤销相关核销')
-    }
+      const menuKey =
+        schedule.direction === PaymentScheduleDirection.receivable
+          ? '/finance/receivable'
+          : '/finance/payable'
+      const menuKeys = await this.authService.getMenuKeysForUser(userId)
+      if (!menuKeys.includes(menuKey)) {
+        throw new ForbiddenException('无权访问')
+      }
 
-    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
-    if (!touched) {
-      throw new BadRequestException('无财务履历时请通过普通编辑修改金额')
-    }
+      const isPayableResource =
+        schedule.direction === PaymentScheduleDirection.payable &&
+        schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+        Boolean(schedule.sourceId)
+      const isReceivableSourcePath =
+        schedule.direction === PaymentScheduleDirection.receivable &&
+        (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
+          schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
+        Boolean(schedule.sourceId)
 
-    const previousAmountCents = schedule.amountCents
-    const operatedAt = new Date()
-    const unsettledAmountCents = Math.max(dto.amountCents - settledAmountCents, 0)
+      if (!isPayableResource && !isReceivableSourcePath) {
+        throw new BadRequestException('仅资源应付或客源应收节点可调整约定金额')
+      }
+      if (schedule.cancelledAt) {
+        throw new BadRequestException('已关闭节点不可调整约定金额')
+      }
+      if (schedule.amountCents === dto.amountCents) {
+        throw new BadRequestException('新约定金额必须与当前金额不同')
+      }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        schedule.departureId,
+        '调整约定金额',
+      )
+
+      const settledAmountCents = await this.verificationService.getSettledAmountCents(
+        schedule.id,
+        tx,
+      )
+      const hasVerificationHistory = await this.verificationService.hasVerificationHistory(
+        schedule.id,
+        tx,
+      )
+      if (settledAmountCents > 0) {
+        throw new BadRequestException('仍有有效核销时不可调整约定金额，请先撤销相关核销')
+      }
+      if (!isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)) {
+        throw new BadRequestException('无财务履历时请通过普通编辑修改金额')
+      }
+
+      const previousAmountCents = schedule.amountCents
+      const operatedAt = new Date()
+      const unsettledAmountCents = dto.amountCents - settledAmountCents
+
       if (isPayableResource) {
         await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
           resourceId: schedule.sourceId!,
@@ -554,14 +614,24 @@ export class PaymentScheduleService {
         },
       })
 
-      return nextSchedule
+      return {
+        updated: nextSchedule,
+        settledAmountCents,
+        hasVerificationHistory,
+        departureId: schedule.departureId,
+      }
     })
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,
-      schedule.departureId,
+      result.departureId,
     )
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
+    return this.toSummary(
+      result.updated,
+      result.settledAmountCents,
+      result.hasVerificationHistory,
+      departureStatus,
+    )
   }
 
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {

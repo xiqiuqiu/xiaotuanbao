@@ -64,13 +64,18 @@ describe('Departure finance tabs (e2e)', () => {
     await prisma.financeTransaction.deleteMany({
       where: {
         organizationId,
-        verifications: {
-          some: {
-            paymentSchedule: {
-              departure: { name: { startsWith: testPrefix } },
+        OR: [
+          { departure: { name: { startsWith: testPrefix } } },
+          {
+            verifications: {
+              some: {
+                paymentSchedule: {
+                  departure: { name: { startsWith: testPrefix } },
+                },
+              },
             },
           },
-        },
+        ],
       },
     })
     await prisma.paymentSchedule.deleteMany({

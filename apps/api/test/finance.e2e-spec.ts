@@ -6,6 +6,8 @@ import {
   PartnerType,
   PaymentScheduleDirection,
   ResourceKind,
+  SourceOrderCollectionMode,
+  SourceOrderDiscountType,
   UserStatus,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
@@ -411,6 +413,76 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.financeTouched).toBe(true)
   })
 
+  it('closes one schedule only once under concurrent retry requests', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-并发关闭` }))
+      .expect(201)
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, financeToken)
+          .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+          .send({ closeDisposition: 'other', cancelReason: '并发重试关闭' }),
+      ),
+    )
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+    const closeActivities = detail.body.data.activities.filter(
+      (activity: { activityType: string }) => activity.activityType === 'close',
+    )
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      rejectedCount: responses.filter((response) => response.status === 400).length,
+      closeActivityCount: closeActivities.length,
+      isClosed: detail.body.data.cancelledAt != null,
+    }).toEqual({
+      successCount: 1,
+      rejectedCount: 7,
+      closeActivityCount: 1,
+      isClosed: true,
+    })
+  })
+
+  it('reopens one schedule only once under concurrent retry requests', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-并发重开` }))
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '准备并发重开' })
+      .expect(201)
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, financeToken)
+          .post(`/api/finance/payment-schedules/${created.body.data.id}/reopen`)
+          .send({ reopenReason: '并发重试重开' }),
+      ),
+    )
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+    const reopenActivities = detail.body.data.activities.filter(
+      (activity: { activityType: string }) => activity.activityType === 'reopen',
+    )
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      rejectedCount: responses.filter((response) => response.status === 400).length,
+      reopenActivityCount: reopenActivities.length,
+      isOpen: detail.body.data.cancelledAt == null,
+    }).toEqual({
+      successCount: 1,
+      rejectedCount: 7,
+      reopenActivityCount: 1,
+      isOpen: true,
+    })
+  })
+
   describe('payment schedule edit guards', () => {
     async function createSettledReceivable(titleSuffix: string) {
       const created = await authRequest(app, financeToken)
@@ -517,6 +589,56 @@ describe('Finance API (e2e)', () => {
         .expect(400)
 
       expect(response.body.message).toBe('已关闭节点不可编辑')
+    })
+
+    it('never commits both ordinary amount edit and verification under concurrency', async () => {
+      const schedule = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-普通编辑核销竞争`, amountCents: 50000 }))
+        .expect(201)
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const requests = Array.from({ length: 8 }, () => [
+        authRequest(app, financeToken)
+          .post('/api/finance/verifications')
+          .send(
+            verificationPayload({
+              paymentScheduleId: schedule.body.data.id,
+              transactionId: transaction.body.data.id,
+              amountCents: 50000,
+            }),
+          ),
+        authRequest(app, financeToken)
+          .patch(`/api/finance/receivables/${schedule.body.data.id}`)
+          .send({ amountCents: 10000 }),
+      ]).flat()
+      const responses = await Promise.all(requests)
+
+      const verificationSuccessCount = responses.filter(
+        (response, index) => index % 2 === 0 && response.status === 201,
+      ).length
+      const editSuccessCount = responses.filter(
+        (response, index) => index % 2 === 1 && response.status === 200,
+      ).length
+      const detail = await authRequest(app, financeToken)
+        .get(`/api/finance/receivables/${schedule.body.data.id}`)
+        .expect(200)
+
+      expect({
+        conflictingSuccess: verificationSuccessCount > 0 && editSuccessCount > 0,
+        amountCents: detail.body.data.amountCents,
+        settledAmountCents: detail.body.data.settledAmountCents,
+        allocationWithinAmount:
+          detail.body.data.settledAmountCents <= detail.body.data.amountCents,
+      }).toEqual({
+        conflictingSuccess: false,
+        amountCents: verificationSuccessCount === 1 ? 50000 : 10000,
+        settledAmountCents: verificationSuccessCount === 1 ? 50000 : 0,
+        allocationWithinAmount: true,
+      })
     })
   })
 
@@ -2379,6 +2501,102 @@ describe('Finance API (e2e)', () => {
 
       expect(cancel.body.code).toBe(403)
     }
+  })
+
+  it('never commits both amount adjustment and verification under concurrency', async () => {
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 50000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const schedule = generated.body.data.schedules[0]
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedule.id}/confirm-collection`)
+      .send(
+        confirmPayload({
+          amountCents: 10000,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: undefined,
+          counterpartyName: sourceOrder.body.data.displayName,
+        }),
+      )
+      .expect(201)
+    const existingVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: schedule.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${existingVerifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '建立调额所需财务履历' })
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          amountCents: 50000,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: undefined,
+          counterpartyName: sourceOrder.body.data.displayName,
+        }),
+      )
+      .expect(201)
+
+    const requests = Array.from({ length: 8 }, () => [
+      authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: schedule.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 50000,
+          }),
+        ),
+      authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${schedule.id}/adjust-amount`)
+        .send({ amountCents: 10000, adjustReason: '并发调额竞争' }),
+    ]).flat()
+    const responses = await Promise.all(requests)
+
+    const verificationSuccessCount = responses.filter(
+      (response, index) => index % 2 === 0 && response.status === 201,
+    ).length
+    const adjustmentSuccessCount = responses.filter(
+      (response, index) => index % 2 === 1 && response.status === 201,
+    ).length
+    const scheduleAfter = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${schedule.id}`)
+      .expect(200)
+
+    expect({
+      successfulMutationCount: verificationSuccessCount + adjustmentSuccessCount,
+      conflictingSuccess: verificationSuccessCount > 0 && adjustmentSuccessCount > 0,
+      amountCents: scheduleAfter.body.data.amountCents,
+      settledAmountCents: scheduleAfter.body.data.settledAmountCents,
+      allocationWithinAmount:
+        scheduleAfter.body.data.settledAmountCents <= scheduleAfter.body.data.amountCents,
+      adjustmentActivityCount: scheduleAfter.body.data.activities.filter(
+        (activity: { activityType: string }) => activity.activityType === 'amount_adjust',
+      ).length,
+    }).toEqual({
+      successfulMutationCount: 1,
+      conflictingSuccess: false,
+      amountCents: verificationSuccessCount === 1 ? 50000 : 10000,
+      settledAmountCents: verificationSuccessCount === 1 ? 50000 : 0,
+      allocationWithinAmount: true,
+      adjustmentActivityCount: verificationSuccessCount === 1 ? 0 : 1,
+    })
   })
 
   describe('PUT /finance/transactions/:id', () => {

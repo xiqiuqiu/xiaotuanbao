@@ -52,13 +52,18 @@ describe('Departure API (e2e)', () => {
     await prisma.financeTransaction.deleteMany({
       where: {
         organizationId,
-        verifications: {
-          some: {
-            paymentSchedule: {
-              departure: { organizationId, name: { startsWith: testPrefix } },
+        OR: [
+          { departure: { name: { startsWith: testPrefix } } },
+          {
+            verifications: {
+              some: {
+                paymentSchedule: {
+                  departure: { organizationId, name: { startsWith: testPrefix } },
+                },
+              },
             },
           },
-        },
+        ],
       },
     })
     await prisma.paymentSchedule.deleteMany({
