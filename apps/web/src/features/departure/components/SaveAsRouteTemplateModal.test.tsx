@@ -52,6 +52,7 @@ const mockDeparture: DepartureDetail = {
   paidCents: 0,
   unpaidCents: 0,
   isFinanciallySettled: false,
+  archiveHistory: [],
 }
 
 function renderModal(open = true) {

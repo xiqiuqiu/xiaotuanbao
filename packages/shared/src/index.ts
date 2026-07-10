@@ -20,10 +20,13 @@ export type {
   DepartureSummary,
   DepartureListResult,
   DepartureDetail,
+  DepartureArchiveHistoryItem,
   CreateDepartureDto,
   CopyDepartureDto,
   UpdateDepartureDto,
   TransitionDepartureDto,
+  CloseDepartureDto,
+  UnarchiveDepartureDto,
   RouteTemplateCardSummary,
   RouteTemplateDetailSummary,
   CreateRouteTemplateDto,
@@ -81,6 +84,7 @@ export { PartnerKind } from './enums/partner-kind.enum'
 export { PartnerType } from './enums/partner-type.enum'
 export { PartnerContactRole } from './enums/partner-contact-role.enum'
 export { DepartureStatus } from './enums/departure-status.enum'
+export { DepartureArchiveAction } from './enums/departure-archive-action.enum'
 export { DepartureType } from './enums/departure-type.enum'
 export { DepartureRouteSource } from './enums/departure-route-source.enum'
 export { DepartureProgress } from './enums/departure-progress.enum'

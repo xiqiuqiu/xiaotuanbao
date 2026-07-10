@@ -50,7 +50,7 @@ export const TRANSITION_ACTION_META: Record<
   },
   close: {
     title: '关闭发团',
-    description: '关闭后整团不可编辑，将作为历史归档。',
+    description: '关闭后整团不可编辑，将作为历史归档。归档原因必填，并保留操作人与时间。',
     confirmLabel: '确认关闭',
     confirmDanger: true,
   },

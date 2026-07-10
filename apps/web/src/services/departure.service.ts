@@ -2,10 +2,12 @@ import { request } from '@/lib/request'
 import type {
   CopyDepartureDto,
   CreateDepartureDto,
+  CloseDepartureDto,
   DepartureDetail,
   DepartureListResult,
   DepartureSummary,
   TransitionDepartureDto,
+  UnarchiveDepartureDto,
   UpdateDepartureDto,
 } from '@/types/api'
 import type { DepartureStatus, DepartureProgress, DepartureType } from '@xiaotuanbao/shared'
@@ -61,6 +63,16 @@ export async function transitionDeparture(
   return request.post<DepartureDetail>(`/departures/${id}/transition`, payload)
 }
 
-export async function closeDeparture(id: string): Promise<DepartureDetail> {
-  return request.post<DepartureDetail>(`/departures/${id}/close`)
+export async function closeDeparture(
+  id: string,
+  payload: CloseDepartureDto,
+): Promise<DepartureDetail> {
+  return request.post<DepartureDetail>(`/departures/${id}/close`, payload)
+}
+
+export async function unarchiveDeparture(
+  id: string,
+  payload: UnarchiveDepartureDto,
+): Promise<DepartureDetail> {
+  return request.post<DepartureDetail>(`/departures/${id}/unarchive`, payload)
 }

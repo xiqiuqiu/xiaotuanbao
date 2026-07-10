@@ -218,6 +218,23 @@ export interface TransitionDepartureDto {
   targetStatus: string
 }
 
+export interface CloseDepartureDto {
+  reason: string
+}
+
+export interface UnarchiveDepartureDto {
+  reason: string
+}
+
+export interface DepartureArchiveHistoryItem {
+  id: string
+  action: string
+  reason: string
+  operatedBy: string
+  operatedByName: string
+  operatedAt: string
+}
+
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
   grossReceivableCents: number
@@ -227,6 +244,7 @@ export interface DepartureDetail extends DepartureSummary {
   paidCents: number
   unpaidCents: number
   isFinanciallySettled: boolean
+  archiveHistory: DepartureArchiveHistoryItem[]
 }
 
 export interface RouteTemplateCardSummary {

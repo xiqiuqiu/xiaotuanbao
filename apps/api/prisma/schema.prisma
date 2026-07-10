@@ -108,6 +108,13 @@ enum DepartureStatus {
   @@map("departure_status")
 }
 
+enum DepartureArchiveAction {
+  archive
+  unarchive
+
+  @@map("departure_archive_action")
+}
+
 enum PaymentScheduleDirection {
   receivable
   payable
@@ -208,6 +215,7 @@ model Organization {
   suppliers Supplier[]
   partners  Partner[]
   departures Departure[]
+  departureArchiveHistories DepartureArchiveHistory[]
   routeTemplates RouteTemplate[]
   paymentSchedules PaymentSchedule[]
   financeTransactions FinanceTransaction[]
@@ -247,6 +255,7 @@ model User {
   deletedAt       DateTime?    @map("deleted_at")
   roles           UserRole[]
   ownedDepartures Departure[]  @relation("DepartureOwner")
+  departureArchiveOperations DepartureArchiveHistory[] @relation("DepartureArchiveOperator")
 
   @@unique([organizationId, username])
   @@map("users")
@@ -417,9 +426,27 @@ model Departure {
   financeTransactions FinanceTransaction[]
   itinerarySegments   ItinerarySegment[]
   sourceOrders        SourceOrder[]
+  archiveHistories    DepartureArchiveHistory[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
+}
+
+model DepartureArchiveHistory {
+  id             String                 @id @default(cuid())
+  organizationId String                 @map("organization_id")
+  organization   Organization           @relation(fields: [organizationId], references: [id])
+  departureId    String                 @map("departure_id")
+  departure      Departure              @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  action         DepartureArchiveAction
+  reason         String
+  operatedBy     String                 @map("operated_by")
+  operator       User                   @relation("DepartureArchiveOperator", fields: [operatedBy], references: [id])
+  operatedAt     DateTime               @default(now()) @map("operated_at")
+
+  @@index([departureId, operatedAt])
+  @@index([organizationId, departureId])
+  @@map("departure_archive_histories")
 }
 
 model SourceOrder {

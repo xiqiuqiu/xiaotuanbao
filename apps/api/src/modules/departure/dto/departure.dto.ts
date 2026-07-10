@@ -8,7 +8,7 @@ import {
   IsString,
   Min,
 } from 'class-validator'
-import { Type } from 'class-transformer'
+import { Transform, Type } from 'class-transformer'
 import {
   DepartureProgress,
 } from '@xiaotuanbao/shared'
@@ -132,6 +132,20 @@ export class UpdateDepartureDto {
 export class TransitionDepartureDto {
   @IsEnum(PrismaDepartureStatus)
   targetStatus!: PrismaDepartureStatus
+}
+
+export class CloseDepartureDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: '归档原因不能为空' })
+  reason!: string
+}
+
+export class UnarchiveDepartureDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty({ message: '解除归档原因不能为空' })
+  reason!: string
 }
 
 export class CopyDepartureDto {

@@ -19,7 +19,11 @@ import { Link } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
-import { closeDeparture, transitionDeparture } from '@/services/departure.service'
+import {
+  closeDeparture,
+  transitionDeparture,
+  unarchiveDeparture,
+} from '@/services/departure.service'
 import {
   DEPARTURE_PROGRESS_COLORS,
   DEPARTURE_PROGRESS_LABELS,
@@ -30,8 +34,16 @@ import {
 } from '../catalog'
 import { departureToFormValues, type DepartureOverviewFormValues } from '../utils/departure-overview-form'
 import type { DepartureTransitionAction } from '../utils/departure-transition'
+import { DepartureArchiveHistory } from './DepartureArchiveHistory'
 import { DepartureOverviewDrawer } from './DepartureOverviewDrawer'
-import { DepartureTransitionModal } from './DepartureTransitionModal'
+import {
+  DepartureTransitionModal,
+  type CloseDepartureFormValues,
+} from './DepartureTransitionModal'
+import {
+  DepartureUnarchiveModal,
+  type UnarchiveDepartureFormValues,
+} from './DepartureUnarchiveModal'
 import { SaveAsRouteTemplateModal } from './SaveAsRouteTemplateModal'
 
 interface DepartureHeaderProps {
@@ -44,8 +56,11 @@ const responsiveColumns = { xs: 1, sm: 2, md: 3, xl: 4 } as const
 export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) {
   const queryClient = useQueryClient()
   const [overviewForm] = Form.useForm<DepartureOverviewFormValues>()
+  const [closeForm] = Form.useForm<CloseDepartureFormValues>()
+  const [unarchiveForm] = Form.useForm<UnarchiveDepartureFormValues>()
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
+  const [unarchiveModalOpen, setUnarchiveModalOpen] = useState(false)
   const [transitionAction, setTransitionAction] = useState<DepartureTransitionAction | null>(null)
 
   const overviewReadOnly =
@@ -58,7 +73,14 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
     canEdit &&
     departure.status === DepartureStatus.PENDING_SETTLEMENT &&
     departure.isFinanciallySettled
-  const canClose = canEdit && departure.status !== DepartureStatus.CLOSED
+  const canClose = departure.status !== DepartureStatus.CLOSED
+  const canUnarchive = departure.status === DepartureStatus.CLOSED
+
+  const invalidateDeparture = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+    void queryClient.invalidateQueries({ queryKey: ['departures'] })
+    onUpdated()
+  }, [departure.id, onUpdated, queryClient])
 
   const transitionMutation = useMutation({
     mutationFn: (targetStatus: DepartureStatus) =>
@@ -66,9 +88,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
     onSuccess: () => {
       message.success('状态已更新')
       setTransitionAction(null)
-      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-      void queryClient.invalidateQueries({ queryKey: ['departures'] })
-      onUpdated()
+      invalidateDeparture()
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '状态切换失败')
@@ -76,20 +96,33 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
   })
 
   const closeMutation = useMutation({
-    mutationFn: () => closeDeparture(departure.id),
+    mutationFn: (reason: string) => closeDeparture(departure.id, { reason }),
     onSuccess: () => {
       message.success('发团已关闭')
       setTransitionAction(null)
-      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-      void queryClient.invalidateQueries({ queryKey: ['departures'] })
-      onUpdated()
+      closeForm.resetFields()
+      invalidateDeparture()
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '关闭失败')
     },
   })
 
-  const actionLoading = transitionMutation.isPending || closeMutation.isPending
+  const unarchiveMutation = useMutation({
+    mutationFn: (reason: string) => unarchiveDeparture(departure.id, { reason }),
+    onSuccess: () => {
+      message.success('已解除归档，发团回到待结算')
+      setUnarchiveModalOpen(false)
+      unarchiveForm.resetFields()
+      invalidateDeparture()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '解除归档失败')
+    },
+  })
+
+  const actionLoading =
+    transitionMutation.isPending || closeMutation.isPending || unarchiveMutation.isPending
 
   const openEditDrawer = useCallback(() => {
     overviewForm.setFieldsValue(departureToFormValues(departure))
@@ -97,12 +130,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
   }, [departure, overviewForm])
 
   const handleTransitionConfirm = () => {
-    if (!transitionAction) {
-      return
-    }
-
-    if (transitionAction === 'close') {
-      closeMutation.mutate()
+    if (!transitionAction || transitionAction === 'close') {
       return
     }
 
@@ -112,6 +140,14 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
         : DepartureStatus.SETTLED
 
     transitionMutation.mutate(targetStatus)
+  }
+
+  const handleCloseSubmit = (values: CloseDepartureFormValues) => {
+    closeMutation.mutate(values.reason.trim())
+  }
+
+  const handleUnarchiveSubmit = (values: UnarchiveDepartureFormValues) => {
+    unarchiveMutation.mutate(values.reason.trim())
   }
 
   const menuItems = useMemo(() => {
@@ -158,12 +194,27 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
       })
     }
 
+    if (canUnarchive) {
+      statusItems.push({
+        key: 'unarchive',
+        label: '解除归档',
+        onClick: () => setUnarchiveModalOpen(true),
+      })
+    }
+
     if (statusItems.length > 0) {
       items.push({ type: 'divider' }, ...statusItems)
     }
 
     return items
-  }, [canClose, canEdit, canTransitionToPending, canTransitionToSettled, openEditDrawer])
+  }, [
+    canClose,
+    canEdit,
+    canTransitionToPending,
+    canTransitionToSettled,
+    canUnarchive,
+    openEditDrawer,
+  ])
 
   const ownerLabel = departure.ownerName ?? '—'
 
@@ -216,7 +267,23 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
           ]}
         />
 
+        <DepartureArchiveHistory items={departure.archiveHistory ?? []} />
       </Card>
+
+      {canUnarchive ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="发团已关闭，当前仅可查看"
+          description="如需继续处理业务或财务事项，请先解除归档。解除后发团将回到待结算，原归档履历会保留。"
+          action={
+            <Button size="small" type="primary" onClick={() => setUnarchiveModalOpen(true)}>
+              解除归档
+            </Button>
+          }
+        />
+      ) : null}
 
       {canTransitionToSettled ? (
         <Alert
@@ -254,8 +321,25 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
         action={transitionAction}
         departure={departure}
         loading={actionLoading}
-        onClose={() => setTransitionAction(null)}
+        closeForm={closeForm}
+        onClose={() => {
+          setTransitionAction(null)
+          closeForm.resetFields()
+        }}
         onConfirm={handleTransitionConfirm}
+        onCloseSubmit={handleCloseSubmit}
+      />
+
+      <DepartureUnarchiveModal
+        open={unarchiveModalOpen}
+        departure={departure}
+        loading={unarchiveMutation.isPending}
+        form={unarchiveForm}
+        onClose={() => {
+          setUnarchiveModalOpen(false)
+          unarchiveForm.resetFields()
+        }}
+        onSubmit={handleUnarchiveSubmit}
       />
     </>
   )

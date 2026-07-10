@@ -4,20 +4,29 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import type { DepartureDetail, DepartureListResult, DepartureSummary } from '@xiaotuanbao/shared'
+import type {
+  DepartureArchiveHistoryItem,
+  DepartureDetail,
+  DepartureListResult,
+  DepartureSummary,
+} from '@xiaotuanbao/shared'
 import {
+  DepartureArchiveAction,
   DepartureRouteSource,
   DepartureStatus,
   DepartureType,
   type Departure,
+  type DepartureArchiveHistory,
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   CreateDepartureDto,
   CopyDepartureDto,
+  CloseDepartureDto,
   ListDeparturesQueryDto,
   TransitionDepartureDto,
+  UnarchiveDepartureDto,
   UpdateDepartureDto,
 } from './dto/departure.dto'
 import {
@@ -381,16 +390,69 @@ export class DepartureService {
     return this.toDepartureDetailAsync(updated)
   }
 
-  async close(organizationId: string, departureId: string): Promise<DepartureDetail> {
+  async close(
+    organizationId: string,
+    departureId: string,
+    operatedBy: string,
+    dto: CloseDepartureDto,
+  ): Promise<DepartureDetail> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
 
     if (departure.status === DepartureStatus.closed) {
       throw new BadRequestException('发团已关闭')
     }
 
-    const updated = await this.prisma.departure.update({
-      where: { id: departure.id },
-      data: { status: DepartureStatus.closed },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const closed = await tx.departure.update({
+        where: { id: departure.id },
+        data: { status: DepartureStatus.closed },
+      })
+
+      await tx.departureArchiveHistory.create({
+        data: {
+          organizationId,
+          departureId: departure.id,
+          action: DepartureArchiveAction.archive,
+          reason: dto.reason,
+          operatedBy,
+        },
+      })
+
+      return closed
+    })
+
+    return this.toDepartureDetailAsync(updated)
+  }
+
+  async unarchive(
+    organizationId: string,
+    departureId: string,
+    operatedBy: string,
+    dto: UnarchiveDepartureDto,
+  ): Promise<DepartureDetail> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+
+    if (departure.status !== DepartureStatus.closed) {
+      throw new BadRequestException('仅已关闭发团可以解除归档')
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const reopened = await tx.departure.update({
+        where: { id: departure.id },
+        data: { status: DepartureStatus.pending_settlement },
+      })
+
+      await tx.departureArchiveHistory.create({
+        data: {
+          organizationId,
+          departureId: departure.id,
+          action: DepartureArchiveAction.unarchive,
+          reason: dto.reason,
+          operatedBy,
+        },
+      })
+
+      return reopened
     })
 
     return this.toDepartureDetailAsync(updated)
@@ -415,15 +477,44 @@ export class DepartureService {
   }
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
-    const [readModel, ownerNameMap] = await Promise.all([
+    const [readModel, ownerNameMap, archiveHistory] = await Promise.all([
       this.departureReadModelService.getForDeparture(departure.id),
       this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
+      this.loadArchiveHistory(departure.id),
     ])
     return this.toDepartureDetail(
       departure,
       readModel,
       ownerNameMap.get(departure.ownerUserId),
+      archiveHistory,
     )
+  }
+
+  private async loadArchiveHistory(departureId: string): Promise<DepartureArchiveHistoryItem[]> {
+    const rows = await this.prisma.departureArchiveHistory.findMany({
+      where: { departureId },
+      orderBy: { operatedAt: 'asc' },
+      include: {
+        operator: {
+          select: { name: true },
+        },
+      },
+    })
+
+    return rows.map((row) => this.toArchiveHistoryItem(row))
+  }
+
+  private toArchiveHistoryItem(
+    row: DepartureArchiveHistory & { operator: { name: string } },
+  ): DepartureArchiveHistoryItem {
+    return {
+      id: row.id,
+      action: row.action,
+      reason: row.reason,
+      operatedBy: row.operatedBy,
+      operatedByName: row.operator.name,
+      operatedAt: row.operatedAt.toISOString(),
+    }
   }
 
   private hasUpdateFields(dto: UpdateDepartureDto): boolean {
@@ -459,7 +550,8 @@ export class DepartureService {
   private toDepartureDetail(
     departure: Departure,
     readModel: DepartureReadModelAggregate,
-    ownerName?: string,
+    ownerName: string | undefined,
+    archiveHistory: DepartureArchiveHistoryItem[],
   ): DepartureDetail {
     return {
       ...this.toDepartureSummary(departure, readModel, ownerName),
@@ -470,6 +562,7 @@ export class DepartureService {
       paidCents: readModel.paidCents,
       unpaidCents: readModel.unpaidCents,
       isFinanciallySettled: readModel.isFinanciallySettled,
+      archiveHistory,
     }
   }
 

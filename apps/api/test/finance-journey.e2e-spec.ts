@@ -978,6 +978,7 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/close`)
+      .send({ reason: '测试归档' })
       .expect(201)
 
     const blockedReceivable = await authRequest(app, coordinatorToken)

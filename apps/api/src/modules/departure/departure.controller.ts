@@ -20,8 +20,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateDepartureDto,
   CopyDepartureDto,
+  CloseDepartureDto,
   ListDeparturesQueryDto,
   TransitionDepartureDto,
+  UnarchiveDepartureDto,
   UpdateDepartureDto,
 } from './dto/departure.dto'
 import { DepartureService } from './departure.service'
@@ -99,9 +101,25 @@ export class DepartureController {
   @Post(':id/close')
   @RequireMenu('/departure')
   close(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
+    @Body() dto: CloseDepartureDto,
   ): Promise<DepartureDetail> {
-    return this.departureService.close(request.user.organizationId, id)
+    return this.departureService.close(request.user.organizationId, id, request.user.userId, dto)
+  }
+
+  @Post(':id/unarchive')
+  @RequireMenu('/departure')
+  unarchive(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Body() dto: UnarchiveDepartureDto,
+  ): Promise<DepartureDetail> {
+    return this.departureService.unarchive(
+      request.user.organizationId,
+      id,
+      request.user.userId,
+      dto,
+    )
   }
 }

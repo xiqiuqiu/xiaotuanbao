@@ -374,6 +374,7 @@ describe('Departure API (e2e)', () => {
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/close`)
+      .send({ reason: '测试归档' })
       .expect(201)
 
     const patchResponse = await authRequest(app, coordinatorToken)
@@ -390,6 +391,7 @@ describe('Departure API (e2e)', () => {
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/close`)
+      .send({ reason: '测试归档' })
       .expect(201)
 
     const response = await authRequest(app, coordinatorToken)
@@ -399,6 +401,249 @@ describe('Departure API (e2e)', () => {
 
     expect(response.body.code).toBe(400)
     expect(response.body.message).toBe('已关闭发团不可变更状态')
+  })
+
+  describe('Archive / unarchive (issue #85)', () => {
+    let adminToken: string
+
+    beforeAll(async () => {
+      adminToken = await loginAs(app, 'admin')
+    })
+
+    it('rejects close without reason', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-close-no-reason` })
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({})
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('rejects close with blank reason', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-close-blank-reason` })
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '   ' })
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('archives departure with required reason and records operator history', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-archive-reason` })
+
+      const closed = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '本团业务结束，归档备查' })
+        .expect(201)
+
+      expect(closed.body.data.status).toBe(DepartureStatus.closed)
+      expect(closed.body.data.archiveHistory).toEqual([
+        expect.objectContaining({
+          action: 'archive',
+          reason: '本团业务结束，归档备查',
+          operatedBy: ownerUserId,
+        }),
+      ])
+      expect(closed.body.data.archiveHistory[0].operatedAt).toBeTruthy()
+      expect(closed.body.data.archiveHistory[0].operatedByName).toBeTruthy()
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(detail.body.data.status).toBe(DepartureStatus.closed)
+      expect(detail.body.data.archiveHistory).toHaveLength(1)
+      expect(detail.body.data.archiveHistory[0]).toMatchObject({
+        action: 'archive',
+        reason: '本团业务结束，归档备查',
+        operatedBy: ownerUserId,
+      })
+    })
+
+    it('rejects unarchive without reason', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-unarchive-no-reason` })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '先归档' })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({})
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+    })
+
+    it('rejects unarchive when departure is not closed', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-unarchive-not-closed` })
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '误操作' })
+        .expect(400)
+
+      expect(response.body.code).toBe(400)
+      expect(response.body.message).toBe('仅已关闭发团可以解除归档')
+    })
+
+    it('unarchives closed departure to pending_settlement and keeps original archive history', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-unarchive-keep` })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '原归档原因不可丢' })
+        .expect(201)
+
+      const unarchived = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '发现账款需继续处理' })
+        .expect(201)
+
+      expect(unarchived.body.data.status).toBe(DepartureStatus.pending_settlement)
+      expect(unarchived.body.data.archiveHistory).toHaveLength(2)
+      expect(unarchived.body.data.archiveHistory[0]).toMatchObject({
+        action: 'archive',
+        reason: '原归档原因不可丢',
+        operatedBy: ownerUserId,
+      })
+      expect(unarchived.body.data.archiveHistory[1]).toMatchObject({
+        action: 'unarchive',
+        reason: '发现账款需继续处理',
+        operatedBy: ownerUserId,
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(detail.body.data.status).toBe(DepartureStatus.pending_settlement)
+      expect(detail.body.data.archiveHistory).toHaveLength(2)
+      expect(detail.body.data.archiveHistory.map((item: { reason: string }) => item.reason)).toEqual([
+        '原归档原因不可丢',
+        '发现账款需继续处理',
+      ])
+    })
+
+    it('allows enterprise admin to unarchive', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-unarchive-admin` })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '计调归档' })
+        .expect(201)
+
+      const response = await authRequest(app, adminToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '企业管理员解除归档' })
+        .expect(201)
+
+      expect(response.body.data.status).toBe(DepartureStatus.pending_settlement)
+      expect(response.body.data.archiveHistory).toHaveLength(2)
+      expect(response.body.data.archiveHistory[1].action).toBe('unarchive')
+      expect(response.body.data.archiveHistory[1].reason).toBe('企业管理员解除归档')
+    })
+
+    it('rejects finance role from closing or unarchiving', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-finance-denied` })
+
+      const closeDenied = await authRequest(app, financeToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '财务不应归档' })
+        .expect(403)
+
+      expect(closeDenied.body.message).toBe('无权访问')
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '计调归档后测财务' })
+        .expect(201)
+
+      const unarchiveDenied = await authRequest(app, financeToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '财务不应解除归档' })
+        .expect(403)
+
+      expect(unarchiveDenied.body.message).toBe('无权访问')
+    })
+
+    it('rejects cross-organization close and unarchive', async () => {
+      const otherOrg = await prisma.organization.create({
+        data: {
+          name: `${testPrefix}-archive-other-org`,
+          businessPrefix: uniqueBusinessPrefix(`${testPrefix}-arch`),
+        },
+      })
+      const otherUser = await prisma.user.create({
+        data: {
+          organizationId: otherOrg.id,
+          username: `${testPrefix}-archive-other-user`,
+          passwordHash: 'unused',
+          name: '跨企业用户',
+        },
+      })
+      const foreign = await prisma.departure.create({
+        data: {
+          organizationId: otherOrg.id,
+          departureNo: `${testPrefix}-arch-foreign`,
+          name: `${testPrefix}-arch-foreign-name`,
+          routeName: '外部路线',
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          endDate: new Date('2026-08-05T00:00:00.000Z'),
+          dayCount: 5,
+          ownerUserId: otherUser.id,
+          status: DepartureStatus.closed,
+        },
+      })
+
+      const closeDenied = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${foreign.id}/close`)
+        .send({ reason: '跨企业归档' })
+        .expect(404)
+      expect(closeDenied.body.message).toBe('发团不存在')
+
+      const unarchiveDenied = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${foreign.id}/unarchive`)
+        .send({ reason: '跨企业解除归档' })
+        .expect(404)
+      expect(unarchiveDenied.body.message).toBe('发团不存在')
+
+      await prisma.departure.delete({ where: { id: foreign.id } })
+      await prisma.user.delete({ where: { id: otherUser.id } })
+      await prisma.organization.delete({ where: { id: otherOrg.id } })
+    })
+
+    it('preserves prior archive history after re-archive', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-rearchive` })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '第一次归档' })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '中间解除' })
+        .expect(201)
+
+      const rearchived = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '第二次归档' })
+        .expect(201)
+
+      expect(rearchived.body.data.status).toBe(DepartureStatus.closed)
+      expect(rearchived.body.data.archiveHistory).toHaveLength(3)
+      expect(rearchived.body.data.archiveHistory.map((item: { reason: string }) => item.reason)).toEqual([
+        '第一次归档',
+        '中间解除',
+        '第二次归档',
+      ])
+    })
   })
 
   describe('Source orders', () => {
@@ -1027,6 +1272,7 @@ describe('Departure API (e2e)', () => {
 
       await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '测试归档' })
         .expect(201)
 
       const createResponse = await authRequest(app, coordinatorToken)
