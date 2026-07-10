@@ -38,6 +38,7 @@ export class RouteTemplateCopyService {
         data: {
           departureId,
           name: templateSegment.name,
+          sortOrder: templateSegment.sortOrder,
           startDate: dateRange.startDate,
           endDate: dateRange.endDate,
           dayCount: dateRange.dayCount,

@@ -5,17 +5,19 @@ export class CreateItinerarySegmentDto {
   @IsNotEmpty()
   name!: string
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  startDate!: string
+  startDate?: string | null
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  endDate!: string
+  endDate?: string | null
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  destination!: string
+  destination?: string | null
 
   @IsOptional()
   @IsString()
@@ -31,17 +33,16 @@ export class UpdateItinerarySegmentDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  startDate?: string
+  startDate?: string | null
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  endDate?: string
+  endDate?: string | null
 
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  destination?: string
+  destination?: string | null
 
   @IsOptional()
   @IsString()

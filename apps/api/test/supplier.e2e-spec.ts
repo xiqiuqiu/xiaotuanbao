@@ -380,6 +380,7 @@ describe('Supplier API (e2e)', () => {
       data: {
         departureId: departure.id,
         name: '测试段',
+        sortOrder: 0,
         startDate: new Date('2026-08-01'),
         endDate: new Date('2026-08-03'),
         dayCount: 3,
@@ -445,6 +446,7 @@ describe('Supplier API (e2e)', () => {
       data: {
         departureId: departure.id,
         name: '测试段',
+        sortOrder: 0,
         startDate: new Date('2026-09-01'),
         endDate: new Date('2026-09-03'),
         dayCount: 3,

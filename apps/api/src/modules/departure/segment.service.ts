@@ -17,13 +17,13 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
-import {
-  computeDayCount,
-  formatDateOnly,
-  parseDateOnly,
-} from './departure-date.utils'
+import { formatDateOnly } from './departure-date.utils'
 import { aggregatePayableOverview } from './segment-payable-overview.utils'
-import { validateSegmentDates, validateSegmentFields } from './segment.validation'
+import {
+  normalizeOptionalText,
+  resolveSegmentDatePair,
+  validateSegmentFields,
+} from './segment.validation'
 
 type SegmentWithResources = ItinerarySegment & {
   resources: Pick<SegmentResource, 'id' | 'amountCents' | 'resourceKind'>[]
@@ -54,7 +54,7 @@ export class SegmentService {
           },
         },
       },
-      orderBy: [{ startDate: 'asc' }],
+      orderBy: [{ sortOrder: 'asc' }],
     })
 
     const resourceIds = segments.flatMap((segment) =>
@@ -74,7 +74,7 @@ export class SegmentService {
       total: items.length,
       summary: {
         segmentCount: items.length,
-        totalDays: items.reduce((sum, item) => sum + item.dayCount, 0),
+        totalDays: items.reduce((sum, item) => sum + (item.dayCount ?? 0), 0),
         resourceCount: items.reduce((sum, item) => sum + item.resourceCount, 0),
         payableOverview: aggregatePayableOverview(
           resourceIds.map(
@@ -96,25 +96,36 @@ export class SegmentService {
     this.ensureDepartureEditable(departure)
 
     const name = dto.name.trim()
-    const destination = dto.destination.trim()
-    validateSegmentFields({ name, destination })
+    validateSegmentFields({ name })
 
-    const startDate = parseDateOnly(dto.startDate)
-    const endDate = parseDateOnly(dto.endDate)
-    validateSegmentDates({
-      startDate,
-      endDate,
+    const dates = resolveSegmentDatePair({
+      startDate: dto.startDate,
+      endDate: dto.endDate,
       departureStartDate: departure.startDate,
       departureEndDate: departure.endDate,
+      mode: 'create',
     })
+
+    if (dates.kind === 'keep') {
+      throw new Error('unreachable: create date resolve returned keep')
+    }
+
+    const maxSort = await this.prisma.itinerarySegment.aggregate({
+      where: { departureId: departure.id },
+      _max: { sortOrder: true },
+    })
+    const sortOrder = (maxSort._max.sortOrder ?? -1) + 1
+
+    const destination = normalizeOptionalText(dto.destination) ?? null
 
     const created = await this.prisma.itinerarySegment.create({
       data: {
         departureId: departure.id,
         name,
-        startDate,
-        endDate,
-        dayCount: computeDayCount(startDate, endDate),
+        sortOrder,
+        startDate: dates.startDate,
+        endDate: dates.endDate,
+        dayCount: dates.dayCount,
         destination,
         notes: dto.notes?.trim() || null,
       },
@@ -151,28 +162,37 @@ export class SegmentService {
 
     validateSegmentFields({
       name: dto.name,
-      destination: dto.destination,
     })
 
-    const startDate = dto.startDate ? parseDateOnly(dto.startDate) : segment.startDate
-    const endDate = dto.endDate ? parseDateOnly(dto.endDate) : segment.endDate
-    validateSegmentDates({
-      startDate,
-      endDate,
+    const dates = resolveSegmentDatePair({
+      startDate: dto.startDate,
+      endDate: dto.endDate,
       departureStartDate: segment.departure.startDate,
       departureEndDate: segment.departure.endDate,
+      existing: {
+        startDate: segment.startDate,
+        endDate: segment.endDate,
+        dayCount: segment.dayCount,
+      },
+      mode: 'update',
     })
+
+    const destination = normalizeOptionalText(dto.destination)
 
     const updated = await this.prisma.itinerarySegment.update({
       where: { id: segment.id },
       data: {
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        ...(dto.startDate !== undefined ? { startDate } : {}),
-        ...(dto.endDate !== undefined ? { endDate } : {}),
-        ...(dto.startDate !== undefined || dto.endDate !== undefined
-          ? { dayCount: computeDayCount(startDate, endDate) }
-          : {}),
-        ...(dto.destination !== undefined ? { destination: dto.destination.trim() } : {}),
+        ...(dates.kind === 'empty'
+          ? { startDate: null, endDate: null, dayCount: null }
+          : dates.kind === 'set'
+            ? {
+                startDate: dates.startDate,
+                endDate: dates.endDate,
+                dayCount: dates.dayCount,
+              }
+            : {}),
+        ...(destination !== undefined ? { destination } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
       },
       include: {
@@ -285,8 +305,9 @@ export class SegmentService {
       id: segment.id,
       departureId: segment.departureId,
       name: segment.name,
-      startDate: formatDateOnly(segment.startDate),
-      endDate: formatDateOnly(segment.endDate),
+      sortOrder: segment.sortOrder,
+      startDate: segment.startDate ? formatDateOnly(segment.startDate) : null,
+      endDate: segment.endDate ? formatDateOnly(segment.endDate) : null,
       dayCount: segment.dayCount,
       destination: segment.destination,
       notes: segment.notes,

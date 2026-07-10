@@ -67,7 +67,7 @@ type SegmentResourceWithRelations = SegmentResource & {
   supplier: Supplier | null
   segment: {
     id: string
-    endDate: Date
+    endDate: Date | null
     departure: { id: string; organizationId: string; status: string; endDate: Date }
   }
 }

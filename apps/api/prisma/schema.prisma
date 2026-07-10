@@ -400,7 +400,7 @@ model RouteTemplateSegment {
   template    RouteTemplate           @relation(fields: [templateId], references: [id], onDelete: Cascade)
   sortOrder   Int                     @map("sort_order")
   name        String
-  dayCount    Int                     @map("day_count")
+  dayCount    Int?                    @map("day_count")
   destination String?
   notes       String?
   resources   RouteTemplateResource[]
@@ -541,9 +541,10 @@ model ItinerarySegment {
   departureId          String            @map("departure_id")
   departure            Departure         @relation(fields: [departureId], references: [id], onDelete: Cascade)
   name                 String
-  startDate            DateTime          @map("start_date") @db.Date
-  endDate              DateTime          @map("end_date") @db.Date
-  dayCount             Int               @map("day_count")
+  sortOrder            Int               @map("sort_order")
+  startDate            DateTime?         @map("start_date") @db.Date
+  endDate              DateTime?         @map("end_date") @db.Date
+  dayCount             Int?              @map("day_count")
   destination  String?
   notes        String?
   resources            SegmentResource[]

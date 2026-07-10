@@ -6,9 +6,9 @@ import {
 
 describe('resolveSelectedSegmentId', () => {
   const segments = [
-    { id: 'seg-b', startDate: '2026-07-04' },
-    { id: 'seg-a', startDate: '2026-07-01' },
-    { id: 'seg-c', startDate: '2026-07-10' },
+    { id: 'seg-b', sortOrder: 1 },
+    { id: 'seg-a', sortOrder: 0 },
+    { id: 'seg-c', sortOrder: 2 },
   ]
 
   it('returns undefined when there are no segments', () => {
@@ -16,7 +16,7 @@ describe('resolveSelectedSegmentId', () => {
     expect(resolveSelectedSegmentId([], 'seg-a')).toBeUndefined()
   })
 
-  it('defaults to the earliest startDate segment when segmentId is missing', () => {
+  it('defaults to the first sortOrder segment when segmentId is missing', () => {
     expect(resolveSelectedSegmentId(segments, undefined)).toBe('seg-a')
   })
 
@@ -24,16 +24,16 @@ describe('resolveSelectedSegmentId', () => {
     expect(resolveSelectedSegmentId(segments, 'seg-b')).toBe('seg-b')
   })
 
-  it('falls back to the earliest startDate segment when segmentId is invalid', () => {
+  it('falls back to the first sortOrder segment when segmentId is invalid', () => {
     expect(resolveSelectedSegmentId(segments, 'missing')).toBe('seg-a')
   })
 })
 
 describe('resolveAdjacentSegmentId', () => {
   const segments = [
-    { id: 'seg-b', startDate: '2026-07-04' },
-    { id: 'seg-a', startDate: '2026-07-01' },
-    { id: 'seg-c', startDate: '2026-07-10' },
+    { id: 'seg-b', sortOrder: 1 },
+    { id: 'seg-a', sortOrder: 0 },
+    { id: 'seg-c', sortOrder: 2 },
   ]
 
   it('selects the next segment when deleting a middle segment', () => {
@@ -49,7 +49,7 @@ describe('resolveAdjacentSegmentId', () => {
   })
 
   it('returns undefined when deleting the only segment', () => {
-    expect(resolveAdjacentSegmentId([{ id: 'seg-a', startDate: '2026-07-01' }], 'seg-a')).toBeUndefined()
+    expect(resolveAdjacentSegmentId([{ id: 'seg-a', sortOrder: 0 }], 'seg-a')).toBeUndefined()
   })
 
   it('falls back to the first remaining segment when deleted id is unknown', () => {

@@ -145,7 +145,9 @@ export function ResourceDrawer({
     >
       {segment ? (
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          {segment.name}｜{formatSegmentDateRange(segment.startDate, segment.endDate)}
+          {[segment.name, formatSegmentDateRange(segment.startDate, segment.endDate)]
+            .filter(Boolean)
+            .join('｜')}
         </Typography.Paragraph>
       ) : null}
 

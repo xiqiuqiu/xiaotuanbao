@@ -1,52 +1,53 @@
 import dayjs from 'dayjs'
 import type { ItinerarySegmentSummary } from '@/types/api'
-import type { CreateItinerarySegmentDto } from '@/types/api'
-import { computeDayCount } from './departure-wizard-form'
+import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from '@/types/api'
 
 export interface SegmentFormValues {
   name: string
-  startDate: string
-  endDate: string
-  dayCount: number
-  destination: string
+  startDate?: string
+  endDate?: string
   notes?: string
 }
 
 export function segmentToFormValues(segment: ItinerarySegmentSummary): SegmentFormValues {
   return {
     name: segment.name,
-    startDate: segment.startDate,
-    endDate: segment.endDate,
-    dayCount: segment.dayCount,
-    destination: segment.destination ?? '',
+    startDate: segment.startDate ?? undefined,
+    endDate: segment.endDate ?? undefined,
     notes: segment.notes ?? undefined,
   }
 }
 
-export function createDefaultSegmentFormValues(
-  departureStartDate: string,
-  departureEndDate: string,
-): SegmentFormValues {
+export function createDefaultSegmentFormValues(): SegmentFormValues {
   return {
     name: '',
-    startDate: departureStartDate,
-    endDate: departureEndDate,
-    dayCount: computeDayCount(departureStartDate, departureEndDate),
-    destination: '',
+    startDate: undefined,
+    endDate: undefined,
   }
 }
 
-export function formValuesToPayload(values: SegmentFormValues): CreateItinerarySegmentDto {
+export function formValuesToPayload(
+  values: SegmentFormValues,
+): CreateItinerarySegmentDto & UpdateItinerarySegmentDto {
+  const startDate = values.startDate || null
+  const endDate = values.endDate || null
+
   return {
     name: values.name.trim(),
-    startDate: values.startDate,
-    endDate: values.endDate,
-    destination: values.destination.trim(),
+    startDate,
+    endDate,
     notes: values.notes?.trim() || undefined,
   }
 }
 
-export function formatSegmentDateRange(startDate: string, endDate: string): string {
+export function formatSegmentDateRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): string | null {
+  if (!startDate || !endDate) {
+    return null
+  }
+
   const start = dayjs(startDate)
   const end = dayjs(endDate)
 

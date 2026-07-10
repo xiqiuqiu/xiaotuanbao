@@ -14,7 +14,6 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import type { DepartureDetail } from '@/types/api'
 import type { ItinerarySegmentSummary } from '@/types/api'
-import { computeDayCount } from '../utils/departure-wizard-form'
 import {
   createDefaultSegmentFormValues,
   formValuesToPayload,
@@ -38,23 +37,6 @@ function toDayjs(value?: string): Dayjs | null {
   return value ? dayjs(value) : null
 }
 
-function DayCountPreview({ form }: { form: ReturnType<typeof Form.useForm<SegmentFormValues>>[0] }) {
-  const startDate = Form.useWatch('startDate', form)
-  const endDate = Form.useWatch('endDate', form)
-
-  if (!startDate || !endDate) {
-    return null
-  }
-
-  const dayCount = computeDayCount(startDate, endDate)
-
-  return (
-    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-      共 {dayCount} 天
-    </Typography.Paragraph>
-  )
-}
-
 export function SegmentDrawer({
   open,
   departure,
@@ -71,11 +53,8 @@ export function SegmentDrawer({
   const canDelete = showDelete && (editing?.resourceCount ?? 0) === 0
 
   const initialValues = useMemo(
-    () =>
-      editing
-        ? segmentToFormValues(editing)
-        : createDefaultSegmentFormValues(departure.startDate, departure.endDate),
-    [departure.endDate, departure.startDate, editing],
+    () => (editing ? segmentToFormValues(editing) : createDefaultSegmentFormValues()),
+    [editing],
   )
 
   useEffect(() => {
@@ -92,21 +71,19 @@ export function SegmentDrawer({
     onClose()
   }
 
-  const handleDateChange = () => {
+  const validateDatePair = () => {
     const startDate = form.getFieldValue('startDate') as string | undefined
     const endDate = form.getFieldValue('endDate') as string | undefined
-    if (startDate && endDate) {
-      form.setFieldValue('dayCount', computeDayCount(startDate, endDate))
-    }
-  }
 
-  const validateEndDate = (_: unknown, value: string | undefined) => {
-    if (!value) {
+    if (!startDate && !endDate) {
       return Promise.resolve()
     }
 
-    const startDate = form.getFieldValue('startDate') as string | undefined
-    if (startDate && value < startDate) {
+    if (!startDate || !endDate) {
+      return Promise.reject(new Error('开始日期与结束日期须同时填写或同时清空'))
+    }
+
+    if (endDate < startDate) {
       return Promise.reject(new Error('结束日期不能早于开始日期'))
     }
 
@@ -179,17 +156,18 @@ export function SegmentDrawer({
         <Form.Item
           label="开始日期"
           name="startDate"
-          rules={[{ required: true, message: '请选择开始日期' }]}
+          dependencies={['endDate']}
+          rules={[{ validator: validateDatePair }]}
           getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
           getValueFromEvent={(value: Dayjs | null) => value?.format('YYYY-MM-DD')}
         >
           <DatePicker
             style={{ width: '100%' }}
+            allowClear
             disabledDate={(current) =>
               current.isBefore(dayjs(departure.startDate), 'day') ||
               current.isAfter(dayjs(departure.endDate), 'day')
             }
-            onChange={handleDateChange}
           />
         </Form.Item>
 
@@ -197,31 +175,18 @@ export function SegmentDrawer({
           label="结束日期"
           name="endDate"
           dependencies={['startDate']}
-          rules={[
-            { required: true, message: '请选择结束日期' },
-            { validator: validateEndDate },
-          ]}
+          rules={[{ validator: validateDatePair }]}
           getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
           getValueFromEvent={(value: Dayjs | null) => value?.format('YYYY-MM-DD')}
         >
           <DatePicker
             style={{ width: '100%' }}
+            allowClear
             disabledDate={(current) =>
               current.isBefore(dayjs(departure.startDate), 'day') ||
               current.isAfter(dayjs(departure.endDate), 'day')
             }
-            onChange={handleDateChange}
           />
-        </Form.Item>
-
-        <DayCountPreview form={form} />
-
-        <Form.Item
-          label="目的地"
-          name="destination"
-          rules={[{ required: true, whitespace: true, message: '请填写目的地' }]}
-        >
-          <Input placeholder="如喀纳斯" />
         </Form.Item>
 
         <Form.Item label="备注" name="notes">

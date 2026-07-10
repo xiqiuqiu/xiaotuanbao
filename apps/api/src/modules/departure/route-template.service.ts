@@ -88,7 +88,7 @@ export class RouteTemplateService {
                 create: dto.segments.map((segment) => ({
                   sortOrder: segment.sortOrder,
                   name: segment.name.trim(),
-                  dayCount: segment.dayCount,
+                  dayCount: segment.dayCount ?? null,
                   destination: segment.destination?.trim() || null,
                   notes: segment.notes?.trim() || null,
                   resources: segment.resources?.length

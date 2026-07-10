@@ -376,8 +376,9 @@ async function seedDemoDepartures(
         startDate: parseDate(departureData.startDate),
         endDate: parseDate(departureData.endDate),
         itinerarySegments: {
-          create: segments.map((segment) => ({
+          create: segments.map((segment, sortOrder) => ({
             name: segment.name,
+            sortOrder,
             startDate: parseDate(segment.startDate),
             endDate: parseDate(segment.endDate),
             dayCount: segment.dayCount,

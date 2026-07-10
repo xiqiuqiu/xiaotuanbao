@@ -288,7 +288,7 @@ export interface CreateRouteTemplateResourceDto {
 export interface CreateRouteTemplateSegmentDto {
   sortOrder: number
   name: string
-  dayCount: number
+  dayCount?: number | null
   destination?: string
   notes?: string
   resources?: CreateRouteTemplateResourceDto[]
@@ -653,9 +653,10 @@ export interface ItinerarySegmentSummary {
   id: string
   departureId: string
   name: string
-  startDate: string
-  endDate: string
-  dayCount: number
+  sortOrder: number
+  startDate: string | null
+  endDate: string | null
+  dayCount: number | null
   destination: string | null
   notes: string | null
   resourceCount: number
@@ -679,17 +680,17 @@ export interface ItinerarySegmentListResult {
 
 export interface CreateItinerarySegmentDto {
   name: string
-  startDate: string
-  endDate: string
-  destination: string
+  startDate?: string | null
+  endDate?: string | null
+  destination?: string | null
   notes?: string
 }
 
 export interface UpdateItinerarySegmentDto {
   name?: string
-  startDate?: string
-  endDate?: string
-  destination?: string
+  startDate?: string | null
+  endDate?: string | null
+  destination?: string | null
   notes?: string | null
 }
 

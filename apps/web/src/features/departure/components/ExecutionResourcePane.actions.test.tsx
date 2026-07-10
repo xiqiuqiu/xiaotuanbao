@@ -25,6 +25,7 @@ const segment: ItinerarySegmentSummary = {
   id: 'segment-1',
   departureId: 'departure-1',
   name: '西栅夜游',
+  sortOrder: 0,
   startDate: '2026-07-14',
   endDate: '2026-07-14',
   dayCount: 1,

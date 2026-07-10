@@ -1056,6 +1056,7 @@ describe('Departure API (e2e)', () => {
 
       expect(response.body.data).toMatchObject({
         name: '喀纳斯段',
+        sortOrder: 0,
         startDate: '2026-08-01',
         endDate: '2026-08-03',
         dayCount: 3,
@@ -1067,6 +1068,72 @@ describe('Departure API (e2e)', () => {
       })
       expect(response.body.data).not.toHaveProperty('applicableGuestCount')
       expect(response.body.data).not.toHaveProperty('fromTemplate')
+    })
+
+    it('creates segment without dates', async () => {
+      const departure = await createSegmentDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({ name: '待定段' })
+        .expect(201)
+
+      expect(response.body.data).toMatchObject({
+        name: '待定段',
+        sortOrder: 0,
+        startDate: null,
+        endDate: null,
+        dayCount: null,
+        destination: null,
+      })
+    })
+
+    it('appends sortOrder for subsequent segments', async () => {
+      const departure = await createSegmentDeparture()
+
+      const first = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({ name: '第一段' })
+        .expect(201)
+
+      const second = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({ name: '第二段' })
+        .expect(201)
+
+      expect(first.body.data.sortOrder).toBe(0)
+      expect(second.body.data.sortOrder).toBe(1)
+    })
+
+    it('clears segment dates with explicit null', async () => {
+      const departure = await createSegmentDeparture()
+
+      const created = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload())
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .patch(`/api/segments/${created.body.data.id}`)
+        .send({ startDate: null, endDate: null })
+        .expect(200)
+
+      expect(response.body.data).toMatchObject({
+        startDate: null,
+        endDate: null,
+        dayCount: null,
+      })
+    })
+
+    it('returns 400 when only one date is provided', async () => {
+      const departure = await createSegmentDeparture()
+
+      const response = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({ name: '半边日期', startDate: '2026-08-01' })
+        .expect(400)
+
+      expect(response.body.message).toBe('开始日期与结束日期须同时填写或同时清空')
     })
 
     it('lists segments with summary', async () => {

@@ -194,15 +194,15 @@ describe('Route Template API (e2e)', () => {
 
     const segments = await prisma.itinerarySegment.findMany({
       where: { departureId },
-      orderBy: { startDate: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     })
     expect(segments).toHaveLength(2)
-    expect(segments[0].name).toBe('喀纳斯')
-    expect(segments[0].startDate.toISOString().slice(0, 10)).toBe('2026-08-01')
-    expect(segments[0].endDate.toISOString().slice(0, 10)).toBe('2026-08-03')
-    expect(segments[1].name).toBe('阿勒泰')
-    expect(segments[1].startDate.toISOString().slice(0, 10)).toBe('2026-08-04')
-    expect(segments[1].endDate.toISOString().slice(0, 10)).toBe('2026-08-10')
+    expect(segments[0]!.name).toBe('喀纳斯')
+    expect(segments[0]!.startDate!.toISOString().slice(0, 10)).toBe('2026-08-01')
+    expect(segments[0]!.endDate!.toISOString().slice(0, 10)).toBe('2026-08-03')
+    expect(segments[1]!.name).toBe('阿勒泰')
+    expect(segments[1]!.startDate!.toISOString().slice(0, 10)).toBe('2026-08-04')
+    expect(segments[1]!.endDate!.toISOString().slice(0, 10)).toBe('2026-08-10')
 
     const resources = await prisma.segmentResource.findMany({
       where: { segmentId: { in: segments.map((segment) => segment.id) } },
@@ -279,7 +279,7 @@ describe('Route Template API (e2e)', () => {
 
     const segments = await prisma.itinerarySegment.findMany({
       where: { departureId },
-      orderBy: { startDate: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     })
     expect(segments[0].name).toBe('喀纳斯')
   })
@@ -318,7 +318,7 @@ describe('Route Template API (e2e)', () => {
 
     const segmentsBefore = await prisma.itinerarySegment.findMany({
       where: { departureId },
-      orderBy: { startDate: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     })
     expect(segmentsBefore).toHaveLength(2)
 
@@ -352,7 +352,7 @@ describe('Route Template API (e2e)', () => {
 
     const segmentsAfter = await prisma.itinerarySegment.findMany({
       where: { departureId },
-      orderBy: { startDate: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     })
     expect(segmentsAfter).toHaveLength(2)
     expect(segmentsAfter.map((segment) => segment.name)).toEqual(['喀纳斯', '阿勒泰'])
@@ -392,6 +392,57 @@ describe('Route Template API (e2e)', () => {
       .expect(400)
 
     expect(String(response.body.message)).toContain('行程段')
+  })
+
+  it('saves template from departure including segments with unset dates', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-undated-seg`,
+        routeName: `${testPrefix}-未定日期`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '有日期段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({ name: '未定日期段' })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/route-templates/from-departure/${departureId}`)
+      .send({
+        name: `${testPrefix}-undated-template`,
+        defaultDayCount: 10,
+      })
+      .expect(201)
+
+    expect(response.body.data).toMatchObject({
+      name: `${testPrefix}-undated-template`,
+      segmentCount: 2,
+    })
+
+    const templateId = response.body.data.id as string
+    const templateSegments = await prisma.routeTemplateSegment.findMany({
+      where: { templateId },
+      orderBy: { sortOrder: 'asc' },
+    })
+    expect(templateSegments).toHaveLength(2)
+    expect(templateSegments[0]).toMatchObject({ name: '有日期段', dayCount: 3 })
+    expect(templateSegments[1]).toMatchObject({ name: '未定日期段', dayCount: null })
   })
 
   it('rejects save-from-departure when trimmed name already exists in organization', async () => {

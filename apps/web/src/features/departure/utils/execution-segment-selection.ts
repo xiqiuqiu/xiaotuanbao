@@ -1,17 +1,13 @@
-type SegmentRef = { id: string; startDate?: string }
+type SegmentRef = { id: string; sortOrder?: number }
 
-function sortSegmentsByStartDate<T extends SegmentRef>(
+function sortSegmentsBySortOrder<T extends SegmentRef>(
   segments: ReadonlyArray<T>,
 ): T[] {
-  return [...segments].sort((a, b) => {
-    const left = a.startDate ?? ''
-    const right = b.startDate ?? ''
-    return left.localeCompare(right)
-  })
+  return [...segments].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 }
 
 /** Resolve the selected itinerary segment for the execution arrangement URL.
- * Segments are ordered by startDate ascending; first item is the default.
+ * Segments are ordered by sortOrder ascending; first item is the default.
  */
 export function resolveSelectedSegmentId(
   segments: ReadonlyArray<SegmentRef>,
@@ -21,7 +17,7 @@ export function resolveSelectedSegmentId(
     return undefined
   }
 
-  const ordered = sortSegmentsByStartDate(segments)
+  const ordered = sortSegmentsBySortOrder(segments)
 
   if (segmentId && ordered.some((segment) => segment.id === segmentId)) {
     return segmentId
@@ -30,14 +26,14 @@ export function resolveSelectedSegmentId(
   return ordered[0]?.id
 }
 
-/** After deleting a segment, pick the next neighbor by startDate order;
+/** After deleting a segment, pick the next neighbor by sortOrder;
  * otherwise the previous; otherwise undefined (empty state).
  */
 export function resolveAdjacentSegmentId(
   segments: ReadonlyArray<SegmentRef>,
   deletedSegmentId: string,
 ): string | undefined {
-  const ordered = sortSegmentsByStartDate(segments)
+  const ordered = sortSegmentsBySortOrder(segments)
   const index = ordered.findIndex((segment) => segment.id === deletedSegmentId)
 
   if (index < 0) {

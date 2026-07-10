@@ -42,16 +42,23 @@ interface ExecutionTabProps {
   amountReadOnly?: boolean
 }
 
-function formatNavDateRange(startDate: string, endDate: string, dayCount: number): string {
+function formatNavDateRange(
+  startDate: string | null,
+  endDate: string | null,
+): string | null {
+  if (!startDate || !endDate) {
+    return null
+  }
+
   const start = dayjs(startDate).format('MM-DD')
   const end = dayjs(endDate).format('MM-DD')
-  return `${start}–${end} · ${dayCount}天`
+  return `${start}–${end}`
 }
 
-function sortSegmentsByStartDate(
+function sortSegmentsBySortOrder(
   segments: ItinerarySegmentSummary[],
 ): ItinerarySegmentSummary[] {
-  return [...segments].sort((a, b) => a.startDate.localeCompare(b.startDate))
+  return [...segments].sort((a, b) => a.sortOrder - b.sortOrder)
 }
 
 export function ExecutionTab({
@@ -75,7 +82,7 @@ export function ExecutionTab({
     queryFn: () => listSegments(departure.id),
   })
 
-  const segments = sortSegmentsByStartDate(listResult?.items ?? [])
+  const segments = sortSegmentsBySortOrder(listResult?.items ?? [])
   const selectedSegmentId = resolveSelectedSegmentId(segments, segmentId)
   const selectedSegment =
     segments.find((segment) => segment.id === selectedSegmentId) ?? null
@@ -357,8 +364,8 @@ function SegmentNavItem({
   onSelect: () => void
   onEdit: () => void
 }) {
-  const dateRange = formatNavDateRange(segment.startDate, segment.endDate, segment.dayCount)
-  const meta = [dateRange, segment.destination].filter(Boolean).join(' · ')
+  const dateRange = formatNavDateRange(segment.startDate, segment.endDate)
+  const meta = dateRange
 
   return (
     <div
@@ -392,7 +399,7 @@ function SegmentNavItem({
           />
         ) : null}
       </div>
-      <span className={styles.segmentItemMeta}>{meta}</span>
+      {meta ? <span className={styles.segmentItemMeta}>{meta}</span> : null}
       <span className={styles.segmentItemOverview}>{formatResourceOverview(segment)}</span>
     </div>
   )

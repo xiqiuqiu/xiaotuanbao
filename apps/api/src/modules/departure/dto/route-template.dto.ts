@@ -57,9 +57,10 @@ export class CreateRouteTemplateSegmentDto {
   @IsNotEmpty()
   name!: string
 
+  @IsOptional()
   @IsInt()
   @Min(1)
-  dayCount!: number
+  dayCount?: number | null
 
   @IsOptional()
   @IsString()

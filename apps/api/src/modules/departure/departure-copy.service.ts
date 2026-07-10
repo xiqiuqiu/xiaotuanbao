@@ -26,7 +26,7 @@ export class DepartureCopyService {
       where: { id: departureId, organizationId },
       include: {
         itinerarySegments: {
-          orderBy: { startDate: 'asc' },
+          orderBy: { sortOrder: 'asc' },
           include: { resources: true },
         },
       },
@@ -55,9 +55,13 @@ export class DepartureCopyService {
       return
     }
 
+    if (segments.some((segment) => segment.dayCount == null)) {
+      throw new BadRequestException('存在未定日期的行程段，无法复制到新发团')
+    }
+
     const dateRanges = allocateSegmentDates(
       targetStartDate,
-      segments.map((segment) => segment.dayCount),
+      segments.map((segment) => segment.dayCount as number),
     )
 
     for (const [index, sourceSegment] of segments.entries()) {
@@ -67,6 +71,7 @@ export class DepartureCopyService {
         data: {
           departureId: targetDepartureId,
           name: sourceSegment.name,
+          sortOrder: sourceSegment.sortOrder,
           startDate: dateRange.startDate,
           endDate: dateRange.endDate,
           dayCount: dateRange.dayCount,
@@ -106,8 +111,8 @@ export class DepartureCopyService {
       throw new BadRequestException('当前发团没有行程段，无法保存为常用路线')
     }
 
-    const templateSegments = segments.map((segment, sortOrder) => ({
-      sortOrder,
+    const templateSegments = segments.map((segment) => ({
+      sortOrder: segment.sortOrder,
       name: segment.name,
       dayCount: segment.dayCount,
       destination: segment.destination ?? undefined,
