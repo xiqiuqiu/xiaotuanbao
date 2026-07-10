@@ -40,6 +40,9 @@ function activityTitle(item: PaymentScheduleActivityItem): string {
   if (item.activityType === PaymentScheduleActivityType.REOPEN) {
     return '重新打开节点'
   }
+  if (item.activityType === PaymentScheduleActivityType.AMOUNT_ADJUST) {
+    return '调整约定金额'
+  }
   return item.activityType
 }
 
@@ -66,6 +69,13 @@ function activityDescription(item: PaymentScheduleActivityItem): string {
       `约定 ${formatCents(item.amountCents ?? 0)}`,
       `已核销 ${formatCents(item.settledAmountCents ?? 0)}`,
       `未结清 ${formatCents(item.unsettledAmountCents ?? 0)}`,
+      `原因：${item.note}`,
+    ].join(' · ')
+  }
+
+  if (item.activityType === PaymentScheduleActivityType.AMOUNT_ADJUST) {
+    return [
+      `约定 ${formatCents(item.previousAmountCents ?? 0)} → ${formatCents(item.amountCents ?? 0)}`,
       `原因：${item.note}`,
     ].join(' · ')
   }

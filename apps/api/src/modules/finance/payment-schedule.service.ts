@@ -13,6 +13,7 @@ import type {
 import {
   deriveScheduleState,
   isFinanceTouched,
+  PaymentScheduleSourceType,
 } from '@xiaotuanbao/shared'
 import {
   PaymentScheduleActivityType,
@@ -32,6 +33,7 @@ import {
   parseDateOnly,
 } from '../departure/departure-date.utils'
 import type {
+  AdjustPaymentScheduleAmountDto,
   CancelPaymentScheduleDto,
   CreatePaymentScheduleDto,
   ListPaymentSchedulesQueryDto,
@@ -439,6 +441,114 @@ export class PaymentScheduleService {
     return this.toSummary(reopened, settledAmountCents, hasVerificationHistory, departureStatus)
   }
 
+  async adjustAmount(
+    organizationId: string,
+    scheduleId: string,
+    userId: string,
+    dto: AdjustPaymentScheduleAmountDto,
+  ): Promise<PaymentScheduleSummary> {
+    const schedule = await this.prisma.paymentSchedule.findFirst({
+      where: { id: scheduleId, organizationId },
+    })
+
+    if (!schedule) {
+      throw new NotFoundException('收付款节点不存在')
+    }
+
+    const menuKey =
+      schedule.direction === PaymentScheduleDirection.receivable
+        ? '/finance/receivable'
+        : '/finance/payable'
+    const menuKeys = await this.authService.getMenuKeysForUser(userId)
+    if (!menuKeys.includes(menuKey)) {
+      throw new ForbiddenException('无权访问')
+    }
+
+    if (schedule.direction !== PaymentScheduleDirection.payable) {
+      throw new BadRequestException('仅资源应付节点可调整约定金额')
+    }
+
+    if (
+      schedule.sourceType !== PaymentScheduleSourceType.SEGMENT_RESOURCE ||
+      !schedule.sourceId
+    ) {
+      throw new BadRequestException('仅资源应付节点可调整约定金额')
+    }
+
+    if (schedule.cancelledAt) {
+      throw new BadRequestException('已关闭节点不可调整约定金额')
+    }
+
+    this.assertPositiveAmount(dto.amountCents)
+
+    const adjustReason = dto.adjustReason?.trim()
+    if (!adjustReason) {
+      throw new BadRequestException('调整原因不能为空')
+    }
+
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '调整约定金额',
+    )
+
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+
+    if (settledAmountCents > 0) {
+      throw new BadRequestException('仍有有效核销时不可调整约定金额，请先撤销相关核销')
+    }
+
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
+    if (!touched) {
+      throw new BadRequestException('无财务履历时请通过普通编辑修改金额')
+    }
+
+    const previousAmountCents = schedule.amountCents
+    const operatedAt = new Date()
+    const unsettledAmountCents = Math.max(dto.amountCents - settledAmountCents, 0)
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
+        resourceId: schedule.sourceId!,
+        amountCents: dto.amountCents,
+      })
+
+      const nextSchedule = await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          amountCents: dto.amountCents,
+          amountAdjustedAt: operatedAt,
+        },
+      })
+
+      await tx.paymentScheduleActivity.create({
+        data: {
+          organizationId,
+          paymentScheduleId: schedule.id,
+          activityType: PaymentScheduleActivityType.amount_adjust,
+          note: adjustReason,
+          previousAmountCents,
+          amountCents: dto.amountCents,
+          settledAmountCents,
+          unsettledAmountCents,
+          operatedBy: userId,
+          operatedAt,
+        },
+      })
+
+      return nextSchedule
+    })
+
+    const departureStatus = await this.departureFinanceFacade.getStatusById(
+      organizationId,
+      schedule.departureId,
+    )
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
+  }
+
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {
     return (
       dto.title !== undefined ||
@@ -486,6 +596,7 @@ export class PaymentScheduleService {
       closeDisposition: row.closeDisposition,
       note: row.note,
       amountCents: row.amountCents,
+      previousAmountCents: row.previousAmountCents,
       settledAmountCents: row.settledAmountCents,
       unsettledAmountCents: row.unsettledAmountCents,
       previousSettledAmountCents: row.previousSettledAmountCents,

@@ -3,6 +3,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { message } from 'antd'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
+  adjustScheduleAmount,
   cancelSchedule,
   confirmCollection,
   confirmPayment,
@@ -12,6 +13,7 @@ import {
   updateReceivable,
 } from '@/services/finance.service'
 import type { FormInstance } from 'antd/es/form'
+import type { AdjustAmountFormValues } from '../components/AdjustAmountModal'
 import type { CancelScheduleFormValues } from '../components/CancelScheduleModal'
 import type { ReopenScheduleFormValues } from '../components/ReopenScheduleModal'
 import {
@@ -26,6 +28,7 @@ import {
   buildUpdateSchedulePayload,
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
+import { yuanToCents } from '../utils/finance-form'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -41,11 +44,13 @@ interface UsePaymentScheduleMutationsOptions {
   verifyForm: FormInstance<CreateVerificationFormValues>
   cancelForm: FormInstance<CancelScheduleFormValues>
   reopenForm: FormInstance<ReopenScheduleFormValues>
+  adjustForm: FormInstance<AdjustAmountFormValues>
   editForm: FormInstance<EditScheduleFormValues>
   onConfirmSuccess: () => void
   onVerifySuccess: () => void
   onCancelSuccess: () => void
   onReopenSuccess: () => void
+  onAdjustSuccess: () => void
   onEditSuccess: () => void
 }
 
@@ -59,11 +64,13 @@ export function usePaymentScheduleMutations({
   verifyForm,
   cancelForm,
   reopenForm,
+  adjustForm,
   editForm,
   onConfirmSuccess,
   onVerifySuccess,
   onCancelSuccess,
   onReopenSuccess,
+  onAdjustSuccess,
   onEditSuccess,
 }: UsePaymentScheduleMutationsOptions) {
   const confirmMutation = useMutation({
@@ -162,6 +169,35 @@ export function usePaymentScheduleMutations({
     },
   })
 
+  const adjustMutation = useMutation({
+    mutationFn: async (values: AdjustAmountFormValues) => {
+      if (!activeSchedule) {
+        throw new Error('未选择节点')
+      }
+      return adjustScheduleAmount(activeSchedule.id, {
+        amountCents: yuanToCents(values.amountYuan),
+        adjustReason: values.adjustReason.trim(),
+      })
+    },
+    onSuccess: () => {
+      message.success('约定金额已调整')
+      adjustForm.resetFields()
+      onAdjustSuccess()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['payment-schedule-detail'] })
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure'] })
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '调整失败')
+    },
+  })
+
   const editMutation = useMutation({
     mutationFn: async (values: EditScheduleFormValues) => {
       if (!activeSchedule) {
@@ -192,6 +228,7 @@ export function usePaymentScheduleMutations({
     verifyCreateMutation,
     cancelMutation,
     reopenMutation,
+    adjustMutation,
     editMutation,
   }
 }

@@ -4,6 +4,7 @@ import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { ConfirmCollectionDrawer } from './ConfirmCollectionDrawer'
 import { ConfirmPaymentDrawer } from './ConfirmPaymentDrawer'
 import { CreateVerificationDrawer } from './CreateVerificationDrawer'
+import { AdjustAmountModal, type AdjustAmountFormValues } from './AdjustAmountModal'
 import { CancelScheduleModal, type CancelScheduleFormValues } from './CancelScheduleModal'
 import { ReopenScheduleModal, type ReopenScheduleFormValues } from './ReopenScheduleModal'
 import { EditScheduleDrawer } from './EditScheduleDrawer'
@@ -21,11 +22,13 @@ interface PaymentScheduleActionDialogsProps {
   verifyOpen: boolean
   cancelOpen: boolean
   reopenOpen: boolean
+  adjustOpen: boolean
   editOpen: boolean
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
   verifyForm: FormInstance<CreateVerificationFormValues>
   cancelForm: FormInstance<CancelScheduleFormValues>
   reopenForm: FormInstance<ReopenScheduleFormValues>
+  adjustForm: FormInstance<AdjustAmountFormValues>
   editForm: FormInstance<EditScheduleFormValues>
   confirmMutation: UseMutationResult<
     unknown,
@@ -36,11 +39,13 @@ interface PaymentScheduleActionDialogsProps {
   verifyCreateMutation: UseMutationResult<unknown, Error, CreateVerificationFormValues, unknown>
   cancelMutation: UseMutationResult<unknown, Error, CancelScheduleFormValues, unknown>
   reopenMutation: UseMutationResult<unknown, Error, ReopenScheduleFormValues, unknown>
+  adjustMutation: UseMutationResult<unknown, Error, AdjustAmountFormValues, unknown>
   editMutation: UseMutationResult<unknown, Error, EditScheduleFormValues, unknown>
   onCloseConfirm: () => void
   onCloseVerify: () => void
   onCloseCancel: () => void
   onCloseReopen: () => void
+  onCloseAdjust: () => void
   onCloseEdit: () => void
 }
 
@@ -53,21 +58,25 @@ export function PaymentScheduleActionDialogs({
   verifyOpen,
   cancelOpen,
   reopenOpen,
+  adjustOpen,
   editOpen,
   confirmForm,
   verifyForm,
   cancelForm,
   reopenForm,
+  adjustForm,
   editForm,
   confirmMutation,
   verifyCreateMutation,
   cancelMutation,
   reopenMutation,
+  adjustMutation,
   editMutation,
   onCloseConfirm,
   onCloseVerify,
   onCloseCancel,
   onCloseReopen,
+  onCloseAdjust,
   onCloseEdit,
 }: PaymentScheduleActionDialogsProps) {
   return (
@@ -123,6 +132,15 @@ export function PaymentScheduleActionDialogs({
         form={reopenForm}
         onClose={onCloseReopen}
         onSubmit={(values) => reopenMutation.mutate(values)}
+      />
+
+      <AdjustAmountModal
+        open={adjustOpen}
+        schedule={activeSchedule}
+        loading={adjustMutation.isPending}
+        form={adjustForm}
+        onClose={onCloseAdjust}
+        onSubmit={(values) => adjustMutation.mutate(values)}
       />
 
       <EditScheduleDrawer

@@ -167,6 +167,7 @@ enum PaymentScheduleActivityType {
   close
   verification_cancelled
   reopen
+  amount_adjust
 
   @@map("payment_schedule_activity_type")
 }
@@ -611,6 +612,7 @@ model PaymentScheduleActivity {
   closeDisposition             PaymentScheduleCloseDisposition?  @map("close_disposition")
   note                         String
   amountCents                  Int?                              @map("amount_cents")
+  previousAmountCents          Int?                              @map("previous_amount_cents")
   settledAmountCents           Int?                              @map("settled_amount_cents")
   unsettledAmountCents         Int?                              @map("unsettled_amount_cents")
   previousSettledAmountCents   Int?                              @map("previous_settled_amount_cents")

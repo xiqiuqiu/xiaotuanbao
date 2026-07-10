@@ -2495,4 +2495,302 @@ describe('Finance journeys (cross-module e2e)', () => {
       }),
     ])
   })
+
+  /**
+   * #92 explicit payable amount adjustment after finance history.
+   * Seam: HTTP APIs across segment-resource / payable schedule / departure read model.
+   * Locks success path, rejection matrix, atomic resource+schedule update,
+   * activity timeline, and no regenerate / ordinary-edit bypass.
+   */
+  it('adjusts resource payable agreed amount with reason while keeping original node (#92)', async () => {
+    const obligationCents = 1_000_000
+    const verifiedCents = 400_000
+    const adjustedCents = 900_000
+
+    const departure = await createDeparture('explicit-payable-adjust')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+
+    const segment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/segments`)
+      .send({
+        name: '显式调整段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-05',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    const resource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId,
+        title: '用车-显式调整',
+        amountCents: obligationCents,
+      })
+      .expect(201)
+    const resourceId = resource.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const payableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resourceId}/generate-payable`)
+      .expect(201)
+
+    const payableScheduleId = payableGenerated.body.data.schedule.id as string
+    const payableScheduleNo = payableGenerated.body.data.schedule.scheduleNo as string
+
+    const payment = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+    expect(payment.body.data.settledAmountCents).toBe(verifiedCents)
+
+    const withActiveVerification = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents, adjustReason: '仍有有效核销不应调整' })
+    expect(withActiveVerification.status).toBe(400)
+    expect(withActiveVerification.body.message).toBe(
+      '仍有有效核销时不可调整约定金额，请先撤销相关核销',
+    )
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: payableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    expect(verifications.body.data.items).toHaveLength(1)
+    const verificationId = verifications.body.data.items[0].id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verificationId}/cancel`)
+      .send({ cancelReason: '撤销后准备显式调整约定金额' })
+      .expect(201)
+
+    const restored = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${payableScheduleId}`)
+      .expect(200)
+    expect(restored.body.data).toMatchObject({
+      id: payableScheduleId,
+      scheduleNo: payableScheduleNo,
+      amountCents: obligationCents,
+      settledAmountCents: 0,
+      unsettledAmountCents: obligationCents,
+      financeTouched: true,
+      status: PaymentScheduleStatus.PENDING,
+    })
+
+    await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${payableScheduleId}`)
+      .send({ amountCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/segment-resources/${resourceId}`)
+      .send({ amountCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ adjustReason: '缺少金额' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents, adjustReason: '   ' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ amountCents: 0, adjustReason: '金额必须大于零' })
+      .expect(400)
+
+    const scheduleCountBefore = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id, direction: PaymentScheduleDirection.payable },
+    })
+
+    const adjusted = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({
+        amountCents: adjustedCents,
+        adjustReason: '供应商重新议价，修正约定金额',
+      })
+      .expect(201)
+
+    expect(adjusted.body.data).toMatchObject({
+      id: payableScheduleId,
+      scheduleNo: payableScheduleNo,
+      amountCents: adjustedCents,
+      settledAmountCents: 0,
+      unsettledAmountCents: adjustedCents,
+      financeTouched: true,
+      status: PaymentScheduleStatus.PENDING,
+      amountAdjustedAt: expect.any(String),
+    })
+
+    const scheduleCountAfter = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id, direction: PaymentScheduleDirection.payable },
+    })
+    expect(scheduleCountAfter).toBe(scheduleCountBefore)
+
+    const resourceAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resourceId}`)
+      .expect(200)
+    expect(resourceAfter.body.data).toMatchObject({
+      amountCents: adjustedCents,
+      hasPaymentSchedule: true,
+      payableStatus: 'pending',
+      amountFieldsLocked: true,
+      hasSourceAmountMismatch: false,
+    })
+
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${payableScheduleId}`)
+      .expect(200)
+    expect(detail.body.data.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activityType: 'amount_adjust',
+          note: '供应商重新议价，修正约定金额',
+          previousAmountCents: obligationCents,
+          amountCents: adjustedCents,
+          operatedByName: expect.any(String),
+          operatedAt: expect.any(String),
+        }),
+      ]),
+    )
+
+    const historyAfterAdjust = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: payableScheduleNo,
+        scheduleNoMatch: 'exact',
+        status: 'cancelled',
+        pageSize: 10,
+      })
+      .expect(200)
+    expect(historyAfterAdjust.body.data.items).toHaveLength(1)
+    expect(historyAfterAdjust.body.data.items[0].id).toBe(verificationId)
+
+    const departureSummary = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(departureSummary.body.data).toMatchObject({
+      openUnsettledPayableCents: adjustedCents,
+      verifiedPayableCents: 0,
+    })
+
+    const regenerate = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resourceId}/generate-payable`)
+      .expect(409)
+    expect(regenerate.body.message).toBe('当前资源已生成应付，不能再次生成')
+
+    await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${payableScheduleId}`)
+      .send({ amountCents: 800_000 })
+      .expect(400)
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/segment-resources/${resourceId}`)
+      .send({ amountCents: 800_000 })
+      .expect(400)
+
+    const closed = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '关闭后不可再调整',
+      })
+      .expect(201)
+    expect(closed.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+
+    const closedReject = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/adjust-amount`)
+      .send({ amountCents: 850_000, adjustReason: '已关闭不应调整' })
+    expect(closedReject.status).toBe(400)
+    expect(closedReject.body.message).toBe('已关闭节点不可调整约定金额')
+
+    const archiveDeparture = await createDeparture('adjust-archive-gate')
+    const archiveSegment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/segments`)
+      .send({
+        name: '归档调整段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-05',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+    const archiveResource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${archiveSegment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId,
+        title: '归档用车',
+        amountCents: 500_000,
+      })
+      .expect(201)
+    const archivePayable = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${archiveResource.body.data.id}/generate-payable`)
+      .expect(201)
+    const archiveScheduleId = archivePayable.body.data.schedule.id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${archiveScheduleId}/confirm-payment`)
+      .send({
+        amountCents: 100_000,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.CASH,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+
+    const archiveVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: archivePayable.body.data.schedule.scheduleNo,
+        scheduleNoMatch: 'exact',
+        pageSize: 10,
+      })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${archiveVerifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '归档前撤销核销' })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/close`)
+      .send({ reason: '归档后拒绝显式调整' })
+      .expect(201)
+
+    const archivedReject = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${archiveScheduleId}/adjust-amount`)
+      .send({ amountCents: 450_000, adjustReason: '归档期不应调整' })
+    expect(archivedReject.status).toBe(409)
+    expect(archivedReject.body.message).toBe('发团已关闭，不可调整约定金额')
+  })
 })

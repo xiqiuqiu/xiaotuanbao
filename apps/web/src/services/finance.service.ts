@@ -1,5 +1,6 @@
 import { request } from '@/lib/request'
 import type {
+  AdjustPaymentScheduleAmountDto,
   ConfirmCollectionDto,
   ConfirmPaymentDto,
   CreateFinanceTransactionDto,
@@ -119,6 +120,16 @@ export async function reopenSchedule(
   payload: ReopenPaymentScheduleDto,
 ): Promise<PaymentScheduleSummary> {
   return request.post<PaymentScheduleSummary>(`/finance/payment-schedules/${id}/reopen`, payload)
+}
+
+export async function adjustScheduleAmount(
+  id: string,
+  payload: AdjustPaymentScheduleAmountDto,
+): Promise<PaymentScheduleSummary> {
+  return request.post<PaymentScheduleSummary>(
+    `/finance/payment-schedules/${id}/adjust-amount`,
+    payload,
+  )
 }
 
 export async function listTransactions(

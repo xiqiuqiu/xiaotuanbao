@@ -114,4 +114,26 @@ export class DepartureFinanceFacade {
 
     return DepartureStatus.pending_settlement
   }
+
+  /**
+   * Sync segment-resource agreed amount with an explicit payable adjustment
+   * inside the caller's transaction (ADR-0010 / ADR-0004).
+   */
+  async syncSegmentResourceAmountOnPayableAdjust(
+    tx: TxClient,
+    params: { resourceId: string; amountCents: number },
+  ): Promise<void> {
+    const resource = await tx.segmentResource.findFirst({
+      where: { id: params.resourceId },
+      select: { id: true },
+    })
+    if (!resource) {
+      throw new BadRequestException('关联资源不存在，无法调整约定金额')
+    }
+
+    await tx.segmentResource.update({
+      where: { id: resource.id },
+      data: { amountCents: params.amountCents },
+    })
+  }
 }

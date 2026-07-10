@@ -118,6 +118,17 @@ export class ReopenPaymentScheduleDto {
   confirmDepartureSettlementReversal?: boolean
 }
 
+export class AdjustPaymentScheduleAmountDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1, { message: '金额必须大于 0' })
+  amountCents!: number
+
+  @IsString()
+  @IsNotEmpty({ message: '调整原因不能为空' })
+  adjustReason!: string
+}
+
 export {
   PrismaPaymentScheduleDirection as PaymentScheduleDirection,
   PrismaPaymentScheduleCloseDisposition as PaymentScheduleCloseDisposition,

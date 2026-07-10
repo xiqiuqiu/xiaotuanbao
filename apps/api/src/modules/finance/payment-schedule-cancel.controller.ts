@@ -2,6 +2,7 @@ import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
+  AdjustPaymentScheduleAmountDto,
   CancelPaymentScheduleDto,
   ReopenPaymentScheduleDto,
 } from './dto/payment-schedule.dto'
@@ -33,6 +34,20 @@ export class PaymentScheduleCancelController {
     @Body() dto: ReopenPaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
     return this.paymentScheduleService.reopen(
+      request.user.organizationId,
+      id,
+      request.user.userId,
+      dto,
+    )
+  }
+
+  @Post(':id/adjust-amount')
+  adjustAmount(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Body() dto: AdjustPaymentScheduleAmountDto,
+  ): Promise<PaymentScheduleSummary> {
+    return this.paymentScheduleService.adjustAmount(
       request.user.organizationId,
       id,
       request.user.userId,

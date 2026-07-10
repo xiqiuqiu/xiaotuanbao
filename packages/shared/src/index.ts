@@ -38,6 +38,7 @@ export type {
   PaymentScheduleListResult,
   CancelPaymentScheduleDto,
   ReopenPaymentScheduleDto,
+  AdjustPaymentScheduleAmountDto,
   CreatePaymentScheduleDto,
   UpdatePaymentScheduleDto,
   FinanceTransactionSummary,

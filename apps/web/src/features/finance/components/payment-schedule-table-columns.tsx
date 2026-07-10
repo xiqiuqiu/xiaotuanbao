@@ -4,6 +4,9 @@ import { Button, Dropdown, Space, Tag, Tooltip, Typography } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
+  DepartureStatus,
+  PaymentScheduleDirection,
+  PaymentScheduleSourceType,
   PaymentScheduleStatus,
   deriveSettlementLabel,
   type PaymentScheduleSummary,
@@ -35,6 +38,25 @@ export function canReopenSchedule(
   return !readOnly && schedule.status === PaymentScheduleStatus.CANCELLED
 }
 
+/**
+ * Resource payables with finance history, zero effective settlement, and an open
+ * node can take an explicit amount adjustment (ADR-0010 / #92).
+ */
+export function canAdjustPayableAmount(
+  schedule: PaymentScheduleSummary,
+  readOnly: boolean,
+): boolean {
+  return (
+    !readOnly &&
+    schedule.departureStatus !== DepartureStatus.CLOSED &&
+    schedule.direction === PaymentScheduleDirection.PAYABLE &&
+    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+    schedule.financeTouched &&
+    schedule.settledAmountCents === 0 &&
+    schedule.status !== PaymentScheduleStatus.CANCELLED
+  )
+}
+
 function hasVerificationRecords(schedule: PaymentScheduleSummary): boolean {
   return schedule.settledAmountCents > 0
 }
@@ -49,6 +71,7 @@ interface BuildPaymentScheduleColumnsOptions {
   onEdit: (schedule: PaymentScheduleSummary) => void
   onCancel: (schedule: PaymentScheduleSummary) => void
   onReopen: (schedule: PaymentScheduleSummary) => void
+  onAdjustAmount: (schedule: PaymentScheduleSummary) => void
   onViewDetail: (schedule: PaymentScheduleSummary) => void
   onViewVerifications: (schedule: PaymentScheduleSummary) => void
 }
@@ -63,6 +86,7 @@ export function buildPaymentScheduleColumns({
   onEdit,
   onCancel,
   onReopen,
+  onAdjustAmount,
   onViewDetail,
   onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
@@ -197,6 +221,14 @@ export function buildPaymentScheduleColumns({
             key: 'reopen',
             label: '重新打开',
             onClick: () => onReopen(record),
+          })
+        }
+
+        if (canAdjustPayableAmount(record, readOnly)) {
+          moreItems.push({
+            key: 'adjust-amount',
+            label: '调整约定金额',
+            onClick: () => onAdjustAmount(record),
           })
         }
 

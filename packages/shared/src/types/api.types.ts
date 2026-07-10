@@ -339,6 +339,7 @@ export interface PaymentScheduleActivityItem {
   closeDisposition: string | null
   note: string
   amountCents: number | null
+  previousAmountCents: number | null
   settledAmountCents: number | null
   unsettledAmountCents: number | null
   previousSettledAmountCents: number | null
@@ -369,6 +370,11 @@ export interface CancelPaymentScheduleDto {
 export interface ReopenPaymentScheduleDto {
   reopenReason: string
   confirmDepartureSettlementReversal?: boolean
+}
+
+export interface AdjustPaymentScheduleAmountDto {
+  amountCents: number
+  adjustReason: string
 }
 
 export interface CreatePaymentScheduleDto {

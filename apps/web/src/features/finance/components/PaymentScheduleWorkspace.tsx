@@ -29,8 +29,10 @@ import {
   scheduleToEditValues,
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
+import { centsToYuan } from '../utils/finance-form'
 import type { CreateVerificationFormValues } from '../utils/verification-form'
 import type { CancelScheduleFormValues } from './CancelScheduleModal'
+import type { AdjustAmountFormValues } from './AdjustAmountModal'
 import type { ReopenScheduleFormValues } from './ReopenScheduleModal'
 import styles from './PaymentScheduleWorkspace.module.css'
 
@@ -180,6 +182,7 @@ export function PaymentScheduleWorkspace({
   const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
   const [cancelForm] = Form.useForm<CancelScheduleFormValues>()
   const [reopenForm] = Form.useForm<ReopenScheduleFormValues>()
+  const [adjustForm] = Form.useForm<AdjustAmountFormValues>()
   const [editForm] = Form.useForm<EditScheduleFormValues>()
 
   const [activeSchedule, setActiveSchedule] = useState<PaymentScheduleSummary | null>(null)
@@ -187,6 +190,7 @@ export function PaymentScheduleWorkspace({
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [reopenOpen, setReopenOpen] = useState(false)
+  const [adjustOpen, setAdjustOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailScheduleId, setDetailScheduleId] = useState<string | null>(null)
@@ -374,14 +378,26 @@ export function PaymentScheduleWorkspace({
     setActiveSchedule(null)
   }, [reopenForm])
 
+  const closeAdjust = useCallback(() => {
+    adjustForm.resetFields()
+    setAdjustOpen(false)
+    setActiveSchedule(null)
+  }, [adjustForm])
+
   const closeEdit = useCallback(() => {
     editForm.resetFields()
     setEditOpen(false)
     setActiveSchedule(null)
   }, [editForm])
 
-  const { confirmMutation, verifyCreateMutation, cancelMutation, reopenMutation, editMutation } =
-    usePaymentScheduleMutations({
+  const {
+    confirmMutation,
+    verifyCreateMutation,
+    cancelMutation,
+    reopenMutation,
+    adjustMutation,
+    editMutation,
+  } = usePaymentScheduleMutations({
       queryClient,
       isReceivable,
       listQueryKey,
@@ -391,11 +407,13 @@ export function PaymentScheduleWorkspace({
       verifyForm,
       cancelForm,
       reopenForm,
+      adjustForm,
       editForm,
       onConfirmSuccess: closeConfirm,
       onVerifySuccess: closeVerify,
       onCancelSuccess: closeCancel,
       onReopenSuccess: closeReopen,
+      onAdjustSuccess: closeAdjust,
       onEditSuccess: closeEdit,
     })
 
@@ -429,6 +447,18 @@ export function PaymentScheduleWorkspace({
     reopenForm.resetFields()
     setReopenOpen(true)
   }, [reopenForm])
+
+  const openAdjust = useCallback(
+    (schedule: PaymentScheduleSummary) => {
+      setActiveSchedule(schedule)
+      adjustForm.resetFields()
+      adjustForm.setFieldsValue({
+        amountYuan: centsToYuan(schedule.amountCents),
+      })
+      setAdjustOpen(true)
+    },
+    [adjustForm],
+  )
 
   const openEdit = useCallback(
     (schedule: PaymentScheduleSummary) => {
@@ -482,6 +512,7 @@ export function PaymentScheduleWorkspace({
         onEdit: openEdit,
         onCancel: openCancel,
         onReopen: openReopen,
+        onAdjustAmount: openAdjust,
         onViewDetail: openDetail,
         onViewVerifications: openViewVerifications,
       }),
@@ -489,6 +520,7 @@ export function PaymentScheduleWorkspace({
       departureMap,
       isDepartureScope,
       isReceivable,
+      openAdjust,
       openCancel,
       openConfirm,
       openDetail,
@@ -553,21 +585,25 @@ export function PaymentScheduleWorkspace({
         verifyOpen={verifyOpen}
         cancelOpen={cancelOpen}
         reopenOpen={reopenOpen}
+        adjustOpen={adjustOpen}
         editOpen={editOpen}
         confirmForm={confirmForm}
         verifyForm={verifyForm}
         cancelForm={cancelForm}
         reopenForm={reopenForm}
+        adjustForm={adjustForm}
         editForm={editForm}
         confirmMutation={confirmMutation}
         verifyCreateMutation={verifyCreateMutation}
         cancelMutation={cancelMutation}
         reopenMutation={reopenMutation}
+        adjustMutation={adjustMutation}
         editMutation={editMutation}
         onCloseConfirm={closeConfirm}
         onCloseVerify={closeVerify}
         onCloseCancel={closeCancel}
         onCloseReopen={closeReopen}
+        onCloseAdjust={closeAdjust}
         onCloseEdit={closeEdit}
       />
 
