@@ -16,6 +16,7 @@ import type {
   ConfirmPaymentDto,
   LinkTransactionDto,
 } from './dto/finance-operations.dto'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { PaymentScheduleService } from './payment-schedule.service'
 import { TransactionService } from './transaction.service'
 import { VerificationService } from './verification.service'
@@ -27,6 +28,7 @@ export class FinanceOperationsService {
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly transactionService: TransactionService,
     private readonly verificationService: VerificationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async confirmCollection(
@@ -39,6 +41,11 @@ export class FinanceOperationsService {
       organizationId,
       scheduleId,
       PaymentScheduleDirection.receivable,
+    )
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '确认收款',
     )
     this.assertScheduleOpen(schedule)
     this.assertPositiveAmount(dto.amountCents)
@@ -103,6 +110,11 @@ export class FinanceOperationsService {
       scheduleId,
       PaymentScheduleDirection.payable,
     )
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '确认付款',
+    )
     this.assertScheduleOpen(schedule)
     this.assertPositiveAmount(dto.amountCents)
 
@@ -163,6 +175,11 @@ export class FinanceOperationsService {
     userId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(organizationId, scheduleId, direction)
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '关联流水',
+    )
     this.assertScheduleOpen(schedule)
     this.assertPositiveAmount(dto.amountCents)
 

@@ -20,7 +20,6 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
-  DepartureStatus,
   PaymentScheduleDirection,
   type Partner,
   type PaymentSchedule,
@@ -29,6 +28,7 @@ import {
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
@@ -85,6 +85,7 @@ export class DepartureFinanceBridgeService {
     private readonly prisma: PrismaService,
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly verificationService: VerificationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async generateReceivables(
@@ -730,8 +731,6 @@ export class DepartureFinanceBridgeService {
   }
 
   private ensureDepartureOpen(departure: { status: string }, action = '生成应收') {
-    if (departure.status === DepartureStatus.closed) {
-      throw new ConflictException(`发团已关闭，不可${action}`)
-    }
+    this.departureFinanceFacade.assertMutable(departure, action)
   }
 }

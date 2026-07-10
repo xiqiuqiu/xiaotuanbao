@@ -972,30 +972,298 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(settled.body.data.status).toBe(DepartureStatus.settled)
   })
 
-  it('blocks finance generation after departure is closed', async () => {
-    const departure = await createDeparture('closed-block')
+  /**
+   * #86 archive read-only gate matrix.
+   * Seam: HTTP write APIs across departure ops + finance.
+   * Covers archive reject × unarchive restore with consistent 409 semantics.
+   */
+  it('rejects ops and finance writes while archived, then restores after unarchive', async () => {
+    const departure = await createDeparture('archive-gate')
     const ops = await seedOps(departure.id)
+    const schedules = await generateSchedules(ops)
+
+    const linkedTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        amountCents: 10000,
+        transactionDate: '2026-08-11',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: ops.displayName,
+        departureId: departure.id,
+        notes: '归档前门禁探针流水',
+      })
+      .expect(201)
+
+    const verification = await authRequest(app, financeToken)
+      .post('/api/finance/verifications')
+      .send({
+        paymentScheduleId: schedules.receivableScheduleId,
+        transactionId: linkedTx.body.data.id,
+        amountCents: 10000,
+        verificationDate: '2026-08-11',
+      })
+      .expect(201)
+
+    const unallocatedLinkedTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'outflow',
+        paymentChannel: PaymentChannel.CASH,
+        amountCents: 500,
+        transactionDate: '2026-08-11',
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+        departureId: departure.id,
+        notes: '归档前未核销关联流水',
+      })
+      .expect(201)
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/close`)
-      .send({ reason: '测试归档' })
+      .send({ reason: '归档只读门禁测试' })
       .expect(201)
 
-    const blockedReceivable = await authRequest(app, coordinatorToken)
-      .post(`/api/source-orders/${ops.sourceOrderId}/generate-receivables`)
-      .expect(409)
-    expect(blockedReceivable.body.message).toBe('发团已关闭，不可生成应收')
+    const expectArchivedConflict = async (
+      request: Promise<{ status: number; body: { message?: string } }>,
+      action: string,
+    ) => {
+      const response = await request
+      expect(response.status).toBe(409)
+      expect(response.body.message).toBe(`发团已关闭，不可${action}`)
+    }
 
-    const blockedPayable = await authRequest(app, coordinatorToken)
-      .post(`/api/segment-resources/${ops.resourceId}/generate-payable`)
-      .expect(409)
-    expect(blockedPayable.body.message).toBe('发团已关闭，不可生成应付')
+    await expectArchivedConflict(
+      authRequest(app, coordinatorToken)
+        .patch(`/api/departures/${departure.id}`)
+        .send({ name: `${testPrefix}-不应改` }),
+      '编辑',
+    )
+    await expectArchivedConflict(
+      authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 10000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        }),
+      '编辑',
+    )
+    await expectArchivedConflict(
+      authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '不应新增段',
+          startDate: '2026-08-01',
+          endDate: '2026-08-02',
+          destination: '测试',
+        }),
+      '编辑',
+    )
+    await expectArchivedConflict(
+      authRequest(app, coordinatorToken).post(
+        `/api/source-orders/${ops.sourceOrderId}/generate-receivables`,
+      ),
+      '生成应收',
+    )
+    await expectArchivedConflict(
+      authRequest(app, coordinatorToken).post(
+        `/api/segment-resources/${ops.resourceId}/generate-payable`,
+      ),
+      '生成应付',
+    )
 
-    const patchBlocked = await authRequest(app, coordinatorToken)
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send({
+          departureId: departure.id,
+          title: '归档期不应创建',
+          amountCents: 1000,
+          dueDate: '2026-08-20',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: ops.displayName,
+        }),
+      '创建收付款节点',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .patch(`/api/finance/receivables/${schedules.receivableScheduleId}`)
+        .send({ title: '归档期不应编辑' }),
+      '编辑收付款节点',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
+        .send({ cancelReason: '归档期不应关闭' }),
+      '关闭收付款节点',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${schedules.receivableScheduleId}/confirm-collection`)
+        .send({
+          amountCents: 1000,
+          transactionDate: '2026-08-12',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: ops.displayName,
+        }),
+      '确认收款',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/payables/${schedules.payableScheduleId}/confirm-payment`)
+        .send({
+          amountCents: 1000,
+          transactionDate: '2026-08-12',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplierId,
+          counterpartyName: `${testPrefix}-supplier`,
+        }),
+      '确认付款',
+    )
+
+    const orphanTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        paymentChannel: PaymentChannel.CASH,
+        amountCents: 1000,
+        transactionDate: '2026-08-12',
+        counterpartyType: CounterpartyType.manual,
+        counterpartyName: '无发团流水可建',
+      })
+      .expect(201)
+
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${schedules.receivableScheduleId}/link-transaction`)
+        .send({ transactionId: orphanTx.body.data.id, amountCents: 1000 }),
+      '关联流水',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send({
+          paymentScheduleId: schedules.receivableScheduleId,
+          transactionId: orphanTx.body.data.id,
+          amountCents: 1000,
+          verificationDate: '2026-08-12',
+        }),
+      '创建核销',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verification.body.data.id}/cancel`)
+        .send({ cancelReason: '归档期不应撤销' }),
+      '撤销核销',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          amountCents: 2000,
+          transactionDate: '2026-08-12',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: ops.displayName,
+          departureId: departure.id,
+        }),
+      '创建流水',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${unallocatedLinkedTx.body.data.id}`)
+        .send({
+          direction: 'outflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 500,
+          transactionDate: '2026-08-11',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplierId,
+          counterpartyName: `${testPrefix}-supplier`,
+          departureId: departure.id,
+          notes: '归档期不应编辑',
+        }),
+      '编辑流水',
+    )
+    await expectArchivedConflict(
+      authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${unallocatedLinkedTx.body.data.id}/void`)
+        .send({ voidReason: '归档期不应作废' }),
+      '作废流水',
+    )
+
+    await authRequest(app, coordinatorToken).get(`/api/departures/${departure.id}`).expect(200)
+    await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${schedules.receivableScheduleId}`)
+      .expect(200)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/unarchive`)
+      .send({ reason: '继续处理财务' })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
       .patch(`/api/departures/${departure.id}`)
-      .send({ name: `${testPrefix}-不应改` })
-      .expect(409)
-    expect(patchBlocked.body.message).toBe('发团已关闭，不可编辑')
+      .send({ name: `${testPrefix}-archive-gate-restored` })
+      .expect(200)
+
+    await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${schedules.receivableScheduleId}`)
+      .send({ title: '解档后可编辑节点' })
+      .expect(200)
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: departure.id,
+        title: '解档后可创建节点',
+        amountCents: 1000,
+        dueDate: '2026-08-20',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: ops.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedules.receivableScheduleId}/confirm-collection`)
+      .send({
+        amountCents: 5000,
+        transactionDate: '2026-08-13',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: ops.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verification.body.data.id}/cancel`)
+      .send({ cancelReason: '解档后撤销探针核销' })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/transactions/${linkedTx.body.data.id}/void`)
+      .send({ voidReason: '解档后作废探针流水' })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/transactions/${unallocatedLinkedTx.body.data.id}/void`)
+      .send({ voidReason: '解档后作废未核销关联流水' })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
+      .send({ cancelReason: '解档后可关闭应付' })
+      .expect(201)
   })
 
   it('copies departure without finance then regenerates and settles independently', async () => {

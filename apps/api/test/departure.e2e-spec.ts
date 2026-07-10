@@ -397,10 +397,10 @@ describe('Departure API (e2e)', () => {
     const response = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/transition`)
       .send({ targetStatus: DepartureStatus.pending_settlement })
-      .expect(400)
+      .expect(409)
 
-    expect(response.body.code).toBe(400)
-    expect(response.body.message).toBe('已关闭发团不可变更状态')
+    expect(response.body.code).toBe(409)
+    expect(response.body.message).toBe('发团已关闭，不可变更状态')
   })
 
   describe('Archive / unarchive (issue #85)', () => {

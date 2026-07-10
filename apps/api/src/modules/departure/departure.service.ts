@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -20,6 +19,8 @@ import {
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { NumberAllocationService } from '../number-allocation/number-allocation.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type {
   CreateDepartureDto,
   CopyDepartureDto,
@@ -39,7 +40,6 @@ import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { RouteTemplateService } from './route-template.service'
 import { DepartureReadModelService } from './departure-read-model.service'
-import { NumberAllocationService } from '../number-allocation/number-allocation.service'
 import {
   emptyDepartureReadModelAggregate,
   type DepartureReadModelAggregate,
@@ -69,6 +69,7 @@ export class DepartureService {
     private readonly departureCopyService: DepartureCopyService,
     private readonly departureReadModelService: DepartureReadModelService,
     private readonly numberAllocationService: NumberAllocationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async list(
@@ -289,9 +290,7 @@ export class DepartureService {
   ): Promise<DepartureDetail> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
 
-    if (departure.status === DepartureStatus.closed) {
-      throw new ConflictException('发团已关闭，不可编辑')
-    }
+    this.departureFinanceFacade.assertMutable(departure, '编辑')
 
     if (!this.hasUpdateFields(dto)) {
       throw new BadRequestException('请至少提供一个待更新字段')
@@ -363,9 +362,7 @@ export class DepartureService {
   ): Promise<DepartureDetail> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
 
-    if (departure.status === DepartureStatus.closed) {
-      throw new BadRequestException('已关闭发团不可变更状态')
-    }
+    this.departureFinanceFacade.assertMutable(departure, '变更状态')
 
     const allowedTargets = TRANSITION_TARGETS[departure.status] ?? []
     if (!allowedTargets.includes(dto.targetStatus)) {

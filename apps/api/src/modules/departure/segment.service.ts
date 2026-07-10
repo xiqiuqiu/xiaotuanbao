@@ -9,12 +9,12 @@ import type {
 } from '@xiaotuanbao/shared'
 import { ResourceKind, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import {
-  DepartureStatus,
   type Departure,
   type ItinerarySegment,
   type SegmentResource,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import {
@@ -34,6 +34,7 @@ export class SegmentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financeBridge: DepartureFinanceBridgeService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async listByDeparture(
@@ -241,9 +242,7 @@ export class SegmentService {
   }
 
   private ensureDepartureEditable(departure: Departure) {
-    if (departure.status === DepartureStatus.closed) {
-      throw new ConflictException('发团已关闭，不可编辑')
-    }
+    this.departureFinanceFacade.assertMutable(departure, '编辑')
   }
 
   private async loadPayableStatusMap(

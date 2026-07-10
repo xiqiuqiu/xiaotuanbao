@@ -14,7 +14,6 @@ import {
   SourceOrderReceivableStatus,
 } from '@xiaotuanbao/shared'
 import {
-  DepartureStatus,
   DirectoryProfileStatus,
   PaymentScheduleDirection,
   type Departure,
@@ -24,6 +23,7 @@ import {
   type SourceOrderGuest,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
@@ -48,6 +48,7 @@ export class SourceOrderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly financeBridge: DepartureFinanceBridgeService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async listByDeparture(
@@ -523,9 +524,7 @@ export class SourceOrderService {
   }
 
   private ensureDepartureEditable(departure: Departure) {
-    if (departure.status === DepartureStatus.closed) {
-      throw new ConflictException('发团已关闭，不可编辑')
-    }
+    this.departureFinanceFacade.assertMutable(departure, '编辑')
   }
 
   private toSourceOrderSummary(

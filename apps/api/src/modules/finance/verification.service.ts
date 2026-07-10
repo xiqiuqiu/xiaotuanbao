@@ -34,6 +34,7 @@ import {
 } from '../departure/departure-date.utils'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { NumberAllocationService } from '../number-allocation/number-allocation.service'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import type {
   CancelFinanceVerificationDto,
   CreateFinanceVerificationDto,
@@ -66,6 +67,7 @@ export class VerificationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly numberAllocationService: NumberAllocationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async list(
@@ -171,6 +173,12 @@ export class VerificationService {
       throw new BadRequestException('已关闭节点不可核销')
     }
 
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '创建核销',
+    )
+
     const transaction = await client.financeTransaction.findFirst({
       where: { id: dto.transactionId, organizationId },
     })
@@ -255,6 +263,20 @@ export class VerificationService {
     if (verification.status === PrismaVerificationStatus.cancelled) {
       throw new BadRequestException('核销已撤销')
     }
+
+    const schedule = await this.prisma.paymentSchedule.findFirst({
+      where: { id: verification.paymentScheduleId, organizationId },
+      select: { departureId: true },
+    })
+    if (!schedule) {
+      throw new NotFoundException('收付款节点不存在')
+    }
+
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '撤销核销',
+    )
 
     const updated = await this.prisma.financeVerification.update({
       where: { id: verification.id },

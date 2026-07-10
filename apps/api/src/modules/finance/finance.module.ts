@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
 import { NumberAllocationModule } from '../number-allocation/number-allocation.module'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { FinanceOperationsService } from './finance-operations.service'
 import { PayableController } from './payable.controller'
 import { PaymentScheduleCancelController } from './payment-schedule-cancel.controller'
@@ -21,11 +22,12 @@ import { VerificationService } from './verification.service'
     VerificationController,
   ],
   providers: [
+    DepartureFinanceFacade,
     PaymentScheduleService,
     VerificationService,
     TransactionService,
     FinanceOperationsService,
   ],
-  exports: [PaymentScheduleService, VerificationService],
+  exports: [DepartureFinanceFacade, PaymentScheduleService, VerificationService],
 })
 export class FinanceModule {}

@@ -20,6 +20,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { NumberAllocationService } from '../number-allocation/number-allocation.service'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { VerificationService } from './verification.service'
 import {
   formatDateOnly,
@@ -48,6 +49,7 @@ export class PaymentScheduleService {
     private readonly authService: AuthService,
     private readonly verificationService: VerificationService,
     private readonly numberAllocationService: NumberAllocationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async list(
@@ -110,7 +112,11 @@ export class PaymentScheduleService {
       throw new BadRequestException('节点标题不能为空')
     }
 
-    await this.ensureDepartureExists(organizationId, dto.departureId)
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      dto.departureId,
+      '创建收付款节点',
+    )
 
     const scheduleNo = await this.numberAllocationService.allocateScheduleNo(
       organizationId,
@@ -144,6 +150,12 @@ export class PaymentScheduleService {
     dto: UpdatePaymentScheduleDto,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
+
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '编辑收付款节点',
+    )
 
     if (schedule.cancelledAt) {
       throw new BadRequestException('已关闭节点不可编辑')
@@ -246,6 +258,12 @@ export class PaymentScheduleService {
       throw new BadRequestException('节点已关闭')
     }
 
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '关闭收付款节点',
+    )
+
     const updated = await this.prisma.paymentSchedule.update({
       where: { id: schedule.id },
       data: {
@@ -268,16 +286,6 @@ export class PaymentScheduleService {
   private assertPositiveAmount(amountCents: number) {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
       throw new BadRequestException('金额必须大于 0')
-    }
-  }
-
-  private async ensureDepartureExists(organizationId: string, departureId: string) {
-    const departure = await this.prisma.departure.findFirst({
-      where: { id: departureId, organizationId },
-    })
-
-    if (!departure) {
-      throw new NotFoundException('发团不存在')
     }
   }
 

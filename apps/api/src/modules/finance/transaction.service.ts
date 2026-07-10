@@ -25,6 +25,7 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from '../departure/departure-date.utils'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import type {
   CreateFinanceTransactionDto,
   ListFinanceTransactionsQueryDto,
@@ -39,6 +40,7 @@ export class TransactionService {
     private readonly prisma: PrismaService,
     private readonly verificationService: VerificationService,
     private readonly numberAllocationService: NumberAllocationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   async list(
@@ -135,7 +137,11 @@ export class TransactionService {
     this.assertPositiveAmount(dto.amountCents)
 
     if (dto.departureId) {
-      await this.ensureDepartureExists(organizationId, dto.departureId, client)
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        dto.departureId,
+        '创建流水',
+      )
     }
 
     const counterparty = await this.resolveCounterparty(organizationId, dto, client)
@@ -189,8 +195,13 @@ export class TransactionService {
 
     this.assertPositiveAmount(dto.amountCents)
 
-    if (dto.departureId) {
-      await this.ensureDepartureExists(organizationId, dto.departureId)
+    const linkedDepartureId = dto.departureId ?? transaction.departureId
+    if (linkedDepartureId) {
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        linkedDepartureId,
+        '编辑流水',
+      )
     }
 
     const counterparty = await this.resolveCounterparty(organizationId, dto)
@@ -229,6 +240,14 @@ export class TransactionService {
 
     if (transaction.voidedAt) {
       throw new BadRequestException('流水已作废')
+    }
+
+    if (transaction.departureId) {
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        transaction.departureId,
+        '作废流水',
+      )
     }
 
     const allocated = await this.verificationService.getAllocatedAmountCents(transaction.id)
@@ -312,20 +331,6 @@ export class TransactionService {
   private assertPositiveAmount(amountCents: number) {
     if (!Number.isInteger(amountCents) || amountCents <= 0) {
       throw new BadRequestException('金额必须大于 0')
-    }
-  }
-
-  private async ensureDepartureExists(
-    organizationId: string,
-    departureId: string,
-    client: Prisma.TransactionClient | PrismaService = this.prisma,
-  ) {
-    const departure = await client.departure.findFirst({
-      where: { id: departureId, organizationId },
-    })
-
-    if (!departure) {
-      throw new NotFoundException('发团不存在')
     }
   }
 
