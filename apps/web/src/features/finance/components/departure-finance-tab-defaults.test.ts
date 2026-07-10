@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { TransactionDirection } from '@xiaotuanbao/shared'
 import { createInitialTransactionListState } from '../utils/transaction-list-state'
-import { createDefaultVerificationListState } from './VerificationsWorkspace'
+import { createDefaultVerificationListState } from '../utils/verification-list-state'
 
 describe('departure finance tab default filters', () => {
   it('does not default a date window for departure transaction lists', () => {
