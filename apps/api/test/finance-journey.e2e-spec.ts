@@ -2026,4 +2026,258 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(detail.body.data.openUnsettledReceivableCents).toBe(700000)
     expect(detail.body.data.isFinanciallySettled).toBe(false)
   })
+
+  /**
+   * #90 auditable reopen of closed payment schedules.
+   * Seam: HTTP APIs across finance schedules / operations / departure archive.
+   * Locks reopen eligibility, reason+progress snapshot, close history retention,
+   * settlement restoration, payment entry recovery, and archive-first guidance.
+   */
+  it('reopens closed schedules with reason, keeps close history, and restores progress (#90)', async () => {
+    const obligationCents = 800_000
+    const verifiedCents = 300_000
+
+    const departure = await createDeparture('auditable-reopen')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+
+    const receivableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const scheduleId = receivableGenerated.body.data.schedules[0].id as string
+    const scheduleNo = receivableGenerated.body.data.schedules[0].scheduleNo as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+
+    const closed = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
+      .send({
+        closeDisposition: 'business_dispute_stop',
+        cancelReason: '临时停止追收，待商务确认',
+      })
+      .expect(201)
+    expect(closed.body.data).toMatchObject({
+      id: scheduleId,
+      status: PaymentScheduleStatus.CANCELLED,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+    })
+
+    const openSchedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: departure.id,
+        title: '未关闭不可重新打开',
+        amountCents: 50_000,
+        dueDate: '2026-08-20',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${openSchedule.body.data.id}/reopen`)
+      .send({ reopenReason: '未关闭节点不应打开' })
+      .expect(400)
+
+    const scheduleCountBeforeReopen = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id },
+    })
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/reopen`)
+      .send({})
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/reopen`)
+      .send({ reopenReason: '   ' })
+      .expect(400)
+
+    const reopened = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/reopen`)
+      .send({ reopenReason: '商务确认继续追收原节点' })
+      .expect(201)
+
+    expect(reopened.body.data).toMatchObject({
+      id: scheduleId,
+      scheduleNo,
+      amountCents: obligationCents,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      status: PaymentScheduleStatus.PENDING,
+      cancelledAt: null,
+      cancelledBy: null,
+      closeDisposition: null,
+      cancelReason: null,
+      financeTouched: true,
+    })
+
+    const scheduleCountAfterReopen = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id },
+    })
+    expect(scheduleCountAfterReopen).toBe(scheduleCountBeforeReopen)
+
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${scheduleId}`)
+      .expect(200)
+    expect(detail.body.data.activities).toEqual([
+      expect.objectContaining({
+        activityType: 'close',
+        closeDisposition: 'business_dispute_stop',
+        note: '临时停止追收，待商务确认',
+        amountCents: obligationCents,
+        settledAmountCents: verifiedCents,
+        unsettledAmountCents: obligationCents - verifiedCents,
+      }),
+      expect.objectContaining({
+        activityType: 'reopen',
+        note: '商务确认继续追收原节点',
+        amountCents: obligationCents,
+        settledAmountCents: verifiedCents,
+        unsettledAmountCents: obligationCents - verifiedCents,
+        operatedByName: expect.any(String),
+      }),
+    ])
+
+    await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${scheduleId}`)
+      .send({ amountCents: obligationCents + 1 })
+      .expect(400)
+
+    const furtherCollection = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: 100_000,
+        transactionDate: '2026-08-05',
+        paymentChannel: PaymentChannel.CASH,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+    expect(furtherCollection.body.data).toMatchObject({
+      id: scheduleId,
+      settledAmountCents: verifiedCents + 100_000,
+      unsettledAmountCents: obligationCents - verifiedCents - 100_000,
+      status: PaymentScheduleStatus.PENDING,
+    })
+
+    const matchTx = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send({
+        direction: 'inflow',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        amountCents: 50_000,
+        transactionDate: '2026-08-06',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+        departureId: departure.id,
+        notes: '重新打开后匹配流水',
+      })
+      .expect(201)
+
+    const matched = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/link-transaction`)
+      .send({
+        transactionId: matchTx.body.data.id,
+        amountCents: 50_000,
+      })
+      .expect(201)
+    expect(matched.body.data).toMatchObject({
+      id: scheduleId,
+      settledAmountCents: verifiedCents + 150_000,
+      unsettledAmountCents: obligationCents - verifiedCents - 150_000,
+    })
+
+    const overdueSchedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: departure.id,
+        title: '逾期恢复探针',
+        amountCents: 120_000,
+        dueDate: '2026-06-01',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${overdueSchedule.body.data.id}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '先关闭再测逾期恢复',
+      })
+      .expect(201)
+
+    const overdueReopened = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${overdueSchedule.body.data.id}/reopen`)
+      .send({ reopenReason: '恢复逾期追收' })
+      .expect(201)
+    expect(overdueReopened.body.data).toMatchObject({
+      id: overdueSchedule.body.data.id,
+      settledAmountCents: 0,
+      unsettledAmountCents: 120_000,
+      status: PaymentScheduleStatus.OVERDUE,
+      cancelledAt: null,
+    })
+
+    const archiveDeparture = await createDeparture('reopen-archive-gate')
+    const archiveOps = await seedOps(archiveDeparture.id)
+    const archiveSchedules = await generateSchedules(archiveOps)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${archiveSchedules.receivableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '归档前关闭应收',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/close`)
+      .send({ reason: '归档后拒绝直接重新打开' })
+      .expect(201)
+
+    const archivedReject = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${archiveSchedules.receivableScheduleId}/reopen`)
+      .send({ reopenReason: '归档期不应直接打开' })
+    expect(archivedReject.status).toBe(409)
+    expect(archivedReject.body.message).toBe(
+      '发团已关闭，不可重新打开收付款节点，请先解除归档',
+    )
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/unarchive`)
+      .send({ reason: '解除归档后再重新打开节点' })
+      .expect(201)
+
+    const afterUnarchive = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${archiveSchedules.receivableScheduleId}/reopen`)
+      .send({ reopenReason: '解除归档后继续追收' })
+      .expect(201)
+    expect(afterUnarchive.body.data).toMatchObject({
+      id: archiveSchedules.receivableScheduleId,
+      status: PaymentScheduleStatus.PENDING,
+      cancelledAt: null,
+    })
+  })
 })

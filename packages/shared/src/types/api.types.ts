@@ -352,6 +352,10 @@ export interface CancelPaymentScheduleDto {
   cancelReason: string
 }
 
+export interface ReopenPaymentScheduleDto {
+  reopenReason: string
+}
+
 export interface CreatePaymentScheduleDto {
   departureId: string
   title: string

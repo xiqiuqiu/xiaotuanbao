@@ -166,6 +166,7 @@ enum PaymentScheduleCloseDisposition {
 enum PaymentScheduleActivityType {
   close
   verification_cancelled
+  reopen
 
   @@map("payment_schedule_activity_type")
 }

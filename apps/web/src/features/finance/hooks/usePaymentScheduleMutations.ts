@@ -7,11 +7,13 @@ import {
   confirmCollection,
   confirmPayment,
   createVerification,
+  reopenSchedule,
   updatePayable,
   updateReceivable,
 } from '@/services/finance.service'
 import type { FormInstance } from 'antd/es/form'
 import type { CancelScheduleFormValues } from '../components/CancelScheduleModal'
+import type { ReopenScheduleFormValues } from '../components/ReopenScheduleModal'
 import {
   buildConfirmCollectionPayload,
   type ConfirmCollectionFormValues,
@@ -38,10 +40,12 @@ interface UsePaymentScheduleMutationsOptions {
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
   verifyForm: FormInstance<CreateVerificationFormValues>
   cancelForm: FormInstance<CancelScheduleFormValues>
+  reopenForm: FormInstance<ReopenScheduleFormValues>
   editForm: FormInstance<EditScheduleFormValues>
   onConfirmSuccess: () => void
   onVerifySuccess: () => void
   onCancelSuccess: () => void
+  onReopenSuccess: () => void
   onEditSuccess: () => void
 }
 
@@ -54,10 +58,12 @@ export function usePaymentScheduleMutations({
   confirmForm,
   verifyForm,
   cancelForm,
+  reopenForm,
   editForm,
   onConfirmSuccess,
   onVerifySuccess,
   onCancelSuccess,
+  onReopenSuccess,
   onEditSuccess,
 }: UsePaymentScheduleMutationsOptions) {
   const confirmMutation = useMutation({
@@ -128,6 +134,31 @@ export function usePaymentScheduleMutations({
     },
   })
 
+  const reopenMutation = useMutation({
+    mutationFn: async (values: ReopenScheduleFormValues) => {
+      if (!activeSchedule) {
+        throw new Error('未选择节点')
+      }
+      return reopenSchedule(activeSchedule.id, {
+        reopenReason: values.reopenReason.trim(),
+      })
+    },
+    onSuccess: () => {
+      message.success('节点已重新打开')
+      reopenForm.resetFields()
+      onReopenSuccess()
+      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['payment-schedule-detail'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '重新打开失败')
+    },
+  })
+
   const editMutation = useMutation({
     mutationFn: async (values: EditScheduleFormValues) => {
       if (!activeSchedule) {
@@ -157,6 +188,7 @@ export function usePaymentScheduleMutations({
     confirmMutation,
     verifyCreateMutation,
     cancelMutation,
+    reopenMutation,
     editMutation,
   }
 }

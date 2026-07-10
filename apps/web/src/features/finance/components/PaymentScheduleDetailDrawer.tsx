@@ -37,6 +37,9 @@ function activityTitle(item: PaymentScheduleActivityItem): string {
   if (item.activityType === PaymentScheduleActivityType.VERIFICATION_CANCELLED) {
     return '关闭后撤销核销'
   }
+  if (item.activityType === PaymentScheduleActivityType.REOPEN) {
+    return '重新打开节点'
+  }
   return item.activityType
 }
 
@@ -55,6 +58,15 @@ function activityDescription(item: PaymentScheduleActivityItem): string {
       `已核销 ${formatCents(item.previousSettledAmountCents ?? 0)} → ${formatCents(item.settledAmountCents ?? 0)}`,
       `未结清 ${formatCents(item.previousUnsettledAmountCents ?? 0)} → ${formatCents(item.unsettledAmountCents ?? 0)}`,
       `说明：${item.note}`,
+    ].join(' · ')
+  }
+
+  if (item.activityType === PaymentScheduleActivityType.REOPEN) {
+    return [
+      `约定 ${formatCents(item.amountCents ?? 0)}`,
+      `已核销 ${formatCents(item.settledAmountCents ?? 0)}`,
+      `未结清 ${formatCents(item.unsettledAmountCents ?? 0)}`,
+      `原因：${item.note}`,
     ].join(' · ')
   }
 
@@ -129,7 +141,11 @@ export function PaymentScheduleDetailDrawer({
                 style={{ marginTop: 12, marginBottom: 0 }}
                 items={schedule.activities.map((item) => ({
                   color:
-                    item.activityType === PaymentScheduleActivityType.CLOSE ? 'gray' : 'blue',
+                    item.activityType === PaymentScheduleActivityType.CLOSE
+                      ? 'gray'
+                      : item.activityType === PaymentScheduleActivityType.REOPEN
+                        ? 'green'
+                        : 'blue',
                   children: (
                     <div>
                       <Typography.Text>

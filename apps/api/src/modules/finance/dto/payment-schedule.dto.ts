@@ -107,6 +107,12 @@ export class CancelPaymentScheduleDto {
   cancelReason!: string
 }
 
+export class ReopenPaymentScheduleDto {
+  @IsString()
+  @IsNotEmpty({ message: '重新打开原因不能为空' })
+  reopenReason!: string
+}
+
 export {
   PrismaPaymentScheduleDirection as PaymentScheduleDirection,
   PrismaPaymentScheduleCloseDisposition as PaymentScheduleCloseDisposition,

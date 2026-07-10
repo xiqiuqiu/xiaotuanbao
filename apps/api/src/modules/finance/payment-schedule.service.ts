@@ -35,6 +35,7 @@ import type {
   CancelPaymentScheduleDto,
   CreatePaymentScheduleDto,
   ListPaymentSchedulesQueryDto,
+  ReopenPaymentScheduleDto,
   UpdatePaymentScheduleDto,
 } from './dto/payment-schedule.dto'
 
@@ -330,6 +331,82 @@ export class PaymentScheduleService {
       })
 
       return closed
+    })
+
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
+  }
+
+  async reopen(
+    organizationId: string,
+    scheduleId: string,
+    userId: string,
+    dto: ReopenPaymentScheduleDto,
+  ): Promise<PaymentScheduleSummary> {
+    const schedule = await this.prisma.paymentSchedule.findFirst({
+      where: { id: scheduleId, organizationId },
+    })
+
+    if (!schedule) {
+      throw new NotFoundException('收付款节点不存在')
+    }
+
+    const menuKey =
+      schedule.direction === PaymentScheduleDirection.receivable
+        ? '/finance/receivable'
+        : '/finance/payable'
+    const menuKeys = await this.authService.getMenuKeysForUser(userId)
+    if (!menuKeys.includes(menuKey)) {
+      throw new ForbiddenException('无权访问')
+    }
+
+    if (!schedule.cancelledAt) {
+      throw new BadRequestException('仅已关闭节点可以重新打开')
+    }
+
+    const reopenReason = dto.reopenReason?.trim()
+    if (!reopenReason) {
+      throw new BadRequestException('重新打开原因不能为空')
+    }
+
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      schedule.departureId,
+      '重新打开收付款节点，请先解除归档',
+    )
+
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+    const operatedAt = new Date()
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const reopened = await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          cancelledAt: null,
+          cancelledBy: null,
+          closeDisposition: null,
+          cancelReason: null,
+        },
+      })
+
+      await tx.paymentScheduleActivity.create({
+        data: {
+          organizationId,
+          paymentScheduleId: schedule.id,
+          activityType: PaymentScheduleActivityType.reopen,
+          note: reopenReason,
+          amountCents: schedule.amountCents,
+          settledAmountCents,
+          unsettledAmountCents,
+          operatedBy: userId,
+          operatedAt,
+        },
+      })
+
+      return reopened
     })
 
     return this.toSummary(updated, settledAmountCents, hasVerificationHistory)

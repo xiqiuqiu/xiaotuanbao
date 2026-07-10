@@ -27,6 +27,14 @@ function canClose(schedule: PaymentScheduleSummary): boolean {
   return canSettle(schedule)
 }
 
+/** Closed schedules can reopen when the list is not archive-read-only. */
+export function canReopenSchedule(
+  schedule: PaymentScheduleSummary,
+  readOnly: boolean,
+): boolean {
+  return !readOnly && schedule.status === PaymentScheduleStatus.CANCELLED
+}
+
 function hasVerificationRecords(schedule: PaymentScheduleSummary): boolean {
   return schedule.settledAmountCents > 0
 }
@@ -40,6 +48,7 @@ interface BuildPaymentScheduleColumnsOptions {
   onVerify: (schedule: PaymentScheduleSummary) => void
   onEdit: (schedule: PaymentScheduleSummary) => void
   onCancel: (schedule: PaymentScheduleSummary) => void
+  onReopen: (schedule: PaymentScheduleSummary) => void
   onViewDetail: (schedule: PaymentScheduleSummary) => void
   onViewVerifications: (schedule: PaymentScheduleSummary) => void
 }
@@ -53,6 +62,7 @@ export function buildPaymentScheduleColumns({
   onVerify,
   onEdit,
   onCancel,
+  onReopen,
   onViewDetail,
   onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
@@ -179,6 +189,14 @@ export function buildPaymentScheduleColumns({
             label: '关闭节点',
             danger: true,
             onClick: () => onCancel(record),
+          })
+        }
+
+        if (canReopenSchedule(record, readOnly)) {
+          moreItems.push({
+            key: 'reopen',
+            label: '重新打开',
+            onClick: () => onReopen(record),
           })
         }
 

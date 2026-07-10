@@ -14,6 +14,7 @@ import type {
   PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
+  ReopenPaymentScheduleDto,
   UpdateFinanceTransactionDto,
   UpdatePaymentScheduleDto,
   VoidFinanceTransactionDto,
@@ -111,6 +112,13 @@ export async function cancelSchedule(
   payload: CancelPaymentSchedulePayload,
 ): Promise<PaymentScheduleSummary> {
   return request.post<PaymentScheduleSummary>(`/finance/payment-schedules/${id}/cancel`, payload)
+}
+
+export async function reopenSchedule(
+  id: string,
+  payload: ReopenPaymentScheduleDto,
+): Promise<PaymentScheduleSummary> {
+  return request.post<PaymentScheduleSummary>(`/finance/payment-schedules/${id}/reopen`, payload)
 }
 
 export async function listTransactions(

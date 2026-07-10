@@ -31,6 +31,7 @@ import {
 } from '../utils/edit-schedule-form'
 import type { CreateVerificationFormValues } from '../utils/verification-form'
 import type { CancelScheduleFormValues } from './CancelScheduleModal'
+import type { ReopenScheduleFormValues } from './ReopenScheduleModal'
 import styles from './PaymentScheduleWorkspace.module.css'
 
 /** Two gentle (0.85s) animation iterations. */
@@ -178,12 +179,14 @@ export function PaymentScheduleWorkspace({
   const [confirmForm] = Form.useForm<ConfirmCollectionFormValues | ConfirmPaymentFormValues>()
   const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
   const [cancelForm] = Form.useForm<CancelScheduleFormValues>()
+  const [reopenForm] = Form.useForm<ReopenScheduleFormValues>()
   const [editForm] = Form.useForm<EditScheduleFormValues>()
 
   const [activeSchedule, setActiveSchedule] = useState<PaymentScheduleSummary | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [reopenOpen, setReopenOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailScheduleId, setDetailScheduleId] = useState<string | null>(null)
@@ -365,13 +368,19 @@ export function PaymentScheduleWorkspace({
     setActiveSchedule(null)
   }, [cancelForm])
 
+  const closeReopen = useCallback(() => {
+    reopenForm.resetFields()
+    setReopenOpen(false)
+    setActiveSchedule(null)
+  }, [reopenForm])
+
   const closeEdit = useCallback(() => {
     editForm.resetFields()
     setEditOpen(false)
     setActiveSchedule(null)
   }, [editForm])
 
-  const { confirmMutation, verifyCreateMutation, cancelMutation, editMutation } =
+  const { confirmMutation, verifyCreateMutation, cancelMutation, reopenMutation, editMutation } =
     usePaymentScheduleMutations({
       queryClient,
       isReceivable,
@@ -381,10 +390,12 @@ export function PaymentScheduleWorkspace({
       confirmForm,
       verifyForm,
       cancelForm,
+      reopenForm,
       editForm,
       onConfirmSuccess: closeConfirm,
       onVerifySuccess: closeVerify,
       onCancelSuccess: closeCancel,
+      onReopenSuccess: closeReopen,
       onEditSuccess: closeEdit,
     })
 
@@ -412,6 +423,12 @@ export function PaymentScheduleWorkspace({
     cancelForm.resetFields()
     setCancelOpen(true)
   }, [cancelForm])
+
+  const openReopen = useCallback((schedule: PaymentScheduleSummary) => {
+    setActiveSchedule(schedule)
+    reopenForm.resetFields()
+    setReopenOpen(true)
+  }, [reopenForm])
 
   const openEdit = useCallback(
     (schedule: PaymentScheduleSummary) => {
@@ -464,6 +481,7 @@ export function PaymentScheduleWorkspace({
         onVerify: openVerify,
         onEdit: openEdit,
         onCancel: openCancel,
+        onReopen: openReopen,
         onViewDetail: openDetail,
         onViewVerifications: openViewVerifications,
       }),
@@ -475,6 +493,7 @@ export function PaymentScheduleWorkspace({
       openConfirm,
       openDetail,
       openEdit,
+      openReopen,
       openVerify,
       openViewVerifications,
       readOnly,
@@ -533,18 +552,22 @@ export function PaymentScheduleWorkspace({
         confirmOpen={confirmOpen}
         verifyOpen={verifyOpen}
         cancelOpen={cancelOpen}
+        reopenOpen={reopenOpen}
         editOpen={editOpen}
         confirmForm={confirmForm}
         verifyForm={verifyForm}
         cancelForm={cancelForm}
+        reopenForm={reopenForm}
         editForm={editForm}
         confirmMutation={confirmMutation}
         verifyCreateMutation={verifyCreateMutation}
         cancelMutation={cancelMutation}
+        reopenMutation={reopenMutation}
         editMutation={editMutation}
         onCloseConfirm={closeConfirm}
         onCloseVerify={closeVerify}
         onCloseCancel={closeCancel}
+        onCloseReopen={closeReopen}
         onCloseEdit={closeEdit}
       />
 
