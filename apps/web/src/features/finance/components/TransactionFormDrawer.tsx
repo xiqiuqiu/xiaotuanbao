@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { DatePicker, Drawer, Form, Input, InputNumber, Select, Space, Button } from 'antd'
+import { useEffect, useMemo } from 'react'
+import { DatePicker, Drawer, Form, Input, InputNumber, Radio, Select, Space, Button } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -43,10 +43,15 @@ export function TransactionFormDrawer({
 }: TransactionFormDrawerProps) {
   const counterpartyType = Form.useWatch('counterpartyType', form)
 
-  const initialValues =
-    mode === 'edit' && editingTransaction
-      ? transactionToFormValues(editingTransaction)
-      : createEmptyTransactionFormValues()
+  // Memoize so the open-seed effect does not re-run on every render (e.g. when
+  // useWatch(counterpartyType) updates) and wipe the user's Select choice.
+  const initialValues = useMemo(
+    () =>
+      mode === 'edit' && editingTransaction
+        ? transactionToFormValues(editingTransaction)
+        : createEmptyTransactionFormValues(),
+    [mode, editingTransaction],
+  )
 
   useEffect(() => {
     if (!open) {
@@ -128,9 +133,12 @@ export function TransactionFormDrawer({
           label="收支方向"
           rules={[{ required: true, message: '请选择收支方向' }]}
         >
-          <Select
+          <Radio.Group
+            block
+            optionType="button"
             options={[...TRANSACTION_DIRECTION_OPTIONS]}
-            onChange={(value: TransactionDirection) => {
+            onChange={(event) => {
+              const value = event.target.value as TransactionDirection
               form.setFieldsValue({
                 counterpartyType:
                   value === TransactionDirection.INFLOW
