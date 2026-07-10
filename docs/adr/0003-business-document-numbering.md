@@ -15,7 +15,7 @@ status: accepted
 | 发团（Departure） | `{prefix}{yyyyMM}{4位流水}` | `XTB2026070001` |
 | 应收收付款节点 | `AR{prefix}{yyyyMM}{6位流水}` | `ARXTB202607000001` |
 | 应付收付款节点 | `AP{prefix}{yyyyMM}{6位流水}` | `APXTB202607000001` |
-| 财务流水 | `TX{prefix}{yyyyMMdd}{6位流水}` | `TXXTB20260708000001` |
+| 收支流水 | `TX{prefix}{yyyyMMdd}{6位流水}` | `TXXTB20260708000001` |
 | 核销 | `CL{prefix}{yyyyMM}{6位流水}` | `CLXTB202607000001` |
 
 业务编号不作为数据库主键（主键仍用 cuid）；编号字段加 `(organization_id, *_no)` 唯一索引。

@@ -19,7 +19,7 @@ export const MENU_KEY_LABELS: Record<MenuKey, string> = {
   '/departure': '发团管理',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',
-  '/finance/transactions': '财务流水',
+  '/finance/transactions': '收支流水',
   '/finance/verification': '核销管理',
   '/partner': '合作伙伴',
   '/supplier': '供应商管理',

@@ -259,7 +259,7 @@ function TransactionsHeader({ onCreate }: TransactionsHeaderProps) {
     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
       <div>
         <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-          财务流水
+          收支流水
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           登记实际收付款流水，供账款节点关联核销

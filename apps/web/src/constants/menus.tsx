@@ -23,7 +23,7 @@ export const mainMenuItems: MenuItem[] = [
   item('财务管理', 'finance', <DollarOutlined />, [
     item('应收管理', '/finance/receivable'),
     item('应付管理', '/finance/payable'),
-    item('财务流水', '/finance/transactions'),
+    item('收支流水', '/finance/transactions'),
     item('核销管理', '/finance/verification'),
   ]),
   item('系统管理', 'system', <SettingOutlined />, [
@@ -38,7 +38,7 @@ export const routeTitles: Record<string, string> = {
   '/departure': '发团管理',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',
-  '/finance/transactions': '财务流水',
+  '/finance/transactions': '收支流水',
   '/finance/verification': '核销管理',
   '/partner': '合作伙伴',
   '/supplier': '供应商管理',

@@ -12,7 +12,7 @@ export function VerificationsPage() {
       scope="global"
       pageHeader={{
         title: '核销管理',
-        description: '将财务流水与账款节点进行核销匹配',
+        description: '将收支流水与账款节点进行核销匹配',
       }}
       deepLinkSearch={{
         transactionNo: search.transactionNo,
