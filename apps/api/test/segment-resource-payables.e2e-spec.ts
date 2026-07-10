@@ -397,7 +397,7 @@ describe('Segment resource generate payables (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
-      .send({ cancelReason: '测试关闭应付' })
+      .send({ closeDisposition: 'other', cancelReason: '测试关闭应付' })
       .expect(201)
 
     const after = await authRequest(app, coordinatorToken)

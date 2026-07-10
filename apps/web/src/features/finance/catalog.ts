@@ -2,6 +2,7 @@ import {
   CounterpartyType,
   PAYMENT_CHANNEL_LABELS,
   PAYMENT_CHANNEL_OPTIONS,
+  PaymentScheduleCloseDisposition,
   PaymentScheduleStatus,
   TransactionDirection,
   TransactionWriteoffStatus,
@@ -49,6 +50,16 @@ export const PAYMENT_SCHEDULE_STATUS_COLORS: Record<string, string> = {
   [PaymentScheduleStatus.SETTLED]: 'success',
   [PaymentScheduleStatus.CANCELLED]: 'default',
 }
+
+export const CLOSE_DISPOSITION_OPTIONS = [
+  { value: PaymentScheduleCloseDisposition.EXTERNAL_OR_SPECIAL, label: '转外部或专项处理' },
+  { value: PaymentScheduleCloseDisposition.BUSINESS_DISPUTE_STOP, label: '商务争议停止跟进' },
+  { value: PaymentScheduleCloseDisposition.OTHER, label: '其他' },
+] as const
+
+export const CLOSE_DISPOSITION_LABELS = Object.fromEntries(
+  CLOSE_DISPOSITION_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<PaymentScheduleCloseDisposition, string>
 
 export const TRANSACTION_DIRECTION_OPTIONS = [
   { value: TransactionDirection.INFLOW, label: '收入' },

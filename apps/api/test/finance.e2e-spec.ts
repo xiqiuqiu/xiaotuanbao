@@ -315,7 +315,7 @@ describe('Finance API (e2e)', () => {
 
     const response = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
-      .send({ cancelReason: '测试关闭' })
+      .send({ closeDisposition: 'other', cancelReason: '测试关闭' })
       .expect(201)
 
     expect(response.body.data.cancelledAt).toBeTruthy()
@@ -420,7 +420,7 @@ describe('Finance API (e2e)', () => {
 
       await authRequest(app, financeToken)
         .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
-        .send({ cancelReason: '测试关闭' })
+        .send({ closeDisposition: 'other', cancelReason: '测试关闭' })
         .expect(201)
 
       const response = await authRequest(app, financeToken)
@@ -979,7 +979,7 @@ describe('Finance API (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
-      .send({ cancelReason: '关闭测试' })
+      .send({ closeDisposition: 'other', cancelReason: '关闭测试' })
       .expect(201)
 
     const response = await authRequest(app, financeToken)

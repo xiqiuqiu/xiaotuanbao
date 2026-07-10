@@ -51,6 +51,8 @@ function schedule(
     settledAmountCents: 0,
     unsettledAmountCents: 500000,
     cancelledAt: null,
+    cancelledBy: null,
+    closeDisposition: null,
     cancelReason: null,
     amountAdjustedAt: null,
     createdAt: '2026-07-01T00:00:00.000Z',

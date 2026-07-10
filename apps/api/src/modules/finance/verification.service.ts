@@ -20,6 +20,7 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   PaymentChannel as PrismaPaymentChannel,
+  PaymentScheduleActivityType,
   PaymentScheduleDirection,
   TransactionDirection as PrismaTransactionDirection,
   VerificationStatus as PrismaVerificationStatus,
@@ -266,7 +267,12 @@ export class VerificationService {
 
     const schedule = await this.prisma.paymentSchedule.findFirst({
       where: { id: verification.paymentScheduleId, organizationId },
-      select: { departureId: true },
+      select: {
+        id: true,
+        departureId: true,
+        amountCents: true,
+        cancelledAt: true,
+      },
     })
     if (!schedule) {
       throw new NotFoundException('收付款节点不存在')
@@ -278,14 +284,51 @@ export class VerificationService {
       '撤销核销',
     )
 
-    const updated = await this.prisma.financeVerification.update({
-      where: { id: verification.id },
-      data: {
-        status: PrismaVerificationStatus.cancelled,
-        cancelledAt: new Date(),
-        cancelledBy,
-        cancelReason,
-      },
+    const previousSettledAmountCents = await this.getSettledAmountCents(schedule.id)
+    const previousUnsettledAmountCents = Math.max(
+      schedule.amountCents - previousSettledAmountCents,
+      0,
+    )
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const cancelled = await tx.financeVerification.update({
+        where: { id: verification.id },
+        data: {
+          status: PrismaVerificationStatus.cancelled,
+          cancelledAt: new Date(),
+          cancelledBy,
+          cancelReason,
+        },
+      })
+
+      if (schedule.cancelledAt) {
+        const settledResult = await tx.financeVerification.aggregate({
+          where: {
+            paymentScheduleId: schedule.id,
+            status: PrismaVerificationStatus.normal,
+          },
+          _sum: { amountCents: true },
+        })
+        const settledAmountCents = settledResult._sum.amountCents ?? 0
+        const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+        await tx.paymentScheduleActivity.create({
+          data: {
+            organizationId,
+            paymentScheduleId: schedule.id,
+            activityType: PaymentScheduleActivityType.verification_cancelled,
+            note: cancelReason,
+            amountCents: schedule.amountCents,
+            settledAmountCents,
+            unsettledAmountCents,
+            previousSettledAmountCents,
+            previousUnsettledAmountCents,
+            verificationId: verification.id,
+            operatedBy: cancelledBy,
+          },
+        })
+      }
+
+      return cancelled
     })
 
     return this.toSummary(updated)
@@ -732,6 +775,8 @@ export class VerificationService {
       settledAmountCents,
       unsettledAmountCents,
       cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+      cancelledBy: schedule.cancelledBy,
+      closeDisposition: schedule.closeDisposition,
       cancelReason: schedule.cancelReason,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,
       createdAt: schedule.createdAt.toISOString(),

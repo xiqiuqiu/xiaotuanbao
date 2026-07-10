@@ -56,7 +56,7 @@ describe('deriveSettlementLabel', () => {
     ).toEqual({ label: '已付清', isOverdue: false })
   })
 
-  it('returns cancelled label regardless of amounts', () => {
+  it('keeps settlement progress when cancelled instead of replacing with 已关闭', () => {
     expect(
       deriveSettlementLabel(
         PaymentScheduleDirection.RECEIVABLE,
@@ -64,7 +64,16 @@ describe('deriveSettlementLabel', () => {
         5000,
         PaymentScheduleStatus.CANCELLED,
       ),
-    ).toEqual({ label: '已关闭', isOverdue: false })
+    ).toEqual({ label: '部分收款', isOverdue: false })
+
+    expect(
+      deriveSettlementLabel(
+        PaymentScheduleDirection.PAYABLE,
+        10000,
+        0,
+        PaymentScheduleStatus.CANCELLED,
+      ),
+    ).toEqual({ label: '待付款', isOverdue: false })
   })
 
   it('flags overdue without replacing settlement label', () => {

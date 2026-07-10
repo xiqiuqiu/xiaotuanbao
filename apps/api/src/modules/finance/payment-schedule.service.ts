@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type {
+  PaymentScheduleActivityItem,
+  PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
@@ -13,8 +15,10 @@ import {
   isFinanceTouched,
 } from '@xiaotuanbao/shared'
 import {
+  PaymentScheduleActivityType,
   PaymentScheduleDirection,
   type PaymentSchedule,
+  type PaymentScheduleActivity,
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -101,13 +105,17 @@ export class PaymentScheduleService {
     organizationId: string,
     direction: PaymentScheduleDirection,
     scheduleId: string,
-  ): Promise<PaymentScheduleSummary> {
+  ): Promise<PaymentScheduleDetail> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+    const [settledAmountCents, hasVerificationHistory, activities] = await Promise.all([
       this.verificationService.getSettledAmountCents(schedule.id),
       this.verificationService.hasVerificationHistory(schedule.id),
+      this.loadActivities(schedule.id),
     ])
-    return this.toSummary(schedule, settledAmountCents, hasVerificationHistory)
+    return {
+      ...this.toSummary(schedule, settledAmountCents, hasVerificationHistory),
+      activities,
+    }
   }
 
   async create(
@@ -271,24 +279,59 @@ export class PaymentScheduleService {
       throw new BadRequestException('节点已关闭')
     }
 
+    const cancelReason = dto.cancelReason?.trim()
+    if (!cancelReason) {
+      throw new BadRequestException('关闭说明不能为空')
+    }
+    if (!dto.closeDisposition) {
+      throw new BadRequestException('关闭处置类型不能为空')
+    }
+
     await this.departureFinanceFacade.assertMutableById(
       organizationId,
       schedule.departureId,
       '关闭收付款节点',
     )
 
-    const updated = await this.prisma.paymentSchedule.update({
-      where: { id: schedule.id },
-      data: {
-        cancelledAt: new Date(),
-        cancelReason: dto.cancelReason?.trim() || null,
-      },
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+    if (unsettledAmountCents <= 0) {
+      throw new BadRequestException('已结清节点不可关闭')
+    }
+
+    const cancelledAt = new Date()
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const closed = await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          cancelledAt,
+          cancelledBy: userId,
+          closeDisposition: dto.closeDisposition,
+          cancelReason,
+        },
+      })
+
+      await tx.paymentScheduleActivity.create({
+        data: {
+          organizationId,
+          paymentScheduleId: schedule.id,
+          activityType: PaymentScheduleActivityType.close,
+          closeDisposition: dto.closeDisposition,
+          note: cancelReason,
+          amountCents: schedule.amountCents,
+          settledAmountCents,
+          unsettledAmountCents,
+          operatedBy: userId,
+          operatedAt: cancelledAt,
+        },
+      })
+
+      return closed
     })
 
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(updated.id),
-      this.verificationService.hasVerificationHistory(updated.id),
-    ])
     return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
   }
 
@@ -319,6 +362,35 @@ export class PaymentScheduleService {
     }
 
     return schedule
+  }
+
+  private async loadActivities(paymentScheduleId: string): Promise<PaymentScheduleActivityItem[]> {
+    const rows = await this.prisma.paymentScheduleActivity.findMany({
+      where: { paymentScheduleId },
+      include: { operator: { select: { name: true } } },
+      orderBy: { operatedAt: 'asc' },
+    })
+    return rows.map((row) => this.toActivityItem(row))
+  }
+
+  private toActivityItem(
+    row: PaymentScheduleActivity & { operator: { name: string } },
+  ): PaymentScheduleActivityItem {
+    return {
+      id: row.id,
+      activityType: row.activityType,
+      closeDisposition: row.closeDisposition,
+      note: row.note,
+      amountCents: row.amountCents,
+      settledAmountCents: row.settledAmountCents,
+      unsettledAmountCents: row.unsettledAmountCents,
+      previousSettledAmountCents: row.previousSettledAmountCents,
+      previousUnsettledAmountCents: row.previousUnsettledAmountCents,
+      verificationId: row.verificationId,
+      operatedBy: row.operatedBy,
+      operatedByName: row.operator.name,
+      operatedAt: row.operatedAt.toISOString(),
+    }
   }
 
   private toSummary(
@@ -353,6 +425,8 @@ export class PaymentScheduleService {
       settledAmountCents,
       unsettledAmountCents,
       cancelledAt: schedule.cancelledAt?.toISOString() ?? null,
+      cancelledBy: schedule.cancelledBy,
+      closeDisposition: schedule.closeDisposition,
       cancelReason: schedule.cancelReason,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,
       createdAt: schedule.createdAt.toISOString(),

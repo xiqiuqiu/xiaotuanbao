@@ -1,9 +1,11 @@
-import { Form, Input, Modal } from 'antd'
+import { Alert, Form, Input, Modal, Select } from 'antd'
 import type { FormInstance } from 'antd/es/form'
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { PaymentScheduleCloseDisposition, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { CLOSE_DISPOSITION_OPTIONS, formatCents } from '../catalog'
 
 export interface CancelScheduleFormValues {
-  cancelReason?: string
+  closeDisposition: PaymentScheduleCloseDisposition
+  cancelReason: string
 }
 
 interface CancelScheduleModalProps {
@@ -23,6 +25,8 @@ export function CancelScheduleModal({
   onClose,
   onSubmit,
 }: CancelScheduleModalProps) {
+  const hasVerifiedAmount = Boolean(schedule && schedule.settledAmountCents > 0)
+
   return (
     <Modal
       title="关闭节点"
@@ -33,15 +37,49 @@ export function CancelScheduleModal({
       okText="确认关闭"
       okType="danger"
       cancelText="取消"
-      destroyOnClose
+      destroyOnHidden
     >
       {schedule ? (
         <Form form={form} layout="vertical" onFinish={onSubmit}>
           <Form.Item label="节点">
             <Input value={`${schedule.scheduleNo} · ${schedule.title}`} disabled />
           </Form.Item>
-          <Form.Item name="cancelReason" label="关闭原因">
-            <Input.TextArea rows={3} maxLength={200} showCount placeholder="可选" />
+          <Form.Item label="约定 / 已核销 / 未结清">
+            <Input
+              value={`${formatCents(schedule.amountCents)} / ${formatCents(schedule.settledAmountCents)} / ${formatCents(schedule.unsettledAmountCents)}`}
+              disabled
+            />
+          </Form.Item>
+          {hasVerifiedAmount ? (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              title="关闭后将停止后续收付；已核销与未结清金额仍保留在节点上，不会撤销核销或改写约定金额。"
+            />
+          ) : null}
+          <Form.Item
+            name="closeDisposition"
+            label="处置类型"
+            rules={[{ required: true, message: '请选择处置类型' }]}
+          >
+            <Select
+              placeholder="请选择处置类型"
+              options={CLOSE_DISPOSITION_OPTIONS.map((item) => ({
+                value: item.value,
+                label: item.label,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="cancelReason"
+            label="具体说明"
+            rules={[
+              { required: true, message: '请填写具体说明' },
+              { whitespace: true, message: '请填写具体说明' },
+            ]}
+          >
+            <Input.TextArea rows={3} maxLength={200} showCount placeholder="必填，说明为何停止当前追收/追付" />
           </Form.Item>
         </Form>
       ) : null}

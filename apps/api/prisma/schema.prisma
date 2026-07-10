@@ -155,6 +155,21 @@ enum VerificationStatus {
   @@map("verification_status")
 }
 
+enum PaymentScheduleCloseDisposition {
+  external_or_special
+  business_dispute_stop
+  other
+
+  @@map("payment_schedule_close_disposition")
+}
+
+enum PaymentScheduleActivityType {
+  close
+  verification_cancelled
+
+  @@map("payment_schedule_activity_type")
+}
+
 enum ResourceKind {
   transport
   hotel
@@ -218,6 +233,7 @@ model Organization {
   departureArchiveHistories DepartureArchiveHistory[]
   routeTemplates RouteTemplate[]
   paymentSchedules PaymentSchedule[]
+  paymentScheduleActivities PaymentScheduleActivity[]
   financeTransactions FinanceTransaction[]
   financeVerifications FinanceVerification[]
   documentSequences DocumentSequence[]
@@ -256,6 +272,8 @@ model User {
   roles           UserRole[]
   ownedDepartures Departure[]  @relation("DepartureOwner")
   departureArchiveOperations DepartureArchiveHistory[] @relation("DepartureArchiveOperator")
+  paymentScheduleCancellations PaymentSchedule[] @relation("PaymentScheduleCancelOperator")
+  paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
 
   @@unique([organizationId, username])
   @@map("users")
@@ -542,16 +560,44 @@ model PaymentSchedule {
   sourceType       String                   @default("manual") @map("source_type")
   sourceId         String?                  @map("source_id")
   cancelledAt      DateTime?                @map("cancelled_at")
+  cancelledBy      String?                  @map("cancelled_by")
+  cancelOperator   User?                    @relation("PaymentScheduleCancelOperator", fields: [cancelledBy], references: [id])
+  closeDisposition PaymentScheduleCloseDisposition? @map("close_disposition")
   cancelReason     String?                  @map("cancel_reason")
   amountAdjustedAt DateTime?                @map("amount_adjusted_at")
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
 
   verifications FinanceVerification[]
+  activities    PaymentScheduleActivity[]
 
   @@unique([organizationId, scheduleNo])
   @@index([organizationId, departureId])
   @@map("payment_schedules")
+}
+
+model PaymentScheduleActivity {
+  id                           String                            @id @default(cuid())
+  organizationId               String                            @map("organization_id")
+  organization                 Organization                      @relation(fields: [organizationId], references: [id])
+  paymentScheduleId            String                            @map("payment_schedule_id")
+  paymentSchedule              PaymentSchedule                   @relation(fields: [paymentScheduleId], references: [id], onDelete: Cascade)
+  activityType                 PaymentScheduleActivityType       @map("activity_type")
+  closeDisposition             PaymentScheduleCloseDisposition?  @map("close_disposition")
+  note                         String
+  amountCents                  Int?                              @map("amount_cents")
+  settledAmountCents           Int?                              @map("settled_amount_cents")
+  unsettledAmountCents         Int?                              @map("unsettled_amount_cents")
+  previousSettledAmountCents   Int?                              @map("previous_settled_amount_cents")
+  previousUnsettledAmountCents Int?                              @map("previous_unsettled_amount_cents")
+  verificationId               String?                           @map("verification_id")
+  operatedBy                   String                            @map("operated_by")
+  operator                     User                              @relation("PaymentScheduleActivityOperator", fields: [operatedBy], references: [id])
+  operatedAt                   DateTime                          @default(now()) @map("operated_at")
+
+  @@index([paymentScheduleId, operatedAt])
+  @@index([organizationId, paymentScheduleId])
+  @@map("payment_schedule_activities")
 }
 
 model FinanceTransaction {

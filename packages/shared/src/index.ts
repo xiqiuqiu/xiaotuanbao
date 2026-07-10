@@ -32,7 +32,10 @@ export type {
   CreateRouteTemplateDto,
   CreateRouteTemplateFromDepartureDto,
   PaymentScheduleSummary,
+  PaymentScheduleDetail,
+  PaymentScheduleActivityItem,
   PaymentScheduleListResult,
+  CancelPaymentScheduleDto,
   CreatePaymentScheduleDto,
   UpdatePaymentScheduleDto,
   FinanceTransactionSummary,
@@ -90,6 +93,8 @@ export { DepartureRouteSource } from './enums/departure-route-source.enum'
 export { DepartureProgress } from './enums/departure-progress.enum'
 export { PaymentScheduleDirection } from './enums/payment-schedule-direction.enum'
 export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
+export { PaymentScheduleCloseDisposition } from './enums/payment-schedule-close-disposition.enum'
+export { PaymentScheduleActivityType } from './enums/payment-schedule-activity-type.enum'
 export { CounterpartyType } from './enums/counterparty-type.enum'
 export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
 export { TransactionDirection } from './enums/transaction-direction.enum'

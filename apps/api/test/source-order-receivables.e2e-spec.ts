@@ -550,7 +550,7 @@ describe('Source order generate receivables (e2e)', () => {
     for (const scheduleId of scheduleIds) {
       await authRequest(app, financeToken)
         .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
-        .send({ cancelReason: '测试关闭全部路径' })
+        .send({ closeDisposition: 'external_or_special', cancelReason: '测试关闭全部路径' })
         .expect(201)
     }
 
@@ -593,7 +593,7 @@ describe('Source order generate receivables (e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${customerSchedule!.id}/cancel`)
-      .send({ cancelReason: '仅关闭客户补款路径' })
+      .send({ closeDisposition: 'business_dispute_stop', cancelReason: '仅关闭客户补款路径' })
       .expect(201)
 
     const fetched = await authRequest(app, coordinatorToken)

@@ -109,7 +109,8 @@ export function usePaymentScheduleMutations({
         throw new Error('未选择节点')
       }
       return cancelSchedule(activeSchedule.id, {
-        cancelReason: values.cancelReason?.trim() || undefined,
+        closeDisposition: values.closeDisposition,
+        cancelReason: values.cancelReason.trim(),
       })
     },
     onSuccess: () => {

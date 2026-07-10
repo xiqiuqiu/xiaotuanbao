@@ -15,10 +15,6 @@ export function deriveSettlementLabel(
   const isReceivable =
     direction === PaymentScheduleDirection.RECEIVABLE || direction === 'receivable'
 
-  if (status === PaymentScheduleStatus.CANCELLED) {
-    return { label: '已关闭', isOverdue: false }
-  }
-
   const isSettled =
     status === PaymentScheduleStatus.SETTLED || settledAmountCents >= amountCents
 

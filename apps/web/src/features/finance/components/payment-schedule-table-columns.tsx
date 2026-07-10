@@ -23,6 +23,10 @@ function canSettle(schedule: PaymentScheduleSummary): boolean {
   return isScheduleActionable(schedule) && schedule.unsettledAmountCents > 0
 }
 
+function canClose(schedule: PaymentScheduleSummary): boolean {
+  return canSettle(schedule)
+}
+
 function hasVerificationRecords(schedule: PaymentScheduleSummary): boolean {
   return schedule.settledAmountCents > 0
 }
@@ -36,6 +40,7 @@ interface BuildPaymentScheduleColumnsOptions {
   onVerify: (schedule: PaymentScheduleSummary) => void
   onEdit: (schedule: PaymentScheduleSummary) => void
   onCancel: (schedule: PaymentScheduleSummary) => void
+  onViewDetail: (schedule: PaymentScheduleSummary) => void
   onViewVerifications: (schedule: PaymentScheduleSummary) => void
 }
 
@@ -48,13 +53,18 @@ export function buildPaymentScheduleColumns({
   onVerify,
   onEdit,
   onCancel,
+  onViewDetail,
   onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
   return [
     {
       title: '节点编号',
       dataIndex: 'scheduleNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
+      render: (value: string, record) => (
+        <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
+          <Typography.Text code>{value}</Typography.Text>
+        </Button>
+      ),
     },
     { title: '标题', dataIndex: 'title' },
     ...(isDepartureScope
@@ -114,10 +124,12 @@ export function buildPaymentScheduleColumns({
           record.settledAmountCents,
           record.status,
         )
+        const isClosed = record.status === PaymentScheduleStatus.CANCELLED
 
         return (
           <Space size={4} wrap>
             <Tag color={SETTLEMENT_LABEL_COLORS[label] ?? 'default'}>{label}</Tag>
+            {isClosed ? <Tag>已关闭</Tag> : null}
             {isOverdue ? <Tag color="error">已逾期</Tag> : null}
           </Space>
         )
@@ -159,6 +171,9 @@ export function buildPaymentScheduleColumns({
             label: '编辑',
             onClick: () => onEdit(record),
           })
+        }
+
+        if (canClose(record)) {
           moreItems.push({
             key: 'cancel',
             label: '关闭节点',

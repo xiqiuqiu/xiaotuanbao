@@ -14,6 +14,7 @@ import {
 } from '@/services/finance.service'
 import { PaymentScheduleFilters, type DueDateRange } from './PaymentScheduleFilters'
 import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
+import { PaymentScheduleDetailDrawer } from './PaymentScheduleDetailDrawer'
 import { buildPaymentScheduleColumns } from './payment-schedule-table-columns'
 import { usePaymentScheduleMutations } from '../hooks/usePaymentScheduleMutations'
 import {
@@ -184,6 +185,8 @@ export function PaymentScheduleWorkspace({
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailScheduleId, setDetailScheduleId] = useState<string | null>(null)
   const [locateFlashActive, setLocateFlashActive] = useState(false)
   const [locateSourceOrderId, setLocateSourceOrderId] = useState<string | undefined>()
   const [locateSegmentResourceId, setLocateSegmentResourceId] = useState<string | undefined>()
@@ -430,6 +433,16 @@ export function PaymentScheduleWorkspace({
     [navigate],
   )
 
+  const openDetail = useCallback((schedule: PaymentScheduleSummary) => {
+    setDetailScheduleId(schedule.id)
+    setDetailOpen(true)
+  }, [])
+
+  const closeDetail = useCallback(() => {
+    setDetailOpen(false)
+    setDetailScheduleId(null)
+  }, [])
+
   const resetFilters = useCallback(() => {
     if (scope === 'global') {
       setDepartureFilter(undefined)
@@ -451,6 +464,7 @@ export function PaymentScheduleWorkspace({
         onVerify: openVerify,
         onEdit: openEdit,
         onCancel: openCancel,
+        onViewDetail: openDetail,
         onViewVerifications: openViewVerifications,
       }),
     [
@@ -459,6 +473,7 @@ export function PaymentScheduleWorkspace({
       isReceivable,
       openCancel,
       openConfirm,
+      openDetail,
       openEdit,
       openVerify,
       openViewVerifications,
@@ -531,6 +546,13 @@ export function PaymentScheduleWorkspace({
         onCloseVerify={closeVerify}
         onCloseCancel={closeCancel}
         onCloseEdit={closeEdit}
+      />
+
+      <PaymentScheduleDetailDrawer
+        open={detailOpen}
+        scheduleId={detailScheduleId}
+        isReceivable={isReceivable}
+        onClose={closeDetail}
       />
     </div>
   )

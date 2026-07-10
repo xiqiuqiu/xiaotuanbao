@@ -311,10 +311,33 @@ export interface PaymentScheduleSummary {
   settledAmountCents: number
   unsettledAmountCents: number
   cancelledAt: string | null
+  cancelledBy: string | null
+  closeDisposition: string | null
   cancelReason: string | null
   amountAdjustedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface PaymentScheduleActivityItem {
+  id: string
+  activityType: string
+  closeDisposition: string | null
+  note: string
+  amountCents: number | null
+  settledAmountCents: number | null
+  unsettledAmountCents: number | null
+  previousSettledAmountCents: number | null
+  previousUnsettledAmountCents: number | null
+  verificationId: string | null
+  operatedBy: string
+  operatedByName: string
+  operatedAt: string
+}
+
+/** Detail response extends summary with node activity timeline. */
+export interface PaymentScheduleDetail extends PaymentScheduleSummary {
+  activities: PaymentScheduleActivityItem[]
 }
 
 export interface PaymentScheduleListResult {
@@ -322,6 +345,11 @@ export interface PaymentScheduleListResult {
   total: number
   page: number
   pageSize: number
+}
+
+export interface CancelPaymentScheduleDto {
+  closeDisposition: string
+  cancelReason: string
 }
 
 export interface CreatePaymentScheduleDto {

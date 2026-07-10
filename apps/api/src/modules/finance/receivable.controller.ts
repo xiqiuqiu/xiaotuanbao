@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
-import type { PaymentScheduleListResult, PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import type { PaymentScheduleDetail, PaymentScheduleListResult, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { PaymentScheduleDirection } from '@prisma/client'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
@@ -52,7 +52,7 @@ export class ReceivableController {
   getById(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-  ): Promise<PaymentScheduleSummary> {
+  ): Promise<PaymentScheduleDetail> {
     return this.paymentScheduleService.getById(
       request.user.organizationId,
       PaymentScheduleDirection.receivable,

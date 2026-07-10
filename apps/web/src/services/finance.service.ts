@@ -11,6 +11,7 @@ import type {
   FinanceVerificationDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
+  PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
   UpdateFinanceTransactionDto,
@@ -53,7 +54,8 @@ export interface ListFinanceVerificationsParams {
 }
 
 export interface CancelPaymentSchedulePayload {
-  cancelReason?: string
+  closeDisposition: string
+  cancelReason: string
 }
 
 export async function listReceivables(
@@ -66,6 +68,14 @@ export async function listPayables(
   params: ListPaymentSchedulesParams,
 ): Promise<PaymentScheduleListResult> {
   return request.get<PaymentScheduleListResult>('/finance/payables', { params })
+}
+
+export async function getReceivable(id: string): Promise<PaymentScheduleDetail> {
+  return request.get<PaymentScheduleDetail>(`/finance/receivables/${id}`)
+}
+
+export async function getPayable(id: string): Promise<PaymentScheduleDetail> {
+  return request.get<PaymentScheduleDetail>(`/finance/payables/${id}`)
 }
 
 export async function updateReceivable(
@@ -98,7 +108,7 @@ export async function confirmPayment(
 
 export async function cancelSchedule(
   id: string,
-  payload: CancelPaymentSchedulePayload = {},
+  payload: CancelPaymentSchedulePayload,
 ): Promise<PaymentScheduleSummary> {
   return request.post<PaymentScheduleSummary>(`/finance/payment-schedules/${id}/cancel`, payload)
 }

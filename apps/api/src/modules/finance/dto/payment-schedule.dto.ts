@@ -10,6 +10,7 @@ import {
 import { Type } from 'class-transformer'
 import {
   CounterpartyType as PrismaCounterpartyType,
+  PaymentScheduleCloseDisposition as PrismaPaymentScheduleCloseDisposition,
   PaymentScheduleDirection as PrismaPaymentScheduleDirection,
 } from '@prisma/client'
 
@@ -98,9 +99,15 @@ export class ListPaymentSchedulesQueryDto {
 }
 
 export class CancelPaymentScheduleDto {
-  @IsOptional()
+  @IsEnum(PrismaPaymentScheduleCloseDisposition)
+  closeDisposition!: PrismaPaymentScheduleCloseDisposition
+
   @IsString()
-  cancelReason?: string
+  @IsNotEmpty({ message: '关闭说明不能为空' })
+  cancelReason!: string
 }
 
-export { PrismaPaymentScheduleDirection as PaymentScheduleDirection }
+export {
+  PrismaPaymentScheduleDirection as PaymentScheduleDirection,
+  PrismaPaymentScheduleCloseDisposition as PaymentScheduleCloseDisposition,
+}

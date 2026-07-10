@@ -102,6 +102,14 @@ describe('Finance journeys (cross-module e2e)', () => {
         ],
       },
     })
+    await prisma.paymentScheduleActivity.deleteMany({
+      where: {
+        organizationId,
+        paymentSchedule: {
+          departure: { name: { startsWith: testPrefix } },
+        },
+      },
+    })
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
@@ -212,6 +220,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     return {
       sourceOrderId: sourceOrder.body.data.id as string,
       displayName: sourceOrder.body.data.displayName as string,
+      segmentId: segment.body.data.id as string,
       resourceId: resource.body.data.id as string,
     }
   }
@@ -1254,7 +1263,10 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const cancelled = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
-      .send({ cancelReason: '供应商改免费接待，关闭应付' })
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '供应商改免费接待，关闭应付',
+      })
       .expect(201)
     expect(cancelled.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
 
@@ -1287,6 +1299,256 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({ targetStatus: DepartureStatus.settled })
       .expect(201)
     expect(settled.body.data.status).toBe(DepartureStatus.settled)
+  })
+
+  /**
+   * #89 structured close + payment schedule activity timeline.
+   * Seam: HTTP APIs across finance schedules / verifications / detail read.
+   * Locks close eligibility, disposition+note, close snapshot, and revoke-while-closed activity.
+   */
+  it('closes unsettled schedules with disposition snapshot and records revoke activity (#89)', async () => {
+    const obligationCents = 1_000_000
+    const verifiedCents = 400_000
+
+    const departure = await createDeparture('structured-close')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+
+    const segment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/segments`)
+      .send({
+        name: '结构化关闭段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-05',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    const resource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId,
+        title: '关闭快照用车-10000',
+        amountCents: obligationCents,
+      })
+      .expect(201)
+
+    const payableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.body.data.id}/generate-payable`)
+      .expect(201)
+    const payableScheduleId = payableGenerated.body.data.schedule.id as string
+
+    const receivableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const receivableScheduleId = receivableGenerated.body.data.schedules[0].id as string
+
+    const partialPayment = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+    expect(partialPayment.body.data).toMatchObject({
+      amountCents: obligationCents,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      status: PaymentScheduleStatus.PENDING,
+    })
+
+    const txCountBeforeClose = await prisma.financeTransaction.count({
+      where: {
+        organizationId,
+        departureId: departure.id,
+      },
+    })
+    const verificationCountBeforeClose = await prisma.financeVerification.count({
+      where: {
+        organizationId,
+        paymentScheduleId: payableScheduleId,
+      },
+    })
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({ cancelReason: '缺少处置类型' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({ closeDisposition: 'external_or_special' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '   ',
+      })
+      .expect(400)
+
+    const closed = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'business_dispute_stop',
+        cancelReason: '供应商争议，停止本团追付',
+      })
+      .expect(201)
+
+    expect(closed.body.data).toMatchObject({
+      id: payableScheduleId,
+      amountCents: obligationCents,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      status: PaymentScheduleStatus.CANCELLED,
+      closeDisposition: 'business_dispute_stop',
+      cancelReason: '供应商争议，停止本团追付',
+    })
+    expect(closed.body.data.cancelledAt).toBeTruthy()
+    expect(closed.body.data.cancelledBy).toBeTruthy()
+
+    const txCountAfterClose = await prisma.financeTransaction.count({
+      where: {
+        organizationId,
+        departureId: departure.id,
+      },
+    })
+    const verificationCountAfterClose = await prisma.financeVerification.count({
+      where: {
+        organizationId,
+        paymentScheduleId: payableScheduleId,
+      },
+    })
+    expect(txCountAfterClose).toBe(txCountBeforeClose)
+    expect(verificationCountAfterClose).toBe(verificationCountBeforeClose)
+
+    const closedDetail = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${payableScheduleId}`)
+      .expect(200)
+    expect(closedDetail.body.data.activities).toEqual([
+      expect.objectContaining({
+        activityType: 'close',
+        closeDisposition: 'business_dispute_stop',
+        note: '供应商争议，停止本团追付',
+        amountCents: obligationCents,
+        settledAmountCents: verifiedCents,
+        unsettledAmountCents: obligationCents - verifiedCents,
+        operatedByName: expect.any(String),
+      }),
+    ])
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '重复关闭应拒绝',
+      })
+      .expect(400)
+
+    const zeroVerifiedClose = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${receivableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '客源改走外部专项收款',
+      })
+      .expect(201)
+    expect(zeroVerifiedClose.body.data).toMatchObject({
+      settledAmountCents: 0,
+      unsettledAmountCents: obligationCents,
+      status: PaymentScheduleStatus.CANCELLED,
+      closeDisposition: 'external_or_special',
+    })
+
+    const settledReceivable = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: departure.id,
+        title: '已结清不可关闭',
+        amountCents: 100_000,
+        dueDate: '2026-08-20',
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${settledReceivable.body.data.id}/confirm-collection`)
+      .send({
+        amountCents: 100_000,
+        transactionDate: '2026-08-04',
+        paymentChannel: PaymentChannel.CASH,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${settledReceivable.body.data.id}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '已结清不应关闭',
+      })
+      .expect(400)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: closed.body.data.scheduleNo,
+        scheduleNoMatch: 'exact',
+        status: 'normal',
+        pageSize: 10,
+      })
+      .expect(200)
+    expect(verifications.body.data.items).toHaveLength(1)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '关闭后撤销部分核销' })
+      .expect(201)
+
+    const afterRevoke = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${payableScheduleId}`)
+      .expect(200)
+    expect(afterRevoke.body.data).toMatchObject({
+      amountCents: obligationCents,
+      settledAmountCents: 0,
+      unsettledAmountCents: obligationCents,
+      status: PaymentScheduleStatus.CANCELLED,
+      closeDisposition: 'business_dispute_stop',
+    })
+    expect(afterRevoke.body.data.activities).toEqual([
+      expect.objectContaining({
+        activityType: 'close',
+        closeDisposition: 'business_dispute_stop',
+        amountCents: obligationCents,
+        settledAmountCents: verifiedCents,
+        unsettledAmountCents: obligationCents - verifiedCents,
+      }),
+      expect.objectContaining({
+        activityType: 'verification_cancelled',
+        note: '关闭后撤销部分核销',
+        previousSettledAmountCents: verifiedCents,
+        previousUnsettledAmountCents: obligationCents - verifiedCents,
+        settledAmountCents: 0,
+        unsettledAmountCents: obligationCents,
+      }),
+    ])
   })
 
   /**
@@ -1418,7 +1680,10 @@ describe('Finance journeys (cross-module e2e)', () => {
     await expectArchivedConflict(
       authRequest(app, financeToken)
         .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
-        .send({ cancelReason: '归档期不应关闭' }),
+        .send({
+          closeDisposition: 'other',
+          cancelReason: '归档期不应关闭',
+        }),
       '关闭收付款节点',
     )
     await expectArchivedConflict(
@@ -1579,7 +1844,10 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
-      .send({ cancelReason: '解档后可关闭应付' })
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '解档后可关闭应付',
+      })
       .expect(201)
   })
 
