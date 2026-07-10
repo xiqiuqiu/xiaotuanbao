@@ -598,6 +598,7 @@ model PaymentSchedule {
   settlementHistories DepartureSettlementHistory[]
 
   @@unique([organizationId, scheduleNo])
+  @@unique([organizationId, direction, sourceType, sourceId])
   @@index([organizationId, departureId])
   @@map("payment_schedules")
 }

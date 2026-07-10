@@ -6,6 +6,7 @@ import {
   PartnerType,
   PaymentScheduleDirection,
   ResourceKind,
+  UserStatus,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
@@ -159,11 +160,86 @@ describe('Finance API (e2e)', () => {
   })
 
   afterAll(async () => {
+    const sentinelDeparture = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `sentinel-${Date.now()}`,
+        name: 'finance-e2e-cleanup-sentinel',
+        routeName: 'cleanup sentinel',
+        startDate: new Date('2026-01-01T00:00:00.000Z'),
+        endDate: new Date('2026-01-01T00:00:00.000Z'),
+        dayCount: 1,
+        ownerUserId,
+      },
+    })
+    const sentinelSchedule = await prisma.paymentSchedule.create({
+      data: {
+        organizationId,
+        departureId: sentinelDeparture.id,
+        direction: PaymentScheduleDirection.receivable,
+        scheduleNo: `sentinel-ar-${Date.now()}`,
+        title: 'cleanup sentinel',
+        amountCents: 1,
+        dueDate: new Date('2026-01-01T00:00:00.000Z'),
+        counterpartyType: CounterpartyType.manual,
+        counterpartyName: 'cleanup sentinel',
+      },
+    })
+    const sentinelTransaction = await prisma.financeTransaction.create({
+      data: {
+        organizationId,
+        transactionNo: `sentinel-tx-${Date.now()}`,
+        direction: 'inflow',
+        paymentChannel: 'other',
+        amountCents: 1,
+        transactionDate: new Date('2026-01-01T00:00:00.000Z'),
+        counterpartyType: CounterpartyType.manual,
+        counterpartyName: 'cleanup sentinel',
+      },
+    })
+    const sentinelVerification = await prisma.financeVerification.create({
+      data: {
+        organizationId,
+        verificationNo: `sentinel-cl-${Date.now()}`,
+        paymentScheduleId: sentinelSchedule.id,
+        transactionId: sentinelTransaction.id,
+        amountCents: 1,
+        verificationDate: new Date('2026-01-01T00:00:00.000Z'),
+        createdBy: ownerUserId,
+        billUnsettledAfterCents: 0,
+      },
+    })
+
+    const fixtureDepartureIds = [departureId, otherDepartureId]
+    const fixtureTransactions = await prisma.financeTransaction.findMany({
+      where: {
+        organizationId,
+        OR: [
+          { departureId: { in: fixtureDepartureIds } },
+          { counterpartyId: { in: [partnerId, supplierId] } },
+          { counterpartyName: { startsWith: testPrefix } },
+          {
+            verifications: {
+              some: { paymentSchedule: { departureId: { in: fixtureDepartureIds } } },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    })
+    const fixtureTransactionIds = fixtureTransactions.map((item) => item.id)
+
     await prisma.financeVerification.deleteMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        OR: [
+          { transactionId: { in: fixtureTransactionIds } },
+          { paymentSchedule: { departureId: { in: fixtureDepartureIds } } },
+        ],
+      },
     })
     await prisma.financeTransaction.deleteMany({
-      where: { organizationId },
+      where: { organizationId, id: { in: fixtureTransactionIds } },
     })
     await prisma.paymentSchedule.deleteMany({
       where: {
@@ -183,6 +259,18 @@ describe('Finance API (e2e)', () => {
     await prisma.supplier.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
+
+    const [sentinelTransactionAfter, sentinelVerificationAfter] = await Promise.all([
+      prisma.financeTransaction.findUnique({ where: { id: sentinelTransaction.id } }),
+      prisma.financeVerification.findUnique({ where: { id: sentinelVerification.id } }),
+    ])
+    await prisma.financeVerification.delete({ where: { id: sentinelVerification.id } })
+    await prisma.financeTransaction.delete({ where: { id: sentinelTransaction.id } })
+    await prisma.paymentSchedule.delete({ where: { id: sentinelSchedule.id } })
+    await prisma.departure.delete({ where: { id: sentinelDeparture.id } })
+
+    expect(sentinelTransactionAfter).not.toBeNull()
+    expect(sentinelVerificationAfter).not.toBeNull()
     await prisma.$disconnect()
     await app.close()
   })
@@ -640,6 +728,57 @@ describe('Finance API (e2e)', () => {
 
     expect(response.body.code).toBe(404)
 
+    const localSchedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-local-cross-org` }))
+      .expect(201)
+    const localTransaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload())
+      .expect(201)
+    const foreignTransaction = await prisma.financeTransaction.create({
+      data: {
+        organizationId: otherOrg.id,
+        transactionNo: `TX${otherOrg.businessPrefix}20260707000999`,
+        direction: 'inflow',
+        paymentChannel: 'other',
+        amountCents: 10000,
+        transactionDate: new Date('2026-07-07T00:00:00.000Z'),
+        counterpartyType: CounterpartyType.manual,
+        counterpartyName: '外部流水',
+      },
+    })
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/verifications')
+      .send(
+        verificationPayload({
+          paymentScheduleId: foreignSchedule.id,
+          transactionId: localTransaction.body.data.id,
+          amountCents: 10000,
+        }),
+      )
+      .expect(404)
+    await authRequest(app, financeToken)
+      .post('/api/finance/verifications')
+      .send(
+        verificationPayload({
+          paymentScheduleId: localSchedule.body.data.id,
+          transactionId: foreignTransaction.id,
+          amountCents: 10000,
+        }),
+      )
+      .expect(404)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${foreignSchedule.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '跨组织伪造 ID' })
+      .expect(404)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/transactions/${foreignTransaction.id}/void`)
+      .send({ voidReason: '跨组织伪造 ID' })
+      .expect(404)
+
+    await prisma.financeTransaction.delete({ where: { id: foreignTransaction.id } })
     await prisma.paymentSchedule.delete({ where: { id: foreignSchedule.id } })
     await prisma.departure.delete({ where: { id: foreignDeparture.id } })
     await prisma.user.delete({ where: { id: otherUser.id } })
@@ -902,6 +1041,53 @@ describe('Finance API (e2e)', () => {
     expect(response.body.code).toBe(400)
   })
 
+  it('never over-allocates a schedule or transaction under concurrent verification requests', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-并发核销`, amountCents: 10000 }))
+      .expect(201)
+
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ amountCents: 10000 }))
+      .expect(201)
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, financeToken)
+          .post('/api/finance/verifications')
+          .send(
+            verificationPayload({
+              paymentScheduleId: created.body.data.id,
+              transactionId: transaction.body.data.id,
+              amountCents: 10000,
+            }),
+          ),
+      ),
+    )
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+    const transactionDetail = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${transaction.body.data.id}`)
+      .expect(200)
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      settledAmountCents: schedule.body.data.settledAmountCents,
+      unsettledAmountCents: schedule.body.data.unsettledAmountCents,
+      allocatedAmountCents: transactionDetail.body.data.allocatedAmountCents,
+      unallocatedAmountCents: transactionDetail.body.data.unallocatedAmountCents,
+    }).toEqual({
+      successCount: 1,
+      settledAmountCents: 10000,
+      unsettledAmountCents: 0,
+      allocatedAmountCents: 10000,
+      unallocatedAmountCents: 0,
+    })
+  })
+
   it('links payable transaction with outflow direction', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/payables')
@@ -969,6 +1155,58 @@ describe('Finance API (e2e)', () => {
       .expect(400)
 
     expect(again.body.code).toBe(400)
+  })
+
+  it('cancels one verification only once under concurrent retry requests', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-并发撤销`, amountCents: 50000 }))
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .send(confirmPayload({ amountCents: 20000 }))
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    const verificationId = verifications.body.data.items[0].id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '关闭后并发撤销核销' })
+      .expect(201)
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, financeToken)
+          .post(`/api/finance/verifications/${verificationId}/cancel`)
+          .send({ cancelReason: '并发重试撤销' }),
+      ),
+    )
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+    const cancelActivities = schedule.body.data.activities.filter(
+      (activity: { activityType: string }) => activity.activityType === 'verification_cancelled',
+    )
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      rejectedCount: responses.filter((response) => response.status === 400).length,
+      settledAmountCents: schedule.body.data.settledAmountCents,
+      unsettledAmountCents: schedule.body.data.unsettledAmountCents,
+      cancelActivityCount: cancelActivities.length,
+    }).toEqual({
+      successCount: 1,
+      rejectedCount: 7,
+      settledAmountCents: 0,
+      unsettledAmountCents: 50000,
+      cancelActivityCount: 1,
+    })
   })
 
   it('rejects confirm-collection on cancelled schedule', async () => {
@@ -1153,7 +1391,7 @@ describe('Finance API (e2e)', () => {
         amountCents: 8000,
         transactionDate: '2026-07-07',
         counterpartyType: CounterpartyType.manual,
-        counterpartyName: '无发团流水',
+        counterpartyName: `${testPrefix}-无发团流水`,
       })
       .expect(201)
 
@@ -2085,6 +2323,22 @@ describe('Finance API (e2e)', () => {
     expect(response.body.message).toBe('无权访问')
   })
 
+  it('rejects an existing finance token after the employee is disabled', async () => {
+    await prisma.user.update({
+      where: { id: financeUserId },
+      data: { status: UserStatus.disabled },
+    })
+
+    const response = await authRequest(app, financeToken).get('/api/finance/transactions')
+
+    await prisma.user.update({
+      where: { id: financeUserId },
+      data: { status: UserStatus.enabled },
+    })
+
+    expect(response.status).toBe(401)
+  })
+
   it('returns 403 for coordinator finance mutations', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -2260,6 +2514,67 @@ describe('Finance API (e2e)', () => {
 
       expect(response.body.code).toBe(400)
     })
+
+    it('never commits an incompatible transaction edit with verification under concurrency', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-编辑核销竞争`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const requests = Array.from({ length: 8 }, () => [
+        authRequest(app, financeToken)
+          .post('/api/finance/verifications')
+          .send(
+            verificationPayload({
+              paymentScheduleId: receivable.body.data.id,
+              transactionId: transaction.body.data.id,
+              amountCents: 50000,
+            }),
+          ),
+        authRequest(app, financeToken)
+          .put(`/api/finance/transactions/${transaction.body.data.id}`)
+          .send(
+            updatePayload({
+              direction: 'inflow',
+              amountCents: 10000,
+              counterpartyType: CounterpartyType.partner,
+              counterpartyId: partnerId,
+              departureId,
+            }),
+          ),
+      ]).flat()
+      const responses = await Promise.all(requests)
+
+      const verificationSuccessCount = responses.filter(
+        (response, index) => index % 2 === 0 && response.status === 201,
+      ).length
+      const editSuccessCount = responses.filter(
+        (response, index) => index % 2 === 1 && response.status === 200,
+      ).length
+      const detail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect({
+        conflictingSuccess: verificationSuccessCount > 0 && editSuccessCount > 0,
+        amountCents: detail.body.data.amountCents,
+        allocatedAmountCents: detail.body.data.allocatedAmountCents,
+        unallocatedAmountCents: detail.body.data.unallocatedAmountCents,
+        allocationWithinAmount:
+          detail.body.data.allocatedAmountCents <= detail.body.data.amountCents,
+      }).toEqual({
+        conflictingSuccess: false,
+        amountCents: verificationSuccessCount === 1 ? 50000 : 10000,
+        allocatedAmountCents: verificationSuccessCount === 1 ? 50000 : 0,
+        unallocatedAmountCents: verificationSuccessCount === 1 ? 0 : 10000,
+        allocationWithinAmount: true,
+      })
+    })
   })
 
   describe('POST /finance/transactions/:id/void', () => {
@@ -2336,6 +2651,117 @@ describe('Finance API (e2e)', () => {
         .expect(400)
 
       expect(response.body.message).toContain('核销')
+    })
+
+    it('never commits both transaction void and verification under concurrency', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-作废核销竞争`, amountCents: 50000 }))
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000 }))
+        .expect(201)
+
+      const requests = Array.from({ length: 8 }, () => [
+        authRequest(app, financeToken)
+          .post('/api/finance/verifications')
+          .send(
+            verificationPayload({
+              paymentScheduleId: receivable.body.data.id,
+              transactionId: transaction.body.data.id,
+              amountCents: 50000,
+            }),
+          ),
+        authRequest(app, financeToken)
+          .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+          .send({ voidReason: '并发作废竞争' }),
+      ]).flat()
+      const responses = await Promise.all(requests)
+
+      const verificationSuccessCount = responses.filter(
+        (response, index) => index % 2 === 0 && response.status === 201,
+      ).length
+      const voidSuccessCount = responses.filter(
+        (response, index) => index % 2 === 1 && response.status === 201,
+      ).length
+      const detail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${transaction.body.data.id}`)
+        .expect(200)
+
+      expect({
+        successfulMutationCount: verificationSuccessCount + voidSuccessCount,
+        verificationSuccessCount,
+        voidSuccessCount,
+        allocatedAmountCents: detail.body.data.allocatedAmountCents,
+        isVoided: detail.body.data.voidedAt != null,
+        stateIsConsistent: !(
+          detail.body.data.allocatedAmountCents > 0 && detail.body.data.voidedAt != null
+        ),
+      }).toEqual({
+        successfulMutationCount: 1,
+        verificationSuccessCount: expect.any(Number),
+        voidSuccessCount: expect.any(Number),
+        allocatedAmountCents: verificationSuccessCount === 1 ? 50000 : 0,
+        isVoided: voidSuccessCount === 1,
+        stateIsConsistent: true,
+      })
+    })
+
+    it('rejects void for an unlinked transaction with verification history in an archived departure', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(
+          schedulePayload({
+            departureId: otherDepartureId,
+            title: `${testPrefix}-归档历史流水`,
+            amountCents: 50000,
+          }),
+        )
+        .expect(201)
+
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ amountCents: 50000, departureId: undefined }))
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: receivable.body.data.id,
+            transactionId: transaction.body.data.id,
+            amountCents: 50000,
+          }),
+        )
+        .expect(201)
+
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ scheduleNo: receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+        .expect(200)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+        .send({ cancelReason: '归档前撤销核销' })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${otherDepartureId}/close`)
+        .send({ reason: '验证历史关联流水的归档写保护' })
+        .expect(201)
+
+      const response = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${transaction.body.data.id}/void`)
+        .send({ voidReason: '归档期间不应允许' })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${otherDepartureId}/unarchive`)
+        .send({ reason: '测试完成恢复发团' })
+        .expect(201)
+
+      expect(response.status).toBe(409)
+      expect(response.body.message).toBe('发团已关闭，不可作废流水')
     })
   })
 })

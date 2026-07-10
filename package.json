@@ -16,6 +16,7 @@
     "db:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres",
     "db:migrate": "pnpm --filter api prisma:migrate:dev",
     "db:seed": "pnpm --filter api prisma:db:seed",
+    "finance:integrity-check": "pnpm --filter api finance:integrity-check",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",

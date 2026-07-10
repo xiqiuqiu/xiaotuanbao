@@ -18,6 +18,7 @@
     "db:reset-departures": "dotenv -e ../../.env -- tsx scripts/reset-demo-departures.ts",
     "db:cleanup-e2e-departures": "dotenv -e ../../.env -- tsx scripts/cleanup-e2e-departures.ts",
     "db:clear-business-data": "dotenv -e ../../.env -- tsx scripts/clear-business-data.ts",
+    "finance:integrity-check": "dotenv -e ../../.env -- tsx scripts/finance-integrity-check.ts",
     "db:seed-demo-loop": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand test/seed-demo-business-loop.e2e-spec.ts"
   },
   "dependencies": {

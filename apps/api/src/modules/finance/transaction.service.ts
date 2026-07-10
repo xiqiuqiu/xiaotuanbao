@@ -34,6 +34,8 @@ import type {
 } from './dto/transaction.dto'
 import { VerificationService } from './verification.service'
 
+type DbClient = PrismaService | Prisma.TransactionClient
+
 @Injectable()
 export class TransactionService {
   constructor(
@@ -176,53 +178,63 @@ export class TransactionService {
     transactionId: string,
     dto: UpdateFinanceTransactionDto,
   ): Promise<FinanceTransactionSummary> {
-    const transaction = await this.prisma.financeTransaction.findFirst({
-      where: { id: transactionId, organizationId },
-    })
-
-    if (!transaction) {
-      throw new NotFoundException('流水不存在')
-    }
-
-    if (transaction.voidedAt) {
-      throw new BadRequestException('流水已作废')
-    }
-
-    const allocated = await this.verificationService.getAllocatedAmountCents(transaction.id)
-    if (allocated > 0) {
-      throw new BadRequestException('流水已有核销分配，不可编辑')
-    }
-
     this.assertPositiveAmount(dto.amountCents)
 
-    const linkedDepartureId = dto.departureId ?? transaction.departureId
-    if (linkedDepartureId) {
-      await this.departureFinanceFacade.assertMutableById(
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM finance_transactions
+        WHERE id = ${transactionId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+
+      const transaction = await tx.financeTransaction.findFirst({
+        where: { id: transactionId, organizationId },
+      })
+      if (!transaction) {
+        throw new NotFoundException('流水不存在')
+      }
+      if (transaction.voidedAt) {
+        throw new BadRequestException('流水已作废')
+      }
+
+      const allocated = await this.verificationService.getAllocatedAmountCents(
+        transaction.id,
+        tx,
+      )
+      if (allocated > 0) {
+        throw new BadRequestException('流水已有核销分配，不可编辑')
+      }
+
+      await this.assertRelatedDeparturesMutable(
+        tx,
         organizationId,
-        linkedDepartureId,
+        transaction.id,
+        [transaction.departureId, dto.departureId],
         '编辑流水',
       )
-    }
 
-    const counterparty = await this.resolveCounterparty(organizationId, dto)
+      const counterparty = await this.resolveCounterparty(organizationId, dto, tx)
 
-    const updated = await this.prisma.financeTransaction.update({
-      where: { id: transaction.id },
-      data: {
-        direction: dto.direction,
-        paymentChannel: dto.paymentChannel,
-        amountCents: dto.amountCents,
-        transactionDate: parseDateOnly(dto.transactionDate),
-        counterpartyType: counterparty.counterpartyType,
-        counterpartyId: counterparty.counterpartyId,
-        counterpartyName: counterparty.counterpartyName,
-        departureId: dto.departureId ?? null,
-        notes: dto.notes?.trim() || null,
-      },
-      include: this.departureInclude,
+      return tx.financeTransaction.update({
+        where: { id: transaction.id },
+        data: {
+          direction: dto.direction,
+          paymentChannel: dto.paymentChannel,
+          amountCents: dto.amountCents,
+          transactionDate: parseDateOnly(dto.transactionDate),
+          counterpartyType: counterparty.counterpartyType,
+          counterpartyId: counterparty.counterpartyId,
+          counterpartyName: counterparty.counterpartyName,
+          departureId: dto.departureId ?? null,
+          notes: dto.notes?.trim() || null,
+        },
+        include: this.departureInclude,
+      })
     })
 
-    return this.toSummary(updated, allocated)
+    return this.toSummary(updated, 0)
   }
 
   async void(
@@ -230,46 +242,86 @@ export class TransactionService {
     transactionId: string,
     dto: VoidFinanceTransactionDto,
   ): Promise<FinanceTransactionSummary> {
-    const transaction = await this.prisma.financeTransaction.findFirst({
-      where: { id: transactionId, organizationId },
-    })
-
-    if (!transaction) {
-      throw new NotFoundException('流水不存在')
-    }
-
-    if (transaction.voidedAt) {
-      throw new BadRequestException('流水已作废')
-    }
-
-    if (transaction.departureId) {
-      await this.departureFinanceFacade.assertMutableById(
-        organizationId,
-        transaction.departureId,
-        '作废流水',
-      )
-    }
-
-    const allocated = await this.verificationService.getAllocatedAmountCents(transaction.id)
-    if (allocated > 0) {
-      throw new BadRequestException('流水已有核销分配，不可作废')
-    }
-
     const voidReason = dto.voidReason?.trim()
     if (!voidReason) {
       throw new BadRequestException('作废原因不能为空')
     }
 
-    const updated = await this.prisma.financeTransaction.update({
-      where: { id: transaction.id },
-      data: {
-        voidedAt: new Date(),
-        voidReason,
-      },
-      include: this.departureInclude,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM finance_transactions
+        WHERE id = ${transactionId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+
+      const transaction = await tx.financeTransaction.findFirst({
+        where: { id: transactionId, organizationId },
+      })
+      if (!transaction) {
+        throw new NotFoundException('流水不存在')
+      }
+      if (transaction.voidedAt) {
+        throw new BadRequestException('流水已作废')
+      }
+
+      await this.assertRelatedDeparturesMutable(
+        tx,
+        organizationId,
+        transaction.id,
+        [transaction.departureId],
+        '作废流水',
+      )
+
+      const allocated = await this.verificationService.getAllocatedAmountCents(
+        transaction.id,
+        tx,
+      )
+      if (allocated > 0) {
+        throw new BadRequestException('流水已有核销分配，不可作废')
+      }
+
+      return tx.financeTransaction.update({
+        where: { id: transaction.id },
+        data: {
+          voidedAt: new Date(),
+          voidReason,
+        },
+        include: this.departureInclude,
+      })
     })
 
     return this.toSummary(updated, 0)
+  }
+
+  private async assertRelatedDeparturesMutable(
+    client: DbClient,
+    organizationId: string,
+    transactionId: string,
+    explicitDepartureIds: Array<string | null | undefined>,
+    action: string,
+  ): Promise<void> {
+    const verificationLinks = await client.financeVerification.findMany({
+      where: { transactionId, organizationId },
+      select: {
+        paymentSchedule: { select: { departureId: true } },
+      },
+    })
+    const departureIds = new Set(
+      [
+        ...explicitDepartureIds,
+        ...verificationLinks.map((link) => link.paymentSchedule.departureId),
+      ].filter((departureId): departureId is string => Boolean(departureId)),
+    )
+
+    for (const departureId of [...departureIds].sort()) {
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        departureId,
+        action,
+      )
+    }
   }
 
   private buildListWhere(
