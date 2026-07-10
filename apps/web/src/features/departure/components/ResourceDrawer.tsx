@@ -230,8 +230,8 @@ export function ResourceDrawer({
           </Form.Item>
         ) : null}
 
-        <Form.Item name="title" label="资源名称">
-          <Input placeholder="如喀纳斯用车、阿勒泰拼出" disabled={readOnly} />
+        <Form.Item name="title" label="资源项目">
+          <Input placeholder="如喀纳斯用车、阿勒泰拼出、贾登峪住宿" disabled={readOnly} />
         </Form.Item>
 
         <Form.Item

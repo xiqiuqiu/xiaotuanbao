@@ -252,7 +252,6 @@ export function SourceOrderDrawer({
               name="childGuestCount"
               label="儿童人数"
               rules={[
-                { required: true, message: '请输入儿童人数' },
                 {
                   type: 'number',
                   min: 0,

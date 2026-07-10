@@ -182,7 +182,7 @@ export function ExecutionResourcePane({
       width: 140,
     },
     {
-      title: '资源名称',
+      title: '资源项目',
       dataIndex: 'title',
       width: 140,
       render: (value: string) => value || '—',

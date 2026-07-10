@@ -20,8 +20,9 @@ COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.home.yml)
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8088/api/health}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_SLEEP_SEC="${HEALTH_SLEEP_SEC:-2}"
-PULL_TIMEOUT="${PULL_TIMEOUT:-10m}"
-PUBLIC_PULL_TIMEOUT="${PUBLIC_PULL_TIMEOUT:-5m}"
+# Home uplink to GHCR is often slow; 10m was timing out mid-layer (~60MB/10min).
+PULL_TIMEOUT="${PULL_TIMEOUT:-30m}"
+PUBLIC_PULL_TIMEOUT="${PUBLIC_PULL_TIMEOUT:-15m}"
 
 cd "$DEPLOY_DIR"
 
