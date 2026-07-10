@@ -229,7 +229,9 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     return {
       receivableScheduleId: receivable.body.data.schedules[0].id as string,
+      receivableScheduleNo: receivable.body.data.schedules[0].scheduleNo as string,
       payableScheduleId: payable.body.data.schedule.id as string,
+      payableScheduleNo: payable.body.data.schedule.scheduleNo as string,
     }
   }
 
@@ -371,14 +373,14 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const arVerifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: schedules.receivableScheduleId, pageSize: 10 })
+      .query({ scheduleNo: schedules.receivableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
     expect(arVerifications.body.data.items).toHaveLength(1)
     expect(arVerifications.body.data.items[0].verificationNo).toMatch(CL_NO_REGEX)
 
     const apVerifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: schedules.payableScheduleId, pageSize: 10 })
+      .query({ scheduleNo: schedules.payableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
     expect(apVerifications.body.data.items).toHaveLength(1)
 
@@ -845,7 +847,7 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     const verification = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: schedules.receivableScheduleId, pageSize: 10 })
+      .query({ scheduleNo: schedules.receivableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     await authRequest(app, financeToken)

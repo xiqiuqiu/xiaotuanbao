@@ -424,7 +424,7 @@ export function PaymentScheduleWorkspace({
     (schedule: PaymentScheduleSummary) => {
       void navigate({
         to: '/finance/verification',
-        search: { paymentScheduleId: schedule.id },
+        search: { scheduleNo: schedule.scheduleNo },
       })
     },
     [navigate],

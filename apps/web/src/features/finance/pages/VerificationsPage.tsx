@@ -3,8 +3,8 @@ import { VerificationsWorkspace } from '../components/VerificationsWorkspace'
 
 export function VerificationsPage() {
   const search = useSearch({ strict: false }) as {
-    paymentScheduleId?: string
-    transactionId?: string
+    transactionNo?: string
+    scheduleNo?: string
   }
 
   return (
@@ -14,8 +14,10 @@ export function VerificationsPage() {
         title: '核销管理',
         description: '将财务流水与账款节点进行核销匹配',
       }}
-      initialPaymentScheduleId={search.paymentScheduleId}
-      initialTransactionId={search.transactionId}
+      deepLinkSearch={{
+        transactionNo: search.transactionNo,
+        scheduleNo: search.scheduleNo,
+      }}
     />
   )
 }

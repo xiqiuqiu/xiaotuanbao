@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
@@ -39,13 +39,19 @@ import {
   getDefaultVerificationDateRange,
   type VerificationDateRange,
 } from '../utils/date-ranges'
+import {
+  applyVerificationDeepLink,
+  buildVerificationListMatchParams,
+  resolveVerificationDeepLinkSearch,
+  type VerificationDeepLinkLock,
+  type VerificationDeepLinkSearch,
+} from '../utils/verification-list-deep-link'
 
 export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'
   departureId?: string
   readOnly?: boolean
-  initialPaymentScheduleId?: string
-  initialTransactionId?: string
+  deepLinkSearch?: VerificationDeepLinkSearch
   /** When set, renders the standard list page header (title + secondary). */
   pageHeader?: {
     title: string
@@ -62,6 +68,7 @@ type VerificationListState = {
   transactionNo: string
   scheduleNo: string
   departureKeyword: string
+  lock: VerificationDeepLinkLock
 }
 
 type VerificationListAction =
@@ -74,8 +81,9 @@ type VerificationListAction =
   | { type: 'setPage'; value: number }
   | { type: 'setPageSize'; value: number }
   | { type: 'resetFilters' }
+  | { type: 'applyDeepLink'; search: VerificationDeepLinkSearch }
 
-function createInitialVerificationListState(): VerificationListState {
+function createDefaultVerificationListState(): VerificationListState {
   return {
     page: 1,
     pageSize: 10,
@@ -85,6 +93,23 @@ function createInitialVerificationListState(): VerificationListState {
     transactionNo: '',
     scheduleNo: '',
     departureKeyword: '',
+    lock: null,
+  }
+}
+
+function createInitialVerificationListState(
+  search?: VerificationDeepLinkSearch,
+): VerificationListState {
+  const resolved = resolveVerificationDeepLinkSearch(search ?? {})
+  if (!resolved.transactionNo && !resolved.scheduleNo) {
+    return createDefaultVerificationListState()
+  }
+
+  const deepLink = applyVerificationDeepLink(resolved)
+  return {
+    page: 1,
+    pageSize: 10,
+    ...deepLink,
   }
 }
 
@@ -100,9 +125,9 @@ function verificationListReducer(
     case 'setStatus':
       return { ...state, status: action.value, page: 1 }
     case 'setTransactionNo':
-      return { ...state, transactionNo: action.value, page: 1 }
+      return { ...state, transactionNo: action.value, page: 1, lock: null }
     case 'setScheduleNo':
-      return { ...state, scheduleNo: action.value, page: 1 }
+      return { ...state, scheduleNo: action.value, page: 1, lock: null }
     case 'setDepartureKeyword':
       return { ...state, departureKeyword: action.value, page: 1 }
     case 'setPage':
@@ -110,7 +135,9 @@ function verificationListReducer(
     case 'setPageSize':
       return { ...state, pageSize: action.value }
     case 'resetFilters':
-      return createInitialVerificationListState()
+      return createDefaultVerificationListState()
+    case 'applyDeepLink':
+      return createInitialVerificationListState(action.search)
     default:
       return state
   }
@@ -225,16 +252,6 @@ function buildVerificationColumns({
   ]
 }
 
-interface VerificationTableProps {
-  loading: boolean
-  columns: ColumnsType<FinanceVerificationListItem>
-  items: FinanceVerificationListItem[]
-  page: number
-  pageSize: number
-  total: number
-  onPageChange: (page: number, pageSize: number) => void
-}
-
 function VerificationTable({
   loading,
   columns,
@@ -243,7 +260,15 @@ function VerificationTable({
   pageSize,
   total,
   onPageChange,
-}: VerificationTableProps) {
+}: {
+  loading: boolean
+  columns: ColumnsType<FinanceVerificationListItem>
+  items: FinanceVerificationListItem[]
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number, pageSize: number) => void
+}) {
   return (
     <Card>
       <Table
@@ -265,12 +290,22 @@ function VerificationTable({
   )
 }
 
+function deepLinkKey(search?: VerificationDeepLinkSearch): string {
+  const resolved = resolveVerificationDeepLinkSearch(search ?? {})
+  if (resolved.transactionNo) {
+    return `tx:${resolved.transactionNo}`
+  }
+  if (resolved.scheduleNo) {
+    return `sch:${resolved.scheduleNo}`
+  }
+  return ''
+}
+
 export function VerificationsWorkspace({
   scope,
   departureId: lockedDepartureId,
   readOnly = false,
-  initialPaymentScheduleId,
-  initialTransactionId,
+  deepLinkSearch,
   pageHeader,
 }: VerificationsWorkspaceProps) {
   const navigate = useNavigate()
@@ -285,7 +320,7 @@ export function VerificationsWorkspace({
     useState<FinanceVerificationListItem | null>(null)
   const [listState, dispatchList] = useReducer(
     verificationListReducer,
-    undefined,
+    deepLinkSearch,
     createInitialVerificationListState,
   )
   const {
@@ -297,38 +332,61 @@ export function VerificationsWorkspace({
     transactionNo,
     scheduleNo,
     departureKeyword,
+    lock,
   } = listState
 
   const isDepartureScope = scope === 'departure'
   const listQueryKey = isDepartureScope ? 'departure-verifications' : 'finance-verifications'
+  const currentDeepLinkKey = deepLinkKey(deepLinkSearch)
 
-  const listParams = useMemo(
-    () => ({
+  useEffect(() => {
+    if (isDepartureScope || !currentDeepLinkKey) {
+      return
+    }
+    dispatchList({ type: 'applyDeepLink', search: deepLinkSearch ?? {} })
+  }, [currentDeepLinkKey, deepLinkSearch, isDepartureScope])
+
+  const syncDeepLinkSearch = useCallback(
+    (nextSearch: VerificationDeepLinkSearch) => {
+      if (isDepartureScope) {
+        return
+      }
+      void navigate({
+        to: '/finance/verification',
+        search: nextSearch,
+        replace: true,
+      })
+    },
+    [isDepartureScope, navigate],
+  )
+
+  const listParams = useMemo(() => {
+    const matchParams = buildVerificationListMatchParams({
+      transactionNo,
+      scheduleNo,
+      lock,
+    })
+    return {
       page,
       pageSize,
       verificationDateStart: dateRange?.[0],
       verificationDateEnd: dateRange?.[1],
       direction,
       status,
-      transactionNo: transactionNo.trim() || undefined,
-      scheduleNo: scheduleNo.trim() || undefined,
       departureKeyword: departureKeyword.trim() || undefined,
-      paymentScheduleId: initialPaymentScheduleId,
-      transactionId: initialTransactionId,
-    }),
-    [
-      page,
-      pageSize,
-      dateRange,
-      direction,
-      status,
-      transactionNo,
-      scheduleNo,
-      departureKeyword,
-      initialPaymentScheduleId,
-      initialTransactionId,
-    ],
-  )
+      ...matchParams,
+    }
+  }, [
+    page,
+    pageSize,
+    dateRange,
+    direction,
+    status,
+    transactionNo,
+    scheduleNo,
+    departureKeyword,
+    lock,
+  ])
 
   const { data: verificationsResult, isLoading } = useQuery({
     queryKey: [
@@ -360,23 +418,28 @@ export function VerificationsWorkspace({
 
   const handleResetFilters = useCallback(() => {
     dispatchList({ type: 'resetFilters' })
-  }, [])
+    syncDeepLinkSearch({})
+  }, [syncDeepLinkSearch])
 
-  const clearPaymentScheduleFilter = useCallback(() => {
-    dispatchList({ type: 'setPage', value: 1 })
-    void navigate({
-      to: '/finance/verification',
-      search: { transactionId: initialTransactionId },
-    })
-  }, [initialTransactionId, navigate])
+  const handleTransactionNoChange = useCallback(
+    (value: string) => {
+      dispatchList({ type: 'setTransactionNo', value })
+      if (lock) {
+        syncDeepLinkSearch({})
+      }
+    },
+    [lock, syncDeepLinkSearch],
+  )
 
-  const clearTransactionFilter = useCallback(() => {
-    dispatchList({ type: 'setPage', value: 1 })
-    void navigate({
-      to: '/finance/verification',
-      search: { paymentScheduleId: initialPaymentScheduleId },
-    })
-  }, [initialPaymentScheduleId, navigate])
+  const handleScheduleNoChange = useCallback(
+    (value: string) => {
+      dispatchList({ type: 'setScheduleNo', value })
+      if (lock) {
+        syncDeepLinkSearch({})
+      }
+    },
+    [lock, syncDeepLinkSearch],
+  )
 
   const createMutation = useMutation({
     mutationFn: (values: CreateVerificationFormValues) =>
@@ -483,36 +546,14 @@ export function VerificationsWorkspace({
         onStatusChange={(value) => {
           dispatchList({ type: 'setStatus', value })
         }}
-        onTransactionNoChange={(value) => {
-          dispatchList({ type: 'setTransactionNo', value })
-        }}
-        onScheduleNoChange={(value) => {
-          dispatchList({ type: 'setScheduleNo', value })
-        }}
+        onTransactionNoChange={handleTransactionNoChange}
+        onScheduleNoChange={handleScheduleNoChange}
         onDepartureKeywordChange={(value) => {
           dispatchList({ type: 'setDepartureKeyword', value })
         }}
         onReset={handleResetFilters}
         extra={createButton}
       />
-
-      {!isDepartureScope && (initialPaymentScheduleId || initialTransactionId) ? (
-        <div style={{ marginBottom: 16 }}>
-          <Space wrap>
-            <Typography.Text type="secondary">当前筛选：</Typography.Text>
-            {initialPaymentScheduleId ? (
-              <Tag closable onClose={clearPaymentScheduleFilter}>
-                收付款节点 {initialPaymentScheduleId.slice(0, 8)}…
-              </Tag>
-            ) : null}
-            {initialTransactionId ? (
-              <Tag closable onClose={clearTransactionFilter}>
-                当前流水 {initialTransactionId.slice(0, 8)}…
-              </Tag>
-            ) : null}
-          </Space>
-        </div>
-      ) : null}
 
       <VerificationTable
         loading={isLoading}

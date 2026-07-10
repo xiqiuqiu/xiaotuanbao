@@ -43,11 +43,11 @@ export interface ListFinanceVerificationsParams {
   direction?: string
   status?: string
   transactionNo?: string
+  transactionNoMatch?: 'exact' | 'contains'
   scheduleNo?: string
+  scheduleNoMatch?: 'exact' | 'contains'
   departureKeyword?: string
   departureId?: string
-  paymentScheduleId?: string
-  transactionId?: string
   page?: number
   pageSize?: number
 }

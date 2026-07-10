@@ -624,7 +624,7 @@ export function TransactionsPage() {
     (record: FinanceTransactionSummary) => {
       void navigate({
         to: '/finance/verification',
-        search: { transactionId: record.id },
+        search: { transactionNo: record.transactionNo },
       })
     },
     [navigate],

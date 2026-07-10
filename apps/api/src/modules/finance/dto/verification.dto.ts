@@ -51,20 +51,20 @@ export class ListFinanceVerificationsQueryDto {
   transactionNo?: string
 
   @IsOptional()
+  @IsIn(['exact', 'contains'])
+  transactionNoMatch?: 'exact' | 'contains'
+
+  @IsOptional()
   @IsString()
   scheduleNo?: string
 
   @IsOptional()
+  @IsIn(['exact', 'contains'])
+  scheduleNoMatch?: 'exact' | 'contains'
+
+  @IsOptional()
   @IsString()
   departureKeyword?: string
-
-  @IsOptional()
-  @IsString()
-  paymentScheduleId?: string
-
-  @IsOptional()
-  @IsString()
-  transactionId?: string
 
   @IsOptional()
   @IsString()

@@ -351,7 +351,10 @@ export class VerificationService {
       paymentScheduleFilter.direction = query.direction as PaymentScheduleDirection
     }
     if (query.scheduleNo) {
-      paymentScheduleFilter.scheduleNo = { contains: query.scheduleNo, mode: 'insensitive' }
+      paymentScheduleFilter.scheduleNo =
+        query.scheduleNoMatch === 'exact'
+          ? { equals: query.scheduleNo, mode: 'insensitive' }
+          : { contains: query.scheduleNo, mode: 'insensitive' }
     }
     if (query.departureId) {
       paymentScheduleFilter.departureId = query.departureId
@@ -367,8 +370,6 @@ export class VerificationService {
 
     return {
       organizationId,
-      ...(query.paymentScheduleId ? { paymentScheduleId: query.paymentScheduleId } : {}),
-      ...(query.transactionId ? { transactionId: query.transactionId } : {}),
       ...(query.status
         ? {
             status:
@@ -392,7 +393,10 @@ export class VerificationService {
       ...(query.transactionNo
         ? {
             transaction: {
-              transactionNo: { contains: query.transactionNo, mode: 'insensitive' },
+              transactionNo:
+                query.transactionNoMatch === 'exact'
+                  ? { equals: query.transactionNo, mode: 'insensitive' }
+                  : { contains: query.transactionNo, mode: 'insensitive' },
             },
           }
         : {}),

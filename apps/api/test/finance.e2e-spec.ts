@@ -773,7 +773,7 @@ describe('Finance API (e2e)', () => {
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     expect(verifications.body.data.items).toHaveLength(1)
@@ -946,7 +946,7 @@ describe('Finance API (e2e)', () => {
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     const verificationId = verifications.body.data.items[0].id
@@ -1037,7 +1037,7 @@ describe('Finance API (e2e)', () => {
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     const transactionId = verifications.body.data.items[0].transactionId
@@ -1075,7 +1075,7 @@ describe('Finance API (e2e)', () => {
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     const transactionId = verifications.body.data.items[0].transactionId
@@ -1458,7 +1458,7 @@ describe('Finance API (e2e)', () => {
 
       const verifications = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .query({ scheduleNo: receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       const response = await authRequest(app, financeToken)
@@ -1538,7 +1538,7 @@ describe('Finance API (e2e)', () => {
 
       const verifications = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .query({ scheduleNo: receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       const verificationId = verifications.body.data.items[0].id
@@ -1600,7 +1600,7 @@ describe('Finance API (e2e)', () => {
 
       const verifications = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+        .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       expect(verifications.body.data.items).toHaveLength(1)
@@ -1693,7 +1693,7 @@ describe('Finance API (e2e)', () => {
       expect(doneDetail.body.data.unallocatedAmountCents).toBe(0)
     })
 
-    it('filters verifications by transactionId', async () => {
+    it('filters verifications by transactionNo exact match', async () => {
       const receivable = await authRequest(app, financeToken)
         .post('/api/finance/receivables')
         .send(schedulePayload({ title: `${testPrefix}-核销过滤`, amountCents: 30000 }))
@@ -1722,15 +1722,45 @@ describe('Finance API (e2e)', () => {
 
       const filtered = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ transactionId: transaction.body.data.id, pageSize: 10 })
+        .query({
+          transactionNo: transaction.body.data.transactionNo,
+          transactionNoMatch: 'exact',
+          pageSize: 10,
+        })
         .expect(200)
 
       expect(filtered.body.data.items).toHaveLength(1)
-      expect(filtered.body.data.items[0].transactionId).toBe(transaction.body.data.id)
+      expect(filtered.body.data.items[0].transactionNo).toBe(transaction.body.data.transactionNo)
+
+      const caseInsensitive = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({
+          transactionNo: String(transaction.body.data.transactionNo).toLowerCase(),
+          transactionNoMatch: 'exact',
+          pageSize: 10,
+        })
+        .expect(200)
+
+      expect(caseInsensitive.body.data.items).toHaveLength(1)
+
+      const partialExact = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({
+          transactionNo: String(transaction.body.data.transactionNo).slice(0, 8),
+          transactionNoMatch: 'exact',
+          pageSize: 10,
+        })
+        .expect(200)
+
+      expect(partialExact.body.data.items).toHaveLength(0)
 
       const otherFiltered = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ transactionId: otherTransaction.body.data.id, pageSize: 10 })
+        .query({
+          transactionNo: otherTransaction.body.data.transactionNo,
+          transactionNoMatch: 'exact',
+          pageSize: 10,
+        })
         .expect(200)
 
       expect(otherFiltered.body.data.items).toHaveLength(0)
@@ -1820,7 +1850,7 @@ describe('Finance API (e2e)', () => {
 
       const list = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .query({ scheduleNo: fixture.receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       expect(list.body.data.items).toHaveLength(1)
@@ -1884,7 +1914,7 @@ describe('Finance API (e2e)', () => {
 
       const cancelled = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ status: 'cancelled', paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .query({ status: 'cancelled', scheduleNo: fixture.receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       expect(cancelled.body.data.items).toHaveLength(1)
@@ -1892,7 +1922,7 @@ describe('Finance API (e2e)', () => {
 
       const normal = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ status: 'normal', paymentScheduleId: fixture.receivable.body.data.id, pageSize: 10 })
+        .query({ status: 'normal', scheduleNo: fixture.receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       expect(normal.body.data.items).toHaveLength(0)
@@ -1926,6 +1956,32 @@ describe('Finance API (e2e)', () => {
       expect(filtered.body.data.items.every((item: { scheduleNo: string }) =>
         item.scheduleNo.includes(partialNo),
       )).toBe(true)
+    })
+
+    it('filters by scheduleNo exact match', async () => {
+      const fixture = await seedListFixture()
+      const scheduleNo = fixture.receivable.body.data.scheduleNo as string
+
+      const filtered = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+        .expect(200)
+
+      expect(filtered.body.data.items.length).toBeGreaterThan(0)
+      expect(
+        filtered.body.data.items.every((item: { scheduleNo: string }) => item.scheduleNo === scheduleNo),
+      ).toBe(true)
+
+      const partialExact = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({
+          scheduleNo: scheduleNo.slice(0, 6),
+          scheduleNoMatch: 'exact',
+          pageSize: 10,
+        })
+        .expect(200)
+
+      expect(partialExact.body.data.items).toHaveLength(0)
     })
 
     it('filters by departure keyword', async () => {
@@ -2010,7 +2066,7 @@ describe('Finance API (e2e)', () => {
 
       const list = await authRequest(app, financeToken)
         .get('/api/finance/verifications')
-        .query({ paymentScheduleId: receivable.body.data.id, pageSize: 10 })
+        .query({ scheduleNo: receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
         .expect(200)
 
       const firstItem = list.body.data.items.find(
@@ -2059,7 +2115,7 @@ describe('Finance API (e2e)', () => {
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
-      .query({ paymentScheduleId: created.body.data.id, pageSize: 10 })
+      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
     if (verifications.body.data.items.length > 0) {
