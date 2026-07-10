@@ -327,6 +327,39 @@ export class VerificationService {
     return map
   }
 
+  /** True if the schedule ever had a verification, including cancelled ones. */
+  async hasVerificationHistory(
+    scheduleId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const client = tx ?? this.prisma
+    const count = await client.financeVerification.count({
+      where: { paymentScheduleId: scheduleId },
+    })
+    return count > 0
+  }
+
+  async batchHasVerificationHistory(scheduleIds: string[]): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>()
+    for (const scheduleId of scheduleIds) {
+      map.set(scheduleId, false)
+    }
+    if (scheduleIds.length === 0) {
+      return map
+    }
+
+    const rows = await this.prisma.financeVerification.groupBy({
+      by: ['paymentScheduleId'],
+      where: { paymentScheduleId: { in: scheduleIds } },
+      _count: { _all: true },
+    })
+
+    for (const row of rows) {
+      map.set(row.paymentScheduleId, row._count._all > 0)
+    }
+    return map
+  }
+
   async getAllocatedAmountCents(
     transactionId: string,
     tx?: Prisma.TransactionClient,
@@ -497,7 +530,8 @@ export class VerificationService {
     }
 
     const settledAmountCents = await this.getSettledAmountCents(schedule.id)
-    return this.toScheduleSummary(schedule, settledAmountCents)
+    const hasVerificationHistory = await this.hasVerificationHistory(schedule.id)
+    return this.toScheduleSummary(schedule, settledAmountCents, hasVerificationHistory)
   }
 
   private async assertScheduleAllocation(
@@ -607,6 +641,7 @@ export class VerificationService {
   private toScheduleSummary(
     schedule: PaymentSchedule,
     settledAmountCents: number,
+    hasVerificationHistory = settledAmountCents > 0,
   ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
@@ -631,7 +666,7 @@ export class VerificationService {
         cancelledAt: schedule.cancelledAt,
         businessDate,
       }),
-      financeTouched: isFinanceTouched(schedule, settledAmountCents),
+      financeTouched: isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory),
       settledAmountCents,
       unsettledAmountCents,
       cancelledAt: schedule.cancelledAt?.toISOString() ?? null,

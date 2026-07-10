@@ -79,10 +79,17 @@ export class PaymentScheduleService {
     const settledMap = await this.verificationService.batchGetSettledAmounts(
       items.map((schedule) => schedule.id),
     )
+    const historyMap = await this.verificationService.batchHasVerificationHistory(
+      items.map((schedule) => schedule.id),
+    )
 
     return {
       items: items.map((schedule) =>
-        this.toSummary(schedule, settledMap.get(schedule.id) ?? 0),
+        this.toSummary(
+          schedule,
+          settledMap.get(schedule.id) ?? 0,
+          historyMap.get(schedule.id) ?? false,
+        ),
       ),
       total,
       page,
@@ -96,8 +103,11 @@ export class PaymentScheduleService {
     scheduleId: string,
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
-    return this.toSummary(schedule, settledAmountCents)
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    return this.toSummary(schedule, settledAmountCents, hasVerificationHistory)
   }
 
   async create(
@@ -140,7 +150,7 @@ export class PaymentScheduleService {
       },
     })
 
-    return this.toSummary(schedule, 0)
+    return this.toSummary(schedule, 0, false)
   }
 
   async update(
@@ -165,8 +175,11 @@ export class PaymentScheduleService {
       throw new BadRequestException('请至少提供一个待更新字段')
     }
 
-    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
-    const touched = isFinanceTouched(schedule, settledAmountCents)
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
     const data: Prisma.PaymentScheduleUpdateInput = {}
     let financeAdjusted = false
 
@@ -228,7 +241,7 @@ export class PaymentScheduleService {
       data,
     })
 
-    return this.toSummary(updated, settledAmountCents)
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
   }
 
   async cancel(
@@ -272,8 +285,11 @@ export class PaymentScheduleService {
       },
     })
 
-    const settledAmountCents = await this.verificationService.getSettledAmountCents(updated.id)
-    return this.toSummary(updated, settledAmountCents)
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(updated.id),
+      this.verificationService.hasVerificationHistory(updated.id),
+    ])
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
   }
 
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {
@@ -305,7 +321,11 @@ export class PaymentScheduleService {
     return schedule
   }
 
-  private toSummary(schedule: PaymentSchedule, settledAmountCents: number): PaymentScheduleSummary {
+  private toSummary(
+    schedule: PaymentSchedule,
+    settledAmountCents: number,
+    hasVerificationHistory = settledAmountCents > 0,
+  ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
 
@@ -329,7 +349,7 @@ export class PaymentScheduleService {
         cancelledAt: schedule.cancelledAt,
         businessDate,
       }),
-      financeTouched: isFinanceTouched(schedule, settledAmountCents),
+      financeTouched: isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory),
       settledAmountCents,
       unsettledAmountCents,
       cancelledAt: schedule.cancelledAt?.toISOString() ?? null,

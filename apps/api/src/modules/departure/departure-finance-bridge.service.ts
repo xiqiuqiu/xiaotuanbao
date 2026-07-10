@@ -154,10 +154,11 @@ export class DepartureFinanceBridgeService {
 
     for (const schedule of activeSchedules) {
       const expectedAmount = this.getExpectedAmountForSchedule(schedule.sourceType, order)
-      const settledAmountCents = await this.verificationService.getSettledAmountCents(
-        schedule.id,
-      )
-      const touched = isFinanceTouched(schedule, settledAmountCents)
+      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id),
+        this.verificationService.hasVerificationHistory(schedule.id),
+      ])
+      const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
       if (touched) {
         anyTouched = true
       }
@@ -242,12 +243,19 @@ export class DepartureFinanceBridgeService {
     const settledMap = await this.verificationService.batchGetSettledAmounts(
       activeSchedules.map((schedule) => schedule.id),
     )
+    const historyMap = await this.verificationService.batchHasVerificationHistory(
+      activeSchedules.map((schedule) => schedule.id),
+    )
 
     let hasSourceAmountMismatch = false
     let amountFieldsLocked = false
     const scheduleStates = activeSchedules.map((schedule) => {
       const settledAmountCents = settledMap.get(schedule.id) ?? 0
-      const touched = isFinanceTouched(schedule, settledAmountCents)
+      const touched = isFinanceTouched(
+        schedule,
+        settledAmountCents,
+        historyMap.get(schedule.id) ?? false,
+      )
       if (touched) {
         amountFieldsLocked = true
         const expectedAmount = this.getExpectedAmountForSchedule(schedule.sourceType, amounts)
@@ -399,8 +407,11 @@ export class DepartureFinanceBridgeService {
     }
 
     const spec = this.buildPayableSpec(resource)
-    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
-    const touched = isFinanceTouched(schedule, settledAmountCents)
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
 
     if (!touched) {
       const updates: {
@@ -472,8 +483,11 @@ export class DepartureFinanceBridgeService {
       }
     }
 
-    const settledAmountCents = await this.verificationService.getSettledAmountCents(schedule.id)
-    const touched = isFinanceTouched(schedule, settledAmountCents)
+    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+      this.verificationService.getSettledAmountCents(schedule.id),
+      this.verificationService.hasVerificationHistory(schedule.id),
+    ])
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
     const expectedAmount = amounts.amountCents
 
     let hasSourceAmountMismatch = false

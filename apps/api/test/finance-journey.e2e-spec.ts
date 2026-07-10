@@ -437,6 +437,308 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(txDetail.body.data.unallocatedAmountCents).toBe(1000000)
   })
 
+  it('revokes 10000/4000 verification while keeping finance history on original AP/AR nodes (#87)', async () => {
+    const obligationCents = 1_000_000
+    const verifiedCents = 400_000
+
+    const departure = await createDeparture('revoke-history')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+
+    const segment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/segments`)
+      .send({
+        name: '撤销履历段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-05',
+        destination: '喀纳斯',
+      })
+      .expect(201)
+
+    const resource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId,
+        title: '用车-10000',
+        amountCents: obligationCents,
+      })
+      .expect(201)
+
+    const receivableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const payableGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.body.data.id}/generate-payable`)
+      .expect(201)
+
+    const receivableScheduleId = receivableGenerated.body.data.schedules[0].id as string
+    const receivableScheduleNo = receivableGenerated.body.data.schedules[0].scheduleNo as string
+    const payableScheduleId = payableGenerated.body.data.schedule.id as string
+    const payableScheduleNo = payableGenerated.body.data.schedule.scheduleNo as string
+
+    const apPayment = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+    expect(apPayment.body.data).toMatchObject({
+      amountCents: obligationCents,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      financeTouched: true,
+      status: PaymentScheduleStatus.PENDING,
+    })
+
+    const arCollection = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivableScheduleId}/confirm-collection`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.WECHAT,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+    expect(arCollection.body.data).toMatchObject({
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      financeTouched: true,
+    })
+
+    const resourceAfterPartial = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.body.data.id}`)
+      .expect(200)
+    expect(resourceAfterPartial.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      payableStatus: 'partial',
+      amountFieldsLocked: true,
+    })
+
+    const sourceAfterPartial = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrder.body.data.id}`)
+      .expect(200)
+    expect(sourceAfterPartial.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      receivableStatus: 'partial',
+      amountFieldsLocked: true,
+    })
+
+    const apVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: payableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    expect(apVerifications.body.data.items).toHaveLength(1)
+
+    const arVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: receivableScheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    expect(arVerifications.body.data.items).toHaveLength(1)
+
+    const apTxId = apVerifications.body.data.items[0].transactionId as string
+    const arTxId = arVerifications.body.data.items[0].transactionId as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${apVerifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '应付核销录入错误' })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${arVerifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '应收核销录入错误' })
+      .expect(201)
+
+    const restoredPayable = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${payableScheduleId}`)
+      .expect(200)
+    expect(restoredPayable.body.data).toMatchObject({
+      id: payableScheduleId,
+      amountCents: obligationCents,
+      settledAmountCents: 0,
+      unsettledAmountCents: obligationCents,
+      status: PaymentScheduleStatus.PENDING,
+      financeTouched: true,
+    })
+
+    const restoredReceivable = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${receivableScheduleId}`)
+      .expect(200)
+    expect(restoredReceivable.body.data).toMatchObject({
+      id: receivableScheduleId,
+      settledAmountCents: 0,
+      unsettledAmountCents: obligationCents,
+      status: PaymentScheduleStatus.PENDING,
+      financeTouched: true,
+    })
+
+    const apTx = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${apTxId}`)
+      .expect(200)
+    expect(apTx.body.data).toMatchObject({
+      amountCents: verifiedCents,
+      allocatedAmountCents: 0,
+      unallocatedAmountCents: verifiedCents,
+      voidedAt: null,
+    })
+
+    const arTx = await authRequest(app, financeToken)
+      .get(`/api/finance/transactions/${arTxId}`)
+      .expect(200)
+    expect(arTx.body.data).toMatchObject({
+      amountCents: verifiedCents,
+      allocatedAmountCents: 0,
+      unallocatedAmountCents: verifiedCents,
+      voidedAt: null,
+    })
+
+    const resourceAfterRevoke = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.body.data.id}`)
+      .expect(200)
+    expect(resourceAfterRevoke.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      payableStatus: 'pending',
+      amountFieldsLocked: true,
+    })
+    expect(resourceAfterRevoke.body.data.payableStatus).not.toBe('not_generated')
+
+    const sourceAfterRevoke = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrder.body.data.id}`)
+      .expect(200)
+    expect(sourceAfterRevoke.body.data).toMatchObject({
+      hasPaymentSchedule: true,
+      receivableStatus: 'pending',
+      amountFieldsLocked: true,
+    })
+    expect(sourceAfterRevoke.body.data.receivableStatus).not.toBe('not_generated')
+
+    const blockedPayableAmount = await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${payableScheduleId}`)
+      .send({ amountCents: 900_000 })
+      .expect(400)
+    expect(blockedPayableAmount.body.message).toBe('财务已介入的节点不可修改金额')
+
+    const blockedPayableDueDate = await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${payableScheduleId}`)
+      .send({ dueDate: '2026-09-01' })
+      .expect(400)
+    expect(blockedPayableDueDate.body.message).toBe('财务已介入的节点不可修改到期日')
+
+    const blockedPayableCounterparty = await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${payableScheduleId}`)
+      .send({
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
+        counterpartyName: `${testPrefix}-partner`,
+      })
+      .expect(400)
+    expect(blockedPayableCounterparty.body.message).toMatch(/财务已介入的节点不可修改往来/)
+
+    const blockedReceivableAmount = await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${receivableScheduleId}`)
+      .send({ amountCents: 900_000 })
+      .expect(400)
+    expect(blockedReceivableAmount.body.message).toBe('财务已介入的节点不可修改金额')
+
+    // 「查看核销」入口只看有效已核销：履历仍为真，但 settled=0 时入口应隐藏
+    expect(restoredPayable.body.data.financeTouched).toBe(true)
+    expect(restoredPayable.body.data.settledAmountCents).toBe(0)
+    expect(restoredReceivable.body.data.financeTouched).toBe(true)
+    expect(restoredReceivable.body.data.settledAmountCents).toBe(0)
+
+    const blockedResourceAmount = await authRequest(app, coordinatorToken)
+      .patch(`/api/segment-resources/${resource.body.data.id}`)
+      .send({ amountCents: 900_000 })
+      .expect(400)
+    expect(blockedResourceAmount.body.message).toBe('当前资源已发生付款，不允许修改金额')
+
+    const blockedSourceAmount = await authRequest(app, coordinatorToken)
+      .patch(`/api/source-orders/${sourceOrder.body.data.id}`)
+      .send({ adultUnitPriceCents: 900_000 })
+      .expect(400)
+    expect(blockedSourceAmount.body.message).toBe('当前客源单已发生收款，不允许修改金额')
+
+    const regeneratePayable = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.body.data.id}/generate-payable`)
+      .expect(409)
+    expect(regeneratePayable.body.message).toBe('当前资源已生成应付，不能再次生成')
+
+    const regenerateReceivable = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(409)
+    expect(regenerateReceivable.body.message).toBe('当前客源单已生成应收，不能再次生成')
+
+    const cancelledHistory = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: payableScheduleNo,
+        scheduleNoMatch: 'exact',
+        status: 'cancelled',
+        pageSize: 10,
+      })
+      .expect(200)
+    expect(cancelledHistory.body.data.items).toHaveLength(1)
+    expect(cancelledHistory.body.data.items[0].status).toBe('cancelled')
+
+    const activeVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: payableScheduleNo,
+        scheduleNoMatch: 'exact',
+        status: 'normal',
+        pageSize: 10,
+      })
+      .expect(200)
+    expect(activeVerifications.body.data.items).toHaveLength(0)
+
+    const repay = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-04',
+        paymentChannel: PaymentChannel.ALIPAY,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+    expect(repay.body.data).toMatchObject({
+      id: payableScheduleId,
+      settledAmountCents: verifiedCents,
+      unsettledAmountCents: obligationCents - verifiedCents,
+      financeTouched: true,
+    })
+
+    const rematch = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivableScheduleId}/link-transaction`)
+      .send({
+        transactionId: arTxId,
+        amountCents: verifiedCents,
+      })
+      .expect(201)
+    expect(rematch.body.data).toMatchObject({
+      id: receivableScheduleId,
+      settledAmountCents: verifiedCents,
+      financeTouched: true,
+    })
+  })
+
   it('settles split receivables and keeps coordinator departure tabs in sync', async () => {
     const departure = await createDeparture('split-tabs')
 
