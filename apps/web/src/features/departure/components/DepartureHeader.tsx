@@ -277,7 +277,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="发团已关闭，当前仅可查看"
+          title="发团已关闭，当前仅可查看"
           description="如需继续处理业务或财务事项，请先解除归档。解除后发团将回到待结算，原归档履历会保留。"
           action={
             <Button size="small" type="primary" onClick={() => setUnarchiveModalOpen(true)}>
@@ -292,7 +292,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
           type="success"
           showIcon
           style={{ marginBottom: 16 }}
-          message="全部账款已结清，可标记为已结清"
+          title="全部账款已结清，可标记为已结清"
           action={
             <Button size="small" type="primary" onClick={() => setTransitionAction('settled')}>
               标记为已结清

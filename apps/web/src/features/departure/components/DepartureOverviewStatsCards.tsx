@@ -28,7 +28,7 @@ function UnverifiedCashHint({
       type="warning"
       showIcon
       style={{ marginBottom: 8 }}
-      message={
+      title={
         <Typography.Text>
           {label} {formatCents(amountCents)}
           <DepartureTransactionsLink departureId={departureId} direction={direction}>

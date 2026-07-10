@@ -116,7 +116,7 @@ export function DepartureTransitionModal({
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="存在归属本发团的未核销资金"
+          title="存在归属本发团的未核销资金"
           description={
             <Space direction="vertical" size={4}>
               {departure.unverifiedIncomeCents > 0 ? (
@@ -150,7 +150,7 @@ export function DepartureTransitionModal({
         <Alert
           type="error"
           showIcon
-          message="全部账款尚未结清，不可标记为已结清"
+          title="全部账款尚未结清，不可标记为已结清"
           description={`仍有未结清应收 ${formatCents(departure.openUnsettledReceivableCents)}、未结清应付 ${formatCents(departure.openUnsettledPayableCents)}`}
         />
       ) : null}
@@ -160,7 +160,7 @@ export function DepartureTransitionModal({
           type="warning"
           showIcon
           style={{ marginBottom: requiresReason ? 16 : 0 }}
-          message="资料或账款尚未完整"
+          title="资料或账款尚未完整"
           description={`当前缺口：${incompleteLabels.join('、')}。仍可继续操作，请自行评估风险。`}
         />
       ) : null}

@@ -26,7 +26,7 @@ export function PartnerFormDrawer({
     <Drawer
       title={editing ? '编辑合作伙伴' : '创建合作伙伴'}
       open={open}
-      width={520}
+      size={520}
       onClose={onClose}
       footer={
         <Space style={{ float: 'right' }}>

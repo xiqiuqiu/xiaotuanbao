@@ -225,7 +225,7 @@ export function ExecutionTab({
       <Alert
         type="error"
         showIcon
-        message="行程段加载失败"
+        title="行程段加载失败"
         description="请稍后重试，或检查网络后再次加载。"
         action={
           <Button size="small" onClick={() => void refetch()}>

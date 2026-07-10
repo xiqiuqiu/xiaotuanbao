@@ -40,7 +40,7 @@ export function EmployeeFormDrawer({
     <Drawer
       title={editing ? '编辑员工' : '创建员工'}
       open={open}
-      width={480}
+      size={480}
       onClose={onClose}
       footer={
         <Space style={{ float: 'right' }}>

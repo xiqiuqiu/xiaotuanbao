@@ -170,9 +170,9 @@ export function SourceOrderDrawer({
     <Drawer
       title={readOnly ? '查看客源单' : editing ? '编辑客源单' : '添加客源单'}
       open={open}
-      width={560}
+      size={560}
       onClose={handleClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         readOnly ? (
           <Button onClick={handleClose}>关闭</Button>
@@ -190,7 +190,7 @@ export function SourceOrderDrawer({
         <Alert
           type="warning"
           showIcon
-          message="来源差异警示"
+          title="来源差异警示"
           description="客源单金额与已生成的应收节点不一致，且财务已介入，请核对后再处理。"
           style={{ marginBottom: 16 }}
         />

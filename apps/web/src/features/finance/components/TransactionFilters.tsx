@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
@@ -27,6 +28,7 @@ interface TransactionFiltersProps {
   onDepartureChange: (value?: string) => void
   onStatusChange: (value?: 'normal' | 'voided') => void
   onReset: () => void
+  extra?: ReactNode
 }
 
 export function TransactionFilters({
@@ -46,6 +48,7 @@ export function TransactionFilters({
   onDepartureChange,
   onStatusChange,
   onReset,
+  extra,
 }: TransactionFiltersProps) {
   const showDepartureFilter = scope === 'global'
   const { data: departuresResult } = useQuery({
@@ -62,80 +65,91 @@ export function TransactionFilters({
 
   return (
     <Card style={{ marginBottom: 16 }}>
-      <Space wrap>
-        <DatePicker.RangePicker
-          allowClear
-          placeholder={['交易日期起', '交易日期止']}
-          value={
-            dateRange
-              ? [
-                  dateRange[0] ? dayjs(dateRange[0]) : null,
-                  dateRange[1] ? dayjs(dateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(values) =>
-            onDateRangeChange(
-              values
-                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                : null,
-            )
-          }
-        />
-        <Select
-          allowClear
-          placeholder="收支方向"
-          style={{ width: 120 }}
-          value={direction}
-          onChange={onDirectionChange}
-          options={[...TRANSACTION_DIRECTION_OPTIONS]}
-        />
-        <Input.Search
-          allowClear
-          placeholder="往来对象"
-          style={{ width: 160 }}
-          value={partnerKeyword}
-          onChange={(event) => onPartnerKeywordChange(event.target.value)}
-          onSearch={(value) => onPartnerKeywordChange(value.trim())}
-        />
-        <Select
-          allowClear
-          placeholder="核销状态"
-          style={{ width: 120 }}
-          value={writeoffStatus}
-          onChange={onWriteoffStatusChange}
-          options={[...TRANSACTION_WRITEOFF_STATUS_OPTIONS]}
-        />
-        <Input.Search
-          allowClear
-          placeholder="流水号"
-          style={{ width: 180 }}
-          value={transactionNo}
-          onChange={(event) => onTransactionNoChange(event.target.value)}
-          onSearch={(value) => onTransactionNoChange(value.trim())}
-        />
-        {showDepartureFilter ? (
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <Space wrap>
+          <DatePicker.RangePicker
+            allowClear
+            placeholder={['交易日期起', '交易日期止']}
+            value={
+              dateRange
+                ? [
+                    dateRange[0] ? dayjs(dateRange[0]) : null,
+                    dateRange[1] ? dayjs(dateRange[1]) : null,
+                  ]
+                : null
+            }
+            onChange={(values) =>
+              onDateRangeChange(
+                values
+                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                  : null,
+              )
+            }
+          />
           <Select
             allowClear
-            showSearch
-            placeholder="关联发团"
-            style={{ width: 280 }}
-            value={departureId}
-            onChange={onDepartureChange}
-            options={departureOptions}
-            optionFilterProp="label"
+            placeholder="收支方向"
+            style={{ width: 120 }}
+            value={direction}
+            onChange={onDirectionChange}
+            options={[...TRANSACTION_DIRECTION_OPTIONS]}
           />
-        ) : null}
-        <Select
-          allowClear
-          placeholder="流水状态"
-          style={{ width: 120 }}
-          value={status}
-          onChange={onStatusChange}
-          options={[...TRANSACTION_STATUS_OPTIONS]}
-        />
-        <Button onClick={onReset}>重置</Button>
-      </Space>
+          <Input.Search
+            allowClear
+            placeholder="往来对象"
+            style={{ width: 160 }}
+            value={partnerKeyword}
+            onChange={(event) => onPartnerKeywordChange(event.target.value)}
+            onSearch={(value) => onPartnerKeywordChange(value.trim())}
+          />
+          <Select
+            allowClear
+            placeholder="核销状态"
+            style={{ width: 120 }}
+            value={writeoffStatus}
+            onChange={onWriteoffStatusChange}
+            options={[...TRANSACTION_WRITEOFF_STATUS_OPTIONS]}
+          />
+          <Input.Search
+            allowClear
+            placeholder="流水号"
+            style={{ width: 180 }}
+            value={transactionNo}
+            onChange={(event) => onTransactionNoChange(event.target.value)}
+            onSearch={(value) => onTransactionNoChange(value.trim())}
+          />
+          {showDepartureFilter ? (
+            <Select
+              allowClear
+              showSearch
+              placeholder="关联发团"
+              style={{ width: 280 }}
+              value={departureId}
+              onChange={onDepartureChange}
+              options={departureOptions}
+              optionFilterProp="label"
+            />
+          ) : null}
+          <Select
+            allowClear
+            placeholder="流水状态"
+            style={{ width: 120 }}
+            value={status}
+            onChange={onStatusChange}
+            options={[...TRANSACTION_STATUS_OPTIONS]}
+          />
+          <Button onClick={onReset}>重置</Button>
+        </Space>
+        {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
+      </div>
     </Card>
   )
 }

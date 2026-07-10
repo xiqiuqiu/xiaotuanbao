@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TransactionDirection } from '@xiaotuanbao/shared'
-import { createInitialTransactionListState } from './TransactionsWorkspace'
+import { createInitialTransactionListState } from '../utils/transaction-list-state'
 import { createDefaultVerificationListState } from './VerificationsWorkspace'
 
 describe('departure finance tab default filters', () => {

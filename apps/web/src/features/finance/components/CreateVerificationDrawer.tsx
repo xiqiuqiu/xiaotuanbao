@@ -323,7 +323,7 @@ function TransactionSelectionSection({
           </Descriptions>
         </Card>
       ) : loadError ? (
-        <Alert type="error" showIcon message="流水候选加载失败，请关闭抽屉后重试" />
+        <Alert type="error" showIcon title="流水候选加载失败，请关闭抽屉后重试" />
       ) : (
         <>
           <Input.Search
@@ -386,7 +386,7 @@ function ScheduleSelectionSection({
       {!selectedTransaction ? (
         <Typography.Text type="secondary">请先选择流水</Typography.Text>
       ) : loadError ? (
-        <Alert type="error" showIcon message="收付款节点候选加载失败，请关闭抽屉后重试" />
+        <Alert type="error" showIcon title="收付款节点候选加载失败，请关闭抽屉后重试" />
       ) : (
         <>
           <Input.Search
@@ -563,9 +563,9 @@ export function CreateVerificationDrawer({
     <Drawer
       title="新增核销"
       open={open}
-      width={960}
+      size={960}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <CreateVerificationFooter
           loading={loading}

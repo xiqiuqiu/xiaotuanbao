@@ -34,7 +34,7 @@ export function CancelVerificationModal({
       okText="确认撤销"
       okType="danger"
       cancelText="取消"
-      destroyOnClose
+      destroyOnHidden
     >
       {verification ? (
         <Form form={form} layout="vertical" onFinish={onSubmit}>

@@ -115,9 +115,9 @@ export function TransactionFormDrawer({
     <Drawer
       title={mode === 'edit' ? '编辑流水' : '新建流水'}
       open={open}
-      width={520}
+      size={520}
       onClose={handleClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space style={{ float: 'right' }}>
           <Button onClick={handleClose}>取消</Button>
@@ -136,6 +136,7 @@ export function TransactionFormDrawer({
           <Radio.Group
             block
             optionType="button"
+            buttonStyle="solid"
             options={[...TRANSACTION_DIRECTION_OPTIONS]}
             onChange={(event) => {
               const value = event.target.value as TransactionDirection

@@ -102,9 +102,9 @@ export function DepartureOverviewDrawer({
     <Drawer
       title="编辑基础信息"
       open={open}
-      width={520}
+      size={520}
       onClose={handleClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space style={{ float: 'right' }}>
           <Button onClick={handleClose}>取消</Button>

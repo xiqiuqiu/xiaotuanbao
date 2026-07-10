@@ -99,7 +99,7 @@ export function RegisterSettlementDrawer({
     <Drawer
       title={copy.title}
       open={open}
-      width={520}
+      size={520}
       onClose={onClose}
       footer={
         <Space style={{ float: 'right' }}>

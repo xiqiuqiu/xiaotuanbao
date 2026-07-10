@@ -13,7 +13,7 @@ export function ExecutionSummaryBar({ summary }: ExecutionSummaryBarProps) {
       type="info"
       showIcon
       style={{ marginBottom: 16 }}
-      message={
+      title={
         <>
           {summary.segmentCount} 段
           {' · '}

@@ -36,7 +36,7 @@ export function SupplierFormDrawer({
     <Drawer
       title={editing ? '编辑供应商' : '创建供应商'}
       open={open}
-      width={520}
+      size={520}
       onClose={onClose}
       footer={
         <Space style={{ float: 'right' }}>

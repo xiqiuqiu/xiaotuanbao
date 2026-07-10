@@ -125,8 +125,8 @@ export function ResourceDrawer({
     <Drawer
       title={readOnly ? '查看资源' : editing ? '编辑资源' : '添加资源'}
       open={open}
-      width={520}
-      destroyOnClose
+      size={520}
+      destroyOnHidden
       onClose={handleClose}
       footer={
         readOnly ? (
@@ -153,7 +153,7 @@ export function ResourceDrawer({
         <Alert
           type="warning"
           showIcon
-          message="来源差异警示"
+          title="来源差异警示"
           description="资源金额与已生成的应付节点不一致，且财务已介入，请核对后再处理。"
           style={{ marginBottom: 16 }}
         />

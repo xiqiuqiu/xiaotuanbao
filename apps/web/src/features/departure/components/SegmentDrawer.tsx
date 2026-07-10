@@ -116,10 +116,10 @@ export function SegmentDrawer({
   return (
     <Drawer
       title={readOnly ? '查看行程段' : editing ? '编辑行程段' : '添加行程段'}
-      width={480}
+      size={480}
       open={open}
       onClose={handleClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         readOnly ? (
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>

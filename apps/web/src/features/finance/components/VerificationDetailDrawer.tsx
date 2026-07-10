@@ -66,9 +66,9 @@ export function VerificationDetailDrawer({
     <Drawer
       title="核销详情"
       open={open}
-      width={680}
+      size={680}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space style={{ float: 'right' }}>
           <Button onClick={onClose}>关闭</Button>

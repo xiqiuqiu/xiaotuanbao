@@ -279,7 +279,7 @@ export function ExecutionResourcePane({
         <Alert
           type="error"
           showIcon
-          message="资源列表加载失败"
+          title="资源列表加载失败"
           description="请稍后重试，或检查网络后再次加载。"
           action={
             <Button size="small" onClick={() => void refetch()}>

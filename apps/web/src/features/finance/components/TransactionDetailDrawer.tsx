@@ -123,9 +123,9 @@ export function TransactionDetailDrawer({
     <Drawer
       title="流水详情"
       open={open}
-      width={640}
+      size={640}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <Space style={{ float: 'right' }}>
           <Button onClick={onClose}>关闭</Button>

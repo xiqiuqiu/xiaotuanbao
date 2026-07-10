@@ -176,15 +176,15 @@ function SourceOrderGuestDrawerPanel({
         </Space>
       }
       open={open}
-      width={720}
+      size={720}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       <Alert
         type="info"
         showIcon
         icon={<TeamOutlined />}
-        message={formatGuestCountContrast(guests.length, sourceOrder.guestCount)}
+        title={formatGuestCountContrast(guests.length, sourceOrder.guestCount)}
         style={{ marginBottom: 16 }}
       />
 

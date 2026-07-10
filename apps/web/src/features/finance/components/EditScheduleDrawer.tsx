@@ -27,7 +27,7 @@ export function EditScheduleDrawer({
     <Drawer
       title="编辑节点"
       open={open}
-      width={480}
+      size={480}
       onClose={onClose}
       footer={
         <Space style={{ float: 'right' }}>
