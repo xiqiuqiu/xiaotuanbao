@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Card, Form, Table, theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { listDepartures, getDeparture } from '@/services/departure.service'
-import { matchesSegmentResourceSchedule } from '@/features/departure/utils/matches-segment-resource-schedule'
-import { matchesSourceOrderSchedule } from '@/features/departure/utils/matches-source-order-schedule'
 import {
   listDeparturePayables,
   listDepartureReceivables,
@@ -16,28 +14,10 @@ import { PaymentScheduleFilters, type DueDateRange } from './PaymentScheduleFilt
 import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
 import { PaymentScheduleDetailDrawer } from './PaymentScheduleDetailDrawer'
 import { buildPaymentScheduleColumns } from './payment-schedule-table-columns'
+import { usePaymentScheduleDialogs } from '../hooks/usePaymentScheduleDialogs'
+import { usePaymentScheduleLocate, matchesLocateTarget } from '../hooks/usePaymentScheduleLocate'
 import { usePaymentScheduleMutations } from '../hooks/usePaymentScheduleMutations'
-import {
-  scheduleToConfirmCollectionValues,
-  type ConfirmCollectionFormValues,
-} from '../utils/confirm-collection-form'
-import {
-  scheduleToConfirmPaymentValues,
-  type ConfirmPaymentFormValues,
-} from '../utils/confirm-payment-form'
-import {
-  scheduleToEditValues,
-  type EditScheduleFormValues,
-} from '../utils/edit-schedule-form'
-import { centsToYuan } from '../utils/finance-form'
-import type { CreateVerificationFormValues } from '../utils/verification-form'
-import type { CancelScheduleFormValues } from './CancelScheduleModal'
-import type { AdjustAmountFormValues } from './AdjustAmountModal'
-import type { ReopenScheduleFormValues } from './ReopenScheduleModal'
 import styles from './PaymentScheduleWorkspace.module.css'
-
-/** Two antd-Slow (0.3s) animation iterations. */
-const LOCATE_FLASH_MS = 600
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -49,20 +29,6 @@ export type PaymentScheduleWorkspaceProps = {
   /** One-shot locate: flash rows for this segment resource, then clear via onHighlightConsumed. */
   highlightSegmentResourceId?: string
   onHighlightConsumed?: () => void
-}
-
-function matchesLocateTarget(
-  schedule: PaymentScheduleSummary,
-  locateSourceOrderId?: string,
-  locateSegmentResourceId?: string,
-): boolean {
-  if (locateSourceOrderId) {
-    return matchesSourceOrderSchedule(schedule, locateSourceOrderId)
-  }
-  if (locateSegmentResourceId) {
-    return matchesSegmentResourceSchedule(schedule, locateSegmentResourceId)
-  }
-  return false
 }
 
 function applyClientFilters(
@@ -178,33 +144,14 @@ export function PaymentScheduleWorkspace({
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  const [confirmForm] = Form.useForm<ConfirmCollectionFormValues | ConfirmPaymentFormValues>()
-  const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
-  const [cancelForm] = Form.useForm<CancelScheduleFormValues>()
-  const [reopenForm] = Form.useForm<ReopenScheduleFormValues>()
-  const [adjustForm] = Form.useForm<AdjustAmountFormValues>()
-  const [editForm] = Form.useForm<EditScheduleFormValues>()
-
-  const [activeSchedule, setActiveSchedule] = useState<PaymentScheduleSummary | null>(null)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [verifyOpen, setVerifyOpen] = useState(false)
-  const [cancelOpen, setCancelOpen] = useState(false)
-  const [reopenOpen, setReopenOpen] = useState(false)
-  const [adjustOpen, setAdjustOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
-  const [detailScheduleId, setDetailScheduleId] = useState<string | null>(null)
-  const [locateFlashActive, setLocateFlashActive] = useState(false)
-  const [locateSourceOrderId, setLocateSourceOrderId] = useState<string | undefined>()
-  const [locateSegmentResourceId, setLocateSegmentResourceId] = useState<string | undefined>()
-  const locateFlashStartedForRef = useRef<string | null>(null)
+  const dialogs = usePaymentScheduleDialogs(isReceivable)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
   const locatingFinanceRow =
     isDepartureScope &&
-    ((isReceivable && Boolean(locateSourceOrderId)) ||
-      (!isReceivable && Boolean(locateSegmentResourceId)))
+    ((isReceivable && Boolean(highlightSourceOrderId)) ||
+      (!isReceivable && Boolean(highlightSegmentResourceId)))
   const useExpandedFetch = hasClientFilters || locatingFinanceRow
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
@@ -236,78 +183,22 @@ export function PaymentScheduleWorkspace({
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
 
-  useEffect(() => {
-    const highlightId = isReceivable ? highlightSourceOrderId : highlightSegmentResourceId
-    if (!highlightId) {
-      return
-    }
-    if (locateFlashStartedForRef.current === highlightId) {
-      return
-    }
-    locateFlashStartedForRef.current = highlightId
-    if (isReceivable) {
-      setLocateSourceOrderId(highlightId)
-    } else {
-      setLocateSegmentResourceId(highlightId)
-    }
-  }, [highlightSegmentResourceId, highlightSourceOrderId, isReceivable])
-
-  useEffect(() => {
-    const locateId = locateSourceOrderId ?? locateSegmentResourceId
-    if (
-      !locateId ||
-      isLoading ||
-      isFetching ||
-      !schedulesResult ||
-      locateFlashActive
-    ) {
-      return
-    }
-
-    const items = applyClientFilters(
-      schedulesResult.items,
+  const { locateSourceOrderId, locateSegmentResourceId, locateFlashActive } =
+    usePaymentScheduleLocate({
+      isReceivable,
+      highlightSourceOrderId,
+      highlightSegmentResourceId,
+      onHighlightConsumed,
+      isLoading,
+      isFetching,
+      schedulesResult,
       keyword,
       statusFilter,
       dueDateRange,
-    )
-    const firstMatchIndex = items.findIndex((item) =>
-      matchesLocateTarget(item, locateSourceOrderId, locateSegmentResourceId),
-    )
-    if (firstMatchIndex >= 0) {
-      setPage(Math.floor(firstMatchIndex / pageSize) + 1)
-    }
-    setLocateFlashActive(true)
-  }, [
-    dueDateRange,
-    isFetching,
-    isLoading,
-    keyword,
-    locateFlashActive,
-    locateSegmentResourceId,
-    locateSourceOrderId,
-    pageSize,
-    schedulesResult,
-    statusFilter,
-  ])
-
-  useEffect(() => {
-    if (!locateFlashActive) {
-      return
-    }
-
-    const clearFlashTimer = window.setTimeout(() => {
-      setLocateFlashActive(false)
-      setLocateSourceOrderId(undefined)
-      setLocateSegmentResourceId(undefined)
-      locateFlashStartedForRef.current = null
-      setPage(1)
-      onHighlightConsumed?.()
-    }, LOCATE_FLASH_MS)
-
-    return () => {
-      window.clearTimeout(clearFlashTimer)
-    }
-  }, [locateFlashActive, onHighlightConsumed])
+      pageSize,
+      setPage,
+      applyClientFilters,
+    })
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-schedule-map'],
@@ -354,42 +245,6 @@ export function PaymentScheduleWorkspace({
     ? filteredItems.length
     : (schedulesResult?.total ?? 0)
 
-  const closeConfirm = useCallback(() => {
-    confirmForm.resetFields()
-    setConfirmOpen(false)
-    setActiveSchedule(null)
-  }, [confirmForm])
-
-  const closeVerify = useCallback(() => {
-    verifyForm.resetFields()
-    setVerifyOpen(false)
-    setActiveSchedule(null)
-  }, [verifyForm])
-
-  const closeCancel = useCallback(() => {
-    cancelForm.resetFields()
-    setCancelOpen(false)
-    setActiveSchedule(null)
-  }, [cancelForm])
-
-  const closeReopen = useCallback(() => {
-    reopenForm.resetFields()
-    setReopenOpen(false)
-    setActiveSchedule(null)
-  }, [reopenForm])
-
-  const closeAdjust = useCallback(() => {
-    adjustForm.resetFields()
-    setAdjustOpen(false)
-    setActiveSchedule(null)
-  }, [adjustForm])
-
-  const closeEdit = useCallback(() => {
-    editForm.resetFields()
-    setEditOpen(false)
-    setActiveSchedule(null)
-  }, [editForm])
-
   const {
     confirmMutation,
     verifyCreateMutation,
@@ -398,77 +253,24 @@ export function PaymentScheduleWorkspace({
     adjustMutation,
     editMutation,
   } = usePaymentScheduleMutations({
-      queryClient,
-      isReceivable,
-      listQueryKey,
-      departureListQueryKey,
-      activeSchedule,
-      confirmForm,
-      verifyForm,
-      cancelForm,
-      reopenForm,
-      adjustForm,
-      editForm,
-      onConfirmSuccess: closeConfirm,
-      onVerifySuccess: closeVerify,
-      onCancelSuccess: closeCancel,
-      onReopenSuccess: closeReopen,
-      onAdjustSuccess: closeAdjust,
-      onEditSuccess: closeEdit,
-    })
-
-  const openConfirm = useCallback(
-    (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
-      confirmForm.resetFields()
-      if (isReceivable) {
-        confirmForm.setFieldsValue(scheduleToConfirmCollectionValues(schedule))
-      } else {
-        confirmForm.setFieldsValue(scheduleToConfirmPaymentValues(schedule))
-      }
-      setConfirmOpen(true)
-    },
-    [confirmForm, isReceivable],
-  )
-
-  const openVerify = useCallback((schedule: PaymentScheduleSummary) => {
-    setActiveSchedule(schedule)
-    setVerifyOpen(true)
-  }, [])
-
-  const openCancel = useCallback((schedule: PaymentScheduleSummary) => {
-    setActiveSchedule(schedule)
-    cancelForm.resetFields()
-    setCancelOpen(true)
-  }, [cancelForm])
-
-  const openReopen = useCallback((schedule: PaymentScheduleSummary) => {
-    setActiveSchedule(schedule)
-    reopenForm.resetFields()
-    setReopenOpen(true)
-  }, [reopenForm])
-
-  const openAdjust = useCallback(
-    (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
-      adjustForm.resetFields()
-      adjustForm.setFieldsValue({
-        amountYuan: centsToYuan(schedule.amountCents),
-      })
-      setAdjustOpen(true)
-    },
-    [adjustForm],
-  )
-
-  const openEdit = useCallback(
-    (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
-      editForm.resetFields()
-      editForm.setFieldsValue(scheduleToEditValues(schedule))
-      setEditOpen(true)
-    },
-    [editForm],
-  )
+    queryClient,
+    isReceivable,
+    listQueryKey,
+    departureListQueryKey,
+    activeSchedule: dialogs.activeSchedule,
+    confirmForm: dialogs.confirmForm,
+    verifyForm: dialogs.verifyForm,
+    cancelForm: dialogs.cancelForm,
+    reopenForm: dialogs.reopenForm,
+    adjustForm: dialogs.adjustForm,
+    editForm: dialogs.editForm,
+    onConfirmSuccess: dialogs.closeConfirm,
+    onVerifySuccess: dialogs.closeVerify,
+    onCancelSuccess: dialogs.closeCancel,
+    onReopenSuccess: dialogs.closeReopen,
+    onAdjustSuccess: dialogs.closeAdjust,
+    onEditSuccess: dialogs.closeEdit,
+  })
 
   const openViewVerifications = useCallback(
     (schedule: PaymentScheduleSummary) => {
@@ -479,16 +281,6 @@ export function PaymentScheduleWorkspace({
     },
     [navigate],
   )
-
-  const openDetail = useCallback((schedule: PaymentScheduleSummary) => {
-    setDetailScheduleId(schedule.id)
-    setDetailOpen(true)
-  }, [])
-
-  const closeDetail = useCallback(() => {
-    setDetailOpen(false)
-    setDetailScheduleId(null)
-  }, [])
 
   const resetFilters = useCallback(() => {
     if (scope === 'global') {
@@ -507,26 +299,26 @@ export function PaymentScheduleWorkspace({
         isReceivable,
         readOnly,
         departureMap,
-        onConfirm: openConfirm,
-        onVerify: openVerify,
-        onEdit: openEdit,
-        onCancel: openCancel,
-        onReopen: openReopen,
-        onAdjustAmount: openAdjust,
-        onViewDetail: openDetail,
+        onConfirm: dialogs.openConfirm,
+        onVerify: dialogs.openVerify,
+        onEdit: dialogs.openEdit,
+        onCancel: dialogs.openCancel,
+        onReopen: dialogs.openReopen,
+        onAdjustAmount: dialogs.openAdjust,
+        onViewDetail: dialogs.openDetail,
         onViewVerifications: openViewVerifications,
       }),
     [
       departureMap,
+      dialogs.openAdjust,
+      dialogs.openCancel,
+      dialogs.openConfirm,
+      dialogs.openDetail,
+      dialogs.openEdit,
+      dialogs.openReopen,
+      dialogs.openVerify,
       isDepartureScope,
       isReceivable,
-      openAdjust,
-      openCancel,
-      openConfirm,
-      openDetail,
-      openEdit,
-      openReopen,
-      openVerify,
       openViewVerifications,
       readOnly,
     ],
@@ -578,40 +370,40 @@ export function PaymentScheduleWorkspace({
 
       <PaymentScheduleActionDialogs
         isReceivable={isReceivable}
-        activeSchedule={activeSchedule}
+        activeSchedule={dialogs.activeSchedule}
         departureMap={departureMap}
         lockedDepartureId={isDepartureScope ? lockedDepartureId : undefined}
-        confirmOpen={confirmOpen}
-        verifyOpen={verifyOpen}
-        cancelOpen={cancelOpen}
-        reopenOpen={reopenOpen}
-        adjustOpen={adjustOpen}
-        editOpen={editOpen}
-        confirmForm={confirmForm}
-        verifyForm={verifyForm}
-        cancelForm={cancelForm}
-        reopenForm={reopenForm}
-        adjustForm={adjustForm}
-        editForm={editForm}
+        confirmOpen={dialogs.confirmOpen}
+        verifyOpen={dialogs.verifyOpen}
+        cancelOpen={dialogs.cancelOpen}
+        reopenOpen={dialogs.reopenOpen}
+        adjustOpen={dialogs.adjustOpen}
+        editOpen={dialogs.editOpen}
+        confirmForm={dialogs.confirmForm}
+        verifyForm={dialogs.verifyForm}
+        cancelForm={dialogs.cancelForm}
+        reopenForm={dialogs.reopenForm}
+        adjustForm={dialogs.adjustForm}
+        editForm={dialogs.editForm}
         confirmMutation={confirmMutation}
         verifyCreateMutation={verifyCreateMutation}
         cancelMutation={cancelMutation}
         reopenMutation={reopenMutation}
         adjustMutation={adjustMutation}
         editMutation={editMutation}
-        onCloseConfirm={closeConfirm}
-        onCloseVerify={closeVerify}
-        onCloseCancel={closeCancel}
-        onCloseReopen={closeReopen}
-        onCloseAdjust={closeAdjust}
-        onCloseEdit={closeEdit}
+        onCloseConfirm={dialogs.closeConfirm}
+        onCloseVerify={dialogs.closeVerify}
+        onCloseCancel={dialogs.closeCancel}
+        onCloseReopen={dialogs.closeReopen}
+        onCloseAdjust={dialogs.closeAdjust}
+        onCloseEdit={dialogs.closeEdit}
       />
 
       <PaymentScheduleDetailDrawer
-        open={detailOpen}
-        scheduleId={detailScheduleId}
+        open={dialogs.detailOpen}
+        scheduleId={dialogs.detailScheduleId}
         isReceivable={isReceivable}
-        onClose={closeDetail}
+        onClose={dialogs.closeDetail}
       />
     </div>
   )

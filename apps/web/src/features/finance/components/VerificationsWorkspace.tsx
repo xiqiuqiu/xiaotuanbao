@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import {
   VerificationStatus,
   type FinanceVerificationListItem,
 } from '@xiaotuanbao/shared'
 import {
-  cancelVerification,
-  createVerification,
   listDepartureVerifications,
   listVerifications,
 } from '@/services/finance.service'
@@ -31,10 +29,7 @@ import {
   VerificationFilters,
 } from './VerificationFilters'
 import { VerificationDetailDrawer } from './VerificationDetailDrawer'
-import {
-  buildCreateVerificationPayload,
-  type CreateVerificationFormValues,
-} from '../utils/verification-form'
+import { type CreateVerificationFormValues } from '../utils/verification-form'
 import {
   getDefaultVerificationDateRange,
   type VerificationDateRange,
@@ -46,6 +41,7 @@ import {
   type VerificationDeepLinkLock,
   type VerificationDeepLinkSearch,
 } from '../utils/verification-list-deep-link'
+import { useVerificationWorkspaceMutations } from '../hooks/useVerificationWorkspaceMutations'
 
 export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -309,15 +305,12 @@ export function VerificationsWorkspace({
   pageHeader,
 }: VerificationsWorkspaceProps) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [form] = Form.useForm<CreateVerificationFormValues>()
   const [cancelForm] = Form.useForm<CancelVerificationFormValues>()
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
   const [detailVerificationId, setDetailVerificationId] = useState<string | null>(null)
-  const [cancellingVerification, setCancellingVerification] =
-    useState<FinanceVerificationListItem | null>(null)
   const [listState, dispatchList] = useReducer(
     verificationListReducer,
     deepLinkSearch,
@@ -441,58 +434,31 @@ export function VerificationsWorkspace({
     [lock, syncDeepLinkSearch],
   )
 
-  const createMutation = useMutation({
-    mutationFn: (values: CreateVerificationFormValues) =>
-      createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: () => {
-      message.success('核销已创建')
-      setModalOpen(false)
-      form.resetFields()
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '创建失败')
-    },
+  const {
+    createMutation,
+    cancelMutation,
+    cancellingVerification,
+    openCancelModal,
+    closeCancelModal,
+  } = useVerificationWorkspaceMutations({
+    form,
+    cancelForm,
+    onCreateSuccess: () => setModalOpen(false),
+    onCancelSuccess: () => setCancelModalOpen(false),
   })
 
-  const cancelMutation = useMutation({
-    mutationFn: ({ id, cancelReason }: { id: string; cancelReason: string }) =>
-      cancelVerification(id, { cancelReason }),
-    onSuccess: () => {
-      message.success('核销已撤销')
-      setCancelModalOpen(false)
-      setCancellingVerification(null)
-      cancelForm.resetFields()
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verification'] })
+  const handleOpenCancelModal = useCallback(
+    (verification: FinanceVerificationListItem) => {
+      openCancelModal(verification)
+      setCancelModalOpen(true)
     },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '撤销失败')
-    },
-  })
-
-  const handleOpenCancelModal = useCallback((verification: FinanceVerificationListItem) => {
-    setCancellingVerification(verification)
-    setCancelModalOpen(true)
-  }, [])
+    [openCancelModal],
+  )
 
   const handleCloseCancelModal = useCallback(() => {
     setCancelModalOpen(false)
-    setCancellingVerification(null)
-    cancelForm.resetFields()
-  }, [cancelForm])
+    closeCancelModal()
+  }, [closeCancelModal])
 
   const columns = useMemo(
     () =>
