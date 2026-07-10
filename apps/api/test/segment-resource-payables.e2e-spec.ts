@@ -236,6 +236,37 @@ describe('Segment resource generate payables (e2e)', () => {
     expect(count).toBe(1)
   })
 
+  it('creates one payable with conflict responses under concurrent generation requests', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, coordinatorToken)
+          .post(`/api/segment-resources/${resource.id}/generate-payable`),
+      ),
+    )
+
+    const payables = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/payables`)
+      .expect(200)
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      conflictCount: responses.filter((response) => response.status === 409).length,
+      unexpectedStatuses: responses
+        .map((response) => response.status)
+        .filter((status) => status !== 201 && status !== 409),
+      scheduleCount: payables.body.data.total,
+    }).toEqual({
+      successCount: 1,
+      conflictCount: 7,
+      unexpectedStatuses: [],
+      scheduleCount: 1,
+    })
+  })
+
   it('syncs schedule amount when resource is patched before finance touch', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)

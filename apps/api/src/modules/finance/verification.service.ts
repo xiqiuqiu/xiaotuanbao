@@ -161,8 +161,21 @@ export class VerificationService {
     context: VerificationCreateContext,
     tx?: Prisma.TransactionClient,
   ): Promise<FinanceVerificationSummary> {
-    const client = tx ?? this.prisma
+    if (!tx) {
+      return this.prisma.$transaction((transaction) =>
+        this.create(organizationId, dto, context, transaction),
+      )
+    }
+
+    const client = tx
     this.assertPositiveAmount(dto.amountCents)
+
+    await this.lockAllocationInputs(
+      client,
+      organizationId,
+      dto.paymentScheduleId,
+      dto.transactionId,
+    )
 
     const schedule = await client.paymentSchedule.findFirst({
       where: { id: dto.paymentScheduleId, organizationId },
@@ -208,7 +221,7 @@ export class VerificationService {
       throw error
     }
 
-    const settled = await this.getSettledAmountCents(schedule.id, client as Prisma.TransactionClient)
+    const settled = await this.getSettledAmountCents(schedule.id, client)
     await this.assertScheduleAllocation(client, schedule.id, schedule.amountCents, dto.amountCents)
     await this.assertTransactionAllocation(
       client,
@@ -242,6 +255,28 @@ export class VerificationService {
     return this.toSummary(verification)
   }
 
+  private async lockAllocationInputs(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    paymentScheduleId: string,
+    transactionId: string,
+  ): Promise<void> {
+    await tx.$queryRaw`
+      SELECT id
+      FROM payment_schedules
+      WHERE id = ${paymentScheduleId}
+        AND organization_id = ${organizationId}
+      FOR UPDATE
+    `
+    await tx.$queryRaw`
+      SELECT id
+      FROM finance_transactions
+      WHERE id = ${transactionId}
+        AND organization_id = ${organizationId}
+      FOR UPDATE
+    `
+  }
+
   async cancel(
     organizationId: string,
     verificationId: string,
@@ -253,44 +288,50 @@ export class VerificationService {
       throw new BadRequestException('撤销原因不能为空')
     }
 
-    const verification = await this.prisma.financeVerification.findFirst({
-      where: { id: verificationId, organizationId },
-    })
-
-    if (!verification) {
-      throw new NotFoundException('核销记录不存在')
-    }
-
-    if (verification.status === PrismaVerificationStatus.cancelled) {
-      throw new BadRequestException('核销已撤销')
-    }
-
-    const schedule = await this.prisma.paymentSchedule.findFirst({
-      where: { id: verification.paymentScheduleId, organizationId },
-      select: {
-        id: true,
-        departureId: true,
-        amountCents: true,
-        cancelledAt: true,
-      },
-    })
-    if (!schedule) {
-      throw new NotFoundException('收付款节点不存在')
-    }
-
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '撤销核销',
-    )
-
-    const previousSettledAmountCents = await this.getSettledAmountCents(schedule.id)
-    const previousUnsettledAmountCents = Math.max(
-      schedule.amountCents - previousSettledAmountCents,
-      0,
-    )
-
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM finance_verifications
+        WHERE id = ${verificationId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+
+      const verification = await tx.financeVerification.findFirst({
+        where: { id: verificationId, organizationId },
+      })
+      if (!verification) {
+        throw new NotFoundException('核销记录不存在')
+      }
+      if (verification.status === PrismaVerificationStatus.cancelled) {
+        throw new BadRequestException('核销已撤销')
+      }
+
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: verification.paymentScheduleId, organizationId },
+        select: {
+          id: true,
+          departureId: true,
+          amountCents: true,
+          cancelledAt: true,
+        },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
+      }
+
+      await this.departureFinanceFacade.assertMutableById(
+        organizationId,
+        schedule.departureId,
+        '撤销核销',
+      )
+
+      const previousSettledAmountCents = await this.getSettledAmountCents(schedule.id, tx)
+      const previousUnsettledAmountCents = Math.max(
+        schedule.amountCents - previousSettledAmountCents,
+        0,
+      )
+
       const cancelled = await tx.financeVerification.update({
         where: { id: verification.id },
         data: {

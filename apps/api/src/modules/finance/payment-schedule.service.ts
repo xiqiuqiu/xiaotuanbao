@@ -129,7 +129,9 @@ export class PaymentScheduleService {
     organizationId: string,
     direction: PaymentScheduleDirection,
     dto: CreatePaymentScheduleDto,
+    tx?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
+    const client = tx ?? this.prisma
     this.assertPositiveAmount(dto.amountCents)
 
     const title = dto.title.trim()
@@ -146,9 +148,10 @@ export class PaymentScheduleService {
     const scheduleNo = await this.numberAllocationService.allocateScheduleNo(
       organizationId,
       direction,
+      client,
     )
 
-    const schedule = await this.prisma.paymentSchedule.create({
+    const schedule = await client.paymentSchedule.create({
       data: {
         organizationId,
         departureId: dto.departureId,

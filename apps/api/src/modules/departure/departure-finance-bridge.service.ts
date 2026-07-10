@@ -23,6 +23,7 @@ import {
   PaymentScheduleDirection,
   type Partner,
   type PaymentSchedule,
+  type Prisma,
   type SegmentResource,
   type SourceOrder,
   type Supplier,
@@ -71,6 +72,8 @@ type SegmentResourceWithRelations = SegmentResource & {
   }
 }
 
+type DbClient = PrismaService | Prisma.TransactionClient
+
 interface PayableSpec {
   amountCents: number
   title: string
@@ -96,40 +99,59 @@ export class DepartureFinanceBridgeService {
       meta: SourceOrderFinanceMeta,
     ) => SourceOrderSummary,
   ): Promise<GenerateReceivablesResult> {
-    const order = await this.loadSourceOrderOrThrow(organizationId, sourceOrderId)
-    this.ensureDepartureOpen(order.departure)
+    const { order, schedules } = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM source_orders
+        WHERE id = ${sourceOrderId}
+        FOR UPDATE
+      `
 
-    const existingSchedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
-    if (existingSchedules.length > 0) {
-      throw new ConflictException('当前客源单已生成应收，不能再次生成')
-    }
+      const lockedOrder = await this.loadSourceOrderOrThrow(
+        organizationId,
+        sourceOrderId,
+        tx,
+      )
+      this.ensureDepartureOpen(lockedOrder.departure)
 
-    const paths = this.buildReceivablePaths(order)
-    const schedules: PaymentScheduleSummary[] = []
-    const dueDate = formatDateOnly(order.departure.endDate)
-
-    for (const path of paths) {
-      if (path.amountCents <= 0) {
-        continue
+      const existingSchedules = await this.loadReceivableSchedules(
+        organizationId,
+        sourceOrderId,
+        tx,
+      )
+      if (existingSchedules.length > 0) {
+        throw new ConflictException('当前客源单已生成应收，不能再次生成')
       }
 
-      const created = await this.paymentScheduleService.create(
-        organizationId,
-        PaymentScheduleDirection.receivable,
-        {
-          departureId: order.departureId,
-          title: path.title,
-          amountCents: path.amountCents,
-          dueDate,
-          counterpartyType: path.counterpartyType,
-          counterpartyId: path.counterpartyId,
-          counterpartyName: path.counterpartyName,
-          sourceType: path.sourceType,
-          sourceId: sourceOrderId,
-        },
-      )
-      schedules.push(created)
-    }
+      const createdSchedules: PaymentScheduleSummary[] = []
+      const dueDate = formatDateOnly(lockedOrder.departure.endDate)
+
+      for (const path of this.buildReceivablePaths(lockedOrder)) {
+        if (path.amountCents <= 0) {
+          continue
+        }
+
+        const created = await this.paymentScheduleService.create(
+          organizationId,
+          PaymentScheduleDirection.receivable,
+          {
+            departureId: lockedOrder.departureId,
+            title: path.title,
+            amountCents: path.amountCents,
+            dueDate,
+            counterpartyType: path.counterpartyType,
+            counterpartyId: path.counterpartyId,
+            counterpartyName: path.counterpartyName,
+            sourceType: path.sourceType,
+            sourceId: sourceOrderId,
+          },
+          tx,
+        )
+        createdSchedules.push(created)
+      }
+
+      return { order: lockedOrder, schedules: createdSchedules }
+    })
 
     const financeMeta = await this.evaluateFinanceMeta(organizationId, sourceOrderId, order)
 
@@ -354,36 +376,55 @@ export class DepartureFinanceBridgeService {
     schedule: PaymentScheduleSummary
     sourceAmountMismatch: boolean
   }> {
-    const resource = await this.loadSegmentResourceOrThrow(organizationId, resourceId)
-    this.ensureDepartureOpen(resource.segment.departure, '生成应付')
+    const { resource, schedule } = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM segment_resources
+        WHERE id = ${resourceId}
+        FOR UPDATE
+      `
 
-    if (resource.amountCents <= 0) {
-      throw new BadRequestException('资源金额须大于 0 才能生成应付')
-    }
+      const lockedResource = await this.loadSegmentResourceOrThrow(
+        organizationId,
+        resourceId,
+        tx,
+      )
+      this.ensureDepartureOpen(lockedResource.segment.departure, '生成应付')
 
-    const existingTrace = await this.findAnyPayableSchedule(organizationId, resourceId)
-    if (existingTrace) {
-      throw new ConflictException('当前资源已生成应付，不能再次生成')
-    }
+      if (lockedResource.amountCents <= 0) {
+        throw new BadRequestException('资源金额须大于 0 才能生成应付')
+      }
 
-    const spec = this.buildPayableSpec(resource)
-    const dueDate = formatDateOnly(resource.segment.departure.endDate)
+      const existingTrace = await this.findAnyPayableSchedule(
+        organizationId,
+        resourceId,
+        tx,
+      )
+      if (existingTrace) {
+        throw new ConflictException('当前资源已生成应付，不能再次生成')
+      }
 
-    const schedule = await this.paymentScheduleService.create(
-      organizationId,
-      PaymentScheduleDirection.payable,
-      {
-        departureId: resource.segment.departure.id,
-        title: spec.title,
-        amountCents: spec.amountCents,
-        dueDate,
-        counterpartyType: spec.counterpartyType,
-        counterpartyId: spec.counterpartyId,
-        counterpartyName: spec.counterpartyName,
-        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-        sourceId: resourceId,
-      },
-    )
+      const spec = this.buildPayableSpec(lockedResource)
+      const dueDate = formatDateOnly(lockedResource.segment.departure.endDate)
+      const createdSchedule = await this.paymentScheduleService.create(
+        organizationId,
+        PaymentScheduleDirection.payable,
+        {
+          departureId: lockedResource.segment.departure.id,
+          title: spec.title,
+          amountCents: spec.amountCents,
+          dueDate,
+          counterpartyType: spec.counterpartyType,
+          counterpartyId: spec.counterpartyId,
+          counterpartyName: spec.counterpartyName,
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: resourceId,
+        },
+        tx,
+      )
+
+      return { resource: lockedResource, schedule: createdSchedule }
+    })
 
     const financeMeta = await this.evaluateResourceFinanceMeta(
       organizationId,
@@ -616,8 +657,9 @@ export class DepartureFinanceBridgeService {
   private async findAnyPayableSchedule(
     organizationId: string,
     resourceId: string,
+    client: DbClient = this.prisma,
   ): Promise<PaymentSchedule | null> {
-    return this.prisma.paymentSchedule.findFirst({
+    return client.paymentSchedule.findFirst({
       where: {
         organizationId,
         sourceId: resourceId,
@@ -630,8 +672,9 @@ export class DepartureFinanceBridgeService {
   private async loadSegmentResourceOrThrow(
     organizationId: string,
     resourceId: string,
+    client: DbClient = this.prisma,
   ): Promise<SegmentResourceWithRelations> {
-    const resource = await this.prisma.segmentResource.findFirst({
+    const resource = await client.segmentResource.findFirst({
       where: {
         id: resourceId,
         segment: { departure: { organizationId } },
@@ -705,8 +748,9 @@ export class DepartureFinanceBridgeService {
   private async loadReceivableSchedules(
     organizationId: string,
     sourceOrderId: string,
+    client: DbClient = this.prisma,
   ): Promise<PaymentSchedule[]> {
-    return this.prisma.paymentSchedule.findMany({
+    return client.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: sourceOrderId,
@@ -718,8 +762,9 @@ export class DepartureFinanceBridgeService {
   private async loadSourceOrderOrThrow(
     organizationId: string,
     sourceOrderId: string,
+    client: DbClient = this.prisma,
   ): Promise<SourceOrderWithRelations> {
-    const order = await this.prisma.sourceOrder.findFirst({
+    const order = await client.sourceOrder.findFirst({
       where: {
         id: sourceOrderId,
         departure: { organizationId },

@@ -258,6 +258,40 @@ describe('Source order generate receivables (e2e)', () => {
     expect(count).toBe(2)
   })
 
+  it('creates each receivable source path only once under concurrent generation requests', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.split,
+      partnerCollectedCents: 200000,
+    })
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, coordinatorToken)
+          .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`),
+      ),
+    )
+
+    const receivables = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/receivables`)
+      .expect(200)
+
+    expect({
+      successCount: responses.filter((response) => response.status === 201).length,
+      scheduleCount: receivables.body.data.total,
+      sourceTypes: receivables.body.data.items.map(
+        (item: { sourceType: string }) => item.sourceType,
+      ),
+    }).toEqual({
+      successCount: 1,
+      scheduleCount: 2,
+      sourceTypes: expect.arrayContaining([
+        PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      ]),
+    })
+  })
+
   it('syncs schedule amounts when source order is patched before finance touch', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
