@@ -3,12 +3,13 @@ import { Card, Table, theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import { listDepartures, getDeparture } from '@/services/departure.service'
+import { getDeparture } from '@/services/departure.service'
 import {
   listDeparturePayables,
   listDepartureReceivables,
   listPayables,
   listReceivables,
+  listFinanceDepartureOptions,
 } from '@/services/finance.service'
 import { PaymentScheduleFilters, type DueDateRange } from './PaymentScheduleFilters'
 import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
@@ -202,7 +203,7 @@ export function PaymentScheduleWorkspace({
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-schedule-map'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
+    queryFn: listFinanceDepartureOptions,
     enabled: !isDepartureScope,
   })
 
@@ -219,7 +220,7 @@ export function PaymentScheduleWorkspace({
 
   const departureMap = useMemo(() => {
     const map = new Map<string, { departureNo: string; name: string }>()
-    for (const departure of departuresResult?.items ?? []) {
+    for (const departure of departuresResult ?? []) {
       map.set(departure.id, { departureNo: departure.departureNo, name: departure.name })
     }
     if (lockedDeparture) {
@@ -229,7 +230,7 @@ export function PaymentScheduleWorkspace({
       })
     }
     return map
-  }, [departuresResult?.items, lockedDeparture])
+  }, [departuresResult, lockedDeparture])
 
   const filteredItems = useMemo(
     () =>

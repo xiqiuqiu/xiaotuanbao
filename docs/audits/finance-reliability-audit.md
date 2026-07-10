@@ -2,7 +2,7 @@
 
 > 状态：审计与高危并发修复已完成；发布门槛尚未通过
 > 审计基线：`71fc894985cd80bf079e4403e34c58d409288d8e`（`main`）  
-> 当前复核：`4d3e938`（`main`，另有本轮未提交的并发修复与测试）
+> 当前复核：`deaff4a`（`main`，另有本轮未提交的并发修复与测试）
 > 首次记录：2026-07-10，Asia/Taipei  
 > 启动时用户原有未提交文件：`apps/api/scripts/seed-xbzt-test-org.cjs`（本轮未修改、未纳入审计改动）
 
@@ -74,8 +74,8 @@ flowchart LR
 | I3 | 核销两侧方向、往来对象、Organization 一致；撤销仅失效不删除 | shared + HTTP E2E | 方向/对象/组织组合伪造与撤销保留均覆盖 |
 | I4 | 同一来源一次性生成；关闭后仍视为已生成 | Facade/Service + HTTP E2E + 唯一性检查 | 并发生成、关闭后重复生成、数据库唯一约束均覆盖 |
 | I5 | 撤销最后核销不清除 finance history；已介入调额显式留痕 | Facade/Service + HTTP journey | 已有正向/拒绝路径；源金额语义冲突待裁决 |
-| I6 | 已结清发团无开放节点；重开与回退原子；门槛不自动结清 | HTTP journey + integrity check | 正向/拒绝/撤销及重开事务覆盖；归档竞争仍待确定性 seam |
-| I7 | 已关闭发团财务只读；解除归档不重开节点 | HTTP journey + browser | 直接 API 与无 departureId 历史流水已覆盖；归档竞争仍待确定性 seam |
+| I6 | 已结清发团无开放节点；重开与回退原子；门槛不自动结清 | HTTP journey + integrity check | 正向/拒绝/撤销、重开及开放节点撤销核销回退均覆盖 |
+| I7 | 已关闭发团财务只读；解除归档不重开节点 | HTTP journey + browser | 直接 API、历史流水及确定性归档竞争 barrier 均覆盖 |
 | I8 | 撤销后账款恢复、原流水成为未核销资金，两层不抵消 | shared + HTTP journey | 现有 journey 覆盖；摘要 mutation 待证明 |
 | I9 | 所有读写受 organizationId 与后端权限约束 | HTTP E2E + integrity check | 跨组织组合与停用 Employee 旧 JWT 已覆盖；前端发团映射存在 P2 |
 | I10 | 多表动作原子且幂等；异常/并发不产生重复或超额事实 | HTTP 并发/故障注入 + DB 约束 | 已覆盖超额、生成、撤销、编辑、作废、关闭/重开；业务请求幂等键仍缺 |
@@ -89,7 +89,7 @@ flowchart LR
 | 登记成功、核销失败 | I10 | HTTP E2E + 故障注入 | 代码使用事务；普通 journey 通过 | 取消事务 mutation 待做 |
 | 撤销后关闭/重开/再核销 | I5/I6/I8 | HTTP journey | journey + 并发撤销、关闭、重开重试 | 已补齐 |
 | 已结清发团重开中途失败 | I6/I10 | HTTP E2E + 故障注入 | 主事务存在 | Activity/状态失败注入待做 |
-| 已关闭发团直接 API 绕过 UI | I7/I9 | HTTP E2E | 主要写路径与无 departureId 历史流水均覆盖 | 归档与财务写竞争待建确定性 seam |
+| 已关闭发团直接 API 绕过 UI | I7/I9 | HTTP E2E | 主要写路径、无 departureId 历史流水及归档提交竞争 barrier 均覆盖 | 已补齐 |
 | 跨 Organization 已知 ID | I3/I9 | HTTP E2E + integrity check | 节点/流水两侧组合伪造、关闭与作废均返回 404 | Activity/源引用由 integrity check 辅助 |
 | 源金额变化后摘要分叉 | I5/I8 | Facade + HTTP journey | finance-touched mismatch 已覆盖 | Gross Receivable 语义冲突待裁决 |
 | 节点关闭后未结清归零 | I1/I6 | shared + HTTP journey | read model 排除开放汇总但节点保留余额 | mutation 待证明 |
@@ -217,7 +217,8 @@ flowchart LR
 - 违反不变量：I9 的前端权限入口一致性；底层财务事实未改变。
 - 最小复现：以 `acai` 进入应收管理；所有节点“关联发团”显示 `—`，同时出现多条“无权访问”。
 - 证据：浏览器实测稳定复现；代码中全局 `PaymentScheduleWorkspace` 无条件调用受 Departure 菜单权限保护的 `listDepartures` 构造映射，而财务角色没有该菜单权限。
-- 建议：由 Finance read API 直接返回最小发团显示信息，或提供后端按 Finance 权限裁剪的只读映射；不得扩大财务角色的 Departure 写权限。
+- 修复：新增 Finance 权限域内的最小发团、合作伙伴、供应商只读 options API；仅返回 ID、名称、发团编号/状态，不授予 Departure/目录写权限。所有 Finance 表单与筛选改用该接口。
+- 绿灯：API 验证 Finance 200、Coordinator 403、Organization 隔离；浏览器确认关联发团编号恢复、合作伙伴下拉有数据且“无权访问”为 0；未提交任何财务表单。
 
 ### F-013（P0）多组业务 E2E 先删核销再按核销关系删流水，导致测试资金事实永久泄漏
 
@@ -227,6 +228,39 @@ flowchart LR
 - 根因：Source Order、Segment Resource、Departure、Departure Finance Tabs 的 `afterAll` 都先删除 Verification，随后用 `verifications.some(...)` 找 Transaction；关系已被前一步删除，查询永远匹配不到。之后删除 Departure/Supplier，把泄漏流水改成无发团并留下断裂对手方。
 - 修复：流水清理增加仍存在的 fixture Departure 关联分支，先于 Departure/目录对象删除；覆盖上述 4 个 suite。修复后重跑 Segment Resource 10/10，测试前后 `e2e-sr-ap-*` 泄漏计数不再增长。已精确删除本轮生成的唯一泄漏流水并读回验证，未触碰其他数据。
 - 防线：`finance-integrity-check` 的断裂对手方检查把该类清理错误提升为非零退出，禁止静默积累。
+
+### F-014（P0）Finance E2E 的动态发团不在清理集合，遗留节点并污染浏览器验收
+
+- 影响用户：共享测试/验收环境、财务列表及完整性结果。
+- 违反不变量：I9、I10 与测试可重复性。
+- 红灯：归档竞争/结清回退测试通过后，浏览器出现多条 `e2e-finance-*` 应收；只读查询确认 5 个动态发团及节点仍在。后续 settlement history 又使旧清理在删除 Schedule 时触发 FK 失败。
+- 根因：Finance `afterAll` 只把 suite 初始化的两个 Departure ID 纳入清理；测试内经 public HTTP 新建的发团使用正式业务编号，不匹配 `departureNo startsWith testPrefix`，因此遗漏。
+- 修复：清理前按固定 ID **或 name testPrefix** 收集全部 fixture Departure ID；核销、流水、结清回退历史、节点、发团按依赖顺序清理；清理后断言本次 prefix 的 Departure/Transaction 均为 0，同时保留 sentinel 防止过删。
+- 环境处置：仅按精确 ID/测试前缀删除本轮产生的 5 个动态发团、5 个节点与 2 条 Source Order 泄漏流水，读回均为 0，未触碰业务数据。
+
+### F-015（P0）发团归档可在财务事务尚未提交时先返回成功，随后仍写入财务事实
+
+- 影响用户：OP、财务、企业管理员与审计人员。
+- 违反不变量：I7、I10。
+- 确定性红灯：测试事务锁住核销编号行，使核销在“已校验发团开放、未插入核销”处暂停；随后归档请求先返回 201；释放 barrier 后核销仍返回 201，形成“归档已完成后财务事实继续落库”。
+- 根因：Finance 事务锁 Schedule/Transaction，但通过独立 Prisma client 读取 Departure；close/unarchive/transition 也在事务外读状态，双方没有共享串行化点。
+- 修复：`DepartureFinanceFacade.lockMutableById` 在调用方事务内锁定并重读 Departure；核销、撤销、节点创建/编辑/关闭/重开/调额、流水创建/编辑/作废全部接入。close/unarchive/transition 对同一 Departure 行加锁并在事务内重读。
+- mutation：临时把核销侧锁退回普通只读校验，barrier 测试稳定恢复为“close 未阻塞且先完成”；恢复锁后测试通过。
+
+### F-016（P1）已结清发团撤销开放节点核销后仍保持已结清
+
+- 影响用户：OP、财务及发团状态消费者。
+- 违反不变量：I6、I8、I10。
+- 红灯：开放应收全部核销 → OP 标记已结清 → 财务撤销核销；原实现返回 201，但发团仍为 `settled`，节点恢复 500.00 元未结清。
+- 根因：撤销只更新 Verification 与金额派生，没有处理发团结清状态。
+- 修复：撤销事务已持有 Departure 锁；若节点开放且发团为 settled，同事务回退 `pending_settlement` 并写 `DepartureSettlementHistory`。若节点本来已关闭，则保留关闭决定和 settled 状态，不错误回退。
+
+### F-017（P1，测试防线）未监听的 Nest 测试服务器在并发请求下稳定触发 `ECONNRESET`
+
+- 影响用户：CI、审计人员；会随机掩盖真实业务红灯并破坏三连跑。
+- 红灯：20 轮 × 32 并发 `/api/health` 请求在原 `createTestApp()` 下确定性 `read ECONNRESET`。
+- 可证伪假设：数据库连接断开、suite 提前 close、系统端口耗尽、Supertest 对未监听共享 server 的自动 bind 竞争。纯 health 压测排除数据库；单 suite 排除 afterAll；失败集中在并发 auto-bind，确认第四项。
+- 修复：测试 helper 改为一次性监听 `127.0.0.1:0` 的稳定临时端口，再交给 Supertest；同一压力测试转绿，Finance 82/82 连续三轮通过，不使用 retry 隐藏错误。
 
 ## 7. 文档—代码冲突与未裁决风险
 
@@ -241,23 +275,22 @@ flowchart LR
 - `pnpm typecheck`：通过。
 - `pnpm --filter @xiaotuanbao/shared test`：13 suites / 47 tests 通过。
 - `pnpm --filter web test`：33 files / 114 tests 通过。
-- 首次全量 `finance.e2e-spec.ts`：67 通过、1 次 `ECONNRESET`；单测重跑时错误漂移到其他用例，初步归类为 E2E 稳定性风险，不当作业务缺陷。
-- 当前完整 `finance.e2e-spec.ts`：78/78，连续三次通过。
+- 首次全量 `finance.e2e-spec.ts`：67 通过、1 次 `ECONNRESET`；F-017 已建立确定性压力红灯并修复。
+- 当前完整 `finance.e2e-spec.ts`：82/82，修复 F-017 后连续三次通过。
 - Source Order / Segment Resource / Finance journey / integrity integration：4 suites / 42 tests 通过。
 - 修复测试清理后复核 Source Order / Segment Resource / Departure / Departure Finance Tabs：4 suites / 91 tests 通过；integrity 未新增 P0。
 - `finance-integrity-check.integration-spec.ts`：通过故障注入识别节点/流水超额与负余额，并输出业务编号。
 - `pnpm finance:integrity-check`：当前正确返回 1；发现 3 条由 F-007 造成的已结清发团开放节点。
 - shared fixed-seed property：2,000×2 轮通过；临时把“到期日早于业务日”改为“早于等于”后测试稳定变红，随后恢复。
-- 浏览器：财务角色可见登记/匹配/详情入口；登记确认框明确展示节点、金额、核销后余额、通道、日期及“生成流水并自动核销”语义；详情时间线可见。发现 F-012；未提交任何财务表单。
+- HTTP server 稳定性：20×32 并发 health 请求通过。
+- 浏览器：财务角色可见登记/匹配/详情入口；关联发团编号恢复；发团筛选、合作伙伴选项可用；“无权访问”计数为 0；未提交任何财务表单。
 
 ## 9. 尚未覆盖的风险与原因
 
-1. **归档与财务写的提交竞争**：当前多数财务事务锁 Schedule/Transaction 后再通过独立 client 读取 Departure；Departure close 自身也未锁后重读。顺序 API 已覆盖，但尚无确定性 public HTTP seam 能把请求暂停在“已读开放、未写财务事实”窗口。需建立可控 barrier 后再决定统一 Departure 行锁顺序。
-2. **业务请求幂等键缺失**：余额锁可阻止超额，但无法区分“两笔相同的合法部分收款”和“同一请求超时重试”。确认收/付款、手工流水、核销仍没有 `Idempotency-Key`/request key 契约。不能仅凭相同 payload 去重，需先确认 API 契约。
-3. **Gross Receivable 调额语义未裁决**：详见第 7 节；这是业务定义冲突，不应由测试替业务做决定。
-4. **浏览器关闭/重开确认语义**：组件测试已覆盖原因必填、已结清发团联动确认；当前演示环境没有适合无副作用操作的已关闭测试节点，因此未在浏览器提交真实动作。
-5. **Asia/Taipei 命名**：固定 seed 纯函数覆盖日期边界；实际实现仍命名为 Shanghai。当前数值等价，但业务权威名未统一。
-6. **E2E `ECONNRESET`**：曾在不同用例随机出现，目标重跑均绿；尚未建立网络层确定性复现，故不记业务缺陷，但会影响“三次一致”门槛可信度。
+1. **业务请求幂等键缺失**：余额锁可阻止超额，但无法区分“两笔相同的合法部分收款”和“同一请求超时重试”。确认收/付款、手工流水、核销仍没有 `Idempotency-Key`/request key 契约。不能仅凭相同 payload 去重，需先确认 API 契约。
+2. **Gross Receivable 调额语义未裁决**：详见第 7 节；这是业务定义冲突，不应由测试替业务做决定。
+3. **浏览器关闭/重开确认语义**：组件测试已覆盖原因必填、已结清发团联动确认；当前演示环境没有适合无副作用操作的已关闭测试节点，因此未在浏览器提交真实动作。
+4. **Asia/Taipei 命名**：固定 seed 纯函数覆盖日期边界；实际实现仍命名为 Shanghai。当前数值等价，但业务权威名未统一。
 
 ## 10. 可重复执行命令
 
@@ -285,34 +318,32 @@ pnpm finance:integrity-check
 
 | 草案 | 级别 | 目标与验收 | 依赖 |
 |---|---|---|---|
-| T-01 统一 Departure 财务写屏障 | P0 | 建立可控并发 barrier 红灯；close/unarchive/transition 与所有财务写使用统一事务 client、固定锁顺序和重读；证明 close 响应后不再提交财务事实 | 无 |
+| T-01 统一 Departure 财务写屏障 | P0 | ✅ 已完成：确定性 barrier、统一事务锁、mutation 与 161 tests | 无 |
 | T-02 财务写请求幂等契约 | P0 | 明确 `Idempotency-Key` 作用域、payload hash、结果重放与过期策略；确认收/付款、流水、核销重复请求只产生一组业务事实 | T-01 的锁顺序结论 |
 | T-03 演示/验收数据恢复与保护 | P1 | 经显式批准重建 F-007 破坏的数据；恢复前后只读快照；integrity check 归零；禁止清理跨 fixture 数据 | 无，执行需用户批准破坏性重灌 |
-| T-04 财务安全的发团只读映射 | P2 | Finance API 返回最小发团编号/名称；财务列表不再报 403、不扩大 Departure 写权限；浏览器与组件回归 | 无 |
+| T-04 财务安全的只读引用 | P2 | ✅ 已完成：发团/Partner/Supplier 最小 options API；API 权限与浏览器回归通过 | 无 |
 | T-05 Gross Receivable 调整建模 | P0/P1 待裁决 | 选择“改计价事实”或“单独财务调整差异”，补 ADR、不变量、迁移与红灯；消除源事实/财务事实语义分叉 | 业务裁决 |
-| T-06 E2E 连接稳定性 | P1（测试防线） | 定位随机 `ECONNRESET`，连续多轮无随机失败；不得通过盲目 retry 隐藏业务错误 | T-01/T-02 后执行，避免并发语义同时变化 |
+| T-06 E2E 连接稳定性 | P1（测试防线） | ✅ 已完成：确定性 640 请求红灯；固定监听临时端口；Finance 三连绿 | T-01 |
 
-依赖顺序：`T-01 → T-02 → T-06`；`T-03` 与 `T-04` 可并行；`T-05` 等待业务裁决。
+剩余依赖顺序：`T-02` 复用 T-01 锁结论；`T-03` 执行需用户批准；`T-05` 等待业务裁决。
 
 ## 12. 最终发布门槛
 
 | 门槛 | 结论 | 证据/阻塞 |
 |---|---|---|
-| P0 不变量均有已证明红灯能力 | ⚠️ 未完全通过 | 超额、重复生成、编辑/作废/调额竞争已有 mutation；归档竞争和请求幂等尚缺契约/seam |
+| P0 不变量均有已证明红灯能力 | ⚠️ 未完全通过 | 超额、生成、编辑/作废/调额、归档竞争已有 mutation；请求幂等尚缺契约/seam |
 | 关键状态迁移正向、拒绝、撤销 | ✅ 通过 | HTTP journey、关闭/重开/撤销并发测试 |
 | 并发与重试不重复、不超额 | ⚠️ 未完全通过 | 数据库临界区已覆盖已建模动作；缺通用请求幂等键 |
-| 跨 Organization 与角色矩阵 | ✅ 后端通过 | 组合伪造、停用 Employee 旧 JWT；前端仍有 F-012 P2 |
+| 跨 Organization 与角色矩阵 | ✅ 通过 | 组合伪造、停用 Employee 旧 JWT；Finance 最小只读引用 API 与浏览器通过 |
 | typecheck、unit、API E2E、journey | ✅ 当前通过 | 见第 8 节 |
 | integrity check 通过 | ❌ 未通过 | 当前环境有 F-007 遗留的 3 条 settled/open P1，不自动修复 |
-| 连续三次结果一致 | ⚠️ 部分通过 | `finance.e2e-spec.ts` 78/78 已连续三轮；全套验收仍因 integrity 当前必红而无法三轮全绿 |
-| 无未解释 P0/P1 风险 | ❌ 未通过 | T-01、T-02、T-05 与 F-007 环境恢复尚未关闭 |
+| 连续三次结果一致 | ⚠️ 部分通过 | `finance.e2e-spec.ts` 82/82 已连续三轮；全套验收仍因 integrity 当前必红而无法三轮全绿 |
+| 无未解释 P0/P1 风险 | ❌ 未通过 | T-02、T-05 与 F-007 环境恢复尚未关闭 |
 
-**发布结论：NO-GO。** 当前代码已清除 3 个新增确定性并发缺陷（F-009～F-011）并保持全量相关测试绿色，但 T-01/T-02/T-05 与环境完整性未关闭前，不满足“风险清零”。
+**发布结论：NO-GO。** 当前代码已清除 F-009～F-017 中所有语义明确且可自主修复的缺陷，并保持 Finance 82/82 三连绿；但 T-02、T-05 与环境完整性未关闭前，不满足“风险清零”。
 
 ## 13. 下一步
 
-- 先完成 T-01 的确定性 barrier seam，再决定共享 Departure 锁实现。
 - 与业务确认 T-02 幂等键契约、T-05 Gross Receivable 定义。
 - 用户明确批准后才执行 T-03 演示数据重建；未批准前 integrity 保持红灯。
-- 修复 T-04 后补一次浏览器跨页刷新与无 403 验证。
 - 所有阻塞关闭后执行完整验收三连跑。

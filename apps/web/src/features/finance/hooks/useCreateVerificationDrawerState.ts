@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { FormInstance } from 'antd/es/form'
 import type { FinanceTransactionSummary, PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
 import {
+  listFinanceDepartureOptions,
   listPayables,
   listReceivables,
   listTransactions,
@@ -63,25 +63,25 @@ export function useCreateVerificationDrawerState({
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'create-verification'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
+    queryFn: listFinanceDepartureOptions,
     enabled: open,
   })
 
   const departureMap = useMemo(() => {
     const map = new Map<string, { departureNo: string; name: string }>()
-    for (const departure of departuresResult?.items ?? []) {
+    for (const departure of departuresResult ?? []) {
       map.set(departure.id, { departureNo: departure.departureNo, name: departure.name })
     }
     return map
-  }, [departuresResult?.items])
+  }, [departuresResult])
 
   const departureOptions = useMemo(
     () =>
-      (departuresResult?.items ?? []).map((departure) => ({
+      (departuresResult ?? []).map((departure) => ({
         value: departure.id,
         label: `${departure.departureNo} · ${departure.name}`,
       })),
-    [departuresResult?.items],
+    [departuresResult],
   )
 
   const {

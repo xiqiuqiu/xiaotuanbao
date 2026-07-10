@@ -19,7 +19,20 @@ import type {
   UpdateFinanceTransactionDto,
   UpdatePaymentScheduleDto,
   VoidFinanceTransactionDto,
+  DepartureStatus,
 } from '@xiaotuanbao/shared'
+
+export interface FinanceDepartureOption {
+  id: string
+  departureNo: string
+  name: string
+  status: DepartureStatus
+}
+
+export interface FinanceDirectoryOption {
+  id: string
+  name: string
+}
 
 export interface ListPaymentSchedulesParams {
   departureId?: string
@@ -58,6 +71,18 @@ export interface ListFinanceVerificationsParams {
 export interface CancelPaymentSchedulePayload {
   closeDisposition: string
   cancelReason: string
+}
+
+export async function listFinanceDepartureOptions(): Promise<FinanceDepartureOption[]> {
+  return request.get<FinanceDepartureOption[]>('/finance/departure-options')
+}
+
+export async function listFinancePartnerOptions(): Promise<FinanceDirectoryOption[]> {
+  return request.get<FinanceDirectoryOption[]>('/finance/partner-options')
+}
+
+export async function listFinanceSupplierOptions(): Promise<FinanceDirectoryOption[]> {
+  return request.get<FinanceDirectoryOption[]>('/finance/supplier-options')
 }
 
 export async function listReceivables(

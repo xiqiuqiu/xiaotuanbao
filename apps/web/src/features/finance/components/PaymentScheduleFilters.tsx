@@ -2,7 +2,7 @@ import dayjs from 'dayjs'
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
+import { listFinanceDepartureOptions } from '@/services/finance.service'
 import { PAYMENT_SCHEDULE_STATUS_OPTIONS } from '../catalog'
 
 export type DueDateRange = [string | undefined, string | undefined] | null
@@ -34,12 +34,12 @@ export function PaymentScheduleFilters({
 }: PaymentScheduleFiltersProps) {
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-filter'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
+    queryFn: listFinanceDepartureOptions,
     enabled: showDepartureFilter,
   })
 
   const departureOptions =
-    departuresResult?.items.map((departure) => ({
+    departuresResult?.map((departure) => ({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []

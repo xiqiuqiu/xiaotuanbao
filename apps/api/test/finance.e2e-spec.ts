@@ -212,7 +212,17 @@ describe('Finance API (e2e)', () => {
       },
     })
 
-    const fixtureDepartureIds = [departureId, otherDepartureId]
+    const fixtureDepartures = await prisma.departure.findMany({
+      where: {
+        organizationId,
+        OR: [
+          { id: { in: [departureId, otherDepartureId] } },
+          { name: { startsWith: testPrefix } },
+        ],
+      },
+      select: { id: true },
+    })
+    const fixtureDepartureIds = fixtureDepartures.map((item) => item.id)
     const fixtureTransactions = await prisma.financeTransaction.findMany({
       where: {
         organizationId,
@@ -243,16 +253,19 @@ describe('Finance API (e2e)', () => {
     await prisma.financeTransaction.deleteMany({
       where: { organizationId, id: { in: fixtureTransactionIds } },
     })
+    await prisma.departureSettlementHistory.deleteMany({
+      where: { organizationId, departureId: { in: fixtureDepartureIds } },
+    })
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
-        departureId: { in: [departureId, otherDepartureId] },
+        departureId: { in: fixtureDepartureIds },
       },
     })
     await prisma.departure.deleteMany({
       where: {
         organizationId,
-        departureNo: { startsWith: testPrefix },
+        id: { in: fixtureDepartureIds },
       },
     })
     await prisma.partner.deleteMany({
@@ -273,6 +286,16 @@ describe('Finance API (e2e)', () => {
 
     expect(sentinelTransactionAfter).not.toBeNull()
     expect(sentinelVerificationAfter).not.toBeNull()
+    await expect(
+      prisma.departure.count({
+        where: { organizationId, name: { startsWith: testPrefix } },
+      }),
+    ).resolves.toBe(0)
+    await expect(
+      prisma.financeTransaction.count({
+        where: { organizationId, counterpartyName: { startsWith: testPrefix } },
+      }),
+    ).resolves.toBe(0)
     await prisma.$disconnect()
     await app.close()
   })
@@ -293,6 +316,46 @@ describe('Finance API (e2e)', () => {
       .expect(201)
 
     expect(response.body.data.direction).toBe(PaymentScheduleDirection.payable)
+  })
+
+  it('lists organization-scoped finance reference options for finance and coordinator', async () => {
+    const response = await authRequest(app, financeToken)
+      .get('/api/finance/departure-options')
+      .expect(200)
+
+    expect(response.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: departureId,
+          departureNo: `${testPrefix}-dep`,
+          name: `${testPrefix}-发团`,
+        }),
+      ]),
+    )
+    expect(response.body.data[0]).toEqual({
+      id: expect.any(String),
+      departureNo: expect.any(String),
+      name: expect.any(String),
+      status: expect.any(String),
+    })
+
+    const partnerOptions = await authRequest(app, financeToken)
+      .get('/api/finance/partner-options')
+      .expect(200)
+    expect(partnerOptions.body.data).toEqual(
+      expect.arrayContaining([{ id: partnerId, name: `${testPrefix}-partner` }]),
+    )
+
+    const supplierOptions = await authRequest(app, financeToken)
+      .get('/api/finance/supplier-options')
+      .expect(200)
+    expect(supplierOptions.body.data).toEqual(
+      expect.arrayContaining([{ id: supplierId, name: `${testPrefix}-supplier` }]),
+    )
+
+    await authRequest(app, coordinatorToken)
+      .get('/api/finance/departure-options')
+      .expect(200)
   })
 
   it('creates receivable with AR schedule number for finance role', async () => {
@@ -1275,6 +1338,153 @@ describe('Finance API (e2e)', () => {
       .expect(400)
 
     expect(again.body.code).toBe(400)
+  })
+
+  it('rolls a settled departure back atomically when verification cancellation reopens debt', async () => {
+    const departure = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-撤销核销回退`,
+        routeName: '撤销核销回退路线',
+        startDate: '2026-11-01',
+        endDate: '2026-11-03',
+        ownerUserId,
+      })
+      .expect(201)
+    const schedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(
+        schedulePayload({
+          departureId: departure.body.data.id,
+          title: `${testPrefix}-撤销核销回退应收`,
+        }),
+      )
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedule.body.data.id}/confirm-collection`)
+      .send(confirmPayload())
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.body.data.id}/transition`)
+      .send({ targetStatus: 'pending_settlement' })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.body.data.id}/transition`)
+      .send({ targetStatus: 'settled' })
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: schedule.body.data.scheduleNo,
+        scheduleNoMatch: 'exact',
+        pageSize: 10,
+      })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '结清后发现核销错误' })
+      .expect(201)
+
+    const [departureAfter, scheduleAfter] = await Promise.all([
+      authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.body.data.id}`)
+        .expect(200),
+      authRequest(app, financeToken)
+        .get(`/api/finance/receivables/${schedule.body.data.id}`)
+        .expect(200),
+    ])
+
+    expect({
+      departureStatus: departureAfter.body.data.status,
+      settledAmountCents: scheduleAfter.body.data.settledAmountCents,
+      unsettledAmountCents: scheduleAfter.body.data.unsettledAmountCents,
+      settlementHistory: departureAfter.body.data.settlementHistory,
+    }).toEqual({
+      departureStatus: 'pending_settlement',
+      settledAmountCents: 0,
+      unsettledAmountCents: 50000,
+      settlementHistory: [
+        expect.objectContaining({
+          triggerPaymentScheduleId: schedule.body.data.id,
+          reason: '结清后发现核销错误',
+          previousStatus: 'settled',
+          newStatus: 'pending_settlement',
+          operatedBy: financeUserId,
+        }),
+      ],
+    })
+  })
+
+  it('keeps a settled departure settled when cancellation leaves the schedule closed', async () => {
+    const departure = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-关闭节点撤销核销`,
+        routeName: '关闭节点撤销核销路线',
+        startDate: '2026-11-11',
+        endDate: '2026-11-13',
+        ownerUserId,
+      })
+      .expect(201)
+    const schedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(
+        schedulePayload({
+          departureId: departure.body.data.id,
+          title: `${testPrefix}-关闭节点撤销核销应收`,
+        }),
+      )
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedule.body.data.id}/confirm-collection`)
+      .send(confirmPayload({ amountCents: 20000 }))
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedule.body.data.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '剩余金额停止追收' })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.body.data.id}/transition`)
+      .send({ targetStatus: 'pending_settlement' })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.body.data.id}/transition`)
+      .send({ targetStatus: 'settled' })
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: schedule.body.data.scheduleNo,
+        scheduleNoMatch: 'exact',
+        pageSize: 10,
+      })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '关闭节点保留关闭决定' })
+      .expect(201)
+
+    const [departureAfter, scheduleAfter] = await Promise.all([
+      authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.body.data.id}`)
+        .expect(200),
+      authRequest(app, financeToken)
+        .get(`/api/finance/receivables/${schedule.body.data.id}`)
+        .expect(200),
+    ])
+    expect({
+      departureStatus: departureAfter.body.data.status,
+      cancelledAt: scheduleAfter.body.data.cancelledAt,
+      settledAmountCents: scheduleAfter.body.data.settledAmountCents,
+      unsettledAmountCents: scheduleAfter.body.data.unsettledAmountCents,
+    }).toEqual({
+      departureStatus: 'settled',
+      cancelledAt: expect.any(String),
+      settledAmountCents: 0,
+      unsettledAmountCents: 50000,
+    })
   })
 
   it('cancels one verification only once under concurrent retry requests', async () => {
@@ -2977,6 +3187,152 @@ describe('Finance API (e2e)', () => {
 
       expect(response.status).toBe(409)
       expect(response.body.message).toBe('发团已关闭，不可作废流水')
+    })
+  })
+
+  it('serializes departure archive behind an in-flight finance write', async () => {
+    const departure = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-归档竞争`,
+        routeName: '归档竞争路线',
+        startDate: '2026-10-01',
+        endDate: '2026-10-03',
+        ownerUserId,
+      })
+      .expect(201)
+    const schedule = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(
+        schedulePayload({
+          departureId: departure.body.data.id,
+          title: `${testPrefix}-归档竞争应收`,
+        }),
+      )
+      .expect(201)
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload({ departureId: departure.body.data.id }))
+      .expect(201)
+
+    const sequence = await prisma.documentSequence.findFirstOrThrow({
+      where: { organizationId, documentType: 'cl' },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    })
+    let releaseSequenceBarrier: (() => void) | undefined
+    let markSequenceLocked: (() => void) | undefined
+    const sequenceLocked = new Promise<void>((resolve) => {
+      markSequenceLocked = resolve
+    })
+    const sequenceBarrier = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT id
+          FROM document_sequences
+          WHERE id = ${sequence.id}
+          FOR UPDATE
+        `
+        markSequenceLocked?.()
+        await new Promise<void>((resolve) => {
+          releaseSequenceBarrier = resolve
+        })
+      },
+      { timeout: 15000 },
+    )
+    await sequenceLocked
+
+    const completionOrder: string[] = []
+    const verificationPromise = Promise.resolve(
+      authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: schedule.body.data.id,
+            transactionId: transaction.body.data.id,
+          }),
+        ),
+    ).then((response) => {
+      completionOrder.push('verification')
+      return response
+    })
+
+    let verificationBlocked = false
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [state] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid <> pg_backend_pid()
+            AND wait_event_type = 'Lock'
+            AND query ILIKE '%document_sequences%'
+        ) AS blocked
+      `
+      if (state?.blocked) {
+        verificationBlocked = true
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+
+    let closeCompleted = false
+    const closePromise = Promise.resolve(
+      authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.body.data.id}/close`)
+        .send({ reason: '并发归档屏障验证' }),
+    ).then((response) => {
+      closeCompleted = true
+      completionOrder.push('close')
+      return response
+    })
+
+    let closeBlocked = false
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (closeCompleted) {
+        break
+      }
+      const [state] = await prisma.$queryRaw<Array<{ blocked: boolean }>>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid <> pg_backend_pid()
+            AND wait_event_type = 'Lock'
+            AND query ILIKE '%departures%'
+        ) AS blocked
+      `
+      if (state?.blocked) {
+        closeBlocked = true
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    const closeCompletedBeforeFinanceCommit = closeCompleted
+
+    releaseSequenceBarrier?.()
+    const [verificationResponse, closeResponse] = await Promise.all([
+      verificationPromise,
+      closePromise,
+      sequenceBarrier,
+    ])
+
+    expect({
+      verificationBlocked,
+      closeBlocked,
+      closeCompletedBeforeFinanceCommit,
+      verificationStatus: verificationResponse.status,
+      closeStatus: closeResponse.status,
+      finalStatus: closeResponse.body.data.status,
+      completionOrder,
+    }).toEqual({
+      verificationBlocked: true,
+      closeBlocked: true,
+      closeCompletedBeforeFinanceCommit: false,
+      verificationStatus: 201,
+      closeStatus: 201,
+      finalStatus: 'closed',
+      completionOrder: expect.arrayContaining(['verification', 'close']),
     })
   })
 })

@@ -362,28 +362,42 @@ export class DepartureService {
     departureId: string,
     dto: TransitionDepartureDto,
   ): Promise<DepartureDetail> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
-
-    this.departureFinanceFacade.assertMutable(departure, '变更状态')
-
-    const allowedTargets = TRANSITION_TARGETS[departure.status] ?? []
-    if (!allowedTargets.includes(dto.targetStatus)) {
-      throw new BadRequestException('不允许的状态转换')
-    }
-
-    if (
-      dto.targetStatus === DepartureStatus.settled &&
-      departure.status === DepartureStatus.pending_settlement
-    ) {
-      const readModel = await this.departureReadModelService.getForDeparture(departure.id)
-      if (!readModel.isFinanciallySettled) {
-        throw new BadRequestException('全部账款尚未结清，不可标记为已结清')
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM departures
+        WHERE id = ${departureId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+      const departure = await tx.departure.findFirst({
+        where: { id: departureId, organizationId },
+      })
+      if (!departure) {
+        throw new NotFoundException('发团不存在')
       }
-    }
 
-    const updated = await this.prisma.departure.update({
-      where: { id: departure.id },
-      data: { status: dto.targetStatus },
+      this.departureFinanceFacade.assertMutable(departure, '变更状态')
+
+      const allowedTargets = TRANSITION_TARGETS[departure.status] ?? []
+      if (!allowedTargets.includes(dto.targetStatus)) {
+        throw new BadRequestException('不允许的状态转换')
+      }
+
+      if (
+        dto.targetStatus === DepartureStatus.settled &&
+        departure.status === DepartureStatus.pending_settlement
+      ) {
+        const readModel = await this.departureReadModelService.getForDeparture(departure.id)
+        if (!readModel.isFinanciallySettled) {
+          throw new BadRequestException('全部账款尚未结清，不可标记为已结清')
+        }
+      }
+
+      return tx.departure.update({
+        where: { id: departure.id },
+        data: { status: dto.targetStatus },
+      })
     })
 
     return this.toDepartureDetailAsync(updated)
@@ -395,13 +409,24 @@ export class DepartureService {
     operatedBy: string,
     dto: CloseDepartureDto,
   ): Promise<DepartureDetail> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
-
-    if (departure.status === DepartureStatus.closed) {
-      throw new BadRequestException('发团已关闭')
-    }
-
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM departures
+        WHERE id = ${departureId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+      const departure = await tx.departure.findFirst({
+        where: { id: departureId, organizationId },
+      })
+      if (!departure) {
+        throw new NotFoundException('发团不存在')
+      }
+      if (departure.status === DepartureStatus.closed) {
+        throw new BadRequestException('发团已关闭')
+      }
+
       const closed = await tx.departure.update({
         where: { id: departure.id },
         data: { status: DepartureStatus.closed },
@@ -429,13 +454,24 @@ export class DepartureService {
     operatedBy: string,
     dto: UnarchiveDepartureDto,
   ): Promise<DepartureDetail> {
-    const departure = await this.findDepartureOrThrow(organizationId, departureId)
-
-    if (departure.status !== DepartureStatus.closed) {
-      throw new BadRequestException('仅已关闭发团可以解除归档')
-    }
-
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM departures
+        WHERE id = ${departureId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+      const departure = await tx.departure.findFirst({
+        where: { id: departureId, organizationId },
+      })
+      if (!departure) {
+        throw new NotFoundException('发团不存在')
+      }
+      if (departure.status !== DepartureStatus.closed) {
+        throw new BadRequestException('仅已关闭发团可以解除归档')
+      }
+
       const reopened = await tx.departure.update({
         where: { id: departure.id },
         data: { status: DepartureStatus.pending_settlement },

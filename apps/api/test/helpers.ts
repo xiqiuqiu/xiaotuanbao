@@ -21,7 +21,10 @@ export async function createTestApp(): Promise<INestApplication> {
   )
   app.useGlobalFilters(new AllExceptionsFilter())
   app.useGlobalInterceptors(new TransformInterceptor())
-  await app.init()
+  // Bind one stable ephemeral listener for the suite. Letting each Supertest
+  // request auto-bind the same unstarted server races under concurrent bursts
+  // and intermittently resets unrelated requests with ECONNRESET.
+  await app.listen(0, '127.0.0.1')
   return app
 }
 

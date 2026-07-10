@@ -2,7 +2,7 @@ import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import dayjs from 'dayjs'
-import { listDepartures } from '@/services/departure.service'
+import { listFinanceDepartureOptions } from '@/services/finance.service'
 import {
   TRANSACTION_DIRECTION_OPTIONS,
   TRANSACTION_STATUS_OPTIONS,
@@ -47,11 +47,11 @@ export function TransactionFilters({
 }: TransactionFiltersProps) {
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'transaction-filter'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
+    queryFn: listFinanceDepartureOptions,
   })
 
   const departureOptions =
-    departuresResult?.items.map((departure) => ({
+    departuresResult?.map((departure) => ({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []

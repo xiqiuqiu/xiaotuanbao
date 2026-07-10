@@ -7,16 +7,10 @@ import { CounterpartyType } from '@xiaotuanbao/shared'
 import { TransactionFormDrawer } from './TransactionFormDrawer'
 import type { TransactionFormValues } from '../utils/transaction-form'
 
-vi.mock('@/services/departure.service', () => ({
-  listDepartures: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 100 })),
-}))
-
-vi.mock('@/services/partner.service', () => ({
-  listPartners: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 100 })),
-}))
-
-vi.mock('@/services/supplier.service', () => ({
-  listSuppliers: vi.fn(async () => ({ items: [], total: 0, page: 1, pageSize: 100 })),
+vi.mock('@/services/finance.service', () => ({
+  listFinanceDepartureOptions: vi.fn(async () => []),
+  listFinancePartnerOptions: vi.fn(async () => []),
+  listFinanceSupplierOptions: vi.fn(async () => []),
 }))
 
 afterEach(() => {

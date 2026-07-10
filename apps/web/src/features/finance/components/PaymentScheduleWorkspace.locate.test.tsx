@@ -19,10 +19,10 @@ vi.mock('@/services/finance.service', () => ({
   listDeparturePayables: (...args: unknown[]) => listDeparturePayables(...args),
   listReceivables: vi.fn(),
   listPayables: vi.fn(),
+  listFinanceDepartureOptions: vi.fn(async () => []),
 }))
 
 vi.mock('@/services/departure.service', () => ({
-  listDepartures: vi.fn(async () => ({ items: [], total: 0 })),
   getDeparture: vi.fn(async () => ({
     id: 'departure-1',
     departureNo: 'XTB2026070003',

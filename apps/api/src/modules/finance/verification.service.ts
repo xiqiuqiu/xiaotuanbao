@@ -187,7 +187,8 @@ export class VerificationService {
       throw new BadRequestException('已关闭节点不可核销')
     }
 
-    await this.departureFinanceFacade.assertMutableById(
+    await this.departureFinanceFacade.lockMutableById(
+      client,
       organizationId,
       schedule.departureId,
       '创建核销',
@@ -320,7 +321,8 @@ export class VerificationService {
         throw new NotFoundException('收付款节点不存在')
       }
 
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
         organizationId,
         schedule.departureId,
         '撤销核销',
@@ -332,15 +334,27 @@ export class VerificationService {
         0,
       )
 
+      const operatedAt = new Date()
       const cancelled = await tx.financeVerification.update({
         where: { id: verification.id },
         data: {
           status: PrismaVerificationStatus.cancelled,
-          cancelledAt: new Date(),
+          cancelledAt: operatedAt,
           cancelledBy,
           cancelReason,
         },
       })
+
+      if (!schedule.cancelledAt) {
+        await this.departureFinanceFacade.reverseSettlementOnVerificationCancel(tx, {
+          organizationId,
+          departureId: schedule.departureId,
+          triggerPaymentScheduleId: schedule.id,
+          reason: cancelReason,
+          operatedBy: cancelledBy,
+          operatedAt,
+        })
+      }
 
       if (schedule.cancelledAt) {
         const settledResult = await tx.financeVerification.aggregate({
@@ -365,6 +379,7 @@ export class VerificationService {
             previousUnsettledAmountCents,
             verificationId: verification.id,
             operatedBy: cancelledBy,
+            operatedAt,
           },
         })
       }

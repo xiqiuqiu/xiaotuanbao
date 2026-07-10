@@ -131,7 +131,12 @@ export class PaymentScheduleService {
     dto: CreatePaymentScheduleDto,
     tx?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
-    const client = tx ?? this.prisma
+    if (!tx) {
+      return this.prisma.$transaction((transaction) =>
+        this.create(organizationId, direction, dto, transaction),
+      )
+    }
+    const client = tx
     this.assertPositiveAmount(dto.amountCents)
 
     const title = dto.title.trim()
@@ -139,7 +144,8 @@ export class PaymentScheduleService {
       throw new BadRequestException('节点标题不能为空')
     }
 
-    await this.departureFinanceFacade.assertMutableById(
+    await this.departureFinanceFacade.lockMutableById(
+      client,
       organizationId,
       dto.departureId,
       '创建收付款节点',
@@ -201,7 +207,8 @@ export class PaymentScheduleService {
         throw new NotFoundException('收付款节点不存在')
       }
 
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
         organizationId,
         schedule.departureId,
         '编辑收付款节点',
@@ -331,7 +338,8 @@ export class PaymentScheduleService {
         throw new BadRequestException('节点已关闭')
       }
 
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
         organizationId,
         schedule.departureId,
         '关闭收付款节点',
@@ -431,7 +439,8 @@ export class PaymentScheduleService {
         throw new BadRequestException('仅已关闭节点可以重新打开')
       }
 
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
         organizationId,
         schedule.departureId,
         '重新打开收付款节点，请先解除归档',
@@ -553,7 +562,8 @@ export class PaymentScheduleService {
         throw new BadRequestException('新约定金额必须与当前金额不同')
       }
 
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
         organizationId,
         schedule.departureId,
         '调整约定金额',

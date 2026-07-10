@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { DepartureStatus, type Prisma } from '@prisma/client'
+import { DepartureStatus, DirectoryProfileStatus, type Prisma } from '@prisma/client'
 import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 
@@ -42,6 +42,35 @@ export class DepartureFinanceFacade {
     this.assertMutable(departure, action)
   }
 
+  /**
+   * Serialize a finance write with Departure archive/state writes, then judge
+   * mutability from the locked row inside the caller's transaction.
+   */
+  async lockMutableById(
+    tx: TxClient,
+    organizationId: string,
+    departureId: string,
+    action = '操作',
+  ): Promise<void> {
+    await tx.$queryRaw`
+      SELECT id
+      FROM departures
+      WHERE id = ${departureId}
+        AND organization_id = ${organizationId}
+      FOR UPDATE
+    `
+
+    const departure = await tx.departure.findFirst({
+      where: { id: departureId, organizationId },
+      select: { status: true },
+    })
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+
+    this.assertMutable(departure, action)
+  }
+
   async getStatusById(
     organizationId: string,
     departureId: string,
@@ -56,6 +85,35 @@ export class DepartureFinanceFacade {
     }
 
     return departure.status
+  }
+
+  async listDepartureOptions(organizationId: string) {
+    return this.prisma.departure.findMany({
+      where: { organizationId },
+      select: {
+        id: true,
+        departureNo: true,
+        name: true,
+        status: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+  }
+
+  async listPartnerOptions(organizationId: string) {
+    return this.prisma.partner.findMany({
+      where: { organizationId, status: DirectoryProfileStatus.active },
+      select: { id: true, name: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+  }
+
+  async listSupplierOptions(organizationId: string) {
+    return this.prisma.supplier.findMany({
+      where: { organizationId, status: DirectoryProfileStatus.active },
+      select: { id: true, name: true },
+      orderBy: { updatedAt: 'desc' },
+    })
   }
 
   /**
@@ -100,6 +158,53 @@ export class DepartureFinanceFacade {
       data: { status: DepartureStatus.pending_settlement },
     })
 
+    await tx.departureSettlementHistory.create({
+      data: {
+        organizationId: params.organizationId,
+        departureId: departure.id,
+        triggerPaymentScheduleId: params.triggerPaymentScheduleId,
+        reason: params.reason,
+        previousStatus: DepartureStatus.settled,
+        newStatus: DepartureStatus.pending_settlement,
+        operatedBy: params.operatedBy,
+        operatedAt: params.operatedAt,
+      },
+    })
+
+    return DepartureStatus.pending_settlement
+  }
+
+  /**
+   * Cancelling a verification on an open schedule can make a settled
+   * departure financially unsettled. Reverse the status in the same
+   * transaction so no settled/open-debt state is ever committed.
+   */
+  async reverseSettlementOnVerificationCancel(
+    tx: TxClient,
+    params: {
+      organizationId: string
+      departureId: string
+      triggerPaymentScheduleId: string
+      reason: string
+      operatedBy: string
+      operatedAt: Date
+    },
+  ): Promise<DepartureStatus> {
+    const departure = await tx.departure.findFirst({
+      where: { id: params.departureId, organizationId: params.organizationId },
+      select: { id: true, status: true },
+    })
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+    if (departure.status !== DepartureStatus.settled) {
+      return departure.status
+    }
+
+    await tx.departure.update({
+      where: { id: departure.id },
+      data: { status: DepartureStatus.pending_settlement },
+    })
     await tx.departureSettlementHistory.create({
       data: {
         organizationId: params.organizationId,

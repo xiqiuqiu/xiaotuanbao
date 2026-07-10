@@ -4,13 +4,14 @@ import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import {
   CounterpartyType,
-  DirectoryProfileStatus,
   TransactionDirection,
   type FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
-import { listPartners } from '@/services/partner.service'
-import { listSuppliers } from '@/services/supplier.service'
+import {
+  listFinanceDepartureOptions,
+  listFinancePartnerOptions,
+  listFinanceSupplierOptions,
+} from '@/services/finance.service'
 import {
   COUNTERPARTY_TYPE_OPTIONS,
   PAYMENT_CHANNEL_OPTIONS,
@@ -64,44 +65,36 @@ export function TransactionFormDrawer({
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'transaction-form'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
+    queryFn: listFinanceDepartureOptions,
     enabled: open,
   })
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'transaction-form-select'],
-    queryFn: () =>
-      listPartners({
-        status: DirectoryProfileStatus.ACTIVE,
-        pageSize: 100,
-      }),
+    queryFn: listFinancePartnerOptions,
     enabled: open && counterpartyType === CounterpartyType.PARTNER,
   })
 
   const { data: suppliersResult } = useQuery({
     queryKey: ['suppliers', 'transaction-form-select'],
-    queryFn: () =>
-      listSuppliers({
-        status: DirectoryProfileStatus.ACTIVE,
-        pageSize: 100,
-      }),
+    queryFn: listFinanceSupplierOptions,
     enabled: open && counterpartyType === CounterpartyType.SUPPLIER,
   })
 
   const departureOptions =
-    departuresResult?.items.map((departure) => ({
+    departuresResult?.map((departure) => ({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []
 
   const partnerOptions =
-    partnersResult?.items.map((partner) => ({
+    partnersResult?.map((partner) => ({
       value: partner.id,
       label: partner.name,
     })) ?? []
 
   const supplierOptions =
-    suppliersResult?.items.map((supplier) => ({
+    suppliersResult?.map((supplier) => ({
       value: supplier.id,
       label: supplier.name,
     })) ?? []

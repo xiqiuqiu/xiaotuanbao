@@ -34,8 +34,6 @@ import type {
 } from './dto/transaction.dto'
 import { VerificationService } from './verification.service'
 
-type DbClient = PrismaService | Prisma.TransactionClient
-
 @Injectable()
 export class TransactionService {
   constructor(
@@ -135,11 +133,17 @@ export class TransactionService {
     dto: CreateFinanceTransactionDto,
     tx?: Prisma.TransactionClient,
   ): Promise<FinanceTransactionSummary> {
-    const client = tx ?? this.prisma
+    if (!tx) {
+      return this.prisma.$transaction((transaction) =>
+        this.create(organizationId, dto, transaction),
+      )
+    }
+    const client = tx
     this.assertPositiveAmount(dto.amountCents)
 
     if (dto.departureId) {
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        client,
         organizationId,
         dto.departureId,
         '创建流水',
@@ -296,7 +300,7 @@ export class TransactionService {
   }
 
   private async assertRelatedDeparturesMutable(
-    client: DbClient,
+    client: Prisma.TransactionClient,
     organizationId: string,
     transactionId: string,
     explicitDepartureIds: Array<string | null | undefined>,
@@ -316,7 +320,8 @@ export class TransactionService {
     )
 
     for (const departureId of [...departureIds].sort()) {
-      await this.departureFinanceFacade.assertMutableById(
+      await this.departureFinanceFacade.lockMutableById(
+        client,
         organizationId,
         departureId,
         action,
