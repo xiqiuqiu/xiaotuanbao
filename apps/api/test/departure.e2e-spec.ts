@@ -135,6 +135,25 @@ describe('Departure API (e2e)', () => {
     expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
+  it('allows finance role owner options without /system/users access', async () => {
+    await authRequest(app, financeToken).get('/api/users').expect(403)
+
+    const response = await authRequest(app, financeToken).get('/api/users/options').expect(200)
+
+    expect(response.body.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ownerUserId,
+          name: expect.any(String),
+        }),
+      ]),
+    )
+    expect(response.body.data[0]).toEqual({
+      id: expect.any(String),
+      name: expect.any(String),
+    })
+  })
+
   it('allows finance role on POST /departures (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/departures')

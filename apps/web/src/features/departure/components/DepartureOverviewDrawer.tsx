@@ -4,7 +4,7 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
-import { listEmployees } from '@/services/employee.service'
+import { listEmployeeOptions } from '@/services/employee.service'
 import { updateDeparture } from '@/services/departure.service'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import { computeDayCount } from '../utils/departure-wizard-form'
@@ -33,9 +33,9 @@ export function DepartureOverviewDrawer({
   onUpdated,
 }: DepartureOverviewDrawerProps) {
   const queryClient = useQueryClient()
-  const { data: employeesResult } = useQuery({
-    queryKey: ['employees', 'departure-overview'],
-    queryFn: () => listEmployees({ pageSize: 100 }),
+  const { data: employeeOptionsResult } = useQuery({
+    queryKey: ['employees', 'options', 'departure-overview'],
+    queryFn: () => listEmployeeOptions(),
   })
 
   const saveMutation = useMutation({
@@ -88,7 +88,7 @@ export function DepartureOverviewDrawer({
   }
 
   const employeeOptions =
-    employeesResult?.items.map((employee) => ({
+    employeeOptionsResult?.map((employee) => ({
       value: employee.id,
       label: employee.name,
     })) ?? []

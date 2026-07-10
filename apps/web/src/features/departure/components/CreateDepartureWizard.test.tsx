@@ -51,7 +51,7 @@ vi.mock('@/services/route-template.service', () => ({
 }))
 
 vi.mock('@/services/employee.service', () => ({
-  listEmployees: vi.fn(),
+  listEmployeeOptions: vi.fn(),
 }))
 
 import {
@@ -60,7 +60,7 @@ import {
   getDeparture,
   previewDepartureNo,
 } from '@/services/departure.service'
-import { listEmployees } from '@/services/employee.service'
+import { listEmployeeOptions } from '@/services/employee.service'
 import { listSegments } from '@/services/segment.service'
 import {
   deleteRouteTemplate,
@@ -130,24 +130,7 @@ describe('CreateDepartureWizard', () => {
     vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
-    vi.mocked(listEmployees).mockResolvedValue({
-      items: [
-        {
-          id: 'user-1',
-          name: '王杰',
-          username: 'wangjie',
-          status: 'enabled',
-          roles: ['coordinator'],
-          remark: null,
-          lastLoginAt: null,
-          createdAt: '2026-01-01T00:00:00.000Z',
-        },
-      ],
-      total: 1,
-      page: 1,
-      pageSize: 100,
-      stats: { total: 1, enabled: 1, disabled: 0, createdToday: 0 },
-    })
+    vi.mocked(listEmployeeOptions).mockResolvedValue([{ id: 'user-1', name: '王杰' }])
     vi.mocked(getRouteTemplate).mockResolvedValue({
       id: 'template-1',
       name: '西安-青海湖-茶卡6日游',

@@ -30,6 +30,10 @@ export async function listEmployees(params: ListEmployeesParams): Promise<Employ
   return request.get<EmployeeListResult>('/users', { params })
 }
 
+export async function listEmployeeOptions(): Promise<Array<{ id: string; name: string }>> {
+  return request.get<Array<{ id: string; name: string }>>('/users/options')
+}
+
 export async function createEmployee(payload: CreateEmployeePayload): Promise<EmployeeSummary> {
   return request.post<EmployeeSummary>('/users', payload)
 }

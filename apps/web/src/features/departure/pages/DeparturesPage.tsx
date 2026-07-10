@@ -7,7 +7,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
 import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import { listDepartures } from '@/services/departure.service'
-import { listEmployees } from '@/services/employee.service'
+import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
 import { DepartureFilters } from '../components/DepartureFilters'
 import {
@@ -233,9 +233,9 @@ export function DeparturesPage() {
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
 
-  const { data: employeesResult } = useQuery({
-    queryKey: ['employees', 'departure-filters'],
-    queryFn: () => listEmployees({ pageSize: 100 }),
+  const { data: employeeOptionsResult } = useQuery({
+    queryKey: ['employees', 'options', 'departure-filters'],
+    queryFn: () => listEmployeeOptions(),
   })
 
   const { data: partnersResult } = useQuery({
@@ -285,7 +285,7 @@ export function DeparturesPage() {
   const columns = useMemo(() => buildColumns(), [])
 
   const ownerOptions =
-    employeesResult?.items.map((employee) => ({
+    employeeOptionsResult?.map((employee) => ({
       value: employee.id,
       label: employee.name,
     })) ?? []

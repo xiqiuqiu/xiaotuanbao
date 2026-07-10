@@ -89,6 +89,18 @@ export class UserService {
     }
   }
 
+  async listOptions(organizationId: string): Promise<Array<{ id: string; name: string }>> {
+    return this.prisma.user.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        status: UserStatus.enabled,
+      },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    })
+  }
+
   async create(organizationId: string, dto: CreateEmployeeDto): Promise<EmployeeSummary> {
     const username = dto.username.trim()
     const existing = await this.prisma.user.findFirst({

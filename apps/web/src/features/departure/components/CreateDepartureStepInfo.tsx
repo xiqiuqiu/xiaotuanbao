@@ -3,7 +3,7 @@ import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
-import { listEmployees } from '@/services/employee.service'
+import { listEmployeeOptions } from '@/services/employee.service'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import {
@@ -28,13 +28,13 @@ export function CreateDepartureStepInfo({
 }: CreateDepartureStepInfoProps) {
   const defaultDayCount = route.defaultDayCount
   const copySummary = buildRouteSummary(route)
-  const { data: employeesResult } = useQuery({
-    queryKey: ['employees', 'create-departure'],
-    queryFn: () => listEmployees({ pageSize: 100 }),
+  const { data: employeeOptionsResult } = useQuery({
+    queryKey: ['employees', 'options', 'create-departure'],
+    queryFn: () => listEmployeeOptions(),
   })
 
   const employeeOptions =
-    employeesResult?.items.map((employee) => ({
+    employeeOptionsResult?.map((employee) => ({
       value: employee.id,
       label: employee.name,
     })) ?? []

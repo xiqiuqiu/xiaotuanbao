@@ -30,6 +30,15 @@ export class UserController {
     return this.userService.list(request.user.organizationId, query)
   }
 
+  /** Lightweight owner/assignee options for departure UI (ADR-0016: no /system/users needed). */
+  @Get('options')
+  @RequireMenu('/departure')
+  listOptions(
+    @Req() request: { user: { organizationId: string } },
+  ): Promise<Array<{ id: string; name: string }>> {
+    return this.userService.listOptions(request.user.organizationId)
+  }
+
   @Post()
   @RequireMenu('/system/users')
   create(
