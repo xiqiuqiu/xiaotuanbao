@@ -11,6 +11,7 @@ vi.mock('@/services/finance.service', () => ({
   listFinanceDepartureOptions: vi.fn(async () => []),
   listFinancePartnerOptions: vi.fn(async () => []),
   listFinanceSupplierOptions: vi.fn(async () => []),
+  listFinanceSourceOrderOptions: vi.fn(async () => []),
 }))
 
 afterEach(() => {

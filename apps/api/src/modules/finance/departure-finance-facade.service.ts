@@ -116,6 +116,26 @@ export class DepartureFinanceFacade {
     })
   }
 
+  async listSourceOrderOptions(organizationId: string, departureId: string) {
+    const departure = await this.prisma.departure.findFirst({
+      where: { id: departureId, organizationId },
+      select: { id: true },
+    })
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+
+    return this.prisma.sourceOrder.findMany({
+      where: {
+        departureId,
+        departure: { organizationId },
+        guestCollectCents: { gt: 0 },
+      },
+      select: { id: true, displayName: true },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
   /**
    * When reopening a schedule under a settled departure, require explicit confirm
    * and reverse settlement to pending_settlement in the caller's transaction (ADR-0013).

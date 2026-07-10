@@ -65,46 +65,51 @@ function makeSchedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentS
 }
 
 describe('getInitialVerificationValues', () => {
-  it('defaults counterpartyKeyword from the opened transaction', () => {
+  it('defaults transaction and direction from the opened transaction', () => {
     const values = getInitialVerificationValues({
       initialTransaction: makeTransaction({ counterpartyName: '华东国旅' }),
     })
 
-    expect(values.counterpartyKeyword).toBe('华东国旅')
     expect(values.transactionId).toBe('tx-1')
     expect(values.direction).toBe('receivable')
+    expect(values.departureId).toBe('dep-1')
   })
 
-  it('defaults counterpartyKeyword from the opened payment schedule', () => {
+  it('defaults schedule and direction from the opened payment schedule', () => {
     const values = getInitialVerificationValues({
       initialSchedule: makeSchedule({ counterpartyName: '华南旅业' }),
     })
 
-    expect(values.counterpartyKeyword).toBe('华南旅业')
     expect(values.paymentScheduleId).toBe('sch-1')
     expect(values.direction).toBe('receivable')
+    expect(values.departureId).toBe('dep-1')
   })
 
-  it('prefers transaction counterparty when both initial records are present', () => {
+  it('prefills amount when opened with matching transaction and schedule', () => {
     const values = getInitialVerificationValues({
-      initialTransaction: makeTransaction({ counterpartyName: '流水往来' }),
-      initialSchedule: makeSchedule({ counterpartyName: '节点往来' }),
+      initialTransaction: makeTransaction(),
+      initialSchedule: makeSchedule(),
     })
 
-    expect(values.counterpartyKeyword).toBe('流水往来')
+    expect(values.transactionId).toBe('tx-1')
+    expect(values.paymentScheduleId).toBe('sch-1')
+    expect(values.amountYuan).toBe(1000)
   })
 
-  it('leaves counterpartyKeyword empty when opened without a source record', () => {
+  it('leaves selection empty when opened without a source record', () => {
     const values = getInitialVerificationValues({})
 
-    expect(values.counterpartyKeyword).toBeUndefined()
+    expect(values.transactionId).toBe('')
+    expect(values.paymentScheduleId).toBe('')
+    expect(values.amountYuan).toBe(0)
   })
 
-  it('leaves counterpartyKeyword empty when source record has no counterparty name', () => {
+  it('respects lockedDepartureId over source departure', () => {
     const values = getInitialVerificationValues({
-      initialTransaction: makeTransaction({ counterpartyName: null }),
+      lockedDepartureId: 'dep-locked',
+      initialTransaction: makeTransaction({ departureId: 'dep-1' }),
     })
 
-    expect(values.counterpartyKeyword).toBeUndefined()
+    expect(values.departureId).toBe('dep-locked')
   })
 })

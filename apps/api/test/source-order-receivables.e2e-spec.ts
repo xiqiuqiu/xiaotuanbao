@@ -21,6 +21,7 @@ describe('Source order generate receivables (e2e)', () => {
   let organizationId: string
   let ownerUserId: string
   let partnerId: string
+  let partnerName: string
   const testPrefix = `e2e-so-ar-${Date.now()}`
 
   beforeAll(async () => {
@@ -48,6 +49,7 @@ describe('Source order generate receivables (e2e)', () => {
       },
     })
     partnerId = partner.id
+    partnerName = partner.name
   })
 
   afterAll(async () => {
@@ -184,11 +186,13 @@ describe('Source order generate receivables (e2e)', () => {
       amountCents: 300000,
       counterpartyType: CounterpartyType.partner,
       counterpartyId: partnerId,
+      counterpartyName: partnerName,
     })
     expect(guestSchedule).toMatchObject({
       title: '游客代收',
       amountCents: 700000,
       counterpartyType: CounterpartyType.guest,
+      counterpartyId: sourceOrder.id,
       counterpartyName: sourceOrder.displayName,
     })
 
@@ -232,6 +236,7 @@ describe('Source order generate receivables (e2e)', () => {
       amountCents: 1000000,
       title: '客户补款',
       counterpartyId: partnerId,
+      counterpartyName: partnerName,
     })
   })
 

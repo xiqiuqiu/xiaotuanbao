@@ -358,6 +358,46 @@ describe('Finance API (e2e)', () => {
       .expect(200)
   })
 
+  it('lists only source orders with guest-collection path in source-order-options', async () => {
+    const guestOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 2,
+        childGuestCount: 0,
+        adultUnitPriceCents: 10000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+
+    const partnerOnlyOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 10000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
+      })
+      .expect(201)
+
+    expect(guestOrder.body.data.guestCollectCents).toBeGreaterThan(0)
+    expect(partnerOnlyOrder.body.data.guestCollectCents).toBe(0)
+
+    const options = await authRequest(app, financeToken)
+      .get('/api/finance/source-order-options')
+      .query({ departureId })
+      .expect(200)
+
+    const ids = (options.body.data as Array<{ id: string }>).map((item) => item.id)
+    expect(ids).toContain(guestOrder.body.data.id)
+    expect(ids).not.toContain(partnerOnlyOrder.body.data.id)
+  })
+
   it('creates receivable with AR schedule number for finance role', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -1712,7 +1752,7 @@ describe('Finance API (e2e)', () => {
     ).toBe(true)
   })
 
-  it('creates transaction without departureId when paymentChannel is provided', async () => {
+  it('rejects create transaction without departureId', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
       .send({
@@ -1723,10 +1763,9 @@ describe('Finance API (e2e)', () => {
         counterpartyType: CounterpartyType.manual,
         counterpartyName: `${testPrefix}-无发团流水`,
       })
-      .expect(201)
+      .expect(400)
 
-    expect(response.body.data.paymentChannel).toBe(PaymentChannel.CASH)
-    expect(response.body.data.departureId).toBeNull()
+    expect(response.body.message).toEqual(expect.stringMatching(/关联发团|departureId/i))
   })
 
   it('filters transactions by direction, transactionNo, status, and writeoffStatus', async () => {
@@ -2691,6 +2730,7 @@ describe('Finance API (e2e)', () => {
         counterpartyType: CounterpartyType.partner,
         counterpartyId: partnerId,
         counterpartyName: '权限测试',
+        departureId,
       })
       .expect(201)
 
@@ -2754,7 +2794,7 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           amountCents: 50000,
           counterpartyType: CounterpartyType.guest,
-          counterpartyId: undefined,
+          counterpartyId: sourceOrder.body.data.id,
           counterpartyName: sourceOrder.body.data.displayName,
         }),
       )
@@ -3148,7 +3188,7 @@ describe('Finance API (e2e)', () => {
 
       const transaction = await authRequest(app, financeToken)
         .post('/api/finance/transactions')
-        .send(transactionPayload({ amountCents: 50000, departureId: undefined }))
+        .send(transactionPayload({ amountCents: 50000 }))
         .expect(201)
 
       await authRequest(app, financeToken)

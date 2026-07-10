@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Req, UseGuards } from '@nestjs/common'
+import { Controller, ForbiddenException, Get, Query, Req, UseGuards, BadRequestException } from '@nestjs/common'
 import { AuthService } from '../auth/auth.service'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { DepartureFinanceFacade } from './departure-finance-facade.service'
@@ -40,6 +40,21 @@ export class FinanceReferenceController {
   ) {
     await this.assertFinanceAccess(request.user.userId)
     return this.departureFinanceFacade.listSupplierOptions(request.user.organizationId)
+  }
+
+  @Get('source-order-options')
+  async listSourceOrderOptions(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Query('departureId') departureId?: string,
+  ) {
+    await this.assertFinanceAccess(request.user.userId)
+    if (!departureId?.trim()) {
+      throw new BadRequestException('请选择关联发团')
+    }
+    return this.departureFinanceFacade.listSourceOrderOptions(
+      request.user.organizationId,
+      departureId.trim(),
+    )
   }
 
   private async assertFinanceAccess(userId: string): Promise<void> {

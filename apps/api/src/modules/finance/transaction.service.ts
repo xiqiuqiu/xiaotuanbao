@@ -436,6 +436,35 @@ export class TransactionService {
       }
     }
 
+    if (dto.counterpartyType === PrismaCounterpartyType.guest) {
+      const counterpartyId = dto.counterpartyId?.trim()
+      if (!counterpartyId) {
+        return {
+          counterpartyType: dto.counterpartyType,
+          counterpartyId: null,
+          counterpartyName: dto.counterpartyName?.trim() || null,
+        }
+      }
+
+      const sourceOrder = await client.sourceOrder.findFirst({
+        where: {
+          id: counterpartyId,
+          departure: { organizationId },
+          ...(dto.departureId ? { departureId: dto.departureId } : {}),
+        },
+        select: { id: true, displayName: true },
+      })
+      if (!sourceOrder) {
+        throw new NotFoundException('客源单不存在')
+      }
+
+      return {
+        counterpartyType: dto.counterpartyType,
+        counterpartyId: sourceOrder.id,
+        counterpartyName: dto.counterpartyName?.trim() || sourceOrder.displayName,
+      }
+    }
+
     return {
       counterpartyType: dto.counterpartyType,
       counterpartyId: null,

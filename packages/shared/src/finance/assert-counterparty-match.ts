@@ -22,15 +22,16 @@ export function assertCounterpartyMatch(
   const scheduleId = schedule.counterpartyId?.trim() || null
   const transactionId = transaction.counterpartyId?.trim() || null
 
-  if (scheduleId && transactionId && scheduleId !== transactionId) {
-    throw new CounterpartyMismatchError('往来对象不匹配')
+  if (scheduleId || transactionId) {
+    if (scheduleId !== transactionId) {
+      throw new CounterpartyMismatchError('往来对象不匹配')
+    }
+    return
   }
 
-  if (!scheduleId && !transactionId) {
-    const scheduleName = schedule.counterpartyName?.trim() || ''
-    const transactionName = transaction.counterpartyName?.trim() || ''
-    if (scheduleName !== transactionName) {
-      throw new CounterpartyMismatchError('往来名称不匹配')
-    }
+  const scheduleName = schedule.counterpartyName?.trim() || ''
+  const transactionName = transaction.counterpartyName?.trim() || ''
+  if (scheduleName !== transactionName) {
+    throw new CounterpartyMismatchError('往来名称不匹配')
   }
 }

@@ -34,6 +34,11 @@ export interface FinanceDirectoryOption {
   name: string
 }
 
+export interface FinanceSourceOrderOption {
+  id: string
+  displayName: string
+}
+
 export interface ListPaymentSchedulesParams {
   departureId?: string
   page?: number
@@ -83,6 +88,14 @@ export async function listFinancePartnerOptions(): Promise<FinanceDirectoryOptio
 
 export async function listFinanceSupplierOptions(): Promise<FinanceDirectoryOption[]> {
   return request.get<FinanceDirectoryOption[]>('/finance/supplier-options')
+}
+
+export async function listFinanceSourceOrderOptions(
+  departureId: string,
+): Promise<FinanceSourceOrderOption[]> {
+  return request.get<FinanceSourceOrderOption[]>('/finance/source-order-options', {
+    params: { departureId },
+  })
 }
 
 export async function listReceivables(

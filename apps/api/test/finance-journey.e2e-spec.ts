@@ -351,6 +351,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 1000000,
         transactionDate: '2026-08-03',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: ops.sourceOrderId,
         counterpartyName: ops.displayName,
         departureId: departure.id,
       })
@@ -1103,6 +1104,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 600000,
         transactionDate: '2026-08-07',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: ops.sourceOrderId,
         counterpartyName: ops.displayName,
         departureId: departure.id,
       })
@@ -1163,6 +1165,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 1000000,
         transactionDate: '2026-08-08',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: ops.sourceOrderId,
         counterpartyName: ops.displayName,
         departureId: departure.id,
       })
@@ -1215,6 +1218,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 1000000,
         transactionDate: '2026-08-08',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: ops.sourceOrderId,
         counterpartyName: ops.displayName,
         departureId: departure.id,
       })
@@ -1580,6 +1584,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 10000,
         transactionDate: '2026-08-11',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: ops.sourceOrderId,
         counterpartyName: ops.displayName,
         departureId: departure.id,
         notes: '归档前门禁探针流水',
@@ -1723,6 +1728,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       '确认付款',
     )
 
+    const orphanDeparture = await createDeparture('orphan-tx-host')
     const orphanTx = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
       .send({
@@ -1731,7 +1737,8 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 1000,
         transactionDate: '2026-08-12',
         counterpartyType: CounterpartyType.manual,
-        counterpartyName: '无发团流水可建',
+        counterpartyName: '其他发团流水可建',
+        departureId: orphanDeparture.id,
       })
       .expect(201)
 
@@ -1767,8 +1774,9 @@ describe('Finance journeys (cross-module e2e)', () => {
           amountCents: 2000,
           transactionDate: '2026-08-12',
           counterpartyType: CounterpartyType.guest,
-          counterpartyName: ops.displayName,
-          departureId: departure.id,
+        counterpartyId: ops.sourceOrderId,
+        counterpartyName: ops.displayName,
+        departureId: departure.id,
         }),
       '创建流水',
     )
@@ -1951,6 +1959,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         transactionDate: '2026-09-02',
         paymentChannel: PaymentChannel.CASH,
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: newSourceOrder.body.data.id,
         counterpartyName: newSourceOrder.body.data.displayName,
       })
       .expect(201)
@@ -2200,6 +2209,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         amountCents: 50_000,
         transactionDate: '2026-08-06',
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: sourceOrder.body.data.id,
         counterpartyName: sourceOrder.body.data.displayName,
         departureId: departure.id,
         notes: '重新打开后匹配流水',
@@ -2446,6 +2456,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         transactionDate: '2026-08-09',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: adminOps.sourceOrderId,
         counterpartyName: adminOps.displayName,
       })
       .expect(201)
@@ -3026,6 +3037,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         transactionDate: '2026-08-03',
         paymentChannel: PaymentChannel.CASH,
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: archiveSource.body.data.id,
         counterpartyName: archiveSource.body.data.displayName,
       })
       .expect(201)

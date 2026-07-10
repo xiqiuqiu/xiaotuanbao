@@ -9,7 +9,6 @@ export interface CreateVerificationFormValues {
   direction: VerificationDirection
   verificationDate: string
   departureId?: string
-  counterpartyKeyword?: string
   transactionId: string
   paymentScheduleId: string
   amountYuan: number
@@ -26,7 +25,6 @@ export function emptyCreateVerificationFormValues(
     direction: 'receivable',
     verificationDate: new Date().toISOString().slice(0, 10),
     departureId: undefined,
-    counterpartyKeyword: undefined,
     transactionId: '',
     paymentScheduleId: '',
     amountYuan: 0,
@@ -59,13 +57,6 @@ export function directionFromTransaction(
   return transaction.direction === TransactionDirection.INFLOW ? 'receivable' : 'payable'
 }
 
-function counterpartyKeywordFromRecord(
-  record?: Pick<FinanceTransactionSummary, 'counterpartyName'> | null,
-): string | undefined {
-  const name = record?.counterpartyName?.trim()
-  return name || undefined
-}
-
 export function getInitialVerificationValues({
   lockedDepartureId,
   initialTransaction,
@@ -95,12 +86,6 @@ export function getInitialVerificationValues({
       initialValues.departureId = initialSchedule.departureId
     }
   }
-
-  // Prefer the opened transaction's counterparty; fall back to the schedule.
-  // This field is a fuzzy filter keyword, not a locked counterparty id.
-  initialValues.counterpartyKeyword =
-    counterpartyKeywordFromRecord(initialTransaction) ??
-    counterpartyKeywordFromRecord(initialSchedule)
 
   if (
     initialTransaction &&

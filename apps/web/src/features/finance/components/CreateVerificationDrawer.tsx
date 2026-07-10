@@ -251,9 +251,6 @@ function VerificationBasicsSection({
           </Form.Item>
         </Col>
       </Row>
-      <Form.Item name="counterpartyKeyword" label="往来对象">
-        <Input allowClear placeholder="可选，模糊过滤往来对象名称" />
-      </Form.Item>
     </>
   )
 }

@@ -245,6 +245,7 @@ describe('Seed demo business loop', () => {
         transactionDate: hangzhouDay,
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: hangzhouSourceOrder.body.data.id,
         counterpartyName: hangzhouSourceOrder.body.data.displayName,
       })
       .expect(201)

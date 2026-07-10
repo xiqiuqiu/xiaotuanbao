@@ -14,8 +14,10 @@ export function matchesCounterparty(
   if (transaction.counterpartyType !== schedule.counterpartyType) {
     return false
   }
-  if (schedule.counterpartyId) {
-    return transaction.counterpartyId === schedule.counterpartyId
+  const scheduleId = schedule.counterpartyId?.trim() || null
+  const transactionId = transaction.counterpartyId?.trim() || null
+  if (scheduleId || transactionId) {
+    return scheduleId === transactionId
   }
   return transaction.counterpartyName === schedule.counterpartyName
 }
@@ -30,19 +32,6 @@ export function formatCounterpartySearchText(
 ): string {
   const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
   return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
-}
-
-function matchesCounterpartyKeyword(
-  counterpartyType: string,
-  counterpartyName: string | null | undefined,
-  keyword: string,
-): boolean {
-  if (!keyword) {
-    return true
-  }
-  return formatCounterpartySearchText(counterpartyType, counterpartyName)
-    .toLowerCase()
-    .includes(keyword)
 }
 
 function formatDepartureLabel(
@@ -63,21 +52,12 @@ export function filterCandidateTransactions(params: {
   transactions: FinanceTransactionSummary[]
   direction: VerificationDirection
   departureId?: string
-  counterpartyKeyword?: string
   searchKeyword?: string
   departureMap: Map<string, { departureNo: string; name: string }>
 }): FinanceTransactionSummary[] {
-  const {
-    transactions,
-    direction,
-    departureId,
-    counterpartyKeyword,
-    searchKeyword,
-    departureMap,
-  } = params
+  const { transactions, direction, departureId, searchKeyword, departureMap } = params
 
   const expectedDirection = expectedTransactionDirection(direction)
-  const normalizedCounterpartyKeyword = counterpartyKeyword?.trim().toLowerCase() ?? ''
   const normalizedSearchKeyword = searchKeyword?.trim().toLowerCase() ?? ''
 
   return transactions.filter((transaction) => {
@@ -90,16 +70,6 @@ export function filterCandidateTransactions(params: {
     }
 
     if (departureId && transaction.departureId !== departureId) {
-      return false
-    }
-
-    if (
-      !matchesCounterpartyKeyword(
-        transaction.counterpartyType,
-        transaction.counterpartyName,
-        normalizedCounterpartyKeyword,
-      )
-    ) {
       return false
     }
 

@@ -105,7 +105,7 @@ export { PAYMENT_CHANNEL_OPTIONS, PAYMENT_CHANNEL_LABELS }
 export const COUNTERPARTY_TYPE_OPTIONS = [
   { value: CounterpartyType.PARTNER, label: '合作伙伴' },
   { value: CounterpartyType.SUPPLIER, label: '供应商' },
-  { value: CounterpartyType.GUEST, label: '客人' },
+  { value: CounterpartyType.GUEST, label: '游客代收' },
   { value: CounterpartyType.MANUAL, label: '手工录入' },
 ] as const
 

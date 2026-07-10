@@ -453,7 +453,7 @@ export interface CreateFinanceTransactionDto {
   counterpartyType: string
   counterpartyId?: string
   counterpartyName?: string
-  departureId?: string
+  departureId: string
   notes?: string
 }
 

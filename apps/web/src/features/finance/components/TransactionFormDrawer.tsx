@@ -10,6 +10,7 @@ import {
 import {
   listFinanceDepartureOptions,
   listFinancePartnerOptions,
+  listFinanceSourceOrderOptions,
   listFinanceSupplierOptions,
 } from '@/services/finance.service'
 import {
@@ -46,6 +47,7 @@ export function TransactionFormDrawer({
   onSubmit,
 }: TransactionFormDrawerProps) {
   const counterpartyType = Form.useWatch('counterpartyType', form)
+  const departureId = Form.useWatch('departureId', form)
   const departureLocked = Boolean(lockedDepartureId)
 
   // Memoize so the open-seed effect does not re-run on every render (e.g. when
@@ -88,6 +90,12 @@ export function TransactionFormDrawer({
     enabled: open && counterpartyType === CounterpartyType.SUPPLIER,
   })
 
+  const { data: sourceOrdersResult } = useQuery({
+    queryKey: ['source-orders', 'transaction-form-select', departureId],
+    queryFn: () => listFinanceSourceOrderOptions(departureId!),
+    enabled: open && counterpartyType === CounterpartyType.GUEST && Boolean(departureId),
+  })
+
   const departureOptions =
     departuresResult?.map((departure) => ({
       value: departure.id,
@@ -104,6 +112,12 @@ export function TransactionFormDrawer({
     suppliersResult?.map((supplier) => ({
       value: supplier.id,
       label: supplier.name,
+    })) ?? []
+
+  const sourceOrderOptions =
+    sourceOrdersResult?.map((sourceOrder) => ({
+      value: sourceOrder.id,
+      label: sourceOrder.displayName,
     })) ?? []
 
   const handleClose = () => {
@@ -128,6 +142,28 @@ export function TransactionFormDrawer({
       }
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
+        <Form.Item
+          name="departureId"
+          label="关联发团"
+          rules={[{ required: true, message: '请选择关联发团' }]}
+        >
+          <Select
+            allowClear={!departureLocked}
+            showSearch
+            disabled={departureLocked}
+            placeholder="请先选择发团"
+            options={departureOptions}
+            optionFilterProp="label"
+            onChange={() => {
+              if (form.getFieldValue('counterpartyType') === CounterpartyType.GUEST) {
+                form.setFieldsValue({
+                  counterpartyId: undefined,
+                  counterpartyName: undefined,
+                })
+              }
+            }}
+          />
+        </Form.Item>
         <Form.Item
           name="direction"
           label="收支方向"
@@ -215,30 +251,42 @@ export function TransactionFormDrawer({
             />
           </Form.Item>
         ) : null}
-        {counterpartyType === CounterpartyType.GUEST ||
-        counterpartyType === CounterpartyType.MANUAL ? (
+        {counterpartyType === CounterpartyType.GUEST ? (
+          <>
+            <Form.Item
+              name="counterpartyId"
+              label="关联客源单"
+              rules={[{ required: true, message: '请选择关联客源单' }]}
+              extra={!departureId ? '请先选择关联发团' : undefined}
+            >
+              <Select
+                showSearch
+                disabled={!departureId}
+                placeholder={departureId ? '选择客源单' : '请先选择关联发团'}
+                optionFilterProp="label"
+                options={sourceOrderOptions}
+                onChange={(value: string) => {
+                  const selected = sourceOrdersResult?.find((item) => item.id === value)
+                  if (selected && !form.getFieldValue('counterpartyName')) {
+                    form.setFieldsValue({ counterpartyName: selected.displayName })
+                  }
+                }}
+              />
+            </Form.Item>
+            <Form.Item
+              name="counterpartyName"
+              label="往来对象名称"
+              extra="可填写客人姓名；核销按客源单匹配，不依赖此名称"
+            >
+              <Input maxLength={100} placeholder="可选，如客人姓名" />
+            </Form.Item>
+          </>
+        ) : null}
+        {counterpartyType === CounterpartyType.MANUAL ? (
           <Form.Item name="counterpartyName" label="往来对象名称">
             <Input maxLength={100} />
           </Form.Item>
         ) : null}
-        <Form.Item
-          name="departureId"
-          label="关联发团"
-          rules={
-            departureLocked
-              ? [{ required: true, message: '关联发团不能为空' }]
-              : undefined
-          }
-        >
-          <Select
-            allowClear={!departureLocked}
-            showSearch
-            disabled={departureLocked}
-            placeholder={departureLocked ? undefined : '可选'}
-            options={departureOptions}
-            optionFilterProp="label"
-          />
-        </Form.Item>
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={3} maxLength={200} showCount />
         </Form.Item>

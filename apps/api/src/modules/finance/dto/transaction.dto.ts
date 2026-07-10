@@ -41,9 +41,9 @@ export class CreateFinanceTransactionDto {
   @IsString()
   counterpartyName?: string
 
-  @IsOptional()
   @IsString()
-  departureId?: string
+  @IsNotEmpty({ message: '请选择关联发团' })
+  departureId!: string
 
   @IsOptional()
   @IsString()

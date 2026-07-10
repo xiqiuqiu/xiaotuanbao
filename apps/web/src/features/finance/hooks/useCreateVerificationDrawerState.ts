@@ -42,7 +42,6 @@ export function useCreateVerificationDrawerState({
 
   const direction = Form.useWatch('direction', form)
   const departureId = Form.useWatch('departureId', form)
-  const counterpartyKeyword = Form.useWatch('counterpartyKeyword', form)
   const selectedTransactionId = Form.useWatch('transactionId', form)
   const selectedScheduleId = Form.useWatch('paymentScheduleId', form)
   const amountYuan = Form.useWatch('amountYuan', form)
@@ -128,12 +127,10 @@ export function useCreateVerificationDrawerState({
       transactions: transactionsResult?.items ?? [],
       direction,
       departureId: effectiveDepartureId,
-      counterpartyKeyword,
       searchKeyword: transactionSearchKeyword,
       departureMap,
     })
   }, [
-    counterpartyKeyword,
     departureMap,
     direction,
     effectiveDepartureId,

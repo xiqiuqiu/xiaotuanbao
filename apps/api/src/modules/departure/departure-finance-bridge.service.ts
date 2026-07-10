@@ -33,19 +33,11 @@ import { DepartureFinanceFacade } from '../finance/departure-finance-facade.serv
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
+import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
 
 type SourceOrderWithRelations = SourceOrder & {
   partner: Partner
   departure: { id: string; organizationId: string; status: string; endDate: Date }
-}
-
-interface ReceivablePathSpec {
-  sourceType: PaymentScheduleSourceType
-  amountCents: number
-  title: string
-  counterpartyType: CounterpartyType
-  counterpartyId?: string
-  counterpartyName?: string
 }
 
 export interface SourceOrderFinanceMeta {
@@ -706,30 +698,15 @@ export class DepartureFinanceBridgeService {
     return resource
   }
 
-  private buildReceivablePaths(order: SourceOrderWithRelations): ReceivablePathSpec[] {
-    const paths: ReceivablePathSpec[] = []
-
-    if (order.partnerCollectedCents > 0) {
-      paths.push({
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-        amountCents: order.partnerCollectedCents,
-        title: '客户补款',
-        counterpartyType: CounterpartyType.partner,
-        counterpartyId: order.partnerId,
-      })
-    }
-
-    if (order.guestCollectCents > 0) {
-      paths.push({
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-        amountCents: order.guestCollectCents,
-        title: '游客代收',
-        counterpartyType: CounterpartyType.guest,
-        counterpartyName: order.displayName,
-      })
-    }
-
-    return paths
+  private buildReceivablePaths(order: SourceOrderWithRelations) {
+    return buildSourceOrderReceivablePaths({
+      sourceOrderId: order.id,
+      partnerId: order.partnerId,
+      partnerName: order.partner.name,
+      displayName: order.displayName,
+      partnerCollectedCents: order.partnerCollectedCents,
+      guestCollectCents: order.guestCollectCents,
+    })
   }
 
   private getExpectedAmountForSchedule(

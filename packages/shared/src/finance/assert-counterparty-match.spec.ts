@@ -54,4 +54,38 @@ describe('assertCounterpartyMatch', () => {
       ),
     ).toThrow(CounterpartyMismatchError)
   })
+
+  it('matches guest collection by source-order id even when names differ', () => {
+    expect(() =>
+      assertCounterpartyMatch(
+        {
+          counterpartyType: 'guest',
+          counterpartyId: 'source-order-1',
+          counterpartyName: '福建土楼专线地接 7月15日发客',
+        },
+        {
+          counterpartyType: 'guest',
+          counterpartyId: 'source-order-1',
+          counterpartyName: 'Hngyu',
+        },
+      ),
+    ).not.toThrow()
+  })
+
+  it('rejects when only one side has counterparty id', () => {
+    expect(() =>
+      assertCounterpartyMatch(
+        {
+          counterpartyType: 'guest',
+          counterpartyId: 'source-order-1',
+          counterpartyName: '福建土楼专线地接 7月15日发客',
+        },
+        {
+          counterpartyType: 'guest',
+          counterpartyId: null,
+          counterpartyName: '福建土楼专线地接 7月15日发客',
+        },
+      ),
+    ).toThrow(CounterpartyMismatchError)
+  })
 })

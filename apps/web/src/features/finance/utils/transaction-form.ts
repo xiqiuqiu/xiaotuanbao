@@ -29,6 +29,13 @@ function resolveCounterpartyPayload(values: TransactionFormValues) {
     }
   }
 
+  if (values.counterpartyType === CounterpartyType.GUEST) {
+    return {
+      counterpartyId: values.counterpartyId,
+      counterpartyName: values.counterpartyName?.trim() || undefined,
+    }
+  }
+
   return {
     counterpartyId: undefined,
     counterpartyName: values.counterpartyName?.trim() || undefined,
@@ -36,6 +43,10 @@ function resolveCounterpartyPayload(values: TransactionFormValues) {
 }
 
 export function buildCreateTransactionPayload(values: TransactionFormValues) {
+  if (!values.departureId) {
+    throw new Error('请选择关联发团')
+  }
+
   return {
     direction: values.direction,
     paymentChannel: values.paymentChannel,
