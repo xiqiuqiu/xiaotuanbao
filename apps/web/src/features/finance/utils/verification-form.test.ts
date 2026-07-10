@@ -23,6 +23,8 @@ function makeTransaction(
     counterpartyId: 'cp-1',
     counterpartyName: '华东国旅',
     departureId: 'dep-1',
+    departureNo: 'DT202601',
+    departureName: '云南六日游',
     voidedAt: null,
     voidReason: null,
     notes: null,

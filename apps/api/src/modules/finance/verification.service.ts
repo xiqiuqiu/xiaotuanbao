@@ -447,6 +447,7 @@ export class VerificationService {
   ): Promise<FinanceTransactionSummary> {
     const transaction = await this.prisma.financeTransaction.findFirst({
       where: { id: transactionId, organizationId },
+      include: { departure: { select: { departureNo: true, name: true } } },
     })
 
     if (!transaction) {
@@ -546,7 +547,9 @@ export class VerificationService {
   }
 
   private toTransactionSummary(
-    transaction: FinanceTransaction,
+    transaction: FinanceTransaction & {
+      departure?: { departureNo: string; name: string } | null
+    },
     allocatedAmountCents: number,
   ): FinanceTransactionSummary {
     return {
@@ -565,6 +568,8 @@ export class VerificationService {
       counterpartyId: transaction.counterpartyId,
       counterpartyName: transaction.counterpartyName,
       departureId: transaction.departureId,
+      departureNo: transaction.departure?.departureNo ?? null,
+      departureName: transaction.departure?.name ?? null,
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,

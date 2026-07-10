@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +8,6 @@ import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus, TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import { createTransaction, createVerification, listTransactions, updateTransaction, voidTransaction } from '@/services/finance.service'
-import { listDepartures } from '@/services/departure.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
@@ -110,6 +109,16 @@ function buildTransactionColumns({
           {record.counterpartyName ? ` · ${record.counterpartyName}` : ''}
         </span>
       ),
+    },
+    {
+      title: '关联发团',
+      dataIndex: 'departureNo',
+      render: (value: string | null, record) => {
+        if (!value) {
+          return '—'
+        }
+        return <Tooltip title={record.departureName ?? undefined}>{value}</Tooltip>
+      },
     },
     {
       title: '收付款通道',
@@ -277,7 +286,6 @@ interface TransactionDialogsProps {
   onCloseTransaction: () => void
   onSubmitTransaction: (values: TransactionFormValues) => void
   detailTransactionId: string | null
-  departureMap: Map<string, { departureNo: string; name: string }>
   onCloseDetail: () => void
   verifyTransaction: FinanceTransactionSummary | null
   verifyLoading: boolean
@@ -301,7 +309,6 @@ function TransactionDialogs({
   onCloseTransaction,
   onSubmitTransaction,
   detailTransactionId,
-  departureMap,
   onCloseDetail,
   verifyTransaction,
   verifyLoading,
@@ -333,7 +340,6 @@ function TransactionDialogs({
       <TransactionDetailDrawer
         open={Boolean(detailTransactionId)}
         transactionId={detailTransactionId}
-        departureMap={departureMap}
         onClose={onCloseDetail}
       />
 
@@ -524,19 +530,6 @@ export function TransactionsPage() {
         pageSize,
       }),
   })
-
-  const { data: departuresResult } = useQuery({
-    queryKey: ['departures', 'transaction-detail-map'],
-    queryFn: () => listDepartures({ pageSize: 100 }),
-  })
-
-  const departureMap = useMemo(() => {
-    const map = new Map<string, { departureNo: string; name: string }>()
-    for (const departure of departuresResult?.items ?? []) {
-      map.set(departure.id, { departureNo: departure.departureNo, name: departure.name })
-    }
-    return map
-  }, [departuresResult?.items])
 
   const handleOpenDetail = useCallback((id: string) => {
     setDetailTransactionId(id)
@@ -732,7 +725,6 @@ export function TransactionsPage() {
           createMutation.mutate(values)
         }}
         detailTransactionId={detailTransactionId}
-        departureMap={departureMap}
         onCloseDetail={handleCloseDetail}
         verifyTransaction={verifyTransaction}
         verifyLoading={verifyMutation.isPending}

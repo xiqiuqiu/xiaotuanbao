@@ -73,6 +73,7 @@ export class TransactionService {
     const [items, total] = await Promise.all([
       this.prisma.financeTransaction.findMany({
         where,
+        include: this.departureInclude,
         orderBy: { updatedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -97,6 +98,7 @@ export class TransactionService {
   async getById(organizationId: string, transactionId: string): Promise<FinanceTransactionDetail> {
     const transaction = await this.prisma.financeTransaction.findFirst({
       where: { id: transactionId, organizationId },
+      include: this.departureInclude,
     })
 
     if (!transaction) {
@@ -157,6 +159,7 @@ export class TransactionService {
         departureId: dto.departureId ?? null,
         notes: dto.notes?.trim() || null,
       },
+      include: this.departureInclude,
     })
 
     return this.toSummary(transaction, 0)
@@ -205,6 +208,7 @@ export class TransactionService {
         departureId: dto.departureId ?? null,
         notes: dto.notes?.trim() || null,
       },
+      include: this.departureInclude,
     })
 
     return this.toSummary(updated, allocated)
@@ -243,6 +247,7 @@ export class TransactionService {
         voidedAt: new Date(),
         voidReason,
       },
+      include: this.departureInclude,
     })
 
     return this.toSummary(updated, 0)
@@ -402,8 +407,14 @@ export class TransactionService {
     }
   }
 
+  private readonly departureInclude = {
+    departure: { select: { departureNo: true, name: true } },
+  } as const
+
   private toSummary(
-    transaction: FinanceTransaction,
+    transaction: FinanceTransaction & {
+      departure?: { departureNo: string; name: string } | null
+    },
     allocatedAmountCents: number,
   ): FinanceTransactionSummary {
     return {
@@ -422,6 +433,8 @@ export class TransactionService {
       counterpartyId: transaction.counterpartyId,
       counterpartyName: transaction.counterpartyName,
       departureId: transaction.departureId,
+      departureNo: transaction.departure?.departureNo ?? null,
+      departureName: transaction.departure?.name ?? null,
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,

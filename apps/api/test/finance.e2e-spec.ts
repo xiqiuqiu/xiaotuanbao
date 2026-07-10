@@ -1120,6 +1120,9 @@ describe('Finance API (e2e)', () => {
 
     expect(response.body.data.transactionNo).toMatch(TX_NO_REGEX)
     expect(response.body.data.paymentChannel).toBe(PaymentChannel.BANK_TRANSFER)
+    expect(response.body.data.departureId).toBe(otherDepartureId)
+    expect(response.body.data.departureNo).toBeTruthy()
+    expect(response.body.data.departureName).toBeTruthy()
 
     const list = await authRequest(app, financeToken)
       .get('/api/finance/transactions')
@@ -1129,7 +1132,14 @@ describe('Finance API (e2e)', () => {
     expect(list.body.data.items.length).toBeGreaterThanOrEqual(1)
     expect(
       list.body.data.items.every(
-        (item: { departureId: string | null }) => item.departureId === otherDepartureId,
+        (item: {
+          departureId: string | null
+          departureNo: string | null
+          departureName: string | null
+        }) =>
+          item.departureId === otherDepartureId &&
+          Boolean(item.departureNo) &&
+          Boolean(item.departureName),
       ),
     ).toBe(true)
   })

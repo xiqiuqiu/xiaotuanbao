@@ -23,7 +23,6 @@ import {
 interface TransactionDetailDrawerProps {
   open: boolean
   transactionId: string | null
-  departureMap: Map<string, { departureNo: string; name: string }>
   onClose: () => void
 }
 
@@ -39,18 +38,15 @@ function formatDateTime(value: string): string {
 
 function formatDepartureLink(
   departureId: string | null,
-  departureMap: Map<string, { departureNo: string; name: string }>,
+  departureNo: string | null,
+  departureName: string | null,
 ) {
-  if (!departureId) {
-    return '—'
-  }
-  const departure = departureMap.get(departureId)
-  if (!departure) {
+  if (!departureId || !departureNo) {
     return '—'
   }
   return (
     <Link to="/departure/$departureId" params={{ departureId }}>
-      {departure.departureNo} · {departure.name}
+      {departureName ? `${departureNo} · ${departureName}` : departureNo}
     </Link>
   )
 }
@@ -66,7 +62,6 @@ function formatCounterpartyLabel(
 export function TransactionDetailDrawer({
   open,
   transactionId,
-  departureMap,
   onClose,
 }: TransactionDetailDrawerProps) {
   const { data: transaction, isLoading } = useQuery({
@@ -164,7 +159,11 @@ export function TransactionDetailDrawer({
               {formatCounterpartyLabel(transaction.counterpartyType, transaction.counterpartyName)}
             </Descriptions.Item>
             <Descriptions.Item label="关联发团">
-              {formatDepartureLink(transaction.departureId, departureMap)}
+              {formatDepartureLink(
+                transaction.departureId,
+                transaction.departureNo,
+                transaction.departureName,
+              )}
             </Descriptions.Item>
             <Descriptions.Item label="流水状态">
               <Tag color={transaction.voidedAt ? 'default' : 'success'}>

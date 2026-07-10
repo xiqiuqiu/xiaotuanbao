@@ -338,6 +338,8 @@ export interface FinanceTransactionSummary {
   counterpartyId: string | null
   counterpartyName: string | null
   departureId: string | null
+  departureNo: string | null
+  departureName: string | null
   voidedAt: string | null
   voidReason: string | null
   notes: string | null
