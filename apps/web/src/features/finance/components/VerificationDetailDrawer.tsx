@@ -83,9 +83,7 @@ export function VerificationDetailDrawer({
             核销信息
           </Typography.Title>
           <Descriptions column={2} size="small">
-            <Descriptions.Item label="核销单号">
-              <Typography.Text code>{verification?.verificationNo}</Typography.Text>
-            </Descriptions.Item>
+            <Descriptions.Item label="核销单号">{verification?.verificationNo}</Descriptions.Item>
             <Descriptions.Item label="核销方向">
               <Tag color={VERIFICATION_DIRECTION_COLORS[verification?.direction ?? '']}>
                 {catalogLabel(VERIFICATION_DIRECTION_LABELS, verification?.direction)}
@@ -105,19 +103,19 @@ export function VerificationDetailDrawer({
             </Descriptions.Item>
             <Descriptions.Item label="核销人">{verification?.createdByName}</Descriptions.Item>
             <Descriptions.Item label="创建时间">
-              {verification?.createdAt ? formatDateTime(verification.createdAt) : '—'}
+              {verification?.createdAt ? formatDateTime(verification.createdAt) : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="备注" span={2}>
-              {verification?.remark?.trim() || '—'}
+              {verification?.remark?.trim() || '-'}
             </Descriptions.Item>
             {verification?.status === VerificationStatus.CANCELLED ? (
               <>
-                <Descriptions.Item label="撤销人">{verification.cancelledByName ?? '—'}</Descriptions.Item>
+                <Descriptions.Item label="撤销人">{verification.cancelledByName ?? '-'}</Descriptions.Item>
                 <Descriptions.Item label="撤销时间">
-                  {verification.cancelledAt ? formatDateTime(verification.cancelledAt) : '—'}
+                  {verification.cancelledAt ? formatDateTime(verification.cancelledAt) : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="撤销原因" span={2}>
-                  {verification.cancelReason?.trim() || '—'}
+                  {verification.cancelReason?.trim() || '-'}
                 </Descriptions.Item>
               </>
             ) : null}
@@ -127,9 +125,7 @@ export function VerificationDetailDrawer({
             流水信息
           </Typography.Title>
           <Descriptions column={2} size="small">
-            <Descriptions.Item label="流水号">
-              <Typography.Text code>{transaction?.transactionNo}</Typography.Text>
-            </Descriptions.Item>
+            <Descriptions.Item label="流水号">{transaction?.transactionNo}</Descriptions.Item>
             <Descriptions.Item label="收支方向">
               <Tag color={TRANSACTION_DIRECTION_COLORS[transaction?.direction ?? '']}>
                 {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction?.direction)}
@@ -148,7 +144,7 @@ export function VerificationDetailDrawer({
                   {verification?.departureNo} · {verification?.departureName}
                 </Link>
               ) : (
-                '—'
+                '-'
               )}
             </Descriptions.Item>
             <Descriptions.Item label="流水金额">
@@ -169,9 +165,7 @@ export function VerificationDetailDrawer({
             收付款节点信息
           </Typography.Title>
           <Descriptions column={2} size="small">
-            <Descriptions.Item label="收付款节点编号">
-              <Typography.Text code>{schedule?.scheduleNo}</Typography.Text>
-            </Descriptions.Item>
+            <Descriptions.Item label="收付款节点编号">{schedule?.scheduleNo}</Descriptions.Item>
             <Descriptions.Item label="类型">
               <Tag color={VERIFICATION_DIRECTION_COLORS[schedule?.direction ?? '']}>
                 {catalogLabel(VERIFICATION_DIRECTION_LABELS, schedule?.direction)}
@@ -183,7 +177,7 @@ export function VerificationDetailDrawer({
                   {verification?.departureNo} · {verification?.departureName}
                 </Link>
               ) : (
-                '—'
+                '-'
               )}
             </Descriptions.Item>
             <Descriptions.Item label="往来对象">

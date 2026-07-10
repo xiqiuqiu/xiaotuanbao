@@ -28,6 +28,11 @@ describe('isFinanceTouched', () => {
     ).toBe(true)
   })
 
+  it('is false when amountAdjustedAt is absent even after ordinary field edits', () => {
+    // Ordinary update must leave amountAdjustedAt null; only adjust-amount sets it.
+    expect(isFinanceTouched(cleanSchedule, 0, false)).toBe(false)
+  })
+
   it('is true when schedule was closed', () => {
     expect(
       isFinanceTouched(

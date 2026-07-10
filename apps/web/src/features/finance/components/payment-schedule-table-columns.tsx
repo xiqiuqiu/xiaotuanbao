@@ -1,6 +1,6 @@
 import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { Button, Dropdown, Space, Tag, Tooltip, Typography } from 'antd'
+import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
@@ -114,7 +114,7 @@ export function buildPaymentScheduleColumns({
       dataIndex: 'scheduleNo',
       render: (value: string, record) => (
         <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
-          <Typography.Text code>{value}</Typography.Text>
+          {value}
         </Button>
       ),
     },
@@ -128,12 +128,12 @@ export function buildPaymentScheduleColumns({
             render: (departureId: string) => {
               const departure = departureMap.get(departureId)
               if (!departure) {
-                return '—'
+                return '-'
               }
               return (
-                <Tooltip title={departure.name}>
+                <Tooltip title={departure.departureNo}>
                   <Link to="/departure/$departureId" params={{ departureId }}>
-                    {departure.departureNo}
+                    {departure.name}
                   </Link>
                 </Tooltip>
               )
@@ -190,7 +190,7 @@ export function buildPaymentScheduleColumns({
     {
       title: '财务介入',
       dataIndex: 'financeTouched',
-      render: (value: boolean) => (value ? <Tag color="gold">已介入</Tag> : '—'),
+      render: (value: boolean) => (value ? <Tag color="gold">已介入</Tag> : '-'),
     },
     {
       title: '操作',
@@ -259,7 +259,7 @@ export function buildPaymentScheduleColumns({
         }
 
         if (primaryActions.length === 0 && moreItems.length === 0) {
-          return '—'
+          return '-'
         }
 
         return (

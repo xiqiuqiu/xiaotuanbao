@@ -7,7 +7,7 @@ interface SupplierCategoryTagsProps {
 
 export function SupplierCategoryTags({ categories }: SupplierCategoryTagsProps) {
   if (!categories.length) {
-    return <>—</>
+    return <>-</>
   }
 
   return (

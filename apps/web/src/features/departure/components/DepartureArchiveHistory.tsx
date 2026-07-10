@@ -38,7 +38,7 @@ export function DepartureArchiveHistory({ items }: DepartureArchiveHistoryProps)
               <Typography.Text>
                 {ACTION_LABELS[item.action] ?? item.action}
                 {' · '}
-                {item.operatedByName || '—'}
+                {item.operatedByName || '-'}
                 {' · '}
                 {formatOperatedAt(item.operatedAt)}
               </Typography.Text>

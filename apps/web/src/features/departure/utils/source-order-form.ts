@@ -107,6 +107,31 @@ export function computeFormAmounts(values: SourceOrderFormAmountInput) {
   }
 }
 
+/** Footer / preview copy for live amount summary by collection mode. */
+export function formatSourceOrderAmountSummary(
+  amounts: ReturnType<typeof computeFormAmounts>,
+  collectionMode: SourceOrderCollectionMode,
+  formatCents: (cents: number) => string,
+): string {
+  const parts = [`结算金额 ${formatCents(amounts.netReceivableCents)}`]
+
+  if (
+    collectionMode === SourceOrderCollectionMode.SPLIT ||
+    collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
+  ) {
+    parts.push(`客户已收 ${formatCents(amounts.partnerCollectedCents)}`)
+  }
+
+  if (
+    collectionMode === SourceOrderCollectionMode.GUEST_ONLY ||
+    collectionMode === SourceOrderCollectionMode.SPLIT
+  ) {
+    parts.push(`我方代收 ${formatCents(amounts.guestCollectCents)}`)
+  }
+
+  return parts.join(' · ')
+}
+
 export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
   return {
     adultGuestCount: 0,

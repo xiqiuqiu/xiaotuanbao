@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Spin, Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +19,7 @@ import {
   isDepartureDetailTabKey,
   type DepartureDetailTabKey,
 } from '../catalog'
+import { invalidateDepartureDetailQueries } from '../utils/invalidate-departure-detail-queries'
 
 const DEFAULT_TAB: DepartureDetailTabKey = 'overview'
 
@@ -41,6 +42,7 @@ export function DepartureDetailPage() {
   const menuKeys = useAuthStore((state) => state.menuKeys)
 
   const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
+  const previousTabRef = useRef(activeTab)
 
   const { data: departure, isLoading, isError } = useQuery({
     queryKey: ['departure', departureId],
@@ -48,16 +50,33 @@ export function DepartureDetailPage() {
     enabled: Boolean(departureId),
   })
 
+  // Tab panes destroyOnHidden + global staleTime can remount with a still-fresh
+  // cache. Invalidate departure-detail queries whenever the active tab changes
+  // (Tabs click or deep-link URL) so each pane refetches current server state.
+  useEffect(() => {
+    if (!departureId || previousTabRef.current === activeTab) {
+      return
+    }
+    previousTabRef.current = activeTab
+    invalidateDepartureDetailQueries(queryClient, departureId)
+  }, [activeTab, departureId, queryClient])
+
   const handleTabChange = (key: string) => {
     if (!departureId) {
       return
+    }
+
+    const nextTab = key as DepartureDetailTabKey
+    if (nextTab !== previousTabRef.current) {
+      previousTabRef.current = nextTab
+      invalidateDepartureDetailQueries(queryClient, departureId)
     }
 
     navigate({
       to: '/departure/$departureId',
       params: { departureId },
       search: {
-        tab: key as DepartureDetailTabKey,
+        tab: nextTab,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
       },
     })

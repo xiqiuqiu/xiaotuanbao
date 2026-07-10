@@ -654,9 +654,9 @@ export class VerificationService {
       departureName: departure.name,
       counterpartyType: schedule.counterpartyType,
       counterpartyName: schedule.counterpartyName,
-      createdByName: userNames.get(verification.createdBy) ?? '—',
+      createdByName: userNames.get(verification.createdBy) ?? '-',
       cancelledByName: verification.cancelledBy
-        ? (userNames.get(verification.cancelledBy) ?? '—')
+        ? (userNames.get(verification.cancelledBy) ?? '-')
         : null,
     }
   }

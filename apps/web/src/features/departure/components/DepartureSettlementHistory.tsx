@@ -34,7 +34,7 @@ export function DepartureSettlementHistory({ items }: DepartureSettlementHistory
                 {' · '}
                 触发节点 {item.triggerScheduleNo}
                 {' · '}
-                {item.operatedByName || '—'}
+                {item.operatedByName || '-'}
                 {' · '}
                 {formatOperatedAt(item.operatedAt)}
               </Typography.Text>

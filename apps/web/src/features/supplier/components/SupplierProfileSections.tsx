@@ -137,7 +137,7 @@ export function SupplierProfileSections({ form, showStatus = false }: SupplierPr
         style={{ marginBottom: 16 }}
       />
 
-      <TypographySection title="备注">
+      <TypographySection title="补充信息">
         <Form.Item label="备注" name="businessNotes">
           <Input.TextArea
             rows={3}

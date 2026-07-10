@@ -35,6 +35,7 @@ describe('SupplierReadonlySections', () => {
     expect(screen.getByText('结算信息')).toBeInTheDocument()
     expect(screen.getByText('更多财务信息')).toBeInTheDocument()
     expect(screen.getByText('收款账户信息')).toBeInTheDocument()
+    expect(screen.getByText('补充信息')).toBeInTheDocument()
     expect(screen.getAllByText('备注').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('西湖国宾馆')).toBeInTheDocument()
     expect(screen.getByText('酒店').closest('.ant-tag')).toBeTruthy()

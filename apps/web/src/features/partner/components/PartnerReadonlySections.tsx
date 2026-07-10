@@ -66,12 +66,12 @@ export function PartnerReadonlySections({ partner }: PartnerReadonlySectionsProp
         <ProfileDescriptions
           column={{ xs: 1, sm: 2, lg: 3 }}
           items={[
-            { label: '主联系人', children: partner.contactName ?? '—' },
+            { label: '主联系人', children: partner.contactName ?? '-' },
             {
               label: '联系人角色',
               children: catalogLabel(PARTNER_CONTACT_ROLE_LABELS, partner.contactRole),
             },
-            { label: '联系方式', children: partner.contactPhone ?? '—' },
+            { label: '联系方式', children: partner.contactPhone ?? '-' },
           ]}
         />
       </ReadonlySection>
@@ -88,7 +88,7 @@ export function PartnerReadonlySections({ partner }: PartnerReadonlySectionsProp
               label: '账期规则',
               children: catalogLabel(SETTLEMENT_CYCLE_LABELS, partner.paymentTermRule),
             },
-            { label: '结算说明', children: partner.settlementNotes ?? '—', span: 3 },
+            { label: '结算说明', children: partner.settlementNotes ?? '-', span: 3 },
           ]}
         />
       </ReadonlySection>

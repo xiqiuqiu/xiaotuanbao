@@ -38,6 +38,7 @@ export function SupplierFormDrawer({
       open={open}
       size={520}
       onClose={onClose}
+      destroyOnHidden
       footer={
         <Space style={{ float: 'right' }}>
           <Button onClick={onClose}>取消</Button>

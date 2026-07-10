@@ -68,7 +68,7 @@ function formatDepartureLabel(
 ): string {
   const departure = departureMap.get(schedule.departureId)
   if (!departure) {
-    return '—'
+    return '-'
   }
   return `${departure.departureNo} · ${departure.name}`
 }

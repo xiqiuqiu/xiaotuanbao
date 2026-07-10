@@ -119,8 +119,8 @@ function buildColumns(
       dataIndex: 'partnerKind',
       render: (value: string) => catalogLabel(PARTNER_KIND_LABELS, value),
     },
-    { title: '主联系人', dataIndex: 'contactName', render: (value) => value ?? '—' },
-    { title: '联系方式', dataIndex: 'contactPhone', render: (value) => value ?? '—' },
+    { title: '主联系人', dataIndex: 'contactName', render: (value) => value ?? '-' },
+    { title: '联系方式', dataIndex: 'contactPhone', render: (value) => value ?? '-' },
     {
       title: '结算方式',
       dataIndex: 'settlementMethod',

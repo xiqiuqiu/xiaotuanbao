@@ -42,7 +42,7 @@ function formatDepartureLink(
   departureName: string | null,
 ) {
   if (!departureId || !departureNo) {
-    return '—'
+    return '-'
   }
   return (
     <Link to="/departure/$departureId" params={{ departureId }}>
@@ -86,7 +86,6 @@ export function TransactionDetailDrawer({
     {
       title: '核销单号',
       dataIndex: 'verificationNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
       title: '核销方向',
@@ -96,7 +95,6 @@ export function TransactionDetailDrawer({
     {
       title: '账款单号',
       dataIndex: 'scheduleNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
       title: '本次核销金额',
@@ -140,9 +138,7 @@ export function TransactionDetailDrawer({
             基础信息
           </Typography.Title>
           <Descriptions column={2} size="small">
-            <Descriptions.Item label="流水号">
-              <Typography.Text code>{transaction.transactionNo}</Typography.Text>
-            </Descriptions.Item>
+            <Descriptions.Item label="流水号">{transaction.transactionNo}</Descriptions.Item>
             <Descriptions.Item label="收支方向">
               <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
                 {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
@@ -178,19 +174,19 @@ export function TransactionDetailDrawer({
                   {TRANSACTION_WRITEOFF_STATUS_LABELS[writeoff.status]}
                 </Tag>
               ) : (
-                '—'
+                '-'
               )}
             </Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {formatDateTime(transaction.createdAt)}
             </Descriptions.Item>
             <Descriptions.Item label="流水备注" span={2}>
-              {transaction.notes?.trim() || '—'}
+              {transaction.notes?.trim() || '-'}
             </Descriptions.Item>
             {transaction.voidedAt ? (
               <>
                 <Descriptions.Item label="作废原因" span={2}>
-                  {transaction.voidReason?.trim() || '—'}
+                  {transaction.voidReason?.trim() || '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="作废时间" span={2}>
                   {formatDateTime(transaction.voidedAt)}
@@ -213,7 +209,7 @@ export function TransactionDetailDrawer({
             <Descriptions.Item label="最近核销时间">
               {transaction.lastVerificationAt
                 ? formatDateTime(transaction.lastVerificationAt)
-                : '—'}
+                : '-'}
             </Descriptions.Item>
           </Descriptions>
 

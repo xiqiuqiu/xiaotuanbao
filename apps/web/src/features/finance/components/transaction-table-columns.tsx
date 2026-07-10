@@ -1,5 +1,6 @@
-import { Button, Tag, Tooltip, Typography } from 'antd'
+import { Button, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { Link } from '@tanstack/react-router'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import {
@@ -47,7 +48,7 @@ export function buildTransactionColumns({
       dataIndex: 'transactionNo',
       render: (value: string, record) => (
         <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => onOpenDetail(record.id)}>
-          <Typography.Text code>{value}</Typography.Text>
+          {value}
         </Button>
       ),
     },
@@ -90,12 +91,19 @@ export function buildTransactionColumns({
   if (!isDepartureScope) {
     columns.push({
       title: '关联发团',
-      dataIndex: 'departureNo',
-      render: (value: string | null, record) => {
-        if (!value) {
-          return '—'
+      dataIndex: 'departureName',
+      render: (_value: string | null, record) => {
+        if (!record.departureId) {
+          return '-'
         }
-        return <Tooltip title={record.departureName ?? undefined}>{value}</Tooltip>
+        const label = record.departureName || record.departureNo || '-'
+        return (
+          <Tooltip title={record.departureNo ?? undefined}>
+            <Link to="/departure/$departureId" params={{ departureId: record.departureId }}>
+              {label}
+            </Link>
+          </Tooltip>
+        )
       },
     })
   }

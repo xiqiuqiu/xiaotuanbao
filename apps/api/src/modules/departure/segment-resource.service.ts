@@ -369,8 +369,8 @@ export class SegmentResourceService {
   ): SegmentResourceSummary {
     const counterpartyName =
       resource.resourceKind === ResourceKind.outsource
-        ? resource.partner?.name ?? '—'
-        : resource.supplier?.name ?? '—'
+        ? resource.partner?.name ?? '-'
+        : resource.supplier?.name ?? '-'
 
     return {
       id: resource.id,

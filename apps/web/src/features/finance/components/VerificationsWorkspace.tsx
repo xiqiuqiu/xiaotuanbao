@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -154,21 +154,23 @@ function formatCounterpartyLabel(
 }
 
 function buildVerificationColumns({
+  isDepartureScope,
   readOnly,
   onOpenDetail,
   onOpenCancelModal,
 }: {
+  isDepartureScope: boolean
   readOnly: boolean
   onOpenDetail: (verificationId: string) => void
   onOpenCancelModal: (verification: FinanceVerificationListItem) => void
 }): ColumnsType<FinanceVerificationListItem> {
-  return [
+  const columns: ColumnsType<FinanceVerificationListItem> = [
     {
       title: '核销单号',
       dataIndex: 'verificationNo',
       render: (value: string, record) => (
         <Button type="link" style={{ padding: 0 }} onClick={() => onOpenDetail(record.id)}>
-          <Typography.Text code>{value}</Typography.Text>
+          {value}
         </Button>
       ),
     },
@@ -187,24 +189,30 @@ function buildVerificationColumns({
       render: (_: unknown, record) =>
         formatCounterpartyLabel(record.counterpartyType, record.counterpartyName),
     },
-    {
+  ]
+
+  if (!isDepartureScope) {
+    columns.push({
       title: '关联发团',
-      dataIndex: 'departureNo',
+      dataIndex: 'departureName',
       render: (value: string, record) => (
-        <Tooltip title={record.departureName}>
-          <span>{value}</span>
+        <Tooltip title={record.departureNo}>
+          <Link to="/departure/$departureId" params={{ departureId: record.departureId }}>
+            {value || record.departureNo}
+          </Link>
         </Tooltip>
       ),
-    },
+    })
+  }
+
+  columns.push(
     {
       title: '流水号',
       dataIndex: 'transactionNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
       title: '收付款节点编号',
       dataIndex: 'scheduleNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     {
       title: '本次核销金额',
@@ -251,7 +259,9 @@ function buildVerificationColumns({
         </Space>
       ),
     },
-  ]
+  )
+
+  return columns
 }
 
 function VerificationTable({
@@ -480,11 +490,12 @@ export function VerificationsWorkspace({
   const columns = useMemo(
     () =>
       buildVerificationColumns({
+        isDepartureScope,
         readOnly,
         onOpenDetail: handleOpenDetail,
         onOpenCancelModal: handleOpenCancelModal,
       }),
-    [handleOpenCancelModal, handleOpenDetail, readOnly],
+    [handleOpenCancelModal, handleOpenDetail, isDepartureScope, readOnly],
   )
 
   const createButton = !readOnly ? (

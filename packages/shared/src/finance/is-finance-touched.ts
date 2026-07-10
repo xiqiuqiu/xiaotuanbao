@@ -6,7 +6,11 @@ export interface FinanceTouchedScheduleInput {
 /**
  * Financial history is irreversible: effective settlement can return to zero
  * after cancel verification, but once any verification (including cancelled),
- * amount adjustment, or schedule close has occurred, finance remains touched.
+ * explicit amount adjustment (adjust-amount), or schedule close has occurred,
+ * finance remains touched.
+ *
+ * Ordinary pre-touch edits must NOT set amountAdjustedAt — that timestamp is
+ * reserved for explicit adjust-amount and would falsely lock the schedule.
  */
 export function isFinanceTouched(
   schedule: FinanceTouchedScheduleInput,

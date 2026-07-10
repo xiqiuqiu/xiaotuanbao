@@ -341,6 +341,9 @@ describe('Source order generate receivables (e2e)', () => {
 
     expect(customerSchedule?.amountCents).toBe(400000)
     expect(guestSchedule?.amountCents).toBe(600000)
+    // Source→schedule sync must not stamp amountAdjustedAt / financeTouched.
+    expect(customerSchedule?.amountAdjustedAt).toBeNull()
+    expect(guestSchedule?.amountAdjustedAt).toBeNull()
   })
 
   it('creates missing receivable path on save when not finance-touched', async () => {

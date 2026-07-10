@@ -86,7 +86,8 @@ token: {
 - 基准字号 **14px**（企业台密度，不是 16px 营销站）。
 - 字重只用 **400** 与 **600**（`fontWeightStrong`）。不用 100–300、700+、斜体做界面强调；选中态靠颜色与描边。
 - 字体栈与 antd / `global.css` 一致：系统 UI 字体优先（`-apple-system`, `BlinkMacSystemFont`, `Segoe UI`, …）。
-- 业务编号、流水号可用 `Typography.Text code`，不要整表等宽。
+- 业务编号、流水号在列表与详情中用正文展示（可点则用 `link`）；不要用 `Typography.Text code` 灰底块，也不要整表等宽。
+- 空值占位统一用半角短横 `-`（不要用全角 `—` 或「未设置」文案），列表与详情一致。
 
 ### 标题层级（本仓库约定）
 

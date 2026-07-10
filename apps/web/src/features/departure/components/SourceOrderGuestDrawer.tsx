@@ -1,14 +1,12 @@
-import { useState } from 'react'
+import { useState, type HTMLAttributes, type PropsWithChildren, type ReactNode } from 'react'
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons'
 import {
   Alert,
   Button,
-  Col,
   Drawer,
   Form,
   Input,
   Popconfirm,
-  Row,
   Select,
   Space,
   Table,
@@ -16,7 +14,7 @@ import {
   message,
   theme,
 } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import type { TableProps } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SourceOrderSummary, SourceOrderGuestSummary } from '@/types/api'
 import {
@@ -29,7 +27,10 @@ import { GUEST_GENDER_OPTIONS, GUEST_GENDER_LABELS, catalogLabel } from '../cata
 import {
   formatGuestCountContrast,
   guestFormFieldRules,
+  type GuestFormFieldName,
 } from '../utils/source-order-guest-form'
+
+const DRAFT_ID = '__draft__'
 
 interface SourceOrderGuestDrawerProps {
   open: boolean
@@ -43,6 +44,85 @@ interface GuestFormValues {
   phone?: string
   gender?: string
   notes?: string
+}
+
+type GuestRow = SourceOrderGuestSummary
+
+type GuestColumn = NonNullable<TableProps<GuestRow>['columns']>[number] & {
+  editable?: boolean
+  dataIndex?: GuestFormFieldName
+  inputType?: 'text' | 'select'
+}
+
+interface EditableCellProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
+  editing: boolean
+  dataIndex: GuestFormFieldName
+  title: ReactNode
+  inputType: 'text' | 'select'
+  record: GuestRow
+  index: number
+}
+
+function EditableCell({
+  editing,
+  dataIndex,
+  title: _title,
+  inputType,
+  record: _record,
+  index: _index,
+  children,
+  ...restProps
+}: PropsWithChildren<EditableCellProps>) {
+  const inputNode =
+    inputType === 'select' ? (
+      <Select
+        allowClear
+        placeholder="请选择性别"
+        options={[...GUEST_GENDER_OPTIONS]}
+        style={{ width: '100%' }}
+      />
+    ) : (
+      <Input
+        placeholder={
+          dataIndex === 'name'
+            ? '请输入姓名'
+            : dataIndex === 'phone'
+              ? '请输入手机号'
+              : dataIndex === 'notes'
+                ? '请输入备注（选填）'
+                : undefined
+        }
+      />
+    )
+
+  return (
+    <td {...restProps}>
+      {editing ? (
+        <Form.Item
+          name={dataIndex}
+          style={{ margin: 0 }}
+          rules={guestFormFieldRules[dataIndex]}
+        >
+          {inputNode}
+        </Form.Item>
+      ) : (
+        children
+      )}
+    </td>
+  )
+}
+
+function createDraftGuest(sourceOrderId: string): GuestRow {
+  return {
+    id: DRAFT_ID,
+    sourceOrderId,
+    name: '',
+    phone: null,
+    gender: '',
+    notes: null,
+    createdAt: '',
+    updatedAt: '',
+  }
 }
 
 export function SourceOrderGuestDrawer({
@@ -82,7 +162,8 @@ function SourceOrderGuestDrawerPanel({
   const { token } = theme.useToken()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<GuestFormValues>()
-  const [editingGuest, setEditingGuest] = useState<SourceOrderGuestSummary | null>(null)
+  const [editingKey, setEditingKey] = useState('')
+  const [draftGuest, setDraftGuest] = useState<GuestRow | null>(null)
 
   const sourceOrderId = sourceOrder.id
 
@@ -91,16 +172,27 @@ function SourceOrderGuestDrawerPanel({
     queryFn: () => listSourceOrderGuests(sourceOrderId),
   })
 
+  const dataSource: GuestRow[] = draftGuest ? [...guests, draftGuest] : guests
+  const isEditing = (record: GuestRow) => record.id === editingKey
+  const isBusy = editingKey !== ''
+
   const saveMutation = useMutation({
-    mutationFn: (values: GuestFormValues) => {
-      if (editingGuest) {
-        return updateSourceOrderGuest(sourceOrderId, editingGuest.id, values)
+    mutationFn: async ({
+      key,
+      values,
+    }: {
+      key: string
+      values: GuestFormValues
+    }) => {
+      if (key === DRAFT_ID) {
+        return createSourceOrderGuest(sourceOrderId, values)
       }
-      return createSourceOrderGuest(sourceOrderId, values)
+      return updateSourceOrderGuest(sourceOrderId, key, values)
     },
-    onSuccess: () => {
-      message.success(editingGuest ? '客人已更新' : '客人已添加')
-      setEditingGuest(null)
+    onSuccess: (_data, variables) => {
+      message.success(variables.key === DRAFT_ID ? '客人已添加' : '客人已更新')
+      setEditingKey('')
+      setDraftGuest(null)
       form.resetFields()
       void queryClient.invalidateQueries({ queryKey: ['source-order-guests', sourceOrderId] })
     },
@@ -114,56 +206,143 @@ function SourceOrderGuestDrawerPanel({
     },
   })
 
-  const columns: ColumnsType<SourceOrderGuestSummary> = [
-    { title: '姓名', dataIndex: 'name' },
-    { title: '手机号', dataIndex: 'phone', render: (value) => value ?? '—' },
+  const startAdd = () => {
+    if (isBusy) {
+      return
+    }
+    const draft = createDraftGuest(sourceOrderId)
+    setDraftGuest(draft)
+    form.setFieldsValue({
+      name: '',
+      phone: undefined,
+      gender: undefined,
+      notes: undefined,
+    })
+    setEditingKey(DRAFT_ID)
+  }
+
+  const startEdit = (record: GuestRow) => {
+    form.setFieldsValue({
+      name: record.name,
+      phone: record.phone ?? undefined,
+      gender: record.gender || undefined,
+      notes: record.notes ?? undefined,
+    })
+    setEditingKey(record.id)
+  }
+
+  const cancelEdit = () => {
+    if (editingKey === DRAFT_ID) {
+      setDraftGuest(null)
+    }
+    setEditingKey('')
+    form.resetFields()
+  }
+
+  const saveRow = async (key: string) => {
+    try {
+      const values = await form.validateFields()
+      saveMutation.mutate({ key, values })
+    } catch {
+      // validation errors are shown inline by Form.Item
+    }
+  }
+
+  const baseColumns: GuestColumn[] = [
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      editable: true,
+      inputType: 'text',
+      width: '18%',
+    },
+    {
+      title: '手机号',
+      dataIndex: 'phone',
+      editable: true,
+      inputType: 'text',
+      width: '20%',
+      render: (value: string | null) => value ?? '-',
+    },
     {
       title: '性别',
       dataIndex: 'gender',
-      render: (value) => catalogLabel(GUEST_GENDER_LABELS, value),
+      editable: true,
+      inputType: 'select',
+      width: '16%',
+      render: (value: string) => catalogLabel(GUEST_GENDER_LABELS, value),
     },
     {
       title: '备注',
       dataIndex: 'notes',
+      editable: true,
+      inputType: 'text',
       ellipsis: true,
-      render: (value) => value ?? '—',
+      render: (value: string | null) => value ?? '-',
     },
-    ...(readOnly
-      ? []
-      : [
-          {
-            title: '操作',
-            key: 'actions',
-            render: (_: unknown, record: SourceOrderGuestSummary) => (
-              <Space>
-                <Button
-                  type="link"
-                  size="small"
-                  onClick={() => {
-                    setEditingGuest(record)
-                    form.setFieldsValue({
-                      name: record.name,
-                      phone: record.phone ?? undefined,
-                      gender: record.gender,
-                      notes: record.notes ?? undefined,
-                    })
-                  }}
-                >
-                  编辑
-                </Button>
-                <Popconfirm
-                  title="确认删除该客人？"
-                  onConfirm={() => deleteMutation.mutate(record.id)}
-                >
-                  <Button type="link" size="small" danger>
-                    删除
-                  </Button>
-                </Popconfirm>
-              </Space>
-            ),
-          },
-        ]),
   ]
+
+  if (!readOnly) {
+    baseColumns.push({
+      title: '操作',
+      key: 'actions',
+      width: 140,
+      render: (_value: unknown, record: GuestRow) => {
+        const editing = isEditing(record)
+        if (editing) {
+          return (
+            <Space>
+              <Typography.Link
+                onClick={() => void saveRow(record.id)}
+                disabled={saveMutation.isPending}
+              >
+                保存
+              </Typography.Link>
+              <Typography.Link onClick={cancelEdit} disabled={saveMutation.isPending}>
+                取消
+              </Typography.Link>
+            </Space>
+          )
+        }
+
+        return (
+          <Space>
+            <Typography.Link disabled={isBusy} onClick={() => startEdit(record)}>
+              编辑
+            </Typography.Link>
+            {record.id !== DRAFT_ID ? (
+              <Popconfirm
+                title="确认删除该客人？"
+                onConfirm={() => deleteMutation.mutate(record.id)}
+                disabled={isBusy}
+              >
+                <Typography.Link type="danger" disabled={isBusy}>
+                  删除
+                </Typography.Link>
+              </Popconfirm>
+            ) : null}
+          </Space>
+        )
+      },
+    })
+  }
+
+  const columns = baseColumns.map((col) => {
+    if (!col.editable || !col.dataIndex) {
+      return col
+    }
+    return {
+      ...col,
+      onCell: (record: GuestRow) =>
+        ({
+          record,
+          inputType: col.inputType ?? 'text',
+          dataIndex: col.dataIndex,
+          title: col.title,
+          editing: isEditing(record),
+        }) as HTMLAttributes<HTMLElement>,
+    }
+  })
 
   return (
     <Drawer
@@ -189,72 +368,31 @@ function SourceOrderGuestDrawerPanel({
       />
 
       {!readOnly ? (
-        <Form
-          form={form}
-          layout="vertical"
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={startAdd}
+          disabled={isBusy}
           style={{ marginBottom: 16 }}
-          onFinish={(values) => saveMutation.mutate(values)}
         >
-          <Row gutter={16}>
-            <Col span={6}>
-              <Form.Item name="name" label="姓名" rules={guestFormFieldRules.name}>
-                <Input placeholder="请输入姓名" />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="phone" label="手机号" rules={guestFormFieldRules.phone}>
-                <Input placeholder="请输入手机号" />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="gender" label="性别" rules={guestFormFieldRules.gender}>
-                <Select
-                  allowClear
-                  placeholder="请选择性别"
-                  options={[...GUEST_GENDER_OPTIONS]}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
-              <Form.Item name="notes" label="备注" rules={guestFormFieldRules.notes}>
-                <Input placeholder="请输入备注（选填）" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                icon={editingGuest ? undefined : <PlusOutlined />}
-                loading={saveMutation.isPending}
-              >
-                {editingGuest ? '保存' : '添加'}
-              </Button>
-              {editingGuest ? (
-                <Button
-                  onClick={() => {
-                    setEditingGuest(null)
-                    form.resetFields()
-                  }}
-                >
-                  取消编辑
-                </Button>
-              ) : null}
-            </Space>
-          </Form.Item>
-        </Form>
+          添加
+        </Button>
       ) : null}
 
-      <Table
-        rowKey="id"
-        loading={isLoading}
-        columns={columns}
-        dataSource={guests}
-        pagination={false}
-        size="small"
-        locale={{ emptyText: '暂无数据' }}
-      />
+      <Form form={form} component={false}>
+        <Table<GuestRow>
+          rowKey="id"
+          loading={isLoading}
+          components={{
+            body: { cell: EditableCell },
+          }}
+          columns={columns}
+          dataSource={dataSource}
+          pagination={false}
+          size="small"
+          locale={{ emptyText: '暂无数据' }}
+        />
+      </Form>
     </Drawer>
   )
 }

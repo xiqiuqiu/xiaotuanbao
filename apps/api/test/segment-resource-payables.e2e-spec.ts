@@ -299,6 +299,59 @@ describe('Segment resource generate payables (e2e)', () => {
     })
 
     expect(schedule?.amountCents).toBe(200000)
+    expect(schedule?.amountAdjustedAt).toBeNull()
+
+    const scheduleDetail = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${schedule!.id}`)
+      .expect(200)
+    expect(scheduleDetail.body.data.financeTouched).toBe(false)
+  })
+
+  /**
+   * Ordinary payable edit before finance touch must keep resource/schedule aligned
+   * and must NOT mark financeTouched via amountAdjustedAt (ADR-0010).
+   */
+  it('keeps resource amount in sync when payable is patched before finance touch', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+    const originalAmountCents = 160000
+    const editedAmountCents = 90000
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+    const scheduleId = generated.body.data.schedule.id as string
+    expect(generated.body.data.schedule.amountCents).toBe(originalAmountCents)
+
+    const edited = await authRequest(app, financeToken)
+      .patch(`/api/finance/payables/${scheduleId}`)
+      .send({ amountCents: editedAmountCents })
+      .expect(200)
+
+    expect(edited.body.data).toMatchObject({
+      amountCents: editedAmountCents,
+      financeTouched: false,
+      amountAdjustedAt: null,
+    })
+
+    const resourceAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.id}`)
+      .expect(200)
+
+    expect({
+      resourceAmountCents: resourceAfter.body.data.amountCents,
+      scheduleAmountCents: edited.body.data.amountCents,
+      hasSourceAmountMismatch: resourceAfter.body.data.hasSourceAmountMismatch,
+      amountFieldsLocked: resourceAfter.body.data.amountFieldsLocked,
+      financeTouched: edited.body.data.financeTouched,
+    }).toEqual({
+      resourceAmountCents: editedAmountCents,
+      scheduleAmountCents: editedAmountCents,
+      hasSourceAmountMismatch: false,
+      amountFieldsLocked: false,
+      financeTouched: false,
+    })
   })
 
   it('blocks amount patch after finance touch and rejects regenerate', async () => {

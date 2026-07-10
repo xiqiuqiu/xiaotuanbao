@@ -1,4 +1,4 @@
-import { Button, Card, Input, Select, Space, Switch } from 'antd'
+import { Button, Card, Input, Select, Space } from 'antd'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { PartnerKind, PartnerType } from '@xiaotuanbao/shared'
 import { DIRECTORY_PROFILE_STATUS_OPTIONS } from '@/features/directory/catalog'
@@ -21,12 +21,10 @@ export function PartnerFilters({
   partnerKindFilter,
   partnerTypeFilter,
   statusFilter,
-  includeArchived,
   onSearch,
   onPartnerKindChange,
   onPartnerTypeChange,
   onStatusChange,
-  onIncludeArchivedChange,
   onReset,
 }: PartnerFiltersProps) {
   return (
@@ -62,10 +60,6 @@ export function PartnerFilters({
           style={{ width: 280 }}
           onSearch={(value) => onSearch(value.trim())}
         />
-        <Space>
-          <span>显示已归档</span>
-          <Switch checked={includeArchived} onChange={onIncludeArchivedChange} />
-        </Space>
         <Button onClick={onReset}>重置</Button>
       </Space>
     </Card>

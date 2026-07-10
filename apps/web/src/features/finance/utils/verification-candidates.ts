@@ -39,11 +39,11 @@ function formatDepartureLabel(
   departureMap: Map<string, { departureNo: string; name: string }>,
 ): string {
   if (!departureId) {
-    return '—'
+    return '-'
   }
   const departure = departureMap.get(departureId)
   if (!departure) {
-    return '—'
+    return '-'
   }
   return `${departure.departureNo} · ${departure.name}`
 }

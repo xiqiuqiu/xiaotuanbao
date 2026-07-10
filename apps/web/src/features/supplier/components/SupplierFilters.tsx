@@ -1,4 +1,4 @@
-import { Card, Input, Select, Space, Switch } from 'antd'
+import { Card, Input, Select, Space } from 'antd'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import { DIRECTORY_PROFILE_STATUS_OPTIONS, SUPPLIER_CATEGORY_OPTIONS } from '../catalog'
 
@@ -15,10 +15,8 @@ interface SupplierFiltersProps {
 export function SupplierFilters({
   categoryFilter,
   statusFilter,
-  includeArchived,
   onCategoryChange,
   onStatusChange,
-  onIncludeArchivedChange,
   onSearch,
 }: SupplierFiltersProps) {
   return (
@@ -46,10 +44,6 @@ export function SupplierFilters({
           style={{ width: 280 }}
           onSearch={(value) => onSearch(value.trim())}
         />
-        <Space>
-          <span>显示已归档</span>
-          <Switch checked={includeArchived} onChange={onIncludeArchivedChange} />
-        </Space>
       </Space>
     </Card>
   )

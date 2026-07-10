@@ -223,7 +223,6 @@ export class PaymentScheduleService {
       ])
       const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
       const data: Prisma.PaymentScheduleUpdateInput = {}
-      let financeAdjusted = false
 
       if (dto.title !== undefined) {
         const title = dto.title.trim()
@@ -238,38 +237,36 @@ export class PaymentScheduleService {
           throw new BadRequestException('财务已介入的节点不可修改金额')
         }
         data.amountCents = dto.amountCents
-        financeAdjusted = true
       }
       if (dto.dueDate !== undefined) {
         if (touched) {
           throw new BadRequestException('财务已介入的节点不可修改到期日')
         }
         data.dueDate = parseDateOnly(dto.dueDate)
-        financeAdjusted = true
       }
       if (dto.counterpartyType !== undefined) {
         if (touched) {
           throw new BadRequestException('财务已介入的节点不可修改往来类型')
         }
         data.counterpartyType = dto.counterpartyType
-        financeAdjusted = true
       }
       if (dto.counterpartyId !== undefined) {
         if (touched) {
           throw new BadRequestException('财务已介入的节点不可修改往来对象')
         }
         data.counterpartyId = dto.counterpartyId?.trim() || null
-        financeAdjusted = true
       }
       if (dto.counterpartyName !== undefined) {
         if (touched) {
           throw new BadRequestException('财务已介入的节点不可修改往来名称')
         }
         data.counterpartyName = dto.counterpartyName?.trim() || null
-        financeAdjusted = true
       }
-      if (financeAdjusted) {
-        data.amountAdjustedAt = new Date()
+
+      // Ordinary edit must not set amountAdjustedAt — that field is reserved for
+      // explicit adjust-amount and would falsely mark financeTouched (ADR-0010).
+      if (dto.amountCents !== undefined && dto.amountCents !== schedule.amountCents) {
+        await this.syncSourceAmountOnOrdinaryEdit(tx, schedule, dto.amountCents)
       }
 
       const updated = await tx.paymentSchedule.update({
@@ -649,6 +646,42 @@ export class PaymentScheduleService {
       dto.title !== undefined ||
       FINANCE_ADJUSTMENT_FIELDS.some((field) => dto[field] !== undefined)
     )
+  }
+
+  /**
+   * Keep source facts aligned with ordinary (pre-finance-touch) amount edits.
+   * Explicit adjust-amount uses the same facade helpers and also sets amountAdjustedAt.
+   */
+  private async syncSourceAmountOnOrdinaryEdit(
+    tx: Prisma.TransactionClient,
+    schedule: PaymentSchedule,
+    amountCents: number,
+  ): Promise<void> {
+    const isPayableResource =
+      schedule.direction === PaymentScheduleDirection.payable &&
+      schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+      Boolean(schedule.sourceId)
+    const isReceivableSourcePath =
+      schedule.direction === PaymentScheduleDirection.receivable &&
+      (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
+        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
+      Boolean(schedule.sourceId)
+
+    if (isPayableResource) {
+      await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
+        resourceId: schedule.sourceId!,
+        amountCents,
+      })
+      return
+    }
+
+    if (isReceivableSourcePath) {
+      await this.departureFinanceFacade.syncSourceOrderPathAmountOnReceivableAdjust(tx, {
+        sourceOrderId: schedule.sourceId!,
+        sourceType: schedule.sourceType,
+        amountCents,
+      })
+    }
   }
 
   private assertPositiveAmount(amountCents: number) {

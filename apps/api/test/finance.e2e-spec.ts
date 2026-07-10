@@ -495,7 +495,9 @@ describe('Finance API (e2e)', () => {
 
     expect(response.body.data.title).toBe(`${testPrefix}-已更新`)
     expect(response.body.data.amountCents).toBe(60000)
-    expect(response.body.data.financeTouched).toBe(true)
+    // Ordinary edit must not set amountAdjustedAt / financeTouched (ADR-0010).
+    expect(response.body.data.financeTouched).toBe(false)
+    expect(response.body.data.amountAdjustedAt).toBeNull()
   })
 
   it('cancels schedule and returns cancelled status', async () => {

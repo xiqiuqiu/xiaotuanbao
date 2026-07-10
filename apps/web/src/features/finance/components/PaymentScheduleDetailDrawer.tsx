@@ -124,14 +124,12 @@ export function PaymentScheduleDetailDrawer({
       ) : (
         <>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="节点编号">
-              <Typography.Text code>{schedule.scheduleNo}</Typography.Text>
-            </Descriptions.Item>
+            <Descriptions.Item label="节点编号">{schedule.scheduleNo}</Descriptions.Item>
             <Descriptions.Item label="标题">{schedule.title}</Descriptions.Item>
             <Descriptions.Item label="约定金额">{formatCents(schedule.amountCents)}</Descriptions.Item>
             <Descriptions.Item label="已核销">{formatCents(schedule.settledAmountCents)}</Descriptions.Item>
             <Descriptions.Item label="未结清">{formatCents(schedule.unsettledAmountCents)}</Descriptions.Item>
-            <Descriptions.Item label="结清进度">{settlement?.label ?? '—'}</Descriptions.Item>
+            <Descriptions.Item label="结清进度">{settlement?.label ?? '-'}</Descriptions.Item>
             <Descriptions.Item label="关闭状态">
               {schedule.cancelledAt
                 ? `已关闭 · ${catalogLabel(CLOSE_DISPOSITION_LABELS, schedule.closeDisposition)}`
@@ -161,7 +159,7 @@ export function PaymentScheduleDetailDrawer({
                       <Typography.Text>
                         {activityTitle(item)}
                         {' · '}
-                        {item.operatedByName || '—'}
+                        {item.operatedByName || '-'}
                         {' · '}
                         {formatDateTime(item.operatedAt)}
                       </Typography.Text>

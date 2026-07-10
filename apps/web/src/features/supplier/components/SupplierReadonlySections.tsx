@@ -59,8 +59,8 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
         <ProfileDescriptions
           column={{ xs: 1, sm: 2 }}
           items={[
-            { label: '主联系人', children: supplier.contactName ?? '—' },
-            { label: '联系方式', children: supplier.contactPhone ?? '—' },
+            { label: '主联系人', children: supplier.contactName ?? '-' },
+            { label: '联系方式', children: supplier.contactPhone ?? '-' },
           ]}
         />
       </ReadonlySection>
@@ -77,8 +77,8 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
               label: '账期规则',
               children: catalogLabel(SETTLEMENT_CYCLE_LABELS, supplier.settlementCycle),
             },
-            { label: '结算说明', children: supplier.settlementNotes ?? '—', span: 3 },
-            { label: '参考报价说明', children: supplier.referenceQuoteNotes ?? '—', span: 3 },
+            { label: '结算说明', children: supplier.settlementNotes ?? '-', span: 3 },
+            { label: '参考报价说明', children: supplier.referenceQuoteNotes ?? '-', span: 3 },
           ]}
         />
       </ReadonlySection>
@@ -93,11 +93,11 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
             },
             {
               label: '发票类型',
-              children: invoiceDisabled ? '—' : catalogLabel(INVOICE_TYPE_LABELS, supplier.invoiceType),
+              children: invoiceDisabled ? '-' : catalogLabel(INVOICE_TYPE_LABELS, supplier.invoiceType),
             },
             {
               label: '税率',
-              children: invoiceDisabled ? '—' : (supplier.taxRate ?? '—'),
+              children: invoiceDisabled ? '-' : (supplier.taxRate ?? '-'),
             },
           ]}
         />
@@ -107,17 +107,17 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
         <ProfileDescriptions
           column={responsiveColumns}
           items={[
-            { label: '开户名称', children: supplier.accountName ?? '—' },
-            { label: '开户行', children: supplier.bankName ?? '—' },
-            { label: '银行账号', children: supplier.bankAccount ?? '—' },
+            { label: '开户名称', children: supplier.accountName ?? '-' },
+            { label: '开户行', children: supplier.bankName ?? '-' },
+            { label: '银行账号', children: supplier.bankAccount ?? '-' },
           ]}
         />
       </ReadonlySection>
 
-      <ReadonlySection title="备注">
+      <ReadonlySection title="补充信息">
         <ProfileDescriptions
           column={1}
-          items={[{ label: '备注', children: supplier.businessNotes ?? '—' }]}
+          items={[{ label: '备注', children: supplier.businessNotes ?? '-' }]}
         />
       </ReadonlySection>
     </>

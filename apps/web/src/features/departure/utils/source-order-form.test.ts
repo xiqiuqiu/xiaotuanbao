@@ -8,6 +8,7 @@ import {
   computeFormAmounts,
   createEmptySourceOrderFormValues,
   formValuesToPayload,
+  formatSourceOrderAmountSummary,
   sourceOrderToFormValues,
   totalGuestCount,
 } from './source-order-form'
@@ -221,5 +222,46 @@ describe('formValuesToPayload', () => {
       adultUnitPriceCents: 120000,
       childUnitPriceCents: 0,
     })
+  })
+})
+
+describe('formatSourceOrderAmountSummary', () => {
+  const formatCents = (cents: number) => `¥${(cents / 100).toFixed(2)}`
+  const amounts = {
+    grossReceivableCents: 399600,
+    discountCents: 0,
+    netReceivableCents: 399600,
+    partnerCollectedCents: 50000,
+    guestCollectCents: 349600,
+  }
+
+  it('shows settlement and guest collect for 全部我方代收', () => {
+    expect(
+      formatSourceOrderAmountSummary(
+        { ...amounts, partnerCollectedCents: 0, guestCollectCents: 399600 },
+        SourceOrderCollectionMode.GUEST_ONLY,
+        formatCents,
+      ),
+    ).toBe('结算金额 ¥3996.00 · 我方代收 ¥3996.00')
+  })
+
+  it('shows settlement, partner collected and guest collect for 客户已收 + 我方代收', () => {
+    expect(
+      formatSourceOrderAmountSummary(
+        amounts,
+        SourceOrderCollectionMode.SPLIT,
+        formatCents,
+      ),
+    ).toBe('结算金额 ¥3996.00 · 客户已收 ¥500.00 · 我方代收 ¥3496.00')
+  })
+
+  it('shows settlement and partner collected for 客户结算', () => {
+    expect(
+      formatSourceOrderAmountSummary(
+        { ...amounts, partnerCollectedCents: 399600, guestCollectCents: 0 },
+        SourceOrderCollectionMode.PARTNER_SETTLED,
+        formatCents,
+      ),
+    ).toBe('结算金额 ¥3996.00 · 客户已收 ¥3996.00')
   })
 })

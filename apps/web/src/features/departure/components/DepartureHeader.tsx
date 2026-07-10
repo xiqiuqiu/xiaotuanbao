@@ -217,7 +217,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
     openEditDrawer,
   ])
 
-  const ownerLabel = departure.ownerName ?? '—'
+  const ownerLabel = departure.ownerName ?? '-'
 
   return (
     <>

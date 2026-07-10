@@ -84,7 +84,7 @@ export function buildSourceOrdersColumns({
       title: '备注',
       dataIndex: 'notes',
       ellipsis: true,
-      render: (value: string | null) => value ?? '—',
+      render: (value: string | null) => value ?? '-',
     },
     {
       title: '操作',

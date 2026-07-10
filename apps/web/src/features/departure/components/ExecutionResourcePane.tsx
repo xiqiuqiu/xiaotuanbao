@@ -185,7 +185,7 @@ export function ExecutionResourcePane({
       title: '资源项目',
       dataIndex: 'title',
       width: 140,
-      render: (value: string) => value || '—',
+      render: (value: string) => value || '-',
     },
     {
       title: '资源金额',
@@ -207,7 +207,7 @@ export function ExecutionResourcePane({
       title: '备注',
       dataIndex: 'notes',
       ellipsis: true,
-      render: (value: string | null) => value || '—',
+      render: (value: string | null) => value || '-',
     },
     {
       title: '操作',

@@ -61,11 +61,11 @@ function formatDepartureLabel(
   departureMap: Map<string, { departureNo: string; name: string }>,
 ): string {
   if (!departureId) {
-    return '—'
+    return '-'
   }
   const departure = departureMap.get(departureId)
   if (!departure) {
-    return '—'
+    return '-'
   }
   return `${departure.departureNo} · ${departure.name}`
 }
@@ -111,7 +111,6 @@ function buildTransactionColumns(
     {
       title: '流水号',
       dataIndex: 'transactionNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     { title: '日期', dataIndex: 'transactionDate' },
     {
@@ -162,7 +161,6 @@ function buildScheduleColumns(
     {
       title: '收付款节点编号',
       dataIndex: 'scheduleNo',
-      render: (value: string) => <Typography.Text code>{value}</Typography.Text>,
     },
     { title: '标题', dataIndex: 'title' },
     {
@@ -298,7 +296,7 @@ function TransactionSelectionSection({
         >
           <Descriptions column={2} size="small">
             <Descriptions.Item label="流水号">
-              <Typography.Text code>{selectedTransaction.transactionNo}</Typography.Text>
+              {selectedTransaction.transactionNo}
             </Descriptions.Item>
             <Descriptions.Item label="交易日期">
               {selectedTransaction.transactionDate}

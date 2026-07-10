@@ -18,6 +18,6 @@ describe('SupplierCategoryTags', () => {
 
   it('renders an em dash when categories are empty', () => {
     render(<SupplierCategoryTags categories={[]} />)
-    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.getByText('-')).toBeInTheDocument()
   })
 })

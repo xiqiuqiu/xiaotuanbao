@@ -217,6 +217,11 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      // Ordinary amount edits sync source facts; keep execution / source-order tabs fresh.
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
+      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure'] })
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '更新失败')

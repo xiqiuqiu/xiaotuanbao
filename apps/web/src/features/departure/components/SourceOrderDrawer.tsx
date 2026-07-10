@@ -30,6 +30,7 @@ import {
   computeFormAmounts,
   createEmptySourceOrderFormValues,
   formValuesToPayload,
+  formatSourceOrderAmountSummary,
   sourceOrderToFormValues,
   totalGuestCount,
   type SourceOrderFormValues,
@@ -72,11 +73,14 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
     return null
   }
 
+  const collectionMode =
+    (watched?.collectionMode as SourceOrderCollectionMode | undefined) ??
+    SourceOrderCollectionMode.GUEST_ONLY
+
   return (
-    <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-      结算金额 {formatCents(amounts.netReceivableCents)} · 我方代收{' '}
-      {formatCents(amounts.guestCollectCents)}
-    </Typography.Paragraph>
+    <Typography.Text type="secondary">
+      {formatSourceOrderAmountSummary(amounts, collectionMode, formatCents)}
+    </Typography.Text>
   )
 }
 
@@ -173,17 +177,23 @@ export function SourceOrderDrawer({
       size={560}
       onClose={handleClose}
       destroyOnHidden
+      styles={{ footer: { paddingBlock: 16 } }}
       footer={
-        readOnly ? (
-          <Button onClick={handleClose}>关闭</Button>
-        ) : (
-          <Space style={{ float: 'right' }}>
-            <Button onClick={handleClose}>取消</Button>
-            <Button type="primary" loading={loading} onClick={() => form.submit()}>
-              保存
-            </Button>
-          </Space>
-        )
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <AmountPreview form={form} />
+          </div>
+          {readOnly ? (
+            <Button onClick={handleClose}>关闭</Button>
+          ) : (
+            <Space>
+              <Button onClick={handleClose}>取消</Button>
+              <Button type="primary" loading={loading} onClick={() => form.submit()}>
+                保存
+              </Button>
+            </Space>
+          )}
+        </div>
       }
     >
       {editing?.hasSourceAmountMismatch ? (
@@ -293,8 +303,7 @@ export function SourceOrderDrawer({
             <Form.Item
               name="adultUnitPriceYuan"
               label="成人团款单价（元）"
-              rules={[unitPriceRequiredWhenCountPositive('adultGuestCount')]}
-              dependencies={['adultGuestCount']}
+              rules={[{ required: true, message: '请输入成人团款单价' }]}
             >
               <InputNumber
                 min={0}
@@ -387,8 +396,6 @@ export function SourceOrderDrawer({
         <Form.Item name="settlementNotes" label="结算说明">
           <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
         </Form.Item>
-
-        <AmountPreview form={form} />
       </Form>
     </Drawer>
   )

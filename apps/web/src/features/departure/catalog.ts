@@ -35,7 +35,7 @@ export function catalogLabel(
   value: string | null | undefined,
 ): string {
   if (!value) {
-    return '—'
+    return '-'
   }
   return labels[value] ?? value
 }
