@@ -129,20 +129,19 @@ describe('Departure API (e2e)', () => {
     }
   }
 
-  it('returns 403 for finance role on GET /departures', async () => {
-    const response = await authRequest(app, financeToken).get('/api/departures').expect(403)
+  it('allows finance role on GET /departures (ADR-0016 early-launch menus)', async () => {
+    const response = await authRequest(app, financeToken).get('/api/departures').expect(200)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('returns 403 for finance role on POST /departures', async () => {
+  it('allows finance role on POST /departures (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/departures')
-      .send(createPayload())
-      .expect(403)
+      .send(createPayload({ name: `${testPrefix}-finance-create` }))
+      .expect(201)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data.name).toBe(`${testPrefix}-finance-create`)
   })
 
   it('returns preview departure number for current Shanghai month', async () => {
@@ -153,12 +152,12 @@ describe('Departure API (e2e)', () => {
     expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
   })
 
-  it('returns 403 for finance role on GET /departures/next-no', async () => {
+  it('allows finance role on GET /departures/next-no (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .get('/api/departures/next-no')
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
   })
 
   it('creates departure with core fields', async () => {
@@ -302,14 +301,14 @@ describe('Departure API (e2e)', () => {
     return response.body.data as { id: string; departureNo: string }
   }
 
-  it('returns 403 for finance role on GET /departures/:id', async () => {
+  it('allows finance role on GET /departures/:id (ADR-0016 early-launch menus)', async () => {
     const departure = await createTestDeparture()
 
     const response = await authRequest(app, financeToken)
       .get(`/api/departures/${departure.id}`)
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data.id).toBe(departure.id)
   })
 
   it('returns departure detail for coordinator', async () => {
@@ -554,27 +553,22 @@ describe('Departure API (e2e)', () => {
       expect(response.body.data.archiveHistory[1].reason).toBe('企业管理员解除归档')
     })
 
-    it('rejects finance role from closing or unarchiving', async () => {
-      const departure = await createTestDeparture({ name: `${testPrefix}-finance-denied` })
+    it('allows finance role to close and unarchive (ADR-0016 early-launch menus)', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-finance-archive` })
 
-      const closeDenied = await authRequest(app, financeToken)
+      const closed = await authRequest(app, financeToken)
         .post(`/api/departures/${departure.id}/close`)
-        .send({ reason: '财务不应归档' })
-        .expect(403)
-
-      expect(closeDenied.body.message).toBe('无权访问')
-
-      await authRequest(app, coordinatorToken)
-        .post(`/api/departures/${departure.id}/close`)
-        .send({ reason: '计调归档后测财务' })
+        .send({ reason: '财务归档' })
         .expect(201)
 
-      const unarchiveDenied = await authRequest(app, financeToken)
-        .post(`/api/departures/${departure.id}/unarchive`)
-        .send({ reason: '财务不应解除归档' })
-        .expect(403)
+      expect(closed.body.data.status).toBe(DepartureStatus.closed)
 
-      expect(unarchiveDenied.body.message).toBe('无权访问')
+      const unarchived = await authRequest(app, financeToken)
+        .post(`/api/departures/${departure.id}/unarchive`)
+        .send({ reason: '财务解除归档' })
+        .expect(201)
+
+      expect(unarchived.body.data.status).toBe(DepartureStatus.pending_settlement)
     })
 
     it('rejects cross-organization close and unarchive', async () => {

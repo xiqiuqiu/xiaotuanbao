@@ -79,7 +79,8 @@ export type {
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
-export { PRESET_ROLE_NAMES, PRESET_ROLE_MENU_KEYS, type PresetRoleName } from './constants/roles'
+export { PRESET_ROLE_NAMES, PRESET_ROLE_MENU_KEYS, EARLY_LAUNCH_BUSINESS_MENU_KEYS, type PresetRoleName } from './constants/roles'
+export { planRolePermissionSync } from './constants/plan-role-permission-sync'
 export { UserStatus } from './enums/user-status.enum'
 export { DirectoryProfileStatus } from './enums/directory-profile-status.enum'
 export { SettlementMethod } from './enums/settlement-method.enum'

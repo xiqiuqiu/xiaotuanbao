@@ -370,7 +370,7 @@ describe('Segment resource generate payables (e2e)', () => {
     expect(response.body.message).toBe('当前资源已生成应付，不能直接删除')
   })
 
-  it('allows coordinator to generate payables but not create finance payables directly', async () => {
+  it('allows coordinator to generate payables and create finance payables (ADR-0016)', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id)
@@ -379,7 +379,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(201)
 
-    const forbidden = await authRequest(app, coordinatorToken)
+    const created = await authRequest(app, coordinatorToken)
       .post('/api/finance/payables')
       .send({
         departureId: departure.id,
@@ -389,9 +389,9 @@ describe('Segment resource generate payables (e2e)', () => {
         counterpartyType: CounterpartyType.supplier,
         counterpartyId: supplierId,
       })
-      .expect(403)
+      .expect(201)
 
-    expect(forbidden.body.message).toBe('无权访问')
+    expect(created.body.data.title).toBe(`${testPrefix}-manual`)
   })
 
   it('rejects generate payable when departure is closed', async () => {

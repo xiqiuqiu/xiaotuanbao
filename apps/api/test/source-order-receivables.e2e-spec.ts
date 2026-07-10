@@ -523,7 +523,7 @@ describe('Source order generate receivables (e2e)', () => {
     expect(schedule.amountCents).toBe(1000000)
   })
 
-  it('allows coordinator to generate receivables but not create finance receivables directly', async () => {
+  it('allows coordinator to generate receivables and create finance receivables (ADR-0016)', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id)
 
@@ -531,7 +531,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
 
-    const forbidden = await authRequest(app, coordinatorToken)
+    const created = await authRequest(app, coordinatorToken)
       .post('/api/finance/receivables')
       .send({
         departureId: departure.id,
@@ -541,9 +541,9 @@ describe('Source order generate receivables (e2e)', () => {
         counterpartyType: CounterpartyType.partner,
         counterpartyId: partnerId,
       })
-      .expect(403)
+      .expect(201)
 
-    expect(forbidden.body.message).toBe('无权访问')
+    expect(created.body.data.title).toBe(`${testPrefix}-manual`)
   })
 
   it('rejects generate receivables when departure is closed', async () => {

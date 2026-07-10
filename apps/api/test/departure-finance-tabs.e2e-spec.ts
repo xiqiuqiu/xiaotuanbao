@@ -197,13 +197,13 @@ describe('Departure finance tabs (e2e)', () => {
     await prisma.supplier.delete({ where: { id: supplier.id } })
   })
 
-  it('blocks coordinator from finance mutation APIs', async () => {
+  it('allows coordinator finance mutations (ADR-0016 early-launch menus)', async () => {
     const departure = await createDeparture('-mut')
     const sourceOrder = await createSourceOrder(departure.id)
     const schedules = await generateReceivables(sourceOrder.id)
     const scheduleId = schedules[0].id
 
-    const forbidden = await authRequest(app, coordinatorToken)
+    const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
       .send({
         amountCents: 1000000,
@@ -212,27 +212,27 @@ describe('Departure finance tabs (e2e)', () => {
         counterpartyType: CounterpartyType.guest,
         counterpartyName: sourceOrder.displayName,
       })
-      .expect(403)
+      .expect(201)
 
-    expect(forbidden.body.message).toBe('无权访问')
+    expect(confirmed.body.data).toBeTruthy()
   })
 
-  it('blocks coordinator from global finance list APIs', async () => {
+  it('allows coordinator global finance list APIs (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/finance/receivables')
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('blocks finance role from departure detail API', async () => {
+  it('allows finance role departure detail API (ADR-0016 early-launch menus)', async () => {
     const departure = await createDeparture('-fin')
 
     const response = await authRequest(app, financeToken)
       .get(`/api/departures/${departure.id}`)
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.id).toBe(departure.id)
   })
 
   it('allows admin to list departure-scoped receivables and confirm collection', async () => {

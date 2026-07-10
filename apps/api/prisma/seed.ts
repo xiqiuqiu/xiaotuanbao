@@ -4,6 +4,7 @@ import {
   PRESET_ROLE_NAMES,
   UserStatus,
   V1_MENU_KEYS,
+  planRolePermissionSync,
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -40,25 +41,36 @@ async function seedRoleCatalog() {
       update: {},
     })
 
-    const menuKeys = PRESET_ROLE_MENU_KEYS[roleName]
-    for (const menuKey of menuKeys) {
+    const desiredKeys = PRESET_ROLE_MENU_KEYS[roleName]
+    const existing = await prisma.rolePermission.findMany({
+      where: { roleId: role.id },
+      include: { permission: true },
+    })
+    const currentKeys = existing.map((item) => item.permission.key)
+    const { toAdd, toRemove } = planRolePermissionSync(currentKeys, desiredKeys)
+
+    for (const menuKey of toAdd) {
       const permission = permissionByKey.get(menuKey)
       if (!permission) {
         throw new Error(`Missing permission for menu key: ${menuKey}`)
       }
 
-      await prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId: role.id,
-            permissionId: permission.id,
-          },
-        },
-        create: {
+      await prisma.rolePermission.create({
+        data: {
           roleId: role.id,
           permissionId: permission.id,
         },
-        update: {},
+      })
+    }
+
+    if (toRemove.length > 0) {
+      const removeKeys = new Set(toRemove)
+      const removeIds = existing
+        .filter((item) => removeKeys.has(item.permission.key))
+        .map((item) => item.id)
+
+      await prisma.rolePermission.deleteMany({
+        where: { id: { in: removeIds } },
       })
     }
   }

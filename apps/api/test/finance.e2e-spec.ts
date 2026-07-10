@@ -277,24 +277,22 @@ describe('Finance API (e2e)', () => {
     await app.close()
   })
 
-  it('returns 403 for coordinator on POST /finance/receivables', async () => {
+  it('allows coordinator to POST /finance/receivables (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, coordinatorToken)
       .post('/api/finance/receivables')
-      .send(schedulePayload())
-      .expect(403)
+      .send(schedulePayload({ title: `${testPrefix}-计调应收` }))
+      .expect(201)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.direction).toBe(PaymentScheduleDirection.receivable)
   })
 
-  it('returns 403 for coordinator on POST /finance/payables', async () => {
+  it('allows coordinator to POST /finance/payables (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, coordinatorToken)
       .post('/api/finance/payables')
-      .send(schedulePayload({ title: `${testPrefix}-应付` }))
-      .expect(403)
+      .send(schedulePayload({ title: `${testPrefix}-计调应付` }))
+      .expect(201)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.direction).toBe(PaymentScheduleDirection.payable)
   })
 
   it('creates receivable with AR schedule number for finance role', async () => {
@@ -2436,13 +2434,12 @@ describe('Finance API (e2e)', () => {
     })
   })
 
-  it('returns 403 for coordinator on GET /finance/receivables', async () => {
+  it('allows coordinator to GET /finance/receivables (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/finance/receivables')
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
   it('rejects an existing finance token after the employee is disabled', async () => {
@@ -2461,7 +2458,7 @@ describe('Finance API (e2e)', () => {
     expect(response.status).toBe(401)
   })
 
-  it('returns 403 for coordinator finance mutations', async () => {
+  it('allows coordinator finance mutations (ADR-0016 early-launch menus)', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
       .send(schedulePayload({ title: `${testPrefix}-权限测试` }))
@@ -2470,9 +2467,9 @@ describe('Finance API (e2e)', () => {
     const confirm = await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
       .send(confirmPayload({ amountCents: 10000 }))
-      .expect(403)
+      .expect(201)
 
-    expect(confirm.body.code).toBe(403)
+    expect(confirm.body.data).toBeTruthy()
 
     const createTx = await authRequest(app, coordinatorToken)
       .post('/api/finance/transactions')
@@ -2485,22 +2482,22 @@ describe('Finance API (e2e)', () => {
         counterpartyId: partnerId,
         counterpartyName: '权限测试',
       })
-      .expect(403)
+      .expect(201)
 
-    expect(createTx.body.code).toBe(403)
+    expect(createTx.body.data.amountCents).toBe(10000)
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
       .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
       .expect(200)
 
-    if (verifications.body.data.items.length > 0) {
-      const cancel = await authRequest(app, coordinatorToken)
-        .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
-        .expect(403)
+    expect(verifications.body.data.items.length).toBeGreaterThan(0)
+    const cancel = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '计调撤销核销' })
+      .expect(201)
 
-      expect(cancel.body.code).toBe(403)
-    }
+    expect(cancel.body.data).toBeTruthy()
   })
 
   it('never commits both amount adjustment and verification under concurrency', async () => {

@@ -37,24 +37,23 @@ describe('Partner API (e2e)', () => {
     await app.close()
   })
 
-  it('returns 403 for finance role without /partner permission', async () => {
-    const response = await authRequest(app, financeToken).get('/api/partners').expect(403)
+  it('allows finance role to list partners (ADR-0016 early-launch menus)', async () => {
+    const response = await authRequest(app, financeToken).get('/api/partners').expect(200)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('returns 403 for finance role on POST /partners', async () => {
+  it('allows finance role to create partners (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/partners')
       .send({
-        name: `${testPartnerPrefix}-finance-blocked`,
+        name: `${testPartnerPrefix}-finance-allowed`,
         partnerKind: PartnerKind.group_agent,
         partnerType: PartnerType.local_agency,
       })
-      .expect(403)
+      .expect(201)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data.name).toBe(`${testPartnerPrefix}-finance-allowed`)
   })
 
   it('lists partners excluding archived by default', async () => {

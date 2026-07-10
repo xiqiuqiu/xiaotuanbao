@@ -857,15 +857,16 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(detail.body.data.openUnsettledReceivableCents).toBe(0)
     expect(detail.body.data.completionTags.receivables).toBe('已收齐')
 
-    const forbidden = await authRequest(app, coordinatorToken)
+    // ADR-0016: coordinator has finance menus; settled schedule still rejects further collection.
+    const rejected = await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${guestSchedule.id}/confirm-collection`)
       .send({
         amountCents: 1,
         transactionDate: '2026-08-04',
         paymentChannel: PaymentChannel.OTHER,
       })
-      .expect(403)
-    expect(forbidden.body.message).toBe('无权访问')
+      .expect(400)
+    expect(rejected.body.message).toMatch(/结清|未结清|不可/)
   })
 
   it('builds departure from template then settles supplier and outsource payables', async () => {
@@ -2333,14 +2334,6 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({ targetStatus: DepartureStatus.settled })
       .expect(201)
     expect(settled.body.data.status).toBe(DepartureStatus.settled)
-
-    await authRequest(app, coordinatorToken)
-      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
-      .send({
-        reopenReason: '计调无权重新打开',
-        confirmDepartureSettlementReversal: true,
-      })
-      .expect(403)
 
     const missingConfirm = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)

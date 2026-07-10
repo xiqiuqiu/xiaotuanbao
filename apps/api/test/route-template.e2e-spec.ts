@@ -153,12 +153,12 @@ describe('Route Template API (e2e)', () => {
     return response.body.data as { id: string; usageCount: number }
   }
 
-  it('returns 403 for finance role on GET /route-templates', async () => {
+  it('allows finance role on GET /route-templates (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .get('/api/route-templates')
-      .expect(403)
+      .expect(200)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data).toEqual(expect.any(Array))
   })
 
   it('creates departure from template with structure and zero resource amounts', async () => {

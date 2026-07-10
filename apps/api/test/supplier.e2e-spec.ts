@@ -61,20 +61,19 @@ describe('Supplier API (e2e)', () => {
     await app.close()
   })
 
-  it('returns 403 for finance role without /supplier permission', async () => {
-    const response = await authRequest(app, financeToken).get('/api/suppliers').expect(403)
+  it('allows finance role to list suppliers (ADR-0016 early-launch menus)', async () => {
+    const response = await authRequest(app, financeToken).get('/api/suppliers').expect(200)
 
-    expect(response.body.code).toBe(403)
-    expect(response.body.message).toBe('无权访问')
+    expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('returns 403 for finance role on POST /suppliers', async () => {
+  it('allows finance role to create suppliers (ADR-0016 early-launch menus)', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/suppliers')
-      .send({ name: `${testSupplierPrefix}-finance-blocked`, categories: [ResourceKind.other] })
-      .expect(403)
+      .send({ name: `${testSupplierPrefix}-finance-allowed`, categories: [ResourceKind.other] })
+      .expect(201)
 
-    expect(response.body.code).toBe(403)
+    expect(response.body.data.name).toBe(`${testSupplierPrefix}-finance-allowed`)
   })
 
   it('lists suppliers excluding archived by default', async () => {
