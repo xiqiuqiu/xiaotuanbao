@@ -303,10 +303,12 @@ describe('CreateDepartureWizard', () => {
       dayCount: 10,
       grossReceivableCents: 0,
       discountCents: 0,
-      collectedCents: 0,
-      uncollectedCents: 0,
-      paidCents: 0,
-      unpaidCents: 0,
+      verifiedReceivableCents: 0,
+      openUnsettledReceivableCents: 0,
+      verifiedPayableCents: 0,
+      openUnsettledPayableCents: 0,
+      unverifiedIncomeCents: 0,
+      unverifiedExpenseCents: 0,
       isFinanciallySettled: false,
     })
 

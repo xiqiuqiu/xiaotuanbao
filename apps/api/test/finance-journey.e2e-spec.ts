@@ -288,10 +288,10 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     expect(afterSettle.body.data).toMatchObject({
       isFinanciallySettled: true,
-      collectedCents: 1000000,
-      uncollectedCents: 0,
-      paidCents: 360000,
-      unpaidCents: 0,
+      verifiedReceivableCents: 1000000,
+      openUnsettledReceivableCents: 0,
+      verifiedPayableCents: 360000,
+      openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
         payables: '已付清',
@@ -388,8 +388,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/departures/${departure.id}`)
       .expect(200)
     expect(settledDetail.body.data.isFinanciallySettled).toBe(true)
-    expect(settledDetail.body.data.collectedCents).toBe(1000000)
-    expect(settledDetail.body.data.paidCents).toBe(360000)
+    expect(settledDetail.body.data.verifiedReceivableCents).toBe(1000000)
+    expect(settledDetail.body.data.verifiedPayableCents).toBe(360000)
 
     const cancelAr = await authRequest(app, financeToken)
       .post(`/api/finance/verifications/${arVerifications.body.data.items[0].id}/cancel`)
@@ -420,10 +420,12 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(restoredDetail.body.data).toMatchObject({
       isFinanciallySettled: false,
-      collectedCents: 0,
-      uncollectedCents: 1000000,
-      paidCents: 0,
-      unpaidCents: 360000,
+      verifiedReceivableCents: 0,
+      openUnsettledReceivableCents: 1000000,
+      verifiedPayableCents: 0,
+      openUnsettledPayableCents: 360000,
+      unverifiedIncomeCents: 1000000,
+      unverifiedExpenseCents: 360000,
       completionTags: {
         receivables: '应收已生成',
         payables: '应付已生成',
@@ -606,6 +608,19 @@ describe('Finance journeys (cross-module e2e)', () => {
       allocatedAmountCents: 0,
       unallocatedAmountCents: verifiedCents,
       voidedAt: null,
+    })
+
+    const departureSummaryAfterRevoke = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(departureSummaryAfterRevoke.body.data).toMatchObject({
+      verifiedReceivableCents: 0,
+      openUnsettledReceivableCents: obligationCents,
+      verifiedPayableCents: 0,
+      openUnsettledPayableCents: obligationCents,
+      unverifiedIncomeCents: verifiedCents,
+      unverifiedExpenseCents: verifiedCents,
+      isFinanciallySettled: false,
     })
 
     const resourceAfterRevoke = await authRequest(app, coordinatorToken)
@@ -819,8 +834,8 @@ describe('Finance journeys (cross-module e2e)', () => {
     const detail = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
       .expect(200)
-    expect(detail.body.data.collectedCents).toBe(1000000)
-    expect(detail.body.data.uncollectedCents).toBe(0)
+    expect(detail.body.data.verifiedReceivableCents).toBe(1000000)
+    expect(detail.body.data.openUnsettledReceivableCents).toBe(0)
     expect(detail.body.data.completionTags.receivables).toBe('已收齐')
 
     const forbidden = await authRequest(app, coordinatorToken)
@@ -995,9 +1010,9 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(settledDetail.body.data).toMatchObject({
       isFinanciallySettled: true,
-      collectedCents: 500000,
-      paidCents: 350000,
-      unpaidCents: 0,
+      verifiedReceivableCents: 500000,
+      verifiedPayableCents: 350000,
+      openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
         payables: '已付清',
@@ -1038,10 +1053,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(partialDetail.body.data).toMatchObject({
       isFinanciallySettled: false,
-      collectedCents: 400000,
-      uncollectedCents: 600000,
-      paidCents: 100000,
-      unpaidCents: 260000,
+      verifiedReceivableCents: 400000,
+      openUnsettledReceivableCents: 600000,
+      verifiedPayableCents: 100000,
+      openUnsettledPayableCents: 260000,
       completionTags: {
         receivables: '应收已生成',
         payables: '应付已生成',
@@ -1098,10 +1113,10 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(completeDetail.body.data).toMatchObject({
       isFinanciallySettled: true,
-      collectedCents: 1000000,
-      uncollectedCents: 0,
-      paidCents: 360000,
-      unpaidCents: 0,
+      verifiedReceivableCents: 1000000,
+      openUnsettledReceivableCents: 0,
+      verifiedPayableCents: 360000,
+      openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
         payables: '已付清',
@@ -1211,7 +1226,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/departures/${departure.id}`)
       .expect(200)
     expect(detail.body.data.isFinanciallySettled).toBe(true)
-    expect(detail.body.data.collectedCents).toBe(1000000)
+    expect(detail.body.data.verifiedReceivableCents).toBe(1000000)
     expect(detail.body.data.completionTags.receivables).toBe('已收齐')
   })
 
@@ -1235,7 +1250,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/departures/${departure.id}`)
       .expect(200)
     expect(beforeCancel.body.data.isFinanciallySettled).toBe(false)
-    expect(beforeCancel.body.data.unpaidCents).toBe(360000)
+    expect(beforeCancel.body.data.openUnsettledPayableCents).toBe(360000)
 
     const cancelled = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
@@ -1248,9 +1263,9 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(afterCancel.body.data).toMatchObject({
       isFinanciallySettled: true,
-      collectedCents: 1000000,
-      paidCents: 0,
-      unpaidCents: 0,
+      verifiedReceivableCents: 1000000,
+      verifiedPayableCents: 0,
+      openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
         payables: '已付清',
@@ -1603,8 +1618,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       sourceOrderCount: 0,
       segmentCount: 1,
       resourceCount: 1,
-      collectedCents: 0,
-      paidCents: 0,
+      verifiedReceivableCents: 0,
+      verifiedPayableCents: 0,
       completionTags: {
         receivables: '应收未生成',
         payables: '应付未生成',
@@ -1677,7 +1692,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/departures/${copied.body.data.id}`)
       .expect(200)
     expect(settledCopy.body.data.isFinanciallySettled).toBe(true)
-    expect(settledCopy.body.data.collectedCents).toBe(320000)
+    expect(settledCopy.body.data.verifiedReceivableCents).toBe(320000)
 
     const sourceStillSettled = await authRequest(app, financeToken)
       .get(`/api/finance/receivables/${schedules.receivableScheduleId}`)
@@ -1739,8 +1754,8 @@ describe('Finance journeys (cross-module e2e)', () => {
     const detail = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
       .expect(200)
-    expect(detail.body.data.collectedCents).toBe(300000)
-    expect(detail.body.data.uncollectedCents).toBe(700000)
+    expect(detail.body.data.verifiedReceivableCents).toBe(300000)
+    expect(detail.body.data.openUnsettledReceivableCents).toBe(700000)
     expect(detail.body.data.isFinanciallySettled).toBe(false)
   })
 })

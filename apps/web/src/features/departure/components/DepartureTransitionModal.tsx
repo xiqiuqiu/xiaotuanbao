@@ -1,7 +1,9 @@
 import { Alert, Descriptions, Form, Input, Modal, Space, Tag, Typography } from 'antd'
 import type { FormInstance } from 'antd/es/form'
+import { TransactionDirection } from '@xiaotuanbao/shared'
 import type { DepartureDetail } from '@/types/api'
 import { formatCents, renderCompletionTags } from '../catalog'
+import { DepartureTransactionsLink } from '../utils/departure-transactions-link'
 import {
   TRANSITION_ACTION_META,
   canConfirmTransition,
@@ -44,6 +46,8 @@ export function DepartureTransitionModal({
   const canConfirm = canConfirmTransition(action, departure)
   const showSoftWarning = action !== 'settled' && incompleteLabels.length > 0
   const requiresReason = action === 'close'
+  const hasUnverifiedCash =
+    departure.unverifiedIncomeCents > 0 || departure.unverifiedExpenseCents > 0
 
   return (
     <Modal
@@ -88,17 +92,66 @@ export function DepartureTransitionModal({
         items={[
           { label: '实际应收', children: formatCents(departure.netReceivableCents) },
           { label: '应付合计', children: formatCents(departure.payableCents) },
-          { label: '已收 / 未收', children: `${formatCents(departure.collectedCents)} / ${formatCents(departure.uncollectedCents)}` },
-          { label: '已付 / 未付', children: `${formatCents(departure.paidCents)} / ${formatCents(departure.unpaidCents)}` },
+          {
+            label: '已核销应收 / 未结清应收',
+            children: `${formatCents(departure.verifiedReceivableCents)} / ${formatCents(departure.openUnsettledReceivableCents)}`,
+          },
+          {
+            label: '已核销应付 / 未结清应付',
+            children: `${formatCents(departure.verifiedPayableCents)} / ${formatCents(departure.openUnsettledPayableCents)}`,
+          },
+          {
+            label: '未核销收入',
+            children: formatCents(departure.unverifiedIncomeCents),
+          },
+          {
+            label: '未核销支出',
+            children: formatCents(departure.unverifiedExpenseCents),
+          },
         ]}
       />
+
+      {hasUnverifiedCash ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="存在归属本发团的未核销资金"
+          description={
+            <Space direction="vertical" size={4}>
+              {departure.unverifiedIncomeCents > 0 ? (
+                <Typography.Text>
+                  未核销收入 {formatCents(departure.unverifiedIncomeCents)}
+                  <DepartureTransactionsLink
+                    departureId={departure.id}
+                    direction={TransactionDirection.INFLOW}
+                  >
+                    查看流水
+                  </DepartureTransactionsLink>
+                </Typography.Text>
+              ) : null}
+              {departure.unverifiedExpenseCents > 0 ? (
+                <Typography.Text>
+                  未核销支出 {formatCents(departure.unverifiedExpenseCents)}
+                  <DepartureTransactionsLink
+                    departureId={departure.id}
+                    direction={TransactionDirection.OUTFLOW}
+                  >
+                    查看流水
+                  </DepartureTransactionsLink>
+                </Typography.Text>
+              ) : null}
+            </Space>
+          }
+        />
+      ) : null}
 
       {action === 'settled' && !departure.isFinanciallySettled ? (
         <Alert
           type="error"
           showIcon
           message="全部账款尚未结清，不可标记为已结清"
-          description={`仍有未收 ${formatCents(departure.uncollectedCents)}、未付 ${formatCents(departure.unpaidCents)}`}
+          description={`仍有未结清应收 ${formatCents(departure.openUnsettledReceivableCents)}、未结清应付 ${formatCents(departure.openUnsettledPayableCents)}`}
         />
       ) : null}
 

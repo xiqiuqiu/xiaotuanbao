@@ -110,6 +110,17 @@ const financePayableRoute = createRoute({
 const financeTransactionsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/transactions',
+  validateSearch: (search: Record<string, unknown>): {
+    departureId?: string
+    direction?: string
+  } => {
+    const departureId = typeof search.departureId === 'string' ? search.departureId.trim() : ''
+    const direction = typeof search.direction === 'string' ? search.direction.trim() : ''
+    return {
+      ...(departureId ? { departureId } : {}),
+      ...(direction ? { direction } : {}),
+    }
+  },
   component: TransactionsPage,
 })
 

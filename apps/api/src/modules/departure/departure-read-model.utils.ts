@@ -1,5 +1,5 @@
 import type { DepartureCompletionTags } from '@xiaotuanbao/shared'
-import { PaymentScheduleDirection } from '@prisma/client'
+import { PaymentScheduleDirection, TransactionDirection } from '@prisma/client'
 
 export interface ScheduleSnapshot {
   direction: PaymentScheduleDirection
@@ -15,6 +15,18 @@ export interface SourceOrderAggregate {
   netReceivableCents: number
 }
 
+export interface UnverifiedCashAggregate {
+  unverifiedIncomeCents: number
+  unverifiedExpenseCents: number
+}
+
+export interface TransactionCashSnapshot {
+  direction: TransactionDirection
+  amountCents: number
+  allocatedAmountCents: number
+  voidedAt: Date | null
+}
+
 export interface DepartureReadModelAggregate {
   totalGuests: number
   sourceOrderCount: number
@@ -25,10 +37,12 @@ export interface DepartureReadModelAggregate {
   netReceivableCents: number
   payableCents: number
   estimatedMarginCents: number
-  collectedCents: number
-  uncollectedCents: number
-  paidCents: number
-  unpaidCents: number
+  verifiedReceivableCents: number
+  openUnsettledReceivableCents: number
+  verifiedPayableCents: number
+  openUnsettledPayableCents: number
+  unverifiedIncomeCents: number
+  unverifiedExpenseCents: number
   completionTags: DepartureCompletionTags
   isFinanciallySettled: boolean
 }
@@ -39,6 +53,11 @@ export const EMPTY_SOURCE_ORDER_AGGREGATE: SourceOrderAggregate = {
   grossReceivableCents: 0,
   discountCents: 0,
   netReceivableCents: 0,
+}
+
+export const EMPTY_UNVERIFIED_CASH: UnverifiedCashAggregate = {
+  unverifiedIncomeCents: 0,
+  unverifiedExpenseCents: 0,
 }
 
 export function isScheduleClosed(schedule: ScheduleSnapshot, settledAmountCents: number): boolean {
@@ -119,27 +138,61 @@ export function computeFinancialAmounts(
   settledByScheduleId: Map<string, number>,
 ): Pick<
   DepartureReadModelAggregate,
-  'collectedCents' | 'uncollectedCents' | 'paidCents' | 'unpaidCents'
+  | 'verifiedReceivableCents'
+  | 'openUnsettledReceivableCents'
+  | 'verifiedPayableCents'
+  | 'openUnsettledPayableCents'
 > {
-  let collectedCents = 0
-  let uncollectedCents = 0
-  let paidCents = 0
-  let unpaidCents = 0
+  let verifiedReceivableCents = 0
+  let openUnsettledReceivableCents = 0
+  let verifiedPayableCents = 0
+  let openUnsettledPayableCents = 0
 
   for (const schedule of schedules) {
     const settled = settledByScheduleId.get(schedule.id) ?? 0
-    const remaining = schedule.cancelledAt != null ? 0 : Math.max(schedule.amountCents - settled, 0)
+    // Closed nodes keep remaining on the node itself, but open summary excludes it.
+    const openRemaining =
+      schedule.cancelledAt != null ? 0 : Math.max(schedule.amountCents - settled, 0)
 
     if (schedule.direction === PaymentScheduleDirection.receivable) {
-      collectedCents += settled
-      uncollectedCents += remaining
+      verifiedReceivableCents += settled
+      openUnsettledReceivableCents += openRemaining
     } else {
-      paidCents += settled
-      unpaidCents += remaining
+      verifiedPayableCents += settled
+      openUnsettledPayableCents += openRemaining
     }
   }
 
-  return { collectedCents, uncollectedCents, paidCents, unpaidCents }
+  return {
+    verifiedReceivableCents,
+    openUnsettledReceivableCents,
+    verifiedPayableCents,
+    openUnsettledPayableCents,
+  }
+}
+
+export function aggregateUnverifiedCashAmounts(
+  transactions: TransactionCashSnapshot[],
+): UnverifiedCashAggregate {
+  let unverifiedIncomeCents = 0
+  let unverifiedExpenseCents = 0
+
+  for (const transaction of transactions) {
+    if (transaction.voidedAt != null) {
+      continue
+    }
+    const unallocated = Math.max(transaction.amountCents - transaction.allocatedAmountCents, 0)
+    if (unallocated <= 0) {
+      continue
+    }
+    if (transaction.direction === TransactionDirection.inflow) {
+      unverifiedIncomeCents += unallocated
+    } else {
+      unverifiedExpenseCents += unallocated
+    }
+  }
+
+  return { unverifiedIncomeCents, unverifiedExpenseCents }
 }
 
 export function deriveIsFinanciallySettled(
@@ -163,9 +216,17 @@ export function buildDepartureReadModelAggregate(input: {
   payableCents: number
   schedules: ScheduleWithId[]
   settledByScheduleId: Map<string, number>
+  unverifiedCash?: UnverifiedCashAggregate
 }): DepartureReadModelAggregate {
-  const { sourceOrders, segmentCount, resourceCount, payableCents, schedules, settledByScheduleId } =
-    input
+  const {
+    sourceOrders,
+    segmentCount,
+    resourceCount,
+    payableCents,
+    schedules,
+    settledByScheduleId,
+    unverifiedCash = EMPTY_UNVERIFIED_CASH,
+  } = input
 
   const financial = computeFinancialAmounts(schedules, settledByScheduleId)
   const estimatedMarginCents = sourceOrders.netReceivableCents - payableCents
@@ -181,6 +242,8 @@ export function buildDepartureReadModelAggregate(input: {
     payableCents,
     estimatedMarginCents,
     ...financial,
+    unverifiedIncomeCents: unverifiedCash.unverifiedIncomeCents,
+    unverifiedExpenseCents: unverifiedCash.unverifiedExpenseCents,
     completionTags: deriveCompletionTags({
       sourceOrderCount: sourceOrders.count,
       segmentCount,
@@ -200,5 +263,6 @@ export function emptyDepartureReadModelAggregate(): DepartureReadModelAggregate 
     payableCents: 0,
     schedules: [],
     settledByScheduleId: new Map(),
+    unverifiedCash: EMPTY_UNVERIFIED_CASH,
   })
 }

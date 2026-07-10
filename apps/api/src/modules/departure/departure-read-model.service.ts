@@ -8,6 +8,7 @@ import {
   type DepartureReadModelAggregate,
   type ScheduleWithId,
   type SourceOrderAggregate,
+  EMPTY_UNVERIFIED_CASH,
 } from './departure-read-model.utils'
 
 interface SegmentRollup {
@@ -38,20 +39,22 @@ export class DepartureReadModelService {
 
     const uniqueIds = [...new Set(departureIds)]
 
-    const [sourceOrderMap, segmentRollupMap, schedules] = await Promise.all([
-      this.batchSourceOrderAggregates(uniqueIds),
-      this.batchSegmentRollups(uniqueIds),
-      this.prisma.paymentSchedule.findMany({
-        where: { departureId: { in: uniqueIds } },
-        select: {
-          id: true,
-          departureId: true,
-          direction: true,
-          amountCents: true,
-          cancelledAt: true,
-        },
-      }),
-    ])
+    const [sourceOrderMap, segmentRollupMap, schedules, unverifiedCashByDeparture] =
+      await Promise.all([
+        this.batchSourceOrderAggregates(uniqueIds),
+        this.batchSegmentRollups(uniqueIds),
+        this.prisma.paymentSchedule.findMany({
+          where: { departureId: { in: uniqueIds } },
+          select: {
+            id: true,
+            departureId: true,
+            direction: true,
+            amountCents: true,
+            cancelledAt: true,
+          },
+        }),
+        this.verificationService.batchGetUnverifiedCashByDeparture(uniqueIds),
+      ])
 
     const scheduleIds = schedules.map((schedule) => schedule.id)
     const settledByScheduleId = await this.verificationService.batchGetSettledAmounts(scheduleIds)
@@ -82,6 +85,7 @@ export class DepartureReadModelService {
         payableCents: 0,
       }
       const departureSchedules = schedulesByDeparture.get(departureId) ?? []
+      const unverifiedCash = unverifiedCashByDeparture.get(departureId) ?? EMPTY_UNVERIFIED_CASH
 
       result.set(
         departureId,
@@ -92,6 +96,7 @@ export class DepartureReadModelService {
           payableCents: rollup.payableCents,
           schedules: departureSchedules,
           settledByScheduleId,
+          unverifiedCash,
         }),
       )
     }

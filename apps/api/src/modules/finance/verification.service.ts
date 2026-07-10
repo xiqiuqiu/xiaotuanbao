@@ -396,6 +396,68 @@ export class VerificationService {
     return map
   }
 
+  /**
+   * Unverified cash for departures: non-voided transactions explicitly linked to the
+   * departure, summing unallocated amounts by inflow/outflow (ADR-0011 / #88).
+   */
+  async batchGetUnverifiedCashByDeparture(
+    departureIds: string[],
+  ): Promise<
+    Map<string, { unverifiedIncomeCents: number; unverifiedExpenseCents: number }>
+  > {
+    const map = new Map<string, { unverifiedIncomeCents: number; unverifiedExpenseCents: number }>()
+    for (const departureId of departureIds) {
+      map.set(departureId, { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 })
+    }
+    if (departureIds.length === 0) {
+      return map
+    }
+
+    const transactions = await this.prisma.financeTransaction.findMany({
+      where: {
+        departureId: { in: departureIds },
+        voidedAt: null,
+      },
+      select: {
+        id: true,
+        departureId: true,
+        direction: true,
+        amountCents: true,
+      },
+    })
+    if (transactions.length === 0) {
+      return map
+    }
+
+    const allocatedByTransactionId = await this.batchGetAllocatedAmounts(
+      transactions.map((transaction) => transaction.id),
+    )
+
+    for (const transaction of transactions) {
+      if (!transaction.departureId) {
+        continue
+      }
+      const unallocated = Math.max(
+        transaction.amountCents - (allocatedByTransactionId.get(transaction.id) ?? 0),
+        0,
+      )
+      if (unallocated <= 0) {
+        continue
+      }
+      const bucket = map.get(transaction.departureId)
+      if (!bucket) {
+        continue
+      }
+      if (transaction.direction === PrismaTransactionDirection.inflow) {
+        bucket.unverifiedIncomeCents += unallocated
+      } else {
+        bucket.unverifiedExpenseCents += unallocated
+      }
+    }
+
+    return map
+  }
+
   private buildListWhere(
     organizationId: string,
     query: ListFinanceVerificationsQueryDto,

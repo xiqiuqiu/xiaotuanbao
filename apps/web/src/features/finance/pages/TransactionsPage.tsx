@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Button, Card, Form, Table, Tag, Tooltip, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FormInstance } from 'antd/es/form'
 import type { ColumnsType } from 'antd/es/table'
@@ -42,6 +42,7 @@ import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
 } from '../utils/verification-form'
+import { applyTransactionListDeepLink } from '../utils/transaction-list-deep-link'
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', {
@@ -381,6 +382,20 @@ type TransactionListAction =
   | { type: 'setPage'; value: number }
   | { type: 'setPageSize'; value: number }
   | { type: 'resetFilters' }
+  | {
+      type: 'applyDeepLink'
+      value: {
+        dateRange: TransactionDateRange
+        direction?: TransactionDirection
+        writeoffStatus?: TransactionWriteoffStatus
+        departureFilter?: string
+        partnerKeyword: string
+        transactionNo: string
+        statusFilter?: 'normal' | 'voided'
+        page: number
+        pageSize: number
+      }
+    }
 
 function createInitialTransactionListState(): TransactionListState {
   const [start, end] = getDefaultTransactionDateRange()
@@ -422,6 +437,8 @@ function transactionListReducer(
       return { ...state, pageSize: action.value }
     case 'resetFilters':
       return createInitialTransactionListState()
+    case 'applyDeepLink':
+      return { ...state, ...action.value }
     default:
       return state
   }
@@ -476,6 +493,10 @@ function TransactionFiltersPanel({
 export function TransactionsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const deepLinkSearch = useSearch({ strict: false }) as {
+    departureId?: string
+    direction?: string
+  }
   const [form] = Form.useForm<TransactionFormValues>()
   const [voidForm] = Form.useForm<VoidTransactionFormValues>()
   const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
@@ -491,6 +512,22 @@ export function TransactionsPage() {
     undefined,
     createInitialTransactionListState,
   )
+  const appliedDeepLinkKey = useRef<string | null>(null)
+
+  useEffect(() => {
+    const deepLink = applyTransactionListDeepLink(deepLinkSearch)
+    if (!deepLink) {
+      appliedDeepLinkKey.current = null
+      return
+    }
+    const key = [deepLink.departureFilter, deepLink.direction ?? ''].join('|')
+    if (appliedDeepLinkKey.current === key) {
+      return
+    }
+    appliedDeepLinkKey.current = key
+    dispatchList({ type: 'applyDeepLink', value: deepLink })
+  }, [deepLinkSearch])
+
   const {
     dateRange,
     direction,

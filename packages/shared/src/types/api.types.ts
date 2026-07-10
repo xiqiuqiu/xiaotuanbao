@@ -239,10 +239,12 @@ export interface DepartureArchiveHistoryItem {
 export interface DepartureDetail extends DepartureSummary {
   grossReceivableCents: number
   discountCents: number
-  collectedCents: number
-  uncollectedCents: number
-  paidCents: number
-  unpaidCents: number
+  verifiedReceivableCents: number
+  openUnsettledReceivableCents: number
+  verifiedPayableCents: number
+  openUnsettledPayableCents: number
+  unverifiedIncomeCents: number
+  unverifiedExpenseCents: number
   isFinanciallySettled: boolean
   archiveHistory: DepartureArchiveHistoryItem[]
 }

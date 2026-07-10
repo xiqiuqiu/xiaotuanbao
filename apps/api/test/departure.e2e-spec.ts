@@ -1529,10 +1529,12 @@ describe('Departure API (e2e)', () => {
         netReceivableCents: 1000000,
         payableCents: 360000,
         estimatedMarginCents: 640000,
-        collectedCents: 0,
-        uncollectedCents: 0,
-        paidCents: 0,
-        unpaidCents: 0,
+        verifiedReceivableCents: 0,
+        openUnsettledReceivableCents: 0,
+        verifiedPayableCents: 0,
+        openUnsettledPayableCents: 0,
+        unverifiedIncomeCents: 0,
+        unverifiedExpenseCents: 0,
         isFinanciallySettled: false,
       })
       expect(response.body.data.completionTags).toMatchObject({
@@ -1607,8 +1609,8 @@ describe('Departure API (e2e)', () => {
         .get(`/api/departures/${departure.id}`)
         .expect(200)
 
-      expect(response.body.data.collectedCents).toBe(500000)
-      expect(response.body.data.uncollectedCents).toBe(500000)
+      expect(response.body.data.verifiedReceivableCents).toBe(500000)
+      expect(response.body.data.openUnsettledReceivableCents).toBe(500000)
       expect(response.body.data.completionTags.receivables).toBe('应收已生成')
       expect(response.body.data.isFinanciallySettled).toBe(false)
     })
@@ -1656,10 +1658,10 @@ describe('Departure API (e2e)', () => {
       expect(detail.body.data.isFinanciallySettled).toBe(true)
       expect(detail.body.data.completionTags.receivables).toBe('已收齐')
       expect(detail.body.data.completionTags.payables).toBe('已付清')
-      expect(detail.body.data.collectedCents).toBe(1000000)
-      expect(detail.body.data.uncollectedCents).toBe(0)
-      expect(detail.body.data.paidCents).toBe(360000)
-      expect(detail.body.data.unpaidCents).toBe(0)
+      expect(detail.body.data.verifiedReceivableCents).toBe(1000000)
+      expect(detail.body.data.openUnsettledReceivableCents).toBe(0)
+      expect(detail.body.data.verifiedPayableCents).toBe(360000)
+      expect(detail.body.data.openUnsettledPayableCents).toBe(0)
     })
 
     it('rejects pending_settlement to settled when not financially settled', async () => {

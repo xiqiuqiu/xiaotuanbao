@@ -1,6 +1,8 @@
-import { PaymentScheduleDirection } from '@prisma/client'
+import { PaymentScheduleDirection, TransactionDirection } from '@prisma/client'
 import {
+  aggregateUnverifiedCashAmounts,
   buildDepartureReadModelAggregate,
+  EMPTY_SOURCE_ORDER_AGGREGATE,
   deriveCompletionTags,
   deriveIsFinanciallySettled,
   derivePayableTagFromSchedules,
@@ -103,7 +105,7 @@ describe('departure-read-model.utils', () => {
   })
 
   describe('buildDepartureReadModelAggregate', () => {
-    it('computes financial summary fields', () => {
+    it('computes obligation-layer verified and open-unsettled amounts', () => {
       const aggregate = buildDepartureReadModelAggregate({
         sourceOrders: {
           count: 1,
@@ -120,24 +122,122 @@ describe('departure-read-model.utils', () => {
           ['ar-1', 600000],
           ['ap-1', 200000],
         ]),
+        unverifiedCash: { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 },
       })
 
       expect(aggregate.totalGuests).toBe(10)
       expect(aggregate.netReceivableCents).toBe(900000)
       expect(aggregate.payableCents).toBe(400000)
       expect(aggregate.estimatedMarginCents).toBe(500000)
-      expect(aggregate.collectedCents).toBe(600000)
-      expect(aggregate.uncollectedCents).toBe(400000)
-      expect(aggregate.paidCents).toBe(200000)
-      expect(aggregate.unpaidCents).toBe(300000)
+      expect(aggregate.verifiedReceivableCents).toBe(600000)
+      expect(aggregate.openUnsettledReceivableCents).toBe(400000)
+      expect(aggregate.verifiedPayableCents).toBe(200000)
+      expect(aggregate.openUnsettledPayableCents).toBe(300000)
+      expect(aggregate.unverifiedIncomeCents).toBe(0)
+      expect(aggregate.unverifiedExpenseCents).toBe(0)
       expect(aggregate.isFinanciallySettled).toBe(false)
+    })
+
+    it('keeps closed-node remaining visible on the node but out of open unsettled summary', () => {
+      const closedPayable = {
+        id: 'ap-closed',
+        direction: PaymentScheduleDirection.payable,
+        amountCents: 1_000_000,
+        cancelledAt: new Date('2026-07-01'),
+      }
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: EMPTY_SOURCE_ORDER_AGGREGATE,
+        segmentCount: 1,
+        resourceCount: 1,
+        payableCents: 1_000_000,
+        schedules: [closedPayable],
+        settledByScheduleId: new Map([['ap-closed', 400_000]]),
+        unverifiedCash: { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 },
+      })
+
+      expect(aggregate.verifiedPayableCents).toBe(400_000)
+      expect(aggregate.openUnsettledPayableCents).toBe(0)
+      expect(aggregate.isFinanciallySettled).toBe(true)
+    })
+
+    it('shows obligation gap and unverified cash together after revoking a 4000 verification', () => {
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 1,
+          grossReceivableCents: 1_000_000,
+          discountCents: 0,
+          netReceivableCents: 1_000_000,
+        },
+        segmentCount: 1,
+        resourceCount: 1,
+        payableCents: 1_000_000,
+        schedules: [receivableSchedule, { ...payableSchedule, amountCents: 1_000_000 }],
+        settledByScheduleId: new Map([
+          ['ar-1', 0],
+          ['ap-1', 0],
+        ]),
+        unverifiedCash: {
+          unverifiedIncomeCents: 400_000,
+          unverifiedExpenseCents: 400_000,
+        },
+      })
+
+      expect(aggregate.verifiedReceivableCents).toBe(0)
+      expect(aggregate.openUnsettledReceivableCents).toBe(1_000_000)
+      expect(aggregate.verifiedPayableCents).toBe(0)
+      expect(aggregate.openUnsettledPayableCents).toBe(1_000_000)
+      expect(aggregate.unverifiedIncomeCents).toBe(400_000)
+      expect(aggregate.unverifiedExpenseCents).toBe(400_000)
     })
 
     it('returns empty aggregate defaults', () => {
       const aggregate = emptyDepartureReadModelAggregate()
       expect(aggregate.totalGuests).toBe(0)
+      expect(aggregate.verifiedReceivableCents).toBe(0)
+      expect(aggregate.openUnsettledReceivableCents).toBe(0)
+      expect(aggregate.verifiedPayableCents).toBe(0)
+      expect(aggregate.openUnsettledPayableCents).toBe(0)
+      expect(aggregate.unverifiedIncomeCents).toBe(0)
+      expect(aggregate.unverifiedExpenseCents).toBe(0)
       expect(aggregate.completionTags.receivables).toBe('应收未生成')
       expect(aggregate.isFinanciallySettled).toBe(false)
+    })
+  })
+
+  describe('aggregateUnverifiedCashAmounts', () => {
+    it('sums unallocated amounts only for non-voided transactions linked to the departure', () => {
+      const cash = aggregateUnverifiedCashAmounts([
+        {
+          direction: TransactionDirection.inflow,
+          amountCents: 400_000,
+          allocatedAmountCents: 0,
+          voidedAt: null,
+        },
+        {
+          direction: TransactionDirection.outflow,
+          amountCents: 500_000,
+          allocatedAmountCents: 100_000,
+          voidedAt: null,
+        },
+        {
+          direction: TransactionDirection.outflow,
+          amountCents: 200_000,
+          allocatedAmountCents: 0,
+          voidedAt: new Date('2026-07-01'),
+        },
+        {
+          direction: TransactionDirection.inflow,
+          amountCents: 50_000,
+          allocatedAmountCents: 50_000,
+          voidedAt: null,
+        },
+      ])
+
+      expect(cash).toEqual({
+        unverifiedIncomeCents: 400_000,
+        unverifiedExpenseCents: 400_000,
+      })
     })
   })
 })
