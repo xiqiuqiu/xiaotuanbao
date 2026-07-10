@@ -14,6 +14,7 @@ import {
   Tabs,
   Typography,
   message,
+  theme,
 } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
@@ -26,6 +27,7 @@ interface CreateDepartureStepRouteProps {
 }
 
 export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureStepRouteProps) {
+  const { token } = theme.useToken()
   const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
   const [activeTab, setActiveTab] = useState<'template' | 'manual'>(
@@ -159,9 +161,9 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                             hoverable
                             onClick={() => handleSelectTemplate(template)}
                             style={{
-                              borderColor: selected ? '#1677ff' : undefined,
+                              borderColor: selected ? token.colorPrimary : undefined,
                               boxShadow: selected
-                                ? '0 0 0 2px rgba(22, 119, 255, 0.15)'
+                                ? `0 0 0 2px ${token.colorPrimaryBg}`
                                 : undefined,
                             }}
                           >
@@ -193,7 +195,10 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                 )}
 
                 {selectedTemplateLabel ? (
-                  <div className={styles.selectedTemplateBanner}>
+                  <div
+                    className={styles.selectedTemplateBanner}
+                    style={{ ['--route-banner-bg' as string]: token.colorFillAlter }}
+                  >
                     <Typography.Text>已选：{selectedTemplateLabel}</Typography.Text>
                     <Typography.Link onClick={handleClearTemplate}>清除</Typography.Link>
                   </div>

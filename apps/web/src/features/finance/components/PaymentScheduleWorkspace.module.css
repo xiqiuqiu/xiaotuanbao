@@ -15,11 +15,19 @@
    promotes stacking and briefly reveals content under the sticky 操作 column.
    Ant Design class names must stay :global — CSS Modules would hash them. */
 .locateFlash > td:not(:global(.ant-table-cell-fix)) {
-  animation: scheduleRowLocateFlash 0.85s cubic-bezier(0.45, 0, 0.55, 1) 2;
+  /* antd Slow (0.3s) × 2 — keep under ~600ms total */
+  animation: scheduleRowLocateFlash 0.3s ease 2;
 }
 
 .locateFlash > td:global(.ant-table-cell-fix) {
   /* Keep sticky 操作 above animated body cells for the flash duration. */
   z-index: 3;
   background-color: var(--ant-color-bg-container, #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locateFlash > td:not(:global(.ant-table-cell-fix)) {
+    animation: none;
+    background-color: color-mix(in srgb, var(--schedule-locate-bg) 72%, transparent);
+  }
 }

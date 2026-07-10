@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Alert,
   Button,
@@ -66,6 +66,8 @@ export function ExecutionTab({
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const segmentListRef = useRef<HTMLDivElement>(null)
   const mutationLocked = readOnly || amountReadOnly
 
   const { data: listResult, isLoading, isError, refetch } = useQuery({
@@ -89,6 +91,24 @@ export function ExecutionTab({
       replace,
     })
   }
+
+  useLayoutEffect(() => {
+    const el = workspaceRef.current
+    if (!el) {
+      return
+    }
+
+    const syncHeight = () => {
+      const top = el.getBoundingClientRect().top
+      // Match AppLayout content bottom margin (16).
+      const next = Math.max(360, Math.floor(window.innerHeight - top - 16))
+      el.style.height = `${next}px`
+    }
+
+    syncHeight()
+    window.addEventListener('resize', syncHeight)
+    return () => window.removeEventListener('resize', syncHeight)
+  }, [isLoading, isError, listResult?.summary])
 
   useEffect(() => {
     // Only canonicalize segmentId while execution owns the URL. Otherwise a
@@ -119,6 +139,21 @@ export function ExecutionTab({
     segmentId,
     selectedSegmentId,
   ])
+
+  useEffect(() => {
+    if (!selectedSegmentId || !segmentListRef.current) {
+      return
+    }
+    const selectedNode = segmentListRef.current.querySelector(
+      `[data-segment-id="${selectedSegmentId}"]`,
+    )
+    if (
+      selectedNode instanceof HTMLElement &&
+      typeof selectedNode.scrollIntoView === 'function'
+    ) {
+      selectedNode.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+    }
+  }, [selectedSegmentId, segments.length])
 
   const invalidateSegments = () => {
     void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
@@ -206,8 +241,8 @@ export function ExecutionTab({
     '--execution-fill-hover': token.colorFillTertiary,
     '--execution-primary-bg': token.colorPrimaryBg,
     '--execution-primary-border': token.colorPrimaryBorder,
-            '--execution-item-bg': token.colorBgContainer,
-            '--execution-item-border': token.colorBorderSecondary,
+    '--execution-item-bg': token.colorBgContainer,
+    '--execution-item-border': token.colorBorderSecondary,
     '--execution-radius': `${token.borderRadiusLG}px`,
     '--execution-font-sm': `${token.fontSizeSM}px`,
     '--execution-font-strong': String(token.fontWeightStrong),
@@ -217,12 +252,14 @@ export function ExecutionTab({
   } as CSSProperties
 
   return (
-    <div>
+    <div className={styles.workspace} ref={workspaceRef}>
       {listResult?.summary ? <ExecutionSummaryBar summary={listResult.summary} /> : null}
 
-      <Row gutter={16} wrap={false} align="stretch">
-        <Col flex="280px" style={{ maxWidth: 280 }}>
+      <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
+        <Col className={styles.paneCol} flex="280px" style={{ maxWidth: 280 }}>
           <Card
+            className={styles.paneCard}
+            classNames={{ body: styles.paneCardBody }}
             title="行程段"
             extra={
               !mutationLocked ? (
@@ -237,9 +274,12 @@ export function ExecutionTab({
               ) : null
             }
             styles={{ body: { padding: 12 } }}
-            style={{ height: '100%', minHeight: 360 }}
           >
-            <div className={styles.segmentList} style={segmentTokenStyle}>
+            <div
+              ref={segmentListRef}
+              className={styles.segmentList}
+              style={segmentTokenStyle}
+            >
               {segments.length === 0 ? (
                 <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
                   暂无行程段
@@ -260,8 +300,11 @@ export function ExecutionTab({
           </Card>
         </Col>
 
-        <Col flex="auto" style={{ minWidth: 0 }}>
-          <Card style={{ height: '100%', minHeight: 360 }}>
+        <Col className={styles.paneCol} flex="auto" style={{ minWidth: 0 }}>
+          <Card
+            className={styles.paneCard}
+            classNames={{ body: styles.paneCardBody }}
+          >
             {segments.length === 0 ? (
               <Empty description="请先添加行程段" style={{ padding: '48px 0' }}>
                 {!mutationLocked ? (
@@ -321,6 +364,7 @@ function SegmentNavItem({
     <div
       role="button"
       tabIndex={0}
+      data-segment-id={segment.id}
       className={`${styles.segmentItem}${selected ? ` ${styles.segmentItemSelected}` : ''}`}
       onClick={onSelect}
       onKeyDown={(event) => {

@@ -126,6 +126,22 @@ describe('ExecutionTab layout', () => {
     expect(row?.className).toContain('ant-row-no-wrap')
   })
 
+  it('puts segment and resource panes in a fixed-height scroll workspace', async () => {
+    const { container } = renderExecutionTab()
+
+    expect(await screen.findByText('行程段')).toBeInTheDocument()
+
+    const workspace = container.querySelector('[class*="workspace"]')
+    expect(workspace).toBeTruthy()
+
+    const segmentCard = screen.getByText('行程段').closest('.ant-card')
+    expect(segmentCard?.className).toMatch(/paneCard/)
+    expect(segmentCard?.querySelector('[class*="paneCardBody"]')).toBeTruthy()
+
+    const selected = container.querySelector('[data-segment-id="segment-1"]')
+    expect(selected).toBeTruthy()
+  })
+
   it('does not render 模板 badge on segment nav cards', async () => {
     renderExecutionTab()
 

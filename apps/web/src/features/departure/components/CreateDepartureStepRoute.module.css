@@ -1,7 +1,7 @@
 .selectedTemplateBanner {
   margin-top: 24px;
   padding: 12px 16px;
-  background: #fafafa;
+  background: var(--route-banner-bg);
   border-radius: 8px;
   display: flex;
   justify-content: space-between;

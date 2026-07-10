@@ -1,8 +1,47 @@
+/* Height is refined in useLayoutEffect to fill the remaining viewport.
+   Fallback keeps first paint from collapsing before measure. */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 380px);
+  min-height: 360px;
+}
+
+.panes {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.paneCol {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.paneCard {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.paneCard :global(.ant-card-head) {
+  flex-shrink: 0;
+}
+
+.paneCardBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .segmentList {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 280px;
 }
 
 .segmentItem {
@@ -17,15 +56,40 @@
   background: var(--execution-item-bg, transparent);
   transition:
     background-color 0.1s,
-    border-color 0.1s;
+    border-color 0.1s,
+    transform 0.1s;
 }
 
-.segmentItem:hover {
-  background: var(--execution-fill-hover, rgba(0, 0, 0, 0.04));
+.segmentItem:active {
+  transform: scale(0.98);
 }
 
-.segmentItemSelected,
-.segmentItemSelected:hover {
+@media (hover: hover) and (pointer: fine) {
+  .segmentItem:hover {
+    background: var(--execution-fill-hover, rgba(0, 0, 0, 0.04));
+  }
+
+  .segmentItemSelected:hover {
+    background: var(--execution-primary-bg, #e6f4ff);
+    border-color: var(--execution-primary-border, #91caff);
+  }
+
+  .segmentItem:hover .segmentItemEdit {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segmentItem {
+    transition: background-color 0.1s, border-color 0.1s;
+  }
+
+  .segmentItem:active {
+    transform: none;
+  }
+}
+
+.segmentItemSelected {
   background: var(--execution-primary-bg, #e6f4ff);
   border-color: var(--execution-primary-border, #91caff);
 }
@@ -53,9 +117,9 @@
   flex-shrink: 0;
   margin-inline: -4px -6px;
   opacity: 0.45;
+  transition: opacity 0.1s;
 }
 
-.segmentItem:hover .segmentItemEdit,
 .segmentItemSelected .segmentItemEdit {
   opacity: 1;
 }

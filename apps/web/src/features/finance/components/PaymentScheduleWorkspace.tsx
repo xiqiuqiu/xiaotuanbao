@@ -36,8 +36,8 @@ import type { AdjustAmountFormValues } from './AdjustAmountModal'
 import type { ReopenScheduleFormValues } from './ReopenScheduleModal'
 import styles from './PaymentScheduleWorkspace.module.css'
 
-/** Two gentle (0.85s) animation iterations. */
-const LOCATE_FLASH_MS = 1700
+/** Two antd-Slow (0.3s) animation iterations. */
+const LOCATE_FLASH_MS = 600
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
