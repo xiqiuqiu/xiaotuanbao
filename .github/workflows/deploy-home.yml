@@ -1,4 +1,4 @@
-name: Deploy Home
+name: Build Home Images
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image / git tag to build and deploy (e.g. v0.1.0 or main)"
+        description: "Image / git ref to build and push (e.g. v0.1.0 or main). Deploy manually on the home server."
         required: true
         type: string
 
@@ -19,7 +19,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_API: ghcr.io/xiqiuqiu/xiaotuanbao-api
   IMAGE_WEB: ghcr.io/xiqiuqiu/xiaotuanbao-web
-  DEPLOY_HOST: ${{ vars.DEPLOY_HOST || 'armbian' }}
 
 jobs:
   resolve:
@@ -120,30 +119,3 @@ jobs:
             VITE_APP_ENV=production
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
-
-  deploy:
-    needs: [resolve, build-push]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Connect Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-          ping: ${{ env.DEPLOY_HOST }}
-
-      - name: Deploy over SSH
-        env:
-          IMAGE_TAG: ${{ needs.resolve.outputs.image_tag }}
-          GIT_REF: ${{ needs.resolve.outputs.git_ref }}
-          HOST: ${{ env.DEPLOY_HOST }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$GHCR_TOKEN" | ssh -o StrictHostKeyChecking=accept-new \
-            -o BatchMode=yes \
-            -o ConnectTimeout=30 \
-            "root@${HOST}" \
-            "cd /mnt/mydata/xiaotuanbao && tmp_docker_config=\$(mktemp -d) && trap 'rm -rf \"\$tmp_docker_config\"' EXIT && export DOCKER_CONFIG=\"\$tmp_docker_config\" && docker login ghcr.io -u '${GHCR_USER}' --password-stdin >/dev/null && perl -0pi -e 's/\r\n/\n/g' ./scripts/remote-deploy-home.sh && IMAGE_TAG='${IMAGE_TAG}' GIT_REF='${GIT_REF}' ./scripts/remote-deploy-home.sh"

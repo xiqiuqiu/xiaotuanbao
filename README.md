@@ -22,7 +22,7 @@ pnpm dev:web    # 终端 2
 | ---- | ---- |
 | [本地开发](./docs/deploy/local-development.md) | pnpm dev 日常开发 |
 | [Docker 部署](./docs/deploy/docker-deploy.md) | 全栈容器部署 |
-| [家庭服务器 CI/CD](./docs/deploy/home-ci.md) | GHCR + Tailscale 自动部署 |
+| [家庭服务器构建与部署](./docs/deploy/home-ci.md) | GHCR 构建镜像 + 手动部署 |
 | [环境变量](./docs/deploy/environment-variables.md) | `.env` 配置说明 |
 | [运维操作](./docs/deploy/operations.md) | 备份、重启、故障排查 |
 | [数据库迁移](./docs/database/migrations-and-seed.md) | Prisma migrate 与 seed |
