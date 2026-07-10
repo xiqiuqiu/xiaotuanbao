@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { TransactionDirection } from '@xiaotuanbao/shared'
-import { buildDepartureTransactionListSearch } from './departure-transactions-search'
+import { buildDepartureTransactionTabSearch } from './departure-transactions-search'
 
 export function DepartureTransactionsLink({
   departureId,
@@ -13,8 +13,9 @@ export function DepartureTransactionsLink({
 }) {
   return (
     <Link
-      to="/finance/transactions"
-      search={buildDepartureTransactionListSearch(departureId, direction)}
+      to="/departure/$departureId"
+      params={{ departureId }}
+      search={buildDepartureTransactionTabSearch(direction)}
       style={{ marginLeft: 8 }}
     >
       {children}

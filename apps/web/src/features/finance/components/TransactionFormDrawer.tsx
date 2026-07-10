@@ -29,6 +29,8 @@ interface TransactionFormDrawerProps {
   editingTransaction: FinanceTransactionSummary | null
   loading: boolean
   form: FormInstance<TransactionFormValues>
+  /** When set, association is locked to this departure (create + edit). */
+  lockedDepartureId?: string
   onClose: () => void
   onSubmit: (values: TransactionFormValues) => void
 }
@@ -39,20 +41,25 @@ export function TransactionFormDrawer({
   editingTransaction,
   loading,
   form,
+  lockedDepartureId,
   onClose,
   onSubmit,
 }: TransactionFormDrawerProps) {
   const counterpartyType = Form.useWatch('counterpartyType', form)
+  const departureLocked = Boolean(lockedDepartureId)
 
   // Memoize so the open-seed effect does not re-run on every render (e.g. when
   // useWatch(counterpartyType) updates) and wipe the user's Select choice.
-  const initialValues = useMemo(
-    () =>
-      mode === 'edit' && editingTransaction
-        ? transactionToFormValues(editingTransaction)
-        : createEmptyTransactionFormValues(),
-    [mode, editingTransaction],
-  )
+  const initialValues = useMemo(() => {
+    if (mode === 'edit' && editingTransaction) {
+      return transactionToFormValues(editingTransaction)
+    }
+    const empty = createEmptyTransactionFormValues()
+    if (lockedDepartureId) {
+      return { ...empty, departureId: lockedDepartureId }
+    }
+    return empty
+  }, [mode, editingTransaction, lockedDepartureId])
 
   useEffect(() => {
     if (!open) {
@@ -213,11 +220,20 @@ export function TransactionFormDrawer({
             <Input maxLength={100} />
           </Form.Item>
         ) : null}
-        <Form.Item name="departureId" label="关联发团">
+        <Form.Item
+          name="departureId"
+          label="关联发团"
+          rules={
+            departureLocked
+              ? [{ required: true, message: '关联发团不能为空' }]
+              : undefined
+          }
+        >
           <Select
-            allowClear
+            allowClear={!departureLocked}
             showSearch
-            placeholder="可选"
+            disabled={departureLocked}
+            placeholder={departureLocked ? undefined : '可选'}
             options={departureOptions}
             optionFilterProp="label"
           />

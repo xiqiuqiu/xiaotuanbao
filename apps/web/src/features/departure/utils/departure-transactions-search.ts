@@ -1,15 +1,12 @@
 import type { TransactionDirection } from '@xiaotuanbao/shared'
 
-/** Deep-link to the transaction list filtered by the current departure (and optional direction). */
-export function buildDepartureTransactionListSearch(
-  departureId: string,
-  direction?: TransactionDirection,
-): {
-  departureId: string
+/** Deep-link search for the departure detail transactions tab (optional direction filter). */
+export function buildDepartureTransactionTabSearch(direction?: TransactionDirection): {
+  tab: 'transactions'
   direction?: TransactionDirection
 } {
   return {
-    departureId,
+    tab: 'transactions',
     ...(direction ? { direction } : {}),
   }
 }

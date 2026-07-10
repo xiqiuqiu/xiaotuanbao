@@ -275,12 +275,23 @@ export function PaymentScheduleWorkspace({
 
   const openViewVerifications = useCallback(
     (schedule: PaymentScheduleSummary) => {
+      if (isDepartureScope && lockedDepartureId) {
+        void navigate({
+          to: '/departure/$departureId',
+          params: { departureId: lockedDepartureId },
+          search: {
+            tab: 'verifications',
+            scheduleNo: schedule.scheduleNo,
+          },
+        })
+        return
+      }
       void navigate({
         to: '/finance/verification',
         search: { scheduleNo: schedule.scheduleNo },
       })
     },
-    [navigate],
+    [isDepartureScope, lockedDepartureId, navigate],
   )
 
   const resetFilters = useCallback(() => {

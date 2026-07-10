@@ -71,6 +71,7 @@ export const DEPARTURE_DETAIL_TABS = [
   { key: 'execution', label: '执行安排' },
   { key: 'receivables', label: '应收管理' },
   { key: 'payables', label: '应付管理' },
+  { key: 'transactions', label: '收支流水' },
   { key: 'verifications', label: '核销记录' },
 ] as const
 

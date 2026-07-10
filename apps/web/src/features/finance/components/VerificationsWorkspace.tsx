@@ -79,11 +79,14 @@ type VerificationListAction =
   | { type: 'resetFilters' }
   | { type: 'applyDeepLink'; search: VerificationDeepLinkSearch }
 
-function createDefaultVerificationListState(): VerificationListState {
+/** Exported for unit tests — departure scope has no default date window. */
+export function createDefaultVerificationListState(
+  scope: 'global' | 'departure' = 'global',
+): VerificationListState {
   return {
     page: 1,
     pageSize: 10,
-    dateRange: getDefaultVerificationDateRange(),
+    dateRange: scope === 'departure' ? null : getDefaultVerificationDateRange(),
     direction: undefined,
     status: undefined,
     transactionNo: '',
@@ -94,11 +97,12 @@ function createDefaultVerificationListState(): VerificationListState {
 }
 
 function createInitialVerificationListState(
-  search?: VerificationDeepLinkSearch,
+  search: VerificationDeepLinkSearch | undefined,
+  scope: 'global' | 'departure',
 ): VerificationListState {
   const resolved = resolveVerificationDeepLinkSearch(search ?? {})
   if (!resolved.transactionNo && !resolved.scheduleNo) {
-    return createDefaultVerificationListState()
+    return createDefaultVerificationListState(scope)
   }
 
   const deepLink = applyVerificationDeepLink(resolved)
@@ -109,33 +113,35 @@ function createInitialVerificationListState(
   }
 }
 
-function verificationListReducer(
-  state: VerificationListState,
-  action: VerificationListAction,
-): VerificationListState {
-  switch (action.type) {
-    case 'setDateRange':
-      return { ...state, dateRange: action.value, page: 1 }
-    case 'setDirection':
-      return { ...state, direction: action.value, page: 1 }
-    case 'setStatus':
-      return { ...state, status: action.value, page: 1 }
-    case 'setTransactionNo':
-      return { ...state, transactionNo: action.value, page: 1, lock: null }
-    case 'setScheduleNo':
-      return { ...state, scheduleNo: action.value, page: 1, lock: null }
-    case 'setDepartureKeyword':
-      return { ...state, departureKeyword: action.value, page: 1 }
-    case 'setPage':
-      return { ...state, page: action.value }
-    case 'setPageSize':
-      return { ...state, pageSize: action.value }
-    case 'resetFilters':
-      return createDefaultVerificationListState()
-    case 'applyDeepLink':
-      return createInitialVerificationListState(action.search)
-    default:
-      return state
+function createVerificationListReducer(scope: 'global' | 'departure') {
+  return function verificationListReducer(
+    state: VerificationListState,
+    action: VerificationListAction,
+  ): VerificationListState {
+    switch (action.type) {
+      case 'setDateRange':
+        return { ...state, dateRange: action.value, page: 1 }
+      case 'setDirection':
+        return { ...state, direction: action.value, page: 1 }
+      case 'setStatus':
+        return { ...state, status: action.value, page: 1 }
+      case 'setTransactionNo':
+        return { ...state, transactionNo: action.value, page: 1, lock: null }
+      case 'setScheduleNo':
+        return { ...state, scheduleNo: action.value, page: 1, lock: null }
+      case 'setDepartureKeyword':
+        return { ...state, departureKeyword: action.value, page: 1 }
+      case 'setPage':
+        return { ...state, page: action.value }
+      case 'setPageSize':
+        return { ...state, pageSize: action.value }
+      case 'resetFilters':
+        return createDefaultVerificationListState(scope)
+      case 'applyDeepLink':
+        return createInitialVerificationListState(action.search, scope)
+      default:
+        return state
+    }
   }
 }
 
@@ -311,10 +317,9 @@ export function VerificationsWorkspace({
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
   const [detailVerificationId, setDetailVerificationId] = useState<string | null>(null)
-  const [listState, dispatchList] = useReducer(
-    verificationListReducer,
-    deepLinkSearch,
-    createInitialVerificationListState,
+  const reducer = useMemo(() => createVerificationListReducer(scope), [scope])
+  const [listState, dispatchList] = useReducer(reducer, deepLinkSearch, (search) =>
+    createInitialVerificationListState(search, scope),
   )
   const {
     page,
@@ -333,15 +338,27 @@ export function VerificationsWorkspace({
   const currentDeepLinkKey = deepLinkKey(deepLinkSearch)
 
   useEffect(() => {
-    if (isDepartureScope || !currentDeepLinkKey) {
+    if (!currentDeepLinkKey) {
       return
     }
     dispatchList({ type: 'applyDeepLink', search: deepLinkSearch ?? {} })
-  }, [currentDeepLinkKey, deepLinkSearch, isDepartureScope])
+  }, [currentDeepLinkKey, deepLinkSearch])
 
   const syncDeepLinkSearch = useCallback(
     (nextSearch: VerificationDeepLinkSearch) => {
       if (isDepartureScope) {
+        if (!lockedDepartureId) {
+          return
+        }
+        void navigate({
+          to: '/departure/$departureId',
+          params: { departureId: lockedDepartureId },
+          search: {
+            tab: 'verifications',
+            ...nextSearch,
+          },
+          replace: true,
+        })
         return
       }
       void navigate({
@@ -350,7 +367,7 @@ export function VerificationsWorkspace({
         replace: true,
       })
     },
-    [isDepartureScope, navigate],
+    [isDepartureScope, lockedDepartureId, navigate],
   )
 
   const listParams = useMemo(() => {

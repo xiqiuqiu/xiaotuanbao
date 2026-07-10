@@ -10,16 +10,24 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
+    params,
     search,
   }: {
     children: React.ReactNode
     to: string
+    params?: Record<string, string>
     search?: Record<string, string>
-  }) => (
-    <a href={`${to}?${new URLSearchParams(search).toString()}`} data-testid="tx-link">
-      {children}
-    </a>
-  ),
+  }) => {
+    const path = Object.entries(params ?? {}).reduce(
+      (current, [key, value]) => current.replace(`$${key}`, value),
+      to,
+    )
+    return (
+      <a href={`${path}?${new URLSearchParams(search).toString()}`} data-testid="tx-link">
+        {children}
+      </a>
+    )
+  },
 }))
 
 function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetail {
@@ -117,6 +125,9 @@ describe('DepartureTransitionModal', () => {
     const links = screen.getAllByTestId('tx-link')
     expect(links.length).toBeGreaterThanOrEqual(2)
     expect(links.every((link) => !link.getAttribute('href')?.includes('writeoffStatus='))).toBe(
+      true,
+    )
+    expect(links.every((link) => link.getAttribute('href')?.includes('tab=transactions'))).toBe(
       true,
     )
     expect(links.some((link) => link.getAttribute('href')?.includes(TransactionDirection.INFLOW))).toBe(

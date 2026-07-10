@@ -11,6 +11,7 @@ import {
 import type { TransactionDateRange } from '../utils/date-ranges'
 
 interface TransactionFiltersProps {
+  scope?: 'global' | 'departure'
   dateRange: TransactionDateRange
   direction?: TransactionDirection
   partnerKeyword: string
@@ -29,6 +30,7 @@ interface TransactionFiltersProps {
 }
 
 export function TransactionFilters({
+  scope = 'global',
   dateRange,
   direction,
   partnerKeyword,
@@ -45,9 +47,11 @@ export function TransactionFilters({
   onStatusChange,
   onReset,
 }: TransactionFiltersProps) {
+  const showDepartureFilter = scope === 'global'
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'transaction-filter'],
     queryFn: listFinanceDepartureOptions,
+    enabled: showDepartureFilter,
   })
 
   const departureOptions =
@@ -110,16 +114,18 @@ export function TransactionFilters({
           onChange={(event) => onTransactionNoChange(event.target.value)}
           onSearch={(value) => onTransactionNoChange(value.trim())}
         />
-        <Select
-          allowClear
-          showSearch
-          placeholder="关联发团"
-          style={{ width: 280 }}
-          value={departureId}
-          onChange={onDepartureChange}
-          options={departureOptions}
-          optionFilterProp="label"
-        />
+        {showDepartureFilter ? (
+          <Select
+            allowClear
+            showSearch
+            placeholder="关联发团"
+            style={{ width: 280 }}
+            value={departureId}
+            onChange={onDepartureChange}
+            options={departureOptions}
+            optionFilterProp="label"
+          />
+        ) : null}
         <Select
           allowClear
           placeholder="流水状态"

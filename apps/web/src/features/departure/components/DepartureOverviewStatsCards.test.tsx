@@ -10,19 +10,27 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({
     children,
     to,
+    params,
     search,
   }: {
     children: React.ReactNode
     to: string
+    params?: Record<string, string>
     search?: Record<string, string>
-  }) => (
-    <a
-      href={`${to}?${new URLSearchParams(search).toString()}`}
-      data-testid="tx-link"
-    >
-      {children}
-    </a>
-  ),
+  }) => {
+    const path = Object.entries(params ?? {}).reduce(
+      (current, [key, value]) => current.replace(`$${key}`, value),
+      to,
+    )
+    return (
+      <a
+        href={`${path}?${new URLSearchParams(search).toString()}`}
+        data-testid="tx-link"
+      >
+        {children}
+      </a>
+    )
+  },
 }))
 
 function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetail {
@@ -96,13 +104,15 @@ describe('DepartureOverviewStatsCards', () => {
     expect(links).toHaveLength(2)
     expect(links[0]).toHaveAttribute(
       'href',
-      expect.stringContaining(`departureId=departure-88`),
+      expect.stringContaining('/departure/departure-88?'),
     )
+    expect(links[0]).toHaveAttribute('href', expect.stringContaining('tab=transactions'))
     expect(links[0]).toHaveAttribute(
       'href',
       expect.stringContaining(`direction=${TransactionDirection.INFLOW}`),
     )
     expect(links[0]).not.toHaveAttribute('href', expect.stringContaining('writeoffStatus='))
+    expect(links[1]).toHaveAttribute('href', expect.stringContaining('tab=transactions'))
     expect(links[1]).toHaveAttribute(
       'href',
       expect.stringContaining(`direction=${TransactionDirection.OUTFLOW}`),

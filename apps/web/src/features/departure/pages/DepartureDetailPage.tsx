@@ -3,10 +3,11 @@ import { Spin, Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { DepartureStatus } from '@xiaotuanbao/shared'
+import { DepartureStatus, TransactionDirection } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
+import { TransactionsWorkspace } from '@/features/finance/components/TransactionsWorkspace'
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureHeader } from '../components/DepartureHeader'
@@ -20,6 +21,17 @@ import {
 } from '../catalog'
 
 const DEFAULT_TAB: DepartureDetailTabKey = 'overview'
+
+function resolveTransactionDirection(
+  value: string | undefined,
+): TransactionDirection | undefined {
+  if (!value) {
+    return undefined
+  }
+  return Object.values(TransactionDirection).includes(value as TransactionDirection)
+    ? (value as TransactionDirection)
+    : undefined
+}
 
 export function DepartureDetailPage() {
   const { departureId } = useParams({ strict: false })
@@ -134,7 +146,13 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: <SourceOrdersTab departure={departure} readOnly={readOnly} amountReadOnly={amountReadOnly} />,
+        children: (
+          <SourceOrdersTab
+            departure={departure}
+            readOnly={readOnly}
+            amountReadOnly={amountReadOnly}
+          />
+        ),
       }
     }
 
@@ -187,6 +205,21 @@ export function DepartureDetailPage() {
       }
     }
 
+    if (tab.key === 'transactions') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: (
+          <TransactionsWorkspace
+            scope="departure"
+            departureId={departure.id}
+            readOnly={financeReadOnly}
+            initialDirection={resolveTransactionDirection(search.direction)}
+          />
+        ),
+      }
+    }
+
     return {
       key: tab.key,
       label: tab.label,
@@ -195,6 +228,10 @@ export function DepartureDetailPage() {
           scope="departure"
           departureId={departure.id}
           readOnly={financeReadOnly}
+          deepLinkSearch={{
+            transactionNo: search.transactionNo,
+            scheduleNo: search.scheduleNo,
+          }}
         />
       ),
     }
