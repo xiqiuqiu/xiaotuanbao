@@ -77,6 +77,7 @@ export class PaymentScheduleService {
         orderBy: { updatedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: { departure: { select: { status: true } } },
       }),
       this.prisma.paymentSchedule.count({ where }),
     ])
@@ -94,6 +95,7 @@ export class PaymentScheduleService {
           schedule,
           settledMap.get(schedule.id) ?? 0,
           historyMap.get(schedule.id) ?? false,
+          schedule.departure.status,
         ),
       ),
       total,
@@ -108,13 +110,15 @@ export class PaymentScheduleService {
     scheduleId: string,
   ): Promise<PaymentScheduleDetail> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-    const [settledAmountCents, hasVerificationHistory, activities] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-      this.loadActivities(schedule.id),
-    ])
+    const [settledAmountCents, hasVerificationHistory, activities, departureStatus] =
+      await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id),
+        this.verificationService.hasVerificationHistory(schedule.id),
+        this.loadActivities(schedule.id),
+        this.departureFinanceFacade.getStatusById(organizationId, schedule.departureId),
+      ])
     return {
-      ...this.toSummary(schedule, settledAmountCents, hasVerificationHistory),
+      ...this.toSummary(schedule, settledAmountCents, hasVerificationHistory, departureStatus),
       activities,
     }
   }
@@ -159,7 +163,11 @@ export class PaymentScheduleService {
       },
     })
 
-    return this.toSummary(schedule, 0, false)
+    const departureStatus = await this.departureFinanceFacade.getStatusById(
+      organizationId,
+      schedule.departureId,
+    )
+    return this.toSummary(schedule, 0, false, departureStatus)
   }
 
   async update(
@@ -250,7 +258,11 @@ export class PaymentScheduleService {
       data,
     })
 
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
+    const departureStatus = await this.departureFinanceFacade.getStatusById(
+      organizationId,
+      schedule.departureId,
+    )
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
   }
 
   async cancel(
@@ -333,7 +345,11 @@ export class PaymentScheduleService {
       return closed
     })
 
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
+    const departureStatus = await this.departureFinanceFacade.getStatusById(
+      organizationId,
+      schedule.departureId,
+    )
+    return this.toSummary(updated, settledAmountCents, hasVerificationHistory, departureStatus)
   }
 
   async reopen(
@@ -381,8 +397,8 @@ export class PaymentScheduleService {
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
     const operatedAt = new Date()
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const reopened = await tx.paymentSchedule.update({
+    const { reopened, departureStatus } = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.paymentSchedule.update({
         where: { id: schedule.id },
         data: {
           cancelledAt: null,
@@ -406,10 +422,21 @@ export class PaymentScheduleService {
         },
       })
 
-      return reopened
+      const nextDepartureStatus =
+        await this.departureFinanceFacade.reverseSettlementOnScheduleReopen(tx, {
+          organizationId,
+          departureId: schedule.departureId,
+          triggerPaymentScheduleId: schedule.id,
+          reason: reopenReason,
+          operatedBy: userId,
+          operatedAt,
+          confirmDepartureSettlementReversal: dto.confirmDepartureSettlementReversal,
+        })
+
+      return { reopened: updated, departureStatus: nextDepartureStatus }
     })
 
-    return this.toSummary(updated, settledAmountCents, hasVerificationHistory)
+    return this.toSummary(reopened, settledAmountCents, hasVerificationHistory, departureStatus)
   }
 
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {
@@ -474,6 +501,7 @@ export class PaymentScheduleService {
     schedule: PaymentSchedule,
     settledAmountCents: number,
     hasVerificationHistory = settledAmountCents > 0,
+    departureStatus: string,
   ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
@@ -481,6 +509,7 @@ export class PaymentScheduleService {
     return {
       id: schedule.id,
       departureId: schedule.departureId,
+      departureStatus,
       direction: schedule.direction,
       scheduleNo: schedule.scheduleNo,
       title: schedule.title,

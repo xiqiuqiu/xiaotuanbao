@@ -141,6 +141,9 @@ export function usePaymentScheduleMutations({
       }
       return reopenSchedule(activeSchedule.id, {
         reopenReason: values.reopenReason.trim(),
+        ...(values.confirmDepartureSettlementReversal === true
+          ? { confirmDepartureSettlementReversal: true }
+          : {}),
       })
     },
     onSuccess: () => {

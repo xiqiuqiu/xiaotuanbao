@@ -628,6 +628,7 @@ export class VerificationService {
   ): Promise<PaymentScheduleSummary> {
     const schedule = await this.prisma.paymentSchedule.findFirst({
       where: { id: scheduleId, organizationId },
+      include: { departure: { select: { status: true } } },
     })
 
     if (!schedule) {
@@ -636,7 +637,12 @@ export class VerificationService {
 
     const settledAmountCents = await this.getSettledAmountCents(schedule.id)
     const hasVerificationHistory = await this.hasVerificationHistory(schedule.id)
-    return this.toScheduleSummary(schedule, settledAmountCents, hasVerificationHistory)
+    return this.toScheduleSummary(
+      schedule,
+      settledAmountCents,
+      hasVerificationHistory,
+      schedule.departure.status,
+    )
   }
 
   private async assertScheduleAllocation(
@@ -747,6 +753,7 @@ export class VerificationService {
     schedule: PaymentSchedule,
     settledAmountCents: number,
     hasVerificationHistory = settledAmountCents > 0,
+    departureStatus: string,
   ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
@@ -754,6 +761,7 @@ export class VerificationService {
     return {
       id: schedule.id,
       departureId: schedule.departureId,
+      departureStatus,
       direction: schedule.direction,
       scheduleNo: schedule.scheduleNo,
       title: schedule.title,

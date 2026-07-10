@@ -67,6 +67,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
     unverifiedExpenseCents: 400_000,
     isFinanciallySettled: false,
     archiveHistory: [],
+    settlementHistory: [],
     ...overrides,
   }
 }

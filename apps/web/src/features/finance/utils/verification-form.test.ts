@@ -38,6 +38,7 @@ function makeSchedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentS
   return {
     id: 'sch-1',
     departureId: 'dep-1',
+    departureStatus: 'editing',
     direction: 'receivable',
     scheduleNo: 'AR202601000001',
     title: '团款',

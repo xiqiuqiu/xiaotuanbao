@@ -6,6 +6,7 @@ function schedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentSched
   return {
     id: 'sch-1',
     departureId: 'dep-1',
+    departureStatus: 'pending_settlement',
     direction: 'receivable',
     scheduleNo: 'AR2026070001',
     title: '团款',

@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -111,6 +112,10 @@ export class ReopenPaymentScheduleDto {
   @IsString()
   @IsNotEmpty({ message: '重新打开原因不能为空' })
   reopenReason!: string
+
+  @IsOptional()
+  @IsBoolean({ message: '请确认是否联动回退发团结清' })
+  confirmDepartureSettlementReversal?: boolean
 }
 
 export {

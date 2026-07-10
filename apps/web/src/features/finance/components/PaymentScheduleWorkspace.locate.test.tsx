@@ -36,6 +36,7 @@ function schedule(
   return {
     id: 'schedule-1',
     departureId: 'departure-1',
+    departureStatus: 'editing',
     direction: 'receivable',
     scheduleNo: 'AR2026070001',
     title: '客户结算',

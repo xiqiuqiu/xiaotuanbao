@@ -232,6 +232,7 @@ model Organization {
   partners  Partner[]
   departures Departure[]
   departureArchiveHistories DepartureArchiveHistory[]
+  departureSettlementHistories DepartureSettlementHistory[]
   routeTemplates RouteTemplate[]
   paymentSchedules PaymentSchedule[]
   paymentScheduleActivities PaymentScheduleActivity[]
@@ -273,6 +274,7 @@ model User {
   roles           UserRole[]
   ownedDepartures Departure[]  @relation("DepartureOwner")
   departureArchiveOperations DepartureArchiveHistory[] @relation("DepartureArchiveOperator")
+  departureSettlementOperations DepartureSettlementHistory[] @relation("DepartureSettlementOperator")
   paymentScheduleCancellations PaymentSchedule[] @relation("PaymentScheduleCancelOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
 
@@ -446,6 +448,7 @@ model Departure {
   itinerarySegments   ItinerarySegment[]
   sourceOrders        SourceOrder[]
   archiveHistories    DepartureArchiveHistory[]
+  settlementHistories DepartureSettlementHistory[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
@@ -466,6 +469,26 @@ model DepartureArchiveHistory {
   @@index([departureId, operatedAt])
   @@index([organizationId, departureId])
   @@map("departure_archive_histories")
+}
+
+model DepartureSettlementHistory {
+  id                       String          @id @default(cuid())
+  organizationId           String          @map("organization_id")
+  organization             Organization    @relation(fields: [organizationId], references: [id])
+  departureId              String          @map("departure_id")
+  departure                Departure       @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  triggerPaymentScheduleId String          @map("trigger_payment_schedule_id")
+  triggerPaymentSchedule   PaymentSchedule @relation(fields: [triggerPaymentScheduleId], references: [id])
+  reason                   String
+  previousStatus           DepartureStatus @map("previous_status")
+  newStatus                DepartureStatus @map("new_status")
+  operatedBy               String          @map("operated_by")
+  operator                 User            @relation("DepartureSettlementOperator", fields: [operatedBy], references: [id])
+  operatedAt               DateTime        @default(now()) @map("operated_at")
+
+  @@index([departureId, operatedAt])
+  @@index([organizationId, departureId])
+  @@map("departure_settlement_histories")
 }
 
 model SourceOrder {
@@ -571,6 +594,7 @@ model PaymentSchedule {
 
   verifications FinanceVerification[]
   activities    PaymentScheduleActivity[]
+  settlementHistories DepartureSettlementHistory[]
 
   @@unique([organizationId, scheduleNo])
   @@index([organizationId, departureId])

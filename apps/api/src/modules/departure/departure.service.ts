@@ -7,6 +7,7 @@ import type {
   DepartureArchiveHistoryItem,
   DepartureDetail,
   DepartureListResult,
+  DepartureSettlementHistoryItem,
   DepartureSummary,
 } from '@xiaotuanbao/shared'
 import {
@@ -16,6 +17,7 @@ import {
   DepartureType,
   type Departure,
   type DepartureArchiveHistory,
+  type DepartureSettlementHistory,
   type Prisma,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -474,16 +476,18 @@ export class DepartureService {
   }
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
-    const [readModel, ownerNameMap, archiveHistory] = await Promise.all([
+    const [readModel, ownerNameMap, archiveHistory, settlementHistory] = await Promise.all([
       this.departureReadModelService.getForDeparture(departure.id),
       this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
       this.loadArchiveHistory(departure.id),
+      this.loadSettlementHistory(departure.id),
     ])
     return this.toDepartureDetail(
       departure,
       readModel,
       ownerNameMap.get(departure.ownerUserId),
       archiveHistory,
+      settlementHistory,
     )
   }
 
@@ -501,6 +505,20 @@ export class DepartureService {
     return rows.map((row) => this.toArchiveHistoryItem(row))
   }
 
+  private async loadSettlementHistory(
+    departureId: string,
+  ): Promise<DepartureSettlementHistoryItem[]> {
+    const rows = await this.prisma.departureSettlementHistory.findMany({
+      where: { departureId },
+      orderBy: { operatedAt: 'asc' },
+      include: {
+        operator: { select: { name: true } },
+        triggerPaymentSchedule: { select: { scheduleNo: true } },
+      },
+    })
+    return rows.map((row) => this.toSettlementHistoryItem(row))
+  }
+
   private toArchiveHistoryItem(
     row: DepartureArchiveHistory & { operator: { name: string } },
   ): DepartureArchiveHistoryItem {
@@ -508,6 +526,25 @@ export class DepartureService {
       id: row.id,
       action: row.action,
       reason: row.reason,
+      operatedBy: row.operatedBy,
+      operatedByName: row.operator.name,
+      operatedAt: row.operatedAt.toISOString(),
+    }
+  }
+
+  private toSettlementHistoryItem(
+    row: DepartureSettlementHistory & {
+      operator: { name: string }
+      triggerPaymentSchedule: { scheduleNo: string }
+    },
+  ): DepartureSettlementHistoryItem {
+    return {
+      id: row.id,
+      triggerPaymentScheduleId: row.triggerPaymentScheduleId,
+      triggerScheduleNo: row.triggerPaymentSchedule.scheduleNo,
+      reason: row.reason,
+      previousStatus: row.previousStatus,
+      newStatus: row.newStatus,
       operatedBy: row.operatedBy,
       operatedByName: row.operator.name,
       operatedAt: row.operatedAt.toISOString(),
@@ -549,6 +586,7 @@ export class DepartureService {
     readModel: DepartureReadModelAggregate,
     ownerName: string | undefined,
     archiveHistory: DepartureArchiveHistoryItem[],
+    settlementHistory: DepartureSettlementHistoryItem[],
   ): DepartureDetail {
     return {
       ...this.toDepartureSummary(departure, readModel, ownerName),
@@ -562,6 +600,7 @@ export class DepartureService {
       unverifiedExpenseCents: readModel.unverifiedExpenseCents,
       isFinanciallySettled: readModel.isFinanciallySettled,
       archiveHistory,
+      settlementHistory,
     }
   }
 

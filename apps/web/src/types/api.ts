@@ -20,6 +20,7 @@ export type {
   DepartureListResult,
   DepartureDetail,
   DepartureArchiveHistoryItem,
+  DepartureSettlementHistoryItem,
   CreateDepartureDto,
   CopyDepartureDto,
   UpdateDepartureDto,

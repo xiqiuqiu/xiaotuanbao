@@ -110,6 +110,12 @@ describe('Finance journeys (cross-module e2e)', () => {
         },
       },
     })
+    await prisma.departureSettlementHistory.deleteMany({
+      where: {
+        organizationId,
+        departure: { name: { startsWith: testPrefix } },
+      },
+    })
     await prisma.paymentSchedule.deleteMany({
       where: {
         organizationId,
@@ -2279,5 +2285,214 @@ describe('Finance journeys (cross-module e2e)', () => {
       status: PaymentScheduleStatus.PENDING,
       cancelledAt: null,
     })
+  })
+
+  /**
+   * #91 reopen on settled departure reverses settlement atomically.
+   * Seam: HTTP APIs across finance reopen / departure status / OP-visible history.
+   * Locks confirm semantics, atomic reopen+rollback, permission, visible reversal,
+   * and no auto re-settle after schedules end again.
+   */
+  it('reopens schedule on settled departure with confirm, rolls back settlement, and does not auto re-settle (#91)', async () => {
+    const adminToken = await loginAs(app, 'mazong')
+    const departure = await createDeparture('reopen-reverses-settlement')
+    const ops = await seedOps(departure.id)
+    const schedules = await generateSchedules(ops)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedules.receivableScheduleId}/confirm-collection`)
+      .send({
+        amountCents: 1000000,
+        transactionDate: '2026-08-09',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: ops.displayName,
+      })
+      .expect(201)
+
+    const closedPayable = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'external_or_special',
+        cancelReason: '供应商改免费接待，关闭应付以达账款结束',
+      })
+      .expect(201)
+    expect(closedPayable.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.pending_settlement })
+      .expect(201)
+
+    const settled = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.settled })
+      .expect(201)
+    expect(settled.body.data.status).toBe(DepartureStatus.settled)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
+      .send({
+        reopenReason: '计调无权重新打开',
+        confirmDepartureSettlementReversal: true,
+      })
+      .expect(403)
+
+    const missingConfirm = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
+      .send({ reopenReason: '未确认联动不应打开' })
+    expect(missingConfirm.status).toBe(400)
+    expect(missingConfirm.body.message).toMatch(/确认|待结算|已结清/)
+
+    const falseConfirm = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
+      .send({
+        reopenReason: '显式拒绝联动',
+        confirmDepartureSettlementReversal: false,
+      })
+    expect(falseConfirm.status).toBe(400)
+
+    const stillSettled = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(stillSettled.body.data.status).toBe(DepartureStatus.settled)
+    expect(stillSettled.body.data.isFinanciallySettled).toBe(true)
+
+    const stillClosed = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${schedules.payableScheduleId}`)
+      .expect(200)
+    expect(stillClosed.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+
+    const reopened = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
+      .send({
+        reopenReason: '供应商恢复收费，需继续追付并回退发团结清',
+        confirmDepartureSettlementReversal: true,
+      })
+      .expect(201)
+
+    expect(reopened.body.data).toMatchObject({
+      id: schedules.payableScheduleId,
+      status: PaymentScheduleStatus.PENDING,
+      cancelledAt: null,
+      departureStatus: DepartureStatus.pending_settlement,
+    })
+
+    const afterReopen = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(afterReopen.body.data).toMatchObject({
+      status: DepartureStatus.pending_settlement,
+      isFinanciallySettled: false,
+    })
+    expect(afterReopen.body.data.settlementHistory).toEqual([
+      expect.objectContaining({
+        triggerPaymentScheduleId: schedules.payableScheduleId,
+        triggerScheduleNo: closedPayable.body.data.scheduleNo,
+        reason: '供应商恢复收费，需继续追付并回退发团结清',
+        operatedByName: expect.any(String),
+        previousStatus: DepartureStatus.settled,
+        newStatus: DepartureStatus.pending_settlement,
+      }),
+    ])
+
+    const payableDetail = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${schedules.payableScheduleId}`)
+      .expect(200)
+    expect(payableDetail.body.data.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activityType: 'close',
+          note: '供应商改免费接待，关闭应付以达账款结束',
+        }),
+        expect.objectContaining({
+          activityType: 'reopen',
+          note: '供应商恢复收费，需继续追付并回退发团结清',
+        }),
+      ]),
+    )
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${schedules.payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: 360000,
+        transactionDate: '2026-08-10',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+
+    const afterResettleSchedules = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(afterResettleSchedules.body.data).toMatchObject({
+      status: DepartureStatus.pending_settlement,
+      isFinanciallySettled: true,
+    })
+
+    const resettled = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/transition`)
+      .send({ targetStatus: DepartureStatus.settled })
+      .expect(201)
+    expect(resettled.body.data.status).toBe(DepartureStatus.settled)
+
+    const adminDeparture = await createDeparture('reopen-reverses-admin')
+    const adminOps = await seedOps(adminDeparture.id)
+    const adminSchedules = await generateSchedules(adminOps)
+
+    await authRequest(app, adminToken)
+      .post(`/api/finance/receivables/${adminSchedules.receivableScheduleId}/confirm-collection`)
+      .send({
+        amountCents: 1000000,
+        transactionDate: '2026-08-09',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: adminOps.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, adminToken)
+      .post(`/api/finance/payment-schedules/${adminSchedules.payableScheduleId}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '管理员路径关闭应付',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${adminDeparture.id}/transition`)
+      .send({ targetStatus: DepartureStatus.pending_settlement })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${adminDeparture.id}/transition`)
+      .send({ targetStatus: DepartureStatus.settled })
+      .expect(201)
+
+    const adminReopened = await authRequest(app, adminToken)
+      .post(`/api/finance/payment-schedules/${adminSchedules.payableScheduleId}/reopen`)
+      .send({
+        reopenReason: '企业管理员确认联动回退结清',
+        confirmDepartureSettlementReversal: true,
+      })
+      .expect(201)
+    expect(adminReopened.body.data).toMatchObject({
+      id: adminSchedules.payableScheduleId,
+      status: PaymentScheduleStatus.PENDING,
+      departureStatus: DepartureStatus.pending_settlement,
+    })
+
+    const adminAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${adminDeparture.id}`)
+      .expect(200)
+    expect(adminAfter.body.data.status).toBe(DepartureStatus.pending_settlement)
+    expect(adminAfter.body.data.settlementHistory).toEqual([
+      expect.objectContaining({
+        triggerPaymentScheduleId: adminSchedules.payableScheduleId,
+        reason: '企业管理员确认联动回退结清',
+        operatedByName: expect.any(String),
+      }),
+    ])
   })
 })

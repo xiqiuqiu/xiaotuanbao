@@ -35,6 +35,7 @@ import {
 import { departureToFormValues, type DepartureOverviewFormValues } from '../utils/departure-overview-form'
 import type { DepartureTransitionAction } from '../utils/departure-transition'
 import { DepartureArchiveHistory } from './DepartureArchiveHistory'
+import { DepartureSettlementHistory } from './DepartureSettlementHistory'
 import { DepartureOverviewDrawer } from './DepartureOverviewDrawer'
 import {
   DepartureTransitionModal,
@@ -268,6 +269,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
         />
 
         <DepartureArchiveHistory items={departure.archiveHistory ?? []} />
+        <DepartureSettlementHistory items={departure.settlementHistory ?? []} />
       </Card>
 
       {canUnarchive ? (

@@ -55,6 +55,7 @@ const mockDeparture: DepartureDetail = {
   unverifiedExpenseCents: 0,
   isFinanciallySettled: false,
   archiveHistory: [],
+  settlementHistory: [],
 }
 
 function renderModal(open = true) {

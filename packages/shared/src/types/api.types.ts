@@ -235,6 +235,18 @@ export interface DepartureArchiveHistoryItem {
   operatedAt: string
 }
 
+export interface DepartureSettlementHistoryItem {
+  id: string
+  triggerPaymentScheduleId: string
+  triggerScheduleNo: string
+  reason: string
+  previousStatus: string
+  newStatus: string
+  operatedBy: string
+  operatedByName: string
+  operatedAt: string
+}
+
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
   grossReceivableCents: number
@@ -247,6 +259,7 @@ export interface DepartureDetail extends DepartureSummary {
   unverifiedExpenseCents: number
   isFinanciallySettled: boolean
   archiveHistory: DepartureArchiveHistoryItem[]
+  settlementHistory: DepartureSettlementHistoryItem[]
 }
 
 export interface RouteTemplateCardSummary {
@@ -296,6 +309,7 @@ export interface CreateRouteTemplateFromDepartureDto {
 export interface PaymentScheduleSummary {
   id: string
   departureId: string
+  departureStatus: string
   direction: string
   scheduleNo: string
   title: string
@@ -354,6 +368,7 @@ export interface CancelPaymentScheduleDto {
 
 export interface ReopenPaymentScheduleDto {
   reopenReason: string
+  confirmDepartureSettlementReversal?: boolean
 }
 
 export interface CreatePaymentScheduleDto {
