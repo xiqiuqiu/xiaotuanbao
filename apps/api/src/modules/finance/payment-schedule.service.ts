@@ -464,15 +464,19 @@ export class PaymentScheduleService {
       throw new ForbiddenException('无权访问')
     }
 
-    if (schedule.direction !== PaymentScheduleDirection.payable) {
-      throw new BadRequestException('仅资源应付节点可调整约定金额')
-    }
+    const isPayableResource =
+      schedule.direction === PaymentScheduleDirection.payable &&
+      schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+      Boolean(schedule.sourceId)
 
-    if (
-      schedule.sourceType !== PaymentScheduleSourceType.SEGMENT_RESOURCE ||
-      !schedule.sourceId
-    ) {
-      throw new BadRequestException('仅资源应付节点可调整约定金额')
+    const isReceivableSourcePath =
+      schedule.direction === PaymentScheduleDirection.receivable &&
+      (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
+        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
+      Boolean(schedule.sourceId)
+
+    if (!isPayableResource && !isReceivableSourcePath) {
+      throw new BadRequestException('仅资源应付或客源应收节点可调整约定金额')
     }
 
     if (schedule.cancelledAt) {
@@ -511,10 +515,18 @@ export class PaymentScheduleService {
     const unsettledAmountCents = Math.max(dto.amountCents - settledAmountCents, 0)
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
-        resourceId: schedule.sourceId!,
-        amountCents: dto.amountCents,
-      })
+      if (isPayableResource) {
+        await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
+          resourceId: schedule.sourceId!,
+          amountCents: dto.amountCents,
+        })
+      } else {
+        await this.departureFinanceFacade.syncSourceOrderPathAmountOnReceivableAdjust(tx, {
+          sourceOrderId: schedule.sourceId!,
+          sourceType: schedule.sourceType,
+          amountCents: dto.amountCents,
+        })
+      }
 
       const nextSchedule = await tx.paymentSchedule.update({
         where: { id: schedule.id },

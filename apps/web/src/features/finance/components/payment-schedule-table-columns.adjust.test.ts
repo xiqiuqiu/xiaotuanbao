@@ -6,7 +6,7 @@ import {
   PaymentScheduleStatus,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
-import { canAdjustPayableAmount } from './payment-schedule-table-columns'
+import { canAdjustScheduleAmount } from './payment-schedule-table-columns'
 
 function schedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentScheduleSummary {
   return {
@@ -38,23 +38,62 @@ function schedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentSched
   }
 }
 
-describe('canAdjustPayableAmount', () => {
-  it('shows adjust only for open finance-touched resource payables with zero settlement', () => {
-    expect(canAdjustPayableAmount(schedule(), false)).toBe(true)
-    expect(canAdjustPayableAmount(schedule({ settledAmountCents: 100 }), false)).toBe(false)
+describe('canAdjustScheduleAmount', () => {
+  it('shows adjust for open finance-touched resource payables with zero settlement', () => {
+    expect(canAdjustScheduleAmount(schedule(), false)).toBe(true)
+    expect(canAdjustScheduleAmount(schedule({ settledAmountCents: 100 }), false)).toBe(false)
     expect(
-      canAdjustPayableAmount(schedule({ status: PaymentScheduleStatus.CANCELLED }), false),
+      canAdjustScheduleAmount(schedule({ status: PaymentScheduleStatus.CANCELLED }), false),
     ).toBe(false)
-    expect(canAdjustPayableAmount(schedule({ financeTouched: false }), false)).toBe(false)
+    expect(canAdjustScheduleAmount(schedule({ financeTouched: false }), false)).toBe(false)
     expect(
-      canAdjustPayableAmount(schedule({ sourceType: PaymentScheduleSourceType.MANUAL }), false),
-    ).toBe(false)
-    expect(
-      canAdjustPayableAmount(schedule({ direction: PaymentScheduleDirection.RECEIVABLE }), false),
+      canAdjustScheduleAmount(schedule({ sourceType: PaymentScheduleSourceType.MANUAL }), false),
     ).toBe(false)
     expect(
-      canAdjustPayableAmount(schedule({ departureStatus: DepartureStatus.CLOSED }), false),
+      canAdjustScheduleAmount(schedule({ departureStatus: DepartureStatus.CLOSED }), false),
     ).toBe(false)
-    expect(canAdjustPayableAmount(schedule(), true)).toBe(false)
+    expect(canAdjustScheduleAmount(schedule(), true)).toBe(false)
+  })
+
+  it('shows adjust for open finance-touched source-order receivable paths (#93)', () => {
+    expect(
+      canAdjustScheduleAmount(
+        schedule({
+          direction: PaymentScheduleDirection.RECEIVABLE,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          scheduleNo: 'AR2026070001',
+        }),
+        false,
+      ),
+    ).toBe(true)
+    expect(
+      canAdjustScheduleAmount(
+        schedule({
+          direction: PaymentScheduleDirection.RECEIVABLE,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+          scheduleNo: 'AR2026070002',
+        }),
+        false,
+      ),
+    ).toBe(true)
+    expect(
+      canAdjustScheduleAmount(
+        schedule({
+          direction: PaymentScheduleDirection.RECEIVABLE,
+          sourceType: PaymentScheduleSourceType.MANUAL,
+        }),
+        false,
+      ),
+    ).toBe(false)
+    expect(
+      canAdjustScheduleAmount(
+        schedule({
+          direction: PaymentScheduleDirection.RECEIVABLE,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          settledAmountCents: 100,
+        }),
+        false,
+      ),
+    ).toBe(false)
   })
 })

@@ -39,22 +39,40 @@ export function canReopenSchedule(
 }
 
 /**
- * Resource payables with finance history, zero effective settlement, and an open
- * node can take an explicit amount adjustment (ADR-0010 / #92).
+ * Resource payables or source-order receivable paths with finance history,
+ * zero effective settlement, and an open node can take an explicit amount
+ * adjustment (ADR-0010 / #92 / #93).
  */
-export function canAdjustPayableAmount(
+export function canAdjustScheduleAmount(
   schedule: PaymentScheduleSummary,
   readOnly: boolean,
 ): boolean {
-  return (
-    !readOnly &&
-    schedule.departureStatus !== DepartureStatus.CLOSED &&
+  if (
+    readOnly ||
+    schedule.departureStatus === DepartureStatus.CLOSED ||
+    !schedule.financeTouched ||
+    schedule.settledAmountCents !== 0 ||
+    schedule.status === PaymentScheduleStatus.CANCELLED
+  ) {
+    return false
+  }
+
+  if (
     schedule.direction === PaymentScheduleDirection.PAYABLE &&
-    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
-    schedule.financeTouched &&
-    schedule.settledAmountCents === 0 &&
-    schedule.status !== PaymentScheduleStatus.CANCELLED
-  )
+    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE
+  ) {
+    return true
+  }
+
+  if (
+    schedule.direction === PaymentScheduleDirection.RECEIVABLE &&
+    (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
+      schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION)
+  ) {
+    return true
+  }
+
+  return false
 }
 
 function hasVerificationRecords(schedule: PaymentScheduleSummary): boolean {
@@ -224,7 +242,7 @@ export function buildPaymentScheduleColumns({
           })
         }
 
-        if (canAdjustPayableAmount(record, readOnly)) {
+        if (canAdjustScheduleAmount(record, readOnly)) {
           moreItems.push({
             key: 'adjust-amount',
             label: '调整约定金额',

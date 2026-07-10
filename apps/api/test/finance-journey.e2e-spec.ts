@@ -12,7 +12,11 @@ import {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { PaymentChannel, PaymentScheduleStatus } from '@xiaotuanbao/shared'
+import {
+  PaymentChannel,
+  PaymentScheduleSourceType,
+  PaymentScheduleStatus,
+} from '@xiaotuanbao/shared'
 import {
   authRequest,
   AR_AP_SCHEDULE_NO_REGEX,
@@ -2792,5 +2796,507 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({ amountCents: 450_000, adjustReason: '归档期不应调整' })
     expect(archivedReject.status).toBe(409)
     expect(archivedReject.body.message).toBe('发团已关闭，不可调整约定金额')
+  })
+
+  /**
+   * #93 explicit receivable amount adjustment after finance history.
+   * Seam: HTTP APIs across source-order / receivable schedule / departure read model.
+   * Locks guest-collection, customer-settlement, and split-path success + rejection
+   * matrix; path-local source sync; activity timeline; no regenerate / sibling mutation.
+   */
+  it('adjusts guest-collection receivable agreed amount with reason while keeping original node (#93)', async () => {
+    const obligationCents = 1_000_000
+    const verifiedCents = 400_000
+    const adjustedCents = 900_000
+
+    const departure = await createDeparture('explicit-recv-guest')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+    const sourceOrderId = sourceOrder.body.data.id as string
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
+      .expect(201)
+    expect(generated.body.data.schedules).toHaveLength(1)
+    expect(generated.body.data.schedules[0].sourceType).toBe(
+      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    )
+
+    const scheduleId = generated.body.data.schedules[0].id as string
+    const scheduleNo = generated.body.data.schedules[0].scheduleNo as string
+
+    const collection = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.CASH,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.body.data.displayName,
+      })
+      .expect(201)
+    expect(collection.body.data.settledAmountCents).toBe(verifiedCents)
+
+    const withActiveVerification = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents, adjustReason: '仍有有效核销不应调整' })
+    expect(withActiveVerification.status).toBe(400)
+    expect(withActiveVerification.body.message).toBe(
+      '仍有有效核销时不可调整约定金额，请先撤销相关核销',
+    )
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    expect(verifications.body.data.items).toHaveLength(1)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '撤销后准备显式调整约定金额' })
+      .expect(201)
+
+    const restored = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${scheduleId}`)
+      .expect(200)
+    expect(restored.body.data).toMatchObject({
+      id: scheduleId,
+      amountCents: obligationCents,
+      settledAmountCents: 0,
+      financeTouched: true,
+      status: PaymentScheduleStatus.PENDING,
+    })
+
+    await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${scheduleId}`)
+      .send({ amountCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/source-orders/${sourceOrderId}`)
+      .send({ adultUnitPriceCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ adjustReason: '缺少金额' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ amountCents: adjustedCents, adjustReason: '   ' })
+      .expect(400)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ amountCents: 0, adjustReason: '金额必须大于零' })
+      .expect(400)
+
+    const scheduleCountBefore = await prisma.paymentSchedule.count({
+      where: {
+        organizationId,
+        departureId: departure.id,
+        direction: PaymentScheduleDirection.receivable,
+      },
+    })
+
+    const adjusted = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({
+        amountCents: adjustedCents,
+        adjustReason: '游客代收重新议价，修正约定金额',
+      })
+      .expect(201)
+
+    expect(adjusted.body.data).toMatchObject({
+      id: scheduleId,
+      scheduleNo,
+      amountCents: adjustedCents,
+      settledAmountCents: 0,
+      unsettledAmountCents: adjustedCents,
+      financeTouched: true,
+      status: PaymentScheduleStatus.PENDING,
+      amountAdjustedAt: expect.any(String),
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    })
+
+    const scheduleCountAfter = await prisma.paymentSchedule.count({
+      where: {
+        organizationId,
+        departureId: departure.id,
+        direction: PaymentScheduleDirection.receivable,
+      },
+    })
+    expect(scheduleCountAfter).toBe(scheduleCountBefore)
+
+    const sourceAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrderId}`)
+      .expect(200)
+    expect(sourceAfter.body.data).toMatchObject({
+      guestCollectCents: adjustedCents,
+      partnerCollectedCents: 0,
+      netReceivableCents: adjustedCents,
+      grossReceivableCents: adjustedCents,
+      receivableStatus: 'pending',
+      amountFieldsLocked: true,
+      hasSourceAmountMismatch: false,
+    })
+
+    const receivableList = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/receivables`)
+      .expect(200)
+    expect(receivableList.body.data.items).toHaveLength(1)
+    expect(receivableList.body.data.items[0]).toMatchObject({
+      id: scheduleId,
+      amountCents: adjustedCents,
+    })
+
+    const detail = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${scheduleId}`)
+      .expect(200)
+    expect(detail.body.data.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activityType: 'amount_adjust',
+          note: '游客代收重新议价，修正约定金额',
+          previousAmountCents: obligationCents,
+          amountCents: adjustedCents,
+          operatedByName: expect.any(String),
+          operatedAt: expect.any(String),
+        }),
+      ]),
+    )
+
+    const departureSummary = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(departureSummary.body.data).toMatchObject({
+      openUnsettledReceivableCents: adjustedCents,
+      verifiedReceivableCents: 0,
+    })
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
+      .expect(409)
+
+    const closed = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '关闭后不可再调整',
+      })
+      .expect(201)
+    expect(closed.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+
+    const closedReject = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({ amountCents: 850_000, adjustReason: '已关闭不应调整' })
+    expect(closedReject.status).toBe(400)
+    expect(closedReject.body.message).toBe('已关闭节点不可调整约定金额')
+
+    const archiveDeparture = await createDeparture('recv-adjust-archive')
+    const archiveSource = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 500_000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+    const archiveGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${archiveSource.body.data.id}/generate-receivables`)
+      .expect(201)
+    const archiveScheduleId = archiveGenerated.body.data.schedules[0].id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${archiveScheduleId}/confirm-collection`)
+      .send({
+        amountCents: 100_000,
+        transactionDate: '2026-08-03',
+        paymentChannel: PaymentChannel.CASH,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: archiveSource.body.data.displayName,
+      })
+      .expect(201)
+
+    const archiveVerifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: archiveGenerated.body.data.schedules[0].scheduleNo,
+        scheduleNoMatch: 'exact',
+        pageSize: 10,
+      })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${archiveVerifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '归档前撤销核销' })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${archiveDeparture.id}/close`)
+      .send({ reason: '归档后拒绝显式调整' })
+      .expect(201)
+
+    const archivedReject = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${archiveScheduleId}/adjust-amount`)
+      .send({ amountCents: 450_000, adjustReason: '归档期不应调整' })
+    expect(archivedReject.status).toBe(409)
+    expect(archivedReject.body.message).toBe('发团已关闭，不可调整约定金额')
+  })
+
+  it('adjusts customer-settlement receivable and keeps partner path source in sync (#93)', async () => {
+    const obligationCents = 800_000
+    const verifiedCents = 200_000
+    const adjustedCents = 750_000
+
+    const departure = await createDeparture('explicit-recv-partner')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: obligationCents,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
+      })
+      .expect(201)
+    const sourceOrderId = sourceOrder.body.data.id as string
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
+      .expect(201)
+    expect(generated.body.data.schedules).toHaveLength(1)
+    expect(generated.body.data.schedules[0].sourceType).toBe(
+      PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    )
+    const scheduleId = generated.body.data.schedules[0].id as string
+    const scheduleNo = generated.body.data.schedules[0].scheduleNo as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: verifiedCents,
+        transactionDate: '2026-08-04',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
+        counterpartyName: `${testPrefix}-partner`,
+      })
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '撤销后调整客户补款' })
+      .expect(201)
+
+    const adjusted = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/adjust-amount`)
+      .send({
+        amountCents: adjustedCents,
+        adjustReason: '客户补款重新议价',
+      })
+      .expect(201)
+
+    expect(adjusted.body.data).toMatchObject({
+      id: scheduleId,
+      amountCents: adjustedCents,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      financeTouched: true,
+    })
+
+    const sourceAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrderId}`)
+      .expect(200)
+    expect(sourceAfter.body.data).toMatchObject({
+      partnerCollectedCents: adjustedCents,
+      guestCollectCents: 0,
+      netReceivableCents: adjustedCents,
+      grossReceivableCents: adjustedCents,
+      hasSourceAmountMismatch: false,
+      receivableStatus: 'pending',
+    })
+
+    const listItem = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${scheduleId}`)
+      .expect(200)
+    expect(listItem.body.data.amountCents).toBe(adjustedCents)
+
+    const departureReceivables = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/receivables`)
+      .expect(200)
+    expect(departureReceivables.body.data.items[0].amountCents).toBe(adjustedCents)
+
+    const departureSummary = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(departureSummary.body.data.openUnsettledReceivableCents).toBe(adjustedCents)
+  })
+
+  it('adjusts one split receivable path without mutating the sibling path (#93)', async () => {
+    const netCents = 1_000_000
+    const partnerPathCents = 400_000
+    const guestPathCents = 600_000
+    const adjustedPartnerCents = 350_000
+
+    const departure = await createDeparture('explicit-recv-split')
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 10,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100_000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.split,
+        partnerCollectedCents: partnerPathCents,
+      })
+      .expect(201)
+    const sourceOrderId = sourceOrder.body.data.id as string
+    expect(sourceOrder.body.data).toMatchObject({
+      partnerCollectedCents: partnerPathCents,
+      guestCollectCents: guestPathCents,
+      netReceivableCents: netCents,
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
+      .expect(201)
+    expect(generated.body.data.schedules).toHaveLength(2)
+
+    const customerSchedule = generated.body.data.schedules.find(
+      (item: { sourceType: string }) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    )
+    const guestSchedule = generated.body.data.schedules.find(
+      (item: { sourceType: string }) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    )
+    expect(customerSchedule.amountCents).toBe(partnerPathCents)
+    expect(guestSchedule.amountCents).toBe(guestPathCents)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${customerSchedule.id}/confirm-collection`)
+      .send({
+        amountCents: 100_000,
+        transactionDate: '2026-08-04',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
+        counterpartyName: `${testPrefix}-partner`,
+      })
+      .expect(201)
+
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({
+        scheduleNo: customerSchedule.scheduleNo,
+        scheduleNoMatch: 'exact',
+        pageSize: 10,
+      })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '撤销后仅调整客户补款路径' })
+      .expect(201)
+
+    const scheduleCountBefore = await prisma.paymentSchedule.count({
+      where: {
+        organizationId,
+        sourceId: sourceOrderId,
+        direction: PaymentScheduleDirection.receivable,
+      },
+    })
+
+    const adjusted = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${customerSchedule.id}/adjust-amount`)
+      .send({
+        amountCents: adjustedPartnerCents,
+        adjustReason: '拆分模式下仅修正客户补款',
+      })
+      .expect(201)
+    expect(adjusted.body.data).toMatchObject({
+      id: customerSchedule.id,
+      amountCents: adjustedPartnerCents,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    })
+
+    const scheduleCountAfter = await prisma.paymentSchedule.count({
+      where: {
+        organizationId,
+        sourceId: sourceOrderId,
+        direction: PaymentScheduleDirection.receivable,
+      },
+    })
+    expect(scheduleCountAfter).toBe(scheduleCountBefore)
+
+    const guestAfter = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${guestSchedule.id}`)
+      .expect(200)
+    expect(guestAfter.body.data).toMatchObject({
+      id: guestSchedule.id,
+      amountCents: guestPathCents,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      settledAmountCents: 0,
+    })
+
+    const sourceAfter = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${sourceOrderId}`)
+      .expect(200)
+    expect(sourceAfter.body.data).toMatchObject({
+      partnerCollectedCents: adjustedPartnerCents,
+      guestCollectCents: guestPathCents,
+      netReceivableCents: adjustedPartnerCents + guestPathCents,
+      grossReceivableCents: adjustedPartnerCents + guestPathCents,
+      collectionMode: SourceOrderCollectionMode.split,
+      hasSourceAmountMismatch: false,
+    })
+    expect(
+      sourceAfter.body.data.grossReceivableCents - sourceAfter.body.data.discountCents,
+    ).toBe(sourceAfter.body.data.netReceivableCents)
+
+    const tabs = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/receivables`)
+      .expect(200)
+    expect(tabs.body.data.total).toBe(2)
+    const tabCustomer = tabs.body.data.items.find(
+      (item: { id: string }) => item.id === customerSchedule.id,
+    )
+    const tabGuest = tabs.body.data.items.find(
+      (item: { id: string }) => item.id === guestSchedule.id,
+    )
+    expect(tabCustomer.amountCents).toBe(adjustedPartnerCents)
+    expect(tabGuest.amountCents).toBe(guestPathCents)
+
+    const departureSummary = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(departureSummary.body.data.openUnsettledReceivableCents).toBe(
+      adjustedPartnerCents + guestPathCents,
+    )
   })
 })

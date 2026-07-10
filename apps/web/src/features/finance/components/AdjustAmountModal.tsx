@@ -1,6 +1,9 @@
 import { Alert, Form, Input, InputNumber, Modal } from 'antd'
 import type { FormInstance } from 'antd/es/form'
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import {
+  PaymentScheduleDirection,
+  type PaymentScheduleSummary,
+} from '@xiaotuanbao/shared'
 import { formatCents } from '../catalog'
 import { centsToYuan } from '../utils/finance-form'
 
@@ -16,6 +19,13 @@ interface AdjustAmountModalProps {
   form: FormInstance<AdjustAmountFormValues>
   onClose: () => void
   onSubmit: (values: AdjustAmountFormValues) => void
+}
+
+function adjustSyncHint(schedule: PaymentScheduleSummary): string {
+  if (schedule.direction === PaymentScheduleDirection.RECEIVABLE) {
+    return '将同步修正客源单对应收款路径金额与原应收节点，保留原节点编号与财务履历。不会新建节点，也不会改动同一客源单的其他收款路径，更不会恢复普通金额编辑。'
+  }
+  return '将同步修正资源约定金额与原应付节点，保留原节点编号与财务履历。不会新建节点，也不会恢复普通金额编辑。'
 }
 
 export function AdjustAmountModal({
@@ -57,7 +67,7 @@ export function AdjustAmountModal({
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            title="将同步修正资源约定金额与原应付节点，保留原节点编号与财务履历。不会新建节点，也不会恢复普通金额编辑。"
+            title={adjustSyncHint(schedule)}
           />
           <Form.Item
             name="amountYuan"

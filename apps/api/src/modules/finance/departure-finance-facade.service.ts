@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { DepartureStatus, type Prisma } from '@prisma/client'
+import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 
 type TxClient = Prisma.TransactionClient
@@ -134,6 +135,57 @@ export class DepartureFinanceFacade {
     await tx.segmentResource.update({
       where: { id: resource.id },
       data: { amountCents: params.amountCents },
+    })
+  }
+
+  /**
+   * Sync one source-order receivable path amount with an explicit adjustment
+   * inside the caller's transaction (ADR-0010 / ADR-0004 / #93).
+   * Updates only the targeted path + netReceivable; sibling path untouched.
+   */
+  async syncSourceOrderPathAmountOnReceivableAdjust(
+    tx: TxClient,
+    params: {
+      sourceOrderId: string
+      sourceType: string
+      amountCents: number
+    },
+  ): Promise<void> {
+    const order = await tx.sourceOrder.findFirst({
+      where: { id: params.sourceOrderId },
+      select: {
+        id: true,
+        partnerCollectedCents: true,
+        guestCollectCents: true,
+        discountCents: true,
+      },
+    })
+    if (!order) {
+      throw new BadRequestException('关联客源单不存在，无法调整约定金额')
+    }
+
+    let partnerCollectedCents = order.partnerCollectedCents
+    let guestCollectCents = order.guestCollectCents
+
+    if (params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT) {
+      partnerCollectedCents = params.amountCents
+    } else if (params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) {
+      guestCollectCents = params.amountCents
+    } else {
+      throw new BadRequestException('仅客源应收路径可调整约定金额')
+    }
+
+    const netReceivableCents = partnerCollectedCents + guestCollectCents
+
+    await tx.sourceOrder.update({
+      where: { id: order.id },
+      data: {
+        partnerCollectedCents,
+        guestCollectCents,
+        netReceivableCents,
+        // Keep gross − discount = net after path-level agreed-amount correction.
+        grossReceivableCents: netReceivableCents + order.discountCents,
+      },
     })
   }
 }
