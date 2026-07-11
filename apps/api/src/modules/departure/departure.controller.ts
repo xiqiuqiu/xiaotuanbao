@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common'
 import type {
@@ -15,6 +16,7 @@ import type {
   DepartureOperationsSheetSnapshot,
   DepartureSummary,
 } from '@xiaotuanbao/shared'
+import type { Response } from 'express'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
@@ -29,6 +31,7 @@ import {
 } from './dto/departure.dto'
 import { DepartureService } from './departure.service'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
+import { buildOperationsSheetContentDisposition } from './departure-operations-sheet-excel.types'
 
 @Controller('departures')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
@@ -85,6 +88,23 @@ export class DepartureController {
       id,
       request.user.userId,
     )
+  }
+
+  @Get(':id/operations-sheet.xlsx')
+  @RequireMenu('/departure')
+  async downloadOperationsSheet(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.operationsSheetService.buildWorkbook(
+      request.user.organizationId,
+      id,
+      request.user.userId,
+    )
+    res.setHeader('Content-Type', file.contentType)
+    res.setHeader('Content-Disposition', buildOperationsSheetContentDisposition(file.filename))
+    res.send(file.buffer)
   }
 
   @Get(':id')

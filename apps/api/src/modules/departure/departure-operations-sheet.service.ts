@@ -23,6 +23,8 @@ import {
   type SourceOrderPathFinanceState,
 } from '../finance/departure-finance-facade.service'
 import { deriveDepartureProgress, formatDateOnly } from './departure-date.utils'
+import { DepartureOperationsSheetExcelRenderer } from './departure-operations-sheet-excel.types'
+import type { DepartureOperationsSheetExcelFile } from './departure-operations-sheet-excel.types'
 
 const RECEIVABLE_PATH_LABELS: Record<string, string> = {
   [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户结算',
@@ -34,7 +36,17 @@ export class DepartureOperationsSheetService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
+    private readonly excelRenderer: DepartureOperationsSheetExcelRenderer,
   ) {}
+
+  async buildWorkbook(
+    organizationId: string,
+    departureId: string,
+    exportedByUserId: string,
+  ): Promise<DepartureOperationsSheetExcelFile> {
+    const snapshot = await this.buildSnapshot(organizationId, departureId, exportedByUserId)
+    return this.excelRenderer.render(snapshot)
+  }
 
   async buildSnapshot(
     organizationId: string,

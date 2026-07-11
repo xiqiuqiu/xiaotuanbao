@@ -18,6 +18,8 @@ import { SegmentResourceService } from './segment-resource.service'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import { DepartureFinanceReadController } from './departure-finance-read.controller'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
+import { DepartureOperationsSheetExcelRenderer } from './departure-operations-sheet-excel.types'
+import { ExcelJsDepartureOperationsSheetRenderer } from './departure-operations-sheet-exceljs.renderer'
 
 @Module({
   imports: [AuthModule, FinanceModule, NumberAllocationModule],
@@ -39,6 +41,10 @@ import { DepartureOperationsSheetService } from './departure-operations-sheet.se
     SegmentService,
     SegmentResourceService,
     DepartureFinanceBridgeService,
+    {
+      provide: DepartureOperationsSheetExcelRenderer,
+      useClass: ExcelJsDepartureOperationsSheetRenderer,
+    },
     DepartureOperationsSheetService,
   ],
 })

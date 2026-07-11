@@ -899,7 +899,7 @@ export interface DepartureOperationsSheetAnomaly {
   remainingCents: number
 }
 
-/** Shared structured snapshot for page preview and future Excel (#99). */
+/** Shared structured snapshot for page preview and Excel export (#99). */
 export interface DepartureOperationsSheetSnapshot {
   organizationName: string
   exportedAt: string

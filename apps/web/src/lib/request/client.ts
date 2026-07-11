@@ -86,3 +86,106 @@ export const request = {
     return http.delete<T, T>(url, config)
   },
 }
+
+export interface BinaryDownload {
+  blob: Blob
+  filename: string | null
+}
+
+function parseContentDispositionFilename(header: string | undefined): string | null {
+  if (!header) {
+    return null
+  }
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim())
+    } catch {
+      return utf8Match[1].trim()
+    }
+  }
+  const plainMatch = header.match(/filename="?([^";]+)"?/i)
+  return plainMatch?.[1]?.trim() || null
+}
+
+async function readApiErrorFromBlob(blob: Blob): Promise<ApiError | null> {
+  if (!blob.type.includes('json') && blob.type !== '' && blob.type !== 'text/plain') {
+    return null
+  }
+  try {
+    const payload = JSON.parse(await blob.text()) as ApiResponse
+    if (payload && typeof payload.message === 'string') {
+      return new ApiError(payload.message || '请求失败', payload.code ?? -1)
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+/** Authenticated binary download that bypasses the JSON unwrap interceptor. */
+export async function downloadBinary(
+  url: string,
+  config?: AxiosRequestConfig,
+): Promise<BinaryDownload> {
+  const token = useAuthStore.getState().token
+  try {
+    const response = await axios.get(`${env.apiBaseUrl}${url}`, {
+      ...config,
+      responseType: 'blob',
+      headers: {
+        ...(config?.headers ?? {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    const blob = response.data as Blob
+    const jsonError = await readApiErrorFromBlob(blob)
+    if (jsonError) {
+      message.error(jsonError.message)
+      throw jsonError
+    }
+    return {
+      blob,
+      filename: parseContentDispositionFilename(
+        response.headers['content-disposition'] as string | undefined,
+      ),
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status
+      if (status === 401) {
+        useAuthStore.getState().logout()
+        message.error('登录已过期，请重新登录')
+        window.location.href = '/login'
+        throw error
+      }
+      const data = error.response?.data
+      if (data instanceof Blob) {
+        const jsonError = await readApiErrorFromBlob(data)
+        if (jsonError) {
+          message.error(jsonError.message)
+          throw jsonError
+        }
+      }
+      const apiMessage =
+        error.response?.data &&
+        typeof error.response.data === 'object' &&
+        'message' in error.response.data
+          ? String((error.response.data as ApiResponse).message)
+          : null
+      message.error(apiMessage || error.message || '网络异常，请稍后重试')
+    }
+    throw error
+  }
+}
+
+export function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
+}

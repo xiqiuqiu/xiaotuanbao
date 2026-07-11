@@ -3115,6 +3115,34 @@ describe('Departure API (e2e)', () => {
         needsReview: true,
         receivableStatus: 'closed',
       })
+
+      const ExcelJS = await import('exceljs')
+      const xlsxResponse = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(xlsxResponse.body as any)
+      const cellTexts: string[] = []
+      workbook.worksheets[0].eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            cellTexts.push(text)
+          }
+        })
+      })
+      expect(cellTexts).toContain('待确认款项')
+      expect(cellTexts).toContain('财务汇总与异常')
+      expect(cellTexts.some((text) => text.includes('需核对'))).toBe(true)
+      expect(cellTexts).toContain('关闭仍有余额')
     })
 
     it('allows finance role to read operations sheet', async () => {
@@ -3200,6 +3228,211 @@ describe('Departure API (e2e)', () => {
 
       expect(response.body.message).toBe('无权访问')
 
+      await prisma.user.delete({ where: { id: user.id } })
+    })
+
+    it('downloads xlsx workbook matching preview semantics (#99)', async () => {
+      const ExcelJS = await import('exceljs')
+      const departure = await createOpsDeparture({
+        name: `${testPrefix}-ops-xlsx/导出*测试`,
+      })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          notes: 'xlsx客源备注',
+        })
+        .expect(201)
+
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: 'xlsx行程段',
+          startDate: '2026-09-01',
+          endDate: '2026-09-03',
+          destination: '喀纳斯',
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: 'xlsx酒店',
+          amountCents: 90000,
+        })
+        .expect(201)
+
+      const preview = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      const previewSheet = preview.body.data
+      expect(previewSheet.dataStage).toBe('not_started')
+      expect(previewSheet.sourceOrders[0].receivablePaths[0].receivedCents).toBeNull()
+      expect(previewSheet.segments[0].resources[0].paidCents).toBeNull()
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      expect(response.headers['content-type']).toMatch(
+        /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/,
+      )
+      const disposition = String(response.headers['content-disposition'] ?? '')
+      expect(disposition).toMatch(/attachment/)
+      expect(disposition).toContain(encodeURIComponent('发团运营表'))
+      expect(disposition).toContain(departure.departureNo)
+      const filenameStar = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? ''
+      const decodedFilename = decodeURIComponent(filenameStar)
+      expect(decodedFilename).toContain('发团运营表')
+      expect(decodedFilename).toContain(departure.departureNo)
+      expect(decodedFilename).toMatch(/\.xlsx$/)
+      const snapshotDate = (() => {
+        const date = new Date(previewSheet.exportedAt)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      })()
+      expect(decodedFilename).toContain(snapshotDate)
+      expect(decodedFilename).not.toMatch(/[\\/:*?"<>|]/)
+      expect(Buffer.isBuffer(response.body)).toBe(true)
+      expect(response.body.length).toBeGreaterThan(1000)
+      // Must not be the global JSON envelope.
+      expect(response.body.subarray(0, 1).toString('utf8')).not.toBe('{')
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(response.body as any)
+      expect(workbook.worksheets).toHaveLength(1)
+
+      const worksheet = workbook.worksheets[0]
+      expect(worksheet.name).toBe('发团运营表')
+
+      const cellTexts: string[] = []
+      const moneyCells: Array<{ value: unknown; numFmt?: string; formula?: unknown }> = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            cellTexts.push(text)
+          }
+          if (typeof cell.value === 'number') {
+            moneyCells.push({ value: cell.value, numFmt: cell.numFmt })
+          }
+          if (cell.value && typeof cell.value === 'object' && 'formula' in cell.value) {
+            moneyCells.push({ value: cell.value, formula: (cell.value as { formula: string }).formula })
+          }
+        })
+      })
+
+      expect(moneyCells.every((cell) => !cell.formula)).toBe(true)
+
+      for (const section of [
+        '发团与数据阶段',
+        '客源及应收',
+        '行程段资源及应付',
+        '发团级备注',
+      ]) {
+        expect(cellTexts).toContain(section)
+      }
+
+      expect(cellTexts).toContain(previewSheet.organizationName)
+      expect(cellTexts).toContain(previewSheet.exportedByName)
+      expect(cellTexts).toContain('快照时间')
+      expect(cellTexts).toContain('企业')
+      expect(cellTexts).toContain('导出人')
+      expect(cellTexts.some((text) => text.includes(departure.departureNo))).toBe(true)
+      expect(cellTexts).toContain('客源：xlsx客源备注')
+      expect(cellTexts).toContain('xlsx酒店')
+      expect(cellTexts).toContain('发团级备注应单独归属')
+      expect(cellTexts.filter((text) => text === '—').length).toBeGreaterThanOrEqual(4)
+
+      const agreedReceivableYuan =
+        previewSheet.sourceOrders[0].agreedReceivableCents / 100
+      const agreedPayableYuan = previewSheet.segments[0].resources[0].agreedPayableCents / 100
+      expect(moneyCells.some((cell) => cell.value === agreedReceivableYuan)).toBe(true)
+      expect(moneyCells.some((cell) => cell.value === agreedPayableYuan)).toBe(true)
+      expect(
+        moneyCells.some(
+          (cell) =>
+            typeof cell.numFmt === 'string' &&
+            (cell.numFmt.includes('¥') || cell.numFmt.includes('￥')),
+        ),
+      ).toBe(true)
+
+      // Finance-not-started: no pending / summary sections that would imply progress.
+      expect(cellTexts).not.toContain('待确认款项')
+    })
+
+    it('denies xlsx download without /departure permission and cross-org (#99)', async () => {
+      const { hash } = await import('bcryptjs')
+      const password = 'admin123'
+      const username = `${testPrefix}-ops-xlsx-noperm`
+      const user = await prisma.user.create({
+        data: {
+          organizationId,
+          username,
+          passwordHash: await hash(password, 10),
+          name: '无发团权限xlsx',
+        },
+      })
+      const token = await loginAs(app, username, password)
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-xlsx-noperm-dep` })
+
+      await authRequest(app, token)
+        .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
+        .expect(403)
+
+      const otherOrg = await prisma.organization.create({
+        data: {
+          name: `${testPrefix}-ops-xlsx-other-org`,
+          businessPrefix: uniqueBusinessPrefix(`${testPrefix}-ops-xlsx-other`),
+        },
+      })
+      const otherUser = await prisma.user.create({
+        data: {
+          organizationId: otherOrg.id,
+          username: `${testPrefix}-ops-xlsx-other-user`,
+          passwordHash: 'unused',
+          name: '跨企业xlsx',
+        },
+      })
+      const foreign = await prisma.departure.create({
+        data: {
+          organizationId: otherOrg.id,
+          departureNo: `${testPrefix}-ops-xlsx-foreign`,
+          name: `${testPrefix}-ops-xlsx-foreign-name`,
+          routeName: '外部路线',
+          startDate: new Date('2026-09-01T00:00:00.000Z'),
+          endDate: new Date('2026-09-05T00:00:00.000Z'),
+          dayCount: 5,
+          ownerUserId: otherUser.id,
+        },
+      })
+
+      await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${foreign.id}/operations-sheet.xlsx`)
+        .expect(404)
+
+      await prisma.departure.delete({ where: { id: foreign.id } })
+      await prisma.user.delete({ where: { id: otherUser.id } })
+      await prisma.organization.delete({ where: { id: otherOrg.id } })
       await prisma.user.delete({ where: { id: user.id } })
     })
   })

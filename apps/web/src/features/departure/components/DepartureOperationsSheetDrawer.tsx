@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import { Alert, Descriptions, Drawer, Empty, Space, Table, Typography } from 'antd'
+import { useMemo, useState } from 'react'
+import { Alert, Button, Descriptions, Drawer, Empty, Space, Table, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
 import type {
@@ -11,7 +11,10 @@ import type {
   DepartureOperationsSheetSourceOrderRow,
 } from '@xiaotuanbao/shared'
 import { PAYMENT_CHANNEL_LABELS } from '@xiaotuanbao/shared'
-import { getDepartureOperationsSheet } from '@/services/departure.service'
+import {
+  downloadDepartureOperationsSheet,
+  getDepartureOperationsSheet,
+} from '@/services/departure.service'
 import {
   DEPARTURE_PROGRESS_LABELS,
   DEPARTURE_STATUS_LABELS,
@@ -50,11 +53,24 @@ export function DepartureOperationsSheetDrawer({
   departureId,
   onClose,
 }: DepartureOperationsSheetDrawerProps) {
+  const [exporting, setExporting] = useState(false)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['departure-operations-sheet', departureId],
     queryFn: () => getDepartureOperationsSheet(departureId),
     enabled: open,
   })
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadDepartureOperationsSheet(departureId)
+      message.success('已开始下载 Excel')
+    } catch {
+      // downloadBinary already surfaces the error message
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <Drawer
@@ -65,6 +81,11 @@ export function DepartureOperationsSheetDrawer({
       onClose={onClose}
       destroyOnHidden
       loading={isLoading}
+      extra={
+        <Button type="primary" loading={exporting} disabled={!data || isError} onClick={handleExport}>
+          导出 Excel
+        </Button>
+      }
     >
       {isError ? (
         <Alert

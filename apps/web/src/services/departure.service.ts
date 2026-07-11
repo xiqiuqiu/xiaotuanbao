@@ -1,4 +1,4 @@
-import { request } from '@/lib/request'
+import { downloadBinary, request, triggerBrowserDownload } from '@/lib/request'
 import type {
   CopyDepartureDto,
   CreateDepartureDto,
@@ -82,4 +82,9 @@ export async function getDepartureOperationsSheet(
   id: string,
 ): Promise<DepartureOperationsSheetSnapshot> {
   return request.get<DepartureOperationsSheetSnapshot>(`/departures/${id}/operations-sheet`)
+}
+
+export async function downloadDepartureOperationsSheet(id: string): Promise<void> {
+  const { blob, filename } = await downloadBinary(`/departures/${id}/operations-sheet.xlsx`)
+  triggerBrowserDownload(blob, filename ?? `发团运营表_${id}.xlsx`)
 }
