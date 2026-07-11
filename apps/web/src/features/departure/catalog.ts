@@ -139,6 +139,15 @@ export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   [SourceOrderReceivableStatus.CLOSED]: '已关闭',
 }
 
+/** Operations-sheet path progress wording (#97 / #94). */
+export const OPERATIONS_SHEET_RECEIVABLE_PROGRESS_LABELS: Record<string, string> = {
+  [SourceOrderReceivableStatus.NOT_GENERATED]: '—',
+  [SourceOrderReceivableStatus.PENDING]: '待收款',
+  [SourceOrderReceivableStatus.PARTIAL]: '部分收款',
+  [SourceOrderReceivableStatus.COLLECTED]: '已收清',
+  [SourceOrderReceivableStatus.CLOSED]: '已关闭',
+}
+
 export const GUEST_GENDER_OPTIONS = [
   { value: GuestGender.MALE, label: '男' },
   { value: GuestGender.FEMALE, label: '女' },

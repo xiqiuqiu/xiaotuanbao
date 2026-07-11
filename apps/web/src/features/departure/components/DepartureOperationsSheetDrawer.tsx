@@ -3,6 +3,7 @@ import { Alert, Descriptions, Drawer, Empty, Space, Table, Typography } from 'an
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
 import type {
+  DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetResourceRow,
   DepartureOperationsSheetSnapshot,
   DepartureOperationsSheetSourceOrderRow,
@@ -12,6 +13,7 @@ import {
   DEPARTURE_PROGRESS_LABELS,
   DEPARTURE_STATUS_LABELS,
   OPERATIONS_SHEET_DATA_STAGE_LABELS,
+  OPERATIONS_SHEET_RECEIVABLE_PROGRESS_LABELS,
   SEGMENT_PAYABLE_STATUS_LABELS,
   catalogLabel,
   formatCents,
@@ -109,6 +111,55 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
         render: (value: number) => formatCents(value),
       },
       {
+        title: '备注',
+        key: 'notes',
+        render: (_, row) => {
+          const parts: string[] = []
+          const settlementNotes = nonEmptyNote(row.settlementNotes)
+          const notes = nonEmptyNote(row.notes)
+          if (settlementNotes) {
+            parts.push(`结算：${settlementNotes}`)
+          }
+          if (notes) {
+            parts.push(`客源：${notes}`)
+          }
+          return parts.length > 0 ? parts.join('；') : '-'
+        },
+      },
+    ],
+    [],
+  )
+
+  const receivablePathColumns = useMemo<ColumnsType<DepartureOperationsSheetReceivablePathRow>>(
+    () => [
+      {
+        title: '收款路径',
+        dataIndex: 'pathLabel',
+        width: 110,
+      },
+      {
+        title: '约定应收',
+        key: 'receivable',
+        width: 160,
+        align: 'right',
+        render: (_, row) => {
+          if (
+            row.scheduleReceivableCents != null &&
+            row.scheduleReceivableCents !== row.agreedReceivableCents
+          ) {
+            return (
+              <Space direction="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
+                <Typography.Text>业务 {formatCents(row.agreedReceivableCents)}</Typography.Text>
+                <Typography.Text type="secondary">
+                  财务 {formatCents(row.scheduleReceivableCents)}
+                </Typography.Text>
+              </Space>
+            )
+          }
+          return formatCents(row.agreedReceivableCents)
+        },
+      },
+      {
         title: '已收',
         dataIndex: 'receivedCents',
         width: 90,
@@ -123,19 +174,21 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
         render: (value: number | null) => formatProgressCents(value),
       },
       {
-        title: '备注',
-        key: 'notes',
+        title: '进度',
+        key: 'progress',
+        width: 130,
         render: (_, row) => {
-          const parts: string[] = []
-          const settlementNotes = nonEmptyNote(row.settlementNotes)
-          const notes = nonEmptyNote(row.notes)
-          if (settlementNotes) {
-            parts.push(`结算：${settlementNotes}`)
+          if (row.receivableStatus === 'not_generated') {
+            return '—'
           }
-          if (notes) {
-            parts.push(`客源：${notes}`)
+          const progressLabel = catalogLabel(
+            OPERATIONS_SHEET_RECEIVABLE_PROGRESS_LABELS,
+            row.receivableStatus,
+          )
+          if (row.needsReview) {
+            return progressLabel === '—' ? '需核对' : `${progressLabel} · 需核对`
           }
-          return parts.length > 0 ? parts.join('；') : '-'
+          return progressLabel
         },
       },
     ],
@@ -268,7 +321,21 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
           columns={sourceColumns}
           dataSource={sheet.sourceOrders}
           locale={{ emptyText: '暂无客源单' }}
-          scroll={{ x: 900 }}
+          scroll={{ x: 760 }}
+          expandable={{
+            defaultExpandAllRows: true,
+            rowExpandable: (row) => (row.receivablePaths?.length ?? 0) > 0,
+            expandedRowRender: (row) => (
+              <Table
+                size="small"
+                rowKey="pathType"
+                pagination={false}
+                columns={receivablePathColumns}
+                dataSource={row.receivablePaths ?? []}
+                showHeader
+              />
+            ),
+          }}
         />
       </div>
 

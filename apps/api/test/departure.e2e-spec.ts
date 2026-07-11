@@ -2038,11 +2038,22 @@ describe('Departure API (e2e)', () => {
         childGuestCount: 0,
         guestCount: 4,
         agreedReceivableCents: 480000,
-        receivedCents: null,
-        unreceivedCents: null,
         notes: '先建客源备注',
         settlementNotes: null,
         guestRepresentative: { name: '最早客人', phone: '13800000001' },
+        receivablePaths: [
+          {
+            pathType: 'source_order_customer_settlement',
+            pathLabel: '客户结算',
+            agreedReceivableCents: 480000,
+            scheduleReceivableCents: null,
+            receivedCents: null,
+            unreceivedCents: null,
+            receivableStatus: 'not_generated',
+            needsReview: false,
+            excludeFromProgressTotals: false,
+          },
+        ],
       })
       expect(sheet.sourceOrders[1]).toMatchObject({
         id: laterSourceOrder.body.data.id,
@@ -2050,11 +2061,22 @@ describe('Departure API (e2e)', () => {
         childGuestCount: 1,
         guestCount: 3,
         agreedReceivableCents: 280000,
-        receivedCents: null,
-        unreceivedCents: null,
         notes: '后建客源备注',
         settlementNotes: '后建结算备注',
         guestRepresentative: null,
+        receivablePaths: [
+          {
+            pathType: 'source_order_guest_collection',
+            pathLabel: '游客代收',
+            agreedReceivableCents: 280000,
+            scheduleReceivableCents: null,
+            receivedCents: null,
+            unreceivedCents: null,
+            receivableStatus: 'not_generated',
+            needsReview: false,
+            excludeFromProgressTotals: false,
+          },
+        ],
       })
 
       expect(sheet.segments.map((s: { name: string }) => s.name)).toEqual(['阿勒泰段', '喀纳斯段'])
@@ -2374,6 +2396,294 @@ describe('Departure API (e2e)', () => {
         needsReview: true,
         excludeFromProgressTotals: true,
       })
+    })
+
+    it('wires source-order receivable path progress from finance facade (#97)', async () => {
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-receivable-progress` })
+
+      // Split: customer settlement + guest collection — generate both, partial on customer.
+      const splitOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.split,
+          partnerCollectedCents: 120000,
+        })
+        .expect(201)
+
+      // Guest-only: generate and fully collect.
+      const collectedOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 50000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      // Partner-settled: generate, partial collect, then close with balance.
+      const closedOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 80000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+        })
+        .expect(201)
+
+      // Guest-only: generate then diverge business vs schedule amount after finance touch.
+      const mismatchOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 120000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      // Guest-only: leave ungenerated so dash progress coexists with generated paths.
+      const ungeneratedOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 30000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const splitGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${splitOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const collectedGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${collectedOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const closedGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${closedOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const mismatchGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${mismatchOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+
+      const splitSchedules = splitGenerated.body.data.schedules as Array<{
+        id: string
+        sourceType: string
+        amountCents: number
+      }>
+      const customerSchedule = splitSchedules.find(
+        (s) => s.sourceType === 'source_order_customer_settlement',
+      )
+      const guestSchedule = splitSchedules.find(
+        (s) => s.sourceType === 'source_order_guest_collection',
+      )
+      expect(customerSchedule).toBeTruthy()
+      expect(guestSchedule).toBeTruthy()
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${customerSchedule!.id}/confirm-collection`)
+        .send({
+          amountCents: 40000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${collectedGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 50000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: collectedOrder.body.data.id,
+          counterpartyName: collectedOrder.body.data.displayName,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${closedGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 30000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${closedGenerated.body.data.schedules[0].id}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '坏账内部备注勿导出' })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${mismatchGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 10000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: mismatchOrder.body.data.id,
+          counterpartyName: mismatchOrder.body.data.displayName,
+        })
+        .expect(201)
+
+      await prisma.paymentSchedule.update({
+        where: { id: mismatchGenerated.body.data.schedules[0].id },
+        data: { amountCents: 90000 },
+      })
+
+      // Unallocated inflow must not count as received on any receivable path.
+      await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 88800,
+          transactionDate: '2026-09-01',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+          departureId: departure.id,
+          notes: '未核销收入不应计入已收',
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      const sheet = response.body.data
+      expect(sheet.dataStage).toBe('partial')
+
+      type PathRow = {
+        pathType: string
+        pathLabel: string
+        agreedReceivableCents: number
+        scheduleReceivableCents: number | null
+        receivedCents: number | null
+        unreceivedCents: number | null
+        receivableStatus: string
+        needsReview: boolean
+        excludeFromProgressTotals: boolean
+      }
+      type OrderRow = {
+        id: string
+        agreedReceivableCents: number
+        receivablePaths: PathRow[]
+      }
+
+      const orders = sheet.sourceOrders as OrderRow[]
+      const byId = Object.fromEntries(orders.map((o) => [o.id, o]))
+
+      expect(byId[ungeneratedOrder.body.data.id]).toMatchObject({
+        agreedReceivableCents: 30000,
+        receivablePaths: [
+          {
+            pathType: 'source_order_guest_collection',
+            pathLabel: '游客代收',
+            agreedReceivableCents: 30000,
+            scheduleReceivableCents: null,
+            receivedCents: null,
+            unreceivedCents: null,
+            receivableStatus: 'not_generated',
+            needsReview: false,
+            excludeFromProgressTotals: false,
+          },
+        ],
+      })
+
+      expect(byId[splitOrder.body.data.id].receivablePaths).toEqual([
+        expect.objectContaining({
+          pathType: 'source_order_customer_settlement',
+          pathLabel: '客户结算',
+          agreedReceivableCents: 120000,
+          scheduleReceivableCents: 120000,
+          receivedCents: 40000,
+          unreceivedCents: 80000,
+          receivableStatus: 'partial',
+          needsReview: false,
+          excludeFromProgressTotals: false,
+        }),
+        expect.objectContaining({
+          pathType: 'source_order_guest_collection',
+          pathLabel: '游客代收',
+          agreedReceivableCents: 80000,
+          scheduleReceivableCents: 80000,
+          receivedCents: 0,
+          unreceivedCents: 80000,
+          receivableStatus: 'pending',
+          needsReview: false,
+          excludeFromProgressTotals: false,
+        }),
+      ])
+
+      expect(byId[collectedOrder.body.data.id].receivablePaths).toEqual([
+        expect.objectContaining({
+          pathType: 'source_order_guest_collection',
+          pathLabel: '游客代收',
+          agreedReceivableCents: 50000,
+          scheduleReceivableCents: 50000,
+          receivedCents: 50000,
+          unreceivedCents: 0,
+          receivableStatus: 'collected',
+          needsReview: false,
+          excludeFromProgressTotals: false,
+        }),
+      ])
+
+      expect(byId[closedOrder.body.data.id].receivablePaths).toEqual([
+        expect.objectContaining({
+          pathType: 'source_order_customer_settlement',
+          pathLabel: '客户结算',
+          agreedReceivableCents: 80000,
+          scheduleReceivableCents: 80000,
+          receivedCents: 30000,
+          unreceivedCents: 50000,
+          receivableStatus: 'closed',
+          needsReview: true,
+          excludeFromProgressTotals: false,
+        }),
+      ])
+      expect(JSON.stringify(byId[closedOrder.body.data.id])).not.toContain('坏账')
+
+      expect(byId[mismatchOrder.body.data.id].receivablePaths).toEqual([
+        expect.objectContaining({
+          pathType: 'source_order_guest_collection',
+          pathLabel: '游客代收',
+          agreedReceivableCents: 120000,
+          scheduleReceivableCents: 90000,
+          receivedCents: 10000,
+          unreceivedCents: 80000,
+          receivableStatus: 'partial',
+          needsReview: true,
+          excludeFromProgressTotals: true,
+        }),
+      ])
     })
 
     it('allows finance role to read operations sheet', async () => {

@@ -77,6 +77,7 @@ export type {
   CreateSegmentResourceDto,
   UpdateSegmentResourceDto,
   DepartureOperationsSheetGuestRepresentative,
+  DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetSourceOrderRow,
   DepartureOperationsSheetResourceRow,
   DepartureOperationsSheetSegmentRow,

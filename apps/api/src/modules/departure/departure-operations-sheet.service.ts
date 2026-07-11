@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import type { DepartureOperationsSheetSnapshot } from '@xiaotuanbao/shared'
 import {
   DepartureOperationsSheetDataStage,
+  PaymentScheduleSourceType,
   RESOURCE_KIND_LABELS,
   ResourceKind,
   SegmentPayableStatus,
@@ -12,8 +13,14 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import {
   DepartureFinanceFacade,
   type SegmentResourceFinanceState,
+  type SourceOrderPathFinanceState,
 } from '../finance/departure-finance-facade.service'
 import { deriveDepartureProgress, formatDateOnly } from './departure-date.utils'
+
+const RECEIVABLE_PATH_LABELS: Record<string, string> = {
+  [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户结算',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '游客代收',
+}
 
 @Injectable()
 export class DepartureOperationsSheetService {
@@ -67,16 +74,31 @@ export class DepartureOperationsSheetService {
     })
 
     const allResources = departure.itinerarySegments.flatMap((segment) => segment.resources)
-    const financeStates = await this.departureFinanceFacade.getSegmentResourceFinanceStates(
-      organizationId,
-      allResources.map((resource) => resource.id),
-      new Map(allResources.map((resource) => [resource.id, resource.amountCents])),
-    )
+    const [resourceFinanceStates, sourceOrderPathStates] = await Promise.all([
+      this.departureFinanceFacade.getSegmentResourceFinanceStates(
+        organizationId,
+        allResources.map((resource) => resource.id),
+        new Map(allResources.map((resource) => [resource.id, resource.amountCents])),
+      ),
+      this.departureFinanceFacade.getSourceOrderPathFinanceStates(
+        organizationId,
+        departure.sourceOrders.map((order) => order.id),
+        new Map(
+          departure.sourceOrders.map((order) => [
+            order.id,
+            {
+              partnerCollectedCents: order.partnerCollectedCents,
+              guestCollectCents: order.guestCollectCents,
+            },
+          ]),
+        ),
+      ),
+    ])
 
-    // #97 will wire Source Order receivable progress; until then receivables stay `—`.
+    const pathStates = [...sourceOrderPathStates.values()].flat()
     const dataStage = deriveDataStage({
-      resourceStates: [...financeStates.values()],
-      sourceOrderCount: departure.sourceOrders.length,
+      resourceStates: [...resourceFinanceStates.values()],
+      pathStates,
     })
 
     return {
@@ -99,6 +121,7 @@ export class DepartureOperationsSheetService {
       },
       sourceOrders: departure.sourceOrders.map((order) => {
         const guest = order.guests[0] ?? null
+        const paths = sourceOrderPathStates.get(order.id) ?? []
         return {
           id: order.id,
           partnerName: order.partner.name,
@@ -107,9 +130,6 @@ export class DepartureOperationsSheetService {
           childGuestCount: order.childGuestCount,
           guestCount: order.guestCount,
           agreedReceivableCents: order.netReceivableCents,
-          // #97: receivable progress not wired; null renders as `—`
-          receivedCents: null,
-          unreceivedCents: null,
           settlementNotes: order.settlementNotes,
           notes: order.notes,
           guestRepresentative: guest
@@ -118,6 +138,17 @@ export class DepartureOperationsSheetService {
                 phone: guest.phone,
               }
             : null,
+          receivablePaths: paths.map((path) => ({
+            pathType: path.pathType,
+            pathLabel: RECEIVABLE_PATH_LABELS[path.pathType] ?? path.pathType,
+            agreedReceivableCents: path.agreedAmountCents,
+            scheduleReceivableCents: path.scheduleAmountCents,
+            receivedCents: path.receivedCents,
+            unreceivedCents: path.unreceivedCents,
+            receivableStatus: path.receivableStatus,
+            needsReview: path.needsReview,
+            excludeFromProgressTotals: path.hasSourceAmountMismatch,
+          })),
         }
       }),
       segments: departure.itinerarySegments.map((segment) => {
@@ -126,7 +157,7 @@ export class DepartureOperationsSheetService {
             const counterpartyName =
               resource.partner?.name ?? resource.supplier?.name ?? ''
             const finance =
-              financeStates.get(resource.id) ??
+              resourceFinanceStates.get(resource.id) ??
               ({
                 hasSchedule: false,
                 payableStatus: SegmentPayableStatus.NOT_GENERATED,
@@ -179,24 +210,19 @@ function resourceKindLabel(kind: PrismaResourceKind): string {
 
 function deriveDataStage(input: {
   resourceStates: SegmentResourceFinanceState[]
-  sourceOrderCount: number
+  pathStates: SourceOrderPathFinanceState[]
 }): DepartureOperationsSheetDataStage {
-  const resourceCount = input.resourceStates.length
-  const generatedResourceCount = input.resourceStates.filter((state) => state.hasSchedule).length
+  const trackableCount = input.resourceStates.length + input.pathStates.length
+  const generatedCount =
+    input.resourceStates.filter((state) => state.hasSchedule).length +
+    input.pathStates.filter((state) => state.hasSchedule).length
 
-  if (generatedResourceCount === 0) {
+  if (trackableCount === 0 || generatedCount === 0) {
     return DepartureOperationsSheetDataStage.NOT_STARTED
   }
 
-  // Source Order receivable progress lands in #97; until then any source order
-  // keeps the sheet from reaching fully-active when resources are all generated.
-  const allResourcesGenerated = generatedResourceCount === resourceCount
-  if (allResourcesGenerated && input.sourceOrderCount === 0) {
+  if (generatedCount === trackableCount) {
     return DepartureOperationsSheetDataStage.ACTIVE
-  }
-
-  if (allResourcesGenerated && input.sourceOrderCount > 0) {
-    return DepartureOperationsSheetDataStage.PARTIAL
   }
 
   return DepartureOperationsSheetDataStage.PARTIAL

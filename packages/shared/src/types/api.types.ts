@@ -749,6 +749,36 @@ export interface DepartureOperationsSheetGuestRepresentative {
   phone: string | null
 }
 
+/**
+ * One Customer Settlement or Guest Collection path under a Source Order.
+ * Progress is path-scoped — never merge payers (#97).
+ */
+export interface DepartureOperationsSheetReceivablePathRow {
+  /** PaymentScheduleSourceType: source_order_customer_settlement | source_order_guest_collection */
+  pathType: string
+  pathLabel: string
+  /** Business agreed receivable for this path. */
+  agreedReceivableCents: number
+  /**
+   * Financial schedule receivable when generated.
+   * Null when finance has not started. Differs from agreedReceivableCents on mismatch.
+   */
+  scheduleReceivableCents: number | null
+  /** Null when finance has not started — render as `—`, never numeric zero. */
+  receivedCents: number | null
+  /** Null when finance has not started. Closed rows keep remaining unreceived. */
+  unreceivedCents: number | null
+  /** SourceOrderReceivableStatus value; `not_generated` when finance has not started. */
+  receivableStatus: string
+  /** Closed-with-balance or business/schedule amount mismatch. Close reason omitted. */
+  needsReview: boolean
+  /**
+   * Amount-mismatch rows stay visible but must not feed normal unreceived totals (#98).
+   * Closed-with-balance rows keep unreceived visible and are NOT excluded here.
+   */
+  excludeFromProgressTotals: boolean
+}
+
 export interface DepartureOperationsSheetSourceOrderRow {
   id: string
   partnerName: string
@@ -756,12 +786,13 @@ export interface DepartureOperationsSheetSourceOrderRow {
   adultGuestCount: number
   childGuestCount: number
   guestCount: number
+  /** Net business receivable across paths (parent identity row). */
   agreedReceivableCents: number
-  receivedCents: number | null
-  unreceivedCents: number | null
   settlementNotes: string | null
   notes: string | null
   guestRepresentative: DepartureOperationsSheetGuestRepresentative | null
+  /** Present collection paths only; progress lives here, not on the parent. */
+  receivablePaths: DepartureOperationsSheetReceivablePathRow[]
 }
 
 export interface DepartureOperationsSheetResourceRow {

@@ -19,6 +19,7 @@ import {
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
   SegmentPayableStatus,
+  SourceOrderReceivableStatus,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
@@ -49,6 +50,37 @@ export interface SegmentResourceFinanceState {
    * Close reason is intentionally omitted.
    */
   needsReview: boolean
+}
+
+/**
+ * One Source Order receivable path finance state owned by Finance (#97).
+ * Received/unreceived use effective verification allocation only — never unallocated inflows.
+ */
+export interface SourceOrderPathFinanceState {
+  pathType:
+    | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
+    | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
+  hasSchedule: boolean
+  receivableStatus: SourceOrderReceivableStatus
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+  agreedAmountCents: number
+  /** Null when finance has not started for this path. */
+  scheduleAmountCents: number | null
+  /** Null when finance has not started — render as `—`, never numeric zero. */
+  receivedCents: number | null
+  /** Null when finance has not started. Closed rows keep remaining unreceived. */
+  unreceivedCents: number | null
+  /**
+   * True when closed-with-remaining unreceived, or business amount ≠ schedule amount.
+   * Close reason is intentionally omitted.
+   */
+  needsReview: boolean
+}
+
+export interface SourceOrderPathAmountInput {
+  partnerCollectedCents: number
+  guestCollectCents: number
 }
 
 /**
@@ -449,12 +481,218 @@ export class DepartureFinanceFacade {
     )
   }
 
+  /**
+   * Source Order receivable-path finance states (ADR-0004 / #97).
+   * Returns one entry per present business path (partnerCollected > 0 / guestCollect > 0).
+   * Operations Sheet consumes this — it must not re-derive verification rules.
+   */
+  async getSourceOrderPathFinanceStates(
+    organizationId: string,
+    sourceOrderIds: string[],
+    agreedAmountsBySourceOrderId?: Map<string, SourceOrderPathAmountInput>,
+  ): Promise<Map<string, SourceOrderPathFinanceState[]>> {
+    const uniqueIds = [...new Set(sourceOrderIds)]
+    const result = new Map<string, SourceOrderPathFinanceState[]>()
+    if (uniqueIds.length === 0) {
+      return result
+    }
+
+    const amountMap =
+      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds))
+
+    const schedules = await this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        sourceId: { in: uniqueIds },
+        direction: PaymentScheduleDirection.receivable,
+        sourceType: {
+          in: [
+            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          ],
+        },
+      },
+    })
+
+    const schedulesByKey = new Map<string, PaymentSchedule[]>()
+    for (const schedule of schedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      const key = `${schedule.sourceId}::${schedule.sourceType}`
+      const list = schedulesByKey.get(key) ?? []
+      list.push(schedule)
+      schedulesByKey.set(key, list)
+    }
+
+    const scheduleByKey = new Map<string, PaymentSchedule>()
+    for (const [key, list] of schedulesByKey) {
+      const active = list.find((schedule) => schedule.cancelledAt == null)
+      if (active) {
+        scheduleByKey.set(key, active)
+        continue
+      }
+      const latestCancelled = [...list].sort(
+        (a, b) => (b.cancelledAt?.getTime() ?? 0) - (a.cancelledAt?.getTime() ?? 0),
+      )[0]
+      if (latestCancelled) {
+        scheduleByKey.set(key, latestCancelled)
+      }
+    }
+
+    const scheduleIds = [...scheduleByKey.values()].map((schedule) => schedule.id)
+    const [settledMap, historyMap] = await Promise.all([
+      this.batchGetSettledAmounts(scheduleIds),
+      this.batchHasVerificationHistory(scheduleIds),
+    ])
+
+    for (const sourceOrderId of uniqueIds) {
+      const amounts = amountMap.get(sourceOrderId) ?? {
+        partnerCollectedCents: 0,
+        guestCollectCents: 0,
+      }
+      const paths: SourceOrderPathFinanceState[] = []
+
+      if (amounts.partnerCollectedCents > 0) {
+        const key = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
+        const schedule = scheduleByKey.get(key) ?? null
+        paths.push(
+          this.toPathFinanceState(
+            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+            amounts.partnerCollectedCents,
+            schedule,
+            schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
+            schedule ? (historyMap.get(schedule.id) ?? false) : false,
+          ),
+        )
+      }
+
+      if (amounts.guestCollectCents > 0) {
+        const key = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION}`
+        const schedule = scheduleByKey.get(key) ?? null
+        paths.push(
+          this.toPathFinanceState(
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+            amounts.guestCollectCents,
+            schedule,
+            schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
+            schedule ? (historyMap.get(schedule.id) ?? false) : false,
+          ),
+        )
+      }
+
+      result.set(sourceOrderId, paths)
+    }
+
+    return result
+  }
+
   private async loadAgreedAmounts(resourceIds: string[]): Promise<Map<string, number>> {
     const rows = await this.prisma.segmentResource.findMany({
       where: { id: { in: resourceIds } },
       select: { id: true, amountCents: true },
     })
     return new Map(rows.map((row) => [row.id, row.amountCents]))
+  }
+
+  private async loadSourceOrderPathAmounts(
+    sourceOrderIds: string[],
+  ): Promise<Map<string, SourceOrderPathAmountInput>> {
+    const rows = await this.prisma.sourceOrder.findMany({
+      where: { id: { in: sourceOrderIds } },
+      select: { id: true, partnerCollectedCents: true, guestCollectCents: true },
+    })
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          partnerCollectedCents: row.partnerCollectedCents,
+          guestCollectCents: row.guestCollectCents,
+        },
+      ]),
+    )
+  }
+
+  private toPathFinanceState(
+    pathType:
+      | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
+      | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    agreedAmountCents: number,
+    schedule: PaymentSchedule | null,
+    settledAmountCents: number,
+    hasVerificationHistory: boolean,
+  ): SourceOrderPathFinanceState {
+    if (!schedule) {
+      return {
+        pathType,
+        hasSchedule: false,
+        receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: false,
+        agreedAmountCents,
+        scheduleAmountCents: null,
+        receivedCents: null,
+        unreceivedCents: null,
+        needsReview: false,
+      }
+    }
+
+    const unreceivedCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+
+    if (schedule.cancelledAt != null) {
+      return {
+        pathType,
+        hasSchedule: true,
+        receivableStatus: SourceOrderReceivableStatus.CLOSED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: true,
+        agreedAmountCents,
+        scheduleAmountCents: schedule.amountCents,
+        receivedCents: settledAmountCents,
+        unreceivedCents,
+        needsReview: unreceivedCents > 0,
+      }
+    }
+
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
+    let hasSourceAmountMismatch = false
+    let amountFieldsLocked = false
+
+    if (touched) {
+      amountFieldsLocked = true
+      if (agreedAmountCents > 0 && schedule.amountCents !== agreedAmountCents) {
+        hasSourceAmountMismatch = true
+      }
+    }
+
+    const status = deriveScheduleState({
+      amountCents: schedule.amountCents,
+      settledAmountCents,
+      dueDate: formatDateOnly(schedule.dueDate),
+      cancelledAt: schedule.cancelledAt,
+      businessDate: getShanghaiTodayString(),
+    })
+
+    let receivableStatus = SourceOrderReceivableStatus.PENDING
+    if (status === PaymentScheduleStatus.SETTLED) {
+      receivableStatus = SourceOrderReceivableStatus.COLLECTED
+      amountFieldsLocked = true
+    } else if (settledAmountCents > 0 && settledAmountCents < schedule.amountCents) {
+      receivableStatus = SourceOrderReceivableStatus.PARTIAL
+    }
+
+    return {
+      pathType,
+      hasSchedule: true,
+      receivableStatus,
+      hasSourceAmountMismatch,
+      amountFieldsLocked,
+      agreedAmountCents,
+      scheduleAmountCents: schedule.amountCents,
+      receivedCents: settledAmountCents,
+      unreceivedCents,
+      needsReview: hasSourceAmountMismatch,
+    }
   }
 
   private toResourceFinanceState(
