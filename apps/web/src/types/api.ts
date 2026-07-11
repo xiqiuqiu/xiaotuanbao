@@ -49,6 +49,7 @@ export type {
   GeneratePayableResult,
   CreateSegmentResourceDto,
   UpdateSegmentResourceDto,
+  DepartureOperationsSheetSnapshot,
   PaymentScheduleSummary,
   PaymentScheduleListResult,
   FinanceTransactionSummary,

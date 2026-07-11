@@ -37,6 +37,7 @@ import type { DepartureTransitionAction } from '../utils/departure-transition'
 import { DepartureArchiveHistory } from './DepartureArchiveHistory'
 import { DepartureSettlementHistory } from './DepartureSettlementHistory'
 import { DepartureOverviewDrawer } from './DepartureOverviewDrawer'
+import { DepartureOperationsSheetDrawer } from './DepartureOperationsSheetDrawer'
 import {
   DepartureTransitionModal,
   type CloseDepartureFormValues,
@@ -61,6 +62,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
   const [unarchiveForm] = Form.useForm<UnarchiveDepartureFormValues>()
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
+  const [operationsSheetOpen, setOperationsSheetOpen] = useState(false)
   const [unarchiveModalOpen, setUnarchiveModalOpen] = useState(false)
   const [transitionAction, setTransitionAction] = useState<DepartureTransitionAction | null>(null)
 
@@ -161,6 +163,12 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
         onClick: openEditDrawer,
       })
     }
+
+    items.push({
+      key: 'operations-sheet',
+      label: '发团运营表',
+      onClick: () => setOperationsSheetOpen(true),
+    })
 
     items.push({
       key: 'save-template',
@@ -316,6 +324,12 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
           overviewForm.resetFields()
         }}
         onUpdated={onUpdated}
+      />
+
+      <DepartureOperationsSheetDrawer
+        open={operationsSheetOpen}
+        departureId={departure.id}
+        onClose={() => setOperationsSheetOpen(false)}
       />
 
       <DepartureTransitionModal

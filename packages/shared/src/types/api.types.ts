@@ -742,3 +742,73 @@ export interface UpdateSegmentResourceDto {
   amountCents?: number
   notes?: string | null
 }
+
+/** Null progress means finance tracking has not started for that row — UI renders as `—`. */
+export interface DepartureOperationsSheetGuestRepresentative {
+  name: string
+  phone: string | null
+}
+
+export interface DepartureOperationsSheetSourceOrderRow {
+  id: string
+  partnerName: string
+  displayName: string
+  adultGuestCount: number
+  childGuestCount: number
+  guestCount: number
+  agreedReceivableCents: number
+  receivedCents: number | null
+  unreceivedCents: number | null
+  settlementNotes: string | null
+  notes: string | null
+  guestRepresentative: DepartureOperationsSheetGuestRepresentative | null
+}
+
+export interface DepartureOperationsSheetResourceRow {
+  id: string
+  resourceKind: string
+  resourceKindLabel: string
+  counterpartyName: string
+  title: string
+  agreedPayableCents: number
+  paidCents: number | null
+  unpaidCents: number | null
+  notes: string | null
+}
+
+export interface DepartureOperationsSheetSegmentRow {
+  id: string
+  sortOrder: number
+  name: string
+  startDate: string | null
+  endDate: string | null
+  dayCount: number | null
+  destination: string | null
+  notes: string | null
+  resources: DepartureOperationsSheetResourceRow[]
+}
+
+export interface DepartureOperationsSheetDepartureInfo {
+  id: string
+  departureNo: string
+  name: string
+  routeName: string
+  startDate: string
+  endDate: string
+  dayCount: number
+  ownerName: string
+  status: string
+  departureProgress: string
+  notes: string | null
+}
+
+/** Shared structured snapshot for page preview and future Excel (#99). */
+export interface DepartureOperationsSheetSnapshot {
+  organizationName: string
+  exportedAt: string
+  exportedByName: string
+  dataStage: string
+  departure: DepartureOperationsSheetDepartureInfo
+  sourceOrders: DepartureOperationsSheetSourceOrderRow[]
+  segments: DepartureOperationsSheetSegmentRow[]
+}

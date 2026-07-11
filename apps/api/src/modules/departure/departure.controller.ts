@@ -12,6 +12,7 @@ import {
 import type {
   DepartureDetail,
   DepartureListResult,
+  DepartureOperationsSheetSnapshot,
   DepartureSummary,
 } from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
@@ -27,11 +28,15 @@ import {
   UpdateDepartureDto,
 } from './dto/departure.dto'
 import { DepartureService } from './departure.service'
+import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 
 @Controller('departures')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class DepartureController {
-  constructor(private readonly departureService: DepartureService) {}
+  constructor(
+    private readonly departureService: DepartureService,
+    private readonly operationsSheetService: DepartureOperationsSheetService,
+  ) {}
 
   @Get()
   @RequireMenu('/departure')
@@ -67,6 +72,19 @@ export class DepartureController {
     @Body() dto: CopyDepartureDto,
   ): Promise<DepartureSummary> {
     return this.departureService.copy(request.user.organizationId, id, dto)
+  }
+
+  @Get(':id/operations-sheet')
+  @RequireMenu('/departure')
+  getOperationsSheet(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+  ): Promise<DepartureOperationsSheetSnapshot> {
+    return this.operationsSheetService.buildSnapshot(
+      request.user.organizationId,
+      id,
+      request.user.userId,
+    )
   }
 
   @Get(':id')

@@ -1816,4 +1816,374 @@ describe('Departure API (e2e)', () => {
       expect(response.body.data.isFinanciallySettled).toBe(true)
     })
   })
+
+  describe('Operations sheet (issue #95)', () => {
+    let opsPartnerId: string
+    let opsSupplierId: string
+    let opsOutsourcePartnerId: string
+
+    beforeAll(async () => {
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-ops-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      opsPartnerId = partner.id
+
+      const outsourcePartner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-ops-outsource`,
+          partnerKind: PartnerKind.peer,
+          partnerType: PartnerType.local_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      opsOutsourcePartnerId = outsourcePartner.id
+
+      const supplier = await prisma.supplier.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-ops-supplier`,
+          categories: [
+            ResourceKind.hotel,
+            ResourceKind.meal,
+            ResourceKind.transport,
+            ResourceKind.guide,
+          ],
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      opsSupplierId = supplier.id
+    })
+
+    async function createOpsDeparture(overrides: Record<string, unknown> = {}) {
+      return createTestDeparture({
+        name: `${testPrefix}-ops-sheet`,
+        notes: '发团级备注应单独归属',
+        startDate: '2026-09-01',
+        endDate: '2026-09-05',
+        ...overrides,
+      })
+    }
+
+    it('returns finance-not-started snapshot with guest representative, stable resource order, and dash progress', async () => {
+      const departure = await createOpsDeparture()
+
+      const laterSourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 2,
+          childGuestCount: 1,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 80000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+          notes: '后建客源备注',
+          settlementNotes: '后建结算备注',
+        })
+        .expect(201)
+
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      const earlierSourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 4,
+          childGuestCount: 0,
+          adultUnitPriceCents: 120000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          notes: '先建客源备注',
+        })
+        .expect(201)
+
+      // createdAt on API path is nearly simultaneous; force ordering for guest-rep + source-order order.
+      await prisma.sourceOrder.update({
+        where: { id: earlierSourceOrder.body.data.id },
+        data: { createdAt: new Date('2026-01-01T00:00:00.000Z') },
+      })
+      await prisma.sourceOrder.update({
+        where: { id: laterSourceOrder.body.data.id },
+        data: { createdAt: new Date('2026-01-02T00:00:00.000Z') },
+      })
+
+      const laterGuest = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${earlierSourceOrder.body.data.id}/guests`)
+        .send({ name: '后建客人', phone: '13900000002' })
+        .expect(201)
+
+      const earlierGuest = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${earlierSourceOrder.body.data.id}/guests`)
+        .send({ name: '最早客人', phone: '13800000001' })
+        .expect(201)
+
+      await prisma.sourceOrderGuest.update({
+        where: { id: earlierGuest.body.data.id },
+        data: { createdAt: new Date('2026-01-01T08:00:00.000Z') },
+      })
+      await prisma.sourceOrderGuest.update({
+        where: { id: laterGuest.body.data.id },
+        data: { createdAt: new Date('2026-01-01T09:00:00.000Z') },
+      })
+
+      const segmentA = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '阿勒泰段',
+          startDate: '2026-09-01',
+          endDate: '2026-09-02',
+          destination: '阿勒泰',
+          notes: '段备注A',
+        })
+        .expect(201)
+
+      const segmentB = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '喀纳斯段',
+          startDate: '2026-09-03',
+          endDate: '2026-09-05',
+          destination: '喀纳斯',
+        })
+        .expect(201)
+
+      // Insert out of kind order to assert stable kind → title → counterparty sort.
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.meal,
+          supplierId: opsSupplierId,
+          title: '晚餐',
+          amountCents: 30000,
+          notes: '餐备注',
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '酒店B',
+          amountCents: 80000,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '酒店A',
+          amountCents: 90000,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentA.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.outsource,
+          partnerId: opsOutsourcePartnerId,
+          title: '拼出阿勒泰',
+          amountCents: 150000,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segmentB.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.transport,
+          supplierId: opsSupplierId,
+          title: '用车',
+          amountCents: 200000,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      const sheet = response.body.data
+      expect(sheet.organizationName).toEqual(expect.any(String))
+      expect(sheet.exportedAt).toEqual(expect.any(String))
+      expect(sheet.exportedByName).toEqual(expect.any(String))
+      expect(sheet.dataStage).toBe('not_started')
+      expect(sheet.departure).toMatchObject({
+        id: departure.id,
+        departureNo: departure.departureNo,
+        name: `${testPrefix}-ops-sheet`,
+        routeName: '喀纳斯阿勒泰10日线',
+        startDate: '2026-09-01',
+        endDate: '2026-09-05',
+        dayCount: 5,
+        status: DepartureStatus.editing,
+        notes: '发团级备注应单独归属',
+      })
+      expect(sheet.departure.ownerName).toBeTruthy()
+      expect(sheet.departure.departureProgress).toBeTruthy()
+
+      expect(sheet.sourceOrders).toHaveLength(2)
+      expect(sheet.sourceOrders[0].id).toBe(earlierSourceOrder.body.data.id)
+      expect(sheet.sourceOrders[0]).toMatchObject({
+        partnerName: `${testPrefix}-ops-partner`,
+        adultGuestCount: 4,
+        childGuestCount: 0,
+        guestCount: 4,
+        agreedReceivableCents: 480000,
+        receivedCents: null,
+        unreceivedCents: null,
+        notes: '先建客源备注',
+        settlementNotes: null,
+        guestRepresentative: { name: '最早客人', phone: '13800000001' },
+      })
+      expect(sheet.sourceOrders[1]).toMatchObject({
+        id: laterSourceOrder.body.data.id,
+        adultGuestCount: 2,
+        childGuestCount: 1,
+        guestCount: 3,
+        agreedReceivableCents: 280000,
+        receivedCents: null,
+        unreceivedCents: null,
+        notes: '后建客源备注',
+        settlementNotes: '后建结算备注',
+        guestRepresentative: null,
+      })
+
+      expect(sheet.segments.map((s: { name: string }) => s.name)).toEqual(['阿勒泰段', '喀纳斯段'])
+      expect(sheet.segments[0]).toMatchObject({
+        name: '阿勒泰段',
+        startDate: '2026-09-01',
+        endDate: '2026-09-02',
+        dayCount: 2,
+        destination: '阿勒泰',
+        notes: '段备注A',
+      })
+
+      const resourceTitles = sheet.segments[0].resources.map((r: { title: string; resourceKind: string }) => ({
+        kind: r.resourceKind,
+        title: r.title,
+      }))
+      expect(resourceTitles).toEqual([
+        { kind: ResourceKind.hotel, title: '酒店A' },
+        { kind: ResourceKind.hotel, title: '酒店B' },
+        { kind: ResourceKind.meal, title: '晚餐' },
+        { kind: ResourceKind.outsource, title: '拼出阿勒泰' },
+      ])
+
+      for (const resource of sheet.segments[0].resources) {
+        expect(resource.paidCents).toBeNull()
+        expect(resource.unpaidCents).toBeNull()
+        expect(resource.agreedPayableCents).toEqual(expect.any(Number))
+      }
+      expect(sheet.segments[0].resources.find((r: { title: string }) => r.title === '晚餐')).toMatchObject({
+        notes: '餐备注',
+        counterpartyName: `${testPrefix}-ops-supplier`,
+        paidCents: null,
+        unpaidCents: null,
+      })
+      expect(sheet.segments[1].resources).toEqual([
+        expect.objectContaining({
+          resourceKind: ResourceKind.transport,
+          title: '用车',
+          agreedPayableCents: 200000,
+          paidCents: null,
+          unpaidCents: null,
+        }),
+      ])
+    })
+
+    it('allows finance role to read operations sheet', async () => {
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-finance` })
+
+      const response = await authRequest(app, financeToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      expect(response.body.data.departure.id).toBe(departure.id)
+      expect(response.body.data.dataStage).toBe('not_started')
+    })
+
+    it('allows org admin to read operations sheet', async () => {
+      const adminToken = await loginAs(app, 'admin')
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-admin` })
+
+      const response = await authRequest(app, adminToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      expect(response.body.data.departure.id).toBe(departure.id)
+    })
+
+    it('returns 404 for cross-organization departure', async () => {
+      const otherOrg = await prisma.organization.create({
+        data: {
+          name: `${testPrefix}-ops-other-org`,
+          businessPrefix: uniqueBusinessPrefix(`${testPrefix}-ops-other`),
+        },
+      })
+      const otherUser = await prisma.user.create({
+        data: {
+          organizationId: otherOrg.id,
+          username: `${testPrefix}-ops-other-user`,
+          passwordHash: 'unused',
+          name: '跨企业用户',
+        },
+      })
+      const foreign = await prisma.departure.create({
+        data: {
+          organizationId: otherOrg.id,
+          departureNo: `${testPrefix}-ops-foreign`,
+          name: `${testPrefix}-ops-foreign-name`,
+          routeName: '外部路线',
+          startDate: new Date('2026-09-01T00:00:00.000Z'),
+          endDate: new Date('2026-09-05T00:00:00.000Z'),
+          dayCount: 5,
+          ownerUserId: otherUser.id,
+        },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${foreign.id}/operations-sheet`)
+        .expect(404)
+
+      expect(response.body.message).toBe('发团不存在')
+
+      await prisma.departure.delete({ where: { id: foreign.id } })
+      await prisma.user.delete({ where: { id: otherUser.id } })
+      await prisma.organization.delete({ where: { id: otherOrg.id } })
+    })
+
+    it('rejects users without /departure menu permission', async () => {
+      const { hash } = await import('bcryptjs')
+      const password = 'admin123'
+      const username = `${testPrefix}-ops-noperm`
+      const user = await prisma.user.create({
+        data: {
+          organizationId,
+          username,
+          passwordHash: await hash(password, 10),
+          name: '无发团权限用户',
+        },
+      })
+
+      const token = await loginAs(app, username, password)
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-noperm-dep` })
+
+      const response = await authRequest(app, token)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(403)
+
+      expect(response.body.message).toBe('无权访问')
+
+      await prisma.user.delete({ where: { id: user.id } })
+    })
+  })
 })

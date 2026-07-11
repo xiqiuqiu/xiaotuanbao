@@ -5,6 +5,7 @@ import type {
   CloseDepartureDto,
   DepartureDetail,
   DepartureListResult,
+  DepartureOperationsSheetSnapshot,
   DepartureSummary,
   TransitionDepartureDto,
   UnarchiveDepartureDto,
@@ -75,4 +76,10 @@ export async function unarchiveDeparture(
   payload: UnarchiveDepartureDto,
 ): Promise<DepartureDetail> {
   return request.post<DepartureDetail>(`/departures/${id}/unarchive`, payload)
+}
+
+export async function getDepartureOperationsSheet(
+  id: string,
+): Promise<DepartureOperationsSheetSnapshot> {
+  return request.get<DepartureOperationsSheetSnapshot>(`/departures/${id}/operations-sheet`)
 }

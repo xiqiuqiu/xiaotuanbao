@@ -76,6 +76,12 @@ export type {
   GeneratePayableResult,
   CreateSegmentResourceDto,
   UpdateSegmentResourceDto,
+  DepartureOperationsSheetGuestRepresentative,
+  DepartureOperationsSheetSourceOrderRow,
+  DepartureOperationsSheetResourceRow,
+  DepartureOperationsSheetSegmentRow,
+  DepartureOperationsSheetDepartureInfo,
+  DepartureOperationsSheetSnapshot,
 } from './types/api.types'
 
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
@@ -109,9 +115,13 @@ export {
   ResourceKind,
   RESOURCE_KIND_OPTIONS,
   RESOURCE_KIND_LABELS,
+  RESOURCE_KIND_SORT_ORDER,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  resourceKindSortIndex,
+  compareSegmentResourcesForOperationsSheet,
   type SupplierAllowedResourceKind,
 } from './enums/resource-kind.enum'
+export { DepartureOperationsSheetDataStage } from './enums/departure-operations-sheet-data-stage.enum'
 export {
   normalizeSupplierCategories,
   InvalidSupplierCategoriesError,

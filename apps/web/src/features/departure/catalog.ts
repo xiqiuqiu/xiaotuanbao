@@ -85,6 +85,21 @@ export function formatCents(cents: number): string {
   return `¥${(cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/** Finance-not-started progress cells render as em dash (CONTEXT), never as ¥0.00.
+ *  Other empty fields use DESIGN.md half-width `-` via call sites. */
+export function formatProgressCents(cents: number | null | undefined): string {
+  if (cents == null) {
+    return '—'
+  }
+  return formatCents(cents)
+}
+
+export const OPERATIONS_SHEET_DATA_STAGE_LABELS: Record<string, string> = {
+  not_started: '财务尚未开始',
+  partial: '财务部分开始',
+  active: '财务跟踪中',
+}
+
 export function renderCompletionTags(tags: {
   sourceOrders: string
   segments: string

@@ -3,6 +3,7 @@ import {
   RESOURCE_KIND_LABELS,
   RESOURCE_KIND_OPTIONS,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  compareSegmentResourcesForOperationsSheet,
 } from './resource-kind.enum'
 
 describe('ResourceKind', () => {
@@ -51,5 +52,23 @@ describe('ResourceKind', () => {
         .filter((kind) => kind !== ResourceKind.OUTSOURCE)
         .sort(),
     )
+  })
+
+  it('orders operations-sheet resources by kind, then title, then counterparty', () => {
+    const rows = [
+      { resourceKind: ResourceKind.MEAL, title: '晚餐', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.HOTEL, title: '酒店B', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.HOTEL, title: '酒店A', counterpartyName: '供应商乙' },
+      { resourceKind: ResourceKind.HOTEL, title: '酒店A', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.OUTSOURCE, title: '拼出', counterpartyName: '同行' },
+    ]
+
+    expect([...rows].sort(compareSegmentResourcesForOperationsSheet)).toEqual([
+      { resourceKind: ResourceKind.HOTEL, title: '酒店A', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.HOTEL, title: '酒店A', counterpartyName: '供应商乙' },
+      { resourceKind: ResourceKind.HOTEL, title: '酒店B', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.MEAL, title: '晚餐', counterpartyName: '供应商甲' },
+      { resourceKind: ResourceKind.OUTSOURCE, title: '拼出', counterpartyName: '同行' },
+    ])
   })
 })

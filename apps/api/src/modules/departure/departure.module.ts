@@ -17,6 +17,7 @@ import { SegmentResourceController } from './segment-resource.controller'
 import { SegmentResourceService } from './segment-resource.service'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import { DepartureFinanceReadController } from './departure-finance-read.controller'
+import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 
 @Module({
   imports: [AuthModule, FinanceModule, NumberAllocationModule],
@@ -38,6 +39,7 @@ import { DepartureFinanceReadController } from './departure-finance-read.control
     SegmentService,
     SegmentResourceService,
     DepartureFinanceBridgeService,
+    DepartureOperationsSheetService,
   ],
 })
 export class DepartureModule {}

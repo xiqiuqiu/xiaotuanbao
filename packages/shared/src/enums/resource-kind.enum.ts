@@ -36,3 +36,32 @@ export const SUPPLIER_ALLOWED_RESOURCE_KINDS = Object.values(ResourceKind).filte
 ) as Exclude<ResourceKind, ResourceKind.OUTSOURCE>[]
 
 export type SupplierAllowedResourceKind = (typeof SUPPLIER_ALLOWED_RESOURCE_KINDS)[number]
+
+/** Fixed Resource Kind order for Departure Operations Sheet (CONTEXT / ADR-0018). */
+export const RESOURCE_KIND_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_OPTIONS.map(
+  (item) => item.value,
+)
+
+export function resourceKindSortIndex(kind: string): number {
+  const index = RESOURCE_KIND_SORT_ORDER.indexOf(kind as ResourceKind)
+  return index === -1 ? RESOURCE_KIND_SORT_ORDER.length : index
+}
+
+/** Stable segment-resource ordering: kind → title → counterparty name. */
+export function compareSegmentResourcesForOperationsSheet(
+  left: { resourceKind: string; title: string; counterpartyName: string },
+  right: { resourceKind: string; title: string; counterpartyName: string },
+): number {
+  const kindDiff = resourceKindSortIndex(left.resourceKind) - resourceKindSortIndex(right.resourceKind)
+  if (kindDiff !== 0) {
+    return kindDiff
+  }
+
+  const titleDiff = left.title.localeCompare(right.title, 'zh-CN')
+  if (titleDiff !== 0) {
+    return titleDiff
+  }
+
+  return left.counterpartyName.localeCompare(right.counterpartyName, 'zh-CN')
+}
+
