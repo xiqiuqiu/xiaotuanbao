@@ -3143,6 +3143,14 @@ describe('Departure API (e2e)', () => {
       expect(cellTexts).toContain('财务汇总与异常')
       expect(cellTexts.some((text) => text.includes('需核对'))).toBe(true)
       expect(cellTexts).toContain('关闭仍有余额')
+      // #100: anomaly rows carry explicit text markers (not color-only).
+      expect(cellTexts.filter((text) => text.includes('需核对')).length).toBeGreaterThanOrEqual(2)
+
+      const anomalySheet = workbook.worksheets[0]
+      expect(anomalySheet.pageSetup.orientation).toBe('landscape')
+      expect(anomalySheet.pageSetup.fitToWidth).toBe(1)
+      expect(anomalySheet.pageSetup.fitToHeight).toBe(0)
+      expect(anomalySheet.pageSetup.printTitlesRow).toMatch(/^\d+:\d+$/)
     })
 
     it('allows finance role to read operations sheet', async () => {
@@ -3434,6 +3442,164 @@ describe('Departure API (e2e)', () => {
       await prisma.user.delete({ where: { id: otherUser.id } })
       await prisma.organization.delete({ where: { id: otherOrg.id } })
       await prisma.user.delete({ where: { id: user.id } })
+    })
+
+    it('configures printable A4 landscape layout with repeated identity, wrap, and anomaly text (#100)', async () => {
+      const ExcelJS = await import('exceljs')
+      const longNotes =
+        '这是一段用于验收自动换行的超长备注，包含常用中文说明：司机、导游、车牌、酒店入住安排以及客户临时交代事项。'.repeat(
+          3,
+        )
+      const departureName = `${testPrefix}-ops-print-layout`
+      const departure = await createOpsDeparture({
+        name: departureName,
+        notes: longNotes,
+      })
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 3,
+          childGuestCount: 1,
+          adultUnitPriceCents: 150000,
+          childUnitPriceCents: 90000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          notes: longNotes,
+        })
+        .expect(201)
+
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '打印验收行程段',
+          startDate: '2026-09-01',
+          endDate: '2026-09-04',
+          destination: '喀纳斯',
+          notes: longNotes,
+        })
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '打印验收酒店',
+          amountCents: 188800,
+          notes: longNotes,
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(response.body as any)
+      const worksheet = workbook.worksheets[0]
+      expect(worksheet).toBeDefined()
+
+      const pageSetup = worksheet.pageSetup
+      expect(pageSetup.paperSize).toBe(9) // A4
+      expect(pageSetup.orientation).toBe('landscape')
+      expect(pageSetup.fitToPage).toBe(true)
+      expect(pageSetup.fitToWidth).toBe(1)
+      expect(pageSetup.fitToHeight).toBe(0)
+
+      const printTitlesRow = pageSetup.printTitlesRow
+      expect(typeof printTitlesRow).toBe('string')
+      expect(printTitlesRow).toMatch(/^\d+:\d+$/)
+      const [titleStart, titleEnd] = printTitlesRow!.split(':').map(Number)
+      const identityTexts: string[] = []
+      for (let rowNumber = titleStart; rowNumber <= titleEnd; rowNumber += 1) {
+        worksheet.getRow(rowNumber).eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            identityTexts.push(text)
+          }
+        })
+      }
+      expect(identityTexts.some((text) => text.includes('发团运营表'))).toBe(true)
+      expect(identityTexts.some((text) => text.includes(departure.departureNo))).toBe(true)
+      expect(identityTexts.some((text) => text.includes(departureName))).toBe(true)
+      expect(identityTexts.some((text) => text.includes('客源及应收'))).toBe(true)
+      expect(identityTexts.some((text) => text.includes('行程段资源及应付'))).toBe(true)
+
+      const wrappedNotes = worksheet
+        .getSheetValues()
+        .flatMap((row) => (Array.isArray(row) ? row : []))
+        .filter((value) => typeof value === 'string' && value.includes('超长备注'))
+      expect(wrappedNotes.length).toBeGreaterThan(0)
+
+      let foundWrappedNote = false
+      let foundRightAlignedMoney = false
+      const moneyColumnWidths = new Set<number>()
+      worksheet.eachRow((row) => {
+        row.eachCell((cell, colNumber) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text.includes('超长备注') && cell.alignment?.wrapText === true) {
+            foundWrappedNote = true
+          }
+          if (typeof cell.value === 'number') {
+            expect(cell.alignment?.horizontal).toBe('right')
+            expect(typeof cell.numFmt).toBe('string')
+            foundRightAlignedMoney = true
+            const width = worksheet.getColumn(colNumber).width
+            expect(typeof width).toBe('number')
+            expect(width!).toBeGreaterThanOrEqual(12)
+            expect(width!).toBeLessThanOrEqual(16)
+            moneyColumnWidths.add(colNumber)
+          }
+        })
+      })
+      expect(foundWrappedNote).toBe(true)
+      expect(foundRightAlignedMoney).toBe(true)
+      expect(moneyColumnWidths.size).toBeGreaterThan(0)
+
+      // Table chrome: column headers must carry borders + fill (not bold-only data dump).
+      const headerStyles: Array<{ text: string; hasBorder: boolean; hasFill: boolean }> = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (['合作方', '收款路径', '资源种类'].includes(text)) {
+            const border = cell.border ?? {}
+            const hasBorder = ['top', 'left', 'bottom', 'right'].some(
+              (side) => Boolean((border as Record<string, { style?: string }>)[side]?.style),
+            )
+            const fill = cell.fill as { fgColor?: unknown } | undefined
+            headerStyles.push({
+              text,
+              hasBorder,
+              hasFill: Boolean(fill?.fgColor),
+            })
+          }
+        })
+      })
+      expect(headerStyles.length).toBeGreaterThan(0)
+      expect(headerStyles.every((item) => item.hasBorder && item.hasFill)).toBe(true)
+
+      const cellTexts: string[] = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            cellTexts.push(text)
+          }
+        })
+      })
+      expect(cellTexts).toContain('打印验收行程段')
+      expect(cellTexts).toContain('客源及应收')
+      expect(cellTexts).toContain('行程段资源及应付')
+      expect(cellTexts.filter((text) => text === '—').length).toBeGreaterThanOrEqual(2)
     })
   })
 })
