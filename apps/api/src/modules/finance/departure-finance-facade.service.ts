@@ -78,6 +78,20 @@ export interface SourceOrderPathFinanceState {
   needsReview: boolean
 }
 
+/**
+ * Departure-linked transaction still carrying unverified balance (#98).
+ * Finance-owned; Operations Sheet must not recompute allocation rules.
+ */
+export interface DeparturePendingTransactionState {
+  id: string
+  direction: 'inflow' | 'outflow'
+  transactionDate: Date
+  counterpartyName: string
+  remainingUnverifiedCents: number
+  paymentChannel: string
+  notes: string | null
+}
+
 export interface SourceOrderPathAmountInput {
   partnerCollectedCents: number
   guestCollectCents: number
@@ -587,6 +601,63 @@ export class DepartureFinanceFacade {
     return result
   }
 
+  /**
+   * Non-voided departure-linked transactions with remaining unverified balance (#98).
+   * Remaining uses effective (normal) verification allocation only.
+   */
+  async getPendingTransactions(
+    organizationId: string,
+    departureId: string,
+  ): Promise<DeparturePendingTransactionState[]> {
+    const transactions = await this.prisma.financeTransaction.findMany({
+      where: {
+        organizationId,
+        departureId,
+        voidedAt: null,
+      },
+      orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        direction: true,
+        transactionDate: true,
+        counterpartyName: true,
+        amountCents: true,
+        paymentChannel: true,
+        notes: true,
+      },
+    })
+
+    if (transactions.length === 0) {
+      return []
+    }
+
+    const allocatedByTransactionId = await this.batchGetAllocatedAmountsByTransaction(
+      transactions.map((transaction) => transaction.id),
+    )
+
+    const pending: DeparturePendingTransactionState[] = []
+    for (const transaction of transactions) {
+      const remainingUnverifiedCents = Math.max(
+        transaction.amountCents - (allocatedByTransactionId.get(transaction.id) ?? 0),
+        0,
+      )
+      if (remainingUnverifiedCents <= 0) {
+        continue
+      }
+      pending.push({
+        id: transaction.id,
+        direction: transaction.direction,
+        transactionDate: transaction.transactionDate,
+        counterpartyName: transaction.counterpartyName?.trim() || '',
+        remainingUnverifiedCents,
+        paymentChannel: transaction.paymentChannel,
+        notes: transaction.notes,
+      })
+    }
+
+    return pending
+  }
+
   private async loadAgreedAmounts(resourceIds: string[]): Promise<Map<string, number>> {
     const rows = await this.prisma.segmentResource.findMany({
       where: { id: { in: resourceIds } },
@@ -788,6 +859,29 @@ export class DepartureFinanceFacade {
 
     for (const row of rows) {
       map.set(row.paymentScheduleId, row._sum.amountCents ?? 0)
+    }
+    return map
+  }
+
+  private async batchGetAllocatedAmountsByTransaction(
+    transactionIds: string[],
+  ): Promise<Map<string, number>> {
+    const map = new Map<string, number>()
+    if (transactionIds.length === 0) {
+      return map
+    }
+
+    const rows = await this.prisma.financeVerification.groupBy({
+      by: ['transactionId'],
+      where: {
+        transactionId: { in: transactionIds },
+        status: PrismaVerificationStatus.normal,
+      },
+      _sum: { amountCents: true },
+    })
+
+    for (const row of rows) {
+      map.set(row.transactionId, row._sum.amountCents ?? 0)
     }
     return map
   }

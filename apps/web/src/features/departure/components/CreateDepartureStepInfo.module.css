@@ -1,0 +1,49 @@
+.sectionHeader {
+  margin-bottom: 24px;
+}
+
+.sectionHeader h5 {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.sectionHeader p {
+  margin-bottom: 0;
+}
+
+.fullWidth,
+.summaryContent {
+  width: 100%;
+}
+
+.summaryCard {
+  position: sticky;
+  top: 16px;
+}
+
+.routeName {
+  margin-top: 4px !important;
+  margin-bottom: 0 !important;
+}
+
+.summaryIcon {
+  margin-right: 8px;
+  color: var(--info-secondary);
+}
+
+.copySummary {
+  padding: 12px;
+  background: var(--info-fill);
+  border-radius: var(--info-radius);
+}
+
+.numberHint {
+  padding-top: 16px;
+  border-top: 1px solid var(--info-border);
+}
+
+@media (max-width: 1199px) {
+  .summaryCard {
+    position: static;
+  }
+}

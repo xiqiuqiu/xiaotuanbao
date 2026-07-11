@@ -3,16 +3,22 @@ import { Alert, Descriptions, Drawer, Empty, Space, Table, Typography } from 'an
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
 import type {
+  DepartureOperationsSheetAnomaly,
+  DepartureOperationsSheetPendingTransaction,
   DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetResourceRow,
   DepartureOperationsSheetSnapshot,
   DepartureOperationsSheetSourceOrderRow,
 } from '@xiaotuanbao/shared'
+import { PAYMENT_CHANNEL_LABELS } from '@xiaotuanbao/shared'
 import { getDepartureOperationsSheet } from '@/services/departure.service'
 import {
   DEPARTURE_PROGRESS_LABELS,
   DEPARTURE_STATUS_LABELS,
+  OPERATIONS_SHEET_ANOMALY_KIND_LABELS,
+  OPERATIONS_SHEET_ANOMALY_SIDE_LABELS,
   OPERATIONS_SHEET_DATA_STAGE_LABELS,
+  OPERATIONS_SHEET_PENDING_DIRECTION_LABELS,
   OPERATIONS_SHEET_RECEIVABLE_PROGRESS_LABELS,
   SEGMENT_PAYABLE_STATUS_LABELS,
   catalogLabel,
@@ -272,7 +278,101 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
     [],
   )
 
+  const pendingColumns = useMemo<ColumnsType<DepartureOperationsSheetPendingTransaction>>(
+    () => [
+      {
+        title: '方向',
+        dataIndex: 'direction',
+        width: 80,
+        render: (value: string) => catalogLabel(OPERATIONS_SHEET_PENDING_DIRECTION_LABELS, value),
+      },
+      {
+        title: '交易日期',
+        dataIndex: 'transactionDate',
+        width: 120,
+      },
+      {
+        title: '往来对象',
+        dataIndex: 'counterpartyName',
+        width: 160,
+        render: (value: string) => value || '-',
+      },
+      {
+        title: '剩余待确认',
+        dataIndex: 'remainingUnverifiedCents',
+        width: 120,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: '收付款通道',
+        dataIndex: 'paymentChannel',
+        width: 110,
+        render: (value: string) => catalogLabel(PAYMENT_CHANNEL_LABELS, value),
+      },
+      {
+        title: '流水备注',
+        dataIndex: 'notes',
+        render: (value: string | null) => nonEmptyNote(value) ?? '-',
+      },
+    ],
+    [],
+  )
+
+  const anomalyColumns = useMemo<ColumnsType<DepartureOperationsSheetAnomaly>>(
+    () => [
+      {
+        title: '异常类型',
+        dataIndex: 'kind',
+        width: 160,
+        render: (value: string) => catalogLabel(OPERATIONS_SHEET_ANOMALY_KIND_LABELS, value),
+      },
+      {
+        title: '侧',
+        dataIndex: 'side',
+        width: 80,
+        render: (value: string) => catalogLabel(OPERATIONS_SHEET_ANOMALY_SIDE_LABELS, value),
+      },
+      {
+        title: '对象',
+        dataIndex: 'subjectLabel',
+      },
+      {
+        title: '业务金额',
+        dataIndex: 'agreedAmountCents',
+        width: 110,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: '财务金额',
+        dataIndex: 'scheduleAmountCents',
+        width: 110,
+        align: 'right',
+        render: (value: number | null) => formatProgressCents(value),
+      },
+      {
+        title: '已核销',
+        dataIndex: 'settledCents',
+        width: 100,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: '剩余',
+        dataIndex: 'remainingCents',
+        width: 100,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+    ],
+    [],
+  )
+
   const departureNotes = nonEmptyNote(sheet.departure.notes)
+  const hasFinanceSummary =
+    sheet.financeSummary.receivable != null || sheet.financeSummary.payable != null
+  const showSummaryAndAnomalies = hasFinanceSummary || sheet.anomalies.length > 0
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -375,6 +475,101 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
           </Space>
         )}
       </div>
+
+      {sheet.pendingSummary ? (
+        <div>
+          <Typography.Title level={5}>待确认款项</Typography.Title>
+          <Descriptions
+            size="small"
+            column={{ xs: 1, sm: 2 }}
+            style={{ marginBottom: 12 }}
+            items={[
+              ...(sheet.pendingSummary.pendingCollectionCents > 0
+                ? [
+                    {
+                      label: '待确认收款',
+                      children: formatCents(sheet.pendingSummary.pendingCollectionCents),
+                    },
+                  ]
+                : []),
+              ...(sheet.pendingSummary.pendingPaymentCents > 0
+                ? [
+                    {
+                      label: '待确认付款',
+                      children: formatCents(sheet.pendingSummary.pendingPaymentCents),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+          <Table
+            size="small"
+            rowKey="id"
+            pagination={false}
+            columns={pendingColumns}
+            dataSource={sheet.pendingTransactions}
+            scroll={{ x: 780 }}
+          />
+        </div>
+      ) : null}
+
+      {showSummaryAndAnomalies ? (
+        <div>
+          <Typography.Title level={5}>财务汇总与异常</Typography.Title>
+          {hasFinanceSummary ? (
+            <Descriptions
+              size="small"
+              bordered
+              column={{ xs: 1, sm: 2 }}
+              style={{ marginBottom: sheet.anomalies.length > 0 ? 16 : 0 }}
+              items={[
+                ...(sheet.financeSummary.receivable
+                  ? [
+                      {
+                        label: '正常应收',
+                        children: formatCents(sheet.financeSummary.receivable.agreedCents),
+                      },
+                      {
+                        label: '正常已收',
+                        children: formatCents(sheet.financeSummary.receivable.settledCents),
+                      },
+                      {
+                        label: '正常未收',
+                        children: formatCents(sheet.financeSummary.receivable.unsettledCents),
+                      },
+                    ]
+                  : []),
+                ...(sheet.financeSummary.payable
+                  ? [
+                      {
+                        label: '正常应付',
+                        children: formatCents(sheet.financeSummary.payable.agreedCents),
+                      },
+                      {
+                        label: '正常已付',
+                        children: formatCents(sheet.financeSummary.payable.settledCents),
+                      },
+                      {
+                        label: '正常未付',
+                        children: formatCents(sheet.financeSummary.payable.unsettledCents),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          ) : null}
+          {sheet.anomalies.length > 0 ? (
+            <Table
+              size="small"
+              rowKey={(row) => `${row.kind}-${row.side}-${row.subjectLabel}`}
+              pagination={false}
+              columns={anomalyColumns}
+              dataSource={sheet.anomalies}
+              scroll={{ x: 860 }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       {departureNotes ? (
         <div>

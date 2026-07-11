@@ -82,6 +82,11 @@ export type {
   DepartureOperationsSheetResourceRow,
   DepartureOperationsSheetSegmentRow,
   DepartureOperationsSheetDepartureInfo,
+  DepartureOperationsSheetPendingTransaction,
+  DepartureOperationsSheetPendingSummary,
+  DepartureOperationsSheetProgressTotals,
+  DepartureOperationsSheetFinanceSummary,
+  DepartureOperationsSheetAnomaly,
   DepartureOperationsSheetSnapshot,
 } from './types/api.types'
 

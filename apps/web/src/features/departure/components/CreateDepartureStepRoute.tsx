@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
   Card,
+  Checkbox,
   Col,
   Empty,
   Form,
@@ -10,13 +11,13 @@ import {
   InputNumber,
   Modal,
   Row,
+  Segmented,
   Spin,
-  Tabs,
   Typography,
   message,
   theme,
 } from 'antd'
-import { DeleteOutlined } from '@ant-design/icons'
+import { ClockCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 import styles from './CreateDepartureStepRoute.module.css'
@@ -40,14 +41,21 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
     enabled: activeTab === 'template',
   })
 
-  const selectedTemplateLabel = useMemo(() => {
+  const selectedTemplate = useMemo(() => {
     if (!values.templateId || !values.routeName) {
       return null
     }
 
-    const dayLabel = values.defaultDayCount ? `（${values.defaultDayCount} 天）` : ''
-    return `${values.routeName}${dayLabel}`
-  }, [values.defaultDayCount, values.routeName, values.templateId])
+    return templates.find((template) => template.id === values.templateId) ?? {
+      id: values.templateId,
+      name: values.routeName,
+      defaultDayCount: values.defaultDayCount ?? 0,
+      usageCount: 0,
+      updatedAt: '',
+      segmentCount: values.previewSegmentCount,
+      resourceCount: values.previewResourceCount,
+    }
+  }, [templates, values])
 
   const handleClearTemplate = () => {
     onChange({
@@ -127,120 +135,145 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
   }
 
   return (
-    <div>
-      <Tabs
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={[
-          {
-            key: 'template',
-            label: '常用路线',
-            children: (
+    <div
+      className={styles.routeStep}
+      style={
+        {
+          '--route-fill': token.colorFillAlter,
+          '--route-border': token.colorBorderSecondary,
+          '--route-radius': `${token.borderRadiusLG}px`,
+        } as CSSProperties
+      }
+    >
+      <div className={styles.modeBar}>
+        <Segmented
+          block
+          value={activeTab}
+          options={[
+            { label: '常用路线', value: 'template' },
+            { label: '手动输入', value: 'manual' },
+          ]}
+          onChange={(value) => handleTabChange(String(value))}
+        />
+      </div>
+
+      {activeTab === 'template' ? (
+        <div>
+          <Input.Search
+            allowClear
+            placeholder="搜索路线名称"
+            className={styles.search}
+            onSearch={setKeyword}
+          />
+
+          <Typography.Text type="secondary">共 {templates.length} 条路线</Typography.Text>
+
+          {isLoading ? (
+            <div className={styles.loading}>
+              <Spin />
+            </div>
+          ) : templates.length === 0 ? (
+            <Empty description="暂无常用路线" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <Row gutter={[16, 16]} className={styles.templateGrid}>
+              {templates.map((template) => {
+                const selected = values.templateId === template.id
+
+                return (
+                  <Col key={template.id} xs={24} xl={12}>
+                    <Card
+                      hoverable
+                      className={styles.templateCard}
+                      styles={{ body: { padding: 16 } }}
+                      onClick={() => handleSelectTemplate(template)}
+                      style={{
+                        borderColor: selected ? token.colorPrimary : undefined,
+                        background: selected ? token.colorPrimaryBg : undefined,
+                      }}
+                    >
+                      <div className={styles.templateCardHeader}>
+                        <div className={styles.templateTitle}>
+                          <Checkbox checked={selected} aria-label={`选择路线 ${template.name}`} />
+                          <Typography.Text strong>{template.name}</Typography.Text>
+                        </div>
+                        <Button
+                          type="text"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          aria-label={`删除常用路线 ${template.name}`}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleDeleteTemplate(template)
+                          }}
+                        />
+                      </div>
+                      <div className={styles.templateMeta}>
+                        <Typography.Text type="secondary">
+                          <ClockCircleOutlined /> {template.defaultDayCount} 天
+                        </Typography.Text>
+                        <Typography.Text type="secondary">已使用 {template.usageCount} 次</Typography.Text>
+                      </div>
+                    </Card>
+                  </Col>
+                )
+              })}
+            </Row>
+          )}
+
+          {selectedTemplate ? (
+            <div className={styles.selectedTemplateBanner}>
               <div>
-                <Input.Search
-                  allowClear
-                  placeholder="搜索路线名称"
-                  style={{ marginBottom: 16, maxWidth: 360 }}
-                  onSearch={setKeyword}
-                />
-
-                {isLoading ? (
-                  <div style={{ textAlign: 'center', padding: 48 }}>
-                    <Spin />
-                  </div>
-                ) : templates.length === 0 ? (
-                  <Empty description="暂无常用路线" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                ) : (
-                  <Row gutter={[16, 16]}>
-                    {templates.map((template) => {
-                      const selected = values.templateId === template.id
-
-                      return (
-                        <Col key={template.id} xs={24} sm={12} lg={8}>
-                          <Card
-                            hoverable
-                            onClick={() => handleSelectTemplate(template)}
-                            style={{
-                              borderColor: selected ? token.colorPrimary : undefined,
-                              boxShadow: selected
-                                ? `0 0 0 2px ${token.colorPrimaryBg}`
-                                : undefined,
-                            }}
-                          >
-                            <div className={styles.templateCardHeader}>
-                              <Typography.Text strong>{template.name}</Typography.Text>
-                              <Button
-                                type="link"
-                                size="small"
-                                danger
-                                icon={<DeleteOutlined />}
-                                aria-label={`删除常用路线 ${template.name}`}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  handleDeleteTemplate(template)
-                                }}
-                              />
-                            </div>
-                            <Typography.Paragraph
-                              type="secondary"
-                              style={{ marginBottom: 0, marginTop: 8 }}
-                            >
-                              {template.defaultDayCount} 天 · 已使用 {template.usageCount} 次
-                            </Typography.Paragraph>
-                          </Card>
-                        </Col>
-                      )
-                    })}
-                  </Row>
-                )}
-
-                {selectedTemplateLabel ? (
-                  <div
-                    className={styles.selectedTemplateBanner}
-                    style={{ ['--route-banner-bg' as string]: token.colorFillAlter }}
-                  >
-                    <Typography.Text>已选：{selectedTemplateLabel}</Typography.Text>
-                    <Typography.Link onClick={handleClearTemplate}>清除</Typography.Link>
-                  </div>
-                ) : null}
+                <Typography.Text type="secondary">已选择路线</Typography.Text>
+                <Typography.Text strong>{selectedTemplate.name}</Typography.Text>
               </div>
-            ),
-          },
-          {
-            key: 'manual',
-            label: '手动输入',
-            children: (
-              <Form layout="vertical" style={{ maxWidth: 480 }}>
-                <Form.Item label="路线名称" required>
-                  <Input
-                    placeholder="如：喀纳斯阿勒泰10日线"
-                    value={values.routeName}
-                    onChange={(event) =>
-                      onChange({ ...values, mode: 'manual', routeName: event.target.value })
-                    }
-                  />
-                </Form.Item>
-                <Form.Item label="默认天数" extra="可选，用于 Step 2 自动计算结束日期">
-                  <InputNumber
-                    min={1}
-                    max={365}
-                    placeholder="如：10"
-                    style={{ width: '100%' }}
-                    value={values.defaultDayCount}
-                    onChange={(value) =>
-                      onChange({
-                        ...values,
-                        mode: 'manual',
-                        defaultDayCount: value ?? undefined,
-                      })
-                    }
-                  />
-                </Form.Item>
-              </Form>
-            ),
-          },
-        ]}
-      />
+              <div className={styles.selectedMeta}>
+                <Typography.Text type="secondary">
+                  {selectedTemplate.defaultDayCount} 天
+                </Typography.Text>
+                <Typography.Text type="secondary">
+                  已使用 {selectedTemplate.usageCount} 次
+                </Typography.Text>
+                <Typography.Link onClick={handleClearTemplate}>清除</Typography.Link>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className={styles.manualPanel}>
+          <Typography.Title level={5}>手动输入路线</Typography.Title>
+          <Typography.Paragraph type="secondary">
+            未沉淀为常用路线时，可先填写名称和默认天数继续创建。
+          </Typography.Paragraph>
+          <Form layout="vertical" className={styles.manualForm}>
+            <Form.Item label="路线名称" required>
+              <Input
+                placeholder="如：喀纳斯阿勒泰10日线"
+                value={values.routeName}
+                onChange={(event) =>
+                  onChange({ ...values, mode: 'manual', routeName: event.target.value })
+                }
+              />
+            </Form.Item>
+            <Form.Item label="默认天数" extra="可选，用于下一步自动计算结束日期">
+              <InputNumber
+                min={1}
+                max={365}
+                placeholder="如：10"
+                className={styles.fullWidth}
+                value={values.defaultDayCount}
+                onChange={(value) =>
+                  onChange({
+                    ...values,
+                    mode: 'manual',
+                    defaultDayCount: value ?? undefined,
+                  })
+                }
+              />
+            </Form.Item>
+          </Form>
+        </div>
+      )}
     </div>
   )
 }

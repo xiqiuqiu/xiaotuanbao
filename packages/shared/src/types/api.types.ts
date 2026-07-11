@@ -848,6 +848,57 @@ export interface DepartureOperationsSheetDepartureInfo {
   notes: string | null
 }
 
+/**
+ * Departure-linked cash that still has unverified balance (#98).
+ * Keeps transaction identity — never attributed to a Source Order or Segment Resource.
+ */
+export interface DepartureOperationsSheetPendingTransaction {
+  id: string
+  /** TransactionDirection: inflow | outflow */
+  direction: string
+  transactionDate: string
+  counterpartyName: string
+  /** Remaining unverified amount after effective allocations. */
+  remainingUnverifiedCents: number
+  paymentChannel: string
+  notes: string | null
+}
+
+/** Separate pending collection vs payment totals; never mixed into path/resource settled. */
+export interface DepartureOperationsSheetPendingSummary {
+  pendingCollectionCents: number
+  pendingPaymentCents: number
+}
+
+/**
+ * Progress totals for rows with a valid financial basis and matching amounts.
+ * Null when no countable rows — empty finance must not render as confirmed zero (#98).
+ */
+export interface DepartureOperationsSheetProgressTotals {
+  agreedCents: number
+  settledCents: number
+  unsettledCents: number
+  includedRowCount: number
+}
+
+export interface DepartureOperationsSheetFinanceSummary {
+  receivable: DepartureOperationsSheetProgressTotals | null
+  payable: DepartureOperationsSheetProgressTotals | null
+}
+
+/** Closed-with-balance or business/schedule amount mismatch callouts (#98). */
+export interface DepartureOperationsSheetAnomaly {
+  /** closed_with_balance | amount_mismatch */
+  kind: string
+  /** receivable | payable */
+  side: string
+  subjectLabel: string
+  agreedAmountCents: number
+  scheduleAmountCents: number | null
+  settledCents: number
+  remainingCents: number
+}
+
 /** Shared structured snapshot for page preview and future Excel (#99). */
 export interface DepartureOperationsSheetSnapshot {
   organizationName: string
@@ -857,4 +908,10 @@ export interface DepartureOperationsSheetSnapshot {
   departure: DepartureOperationsSheetDepartureInfo
   sourceOrders: DepartureOperationsSheetSourceOrderRow[]
   segments: DepartureOperationsSheetSegmentRow[]
+  /** Non-voided departure transactions with remaining unverified balance. */
+  pendingTransactions: DepartureOperationsSheetPendingTransaction[]
+  /** Null when there are no pending transactions (avoid misleading zeros). */
+  pendingSummary: DepartureOperationsSheetPendingSummary | null
+  financeSummary: DepartureOperationsSheetFinanceSummary
+  anomalies: DepartureOperationsSheetAnomaly[]
 }

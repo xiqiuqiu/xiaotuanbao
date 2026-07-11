@@ -146,7 +146,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.click(screen.getByText('手动输入'))
     expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
   })
 
@@ -154,7 +154,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.click(screen.getByText('手动输入'))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
 
@@ -168,7 +168,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.click(screen.getByText('手动输入'))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await screen.findByLabelText('团名')
@@ -385,7 +385,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.click(screen.getByText('手动输入'))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await screen.findByLabelText('团名')
@@ -401,7 +401,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByRole('tab', { name: '手动输入' }))
+    await user.click(screen.getByText('手动输入'))
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     await user.click(screen.getByRole('button', { name: '下一步' }))
     await screen.findByLabelText('团名')

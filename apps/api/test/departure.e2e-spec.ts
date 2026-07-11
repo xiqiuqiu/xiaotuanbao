@@ -2129,6 +2129,12 @@ describe('Departure API (e2e)', () => {
           needsReview: false,
         }),
       ])
+
+      // Finance not started: empty pending / summary / anomalies must not fake zeros (#98).
+      expect(sheet.pendingTransactions).toEqual([])
+      expect(sheet.pendingSummary).toBeNull()
+      expect(sheet.financeSummary).toEqual({ receivable: null, payable: null })
+      expect(sheet.anomalies).toEqual([])
     })
 
     it('wires resource payable progress from finance facade (#96)', async () => {
@@ -2684,6 +2690,431 @@ describe('Departure API (e2e)', () => {
           excludeFromProgressTotals: true,
         }),
       ])
+    })
+
+    it('assembles pending transactions, normal totals and anomalies (#98)', async () => {
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-pending-summary` })
+
+      const partialOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+        })
+        .expect(201)
+
+      const closedOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 80000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+        })
+        .expect(201)
+
+      const mismatchOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 120000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const ungeneratedOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 30000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '汇总段',
+          startDate: '2026-09-01',
+          endDate: '2026-09-02',
+          destination: '阿勒泰',
+        })
+        .expect(201)
+
+      const hotelPartial = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '部分付款酒店',
+          amountCents: 100000,
+        })
+        .expect(201)
+
+      const hotelClosed = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '关闭仍未付酒店',
+          amountCents: 80000,
+        })
+        .expect(201)
+
+      const hotelMismatch = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '金额不一致酒店',
+          amountCents: 120000,
+        })
+        .expect(201)
+
+      const mealUngenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.meal,
+          supplierId: opsSupplierId,
+          title: '未生成餐',
+          amountCents: 20000,
+        })
+        .expect(201)
+
+      const partialGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${partialOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const closedGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${closedOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const mismatchGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${mismatchOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+
+      const hotelPartialGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelPartial.body.data.id}/generate-payable`)
+        .expect(201)
+      const hotelClosedGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelClosed.body.data.id}/generate-payable`)
+        .expect(201)
+      const hotelMismatchGenerated = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelMismatch.body.data.id}/generate-payable`)
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${partialGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 40000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${closedGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 30000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${closedGenerated.body.data.schedules[0].id}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '坏账内部备注勿导出' })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${mismatchGenerated.body.data.schedules[0].id}/confirm-collection`)
+        .send({
+          amountCents: 10000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: mismatchOrder.body.data.id,
+          counterpartyName: mismatchOrder.body.data.displayName,
+        })
+        .expect(201)
+
+      await prisma.paymentSchedule.update({
+        where: { id: mismatchGenerated.body.data.schedules[0].id },
+        data: { amountCents: 90000 },
+      })
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${hotelPartialGenerated.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 40000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${hotelClosedGenerated.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 30000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${hotelClosedGenerated.body.data.schedule.id}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '供应商纠纷内部备注勿导出' })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${hotelMismatchGenerated.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 10000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await prisma.segmentResource.update({
+        where: { id: hotelMismatch.body.data.id },
+        data: { amountCents: 120000 },
+      })
+      await prisma.paymentSchedule.update({
+        where: { id: hotelMismatchGenerated.body.data.schedule.id },
+        data: { amountCents: 90000 },
+      })
+
+      // Fully-unallocated inflow / outflow stay as pending cash facts.
+      const pendingInflow = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 55000,
+          transactionDate: '2026-09-02',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+          departureId: departure.id,
+          notes: '待确认收款备注',
+        })
+        .expect(201)
+
+      const pendingOutflow = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'outflow',
+          paymentChannel: PaymentChannel.WECHAT,
+          amountCents: 66000,
+          transactionDate: '2026-09-03',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+          departureId: departure.id,
+          notes: '待确认付款备注',
+        })
+        .expect(201)
+
+      // Partial verification: remaining unverified amount stays pending.
+      const partialTx = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.ALIPAY,
+          amountCents: 70000,
+          transactionDate: '2026-09-04',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+          departureId: departure.id,
+          notes: '部分核销后剩余待确认',
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(
+          `/api/finance/receivables/${partialGenerated.body.data.schedules[0].id}/link-transaction`,
+        )
+        .send({ transactionId: partialTx.body.data.id, amountCents: 25000 })
+        .expect(201)
+
+      // Voided transaction must disappear from pending.
+      const voidedTx = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 99000,
+          transactionDate: '2026-09-05',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: opsPartnerId,
+          counterpartyName: `${testPrefix}-ops-partner`,
+          departureId: departure.id,
+          notes: '作废流水不应出现',
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${voidedTx.body.data.id}/void`)
+        .send({ voidReason: '录入错误' })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      const sheet = response.body.data
+      expect(sheet.dataStage).toBe('partial')
+
+      // Pending: voided excluded; partial shows remaining only; totals stay cash-fact scoped.
+      expect(sheet.pendingTransactions).toEqual([
+        expect.objectContaining({
+          id: pendingInflow.body.data.id,
+          direction: 'inflow',
+          transactionDate: '2026-09-02',
+          counterpartyName: `${testPrefix}-ops-partner`,
+          remainingUnverifiedCents: 55000,
+          paymentChannel: PaymentChannel.CASH,
+          notes: '待确认收款备注',
+        }),
+        expect.objectContaining({
+          id: pendingOutflow.body.data.id,
+          direction: 'outflow',
+          transactionDate: '2026-09-03',
+          counterpartyName: `${testPrefix}-ops-supplier`,
+          remainingUnverifiedCents: 66000,
+          paymentChannel: PaymentChannel.WECHAT,
+          notes: '待确认付款备注',
+        }),
+        expect.objectContaining({
+          id: partialTx.body.data.id,
+          direction: 'inflow',
+          transactionDate: '2026-09-04',
+          remainingUnverifiedCents: 45000,
+          paymentChannel: PaymentChannel.ALIPAY,
+          notes: '部分核销后剩余待确认',
+        }),
+      ])
+      expect(sheet.pendingTransactions.map((row: { id: string }) => row.id)).not.toContain(
+        voidedTx.body.data.id,
+      )
+      expect(sheet.pendingSummary).toEqual({
+        pendingCollectionCents: 100000,
+        pendingPaymentCents: 66000,
+      })
+
+      // Normal totals: generated + amount-consistent only; ungenerated/mismatch excluded.
+      // Receivable countable: partial (100k/65k/35k after extra 25k link) + closed (80k/30k/50k)
+      // After link-transaction of 25000 onto partial schedule that already had 40000:
+      // received=65000, unreceived=35000.
+      expect(sheet.financeSummary.receivable).toEqual({
+        agreedCents: 180000,
+        settledCents: 95000,
+        unsettledCents: 85000,
+        includedRowCount: 2,
+      })
+      expect(sheet.financeSummary.payable).toEqual({
+        agreedCents: 180000,
+        settledCents: 70000,
+        unsettledCents: 110000,
+        includedRowCount: 2,
+      })
+
+      // Ungenerated rows stay visible but out of normal unsettled totals.
+      const orders = sheet.sourceOrders as Array<{
+        id: string
+        receivablePaths: Array<{
+          receivableStatus: string
+          unreceivedCents: number | null
+          needsReview: boolean
+          excludeFromProgressTotals: boolean
+        }>
+      }>
+      const ungenerated = orders.find((order) => order.id === ungeneratedOrder.body.data.id)
+      expect(ungenerated?.receivablePaths[0]).toMatchObject({
+        receivableStatus: 'not_generated',
+        unreceivedCents: null,
+      })
+      const meal = sheet.segments[0].resources.find(
+        (resource: { id: string }) => resource.id === mealUngenerated.body.data.id,
+      )
+      expect(meal).toMatchObject({
+        payableStatus: 'not_generated',
+        unpaidCents: null,
+      })
+
+      // Anomalies concentrate closed-with-balance and amount mismatch; main rows keep 需核对.
+      expect(sheet.anomalies).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'closed_with_balance',
+            side: 'receivable',
+            remainingCents: 50000,
+          }),
+          expect.objectContaining({
+            kind: 'amount_mismatch',
+            side: 'receivable',
+            agreedAmountCents: 120000,
+            scheduleAmountCents: 90000,
+            remainingCents: 80000,
+          }),
+          expect.objectContaining({
+            kind: 'closed_with_balance',
+            side: 'payable',
+            remainingCents: 50000,
+          }),
+          expect.objectContaining({
+            kind: 'amount_mismatch',
+            side: 'payable',
+            agreedAmountCents: 120000,
+            scheduleAmountCents: 90000,
+            remainingCents: 80000,
+          }),
+        ]),
+      )
+      expect(sheet.anomalies).toHaveLength(4)
+
+      const mismatchPath = orders.find((order) => order.id === mismatchOrder.body.data.id)
+        ?.receivablePaths[0]
+      expect(mismatchPath).toMatchObject({
+        needsReview: true,
+        excludeFromProgressTotals: true,
+      })
+      const closedPath = orders.find((order) => order.id === closedOrder.body.data.id)
+        ?.receivablePaths[0]
+      expect(closedPath).toMatchObject({
+        needsReview: true,
+        receivableStatus: 'closed',
+      })
     })
 
     it('allows finance role to read operations sheet', async () => {

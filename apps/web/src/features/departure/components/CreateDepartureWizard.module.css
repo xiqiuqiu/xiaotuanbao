@@ -1,0 +1,84 @@
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.pageHeader {
+  margin-bottom: 16px;
+}
+
+.title {
+  margin-top: 8px !important;
+  margin-bottom: 4px !important;
+}
+
+.wizardCard {
+  overflow: hidden;
+}
+
+.wizardBody {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 616px;
+}
+
+.stepRail {
+  padding: 32px 24px;
+  border-right: 1px solid var(--wizard-border);
+}
+
+.workspace {
+  min-width: 0;
+  padding: 32px;
+}
+
+.loadingState {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.loadingPlaceholder {
+  min-height: 80px;
+}
+
+.hiddenForm {
+  display: none;
+}
+
+.wizardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--wizard-border);
+}
+
+@media (max-width: 991px) {
+  .wizardBody {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .stepRail {
+    padding: 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--wizard-border);
+  }
+
+  .workspace {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 575px) {
+  .workspace,
+  .stepRail {
+    padding: 16px;
+  }
+
+  .wizardFooter {
+    padding: 16px;
+  }
+}

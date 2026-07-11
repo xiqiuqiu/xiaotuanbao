@@ -95,9 +95,24 @@ export function formatProgressCents(cents: number | null | undefined): string {
 }
 
 export const OPERATIONS_SHEET_DATA_STAGE_LABELS: Record<string, string> = {
-  not_started: '财务尚未开始',
-  partial: '财务部分开始',
-  active: '财务跟踪中',
+  not_started: '财务未开始',
+  partial: '部分开始',
+  active: '已开始',
+}
+
+export const OPERATIONS_SHEET_PENDING_DIRECTION_LABELS: Record<string, string> = {
+  inflow: '收入',
+  outflow: '支出',
+}
+
+export const OPERATIONS_SHEET_ANOMALY_KIND_LABELS: Record<string, string> = {
+  closed_with_balance: '关闭仍有余额',
+  amount_mismatch: '业务/财务金额不一致',
+}
+
+export const OPERATIONS_SHEET_ANOMALY_SIDE_LABELS: Record<string, string> = {
+  receivable: '应收',
+  payable: '应付',
 }
 
 export function renderCompletionTags(tags: {

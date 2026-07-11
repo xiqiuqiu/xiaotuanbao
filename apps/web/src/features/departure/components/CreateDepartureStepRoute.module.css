@@ -1,17 +1,104 @@
+.routeStep {
+  min-width: 0;
+}
+
+.modeBar {
+  width: 280px;
+  margin-bottom: 16px;
+}
+
+.search {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.loading {
+  padding: 48px;
+  text-align: center;
+}
+
+.templateGrid {
+  margin-top: 16px;
+}
+
+.templateCard {
+  height: 100%;
+}
+
 .selectedTemplateBanner {
-  margin-top: 24px;
-  padding: 12px 16px;
-  background: var(--route-banner-bg);
-  border-radius: 8px;
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--route-fill);
+  border: 1px solid var(--route-border);
+  border-radius: var(--route-radius);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
 }
 
+.selectedTemplateBanner > div {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.selectedMeta {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .templateCardHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.templateTitle {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.templateMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
+.manualPanel {
+  max-width: 640px;
+  padding-top: 8px;
+}
+
+.manualPanel h5 {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.manualForm {
+  margin-top: 24px;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+@media (max-width: 575px) {
+  .modeBar {
+    width: 100%;
+  }
+
+  .selectedTemplateBanner,
+  .selectedTemplateBanner > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .selectedMeta {
+    justify-content: flex-start;
+  }
 }

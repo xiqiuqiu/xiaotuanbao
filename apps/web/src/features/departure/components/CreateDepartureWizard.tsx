@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react'
-import { Button, Card, Form, Space, Spin, Steps, Typography, message } from 'antd'
+import { useCallback, useState, type CSSProperties } from 'react'
+import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -9,6 +9,7 @@ import { getRouteTemplate } from '@/services/route-template.service'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
 import { useCopyFromDepartureSearch } from '../hooks/useCopyFromDepartureSearch'
+import styles from './CreateDepartureWizard.module.css'
 import {
   buildCopyDeparturePayload,
   buildCreateDeparturePayload,
@@ -23,6 +24,8 @@ import {
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 
 export function CreateDepartureWizard() {
+  const screens = Grid.useBreakpoint()
+  const { token } = theme.useToken()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
@@ -135,15 +138,20 @@ export function CreateDepartureWizard() {
     }
   }
 
+  const showSteps = !isCopyMode && !copyFromId
+
   return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
+    <div
+      className={styles.page}
+      style={{ '--wizard-border': token.colorBorderSecondary } as CSSProperties}
+    >
+      <div className={styles.pageHeader}>
         <Link to="/departure">
           <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }}>
             返回发团列表
           </Button>
         </Link>
-        <Typography.Title level={4} style={{ marginTop: 8, marginBottom: 4 }}>
+        <Typography.Title level={4} className={styles.title}>
           {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
         </Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
@@ -153,41 +161,51 @@ export function CreateDepartureWizard() {
         </Typography.Paragraph>
       </div>
 
-      <Card>
-        {!isCopyMode && !copyFromId ? (
-          <Steps current={currentStep} items={STEP_ITEMS} style={{ marginBottom: 32 }} />
-        ) : null}
+      <Card className={styles.wizardCard} styles={{ body: { padding: 0 } }}>
+        <div className={styles.wizardBody}>
+          {showSteps ? (
+            <aside className={styles.stepRail} aria-label="创建进度">
+              <Steps
+                current={currentStep}
+                orientation={screens.lg ? 'vertical' : 'horizontal'}
+                responsive={false}
+                items={[
+                  { title: STEP_ITEMS[0].title, content: '选择或输入本次发团路线' },
+                  { title: STEP_ITEMS[1].title, content: '填写发团基础信息' },
+                ]}
+              />
+            </aside>
+          ) : null}
 
-        {showCopyBootstrap ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
-            <Spin tip="正在加载源发团…">
-              <div style={{ minHeight: 80 }} />
-            </Spin>
-          </div>
-        ) : !isCopyMode && currentStep === 0 ? (
-          <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
-        ) : (
-          <CreateDepartureStepInfo
-            form={infoForm}
-            route={routeValues}
-          />
-        )}
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: 32,
-            paddingTop: 16,
-            borderTop: '1px solid #f0f0f0',
-          }}
-        >
-          <div>
-            {!isCopyMode && !copyFromId && currentStep === 1 ? (
-              <Button onClick={() => setCurrentStep(0)}>上一步</Button>
+          <main className={styles.workspace}>
+            {currentStep === 0 || showCopyBootstrap ? (
+              <Form form={infoForm} className={styles.hiddenForm} aria-hidden />
             ) : null}
+            {showCopyBootstrap ? (
+              <div className={styles.loadingState}>
+                <Spin description="正在加载源发团…">
+                  <div className={styles.loadingPlaceholder} />
+                </Spin>
+              </div>
+            ) : !isCopyMode && currentStep === 0 ? (
+              <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
+            ) : (
+              <CreateDepartureStepInfo form={infoForm} route={routeValues} />
+            )}
+          </main>
+        </div>
+
+        <footer className={styles.wizardFooter}>
+          <div>
+            {showSteps && currentStep === 1 ? (
+              <Button onClick={() => setCurrentStep(0)}>上一步</Button>
+            ) : (
+              <Link to="/departure">
+                <Button>返回</Button>
+              </Link>
+            )}
           </div>
-          <Space>
+          <div>
             {!isCopyMode && !copyFromId && currentStep === 0 ? (
               <Button
                 type="primary"
@@ -207,8 +225,8 @@ export function CreateDepartureWizard() {
                 创建发团
               </Button>
             )}
-          </Space>
-        </div>
+          </div>
+        </footer>
       </Card>
     </div>
   )
