@@ -29,10 +29,8 @@ import type {
   ListSegmentResourcesQueryDto,
   UpdateSegmentResourceDto,
 } from './dto/segment-resource.dto'
-import {
-  DepartureFinanceBridgeService,
-  type SegmentResourceFinanceMeta,
-} from './departure-finance-bridge.service'
+import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
+import type { SegmentResourceFinanceState } from '../finance/departure-finance-facade.service'
 import { resolveSegmentResourceCounterparty } from './segment-resource.validation'
 
 type SegmentResourceWithRelations = SegmentResource & {
@@ -80,9 +78,10 @@ export class SegmentResourceService {
       orderBy: [{ id: 'asc' }],
     })
 
-    const metaMap = await this.loadFinanceMetaMap(
+    const metaMap = await this.departureFinanceFacade.getSegmentResourceFinanceStates(
       organizationId,
       resources.map((resource) => resource.id),
+      new Map(resources.map((resource) => [resource.id, resource.amountCents])),
     )
 
     let items = resources.map((resource) =>
@@ -146,12 +145,17 @@ export class SegmentResourceService {
       payableStatus: SegmentPayableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: false,
       amountFieldsLocked: false,
+      agreedAmountCents: created.amountCents,
+      scheduleAmountCents: null,
+      paidCents: null,
+      unpaidCents: null,
+      needsReview: false,
     })
   }
 
   async getById(organizationId: string, resourceId: string): Promise<SegmentResourceSummary> {
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
-    const meta = await this.financeBridge.evaluateResourceFinanceMeta(
+    const meta = await this.departureFinanceFacade.getSegmentResourceFinanceState(
       organizationId,
       resource.id,
       resource,
@@ -250,7 +254,7 @@ export class SegmentResourceService {
       resourceId,
     )
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
-    const meta = await this.financeBridge.evaluateResourceFinanceMeta(
+    const meta = await this.departureFinanceFacade.getSegmentResourceFinanceState(
       organizationId,
       resourceId,
       resource,
@@ -260,22 +264,6 @@ export class SegmentResourceService {
       resource: this.toResourceSummary(resource, meta),
       sourceAmountMismatch,
     }
-  }
-
-  private async loadFinanceMetaMap(organizationId: string, resourceIds: string[]) {
-    const map = new Map<string, SegmentResourceFinanceMeta>()
-
-    await Promise.all(
-      resourceIds.map(async (resourceId) => {
-        const meta = await this.financeBridge.evaluateResourceFinanceMeta(
-          organizationId,
-          resourceId,
-        )
-        map.set(resourceId, meta)
-      }),
-    )
-
-    return map
   }
 
   private async findSegmentOrThrow(organizationId: string, segmentId: string) {
@@ -365,7 +353,7 @@ export class SegmentResourceService {
 
   private toResourceSummary(
     resource: SegmentResourceWithRelations,
-    meta?: SegmentResourceFinanceMeta,
+    meta?: SegmentResourceFinanceState,
   ): SegmentResourceSummary {
     const counterpartyName =
       resource.resourceKind === ResourceKind.outsource

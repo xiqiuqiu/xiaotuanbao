@@ -4,15 +4,23 @@ import {
   DepartureOperationsSheetDataStage,
   RESOURCE_KIND_LABELS,
   ResourceKind,
+  SegmentPayableStatus,
   compareSegmentResourcesForOperationsSheet,
 } from '@xiaotuanbao/shared'
 import type { ResourceKind as PrismaResourceKind } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import {
+  DepartureFinanceFacade,
+  type SegmentResourceFinanceState,
+} from '../finance/departure-finance-facade.service'
 import { deriveDepartureProgress, formatDateOnly } from './departure-date.utils'
 
 @Injectable()
 export class DepartureOperationsSheetService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
+  ) {}
 
   async buildSnapshot(
     organizationId: string,
@@ -58,9 +66,18 @@ export class DepartureOperationsSheetService {
       select: { name: true },
     })
 
-    // #95 ships the finance-not-started preview only. dataStage + progress amounts
-    // for partial/active finance are filled by #96/#97.
-    const dataStage = DepartureOperationsSheetDataStage.NOT_STARTED
+    const allResources = departure.itinerarySegments.flatMap((segment) => segment.resources)
+    const financeStates = await this.departureFinanceFacade.getSegmentResourceFinanceStates(
+      organizationId,
+      allResources.map((resource) => resource.id),
+      new Map(allResources.map((resource) => [resource.id, resource.amountCents])),
+    )
+
+    // #97 will wire Source Order receivable progress; until then receivables stay `—`.
+    const dataStage = deriveDataStage({
+      resourceStates: [...financeStates.values()],
+      sourceOrderCount: departure.sourceOrders.length,
+    })
 
     return {
       organizationName: departure.organization.name,
@@ -90,7 +107,7 @@ export class DepartureOperationsSheetService {
           childGuestCount: order.childGuestCount,
           guestCount: order.guestCount,
           agreedReceivableCents: order.netReceivableCents,
-          // #95: finance progress not wired; null renders as `—`
+          // #97: receivable progress not wired; null renders as `—`
           receivedCents: null,
           unreceivedCents: null,
           settlementNotes: order.settlementNotes,
@@ -108,6 +125,20 @@ export class DepartureOperationsSheetService {
           .map((resource) => {
             const counterpartyName =
               resource.partner?.name ?? resource.supplier?.name ?? ''
+            const finance =
+              financeStates.get(resource.id) ??
+              ({
+                hasSchedule: false,
+                payableStatus: SegmentPayableStatus.NOT_GENERATED,
+                hasSourceAmountMismatch: false,
+                amountFieldsLocked: false,
+                agreedAmountCents: resource.amountCents,
+                scheduleAmountCents: null,
+                paidCents: null,
+                unpaidCents: null,
+                needsReview: false,
+              } satisfies SegmentResourceFinanceState)
+
             return {
               id: resource.id,
               resourceKind: resource.resourceKind,
@@ -115,9 +146,12 @@ export class DepartureOperationsSheetService {
               counterpartyName,
               title: resource.title,
               agreedPayableCents: resource.amountCents,
-              // #95: progress fill-in is #96/#97; null → UI `—`
-              paidCents: null,
-              unpaidCents: null,
+              schedulePayableCents: finance.scheduleAmountCents,
+              paidCents: finance.paidCents,
+              unpaidCents: finance.unpaidCents,
+              payableStatus: finance.payableStatus,
+              needsReview: finance.needsReview,
+              excludeFromProgressTotals: finance.hasSourceAmountMismatch,
               notes: resource.notes,
             }
           })
@@ -141,4 +175,29 @@ export class DepartureOperationsSheetService {
 
 function resourceKindLabel(kind: PrismaResourceKind): string {
   return RESOURCE_KIND_LABELS[kind as ResourceKind] ?? kind
+}
+
+function deriveDataStage(input: {
+  resourceStates: SegmentResourceFinanceState[]
+  sourceOrderCount: number
+}): DepartureOperationsSheetDataStage {
+  const resourceCount = input.resourceStates.length
+  const generatedResourceCount = input.resourceStates.filter((state) => state.hasSchedule).length
+
+  if (generatedResourceCount === 0) {
+    return DepartureOperationsSheetDataStage.NOT_STARTED
+  }
+
+  // Source Order receivable progress lands in #97; until then any source order
+  // keeps the sheet from reaching fully-active when resources are all generated.
+  const allResourcesGenerated = generatedResourceCount === resourceCount
+  if (allResourcesGenerated && input.sourceOrderCount === 0) {
+    return DepartureOperationsSheetDataStage.ACTIVE
+  }
+
+  if (allResourcesGenerated && input.sourceOrderCount > 0) {
+    return DepartureOperationsSheetDataStage.PARTIAL
+  }
+
+  return DepartureOperationsSheetDataStage.PARTIAL
 }

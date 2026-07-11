@@ -12,6 +12,7 @@ import {
   DEPARTURE_PROGRESS_LABELS,
   DEPARTURE_STATUS_LABELS,
   OPERATIONS_SHEET_DATA_STAGE_LABELS,
+  SEGMENT_PAYABLE_STATUS_LABELS,
   catalogLabel,
   formatCents,
   formatProgressCents,
@@ -160,10 +161,25 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
       },
       {
         title: '约定应付',
-        dataIndex: 'agreedPayableCents',
-        width: 110,
+        key: 'payable',
+        width: 150,
         align: 'right',
-        render: (value: number) => formatCents(value),
+        render: (_, row) => {
+          if (
+            row.schedulePayableCents != null &&
+            row.schedulePayableCents !== row.agreedPayableCents
+          ) {
+            return (
+              <Space direction="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
+                <Typography.Text>业务 {formatCents(row.agreedPayableCents)}</Typography.Text>
+                <Typography.Text type="secondary">
+                  财务 {formatCents(row.schedulePayableCents)}
+                </Typography.Text>
+              </Space>
+            )
+          }
+          return formatCents(row.agreedPayableCents)
+        },
       },
       {
         title: '已付',
@@ -178,6 +194,21 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
         width: 90,
         align: 'right',
         render: (value: number | null) => formatProgressCents(value),
+      },
+      {
+        title: '进度',
+        key: 'progress',
+        width: 110,
+        render: (_, row) => {
+          if (row.payableStatus === 'not_generated') {
+            return '—'
+          }
+          const progressLabel = catalogLabel(SEGMENT_PAYABLE_STATUS_LABELS, row.payableStatus)
+          if (row.needsReview) {
+            return progressLabel === '—' ? '需核对' : `${progressLabel} · 需核对`
+          }
+          return progressLabel
+        },
       },
       {
         title: '备注',
@@ -269,7 +300,7 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
                     columns={resourceColumns}
                     dataSource={segment.resources}
                     locale={{ emptyText: '该段暂无资源' }}
-                    scroll={{ x: 860 }}
+                    scroll={{ x: 980 }}
                   />
                 </div>
               )

@@ -16,7 +16,6 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
-import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import { formatDateOnly } from './departure-date.utils'
 import { aggregatePayableOverview } from './segment-payable-overview.utils'
 import {
@@ -33,7 +32,6 @@ type SegmentWithResources = ItinerarySegment & {
 export class SegmentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly financeBridge: DepartureFinanceBridgeService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
@@ -269,18 +267,14 @@ export class SegmentService {
     organizationId: string,
     resourceIds: string[],
   ): Promise<Map<string, SegmentPayableStatus>> {
-    const map = new Map<string, SegmentPayableStatus>()
-
-    await Promise.all(
-      resourceIds.map(async (resourceId) => {
-        const meta = await this.financeBridge.evaluateResourceFinanceMeta(
-          organizationId,
-          resourceId,
-        )
-        map.set(resourceId, meta.payableStatus)
-      }),
+    const states = await this.departureFinanceFacade.getSegmentResourceFinanceStates(
+      organizationId,
+      resourceIds,
     )
-
+    const map = new Map<string, SegmentPayableStatus>()
+    for (const [resourceId, state] of states) {
+      map.set(resourceId, state.payableStatus)
+    }
     return map
   }
 

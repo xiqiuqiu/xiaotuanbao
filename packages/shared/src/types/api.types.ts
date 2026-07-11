@@ -770,9 +770,24 @@ export interface DepartureOperationsSheetResourceRow {
   resourceKindLabel: string
   counterpartyName: string
   title: string
+  /** Business agreed payable from Segment Resource. */
   agreedPayableCents: number
+  /**
+   * Financial schedule payable when generated.
+   * Null when finance has not started. Differs from agreedPayableCents on mismatch.
+   */
+  schedulePayableCents: number | null
   paidCents: number | null
   unpaidCents: number | null
+  /** SegmentPayableStatus value; `not_generated` when finance has not started. */
+  payableStatus: string
+  /** Closed-with-balance or business/schedule amount mismatch. Close reason omitted. */
+  needsReview: boolean
+  /**
+   * Amount-mismatch rows stay visible but must not feed normal unpaid totals (#98).
+   * Closed-with-balance rows keep unpaid visible and are NOT excluded here.
+   */
+  excludeFromProgressTotals: boolean
   notes: string | null
 }
 

@@ -4,11 +4,52 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { DepartureStatus, DirectoryProfileStatus, type Prisma } from '@prisma/client'
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import {
+  DepartureStatus,
+  DirectoryProfileStatus,
+  PaymentScheduleDirection,
+  VerificationStatus as PrismaVerificationStatus,
+  type PaymentSchedule,
+  type Prisma,
+  type SegmentResource,
+} from '@prisma/client'
+import {
+  deriveScheduleState,
+  isFinanceTouched,
+  PaymentScheduleSourceType,
+  PaymentScheduleStatus,
+  SegmentPayableStatus,
+} from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import {
+  formatDateOnly,
+  getShanghaiTodayString,
+} from '../departure/departure-date.utils'
 
 type TxClient = Prisma.TransactionClient
+
+/**
+ * Segment Resource finance state owned by Finance (ADR-0004 / #49).
+ * Paid/unpaid use effective verification allocation only — never unallocated outflows.
+ */
+export interface SegmentResourceFinanceState {
+  hasSchedule: boolean
+  payableStatus: SegmentPayableStatus
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+  agreedAmountCents: number
+  /** Null when finance has not started for this resource. */
+  scheduleAmountCents: number | null
+  /** Null when finance has not started — render as `—`, never numeric zero. */
+  paidCents: number | null
+  /** Null when finance has not started. Closed rows keep remaining unpaid. */
+  unpaidCents: number | null
+  /**
+   * True when closed-with-remaining unpaid, or business amount ≠ schedule amount.
+   * Close reason is intentionally omitted.
+   */
+  needsReview: boolean
+}
 
 /**
  * Authoritative Departure write gate owned by Finance (ADR-0004 / #86).
@@ -312,5 +353,227 @@ export class DepartureFinanceFacade {
         grossReceivableCents: netReceivableCents + order.discountCents,
       },
     })
+  }
+
+  /**
+   * Segment Resource finance state for one or more resources (ADR-0004 / #49).
+   * Departure list/detail and Operations Sheet consume this — they must not
+   * re-derive verification or finance-touched rules from raw schedules.
+   */
+  async getSegmentResourceFinanceStates(
+    organizationId: string,
+    resourceIds: string[],
+    agreedAmountByResourceId?: Map<string, number>,
+  ): Promise<Map<string, SegmentResourceFinanceState>> {
+    const uniqueIds = [...new Set(resourceIds)]
+    const result = new Map<string, SegmentResourceFinanceState>()
+    if (uniqueIds.length === 0) {
+      return result
+    }
+
+    const amountMap = agreedAmountByResourceId ?? (await this.loadAgreedAmounts(uniqueIds))
+
+    const schedules = await this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        sourceId: { in: uniqueIds },
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        direction: PaymentScheduleDirection.payable,
+      },
+    })
+
+    const schedulesByResourceId = new Map<string, PaymentSchedule[]>()
+    for (const schedule of schedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      const list = schedulesByResourceId.get(schedule.sourceId) ?? []
+      list.push(schedule)
+      schedulesByResourceId.set(schedule.sourceId, list)
+    }
+
+    const scheduleByResourceId = new Map<string, PaymentSchedule>()
+    for (const [resourceId, list] of schedulesByResourceId) {
+      const active = list.find((schedule) => schedule.cancelledAt == null)
+      if (active) {
+        scheduleByResourceId.set(resourceId, active)
+        continue
+      }
+      const latestCancelled = [...list].sort(
+        (a, b) => (b.cancelledAt?.getTime() ?? 0) - (a.cancelledAt?.getTime() ?? 0),
+      )[0]
+      if (latestCancelled) {
+        scheduleByResourceId.set(resourceId, latestCancelled)
+      }
+    }
+
+    const scheduleIds = [...scheduleByResourceId.values()].map((schedule) => schedule.id)
+    const [settledMap, historyMap] = await Promise.all([
+      this.batchGetSettledAmounts(scheduleIds),
+      this.batchHasVerificationHistory(scheduleIds),
+    ])
+
+    for (const resourceId of uniqueIds) {
+      const agreedAmountCents = amountMap.get(resourceId) ?? 0
+      const schedule = scheduleByResourceId.get(resourceId)
+      result.set(
+        resourceId,
+        this.toResourceFinanceState(
+          agreedAmountCents,
+          schedule ?? null,
+          schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
+          schedule ? (historyMap.get(schedule.id) ?? false) : false,
+        ),
+      )
+    }
+
+    return result
+  }
+
+  async getSegmentResourceFinanceState(
+    organizationId: string,
+    resourceId: string,
+    resource?: Pick<SegmentResource, 'amountCents'>,
+  ): Promise<SegmentResourceFinanceState> {
+    const agreedAmountByResourceId = resource
+      ? new Map([[resourceId, resource.amountCents]])
+      : undefined
+    const map = await this.getSegmentResourceFinanceStates(
+      organizationId,
+      [resourceId],
+      agreedAmountByResourceId,
+    )
+    return (
+      map.get(resourceId) ??
+      this.toResourceFinanceState(resource?.amountCents ?? 0, null, 0, false)
+    )
+  }
+
+  private async loadAgreedAmounts(resourceIds: string[]): Promise<Map<string, number>> {
+    const rows = await this.prisma.segmentResource.findMany({
+      where: { id: { in: resourceIds } },
+      select: { id: true, amountCents: true },
+    })
+    return new Map(rows.map((row) => [row.id, row.amountCents]))
+  }
+
+  private toResourceFinanceState(
+    agreedAmountCents: number,
+    schedule: PaymentSchedule | null,
+    settledAmountCents: number,
+    hasVerificationHistory: boolean,
+  ): SegmentResourceFinanceState {
+    if (!schedule) {
+      return {
+        hasSchedule: false,
+        payableStatus: SegmentPayableStatus.NOT_GENERATED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: false,
+        agreedAmountCents,
+        scheduleAmountCents: null,
+        paidCents: null,
+        unpaidCents: null,
+        needsReview: false,
+      }
+    }
+
+    const unpaidCents = Math.max(schedule.amountCents - settledAmountCents, 0)
+
+    if (schedule.cancelledAt != null) {
+      return {
+        hasSchedule: true,
+        payableStatus: SegmentPayableStatus.CLOSED,
+        hasSourceAmountMismatch: false,
+        amountFieldsLocked: true,
+        agreedAmountCents,
+        scheduleAmountCents: schedule.amountCents,
+        paidCents: settledAmountCents,
+        unpaidCents,
+        needsReview: unpaidCents > 0,
+      }
+    }
+
+    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
+    let hasSourceAmountMismatch = false
+    let amountFieldsLocked = false
+
+    if (touched) {
+      amountFieldsLocked = true
+      if (agreedAmountCents > 0 && schedule.amountCents !== agreedAmountCents) {
+        hasSourceAmountMismatch = true
+      }
+    }
+
+    const status = deriveScheduleState({
+      amountCents: schedule.amountCents,
+      settledAmountCents,
+      dueDate: formatDateOnly(schedule.dueDate),
+      cancelledAt: schedule.cancelledAt,
+      businessDate: getShanghaiTodayString(),
+    })
+
+    let payableStatus = SegmentPayableStatus.PENDING
+    if (status === PaymentScheduleStatus.SETTLED) {
+      payableStatus = SegmentPayableStatus.PAID
+      amountFieldsLocked = true
+    } else if (settledAmountCents > 0 && settledAmountCents < schedule.amountCents) {
+      payableStatus = SegmentPayableStatus.PARTIAL
+    }
+
+    return {
+      hasSchedule: true,
+      payableStatus,
+      hasSourceAmountMismatch,
+      amountFieldsLocked,
+      agreedAmountCents,
+      scheduleAmountCents: schedule.amountCents,
+      paidCents: settledAmountCents,
+      unpaidCents,
+      needsReview: hasSourceAmountMismatch,
+    }
+  }
+
+  private async batchGetSettledAmounts(scheduleIds: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>()
+    if (scheduleIds.length === 0) {
+      return map
+    }
+
+    const rows = await this.prisma.financeVerification.groupBy({
+      by: ['paymentScheduleId'],
+      where: {
+        paymentScheduleId: { in: scheduleIds },
+        status: PrismaVerificationStatus.normal,
+      },
+      _sum: { amountCents: true },
+    })
+
+    for (const row of rows) {
+      map.set(row.paymentScheduleId, row._sum.amountCents ?? 0)
+    }
+    return map
+  }
+
+  private async batchHasVerificationHistory(
+    scheduleIds: string[],
+  ): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>()
+    for (const scheduleId of scheduleIds) {
+      map.set(scheduleId, false)
+    }
+    if (scheduleIds.length === 0) {
+      return map
+    }
+
+    const rows = await this.prisma.financeVerification.groupBy({
+      by: ['paymentScheduleId'],
+      where: { paymentScheduleId: { in: scheduleIds } },
+      _count: { _all: true },
+    })
+
+    for (const row of rows) {
+      map.set(row.paymentScheduleId, row._count._all > 0)
+    }
+    return map
   }
 }

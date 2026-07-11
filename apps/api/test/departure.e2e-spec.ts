@@ -2081,6 +2081,9 @@ describe('Departure API (e2e)', () => {
       for (const resource of sheet.segments[0].resources) {
         expect(resource.paidCents).toBeNull()
         expect(resource.unpaidCents).toBeNull()
+        expect(resource.schedulePayableCents).toBeNull()
+        expect(resource.payableStatus).toBe('not_generated')
+        expect(resource.needsReview).toBe(false)
         expect(resource.agreedPayableCents).toEqual(expect.any(Number))
       }
       expect(sheet.segments[0].resources.find((r: { title: string }) => r.title === '晚餐')).toMatchObject({
@@ -2088,6 +2091,9 @@ describe('Departure API (e2e)', () => {
         counterpartyName: `${testPrefix}-ops-supplier`,
         paidCents: null,
         unpaidCents: null,
+        schedulePayableCents: null,
+        payableStatus: 'not_generated',
+        needsReview: false,
       })
       expect(sheet.segments[1].resources).toEqual([
         expect.objectContaining({
@@ -2096,8 +2102,278 @@ describe('Departure API (e2e)', () => {
           agreedPayableCents: 200000,
           paidCents: null,
           unpaidCents: null,
+          schedulePayableCents: null,
+          payableStatus: 'not_generated',
+          needsReview: false,
         }),
       ])
+    })
+
+    it('wires resource payable progress from finance facade (#96)', async () => {
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-payable-progress` })
+
+      const segment = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send({
+          name: '进度段',
+          startDate: '2026-09-01',
+          endDate: '2026-09-02',
+          destination: '阿勒泰',
+        })
+        .expect(201)
+
+      // Insert out of kind order — sheet must still sort hotel → meal → transport → outsource.
+      const meal = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.meal,
+          supplierId: opsSupplierId,
+          title: '未生成餐',
+          amountCents: 20000,
+        })
+        .expect(201)
+
+      const hotelPartial = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '部分付款酒店',
+          amountCents: 100000,
+        })
+        .expect(201)
+
+      const hotelPending = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '待付酒店',
+          amountCents: 60000,
+        })
+        .expect(201)
+
+      const transportPaid = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.transport,
+          supplierId: opsSupplierId,
+          title: '已付清用车',
+          amountCents: 50000,
+        })
+        .expect(201)
+
+      const hotelClosed = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '关闭仍未付酒店',
+          amountCents: 80000,
+        })
+        .expect(201)
+
+      const hotelMismatch = await authRequest(app, coordinatorToken)
+        .post(`/api/segments/${segment.body.data.id}/resources`)
+        .send({
+          resourceKind: ResourceKind.hotel,
+          supplierId: opsSupplierId,
+          title: '金额不一致酒店',
+          amountCents: 120000,
+        })
+        .expect(201)
+
+      const generatedPartial = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelPartial.body.data.id}/generate-payable`)
+        .expect(201)
+      await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelPending.body.data.id}/generate-payable`)
+        .expect(201)
+      const generatedPaid = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${transportPaid.body.data.id}/generate-payable`)
+        .expect(201)
+      const generatedClosed = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelClosed.body.data.id}/generate-payable`)
+        .expect(201)
+      const generatedMismatch = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${hotelMismatch.body.data.id}/generate-payable`)
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${generatedPartial.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 40000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${generatedPaid.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 50000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${generatedClosed.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 30000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${generatedClosed.body.data.schedule.id}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '供应商纠纷内部备注勿导出' })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payables/${generatedMismatch.body.data.schedule.id}/confirm-payment`)
+        .send({
+          amountCents: 10000,
+          transactionDate: '2026-09-01',
+          paymentChannel: PaymentChannel.BANK_TRANSFER,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+        })
+        .expect(201)
+
+      // Simulate business/schedule divergence after finance touch (same seam as payables e2e).
+      await prisma.segmentResource.update({
+        where: { id: hotelMismatch.body.data.id },
+        data: { amountCents: 120000 },
+      })
+      await prisma.paymentSchedule.update({
+        where: { id: generatedMismatch.body.data.schedule.id },
+        data: { amountCents: 90000 },
+      })
+
+      // Unallocated outflow must not count as paid on the meal resource.
+      await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'outflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 99900,
+          transactionDate: '2026-09-01',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: opsSupplierId,
+          counterpartyName: `${testPrefix}-ops-supplier`,
+          departureId: departure.id,
+          notes: '未核销支出不应计入已付',
+        })
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      const sheet = response.body.data
+      expect(sheet.dataStage).toBe('partial')
+
+      const resources = sheet.segments[0].resources as Array<{
+        id: string
+        title: string
+        resourceKind: string
+        agreedPayableCents: number
+        schedulePayableCents: number | null
+        paidCents: number | null
+        unpaidCents: number | null
+        payableStatus: string
+        needsReview: boolean
+      }>
+
+      expect(resources.map((r) => ({ kind: r.resourceKind, title: r.title }))).toEqual([
+        { kind: ResourceKind.transport, title: '已付清用车' },
+        { kind: ResourceKind.hotel, title: '部分付款酒店' },
+        { kind: ResourceKind.hotel, title: '待付酒店' },
+        { kind: ResourceKind.hotel, title: '关闭仍未付酒店' },
+        { kind: ResourceKind.hotel, title: '金额不一致酒店' },
+        { kind: ResourceKind.meal, title: '未生成餐' },
+      ])
+
+      const byTitle = Object.fromEntries(resources.map((r) => [r.title, r]))
+
+      expect(byTitle['未生成餐']).toMatchObject({
+        id: meal.body.data.id,
+        agreedPayableCents: 20000,
+        schedulePayableCents: null,
+        paidCents: null,
+        unpaidCents: null,
+        payableStatus: 'not_generated',
+        needsReview: false,
+        excludeFromProgressTotals: false,
+      })
+
+      expect(byTitle['待付酒店']).toMatchObject({
+        id: hotelPending.body.data.id,
+        agreedPayableCents: 60000,
+        schedulePayableCents: 60000,
+        paidCents: 0,
+        unpaidCents: 60000,
+        payableStatus: 'pending',
+        needsReview: false,
+        excludeFromProgressTotals: false,
+      })
+
+      expect(byTitle['部分付款酒店']).toMatchObject({
+        id: hotelPartial.body.data.id,
+        agreedPayableCents: 100000,
+        schedulePayableCents: 100000,
+        paidCents: 40000,
+        unpaidCents: 60000,
+        payableStatus: 'partial',
+        needsReview: false,
+        excludeFromProgressTotals: false,
+      })
+
+      expect(byTitle['已付清用车']).toMatchObject({
+        id: transportPaid.body.data.id,
+        agreedPayableCents: 50000,
+        schedulePayableCents: 50000,
+        paidCents: 50000,
+        unpaidCents: 0,
+        payableStatus: 'paid',
+        needsReview: false,
+        excludeFromProgressTotals: false,
+      })
+
+      expect(byTitle['关闭仍未付酒店']).toMatchObject({
+        id: hotelClosed.body.data.id,
+        agreedPayableCents: 80000,
+        schedulePayableCents: 80000,
+        paidCents: 30000,
+        unpaidCents: 50000,
+        payableStatus: 'closed',
+        needsReview: true,
+        excludeFromProgressTotals: false,
+      })
+      expect(JSON.stringify(byTitle['关闭仍未付酒店'])).not.toContain('供应商纠纷')
+
+      expect(byTitle['金额不一致酒店']).toMatchObject({
+        id: hotelMismatch.body.data.id,
+        agreedPayableCents: 120000,
+        schedulePayableCents: 90000,
+        paidCents: 10000,
+        unpaidCents: 80000,
+        payableStatus: 'partial',
+        needsReview: true,
+        excludeFromProgressTotals: true,
+      })
     })
 
     it('allows finance role to read operations sheet', async () => {

@@ -12,7 +12,6 @@ import type {
 import {
   isFinanceTouched,
   PaymentScheduleSourceType,
-  SegmentPayableStatus,
   SourceOrderReceivableStatus,
   deriveScheduleState,
   PaymentScheduleStatus,
@@ -29,11 +28,17 @@ import {
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
+import {
+  DepartureFinanceFacade,
+  type SegmentResourceFinanceState,
+} from '../finance/departure-finance-facade.service'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
 import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
+
+/** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
+export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
 
 type SourceOrderWithRelations = SourceOrder & {
   partner: Partner
@@ -43,13 +48,6 @@ type SourceOrderWithRelations = SourceOrder & {
 export interface SourceOrderFinanceMeta {
   hasSchedule: boolean
   receivableStatus: SourceOrderReceivableStatus
-  hasSourceAmountMismatch: boolean
-  amountFieldsLocked: boolean
-}
-
-export interface SegmentResourceFinanceMeta {
-  hasSchedule: boolean
-  payableStatus: SegmentPayableStatus
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
 }
@@ -483,78 +481,11 @@ export class DepartureFinanceBridgeService {
     resourceId: string,
     resource?: Pick<SegmentResource, 'amountCents' | 'resourceKind' | 'partnerId' | 'supplierId'>,
   ): Promise<SegmentResourceFinanceMeta> {
-    const amounts =
-      resource ??
-      (await this.prisma.segmentResource.findFirstOrThrow({
-        where: { id: resourceId },
-        select: {
-          amountCents: true,
-          resourceKind: true,
-          partnerId: true,
-          supplierId: true,
-        },
-      }))
-
-    const schedule =
-      (await this.findActivePayableSchedule(organizationId, resourceId)) ??
-      (await this.findCancelledPayableSchedule(organizationId, resourceId))
-    if (!schedule) {
-      return {
-        hasSchedule: false,
-        payableStatus: SegmentPayableStatus.NOT_GENERATED,
-        hasSourceAmountMismatch: false,
-        amountFieldsLocked: false,
-      }
-    }
-
-    if (schedule.cancelledAt != null) {
-      return {
-        hasSchedule: true,
-        payableStatus: SegmentPayableStatus.CLOSED,
-        hasSourceAmountMismatch: false,
-        amountFieldsLocked: true,
-      }
-    }
-
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
-    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
-    const expectedAmount = amounts.amountCents
-
-    let hasSourceAmountMismatch = false
-    let amountFieldsLocked = false
-
-    if (touched) {
-      amountFieldsLocked = true
-      if (expectedAmount > 0 && schedule.amountCents !== expectedAmount) {
-        hasSourceAmountMismatch = true
-      }
-    }
-
-    const status = deriveScheduleState({
-      amountCents: schedule.amountCents,
-      settledAmountCents,
-      dueDate: formatDateOnly(schedule.dueDate),
-      cancelledAt: schedule.cancelledAt,
-      businessDate: getShanghaiTodayString(),
-    })
-
-    let payableStatus = SegmentPayableStatus.PENDING
-    if (status === PaymentScheduleStatus.SETTLED) {
-      payableStatus = SegmentPayableStatus.PAID
-      amountFieldsLocked = true
-    } else if (settledAmountCents > 0 && settledAmountCents < schedule.amountCents) {
-      payableStatus = SegmentPayableStatus.PARTIAL
-    }
-
-    return {
-      hasSchedule: true,
-      payableStatus,
-      hasSourceAmountMismatch,
-      amountFieldsLocked,
-    }
+    return this.departureFinanceFacade.getSegmentResourceFinanceState(
+      organizationId,
+      resourceId,
+      resource,
+    )
   }
 
   async assertResourceAmountEditable(
@@ -627,22 +558,6 @@ export class DepartureFinanceBridgeService {
         direction: PaymentScheduleDirection.payable,
         cancelledAt: null,
       },
-    })
-  }
-
-  private async findCancelledPayableSchedule(
-    organizationId: string,
-    resourceId: string,
-  ): Promise<PaymentSchedule | null> {
-    return this.prisma.paymentSchedule.findFirst({
-      where: {
-        organizationId,
-        sourceId: resourceId,
-        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-        direction: PaymentScheduleDirection.payable,
-        cancelledAt: { not: null },
-      },
-      orderBy: { cancelledAt: 'desc' },
     })
   }
 
