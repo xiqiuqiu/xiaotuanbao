@@ -6,7 +6,11 @@ import {
   TransactionDirection,
   VerificationStatus,
 } from '@prisma/client'
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import {
+  assertCounterpartyMatch,
+  CounterpartyMismatchError,
+  PaymentScheduleSourceType,
+} from '@xiaotuanbao/shared'
 
 export type FinanceIntegritySeverity = 'P0' | 'P1'
 
@@ -17,6 +21,8 @@ export interface FinanceIntegrityRefs {
   transactionNo?: string
   verificationNo?: string
   sourceId?: string
+  operation?: string
+  idempotencyKey?: string
 }
 
 export interface FinanceIntegrityViolation {
@@ -38,15 +44,15 @@ function counterpartyMatches(
     counterpartyName: string | null
   },
 ): boolean {
-  if (left.counterpartyType !== right.counterpartyType) {
-    return false
+  try {
+    assertCounterpartyMatch(left, right)
+    return true
+  } catch (error) {
+    if (error instanceof CounterpartyMismatchError) {
+      return false
+    }
+    throw error
   }
-  const leftId = left.counterpartyId?.trim() || null
-  const rightId = right.counterpartyId?.trim() || null
-  if (leftId || rightId) {
-    return leftId === rightId
-  }
-  return (left.counterpartyName?.trim() || '') === (right.counterpartyName?.trim() || '')
 }
 
 function expectedTransactionDirection(direction: PaymentScheduleDirection): TransactionDirection {
@@ -68,6 +74,7 @@ export async function collectFinanceIntegrityViolations(
     segmentResources,
     partners,
     suppliers,
+    idempotencyRecords,
   ] = await Promise.all([
     prisma.paymentSchedule.findMany({
       select: {
@@ -143,6 +150,15 @@ export async function collectFinanceIntegrityViolations(
     }),
     prisma.partner.findMany({ select: { id: true, organizationId: true } }),
     prisma.supplier.findMany({ select: { id: true, organizationId: true } }),
+    prisma.financeIdempotencyRecord.findMany({
+      select: {
+        organizationId: true,
+        operation: true,
+        idempotencyKey: true,
+        resultJson: true,
+        completedAt: true,
+      },
+    }),
   ])
 
   const violations: FinanceIntegrityViolation[] = []
@@ -219,8 +235,11 @@ export async function collectFinanceIntegrityViolations(
   const validateCounterpartyReference = (
     item: {
       organizationId: string
+      departureId: string | null
       counterpartyType: CounterpartyType
       counterpartyId: string | null
+      sourceType?: string | null
+      sourceId?: string | null
     },
     refs: FinanceIntegrityRefs,
   ) => {
@@ -234,8 +253,23 @@ export async function collectFinanceIntegrityViolations(
       if (!supplier || supplier.organizationId !== item.organizationId) {
         add('COUNTERPARTY_REFERENCE_BROKEN', 'P0', 'Supplier 往来对象缺失或跨 Organization', refs)
       }
+    } else if (item.counterpartyType === CounterpartyType.guest) {
+      if (!item.counterpartyId) {
+        add('GUEST_COUNTERPARTY_REFERENCE_MISSING', 'P1', '游客代收往来对象缺少客源单 ID', refs)
+        return
+      }
+      const sourceOrder = sourceOrderById.get(item.counterpartyId)
+      if (
+        !sourceOrder ||
+        sourceOrder.departure.organizationId !== item.organizationId ||
+        (item.departureId !== null && sourceOrder.departureId !== item.departureId) ||
+        (item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION &&
+          item.sourceId !== item.counterpartyId)
+      ) {
+        add('COUNTERPARTY_REFERENCE_BROKEN', 'P0', '游客代收往来对象缺失、串团或跨 Organization', refs)
+      }
     } else if (item.counterpartyId) {
-      add('COUNTERPARTY_REFERENCE_BROKEN', 'P0', 'Guest/Manual 往来对象不应保存目录 ID', refs)
+      add('COUNTERPARTY_REFERENCE_BROKEN', 'P0', '手工往来对象不应保存目录 ID', refs)
     }
   }
 
@@ -332,6 +366,16 @@ export async function collectFinanceIntegrityViolations(
       add('ACTIVITY_CROSS_ORGANIZATION', 'P1', '节点 Activity 缺少节点或跨 Organization', {
         organizationId: activity.organizationId,
         scheduleNo: schedule?.scheduleNo,
+      })
+    }
+  }
+
+  for (const record of idempotencyRecords) {
+    if (!record.completedAt || record.resultJson === null) {
+      add('INCOMPLETE_IDEMPOTENCY_RECORD', 'P1', '财务幂等记录未与业务结果完整提交', {
+        organizationId: record.organizationId,
+        operation: record.operation,
+        idempotencyKey: record.idempotencyKey,
       })
     }
   }

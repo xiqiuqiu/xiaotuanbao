@@ -181,10 +181,11 @@ export class TransactionService {
     organizationId: string,
     transactionId: string,
     dto: UpdateFinanceTransactionDto,
+    client?: Prisma.TransactionClient,
   ): Promise<FinanceTransactionSummary> {
     this.assertPositiveAmount(dto.amountCents)
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM finance_transactions
@@ -236,7 +237,8 @@ export class TransactionService {
         },
         include: this.departureInclude,
       })
-    })
+    }
+    const updated = client ? await run(client) : await this.prisma.$transaction(run)
 
     return this.toSummary(updated, 0)
   }
@@ -245,13 +247,14 @@ export class TransactionService {
     organizationId: string,
     transactionId: string,
     dto: VoidFinanceTransactionDto,
+    client?: Prisma.TransactionClient,
   ): Promise<FinanceTransactionSummary> {
     const voidReason = dto.voidReason?.trim()
     if (!voidReason) {
       throw new BadRequestException('作废原因不能为空')
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM finance_transactions
@@ -294,7 +297,8 @@ export class TransactionService {
         },
         include: this.departureInclude,
       })
-    })
+    }
+    const updated = client ? await run(client) : await this.prisma.$transaction(run)
 
     return this.toSummary(updated, 0)
   }

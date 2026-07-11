@@ -283,13 +283,14 @@ export class VerificationService {
     verificationId: string,
     dto: CancelFinanceVerificationDto,
     cancelledBy: string,
+    client?: Prisma.TransactionClient,
   ): Promise<FinanceVerificationSummary> {
     const cancelReason = dto.cancelReason?.trim()
     if (!cancelReason) {
       throw new BadRequestException('撤销原因不能为空')
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM finance_verifications
@@ -385,7 +386,8 @@ export class VerificationService {
       }
 
       return cancelled
-    })
+    }
+    const updated = client ? await run(client) : await this.prisma.$transaction(run)
 
     return this.toSummary(updated)
   }

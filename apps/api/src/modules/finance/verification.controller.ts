@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
   FinanceVerificationDetail,
   FinanceVerificationListResult,
@@ -13,11 +13,15 @@ import {
   ListFinanceVerificationsQueryDto,
 } from './dto/verification.dto'
 import { VerificationService } from './verification.service'
+import { FinanceIdempotencyService } from './finance-idempotency.service'
 
 @Controller('finance/verifications')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class VerificationController {
-  constructor(private readonly verificationService: VerificationService) {}
+  constructor(
+    private readonly verificationService: VerificationService,
+    private readonly financeIdempotencyService: FinanceIdempotencyService,
+  ) {}
 
   @Get()
   @RequireMenu('/finance/verification')
@@ -33,9 +37,20 @@ export class VerificationController {
   create(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Body() dto: CreateFinanceVerificationDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<FinanceVerificationSummary> {
-    return this.verificationService.create(request.user.organizationId, dto, {
-      createdBy: request.user.userId,
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'create-verification',
+      idempotencyKey,
+      request: { dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.verificationService.create(
+          request.user.organizationId,
+          dto,
+          { createdBy: request.user.userId },
+          tx,
+        ),
     })
   }
 
@@ -54,12 +69,21 @@ export class VerificationController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: CancelFinanceVerificationDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<FinanceVerificationSummary> {
-    return this.verificationService.cancel(
-      request.user.organizationId,
-      id,
-      dto,
-      request.user.userId,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'cancel-verification',
+      idempotencyKey,
+      request: { verificationId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.verificationService.cancel(
+          request.user.organizationId,
+          id,
+          dto,
+          request.user.userId,
+          tx,
+        ),
+    })
   }
 }

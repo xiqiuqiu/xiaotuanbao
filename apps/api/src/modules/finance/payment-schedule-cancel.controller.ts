@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Headers, Param, Post, Req, UseGuards } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
@@ -7,24 +7,37 @@ import {
   ReopenPaymentScheduleDto,
 } from './dto/payment-schedule.dto'
 import { PaymentScheduleService } from './payment-schedule.service'
+import { FinanceIdempotencyService } from './finance-idempotency.service'
 
 @Controller('finance/payment-schedules')
 @UseGuards(JwtAuthGuard)
 export class PaymentScheduleCancelController {
-  constructor(private readonly paymentScheduleService: PaymentScheduleService) {}
+  constructor(
+    private readonly paymentScheduleService: PaymentScheduleService,
+    private readonly financeIdempotencyService: FinanceIdempotencyService,
+  ) {}
 
   @Post(':id/cancel')
   cancel(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: CancelPaymentScheduleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    return this.paymentScheduleService.cancel(
-      request.user.organizationId,
-      id,
-      request.user.userId,
-      dto,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'close-payment-schedule',
+      idempotencyKey,
+      request: { scheduleId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.cancel(
+          request.user.organizationId,
+          id,
+          request.user.userId,
+          dto,
+          tx,
+        ),
+    })
   }
 
   @Post(':id/reopen')
@@ -32,13 +45,22 @@ export class PaymentScheduleCancelController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: ReopenPaymentScheduleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    return this.paymentScheduleService.reopen(
-      request.user.organizationId,
-      id,
-      request.user.userId,
-      dto,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'reopen-payment-schedule',
+      idempotencyKey,
+      request: { scheduleId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.reopen(
+          request.user.organizationId,
+          id,
+          request.user.userId,
+          dto,
+          tx,
+        ),
+    })
   }
 
   @Post(':id/adjust-amount')
@@ -46,12 +68,21 @@ export class PaymentScheduleCancelController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: AdjustPaymentScheduleAmountDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    return this.paymentScheduleService.adjustAmount(
-      request.user.organizationId,
-      id,
-      request.user.userId,
-      dto,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'adjust-payment-schedule-amount',
+      idempotencyKey,
+      request: { scheduleId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.adjustAmount(
+          request.user.organizationId,
+          id,
+          request.user.userId,
+          dto,
+          tx,
+        ),
+    })
   }
 }

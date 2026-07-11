@@ -2370,6 +2370,54 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(stillClosed.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
 
+    const failureReason = 'e2e-force-settlement-history-failure'
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION e2e_fail_settlement_history_insert()
+      RETURNS trigger AS $$
+      BEGIN
+        IF NEW.reason = '${failureReason}' THEN
+          RAISE EXCEPTION 'forced settlement history insert failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `)
+    await prisma.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS e2e_fail_settlement_history_insert ON departure_settlement_histories',
+    )
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER e2e_fail_settlement_history_insert
+      BEFORE INSERT ON departure_settlement_histories
+      FOR EACH ROW EXECUTE FUNCTION e2e_fail_settlement_history_insert()
+    `)
+    try {
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
+        .send({
+          reopenReason: failureReason,
+          confirmDepartureSettlementReversal: true,
+        })
+        .expect(500)
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER IF EXISTS e2e_fail_settlement_history_insert ON departure_settlement_histories',
+      )
+      await prisma.$executeRawUnsafe(
+        'DROP FUNCTION IF EXISTS e2e_fail_settlement_history_insert()',
+      )
+    }
+
+    const afterInjectedFailure = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(afterInjectedFailure.body.data.status).toBe(DepartureStatus.settled)
+    const scheduleAfterInjectedFailure = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${schedules.payableScheduleId}`)
+      .expect(200)
+    expect(scheduleAfterInjectedFailure.body.data.status).toBe(
+      PaymentScheduleStatus.CANCELLED,
+    )
+
     const reopened = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/reopen`)
       .send({

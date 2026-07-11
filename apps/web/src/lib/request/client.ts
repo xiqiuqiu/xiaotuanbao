@@ -27,6 +27,15 @@ http.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  const method = config.method?.toUpperCase()
+  if (
+    config.url?.startsWith('/finance/') &&
+    method &&
+    ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) &&
+    !config.headers.has('Idempotency-Key')
+  ) {
+    config.headers.set('Idempotency-Key', crypto.randomUUID())
+  }
   return config
 })
 

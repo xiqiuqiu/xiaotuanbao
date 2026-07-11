@@ -6,6 +6,7 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   PaymentScheduleDirection,
+  Prisma,
   TransactionDirection as PrismaTransactionDirection,
   type PaymentSchedule,
 } from '@prisma/client'
@@ -20,6 +21,7 @@ import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { PaymentScheduleService } from './payment-schedule.service'
 import { TransactionService } from './transaction.service'
 import { VerificationService } from './verification.service'
+import { FinanceIdempotencyService } from './finance-idempotency.service'
 
 @Injectable()
 export class FinanceOperationsService {
@@ -29,6 +31,7 @@ export class FinanceOperationsService {
     private readonly transactionService: TransactionService,
     private readonly verificationService: VerificationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
+    private readonly financeIdempotencyService: FinanceIdempotencyService,
   ) {}
 
   async confirmCollection(
@@ -36,66 +39,15 @@ export class FinanceOperationsService {
     scheduleId: string,
     dto: ConfirmCollectionDto,
     userId: string,
+    idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.findScheduleOrThrow(
-      organizationId,
-      scheduleId,
-      PaymentScheduleDirection.receivable,
-    )
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '确认收款',
-    )
-    this.assertScheduleOpen(schedule)
-    this.assertPositiveAmount(dto.amountCents)
-
-    const counterparty = this.resolveCounterparty(schedule, dto)
-
-    try {
-      assertCounterpartyMatch(schedule, counterparty)
-    } catch (error) {
-      if (error instanceof CounterpartyMismatchError) {
-        throw new BadRequestException(error.message)
-      }
-      throw error
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      const transaction = await this.transactionService.create(
-        organizationId,
-        {
-          direction: PrismaTransactionDirection.inflow,
-          paymentChannel: dto.paymentChannel,
-          amountCents: dto.amountCents,
-          transactionDate: dto.transactionDate,
-          counterpartyType: counterparty.counterpartyType,
-          counterpartyId: counterparty.counterpartyId ?? undefined,
-          counterpartyName: counterparty.counterpartyName ?? undefined,
-          departureId: schedule.departureId,
-          notes: dto.notes,
-        },
-        tx,
-      )
-
-      await this.verificationService.create(
-        organizationId,
-        {
-          paymentScheduleId: schedule.id,
-          transactionId: transaction.id,
-          amountCents: dto.amountCents,
-          verificationDate: dto.transactionDate,
-          remark: dto.notes,
-        },
-        { createdBy: userId },
-        tx,
-      )
-    })
-
-    return this.paymentScheduleService.getById(
+    return this.confirmSchedule(
       organizationId,
       PaymentScheduleDirection.receivable,
       scheduleId,
+      dto,
+      userId,
+      idempotencyKey,
     )
   }
 
@@ -104,66 +56,15 @@ export class FinanceOperationsService {
     scheduleId: string,
     dto: ConfirmPaymentDto,
     userId: string,
+    idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.findScheduleOrThrow(
-      organizationId,
-      scheduleId,
-      PaymentScheduleDirection.payable,
-    )
-    await this.departureFinanceFacade.assertMutableById(
-      organizationId,
-      schedule.departureId,
-      '确认付款',
-    )
-    this.assertScheduleOpen(schedule)
-    this.assertPositiveAmount(dto.amountCents)
-
-    const counterparty = this.resolveCounterparty(schedule, dto)
-
-    try {
-      assertCounterpartyMatch(schedule, counterparty)
-    } catch (error) {
-      if (error instanceof CounterpartyMismatchError) {
-        throw new BadRequestException(error.message)
-      }
-      throw error
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      const transaction = await this.transactionService.create(
-        organizationId,
-        {
-          direction: PrismaTransactionDirection.outflow,
-          paymentChannel: dto.paymentChannel,
-          amountCents: dto.amountCents,
-          transactionDate: dto.transactionDate,
-          counterpartyType: counterparty.counterpartyType,
-          counterpartyId: counterparty.counterpartyId ?? undefined,
-          counterpartyName: counterparty.counterpartyName ?? undefined,
-          departureId: schedule.departureId,
-          notes: dto.notes,
-        },
-        tx,
-      )
-
-      await this.verificationService.create(
-        organizationId,
-        {
-          paymentScheduleId: schedule.id,
-          transactionId: transaction.id,
-          amountCents: dto.amountCents,
-          verificationDate: dto.transactionDate,
-          remark: dto.notes,
-        },
-        { createdBy: userId },
-        tx,
-      )
-    })
-
-    return this.paymentScheduleService.getById(
+    return this.confirmSchedule(
       organizationId,
       PaymentScheduleDirection.payable,
       scheduleId,
+      dto,
+      userId,
+      idempotencyKey,
     )
   }
 
@@ -173,48 +74,143 @@ export class FinanceOperationsService {
     scheduleId: string,
     dto: LinkTransactionDto,
     userId: string,
+    idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    const schedule = await this.findScheduleOrThrow(organizationId, scheduleId, direction)
-    await this.departureFinanceFacade.assertMutableById(
+    const result = await this.financeIdempotencyService.execute({
       organizationId,
-      schedule.departureId,
-      '关联流水',
-    )
-    this.assertScheduleOpen(schedule)
-    this.assertPositiveAmount(dto.amountCents)
+      operation: `link-transaction-${direction}`,
+      idempotencyKey,
+      request: { scheduleId, dto, userId },
+      handler: async (tx) => {
+        const schedule = await this.findScheduleOrThrow(
+          organizationId,
+          scheduleId,
+          direction,
+          tx,
+        )
+        await this.departureFinanceFacade.lockMutableById(
+          tx,
+          organizationId,
+          schedule.departureId,
+          '关联流水',
+        )
+        this.assertScheduleOpen(schedule)
+        this.assertPositiveAmount(dto.amountCents)
 
-    const transaction = await this.prisma.financeTransaction.findFirst({
-      where: { id: dto.transactionId, organizationId },
+        const transaction = await tx.financeTransaction.findFirst({
+          where: { id: dto.transactionId, organizationId },
+        })
+        if (!transaction) {
+          throw new NotFoundException('流水不存在')
+        }
+        if (transaction.voidedAt) {
+          throw new BadRequestException('流水已作废，不可关联')
+        }
+
+        await this.verificationService.create(
+          organizationId,
+          {
+            paymentScheduleId: schedule.id,
+            transactionId: transaction.id,
+            amountCents: dto.amountCents,
+            verificationDate: formatDateOnly(transaction.transactionDate),
+          },
+          { createdBy: userId },
+          tx,
+        )
+
+        return { scheduleId: schedule.id }
+      },
     })
 
-    if (!transaction) {
-      throw new NotFoundException('流水不存在')
-    }
+    return this.paymentScheduleService.getById(organizationId, direction, result.scheduleId)
+  }
 
-    if (transaction.voidedAt) {
-      throw new BadRequestException('流水已作废，不可关联')
-    }
-
-    await this.verificationService.create(
+  private async confirmSchedule(
+    organizationId: string,
+    direction: PaymentScheduleDirection,
+    scheduleId: string,
+    dto: ConfirmCollectionDto | ConfirmPaymentDto,
+    userId: string,
+    idempotencyKey?: string,
+  ): Promise<PaymentScheduleSummary> {
+    const receivable = direction === PaymentScheduleDirection.receivable
+    const result = await this.financeIdempotencyService.execute({
       organizationId,
-      {
-        paymentScheduleId: schedule.id,
-        transactionId: transaction.id,
-        amountCents: dto.amountCents,
-        verificationDate: formatDateOnly(transaction.transactionDate),
-      },
-      { createdBy: userId },
-    )
+      operation: receivable ? 'confirm-collection' : 'confirm-payment',
+      idempotencyKey,
+      request: { scheduleId, dto, userId },
+      handler: async (tx) => {
+        const schedule = await this.findScheduleOrThrow(
+          organizationId,
+          scheduleId,
+          direction,
+          tx,
+        )
+        await this.departureFinanceFacade.lockMutableById(
+          tx,
+          organizationId,
+          schedule.departureId,
+          receivable ? '确认收款' : '确认付款',
+        )
+        this.assertScheduleOpen(schedule)
+        this.assertPositiveAmount(dto.amountCents)
 
-    return this.paymentScheduleService.getById(organizationId, direction, scheduleId)
+        const counterparty = this.resolveCounterparty(schedule, dto)
+        try {
+          assertCounterpartyMatch(schedule, counterparty)
+        } catch (error) {
+          if (error instanceof CounterpartyMismatchError) {
+            throw new BadRequestException(error.message)
+          }
+          throw error
+        }
+
+        const transaction = await this.transactionService.create(
+          organizationId,
+          {
+            direction: receivable
+              ? PrismaTransactionDirection.inflow
+              : PrismaTransactionDirection.outflow,
+            paymentChannel: dto.paymentChannel,
+            amountCents: dto.amountCents,
+            transactionDate: dto.transactionDate,
+            counterpartyType: counterparty.counterpartyType,
+            counterpartyId: counterparty.counterpartyId ?? undefined,
+            counterpartyName: counterparty.counterpartyName ?? undefined,
+            departureId: schedule.departureId,
+            notes: dto.notes,
+          },
+          tx,
+        )
+
+        await this.verificationService.create(
+          organizationId,
+          {
+            paymentScheduleId: schedule.id,
+            transactionId: transaction.id,
+            amountCents: dto.amountCents,
+            verificationDate: dto.transactionDate,
+            remark: dto.notes,
+          },
+          { createdBy: userId },
+          tx,
+        )
+
+        return { scheduleId: schedule.id }
+      },
+    })
+
+    return this.paymentScheduleService.getById(organizationId, direction, result.scheduleId)
   }
 
   private async findScheduleOrThrow(
     organizationId: string,
     scheduleId: string,
     direction: PaymentScheduleDirection,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<PaymentSchedule> {
-    const schedule = await this.prisma.paymentSchedule.findFirst({
+    const schedule = await client.paymentSchedule.findFirst({
       where: { id: scheduleId, organizationId, direction },
     })
 

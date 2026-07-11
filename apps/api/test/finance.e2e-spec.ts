@@ -274,6 +274,9 @@ describe('Finance API (e2e)', () => {
     await prisma.supplier.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
+    await prisma.financeIdempotencyRecord.deleteMany({
+      where: { organizationId, idempotencyKey: { startsWith: testPrefix } },
+    })
 
     const [sentinelTransactionAfter, sentinelVerificationAfter] = await Promise.all([
       prisma.financeTransaction.findUnique({ where: { id: sentinelTransaction.id } }),
@@ -294,6 +297,11 @@ describe('Finance API (e2e)', () => {
     await expect(
       prisma.financeTransaction.count({
         where: { organizationId, counterpartyName: { startsWith: testPrefix } },
+      }),
+    ).resolves.toBe(0)
+    await expect(
+      prisma.financeIdempotencyRecord.count({
+        where: { organizationId, idempotencyKey: { startsWith: testPrefix } },
       }),
     ).resolves.toBe(0)
     await prisma.$disconnect()
@@ -411,6 +419,29 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.financeTouched).toBe(false)
   })
 
+  it('replays manual receivable creation with the same idempotency key', async () => {
+    const idempotencyKey = `${testPrefix}-create-receivable-retry`
+    const payload = schedulePayload({ title: `${testPrefix}-幂等手工应收` })
+
+    const first = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(
+      await prisma.paymentSchedule.count({
+        where: { organizationId, title: `${testPrefix}-幂等手工应收` },
+      }),
+    ).toBe(1)
+  })
+
   it('creates receivable for org admin role', async () => {
     const response = await authRequest(app, adminToken)
       .post('/api/finance/receivables')
@@ -500,6 +531,29 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.amountAdjustedAt).toBeNull()
   })
 
+  it('replays payment schedule update with the same idempotency key', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等编辑节点前` }))
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-update-schedule-retry`
+    const payload = { title: `${testPrefix}-幂等编辑节点后`, amountCents: 45000 }
+
+    const first = await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${created.body.data.id}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(200)
+    const replay = await authRequest(app, financeToken)
+      .patch(`/api/finance/receivables/${created.body.data.id}`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(200)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(replay.body.data.amountCents).toBe(45000)
+  })
+
   it('cancels schedule and returns cancelled status', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -549,6 +603,37 @@ describe('Finance API (e2e)', () => {
     })
   })
 
+  it('replays schedule close with the same idempotency key', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等关闭节点` }))
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-close-schedule-retry`
+    const payload = { closeDisposition: 'other', cancelReason: '幂等关闭测试' }
+
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(
+      await prisma.paymentScheduleActivity.count({
+        where: {
+          organizationId,
+          paymentScheduleId: created.body.data.id,
+          activityType: 'close',
+        },
+      }),
+    ).toBe(1)
+  })
+
   it('reopens one schedule only once under concurrent retry requests', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -584,6 +669,41 @@ describe('Finance API (e2e)', () => {
       reopenActivityCount: 1,
       isOpen: true,
     })
+  })
+
+  it('replays schedule reopen with the same idempotency key', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等重开节点` }))
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '重开前关闭' })
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-reopen-schedule-retry`
+    const payload = { reopenReason: '幂等重开测试' }
+
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/reopen`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/reopen`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(
+      await prisma.paymentScheduleActivity.count({
+        where: {
+          organizationId,
+          paymentScheduleId: created.body.data.id,
+          activityType: 'reopen',
+        },
+      }),
+    ).toBe(1)
   })
 
   describe('payment schedule edit guards', () => {
@@ -952,6 +1072,13 @@ describe('Finance API (e2e)', () => {
       .expect(404)
 
     expect(response.body.code).toBe(404)
+    const localList = await authRequest(app, financeToken)
+      .get('/api/finance/receivables')
+      .query({ pageSize: 100 })
+      .expect(200)
+    expect(
+      localList.body.data.items.some((item: { id: string }) => item.id === foreignSchedule.id),
+    ).toBe(false)
 
     const localSchedule = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -1031,6 +1158,59 @@ describe('Finance API (e2e)', () => {
     expect(response.body.data.financeTouched).toBe(true)
   })
 
+  it('rolls back the transaction when verification insertion fails', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-核销写入故障回滚` }))
+      .expect(201)
+    const failureMarker = 'e2e-force-verification-failure'
+
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION e2e_fail_finance_verification_insert()
+      RETURNS trigger AS $$
+      BEGIN
+        IF NEW.remark = '${failureMarker}' THEN
+          RAISE EXCEPTION 'forced verification insert failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `)
+    await prisma.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS e2e_fail_finance_verification_insert ON finance_verifications',
+    )
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER e2e_fail_finance_verification_insert
+      BEFORE INSERT ON finance_verifications
+      FOR EACH ROW EXECUTE FUNCTION e2e_fail_finance_verification_insert()
+    `)
+
+    try {
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+        .send(confirmPayload({ amountCents: 20000, notes: failureMarker }))
+        .expect(500)
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'DROP TRIGGER IF EXISTS e2e_fail_finance_verification_insert ON finance_verifications',
+      )
+      await prisma.$executeRawUnsafe(
+        'DROP FUNCTION IF EXISTS e2e_fail_finance_verification_insert()',
+      )
+    }
+
+    const schedule = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${created.body.data.id}`)
+      .expect(200)
+    expect(schedule.body.data.settledAmountCents).toBe(0)
+    expect(schedule.body.data.unsettledAmountCents).toBe(50000)
+    expect(
+      await prisma.financeTransaction.count({
+        where: { organizationId, notes: failureMarker },
+      }),
+    ).toBe(0)
+  })
+
   it('supports partial collection until settled', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -1060,6 +1240,109 @@ describe('Finance API (e2e)', () => {
 
     expect(settled.body.data.settledAmountCents).toBe(50000)
     expect(settled.body.data.status).toBe(PaymentScheduleStatus.SETTLED)
+  })
+
+  it('replays confirm-collection with the same idempotency key without duplicate facts', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等登记收款` }))
+      .expect(201)
+
+    const idempotencyKey = `${testPrefix}-confirm-collection-retry`
+    const payload = confirmPayload({ amountCents: 20000 })
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(first.body.data.settledAmountCents).toBe(20000)
+    expect(replay.body.data).toEqual(first.body.data)
+
+    const [transactions, verifications] = await Promise.all([
+      prisma.financeTransaction.findMany({
+        where: {
+          organizationId,
+          departureId,
+          amountCents: 20000,
+          notes: null,
+          verifications: { some: { paymentScheduleId: created.body.data.id } },
+        },
+      }),
+      prisma.financeVerification.findMany({
+        where: { organizationId, paymentScheduleId: created.body.data.id },
+      }),
+    ])
+    expect(transactions).toHaveLength(1)
+    expect(verifications).toHaveLength(1)
+  })
+
+  it('requires an idempotency key for confirm-collection', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-缺少幂等键` }))
+      .expect(201)
+
+    const response = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .unset('Idempotency-Key')
+      .send(confirmPayload({ amountCents: 10000 }))
+      .expect(400)
+
+    expect(response.body.message).toContain('幂等键')
+  })
+
+  it('rejects confirm-collection when one idempotency key is reused with another payload', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等键载荷冲突` }))
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-confirm-collection-conflict`
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(confirmPayload({ amountCents: 10000 }))
+      .expect(201)
+    const conflict = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(confirmPayload({ amountCents: 15000 }))
+      .expect(409)
+
+    expect(conflict.body.message).toContain('幂等键')
+  })
+
+  it('serializes concurrent confirm-collection retries with one idempotency key', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-并发幂等登记收款` }))
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-confirm-collection-concurrent`
+    const payload = confirmPayload({ amountCents: 20000 })
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, financeToken)
+          .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
+          .set('Idempotency-Key', idempotencyKey)
+          .send(payload),
+      ),
+    )
+
+    expect(responses.every((response) => response.status === 201)).toBe(true)
+    expect(new Set(responses.map((response) => JSON.stringify(response.body.data))).size).toBe(1)
+    expect(responses[0].body.data.settledAmountCents).toBe(20000)
+    expect(
+      await prisma.financeVerification.count({
+        where: { organizationId, paymentScheduleId: created.body.data.id },
+      }),
+    ).toBe(1)
   })
 
   it('rejects link-transaction on counterparty mismatch', async () => {
@@ -1201,6 +1484,38 @@ describe('Finance API (e2e)', () => {
     expect(schedule.body.data.settledAmountCents).toBe(50000)
     expect(schedule.body.data.unsettledAmountCents).toBe(30000)
     expect(schedule.body.data.status).toBe(PaymentScheduleStatus.PENDING)
+  })
+
+  it('replays link-transaction with the same idempotency key', async () => {
+    const receivable = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(schedulePayload({ title: `${testPrefix}-幂等匹配流水` }))
+      .expect(201)
+    const transaction = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(transactionPayload())
+      .expect(201)
+    const payload = { transactionId: transaction.body.data.id, amountCents: 20000 }
+    const idempotencyKey = `${testPrefix}-link-transaction-retry`
+
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivable.body.data.id}/link-transaction`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${receivable.body.data.id}/link-transaction`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(replay.body.data.settledAmountCents).toBe(20000)
+    expect(
+      await prisma.financeVerification.count({
+        where: { organizationId, paymentScheduleId: receivable.body.data.id },
+      }),
+    ).toBe(1)
   })
 
   it('rejects link-transaction on direction mismatch', async () => {
@@ -1697,6 +2012,34 @@ describe('Finance API (e2e)', () => {
     expect(transaction.body.data.direction).toBe('outflow')
   })
 
+  it('replays confirm-payment with the same idempotency key', async () => {
+    const created = await authRequest(app, financeToken)
+      .post('/api/finance/payables')
+      .send(payablePayload({ title: `${testPrefix}-幂等登记付款` }))
+      .expect(201)
+    const idempotencyKey = `${testPrefix}-confirm-payment-retry`
+    const payload = confirmPayload({ amountCents: 20000 })
+
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${created.body.data.id}/confirm-payment`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${created.body.data.id}/confirm-payment`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(replay.body.data.settledAmountCents).toBe(20000)
+    expect(
+      await prisma.financeVerification.count({
+        where: { organizationId, paymentScheduleId: created.body.data.id },
+      }),
+    ).toBe(1)
+  })
+
   it('rejects create transaction without paymentChannel', async () => {
     const response = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
@@ -1752,6 +2095,29 @@ describe('Finance API (e2e)', () => {
           Boolean(item.departureName),
       ),
     ).toBe(true)
+  })
+
+  it('replays transaction creation with the same idempotency key', async () => {
+    const idempotencyKey = `${testPrefix}-create-transaction-retry`
+    const payload = transactionPayload({ amountCents: 12345, notes: `${testPrefix}-幂等流水` })
+
+    const first = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(
+      await prisma.financeTransaction.count({
+        where: { organizationId, notes: `${testPrefix}-幂等流水` },
+      }),
+    ).toBe(1)
   })
 
   it('rejects create transaction without departureId', async () => {
@@ -2160,6 +2526,43 @@ describe('Finance API (e2e)', () => {
       expect(response.body.data.cancelReason).toBe('录入错误')
       expect(response.body.data.cancelledBy).toBe(financeUserId)
     })
+
+    it('replays verification cancellation with the same idempotency key', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-幂等撤销核销` }))
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivable.body.data.id}/confirm-collection`)
+        .send(confirmPayload({ amountCents: 20000 }))
+        .expect(201)
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ scheduleNo: receivable.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+        .expect(200)
+      const verificationId = verifications.body.data.items[0].id
+      const idempotencyKey = `${testPrefix}-cancel-verification-retry`
+      const payload = { cancelReason: '幂等撤销测试' }
+
+      const first = await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verificationId}/cancel`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+      const replay = await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verificationId}/cancel`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+
+      expect(replay.body.data).toEqual(first.body.data)
+      expect(replay.body.data.status).toBe('cancelled')
+      expect(
+        await prisma.financeVerification.count({
+          where: { id: verificationId, organizationId, status: 'cancelled' },
+        }),
+      ).toBe(1)
+    })
   })
 
   describe('match schedule via verifications', () => {
@@ -2231,6 +2634,41 @@ describe('Finance API (e2e)', () => {
       expect(linkedTransaction.body.data.verifications[0].verificationNo).toMatch(CL_NO_REGEX)
       expect(linkedTransaction.body.data.verifications[0].scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
       expect(linkedTransaction.body.data.verifications[0].amountCents).toBe(50000)
+    })
+
+    it('replays verification creation with the same idempotency key', async () => {
+      const receivable = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(schedulePayload({ title: `${testPrefix}-幂等核销` }))
+        .expect(201)
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload())
+        .expect(201)
+      const payload = verificationPayload({
+        paymentScheduleId: receivable.body.data.id,
+        transactionId: transaction.body.data.id,
+        amountCents: 20000,
+      })
+      const idempotencyKey = `${testPrefix}-create-verification-retry`
+
+      const first = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+      const replay = await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+
+      expect(replay.body.data).toEqual(first.body.data)
+      expect(
+        await prisma.financeVerification.count({
+          where: { organizationId, paymentScheduleId: receivable.body.data.id },
+        }),
+      ).toBe(1)
     })
   })
 
@@ -2848,6 +3286,63 @@ describe('Finance API (e2e)', () => {
     })
   })
 
+  it('replays amount adjustment with the same idempotency key', async () => {
+    const sourceOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 50000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+      })
+      .expect(201)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const schedule = generated.body.data.schedules[0]
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${schedule.id}/confirm-collection`)
+      .send(confirmPayload({ amountCents: 10000 }))
+      .expect(201)
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: schedule.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '建立幂等调额履历' })
+      .expect(201)
+
+    const idempotencyKey = `${testPrefix}-adjust-amount-retry`
+    const payload = { amountCents: 40000, adjustReason: '幂等调额测试' }
+    const first = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedule.id}/adjust-amount`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+    const replay = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${schedule.id}/adjust-amount`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload)
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(replay.body.data.amountCents).toBe(40000)
+    expect(
+      await prisma.paymentScheduleActivity.count({
+        where: {
+          organizationId,
+          paymentScheduleId: schedule.id,
+          activityType: 'amount_adjust',
+        },
+      }),
+    ).toBe(1)
+  })
+
   describe('PUT /finance/transactions/:id', () => {
     function updatePayload(overrides: Record<string, unknown> = {}) {
       return {
@@ -2901,6 +3396,28 @@ describe('Finance API (e2e)', () => {
       expect(fetched.body.data.direction).toBe('outflow')
       expect(fetched.body.data.counterpartyId).toBe(supplierId)
       expect(fetched.body.data.counterpartyName).toBe(`${testPrefix}-supplier`)
+    })
+
+    it('replays transaction update with the same idempotency key', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ notes: `${testPrefix}-幂等编辑前` }))
+        .expect(201)
+      const idempotencyKey = `${testPrefix}-update-transaction-retry`
+      const payload = updatePayload({ notes: `${testPrefix}-幂等编辑后` })
+
+      const first = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${created.body.data.id}`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(200)
+      const replay = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${created.body.data.id}`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(200)
+
+      expect(replay.body.data).toEqual(first.body.data)
     })
 
     it('rejects update when transaction has verification allocation', async () => {
@@ -3089,6 +3606,29 @@ describe('Finance API (e2e)', () => {
 
       expect(fetched.body.data.voidedAt).not.toBeNull()
       expect(fetched.body.data.voidReason).toBe('录入错误')
+    })
+
+    it('replays transaction void with the same idempotency key', async () => {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(transactionPayload({ notes: `${testPrefix}-幂等作废` }))
+        .expect(201)
+      const idempotencyKey = `${testPrefix}-void-transaction-retry`
+      const payload = { voidReason: '幂等作废测试' }
+
+      const first = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${created.body.data.id}/void`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+      const replay = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${created.body.data.id}/void`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(payload)
+        .expect(201)
+
+      expect(replay.body.data).toEqual(first.body.data)
+      expect(replay.body.data.voidReason).toBe('幂等作废测试')
     })
 
     it('rejects void when transaction has verification allocation', async () => {

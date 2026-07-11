@@ -186,12 +186,13 @@ export class PaymentScheduleService {
     direction: PaymentScheduleDirection,
     scheduleId: string,
     dto: UpdatePaymentScheduleDto,
+    client?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
     if (!this.hasUpdateFields(dto)) {
       throw new BadRequestException('请至少提供一个待更新字段')
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM payment_schedules
@@ -279,7 +280,8 @@ export class PaymentScheduleService {
         hasVerificationHistory,
         departureId: schedule.departureId,
       }
-    })
+    }
+    const result = client ? await run(client) : await this.prisma.$transaction(run)
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,
@@ -298,6 +300,7 @@ export class PaymentScheduleService {
     scheduleId: string,
     userId: string,
     dto: CancelPaymentScheduleDto,
+    client?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
     const cancelReason = dto.cancelReason?.trim()
     if (!cancelReason) {
@@ -307,7 +310,7 @@ export class PaymentScheduleService {
       throw new BadRequestException('关闭处置类型不能为空')
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM payment_schedules
@@ -383,7 +386,8 @@ export class PaymentScheduleService {
         hasVerificationHistory,
         departureId: schedule.departureId,
       }
-    })
+    }
+    const result = client ? await run(client) : await this.prisma.$transaction(run)
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,
@@ -402,13 +406,14 @@ export class PaymentScheduleService {
     scheduleId: string,
     userId: string,
     dto: ReopenPaymentScheduleDto,
+    client?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
     const reopenReason = dto.reopenReason?.trim()
     if (!reopenReason) {
       throw new BadRequestException('重新打开原因不能为空')
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM payment_schedules
@@ -491,7 +496,8 @@ export class PaymentScheduleService {
         hasVerificationHistory,
         departureStatus: nextDepartureStatus,
       }
-    })
+    }
+    const result = client ? await run(client) : await this.prisma.$transaction(run)
 
     return this.toSummary(
       result.reopened,
@@ -506,6 +512,7 @@ export class PaymentScheduleService {
     scheduleId: string,
     userId: string,
     dto: AdjustPaymentScheduleAmountDto,
+    client?: Prisma.TransactionClient,
   ): Promise<PaymentScheduleSummary> {
     this.assertPositiveAmount(dto.amountCents)
 
@@ -514,7 +521,7 @@ export class PaymentScheduleService {
       throw new BadRequestException('调整原因不能为空')
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const run = async (tx: Prisma.TransactionClient) => {
       await tx.$queryRaw`
         SELECT id
         FROM payment_schedules
@@ -627,7 +634,8 @@ export class PaymentScheduleService {
         hasVerificationHistory,
         departureId: schedule.departureId,
       }
-    })
+    }
+    const result = client ? await run(client) : await this.prisma.$transaction(run)
 
     const departureStatus = await this.departureFinanceFacade.getStatusById(
       organizationId,

@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module'
 import { NumberAllocationModule } from '../number-allocation/number-allocation.module'
 import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { FinanceOperationsService } from './finance-operations.service'
+import { FinanceIdempotencyService } from './finance-idempotency.service'
 import { FinanceReferenceController } from './finance-reference.controller'
 import { PayableController } from './payable.controller'
 import { PaymentScheduleCancelController } from './payment-schedule-cancel.controller'
@@ -29,6 +30,7 @@ import { VerificationService } from './verification.service'
     VerificationService,
     TransactionService,
     FinanceOperationsService,
+    FinanceIdempotencyService,
   ],
   exports: [DepartureFinanceFacade, PaymentScheduleService, VerificationService],
 })

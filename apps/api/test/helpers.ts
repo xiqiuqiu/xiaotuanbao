@@ -4,6 +4,7 @@ import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter'
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor'
+import { PrismaService } from '../src/database/prisma/prisma.service'
 
 export async function createTestApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
@@ -25,6 +26,13 @@ export async function createTestApp(): Promise<INestApplication> {
   // request auto-bind the same unstarted server races under concurrent bursts
   // and intermittently resets unrelated requests with ECONNRESET.
   await app.listen(0, '127.0.0.1')
+  const close = app.close.bind(app)
+  app.close = async () => {
+    await app.get(PrismaService).financeIdempotencyRecord.deleteMany({
+      where: { idempotencyKey: { startsWith: 'e2e-' } },
+    })
+    await close()
+  }
   return app
 }
 
@@ -42,17 +50,19 @@ export async function loginAs(
 }
 
 export function authRequest(app: INestApplication, token: string) {
+  const mutation = (method: 'post' | 'patch' | 'put' | 'delete', url: string) =>
+    request(app.getHttpServer())
+      [method](url)
+      .set('Authorization', `Bearer ${token}`)
+      .set('Idempotency-Key', `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+
   return {
     get: (url: string) =>
       request(app.getHttpServer()).get(url).set('Authorization', `Bearer ${token}`),
-    post: (url: string) =>
-      request(app.getHttpServer()).post(url).set('Authorization', `Bearer ${token}`),
-    patch: (url: string) =>
-      request(app.getHttpServer()).patch(url).set('Authorization', `Bearer ${token}`),
-    put: (url: string) =>
-      request(app.getHttpServer()).put(url).set('Authorization', `Bearer ${token}`),
-    delete: (url: string) =>
-      request(app.getHttpServer()).delete(url).set('Authorization', `Bearer ${token}`),
+    post: (url: string) => mutation('post', url),
+    patch: (url: string) => mutation('patch', url),
+    put: (url: string) => mutation('put', url),
+    delete: (url: string) => mutation('delete', url),
   }
 }
 

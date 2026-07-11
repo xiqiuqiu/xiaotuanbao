@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type { PaymentScheduleDetail, PaymentScheduleListResult, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { PaymentScheduleDirection } from '@prisma/client'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
@@ -12,6 +12,7 @@ import {
 import { PaymentScheduleService } from './payment-schedule.service'
 import { FinanceOperationsService } from './finance-operations.service'
 import { ConfirmCollectionDto, LinkTransactionDto } from './dto/finance-operations.dto'
+import { FinanceIdempotencyService } from './finance-idempotency.service'
 
 @Controller('finance/receivables')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
@@ -19,6 +20,7 @@ export class ReceivableController {
   constructor(
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly financeOperationsService: FinanceOperationsService,
+    private readonly financeIdempotencyService: FinanceIdempotencyService,
   ) {}
 
   @Get()
@@ -37,14 +39,23 @@ export class ReceivableController {
   @Post()
   @RequireMenu('/finance/receivable')
   create(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Body() dto: CreatePaymentScheduleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    return this.paymentScheduleService.create(
-      request.user.organizationId,
-      PaymentScheduleDirection.receivable,
-      dto,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'create-receivable',
+      idempotencyKey,
+      request: { dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.create(
+          request.user.organizationId,
+          PaymentScheduleDirection.receivable,
+          dto,
+          tx,
+        ),
+    })
   }
 
   @Get(':id')
@@ -63,16 +74,25 @@ export class ReceivableController {
   @Patch(':id')
   @RequireMenu('/finance/receivable')
   update(
-    @Req() request: { user: { organizationId: string } },
+    @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: UpdatePaymentScheduleDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
-    return this.paymentScheduleService.update(
-      request.user.organizationId,
-      PaymentScheduleDirection.receivable,
-      id,
-      dto,
-    )
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'update-receivable',
+      idempotencyKey,
+      request: { scheduleId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.update(
+          request.user.organizationId,
+          PaymentScheduleDirection.receivable,
+          id,
+          dto,
+          tx,
+        ),
+    })
   }
 
   @Post(':id/confirm-collection')
@@ -81,12 +101,14 @@ export class ReceivableController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: ConfirmCollectionDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
     return this.financeOperationsService.confirmCollection(
       request.user.organizationId,
       id,
       dto,
       request.user.userId,
+      idempotencyKey,
     )
   }
 
@@ -96,6 +118,7 @@ export class ReceivableController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
     @Body() dto: LinkTransactionDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<PaymentScheduleSummary> {
     return this.financeOperationsService.linkTransaction(
       request.user.organizationId,
@@ -103,6 +126,7 @@ export class ReceivableController {
       id,
       dto,
       request.user.userId,
+      idempotencyKey,
     )
   }
 }
