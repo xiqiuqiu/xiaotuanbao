@@ -1,15 +1,69 @@
-import { Card, Form, Input, Button, Alert, Typography } from 'antd'
+import { useEffect, useState } from 'react'
+import {
+  Alert,
+  App,
+  Button,
+  Checkbox,
+  Form,
+  Input,
+  Typography,
+} from 'antd'
+import {
+  FileDoneOutlined,
+  FolderOutlined,
+  LockOutlined,
+  MoneyCollectOutlined,
+  SafetyCertificateOutlined,
+  UserOutlined,
+} from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { login } from '@/services/auth.service'
 import { useAuthStore } from '@/app/store/auth.store'
-import { AuthLayout } from '@/layouts/MainLayout'
+import { env } from '@/config/env'
 import { queryClient } from '@/lib/query/client'
+import styles from './LoginPage.module.css'
+
+const REMEMBER_USERNAME_KEY = 'xiaotuanbao.login.rememberedUsername'
+
+const FEATURES = [
+  {
+    key: 'project',
+    title: '项目经营',
+    desc: '全过程管控',
+    icon: <FolderOutlined />,
+    iconClassName: styles.featureIcon,
+  },
+  {
+    key: 'contract',
+    title: '合同履约',
+    desc: '全周期跟踪',
+    icon: <FileDoneOutlined />,
+    iconClassName: `${styles.featureIcon} ${styles.featureIconTeal}`,
+  },
+  {
+    key: 'fund',
+    title: '资金协同',
+    desc: '多维度联动',
+    icon: <MoneyCollectOutlined />,
+    iconClassName: styles.featureIcon,
+  },
+] as const
 
 export function LoginPage() {
+  const { message } = App.useApp()
   const navigate = useNavigate()
   const setSession = useAuthStore((state) => state.setSession)
-  const [form] = Form.useForm()
+  const [form] = Form.useForm<{ username: string; password: string }>()
+  const [rememberUsername, setRememberUsername] = useState(false)
+
+  useEffect(() => {
+    const remembered = localStorage.getItem(REMEMBER_USERNAME_KEY)
+    if (remembered) {
+      setRememberUsername(true)
+      form.setFieldsValue({ username: remembered })
+    }
+  }, [form])
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -24,48 +78,138 @@ export function LoginPage() {
   })
 
   return (
-    <AuthLayout>
-      <Card>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-          演示账号：admin / admin123（企业管理员）；wangjie / admin123（计调）；acai / admin123（财务）
+    <div className={styles.page}>
+      <section className={styles.brand} aria-label="品牌介绍">
+        <div className={styles.brandLockup} aria-label={env.appName}>
+          <img
+            className={styles.brandLogo}
+            src="/xiaotuanbao-brand-mark-v2.png"
+            alt=""
+            aria-hidden="true"
+          />
+          <Typography.Title level={2} className={styles.brandName}>
+            {env.appName}
+          </Typography.Title>
+        </div>
+
+        <Typography.Title level={2} className={styles.headline}>
+          让项目、合同与资金协同流转
+        </Typography.Title>
+        <Typography.Paragraph className={styles.subheadline}>
+          企业项目经营与财务协作平台
         </Typography.Paragraph>
 
-        {loginMutation.error ? (
-          <Alert
-            type="error"
-            title={loginMutation.error instanceof Error ? loginMutation.error.message : '登录失败'}
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-        ) : null}
+        <div className={styles.features}>
+          {FEATURES.map((feature) => (
+            <div key={feature.key} className={styles.feature}>
+              <span className={feature.iconClassName}>{feature.icon}</span>
+              <p className={styles.featureTitle}>{feature.title}</p>
+              <p className={styles.featureDesc}>{feature.desc}</p>
+            </div>
+          ))}
+        </div>
 
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={(values) => loginMutation.mutate(values)}
-          autoComplete="off"
-        >
-          <Form.Item
-            label="用户名"
-            name="username"
-            rules={[{ required: true, message: '请输入用户名' }]}
+        <img
+          className={styles.illustration}
+          src="/login-travel-operations-transparent-v2.png"
+          alt="发团协同流程示意：出发地、行程计划、供应商资源、地接服务、酒店资源与结算对账"
+        />
+      </section>
+
+      <section className={styles.panel} aria-label="登录">
+        <div className={styles.card}>
+          <Typography.Title level={3} className={styles.cardTitle}>
+            登录工作台
+          </Typography.Title>
+
+          {loginMutation.error ? (
+            <Alert
+              type="error"
+              title={
+                loginMutation.error instanceof Error
+                  ? loginMutation.error.message
+                  : '登录失败'
+              }
+              showIcon
+              style={{ marginBottom: 16 }}
+            />
+          ) : null}
+
+          <Form
+            className={styles.form}
+            form={form}
+            layout="vertical"
+            requiredMark={false}
+            onFinish={(values) => {
+              if (rememberUsername) {
+                localStorage.setItem(REMEMBER_USERNAME_KEY, values.username)
+              } else {
+                localStorage.removeItem(REMEMBER_USERNAME_KEY)
+              }
+              loginMutation.mutate(values)
+            }}
+            autoComplete="off"
           >
-            <Input placeholder="请输入用户名" />
-          </Form.Item>
+            <Form.Item
+              label="用户名"
+              name="username"
+              rules={[{ required: true, message: '请输入用户名' }]}
+            >
+              <Input
+                size="large"
+                prefix={<UserOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+                placeholder="请输入用户名"
+              />
+            </Form.Item>
 
-          <Form.Item
-            label="密码"
-            name="password"
-            rules={[{ required: true, message: '请输入密码' }]}
-          >
-            <Input.Password placeholder="请输入密码" />
-          </Form.Item>
+            <Form.Item
+              label="密码"
+              name="password"
+              rules={[{ required: true, message: '请输入密码' }]}
+            >
+              <Input.Password
+                size="large"
+                prefix={<LockOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+                placeholder="请输入密码"
+              />
+            </Form.Item>
 
-          <Button type="primary" htmlType="submit" block loading={loginMutation.isPending}>
-            登录
-          </Button>
-        </Form>
-      </Card>
-    </AuthLayout>
+            <div className={styles.formExtras}>
+              <Checkbox
+                checked={rememberUsername}
+                onChange={(event) => setRememberUsername(event.target.checked)}
+              >
+                记住账号
+              </Checkbox>
+              <Button
+                type="link"
+                className={styles.forgotLink}
+                onClick={() => message.info('请联系企业管理员重置密码')}
+              >
+                忘记密码？
+              </Button>
+            </div>
+
+            <Button
+              className={styles.submit}
+              type="primary"
+              htmlType="submit"
+              block
+              size="large"
+              loading={loginMutation.isPending}
+            >
+              登录
+            </Button>
+          </Form>
+
+          <div className={styles.secureHint}>
+            <SafetyCertificateOutlined className={styles.secureIcon} />
+            <span>安全连接，企业数据加密传输</span>
+          </div>
+        </div>
+
+        <div className={styles.version}>版本 1.0</div>
+      </section>
+    </div>
   )
 }

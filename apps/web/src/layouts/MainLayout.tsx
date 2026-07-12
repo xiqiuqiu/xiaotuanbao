@@ -1,4 +1,4 @@
-import { Layout, Menu, Breadcrumb, Button, Dropdown, theme, Typography } from 'antd'
+import { Layout, Menu, Breadcrumb, Button, Dropdown, theme } from 'antd'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -135,24 +135,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   )
 }
 
+/** 认证页全屏壳；具体布局由页面自行控制（如登录双栏）。 */
 export function AuthLayout({ children }: PropsWithChildren) {
-  return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Content
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'linear-gradient(135deg, #f0f5ff 0%, #ffffff 100%)',
-        }}
-      >
-        <div style={{ width: 400, maxWidth: '90vw' }}>
-          <Typography.Title level={2} style={{ textAlign: 'center', marginBottom: 32 }}>
-            {env.appName}
-          </Typography.Title>
-          {children}
-        </div>
-      </Layout.Content>
-    </Layout>
-  )
+  return <>{children}</>
 }

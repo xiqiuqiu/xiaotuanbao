@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
@@ -16,7 +16,9 @@ const theme = {
 function Providers({ children }: PropsWithChildren) {
   return (
     <ConfigProvider locale={zhCN} theme={theme}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <App>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </App>
     </ConfigProvider>
   )
 }
