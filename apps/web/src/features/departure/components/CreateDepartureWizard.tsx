@@ -161,7 +161,7 @@ export function CreateDepartureWizard() {
         </Typography.Paragraph>
       </div>
 
-      <Card className={styles.wizardCard} styles={{ body: { padding: 0 } }}>
+      <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>
         <div
           className={
             showSteps ? styles.wizardBody : `${styles.wizardBody} ${styles.wizardBodyNoRail}`

@@ -1,9 +1,15 @@
 .page {
   max-width: 1440px;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* MainLayout header 64px + .app-content vertical margin 32px */
+  height: calc(100dvh - 96px);
+  min-height: 0;
 }
 
 .pageHeader {
+  flex-shrink: 0;
   margin-bottom: 16px;
 }
 
@@ -13,13 +19,27 @@
 }
 
 .wizardCard {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wizardCard :global(.ant-card-body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .wizardBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  min-height: 616px;
 }
 
 /* Copy mode hides the step rail; without this the sole child sits in the 240px track. */
@@ -52,18 +72,19 @@
 }
 
 .wizardFooter {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
   padding: 16px 24px;
   border-top: 1px solid var(--wizard-border);
+  background: var(--ant-color-bg-container);
 }
 
 @media (max-width: 991px) {
   .wizardBody {
     grid-template-columns: 1fr;
-    min-height: auto;
   }
 
   .stepRail {
@@ -74,6 +95,13 @@
 
   .workspace {
     padding: 24px;
+  }
+}
+
+@media (max-width: 767px) {
+  .page {
+    /* .app-content margin is 12px on each side below md */
+    height: calc(100dvh - 88px);
   }
 }
 
