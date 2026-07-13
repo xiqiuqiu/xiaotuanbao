@@ -1,0 +1,81 @@
+.shell {
+  min-height: 100vh;
+}
+
+.sider {
+  border-right: 1px solid var(--shell-border);
+}
+
+.brand {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--shell-border);
+  color: var(--shell-text);
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.brandCollapsed {
+  font-size: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.headerLeading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.collapseButton {
+  flex: none;
+}
+
+.breadcrumb {
+  min-width: 0;
+}
+
+.userButton {
+  max-width: 200px;
+}
+
+.userName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .sider {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    z-index: 100;
+    box-shadow: var(--shell-overlay-shadow);
+  }
+
+  .header {
+    padding-inline: 8px !important;
+  }
+
+  .collapseButton,
+  .userButton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .userName {
+    display: none;
+  }
+}

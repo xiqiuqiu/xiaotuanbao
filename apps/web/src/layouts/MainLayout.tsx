@@ -6,13 +6,14 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import type { PropsWithChildren } from 'react'
+import type { CSSProperties, PropsWithChildren } from 'react'
 import { useMemo } from 'react'
 import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { filterMenuItems } from '@/utils/menu-permission'
+import styles from './MainLayout.module.css'
 
 const { Header, Sider } = Layout
 
@@ -26,6 +27,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const logout = useAuthStore((state) => state.logout)
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
+  const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed)
 
   const visibleMenuItems = useMemo(
     () => filterMenuItems(mainMenuItems, menuKeys),
@@ -53,25 +55,31 @@ export function MainLayout({ children }: PropsWithChildren) {
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout
+      className={styles.shell}
+      style={{
+        '--shell-border': token.colorBorderSecondary,
+        '--shell-text': token.colorText,
+        '--shell-overlay-shadow': token.boxShadowSecondary,
+      } as CSSProperties}
+    >
       <Sider
+        className={styles.sider}
         collapsible
         collapsed={sidebarCollapsed}
         trigger={null}
         width={220}
+        collapsedWidth={0}
+        breakpoint="md"
+        onBreakpoint={(broken) => {
+          if (broken) {
+            setSidebarCollapsed(true)
+          }
+        }}
         theme="light"
-        style={{ borderRight: `1px solid ${token.colorBorderSecondary}` }}
       >
         <div
-          style={{
-            height: 64,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 600,
-            fontSize: sidebarCollapsed ? 14 : 18,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-          }}
+          className={`${styles.brand} ${sidebarCollapsed ? styles.brandCollapsed : ''}`}
         >
           {sidebarCollapsed ? '团' : env.appName}
         </div>
@@ -90,22 +98,17 @@ export function MainLayout({ children }: PropsWithChildren) {
 
       <Layout>
         <Header
-          style={{
-            padding: '0 16px',
-            background: token.colorBgContainer,
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
+          className={styles.header}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className={styles.headerLeading}>
             <Button
+              className={styles.collapseButton}
               type="text"
               icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
               onClick={toggleSidebar}
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
             />
-            <Breadcrumb items={breadcrumbItems} />
+            <Breadcrumb className={styles.breadcrumb} items={breadcrumbItems} />
           </div>
 
           <Dropdown
@@ -123,8 +126,8 @@ export function MainLayout({ children }: PropsWithChildren) {
               ],
             }}
           >
-            <Button type="text" icon={<UserOutlined />}>
-              {user?.name ?? '用户'}
+            <Button className={styles.userButton} type="text" icon={<UserOutlined />}>
+              <span className={styles.userName}>{user?.name ?? '用户'}</span>
             </Button>
           </Dropdown>
         </Header>

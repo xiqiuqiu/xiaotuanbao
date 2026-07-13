@@ -12,6 +12,10 @@ body,
   min-height: 100%;
 }
 
+html {
+  background: var(--ant-color-bg-layout);
+}
+
 body {
   font-family:
     -apple-system,
@@ -24,4 +28,46 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.app-content {
+  min-width: 0;
+  margin: 16px;
+}
+
+@media (max-width: 767px) {
+  .app-content {
+    margin: 12px;
+  }
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .ant-btn-primary,
+  .ant-modal-footer .ant-btn,
+  .ant-drawer-footer .ant-btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
