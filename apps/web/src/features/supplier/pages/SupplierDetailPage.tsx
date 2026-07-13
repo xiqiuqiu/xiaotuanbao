@@ -114,12 +114,9 @@ export function SupplierDetailPage() {
         }}
       >
         <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
+          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
             {supplier.name}
           </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            查看供应商档案、结算约定与收款账户信息。
-          </Typography.Paragraph>
         </div>
         <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
           编辑

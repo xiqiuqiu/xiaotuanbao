@@ -1,7 +1,4 @@
-import {
-  buildPaymentScheduleCounterpartyWhere,
-  dedupePaymentScheduleCounterparties,
-} from './payment-schedule-list-filters'
+import { buildPaymentScheduleCounterpartyWhere } from './payment-schedule-list-filters'
 
 describe('buildPaymentScheduleCounterpartyWhere', () => {
   it('returns undefined when no counterparty filter is set', () => {
@@ -39,54 +36,28 @@ describe('buildPaymentScheduleCounterpartyWhere', () => {
       counterpartyName: '手改客人',
     })
   })
-})
 
-describe('dedupePaymentScheduleCounterparties', () => {
-  it('dedupes by type+id and keeps type+name rows without id', () => {
-    const result = dedupePaymentScheduleCounterparties([
-      {
-        counterpartyType: 'supplier',
-        counterpartyId: 'sup-1',
-        counterpartyName: '丝路旅汽',
-      },
-      {
-        counterpartyType: 'supplier',
-        counterpartyId: 'sup-1',
-        counterpartyName: '新疆丝路旅汽',
-      },
-      {
-        counterpartyType: 'guest',
-        counterpartyId: null,
-        counterpartyName: '手改客人',
-      },
-      {
-        counterpartyType: 'guest',
-        counterpartyId: null,
-        counterpartyName: '手改客人',
-      },
-      {
-        counterpartyType: 'partner',
-        counterpartyId: 'p-1',
-        counterpartyName: '巴州博湖旅行社',
-      },
-    ])
+  it('filters by counterparty name keyword contains', () => {
+    expect(
+      buildPaymentScheduleCounterpartyWhere({
+        counterpartyKeyword: '  丝路  ',
+      }),
+    ).toEqual({
+      counterpartyName: { contains: '丝路' },
+    })
+  })
 
-    expect(result).toEqual([
-      {
-        counterpartyType: 'partner',
-        counterpartyId: 'p-1',
-        counterpartyName: '巴州博湖旅行社',
-      },
-      {
-        counterpartyType: 'guest',
-        counterpartyId: null,
-        counterpartyName: '手改客人',
-      },
-      {
+  it('combines type filter with keyword', () => {
+    expect(
+      buildPaymentScheduleCounterpartyWhere({
         counterpartyType: 'supplier',
-        counterpartyId: 'sup-1',
-        counterpartyName: '丝路旅汽',
-      },
-    ])
+        counterpartyKeyword: '丝路',
+      }),
+    ).toEqual({
+      AND: [
+        { counterpartyType: 'supplier' },
+        { counterpartyName: { contains: '丝路' } },
+      ],
+    })
   })
 })

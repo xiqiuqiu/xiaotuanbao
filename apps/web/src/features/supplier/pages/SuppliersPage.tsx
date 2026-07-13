@@ -255,7 +255,6 @@ export function SuppliersPage() {
     <div>
       <PageHeader
         title="供应商管理"
-        description="维护自营资源供应商档案"
         action={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
             创建供应商

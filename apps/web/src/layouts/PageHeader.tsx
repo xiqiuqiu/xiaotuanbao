@@ -4,20 +4,16 @@ import styles from './PageHeader.module.css'
 
 type PageHeaderProps = {
   title: ReactNode
-  description: ReactNode
   action?: ReactNode
 }
 
-export function PageHeader({ title, description, action }: PageHeaderProps) {
+export function PageHeader({ title, action }: PageHeaderProps) {
   return (
     <div className={styles.header}>
       <div className={styles.copy}>
         <Typography.Title className={styles.title} level={4}>
           {title}
         </Typography.Title>
-        <Typography.Paragraph className={styles.description} type="secondary">
-          {description}
-        </Typography.Paragraph>
       </div>
       {action ? <div className={styles.action}>{action}</div> : null}
     </div>

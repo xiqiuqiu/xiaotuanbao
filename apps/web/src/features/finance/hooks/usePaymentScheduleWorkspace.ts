@@ -2,11 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  CounterpartyType,
-  PaymentScheduleStatus,
-  type PaymentScheduleSummary,
-} from '@xiaotuanbao/shared'
+import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import {
   listDeparturePayables,
@@ -18,7 +14,6 @@ import {
 import type { DueDateRange } from '../components/PaymentScheduleFilters'
 import { buildPaymentScheduleColumns } from '../components/payment-schedule-table-columns'
 import { applyPaymentScheduleClientFilters } from '../utils/apply-payment-schedule-client-filters'
-import { decodeCounterpartyEntityKey } from '../utils/payment-schedule-counterparty-filter'
 import { usePaymentScheduleDialogs } from './usePaymentScheduleDialogs'
 import { usePaymentScheduleLocate } from './usePaymentScheduleLocate'
 import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
@@ -30,6 +25,7 @@ export type UsePaymentScheduleWorkspaceOptions = {
   readOnly?: boolean
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
+  initialCounterpartyKeyword?: string
   onHighlightConsumed?: () => void
 }
 
@@ -40,6 +36,7 @@ export function usePaymentScheduleWorkspace({
   readOnly = false,
   highlightSourceOrderId,
   highlightSegmentResourceId,
+  initialCounterpartyKeyword = '',
   onHighlightConsumed,
 }: UsePaymentScheduleWorkspaceOptions) {
   const navigate = useNavigate()
@@ -56,16 +53,14 @@ export function usePaymentScheduleWorkspace({
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatus | undefined>()
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
-  const [counterpartyType, setCounterpartyType] = useState<CounterpartyType | undefined>()
-  const [counterpartyEntityKey, setCounterpartyEntityKey] = useState<string | undefined>()
+  const [counterpartyKeyword, setCounterpartyKeyword] = useState(initialCounterpartyKeyword)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
   const dialogs = usePaymentScheduleDialogs(isReceivable)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
-  const counterpartyEntity = decodeCounterpartyEntityKey(counterpartyEntityKey)
-  const hasCounterpartyFilter = Boolean(counterpartyType)
+  const trimmedCounterpartyKeyword = counterpartyKeyword.trim()
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
   const locatingFinanceRow =
     isDepartureScope &&
@@ -74,14 +69,6 @@ export function usePaymentScheduleWorkspace({
   const useExpandedFetch = hasClientFilters || locatingFinanceRow
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
-  const counterpartyQuery = hasCounterpartyFilter
-    ? {
-        counterpartyType,
-        counterpartyId: counterpartyEntity?.counterpartyId,
-        counterpartyName: counterpartyEntity?.counterpartyName,
-      }
-    : {}
-
   const { data: schedulesResult, isLoading, isFetching } = useQuery({
     queryKey: [
       isDepartureScope ? departureListQueryKey : listQueryKey,
@@ -89,10 +76,12 @@ export function usePaymentScheduleWorkspace({
       page,
       fetchPageSize,
       useExpandedFetch,
-      counterpartyType,
-      counterpartyEntityKey,
+      trimmedCounterpartyKeyword,
     ],
     queryFn: () => {
+      const counterpartyQuery = trimmedCounterpartyKeyword
+        ? { counterpartyKeyword: trimmedCounterpartyKeyword }
+        : {}
       if (isDepartureScope) {
         if (!lockedDepartureId) {
           throw new Error('发团 ID 缺失')
@@ -239,10 +228,19 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter(undefined)
     setKeyword('')
     setDueDateRange(null)
-    setCounterpartyType(undefined)
-    setCounterpartyEntityKey(undefined)
+    setCounterpartyKeyword('')
     setPage(1)
-  }, [scope])
+    if (isDepartureScope && lockedDepartureId) {
+      void navigate({
+        to: '/departure/$departureId',
+        params: { departureId: lockedDepartureId },
+        search: {
+          tab: isReceivable ? 'receivables' : 'payables',
+        },
+        replace: true,
+      })
+    }
+  }, [isDepartureScope, isReceivable, lockedDepartureId, navigate, scope])
 
   const columns = useMemo(
     () =>
@@ -283,8 +281,7 @@ export function usePaymentScheduleWorkspace({
     statusFilter,
     keyword,
     dueDateRange,
-    counterpartyType,
-    counterpartyEntityKey,
+    counterpartyKeyword,
     page,
     pageSize,
     setPage,
@@ -293,11 +290,9 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter,
     setKeyword,
     setDueDateRange,
-    setCounterpartyType,
-    setCounterpartyEntityKey,
+    setCounterpartyKeyword,
     resetFilters,
     scope,
-    direction,
     isLoading,
     columns,
     tableItems,

@@ -202,7 +202,6 @@ export function EmployeesPage() {
     <div>
       <PageHeader
         title="员工管理"
-        description="管理员工账号、Role 与访问权限"
         action={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
             创建员工

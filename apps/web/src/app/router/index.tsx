@@ -79,6 +79,7 @@ const departureDetailRoute = createRoute({
     segmentId?: string
     highlightSourceOrderId?: string
     highlightSegmentResourceId?: string
+    counterpartyKeyword?: string
     direction?: string
     transactionNo?: string
     scheduleNo?: string
@@ -87,6 +88,8 @@ const departureDetailRoute = createRoute({
     const transactionNo =
       typeof search.transactionNo === 'string' ? search.transactionNo.trim() : ''
     const scheduleNo = typeof search.scheduleNo === 'string' ? search.scheduleNo.trim() : ''
+    const counterpartyKeyword =
+      typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword.trim() : ''
     return {
       tab: typeof search.tab === 'string' ? search.tab : undefined,
       segmentId: typeof search.segmentId === 'string' ? search.segmentId : undefined,
@@ -98,6 +101,7 @@ const departureDetailRoute = createRoute({
         typeof search.highlightSegmentResourceId === 'string'
           ? search.highlightSegmentResourceId
           : undefined,
+      ...(counterpartyKeyword ? { counterpartyKeyword } : {}),
       ...(direction ? { direction } : {}),
       ...(transactionNo ? { transactionNo } : {}),
       ...(scheduleNo ? { scheduleNo } : {}),

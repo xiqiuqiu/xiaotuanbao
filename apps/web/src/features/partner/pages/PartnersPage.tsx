@@ -305,7 +305,6 @@ export function PartnersPage() {
     <div>
       <PageHeader
         title="合作伙伴管理"
-        description="维护同业旅行社合作伙伴档案"
         action={
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
             创建合作伙伴

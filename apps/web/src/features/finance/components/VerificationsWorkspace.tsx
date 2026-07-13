@@ -51,7 +51,6 @@ export type VerificationsWorkspaceProps = {
   /** When set, renders the standard list page header (title + secondary). */
   pageHeader?: {
     title: string
-    description: string
   }
 }
 
@@ -425,7 +424,6 @@ export function VerificationsWorkspace({
       {pageHeader ? (
         <PageHeader
           title={pageHeader.title}
-          description={pageHeader.description}
           action={createButton}
         />
       ) : null}

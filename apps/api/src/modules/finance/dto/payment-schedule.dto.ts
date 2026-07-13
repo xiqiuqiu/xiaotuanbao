@@ -99,6 +99,10 @@ export class ListPaymentSchedulesQueryDto {
   counterpartyName?: string
 
   @IsOptional()
+  @IsString()
+  counterpartyKeyword?: string
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

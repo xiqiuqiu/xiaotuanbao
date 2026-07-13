@@ -113,6 +113,7 @@ describe('SourceOrdersTab 查看应收 navigation', () => {
       search: {
         tab: 'receivables',
         highlightSourceOrderId: 'order-1',
+        counterpartyKeyword: '杭州同行',
       },
     })
   })

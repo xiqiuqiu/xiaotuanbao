@@ -26,7 +26,6 @@ export type TransactionsWorkspaceProps = {
   }
   pageHeader?: {
     title: string
-    description: string
   }
 }
 
@@ -171,7 +170,6 @@ export function TransactionsWorkspace({
       {pageHeader ? (
         <PageHeader
           title={pageHeader.title}
-          description={pageHeader.description}
           action={createButton}
         />
       ) : null}

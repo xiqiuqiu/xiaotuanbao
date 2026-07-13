@@ -215,3 +215,47 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
     expect(other?.className).not.toContain(styles.locateFlash)
   })
 })
+
+describe('PaymentScheduleWorkspace initial counterparty filter', () => {
+  afterEach(() => {
+    cleanup()
+    listDepartureReceivables.mockReset()
+    listDeparturePayables.mockReset()
+  })
+
+  it('applies initial partner filter when opening receivables from 查看应收', async () => {
+    listDepartureReceivables.mockResolvedValue({
+      items: [schedule()],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConfigProvider>
+          <PaymentScheduleWorkspace
+            scope="departure"
+            direction="receivable"
+            departureId="departure-1"
+            initialCounterpartyKeyword="杭州同行"
+          />
+        </ConfigProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => {
+      expect(listDepartureReceivables).toHaveBeenCalled()
+    })
+
+    expect(listDepartureReceivables).toHaveBeenCalledWith(
+      'departure-1',
+      expect.objectContaining({
+        counterpartyKeyword: '杭州同行',
+      }),
+    )
+  })
+})

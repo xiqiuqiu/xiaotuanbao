@@ -14,11 +14,12 @@ export type PaymentScheduleWorkspaceProps = {
   highlightSourceOrderId?: string
   /** One-shot locate: flash rows for this segment resource, then clear via onHighlightConsumed. */
   highlightSegmentResourceId?: string
+  /** Prefill 往来对象关键字（如从「查看应收 / 查看应付」带入）。 */
+  initialCounterpartyKeyword?: string
   onHighlightConsumed?: () => void
   /** When set, renders the standard list page header. */
   pageHeader?: {
     title: string
-    description: string
   }
 }
 
@@ -30,8 +31,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     statusFilter,
     keyword,
     dueDateRange,
-    counterpartyType,
-    counterpartyEntityKey,
+    counterpartyKeyword,
     page,
     pageSize,
     setPage,
@@ -40,11 +40,9 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     setStatusFilter,
     setKeyword,
     setDueDateRange,
-    setCounterpartyType,
-    setCounterpartyEntityKey,
+    setCounterpartyKeyword,
     resetFilters,
     scope,
-    direction,
     isLoading,
     columns,
     tableItems,
@@ -69,7 +67,6 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
       {props.pageHeader ? (
         <PageHeader
           title={props.pageHeader.title}
-          description={props.pageHeader.description}
         />
       ) : null}
 
@@ -77,12 +74,9 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         departureId={effectiveDepartureId}
         statusFilter={statusFilter}
         keyword={keyword}
+        counterpartyKeyword={counterpartyKeyword}
         dueDateRange={dueDateRange}
         showDepartureFilter={scope === 'global'}
-        showCounterpartyFilter={scope === 'departure'}
-        direction={direction}
-        counterpartyType={counterpartyType}
-        counterpartyEntityKey={counterpartyEntityKey}
         onDepartureChange={(value) => {
           setDepartureFilter(value)
           setPage(1)
@@ -95,16 +89,12 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
           setKeyword(value)
           setPage(1)
         }}
+        onCounterpartyKeywordChange={(value) => {
+          setCounterpartyKeyword(value)
+          setPage(1)
+        }}
         onDueDateRangeChange={(value) => {
           setDueDateRange(value)
-          setPage(1)
-        }}
-        onCounterpartyTypeChange={(value) => {
-          setCounterpartyType(value)
-          setPage(1)
-        }}
-        onCounterpartyEntityKeyChange={(value) => {
-          setCounterpartyEntityKey(value)
           setPage(1)
         }}
         onReset={resetFilters}

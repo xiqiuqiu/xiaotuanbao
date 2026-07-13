@@ -154,11 +154,6 @@ export function CreateDepartureWizard() {
         <Typography.Title level={4} className={styles.title}>
           {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
         </Typography.Title>
-        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          {isCopyMode || copyFromId
-            ? '基于已有发团复制行程与资源，重新填写团期信息'
-            : '先选择路线，再填写发团基础信息'}
-        </Typography.Paragraph>
       </div>
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>

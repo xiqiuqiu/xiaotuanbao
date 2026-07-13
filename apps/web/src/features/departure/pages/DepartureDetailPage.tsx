@@ -3,7 +3,10 @@ import { Spin, Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import { DepartureStatus, TransactionDirection } from '@xiaotuanbao/shared'
+import {
+  DepartureStatus,
+  TransactionDirection,
+} from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
@@ -96,6 +99,9 @@ export function DepartureDetailPage() {
       search: {
         tab: activeTab,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+        ...(search.counterpartyKeyword
+          ? { counterpartyKeyword: search.counterpartyKeyword }
+          : {}),
       },
       replace: true,
     })
@@ -103,6 +109,7 @@ export function DepartureDetailPage() {
     activeTab,
     departureId,
     navigate,
+    search.counterpartyKeyword,
     search.highlightSegmentResourceId,
     search.highlightSourceOrderId,
     search.segmentId,
@@ -151,6 +158,8 @@ export function DepartureDetailPage() {
     departure.status === DepartureStatus.SETTLED ||
     departure.status === DepartureStatus.CLOSED
   const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
+  const counterpartyKeyword =
+    typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword : undefined
 
   const tabItems: NonNullable<TabsProps['items']> = DEPARTURE_DETAIL_TABS.map((tab) => {
     if (tab.key === 'overview') {
@@ -201,6 +210,7 @@ export function DepartureDetailPage() {
             departureId={departure.id}
             readOnly={financeReadOnly}
             highlightSourceOrderId={search.highlightSourceOrderId}
+            initialCounterpartyKeyword={counterpartyKeyword}
             onHighlightConsumed={clearFinanceHighlight}
           />
         ),
@@ -218,6 +228,7 @@ export function DepartureDetailPage() {
             departureId={departure.id}
             readOnly={financeReadOnly}
             highlightSegmentResourceId={search.highlightSegmentResourceId}
+            initialCounterpartyKeyword={counterpartyKeyword}
             onHighlightConsumed={clearFinanceHighlight}
           />
         ),

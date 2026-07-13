@@ -6,10 +6,7 @@ export function PayablesPage() {
       scope="global"
       direction="payable"
       readOnly={false}
-      pageHeader={{
-        title: '应付管理',
-        description: '全局应付节点：登记付款、匹配流水、关闭节点',
-      }}
+      pageHeader={{ title: '应付管理' }}
     />
   )
 }

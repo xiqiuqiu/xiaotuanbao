@@ -301,7 +301,6 @@ export function DeparturesPage() {
     <div>
       <PageHeader
         title="发团管理"
-        description="查看与管理所有发团批次"
         action={
           <Link to="/departure/new">
             <Button type="primary" icon={<PlusOutlined />}>

@@ -23,6 +23,7 @@ import {
   EMPTY_SOURCE_ORDER_FILTERS,
   type SourceOrderFilterDraft,
 } from '../utils/source-order-filter-state'
+import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
 
 interface SourceOrdersTabProps {
   departure: DepartureDetail
@@ -211,12 +212,14 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
 
   const onViewReceivables = useCallback(
     (order: SourceOrderSummary) => {
+      const counterparty = counterpartyFilterFromSourceOrder(order)
       void navigate({
         to: '/departure/$departureId',
         params: { departureId: departure.id },
         search: {
           tab: 'receivables',
           highlightSourceOrderId: order.id,
+          ...(counterparty ? { counterpartyKeyword: counterparty.counterpartyKeyword } : {}),
         },
       })
     },

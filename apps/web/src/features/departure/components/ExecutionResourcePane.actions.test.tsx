@@ -169,6 +169,7 @@ describe('ExecutionResourcePane action buttons', () => {
         tab: 'payables',
         highlightSegmentResourceId: 'resource-1',
         segmentId: 'segment-1',
+        counterpartyKeyword: '乌镇西栅景区',
       },
     })
   })

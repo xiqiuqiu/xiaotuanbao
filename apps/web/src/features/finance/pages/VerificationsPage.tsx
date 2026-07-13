@@ -10,10 +10,7 @@ export function VerificationsPage() {
   return (
     <VerificationsWorkspace
       scope="global"
-      pageHeader={{
-        title: '核销管理',
-        description: '将收支流水与账款节点进行核销匹配',
-      }}
+      pageHeader={{ title: '核销管理' }}
       deepLinkSearch={{
         transactionNo: search.transactionNo,
         scheduleNo: search.scheduleNo,

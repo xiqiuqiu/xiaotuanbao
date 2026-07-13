@@ -222,7 +222,6 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
       void queryClient.invalidateQueries({ queryKey: ['departure'] })
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-schedule-counterparties'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '更新失败')

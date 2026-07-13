@@ -36,6 +36,7 @@ import {
 } from '../catalog'
 import { formValuesToPayload } from '../utils/resource-form'
 import { ResourceDrawer } from './ResourceDrawer'
+import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
 
 function canGeneratePayable(record: SegmentResourceSummary): boolean {
   return record.payableStatus === SegmentPayableStatus.NOT_GENERATED
@@ -156,6 +157,7 @@ export function ExecutionResourcePane({
 
   const onViewPayables = useCallback(
     (resource: SegmentResourceSummary) => {
+      const counterparty = counterpartyFilterFromSegmentResource(resource)
       void navigate({
         to: '/departure/$departureId',
         params: { departureId: departure.id },
@@ -163,6 +165,9 @@ export function ExecutionResourcePane({
           tab: 'payables',
           highlightSegmentResourceId: resource.id,
           ...(segment.id ? { segmentId: segment.id } : {}),
+          ...(counterparty
+            ? { counterpartyKeyword: counterparty.counterpartyKeyword }
+            : {}),
         },
       })
     },

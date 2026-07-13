@@ -1,17 +1,9 @@
 import dayjs from 'dayjs'
-import { Button, Card, Cascader, DatePicker, Input, Select, Space } from 'antd'
+import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { CounterpartyType, PaymentScheduleStatus } from '@xiaotuanbao/shared'
-import {
-  listDeparturePayableCounterparties,
-  listDepartureReceivableCounterparties,
-  listFinanceDepartureOptions,
-} from '@/services/finance.service'
+import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
+import { listFinanceDepartureOptions } from '@/services/finance.service'
 import { PAYMENT_SCHEDULE_STATUS_OPTIONS } from '../catalog'
-import {
-  buildCounterpartyCascaderOptions,
-  toCounterpartyCascaderValue,
-} from '../utils/payment-schedule-counterparty-filter'
 
 export type DueDateRange = [string | undefined, string | undefined] | null
 
@@ -19,18 +11,14 @@ interface PaymentScheduleFiltersProps {
   departureId?: string
   statusFilter?: PaymentScheduleStatus
   keyword: string
+  counterpartyKeyword: string
   dueDateRange: DueDateRange
   showDepartureFilter: boolean
-  showCounterpartyFilter: boolean
-  direction: 'receivable' | 'payable'
-  counterpartyType?: CounterpartyType
-  counterpartyEntityKey?: string
   onDepartureChange: (value?: string) => void
   onStatusChange: (value?: PaymentScheduleStatus) => void
   onKeywordChange: (value: string) => void
+  onCounterpartyKeywordChange: (value: string) => void
   onDueDateRangeChange: (value: DueDateRange) => void
-  onCounterpartyTypeChange: (value?: CounterpartyType) => void
-  onCounterpartyEntityKeyChange: (value?: string) => void
   onReset: () => void
 }
 
@@ -38,18 +26,14 @@ export function PaymentScheduleFilters({
   departureId,
   statusFilter,
   keyword,
+  counterpartyKeyword,
   dueDateRange,
   showDepartureFilter,
-  showCounterpartyFilter,
-  direction,
-  counterpartyType,
-  counterpartyEntityKey,
   onDepartureChange,
   onStatusChange,
   onKeywordChange,
+  onCounterpartyKeywordChange,
   onDueDateRangeChange,
-  onCounterpartyTypeChange,
-  onCounterpartyEntityKeyChange,
   onReset,
 }: PaymentScheduleFiltersProps) {
   const { data: departuresResult } = useQuery({
@@ -58,30 +42,11 @@ export function PaymentScheduleFilters({
     enabled: showDepartureFilter,
   })
 
-  const { data: counterparties = [] } = useQuery({
-    queryKey: ['departure-schedule-counterparties', direction, departureId],
-    queryFn: () => {
-      if (!departureId) {
-        throw new Error('发团 ID 缺失')
-      }
-      return direction === 'receivable'
-        ? listDepartureReceivableCounterparties(departureId)
-        : listDeparturePayableCounterparties(departureId)
-    },
-    enabled: showCounterpartyFilter && Boolean(departureId),
-  })
-
   const departureOptions =
     departuresResult?.map((departure) => ({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []
-
-  const counterpartyOptions = buildCounterpartyCascaderOptions(direction, counterparties)
-  const counterpartyValue = toCounterpartyCascaderValue(
-    counterpartyType,
-    counterpartyEntityKey,
-  )
 
   return (
     <Card style={{ marginBottom: 16 }}>
@@ -106,28 +71,14 @@ export function PaymentScheduleFilters({
           onChange={(event) => onKeywordChange(event.target.value)}
           onSearch={(value) => onKeywordChange(value.trim())}
         />
-        {showCounterpartyFilter ? (
-          <Cascader
-            allowClear
-            changeOnSelect
-            showSearch
-            placeholder="往来对象"
-            style={{ width: 280, maxWidth: '100%' }}
-            options={counterpartyOptions}
-            value={counterpartyValue}
-            onChange={(value) => {
-              if (!value || value.length === 0) {
-                onCounterpartyTypeChange(undefined)
-                onCounterpartyEntityKeyChange(undefined)
-                return
-              }
-              onCounterpartyTypeChange(value[0] as CounterpartyType)
-              onCounterpartyEntityKeyChange(
-                typeof value[1] === 'string' ? value[1] : undefined,
-              )
-            }}
-          />
-        ) : null}
+        <Input.Search
+          allowClear
+          placeholder="往来对象"
+          style={{ width: 200, maxWidth: '100%' }}
+          value={counterpartyKeyword}
+          onChange={(event) => onCounterpartyKeywordChange(event.target.value)}
+          onSearch={(value) => onCounterpartyKeywordChange(value.trim())}
+        />
         <Select
           allowClear
           placeholder="节点状态"
