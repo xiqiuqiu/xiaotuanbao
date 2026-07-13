@@ -65,12 +65,15 @@ async function seedRoleCatalog() {
 
     if (toRemove.length > 0) {
       const removeKeys = new Set(toRemove)
-      const removeIds = existing
+      const removePermissionIds = existing
         .filter((item) => removeKeys.has(item.permission.key))
-        .map((item) => item.id)
+        .map((item) => item.permissionId)
 
       await prisma.rolePermission.deleteMany({
-        where: { id: { in: removeIds } },
+        where: {
+          roleId: role.id,
+          permissionId: { in: removePermissionIds },
+        },
       })
     }
   }
