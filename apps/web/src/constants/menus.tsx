@@ -29,7 +29,6 @@ export const mainMenuItems: MenuItem[] = [
   item('系统管理', 'system', <SettingOutlined />, [
     item('组织管理', '/system/organization'),
     item('员工管理', '/system/users'),
-    item('角色权限', '/system/roles'),
   ]),
 ]
 
@@ -44,5 +43,4 @@ export const routeTitles: Record<string, string> = {
   '/supplier': '供应商管理',
   '/system/organization': '组织管理',
   '/system/users': '员工管理',
-  '/system/roles': '角色权限',
 }

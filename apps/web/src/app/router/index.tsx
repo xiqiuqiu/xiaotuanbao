@@ -24,7 +24,6 @@ import { PayablesPage } from '@/features/finance/pages/PayablesPage'
 import { TransactionsPage } from '@/features/finance/pages/TransactionsPage'
 import { VerificationsPage } from '@/features/finance/pages/VerificationsPage'
 import { OrganizationPage } from '@/pages/system/OrganizationPage'
-import { RolesPage } from '@/pages/system/RolesPage'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -189,12 +188,6 @@ const systemUsersRoute = createRoute({
   component: EmployeesPage,
 })
 
-const systemRolesRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/system/roles',
-  component: RolesPage,
-})
-
 const routeTree = rootRoute.addChildren([
   loginRoute,
   appLayoutRoute.addChildren([
@@ -212,7 +205,6 @@ const routeTree = rootRoute.addChildren([
     supplierDetailRoute,
     systemOrganizationRoute,
     systemUsersRoute,
-    systemRolesRoute,
   ]),
 ])
 
