@@ -67,6 +67,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
+  generatePayablesForDeparture: vi.fn(),
 }))
 
 const mockDeparture = {
@@ -148,5 +149,25 @@ describe('ExecutionTab layout', () => {
 
     expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
     expect(screen.queryByText('模板')).not.toBeInTheDocument()
+  })
+
+  it('pins 添加 under the segment list and puts 一键生成应付 in the segment card header', async () => {
+    renderExecutionTab()
+
+    const segmentTitle = await screen.findByText('行程段')
+    const segmentCard = segmentTitle.closest('.ant-card')
+    expect(segmentCard).toBeTruthy()
+
+    const generateBtn = screen.getByRole('button', { name: '一键生成应付' })
+    expect(segmentCard!.querySelector('.ant-card-extra')).toContainElement(generateBtn)
+
+    const addBtn = screen.getByRole('button', { name: '添加' })
+    const footer = addBtn.closest('[class*="segmentListFooter"]')
+    expect(footer).toBeTruthy()
+    expect(segmentCard).toContainElement(footer)
+
+    const segmentList = footer!.parentElement
+    expect(segmentList?.className).toMatch(/segmentList/)
+    expect(segmentList?.lastElementChild).toBe(footer)
   })
 })

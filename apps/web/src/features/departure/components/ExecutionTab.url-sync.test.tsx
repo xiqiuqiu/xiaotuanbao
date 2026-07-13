@@ -59,6 +59,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
+  generatePayablesForDeparture: vi.fn(),
 }))
 
 const mockDeparture = {

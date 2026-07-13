@@ -1,6 +1,7 @@
 import { request } from '@/lib/request'
 import type {
   CreateSegmentResourceDto,
+  BatchFinanceGenerationResult,
   GeneratePayableResult,
   SegmentResourceListResult,
   SegmentResourceSummary,
@@ -43,4 +44,12 @@ export async function deleteSegmentResource(id: string): Promise<void> {
 
 export async function generatePayable(resourceId: string): Promise<GeneratePayableResult> {
   return request.post<GeneratePayableResult>(`/segment-resources/${resourceId}/generate-payable`)
+}
+
+export async function generatePayablesForDeparture(
+  departureId: string,
+): Promise<BatchFinanceGenerationResult> {
+  return request.post<BatchFinanceGenerationResult>(
+    `/departures/${departureId}/generate-payables`,
+  )
 }

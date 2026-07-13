@@ -5,6 +5,7 @@ import {
   Card,
   Col,
   Empty,
+  Modal,
   Row,
   Spin,
   Typography,
@@ -26,6 +27,7 @@ import {
   listSegments,
   updateSegment,
 } from '@/services/segment.service'
+import { generatePayablesForDeparture } from '@/services/segment-resource.service'
 import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
@@ -34,6 +36,7 @@ import {
   formatResourceOverview,
   formValuesToPayload,
 } from '../utils/segment-form'
+import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { ExecutionSummaryBar } from './ExecutionSummaryBar'
 import { SegmentDrawer } from './SegmentDrawer'
@@ -259,6 +262,38 @@ export function ExecutionTab({
     },
   })
 
+  const batchGenerateMutation = useMutation({
+    mutationFn: () => generatePayablesForDeparture(departure.id),
+    onSuccess: (result) => {
+      const text = formatBatchFinanceGenerationMessage(result, '应付')
+      if (result.failed > 0) {
+        message.warning(text)
+      } else if (result.succeeded > 0) {
+        message.success(text)
+      } else {
+        message.info(text)
+      }
+      invalidateSegments()
+      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '一键生成应付失败')
+    },
+  })
+
+  const confirmBatchGenerate = () => {
+    Modal.confirm({
+      title: '一键生成应付',
+      content: '将为本团所有尚未生成应付的资源生成应付，是否继续？',
+      okText: '生成',
+      cancelText: '取消',
+      onOk: () => batchGenerateMutation.mutateAsync(),
+    })
+  }
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -315,38 +350,51 @@ export function ExecutionTab({
             extra={
               !mutationLocked ? (
                 <Button
-                  type="link"
                   size="small"
-                  icon={<PlusOutlined />}
-                  onClick={openCreate}
+                  onClick={confirmBatchGenerate}
+                  loading={batchGenerateMutation.isPending}
+                  disabled={segments.length === 0}
                 >
-                  添加
+                  一键生成应付
                 </Button>
               ) : null
             }
             styles={{ body: { padding: 12 } }}
           >
-            <div
-              ref={segmentListRef}
-              className={styles.segmentList}
-              style={segmentTokenStyle}
-            >
-              {segments.length === 0 ? (
-                <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                  暂无行程段
-                </Typography.Paragraph>
-              ) : (
-                segments.map((segment) => (
-                  <SegmentNavItem
-                    key={segment.id}
-                    segment={segment}
-                    selected={segment.id === selectedSegmentId}
-                    showEdit={!mutationLocked}
-                    onSelect={() => navigateExecution(segment.id)}
-                    onEdit={() => openEdit(segment)}
-                  />
-                ))
-              )}
+            <div className={styles.segmentPane} style={segmentTokenStyle}>
+              <div ref={segmentListRef} className={styles.segmentList}>
+                {segments.length === 0 ? (
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                    暂无行程段
+                  </Typography.Paragraph>
+                ) : (
+                  segments.map((segment) => (
+                    <SegmentNavItem
+                      key={segment.id}
+                      segment={segment}
+                      selected={segment.id === selectedSegmentId}
+                      showEdit={!mutationLocked}
+                      onSelect={() => navigateExecution(segment.id)}
+                      onEdit={() => openEdit(segment)}
+                    />
+                  ))
+                )}
+                {!mutationLocked ? (
+                  <>
+                    <div className={styles.segmentListGrow} aria-hidden />
+                    <div className={styles.segmentListFooter}>
+                      <Button
+                        block
+                        icon={<PlusOutlined />}
+                        aria-label="添加"
+                        onClick={openCreate}
+                      >
+                        添加
+                      </Button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
             </div>
           </Card>
         </Col>

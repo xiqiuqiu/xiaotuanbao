@@ -579,6 +579,24 @@ export interface GenerateReceivablesResult {
   sourceAmountMismatch: boolean
 }
 
+export type BatchFinanceGenerationOutcome = 'succeeded' | 'skipped' | 'failed'
+
+export interface BatchFinanceGenerationItem {
+  sourceId: string
+  sourceLabel: string
+  outcome: BatchFinanceGenerationOutcome
+  reason?: string
+}
+
+/** 发团级一键生成应收/应付的汇总结果；逐条独立事务，允许部分成功。 */
+export interface BatchFinanceGenerationResult {
+  attempted: number
+  succeeded: number
+  skipped: number
+  failed: number
+  items: BatchFinanceGenerationItem[]
+}
+
 export interface SourceOrderListSummary {
   orderCount: number
   totalGuests: number

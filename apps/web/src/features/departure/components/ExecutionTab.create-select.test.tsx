@@ -95,6 +95,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
+  generatePayablesForDeparture: vi.fn(),
 }))
 
 const mockDeparture = {
@@ -163,7 +164,7 @@ describe('ExecutionTab create → select new segment', () => {
 
     expect(await screen.findByText('喀纳斯')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /添加/ }))
+    await user.click(screen.getByRole('button', { name: '添加' }))
     expect(await screen.findByText('添加行程段')).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('行程段名称'), '新建段')

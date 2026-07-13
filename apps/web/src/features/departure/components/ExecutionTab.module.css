@@ -38,10 +38,45 @@
   overflow: auto;
 }
 
+.segmentPaneCol .paneCardBody {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.segmentPane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .segmentList {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 8px;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Pushes the footer to the pane bottom when the list is short. */
+.segmentListGrow {
+  flex: 1 1 auto;
+  min-height: 0;
+  pointer-events: none;
+}
+
+/* Sticky over scrolling cards; border (not shadow) per DESIGN elevation. */
+.segmentListFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  flex-shrink: 0;
+  padding-top: 8px;
+  background: var(--execution-item-bg);
+  border-top: 1px solid var(--execution-border);
 }
 
 .segmentItem {
@@ -164,5 +199,9 @@
 
   .segmentPaneCol .paneCardBody {
     max-height: 280px;
+  }
+
+  .segmentPaneCol .segmentList {
+    max-height: none;
   }
 }
