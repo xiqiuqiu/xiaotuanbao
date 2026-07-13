@@ -14,11 +14,11 @@ import {
   theme,
 } from 'antd'
 import {
-  FileDoneOutlined,
-  FolderOutlined,
+  AccountBookOutlined,
+  ClusterOutlined,
   LockOutlined,
-  MoneyCollectOutlined,
   SafetyCertificateOutlined,
+  ScheduleOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
@@ -33,22 +33,22 @@ const REMEMBER_USERNAME_KEY = 'xiaotuanbao.login.rememberedUsername'
 
 const FEATURES = [
   {
-    key: 'project',
-    title: '项目经营',
-    desc: '全过程管控',
-    icon: <FolderOutlined />,
+    key: 'departure',
+    title: '团单经营',
+    desc: '全流程跟进',
+    icon: <ScheduleOutlined />,
   },
   {
-    key: 'contract',
-    title: '合同履约',
-    desc: '全周期跟踪',
-    icon: <FileDoneOutlined />,
+    key: 'resource',
+    title: '资源安排',
+    desc: '车房餐导统筹',
+    icon: <ClusterOutlined />,
   },
   {
-    key: 'fund',
-    title: '资金协同',
-    desc: '多维度联动',
-    icon: <MoneyCollectOutlined />,
+    key: 'finance',
+    title: '财务协同',
+    desc: '应收应付核销',
+    icon: <AccountBookOutlined />,
   },
 ] as const
 
@@ -103,10 +103,10 @@ export function LoginPage() {
 
           <div className={styles.copyBlock}>
             <Typography.Title level={2} className={styles.headline}>
-              让项目、合同与资金协同流转
+              让团单、资源与资金高效协同
             </Typography.Title>
             <Typography.Paragraph className={styles.subheadline}>
-              企业项目经营与财务协作平台
+              地接旅行社团单经营与财务协作平台
             </Typography.Paragraph>
           </div>
 
@@ -144,7 +144,7 @@ export function LoginPage() {
             登录工作台
           </Typography.Title>
           <Typography.Paragraph className={styles.cardSubtitle}>
-            使用企业账号继续
+            使用{env.appName}组织账号登录
           </Typography.Paragraph>
 
           {loginMutation.error ? (
@@ -233,7 +233,7 @@ export function LoginPage() {
 
           <Flex className={styles.secureHint} align="center" gap={token.marginXS}>
             <SafetyCertificateOutlined className={styles.secureIcon} />
-            <span>安全连接，企业数据加密传输</span>
+            <span>数据安全传输，经营信息可靠存储</span>
           </Flex>
         </Card>
 
