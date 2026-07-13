@@ -22,6 +22,11 @@
   min-height: 616px;
 }
 
+/* Copy mode hides the step rail; without this the sole child sits in the 240px track. */
+.wizardBodyNoRail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .stepRail {
   padding: 32px 24px;
   border-right: 1px solid var(--wizard-border);

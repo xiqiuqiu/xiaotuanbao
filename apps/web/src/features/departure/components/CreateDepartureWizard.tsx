@@ -162,7 +162,11 @@ export function CreateDepartureWizard() {
       </div>
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0 } }}>
-        <div className={styles.wizardBody}>
+        <div
+          className={
+            showSteps ? styles.wizardBody : `${styles.wizardBody} ${styles.wizardBodyNoRail}`
+          }
+        >
           {showSteps ? (
             <aside className={styles.stepRail} aria-label="创建进度">
               <Steps

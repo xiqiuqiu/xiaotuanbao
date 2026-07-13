@@ -300,6 +300,13 @@ describe('CreateDepartureWizard', () => {
     expect(screen.queryByText('复制已有发团')).not.toBeInTheDocument()
     expect(screen.getByText('复制自发团 XTB2026060009，不含客源与财务')).toBeInTheDocument()
 
+    const { default: wizardStyles } = await import('./CreateDepartureWizard.module.css')
+    const workspace = screen.getByText('发团基础信息').closest(`.${wizardStyles.wizardBody}`)
+    expect(workspace?.className.split(/\s+/)).toEqual(
+      expect.arrayContaining([wizardStyles.wizardBody, wizardStyles.wizardBodyNoRail]),
+    )
+    expect(screen.queryByLabelText('创建进度')).not.toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {

@@ -143,6 +143,9 @@ export function LoginPage() {
           <Typography.Title level={3} className={styles.cardTitle}>
             登录工作台
           </Typography.Title>
+          <Typography.Paragraph className={styles.cardSubtitle}>
+            使用企业账号继续
+          </Typography.Paragraph>
 
           {loginMutation.error ? (
             <Alert

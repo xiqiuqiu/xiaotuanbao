@@ -1,0 +1,16 @@
+.nameLink {
+  color: var(--ant-color-link, var(--ant-color-primary));
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.2s;
+  cursor: pointer;
+}
+
+.nameLink:hover {
+  color: var(--ant-color-link-hover, var(--ant-color-primary-hover));
+  text-decoration: underline;
+}
+
+.nameLink:active {
+  color: var(--ant-color-link-active, var(--ant-color-primary-active));
+}

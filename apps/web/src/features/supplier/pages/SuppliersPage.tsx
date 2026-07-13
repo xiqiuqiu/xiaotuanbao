@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Modal, Space, Table, Tag, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -34,6 +34,7 @@ import {
   toFormValues,
 } from '../utils/supplier-form'
 import { PageHeader } from '@/layouts/PageHeader'
+import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 
 function buildColumns(
   includeArchived: boolean,
@@ -46,8 +47,12 @@ function buildColumns(
       title: '供应商名称',
       dataIndex: 'name',
       render: (name: string, record) => (
-        <Link to="/supplier/$supplierId" params={{ supplierId: record.id }}>
-          <Typography.Text strong>{name}</Typography.Text>
+        <Link
+          className={nameLinkStyles.nameLink}
+          to="/supplier/$supplierId"
+          params={{ supplierId: record.id }}
+        >
+          {name}
         </Link>
       ),
     },

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Modal, Space, Table, Tag, Typography, message } from 'antd'
+import { Button, Card, Form, Modal, Space, Table, Tag, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -33,6 +33,7 @@ import {
   partnerToFormValues,
 } from '../utils/partner-form'
 import { PageHeader } from '@/layouts/PageHeader'
+import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 
 type PartnersPageState = {
   search: string
@@ -105,8 +106,12 @@ function buildColumns(
       title: '合作伙伴名称',
       dataIndex: 'name',
       render: (name: string, record) => (
-        <Link to="/partner/$partnerId" params={{ partnerId: record.id }}>
-          <Typography.Text strong>{name}</Typography.Text>
+        <Link
+          className={nameLinkStyles.nameLink}
+          to="/partner/$partnerId"
+          params={{ partnerId: record.id }}
+        >
+          {name}
         </Link>
       ),
     },
