@@ -29,15 +29,8 @@ function resolveCounterpartyPayload(values: TransactionFormValues) {
     }
   }
 
-  if (values.counterpartyType === CounterpartyType.GUEST) {
-    return {
-      counterpartyId: values.counterpartyId,
-      counterpartyName: values.counterpartyName?.trim() || undefined,
-    }
-  }
-
   return {
-    counterpartyId: undefined,
+    counterpartyId: values.counterpartyId,
     counterpartyName: values.counterpartyName?.trim() || undefined,
   }
 }

@@ -126,7 +126,6 @@ enum CounterpartyType {
   partner
   supplier
   guest
-  manual
 
   @@map("counterparty_type")
 }

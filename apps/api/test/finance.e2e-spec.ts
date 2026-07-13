@@ -183,7 +183,7 @@ describe('Finance API (e2e)', () => {
         title: 'cleanup sentinel',
         amountCents: 1,
         dueDate: new Date('2026-01-01T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
         counterpartyName: 'cleanup sentinel',
       },
     })
@@ -195,7 +195,7 @@ describe('Finance API (e2e)', () => {
         paymentChannel: 'other',
         amountCents: 1,
         transactionDate: new Date('2026-01-01T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
         counterpartyName: 'cleanup sentinel',
       },
     })
@@ -1063,7 +1063,7 @@ describe('Finance API (e2e)', () => {
         title: `${testPrefix}-foreign-schedule`,
         amountCents: 10000,
         dueDate: new Date('2026-12-31T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
       },
     })
 
@@ -1096,7 +1096,7 @@ describe('Finance API (e2e)', () => {
         paymentChannel: 'other',
         amountCents: 10000,
         transactionDate: new Date('2026-07-07T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
         counterpartyName: '外部流水',
       },
     })
@@ -2128,7 +2128,8 @@ describe('Finance API (e2e)', () => {
         paymentChannel: PaymentChannel.CASH,
         amountCents: 8000,
         transactionDate: '2026-07-07',
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
         counterpartyName: `${testPrefix}-无发团流水`,
       })
       .expect(400)
@@ -2180,8 +2181,8 @@ describe('Finance API (e2e)', () => {
           direction: 'inflow',
           amountCents: 50000,
           transactionDate: '2026-07-10',
-          counterpartyType: CounterpartyType.manual,
-          counterpartyId: undefined,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: filterPartner.id,
           counterpartyName: `${filterPrefix}-旅行社A`,
         }),
       )
@@ -2194,8 +2195,8 @@ describe('Finance API (e2e)', () => {
           direction: 'outflow',
           amountCents: 20000,
           transactionDate: '2026-07-10',
-          counterpartyType: CounterpartyType.manual,
-          counterpartyId: undefined,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplierId,
           counterpartyName: `${filterPrefix}-供应商B`,
         }),
       )
@@ -2241,8 +2242,8 @@ describe('Finance API (e2e)', () => {
         transactionPayload({
           amountCents: 10000,
           transactionDate: '2026-07-12',
-          counterpartyType: CounterpartyType.manual,
-          counterpartyId: undefined,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: filterPartner.id,
           counterpartyName: `${filterPrefix}-作废`,
         }),
       )

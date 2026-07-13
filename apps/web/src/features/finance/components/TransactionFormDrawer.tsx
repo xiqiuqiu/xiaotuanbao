@@ -282,11 +282,6 @@ export function TransactionFormDrawer({
             </Form.Item>
           </>
         ) : null}
-        {counterpartyType === CounterpartyType.MANUAL ? (
-          <Form.Item name="counterpartyName" label="往来对象名称">
-            <Input maxLength={100} />
-          </Form.Item>
-        ) : null}
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={3} maxLength={200} showCount />
         </Form.Item>

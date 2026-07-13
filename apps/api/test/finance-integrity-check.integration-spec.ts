@@ -50,7 +50,7 @@ describe('finance-integrity-check (integration)', () => {
         title: '故障注入应收',
         amountCents: 10000,
         dueDate: new Date('2026-07-02T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
         counterpartyName: '故障注入对象',
       },
     })
@@ -64,7 +64,7 @@ describe('finance-integrity-check (integration)', () => {
         paymentChannel: PaymentChannel.other,
         amountCents: 10000,
         transactionDate: new Date('2026-07-02T00:00:00.000Z'),
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
         counterpartyName: '故障注入对象',
         departureId,
       },

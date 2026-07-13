@@ -20,8 +20,8 @@ describe('assertCounterpartyMatch', () => {
   it('passes when both lack id and names match after trim', () => {
     expect(() =>
       assertCounterpartyMatch(
-        { counterpartyType: 'manual', counterpartyId: null, counterpartyName: '  手工往来  ' },
-        { counterpartyType: 'manual', counterpartyId: null, counterpartyName: '手工往来' },
+        { counterpartyType: 'guest', counterpartyId: null, counterpartyName: '  同名游客  ' },
+        { counterpartyType: 'guest', counterpartyId: null, counterpartyName: '同名游客' },
       ),
     ).not.toThrow()
   })
@@ -49,8 +49,8 @@ describe('assertCounterpartyMatch', () => {
   it('rejects mismatched counterparty name when no id', () => {
     expect(() =>
       assertCounterpartyMatch(
-        { counterpartyType: 'manual', counterpartyId: null, counterpartyName: 'A' },
-        { counterpartyType: 'manual', counterpartyId: null, counterpartyName: 'B' },
+        { counterpartyType: 'guest', counterpartyId: null, counterpartyName: 'A' },
+        { counterpartyType: 'guest', counterpartyId: null, counterpartyName: 'B' },
       ),
     ).toThrow(CounterpartyMismatchError)
   })

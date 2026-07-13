@@ -440,39 +440,35 @@ export class TransactionService {
       }
     }
 
-    if (dto.counterpartyType === PrismaCounterpartyType.guest) {
-      const counterpartyId = dto.counterpartyId?.trim()
-      if (!counterpartyId) {
-        return {
-          counterpartyType: dto.counterpartyType,
-          counterpartyId: null,
-          counterpartyName: dto.counterpartyName?.trim() || null,
-        }
-      }
+    if (dto.counterpartyType !== PrismaCounterpartyType.guest) {
+      throw new BadRequestException('不支持的往来对象类型')
+    }
 
-      const sourceOrder = await client.sourceOrder.findFirst({
-        where: {
-          id: counterpartyId,
-          departure: { organizationId },
-          ...(dto.departureId ? { departureId: dto.departureId } : {}),
-        },
-        select: { id: true, displayName: true },
-      })
-      if (!sourceOrder) {
-        throw new NotFoundException('客源单不存在')
-      }
-
+    const counterpartyId = dto.counterpartyId?.trim()
+    if (!counterpartyId) {
       return {
         counterpartyType: dto.counterpartyType,
-        counterpartyId: sourceOrder.id,
-        counterpartyName: dto.counterpartyName?.trim() || sourceOrder.displayName,
+        counterpartyId: null,
+        counterpartyName: dto.counterpartyName?.trim() || null,
       }
+    }
+
+    const sourceOrder = await client.sourceOrder.findFirst({
+      where: {
+        id: counterpartyId,
+        departure: { organizationId },
+        ...(dto.departureId ? { departureId: dto.departureId } : {}),
+      },
+      select: { id: true, displayName: true },
+    })
+    if (!sourceOrder) {
+      throw new NotFoundException('客源单不存在')
     }
 
     return {
       counterpartyType: dto.counterpartyType,
-      counterpartyId: null,
-      counterpartyName: dto.counterpartyName?.trim() || null,
+      counterpartyId: sourceOrder.id,
+      counterpartyName: dto.counterpartyName?.trim() || sourceOrder.displayName,
     }
   }
 

@@ -1736,7 +1736,8 @@ describe('Finance journeys (cross-module e2e)', () => {
         paymentChannel: PaymentChannel.CASH,
         amountCents: 1000,
         transactionDate: '2026-08-12',
-        counterpartyType: CounterpartyType.manual,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
         counterpartyName: '其他发团流水可建',
         departureId: orphanDeparture.id,
       })
