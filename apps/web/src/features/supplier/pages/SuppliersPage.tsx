@@ -33,6 +33,7 @@ import {
   clearInvoiceFieldsWhenUnavailable,
   toFormValues,
 } from '../utils/supplier-form'
+import { PageHeader } from '@/layouts/PageHeader'
 
 function buildColumns(
   includeArchived: boolean,
@@ -247,19 +248,15 @@ export function SuppliersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            供应商管理
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            维护自营资源供应商档案
-          </Typography.Paragraph>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-          创建供应商
-        </Button>
-      </div>
+      <PageHeader
+        title="供应商管理"
+        description="维护自营资源供应商档案"
+        action={
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+            创建供应商
+          </Button>
+        }
+      />
 
       <SupplierFilters
         categoryFilter={categoryFilter}
@@ -289,6 +286,7 @@ export function SuppliersPage() {
           loading={isLoading}
           columns={columns}
           dataSource={suppliersResult?.items ?? []}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: page,
             pageSize,

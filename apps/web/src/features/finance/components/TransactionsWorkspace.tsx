@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react'
-import { Button, Card, Table, Typography } from 'antd'
+import { Button, Card, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { FinanceTransactionSummary, TransactionDirection } from '@xiaotuanbao/shared'
 import { listTransactions } from '@/services/finance.service'
+import { PageHeader } from '@/layouts/PageHeader'
 import { useTransactionListState } from '../hooks/useTransactionListState'
 import { useTransactionWorkspaceDialogs } from '../hooks/useTransactionWorkspaceDialogs'
 import { useTransactionWorkspaceMutations } from '../hooks/useTransactionWorkspaceMutations'
@@ -168,14 +169,11 @@ export function TransactionsWorkspace({
   return (
     <div>
       {pageHeader ? (
-        <div style={{ marginBottom: 16 }}>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            {pageHeader.title}
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            {pageHeader.description}
-          </Typography.Paragraph>
-        </div>
+        <PageHeader
+          title={pageHeader.title}
+          description={pageHeader.description}
+          action={createButton}
+        />
       ) : null}
 
       <TransactionFilters
@@ -209,7 +207,7 @@ export function TransactionsWorkspace({
           dispatchList({ type: 'setStatusFilter', value })
         }}
         onReset={handleResetFilters}
-        extra={createButton}
+        extra={pageHeader ? undefined : createButton}
       />
 
       <Card>

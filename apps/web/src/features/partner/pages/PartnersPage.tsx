@@ -32,6 +32,7 @@ import {
   buildUpdatePayload,
   partnerToFormValues,
 } from '../utils/partner-form'
+import { PageHeader } from '@/layouts/PageHeader'
 
 type PartnersPageState = {
   search: string
@@ -297,19 +298,15 @@ export function PartnersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            合作伙伴管理
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            维护同业旅行社合作伙伴档案
-          </Typography.Paragraph>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-          创建合作伙伴
-        </Button>
-      </div>
+      <PageHeader
+        title="合作伙伴管理"
+        description="维护同业旅行社合作伙伴档案"
+        action={
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+            创建合作伙伴
+          </Button>
+        }
+      />
 
       <PartnerStatsCards summary={partnersResult?.summary} />
 
@@ -333,6 +330,7 @@ export function PartnersPage() {
           loading={isLoading}
           columns={columns}
           dataSource={partnersResult?.items ?? []}
+          scroll={{ x: 'max-content' }}
           pagination={{
             current: state.page,
             pageSize: state.pageSize,

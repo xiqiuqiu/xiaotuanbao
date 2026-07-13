@@ -2,6 +2,7 @@ import { Card, Col, Row, Statistic, Tag, Typography, Alert, Spin } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { fetchHealth } from '@/services/health.service'
 import { useAuthStore } from '@/app/store/auth.store'
+import { PageHeader } from '@/layouts/PageHeader'
 
 export function HomePage() {
   const user = useAuthStore((state) => state.user)
@@ -14,10 +15,10 @@ export function HomePage() {
 
   return (
     <div>
-      <Typography.Title level={3}>工作台</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        概览整体情况，追踪业务进度 · {user?.organizationName}
-      </Typography.Paragraph>
+      <PageHeader
+        title="工作台"
+        description={<>概览整体情况，追踪业务进度 · {user?.organizationName}</>}
+      />
       <Typography.Paragraph>欢迎回来，{user?.name}</Typography.Paragraph>
 
       <Row gutter={[16, 16]} style={{ marginTop: 24 }}>

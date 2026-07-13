@@ -12,6 +12,7 @@ import {
   updateEmployee,
 } from '@/services/employee.service'
 import { listRoles } from '@/services/role.service'
+import { PageHeader } from '@/layouts/PageHeader'
 import { EmployeeFilters } from './employees/EmployeeFilters'
 import { EmployeeFormDrawer, type EmployeeFormValues } from './employees/EmployeeFormDrawer'
 import { EmployeeStatsCards } from './employees/EmployeeStatsCards'
@@ -199,19 +200,15 @@ export function EmployeesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            员工管理
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            管理员工账号、Role 与访问权限
-          </Typography.Paragraph>
-        </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-          创建员工
-        </Button>
-      </div>
+      <PageHeader
+        title="员工管理"
+        description="管理员工账号、Role 与访问权限"
+        action={
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+            创建员工
+          </Button>
+        }
+      />
 
       <EmployeeStatsCards stats={employeesResult?.stats} />
 
@@ -233,6 +230,7 @@ export function EmployeesPage() {
           loading={employeesLoading}
           columns={columns}
           dataSource={employeesResult?.items ?? []}
+          scroll={{ x: 760 }}
           pagination={{
             current: page,
             pageSize,

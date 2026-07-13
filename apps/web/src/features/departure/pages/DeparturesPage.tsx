@@ -9,6 +9,7 @@ import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStat
 import { listDepartures } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
+import { PageHeader } from '@/layouts/PageHeader'
 import { DepartureFilters } from '../components/DepartureFilters'
 import {
   DEPARTURE_PROGRESS_COLORS,
@@ -298,21 +299,17 @@ export function DeparturesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            发团管理
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            查看与管理所有发团批次
-          </Typography.Paragraph>
-        </div>
-        <Link to="/departure/new">
-          <Button type="primary" icon={<PlusOutlined />}>
-            新建发团
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="发团管理"
+        description="查看与管理所有发团批次"
+        action={
+          <Link to="/departure/new">
+            <Button type="primary" icon={<PlusOutlined />}>
+              新建发团
+            </Button>
+          </Link>
+        }
+      />
 
       <DepartureFilters
         key={state.filtersKey}

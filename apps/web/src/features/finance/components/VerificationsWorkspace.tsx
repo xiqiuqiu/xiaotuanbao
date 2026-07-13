@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Space, Table, Tag, Tooltip, Typography } from 'antd'
+import { Button, Card, Form, Space, Table, Tag, Tooltip } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -40,6 +40,7 @@ import {
   createVerificationListReducer,
 } from '../utils/verification-list-state'
 import { useVerificationWorkspaceMutations } from '../hooks/useVerificationWorkspaceMutations'
+import { PageHeader } from '@/layouts/PageHeader'
 
 export type VerificationsWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -421,14 +422,11 @@ export function VerificationsWorkspace({
   return (
     <div>
       {pageHeader ? (
-        <div style={{ marginBottom: 16 }}>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-            {pageHeader.title}
-          </Typography.Title>
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            {pageHeader.description}
-          </Typography.Paragraph>
-        </div>
+        <PageHeader
+          title={pageHeader.title}
+          description={pageHeader.description}
+          action={createButton}
+        />
       ) : null}
 
       <VerificationFilters
@@ -454,7 +452,7 @@ export function VerificationsWorkspace({
           dispatchList({ type: 'setDepartureKeyword', value })
         }}
         onReset={handleResetFilters}
-        extra={createButton}
+        extra={pageHeader ? undefined : createButton}
       />
 
       <VerificationTable

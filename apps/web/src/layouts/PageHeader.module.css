@@ -1,0 +1,38 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.title {
+  margin-top: 0 !important;
+  margin-bottom: 4px !important;
+}
+
+.description {
+  margin-bottom: 0 !important;
+}
+
+.action {
+  flex: none;
+}
+
+@media (max-width: 767px) {
+  .header {
+    flex-wrap: wrap;
+  }
+
+  .action {
+    width: 100%;
+  }
+
+  .action > :global(.ant-btn) {
+    width: 100%;
+  }
+}

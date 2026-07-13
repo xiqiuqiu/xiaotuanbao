@@ -3,6 +3,7 @@ import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
 import { PaymentScheduleDetailDrawer } from './PaymentScheduleDetailDrawer'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
 import { usePaymentScheduleWorkspace } from '../hooks/usePaymentScheduleWorkspace'
+import { PageHeader } from '@/layouts/PageHeader'
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -14,6 +15,11 @@ export type PaymentScheduleWorkspaceProps = {
   /** One-shot locate: flash rows for this segment resource, then clear via onHighlightConsumed. */
   highlightSegmentResourceId?: string
   onHighlightConsumed?: () => void
+  /** When set, renders the standard list page header. */
+  pageHeader?: {
+    title: string
+    description: string
+  }
 }
 
 export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
@@ -55,6 +61,13 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
 
   return (
     <div>
+      {props.pageHeader ? (
+        <PageHeader
+          title={props.pageHeader.title}
+          description={props.pageHeader.description}
+        />
+      ) : null}
+
       <PaymentScheduleFilters
         departureId={effectiveDepartureId}
         statusFilter={statusFilter}
