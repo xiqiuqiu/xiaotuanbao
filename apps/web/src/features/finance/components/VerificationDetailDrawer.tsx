@@ -1,5 +1,4 @@
 import { Button, Descriptions, Drawer, Space, Spin, Tag, Typography } from 'antd'
-import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { VerificationStatus } from '@xiaotuanbao/shared'
 import { getVerification } from '@/services/finance.service'
@@ -17,6 +16,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 interface VerificationDetailDrawerProps {
   open: boolean
@@ -140,9 +140,9 @@ export function VerificationDetailDrawer({
             </Descriptions.Item>
             <Descriptions.Item label="关联发团">
               {transaction?.departureId ? (
-                <Link to="/departure/$departureId" params={{ departureId: transaction.departureId }}>
+                <FinanceDepartureLink departureId={transaction.departureId}>
                   {verification?.departureNo} · {verification?.departureName}
-                </Link>
+                </FinanceDepartureLink>
               ) : (
                 '-'
               )}
@@ -173,9 +173,9 @@ export function VerificationDetailDrawer({
             </Descriptions.Item>
             <Descriptions.Item label="关联发团">
               {schedule?.departureId ? (
-                <Link to="/departure/$departureId" params={{ departureId: schedule.departureId }}>
+                <FinanceDepartureLink departureId={schedule.departureId}>
                   {verification?.departureNo} · {verification?.departureName}
-                </Link>
+                </FinanceDepartureLink>
               ) : (
                 '-'
               )}

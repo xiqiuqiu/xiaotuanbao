@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Card, Form, Spin, Tabs, Typography, message } from 'antd'
-import { EditOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { getPartner, updatePartner } from '@/services/partner.service'
@@ -53,10 +53,14 @@ export function PartnerDetailPage() {
   if (!partnerId) {
     return (
       <div>
+        <Link to="/partner">
+          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+            返回合作伙伴列表
+          </Button>
+        </Link>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           合作伙伴不存在
         </Typography.Title>
-        <Link to="/partner">返回合作伙伴列表</Link>
       </div>
     )
   }
@@ -72,19 +76,28 @@ export function PartnerDetailPage() {
   if (isError || !partner) {
     return (
       <div>
+        <Link to="/partner">
+          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+            返回合作伙伴列表
+          </Button>
+        </Link>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           合作伙伴不存在
         </Typography.Title>
         <Typography.Paragraph type="secondary">
           该合作伙伴可能已被删除或您无权访问。
         </Typography.Paragraph>
-        <Link to="/partner">返回合作伙伴列表</Link>
       </div>
     )
   }
 
   return (
     <div>
+      <Link to="/partner">
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+          返回合作伙伴列表
+        </Button>
+      </Link>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
           {partner.name}

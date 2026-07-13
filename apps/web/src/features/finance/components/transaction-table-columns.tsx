@@ -1,6 +1,5 @@
 import { Button, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { Link } from '@tanstack/react-router'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import {
@@ -14,6 +13,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', {
@@ -99,9 +99,9 @@ export function buildTransactionColumns({
         const label = record.departureName || record.departureNo || '-'
         return (
           <Tooltip title={record.departureNo ?? undefined}>
-            <Link to="/departure/$departureId" params={{ departureId: record.departureId }}>
+            <FinanceDepartureLink departureId={record.departureId}>
               {label}
-            </Link>
+            </FinanceDepartureLink>
           </Tooltip>
         )
       },

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Card, Form, Spin, Tabs, Typography, message } from 'antd'
-import { EditOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { getSupplier, updateSupplier } from '@/services/supplier.service'
@@ -58,10 +58,14 @@ export function SupplierDetailPage() {
   if (!supplierId) {
     return (
       <div>
+        <Link to="/supplier">
+          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+            返回供应商列表
+          </Button>
+        </Link>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           供应商不存在
         </Typography.Title>
-        <Link to="/supplier">返回供应商列表</Link>
       </div>
     )
   }
@@ -77,19 +81,28 @@ export function SupplierDetailPage() {
   if (isError || !supplier) {
     return (
       <div>
+        <Link to="/supplier">
+          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+            返回供应商列表
+          </Button>
+        </Link>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           供应商不存在
         </Typography.Title>
         <Typography.Paragraph type="secondary">
           该供应商可能已被删除或您无权访问。
         </Typography.Paragraph>
-        <Link to="/supplier">返回供应商列表</Link>
       </div>
     )
   }
 
   return (
     <div>
+      <Link to="/supplier">
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
+          返回供应商列表
+        </Button>
+      </Link>
       <div
         style={{
           display: 'flex',

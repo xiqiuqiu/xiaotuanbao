@@ -80,8 +80,17 @@ export function MainLayout({ children }: PropsWithChildren) {
       >
         <div
           className={`${styles.brand} ${sidebarCollapsed ? styles.brandCollapsed : ''}`}
+          aria-label={env.appName}
         >
-          {sidebarCollapsed ? '团' : env.appName}
+          <img
+            className={styles.brandLogo}
+            src="/xiaotuanbao-brand-mark-v2.png"
+            alt=""
+            aria-hidden="true"
+          />
+          {!sidebarCollapsed ? (
+            <span className={styles.brandName}>{env.appName}</span>
+          ) : null}
         </div>
         <Menu
           mode="inline"

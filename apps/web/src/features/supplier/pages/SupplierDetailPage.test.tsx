@@ -68,6 +68,7 @@ describe('SupplierDetailPage', () => {
     renderDetailPage()
 
     expect(await screen.findByRole('heading', { level: 4, name: '西湖国宾馆' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /返回供应商列表/ })).toHaveAttribute('href', '/supplier')
 
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑供应商')).toBeInTheDocument()

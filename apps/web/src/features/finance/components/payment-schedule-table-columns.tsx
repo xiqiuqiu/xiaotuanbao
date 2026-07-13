@@ -2,7 +2,6 @@ import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
-import { Link } from '@tanstack/react-router'
 import {
   DepartureStatus,
   PaymentScheduleDirection,
@@ -17,6 +16,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 function isScheduleActionable(schedule: PaymentScheduleSummary): boolean {
   return schedule.status !== PaymentScheduleStatus.CANCELLED
@@ -132,9 +132,9 @@ export function buildPaymentScheduleColumns({
               }
               return (
                 <Tooltip title={departure.departureNo}>
-                  <Link to="/departure/$departureId" params={{ departureId }}>
+                  <FinanceDepartureLink departureId={departureId}>
                     {departure.name}
-                  </Link>
+                  </FinanceDepartureLink>
                 </Tooltip>
               )
             },

@@ -1,5 +1,4 @@
 import { Button, Descriptions, Drawer, Empty, Space, Spin, Table, Tag, Typography } from 'antd'
-import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionVerificationSummary } from '@xiaotuanbao/shared'
@@ -19,6 +18,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 interface TransactionDetailDrawerProps {
   open: boolean
@@ -45,9 +45,9 @@ function formatDepartureLink(
     return '-'
   }
   return (
-    <Link to="/departure/$departureId" params={{ departureId }}>
+    <FinanceDepartureLink departureId={departureId}>
       {departureName ? `${departureNo} · ${departureName}` : departureNo}
-    </Link>
+    </FinanceDepartureLink>
   )
 }
 

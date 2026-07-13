@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Space, Table, Tag, Tooltip } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import {
@@ -29,6 +29,7 @@ import {
   VerificationFilters,
 } from './VerificationFilters'
 import { VerificationDetailDrawer } from './VerificationDetailDrawer'
+import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { type CreateVerificationFormValues } from '../utils/verification-form'
 import {
   buildVerificationListMatchParams,
@@ -106,9 +107,9 @@ function buildVerificationColumns({
       dataIndex: 'departureName',
       render: (value: string, record) => (
         <Tooltip title={record.departureNo}>
-          <Link to="/departure/$departureId" params={{ departureId: record.departureId }}>
+          <FinanceDepartureLink departureId={record.departureId}>
             {value || record.departureNo}
-          </Link>
+          </FinanceDepartureLink>
         </Tooltip>
       ),
     })
