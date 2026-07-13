@@ -680,6 +680,8 @@ export interface ItinerarySegmentSummary {
   resourceCount: number
   outsourceCount: number
   resourceAmountCents: number
+  /** Resources that already have payables (any status other than not_generated). */
+  payableGeneratedCount: number
   payableStatus: string
 }
 

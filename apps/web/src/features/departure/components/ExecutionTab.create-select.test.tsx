@@ -41,6 +41,7 @@ const existingSegment: ItinerarySegmentSummary = {
   resourceCount: 2,
   outsourceCount: 0,
   resourceAmountCents: 568000,
+  payableGeneratedCount: 1,
   payableStatus: 'partially_paid',
 }
 
@@ -57,6 +58,7 @@ const createdSegment: ItinerarySegmentSummary = {
   resourceCount: 0,
   outsourceCount: 0,
   resourceAmountCents: 0,
+  payableGeneratedCount: 0,
   payableStatus: 'not_generated',
 }
 
@@ -95,7 +97,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
-  generatePayablesForDeparture: vi.fn(),
+  generatePayablesForSegment: vi.fn(),
 }))
 
 const mockDeparture = {

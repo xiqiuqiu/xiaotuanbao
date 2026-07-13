@@ -39,7 +39,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
       ],
     }
     expect(formatBatchFinanceGenerationMessage(result, '应付')).toBe(
-      '应付一键生成完成：成功 1 · 跳过 1 · 失败 1。丙：网络错误',
+      '应付批量生成完成：成功 1 · 跳过 1 · 失败 1。丙：网络错误',
     )
   })
 })

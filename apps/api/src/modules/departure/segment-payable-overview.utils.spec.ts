@@ -1,5 +1,5 @@
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
-import { aggregatePayableOverview } from './segment-payable-overview.utils'
+import { aggregatePayableOverview, countPayableGenerated } from './segment-payable-overview.utils'
 
 describe('aggregatePayableOverview', () => {
   const { NOT_GENERATED, PENDING, PARTIAL, PAID, CLOSED } = SegmentPayableStatus
@@ -41,5 +41,16 @@ describe('aggregatePayableOverview', () => {
     expect(aggregatePayableOverview([CLOSED, PAID])).toBe(PAID)
     expect(aggregatePayableOverview([CLOSED, NOT_GENERATED])).toBe(NOT_GENERATED)
     expect(aggregatePayableOverview([CLOSED, PENDING, PAID])).toBe(PARTIAL)
+  })
+})
+
+describe('countPayableGenerated', () => {
+  const { NOT_GENERATED, PENDING, PARTIAL, PAID, CLOSED } = SegmentPayableStatus
+
+  it('counts every status except not_generated', () => {
+    expect(countPayableGenerated([])).toBe(0)
+    expect(countPayableGenerated([NOT_GENERATED, NOT_GENERATED])).toBe(0)
+    expect(countPayableGenerated([PENDING, NOT_GENERATED, PAID])).toBe(2)
+    expect(countPayableGenerated([CLOSED, PARTIAL])).toBe(2)
   })
 })

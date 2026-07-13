@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import type {
+  BatchFinanceGenerationResult,
   GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
@@ -130,6 +131,18 @@ export class SourceOrderController {
   ): Promise<{ success: true }> {
     await this.sourceOrderService.removeGuest(request.user.organizationId, id, guestId)
     return { success: true }
+  }
+
+  @Post('departures/:departureId/generate-receivables')
+  @RequireMenu('/departure')
+  generateReceivablesForDeparture(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+  ): Promise<BatchFinanceGenerationResult> {
+    return this.sourceOrderService.generateReceivablesForDeparture(
+      request.user.organizationId,
+      departureId,
+    )
   }
 
   @Post('source-orders/:id/generate-receivables')

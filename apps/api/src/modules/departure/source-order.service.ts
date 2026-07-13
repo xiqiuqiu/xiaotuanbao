@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type {
+  BatchFinanceGenerationItem,
+  BatchFinanceGenerationResult,
   GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
@@ -36,6 +38,11 @@ import {
   computeSourceOrderAmounts,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
+import {
+  httpExceptionMessage,
+  isAlreadyGeneratedConflict,
+  summarizeBatchFinanceGeneration,
+} from './batch-finance-generation.utils'
 import {
   DepartureFinanceBridgeService,
   type SourceOrderFinanceMeta,
@@ -171,6 +178,85 @@ export class SourceOrderService {
       sourceOrderId,
       (order, meta) => this.toSourceOrderSummary(order, meta),
     )
+  }
+
+  async generateReceivablesForDeparture(
+    organizationId: string,
+    departureId: string,
+  ): Promise<BatchFinanceGenerationResult> {
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      departureId,
+      '生成应收',
+    )
+
+    const orders = await this.prisma.sourceOrder.findMany({
+      where: { departureId, departure: { organizationId } },
+      include: { partner: true },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    const existingScheduleSourceIds = new Set(
+      (
+        await this.prisma.paymentSchedule.findMany({
+          where: {
+            organizationId,
+            departureId,
+            direction: PaymentScheduleDirection.receivable,
+            sourceId: { in: orders.map((order) => order.id) },
+          },
+          select: { sourceId: true },
+          distinct: ['sourceId'],
+        })
+      ).map((row) => row.sourceId),
+    )
+
+    const items: BatchFinanceGenerationItem[] = []
+
+    for (const order of orders) {
+      const sourceLabel = order.partner.name
+
+      if (existingScheduleSourceIds.has(order.id)) {
+        continue
+      }
+
+      if (order.partnerCollectedCents <= 0 && order.guestCollectCents <= 0) {
+        items.push({
+          sourceId: order.id,
+          sourceLabel,
+          outcome: 'skipped',
+          reason: '无可生成金额',
+        })
+        continue
+      }
+
+      try {
+        await this.generateReceivables(organizationId, order.id)
+        items.push({
+          sourceId: order.id,
+          sourceLabel,
+          outcome: 'succeeded',
+        })
+      } catch (error) {
+        if (isAlreadyGeneratedConflict(error)) {
+          items.push({
+            sourceId: order.id,
+            sourceLabel,
+            outcome: 'skipped',
+            reason: httpExceptionMessage(error),
+          })
+          continue
+        }
+        items.push({
+          sourceId: order.id,
+          sourceLabel,
+          outcome: 'failed',
+          reason: httpExceptionMessage(error),
+        })
+      }
+    }
+
+    return summarizeBatchFinanceGeneration(items)
   }
 
   async getById(organizationId: string, sourceOrderId: string): Promise<SourceOrderSummary> {

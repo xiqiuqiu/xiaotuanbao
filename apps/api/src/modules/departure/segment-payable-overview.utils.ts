@@ -48,3 +48,12 @@ export function aggregatePayableOverview(
 
   return SegmentPayableStatus.PARTIAL
 }
+
+/** How many resources already have payables (anything other than not_generated). */
+export function countPayableGenerated(
+  statuses: readonly SegmentPayableStatus[],
+): number {
+  return statuses.filter(
+    (status) => status !== SegmentPayableStatus.NOT_GENERATED,
+  ).length
+}

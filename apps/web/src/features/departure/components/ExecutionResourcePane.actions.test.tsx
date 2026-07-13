@@ -19,6 +19,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
+  generatePayablesForSegment: vi.fn(),
 }))
 
 const segment: ItinerarySegmentSummary = {
@@ -34,6 +35,7 @@ const segment: ItinerarySegmentSummary = {
   resourceCount: 1,
   outsourceCount: 0,
   resourceAmountCents: 300000,
+  payableGeneratedCount: 0,
   payableStatus: 'not_generated',
 }
 

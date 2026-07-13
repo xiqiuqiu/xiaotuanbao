@@ -17,7 +17,7 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
 import { formatDateOnly } from './departure-date.utils'
-import { aggregatePayableOverview } from './segment-payable-overview.utils'
+import { aggregatePayableOverview, countPayableGenerated } from './segment-payable-overview.utils'
 import {
   normalizeOptionalText,
   resolveSegmentDatePair,
@@ -308,6 +308,7 @@ export class SegmentService {
       resourceCount,
       outsourceCount,
       resourceAmountCents,
+      payableGeneratedCount: countPayableGenerated(payableStatuses),
       payableStatus: aggregatePayableOverview(payableStatuses),
     }
   }

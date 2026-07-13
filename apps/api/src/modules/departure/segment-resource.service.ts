@@ -7,6 +7,8 @@ import {
 import {
   RESOURCE_KIND_LABELS,
   SegmentPayableStatus,
+  type BatchFinanceGenerationItem,
+  type BatchFinanceGenerationResult,
   type GeneratePayableResult,
   type ResourceKind as SharedResourceKind,
   type SegmentResourceListResult,
@@ -32,6 +34,11 @@ import type {
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import type { SegmentResourceFinanceState } from '../finance/departure-finance-facade.service'
 import { resolveSegmentResourceCounterparty } from './segment-resource.validation'
+import {
+  httpExceptionMessage,
+  isAlreadyGeneratedConflict,
+  summarizeBatchFinanceGeneration,
+} from './batch-finance-generation.utils'
 
 type SegmentResourceWithRelations = SegmentResource & {
   partner: Partner | null
@@ -264,6 +271,98 @@ export class SegmentResourceService {
       resource: this.toResourceSummary(resource, meta),
       sourceAmountMismatch,
     }
+  }
+
+  async generatePayablesForSegment(
+    organizationId: string,
+    segmentId: string,
+  ): Promise<BatchFinanceGenerationResult> {
+    const segment = await this.findSegmentOrThrow(organizationId, segmentId)
+    await this.departureFinanceFacade.assertMutableById(
+      organizationId,
+      segment.departureId,
+      '生成应付',
+    )
+
+    const resources = await this.prisma.segmentResource.findMany({
+      where: {
+        segmentId,
+        segment: { departure: { organizationId } },
+      },
+      include: {
+        partner: true,
+        supplier: true,
+        segment: true,
+      },
+      orderBy: [{ id: 'asc' }],
+    })
+
+    const existingScheduleSourceIds = new Set(
+      (
+        await this.prisma.paymentSchedule.findMany({
+          where: {
+            organizationId,
+            departureId: segment.departureId,
+            direction: PaymentScheduleDirection.payable,
+            sourceId: { in: resources.map((resource) => resource.id) },
+          },
+          select: { sourceId: true },
+          distinct: ['sourceId'],
+        })
+      ).map((row) => row.sourceId),
+    )
+
+    const items: BatchFinanceGenerationItem[] = []
+
+    for (const resource of resources) {
+      const sourceLabel =
+        resource.title?.trim() ||
+        resource.partner?.name ||
+        resource.supplier?.name ||
+        RESOURCE_KIND_LABELS[resource.resourceKind as SharedResourceKind] ||
+        resource.id
+
+      if (existingScheduleSourceIds.has(resource.id)) {
+        continue
+      }
+
+      if (resource.amountCents <= 0) {
+        items.push({
+          sourceId: resource.id,
+          sourceLabel,
+          outcome: 'skipped',
+          reason: '资源金额须大于 0 才能生成应付',
+        })
+        continue
+      }
+
+      try {
+        await this.generatePayable(organizationId, resource.id)
+        items.push({
+          sourceId: resource.id,
+          sourceLabel,
+          outcome: 'succeeded',
+        })
+      } catch (error) {
+        if (isAlreadyGeneratedConflict(error)) {
+          items.push({
+            sourceId: resource.id,
+            sourceLabel,
+            outcome: 'skipped',
+            reason: httpExceptionMessage(error),
+          })
+          continue
+        }
+        items.push({
+          sourceId: resource.id,
+          sourceLabel,
+          outcome: 'failed',
+          reason: httpExceptionMessage(error),
+        })
+      }
+    }
+
+    return summarizeBatchFinanceGeneration(items)
   }
 
   private async findSegmentOrThrow(organizationId: string, segmentId: string) {

@@ -2,6 +2,7 @@ import { request } from '@/lib/request'
 import type {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
+  BatchFinanceGenerationResult,
   GenerateReceivablesResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
@@ -48,6 +49,14 @@ export async function deleteSourceOrder(id: string): Promise<void> {
 export async function generateReceivables(sourceOrderId: string): Promise<GenerateReceivablesResult> {
   return request.post<GenerateReceivablesResult>(
     `/source-orders/${sourceOrderId}/generate-receivables`,
+  )
+}
+
+export async function generateReceivablesForDeparture(
+  departureId: string,
+): Promise<BatchFinanceGenerationResult> {
+  return request.post<BatchFinanceGenerationResult>(
+    `/departures/${departureId}/generate-receivables`,
   )
 }
 

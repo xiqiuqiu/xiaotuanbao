@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Empty,
+  Modal,
   Popconfirm,
   Space,
   Spin,
@@ -25,6 +26,7 @@ import {
   createSegmentResource,
   deleteSegmentResource,
   generatePayable,
+  generatePayablesForSegment,
   listSegmentResources,
   updateSegmentResource,
 } from '@/services/segment-resource.service'
@@ -35,6 +37,8 @@ import {
   formatCents,
 } from '../catalog'
 import { formValuesToPayload } from '../utils/resource-form'
+import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
+import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ResourceDrawer } from './ResourceDrawer'
 import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
 
@@ -85,6 +89,11 @@ export function ExecutionResourcePane({
   })
 
   const resources = listResult?.items ?? []
+  const payableGap = segmentPayableGenerationGap(
+    segment.payableGeneratedCount,
+    segment.resourceCount,
+  )
+  const showBatchGenerate = !mutationLocked && payableGap.hasGap
 
   const invalidateResourceQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['segment-resources', segment.id] })
@@ -154,6 +163,36 @@ export function ExecutionResourcePane({
       message.error(mutationErrorMessage(error, '生成应付失败'))
     },
   })
+
+  const batchGenerateMutation = useMutation({
+    mutationFn: () => generatePayablesForSegment(segment.id),
+    onSuccess: (result) => {
+      const text = formatBatchFinanceGenerationMessage(result, '应付')
+      if (result.failed > 0) {
+        message.warning(text)
+      } else if (result.succeeded > 0) {
+        message.success(text)
+      } else {
+        message.info(text)
+      }
+      invalidateResourceQueries()
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+    },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '批量生成应付失败'))
+    },
+  })
+
+  const confirmBatchGenerate = () => {
+    Modal.confirm({
+      title: '批量生成应付',
+      content: '将为本段所有尚未生成应付的资源生成应付，是否继续？',
+      okText: '生成',
+      cancelText: '取消',
+      onOk: () => batchGenerateMutation.mutateAsync(),
+    })
+  }
 
   const onViewPayables = useCallback(
     (resource: SegmentResourceSummary) => {
@@ -274,11 +313,21 @@ export function ExecutionResourcePane({
         }}
       >
         <Typography.Text strong>资源安排</Typography.Text>
-        {!mutationLocked && !isLoading && !isError && resources.length > 0 ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            添加资源
-          </Button>
-        ) : null}
+        <Space>
+          {showBatchGenerate ? (
+            <Button
+              onClick={confirmBatchGenerate}
+              loading={batchGenerateMutation.isPending}
+            >
+              批量生成应付
+            </Button>
+          ) : null}
+          {!mutationLocked && !isLoading && !isError && resources.length > 0 ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              添加资源
+            </Button>
+          ) : null}
+        </Space>
       </div>
 
       {isError ? (

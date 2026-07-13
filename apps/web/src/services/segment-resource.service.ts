@@ -46,10 +46,10 @@ export async function generatePayable(resourceId: string): Promise<GeneratePayab
   return request.post<GeneratePayableResult>(`/segment-resources/${resourceId}/generate-payable`)
 }
 
-export async function generatePayablesForDeparture(
-  departureId: string,
+export async function generatePayablesForSegment(
+  segmentId: string,
 ): Promise<BatchFinanceGenerationResult> {
   return request.post<BatchFinanceGenerationResult>(
-    `/departures/${departureId}/generate-payables`,
+    `/segments/${segmentId}/generate-payables`,
   )
 }

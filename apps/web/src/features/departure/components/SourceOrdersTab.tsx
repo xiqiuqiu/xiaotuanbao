@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer } from 'react'
-import { Button, Table, Typography, message } from 'antd'
+import { Button, Modal, Space, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -10,10 +10,10 @@ import {
   createSourceOrder,
   deleteSourceOrder,
   generateReceivables,
+  generateReceivablesForDeparture,
   listSourceOrders,
   updateSourceOrder,
 } from '@/services/source-order.service'
-import { formatCents } from '../catalog'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrderGuestDrawer } from './SourceOrderGuestDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
@@ -24,6 +24,7 @@ import {
   type SourceOrderFilterDraft,
 } from '../utils/source-order-filter-state'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
+import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
 
 interface SourceOrdersTabProps {
   departure: DepartureDetail
@@ -198,6 +199,37 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     },
   })
 
+  const batchGenerateMutation = useMutation({
+    mutationFn: () => generateReceivablesForDeparture(departure.id),
+    onSuccess: (result) => {
+      const text = formatBatchFinanceGenerationMessage(result, '应收')
+      if (result.failed > 0) {
+        message.warning(text)
+      } else if (result.succeeded > 0) {
+        message.success(text)
+      } else {
+        message.info(text)
+      }
+      void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '批量生成应收失败')
+    },
+  })
+
+  const confirmBatchGenerate = () => {
+    Modal.confirm({
+      title: '批量生成应收',
+      content: '将为本团所有尚未生成应收的客源单生成应收，是否继续？',
+      okText: '生成',
+      cancelText: '取消',
+      onOk: () => batchGenerateMutation.mutateAsync(),
+    })
+  }
+
   const onView = useCallback((order: SourceOrderSummary) => {
     dispatchDrawer({ type: 'OPEN_VIEW', order })
   }, [])
@@ -254,28 +286,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       label: partner.name,
     })) ?? []
 
-  const summary = listResult?.summary
-
   return (
     <div>
-      {summary ? (
-        <Typography.Paragraph style={{ marginBottom: 16 }}>
-          <Typography.Text strong>
-            客源{summary.orderCount}单
-          </Typography.Text>
-          {' · '}
-          总人数{summary.totalGuests}人
-          {' · '}
-          客户{summary.partnerCount}家
-          {' · '}
-          优惠 {formatCents(summary.totalDiscountCents)}
-          {' · '}
-          结算金额 {formatCents(summary.totalNetReceivableCents)}
-          {' · '}
-          我方代收 {formatCents(summary.totalGuestCollectCents)}
-        </Typography.Paragraph>
-      ) : null}
-
       <SourceOrdersFilters
         draft={filters.draft}
         partnerOptions={partnerOptions}
@@ -284,13 +296,18 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         onReset={() => dispatchFilters({ type: 'RESET' })}
         extra={
           !readOnly ? (
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
-            >
-              添加客源单
-            </Button>
+            <Space>
+              <Button onClick={confirmBatchGenerate} loading={batchGenerateMutation.isPending}>
+                批量生成应收
+              </Button>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
+              >
+                添加客源单
+              </Button>
+            </Space>
           ) : undefined
         }
       />

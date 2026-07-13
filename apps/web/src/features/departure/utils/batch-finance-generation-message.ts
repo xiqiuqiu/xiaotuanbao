@@ -1,6 +1,6 @@
 import type { BatchFinanceGenerationResult } from '@xiaotuanbao/shared'
 
-/** 将发团级一键生成结果收成一句 Toast 文案。 */
+/** 将批量生成应收/应付结果收成一句 Toast 文案。 */
 export function formatBatchFinanceGenerationMessage(
   result: BatchFinanceGenerationResult,
   noun: '应收' | '应付',
@@ -22,7 +22,7 @@ export function formatBatchFinanceGenerationMessage(
     .slice(0, 2)
     .map((item) => `${item.sourceLabel}：${item.reason}`)
 
-  const summary = `${noun}一键生成完成：${parts.join(' · ')}`
+  const summary = `${noun}批量生成完成：${parts.join(' · ')}`
   if (failedSample.length === 0) {
     return summary
   }

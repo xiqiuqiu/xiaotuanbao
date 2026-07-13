@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -23,6 +23,7 @@ const mockSegment = {
   resourceCount: 1,
   outsourceCount: 0,
   resourceAmountCents: 300000,
+  payableGeneratedCount: 0,
   payableStatus: 'not_generated',
   // Extra legacy field: UI must ignore even if a stale client still sends it.
   fromTemplate: true,
@@ -67,7 +68,7 @@ vi.mock('@/services/segment-resource.service', () => ({
   updateSegmentResource: vi.fn(),
   deleteSegmentResource: vi.fn(),
   generatePayable: vi.fn(),
-  generatePayablesForDeparture: vi.fn(),
+  generatePayablesForSegment: vi.fn(),
 }))
 
 const mockDeparture = {
@@ -107,7 +108,7 @@ describe('ExecutionTab layout', () => {
   })
 
   it('keeps 行程段 and 资源安排 side-by-side in one nowrap row', async () => {
-    renderExecutionTab()
+    const { container } = renderExecutionTab()
 
     const segmentTitle = await screen.findByText('行程段')
     const resourceTitle = await screen.findByText('资源安排')
@@ -116,6 +117,10 @@ describe('ExecutionTab layout', () => {
     const resourceCard = resourceTitle.closest('.ant-card')
     expect(segmentCard).toBeTruthy()
     expect(resourceCard).toBeTruthy()
+    expect(segmentCard!.querySelector('.ant-card-extra')).toBeNull()
+    expect(container.querySelector('[aria-label="生成 0/1"]')).toBeTruthy()
+    expect(within(resourceCard as HTMLElement).getByText('批量生成应付')).toBeInTheDocument()
+    expect(within(resourceCard as HTMLElement).getByText('添加资源')).toBeInTheDocument()
 
     const segmentCol = segmentCard!.parentElement
     const resourceCol = resourceCard!.parentElement
@@ -142,6 +147,12 @@ describe('ExecutionTab layout', () => {
 
     const selected = container.querySelector('[data-segment-id="segment-1"]')
     expect(selected).toBeTruthy()
+
+    const addBtn = screen.getByRole('button', { name: '添加' })
+    const footer = addBtn.closest('[class*="segmentListFooter"]')
+    expect(footer).toBeTruthy()
+    expect(segmentCard).toContainElement(footer)
+    expect(footer!.parentElement?.lastElementChild).toBe(footer)
   })
 
   it('does not render 模板 badge on segment nav cards', async () => {
@@ -149,25 +160,5 @@ describe('ExecutionTab layout', () => {
 
     expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
     expect(screen.queryByText('模板')).not.toBeInTheDocument()
-  })
-
-  it('pins 添加 under the segment list and puts 一键生成应付 in the segment card header', async () => {
-    renderExecutionTab()
-
-    const segmentTitle = await screen.findByText('行程段')
-    const segmentCard = segmentTitle.closest('.ant-card')
-    expect(segmentCard).toBeTruthy()
-
-    const generateBtn = screen.getByRole('button', { name: '一键生成应付' })
-    expect(segmentCard!.querySelector('.ant-card-extra')).toContainElement(generateBtn)
-
-    const addBtn = screen.getByRole('button', { name: '添加' })
-    const footer = addBtn.closest('[class*="segmentListFooter"]')
-    expect(footer).toBeTruthy()
-    expect(segmentCard).toContainElement(footer)
-
-    const segmentList = footer!.parentElement
-    expect(segmentList?.className).toMatch(/segmentList/)
-    expect(segmentList?.lastElementChild).toBe(footer)
   })
 })

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import type {
+  BatchFinanceGenerationResult,
   GeneratePayableResult,
   SegmentResourceListResult,
   SegmentResourceSummary,
@@ -81,6 +82,18 @@ export class SegmentResourceController {
   ): Promise<{ success: true }> {
     await this.segmentResourceService.remove(request.user.organizationId, id)
     return { success: true }
+  }
+
+  @Post('segments/:id/generate-payables')
+  @RequireMenu('/departure')
+  generatePayablesForSegment(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<BatchFinanceGenerationResult> {
+    return this.segmentResourceService.generatePayablesForSegment(
+      request.user.organizationId,
+      id,
+    )
   }
 
   @Post('segment-resources/:id/generate-payable')

@@ -5,9 +5,9 @@ import {
   Card,
   Col,
   Empty,
-  Modal,
   Row,
   Spin,
+  Tooltip,
   Typography,
   message,
   theme,
@@ -27,7 +27,6 @@ import {
   listSegments,
   updateSegment,
 } from '@/services/segment.service'
-import { generatePayablesForDeparture } from '@/services/segment-resource.service'
 import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
@@ -36,9 +35,8 @@ import {
   formatResourceOverview,
   formValuesToPayload,
 } from '../utils/segment-form'
-import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
+import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
-import { ExecutionSummaryBar } from './ExecutionSummaryBar'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
 
@@ -122,7 +120,7 @@ export function ExecutionTab({
     syncHeight()
     window.addEventListener('resize', syncHeight)
     return () => window.removeEventListener('resize', syncHeight)
-  }, [isLoading, isError, listResult?.summary])
+  }, [isLoading, isError, listResult])
 
   useEffect(() => {
     // Only canonicalize segmentId while execution owns the URL. Otherwise a
@@ -262,38 +260,6 @@ export function ExecutionTab({
     },
   })
 
-  const batchGenerateMutation = useMutation({
-    mutationFn: () => generatePayablesForDeparture(departure.id),
-    onSuccess: (result) => {
-      const text = formatBatchFinanceGenerationMessage(result, '应付')
-      if (result.failed > 0) {
-        message.warning(text)
-      } else if (result.succeeded > 0) {
-        message.success(text)
-      } else {
-        message.info(text)
-      }
-      invalidateSegments()
-      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-    },
-    onError: (error) => {
-      message.error(error instanceof Error ? error.message : '一键生成应付失败')
-    },
-  })
-
-  const confirmBatchGenerate = () => {
-    Modal.confirm({
-      title: '一键生成应付',
-      content: '将为本团所有尚未生成应付的资源生成应付，是否继续？',
-      okText: '生成',
-      cancelText: '取消',
-      onOk: () => batchGenerateMutation.mutateAsync(),
-    })
-  }
-
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -335,8 +301,6 @@ export function ExecutionTab({
 
   return (
     <div className={styles.workspace} ref={workspaceRef}>
-      {listResult?.summary ? <ExecutionSummaryBar summary={listResult.summary} /> : null}
-
       <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
         <Col
           className={`${styles.paneCol} ${styles.segmentPaneCol}`}
@@ -347,18 +311,6 @@ export function ExecutionTab({
             className={styles.paneCard}
             classNames={{ body: styles.paneCardBody }}
             title="行程段"
-            extra={
-              !mutationLocked ? (
-                <Button
-                  size="small"
-                  onClick={confirmBatchGenerate}
-                  loading={batchGenerateMutation.isPending}
-                  disabled={segments.length === 0}
-                >
-                  一键生成应付
-                </Button>
-              ) : null
-            }
             styles={{ body: { padding: 12 } }}
           >
             <div className={styles.segmentPane} style={segmentTokenStyle}>
@@ -460,8 +412,13 @@ function SegmentNavItem({
   onSelect: () => void
   onEdit: () => void
 }) {
+  const { token } = theme.useToken()
   const dateRange = formatNavDateRange(segment.startDate, segment.endDate)
   const meta = dateRange
+  const gap = segmentPayableGenerationGap(
+    segment.payableGeneratedCount,
+    segment.resourceCount,
+  )
 
   return (
     <div
@@ -496,7 +453,36 @@ function SegmentNavItem({
         ) : null}
       </div>
       {meta ? <span className={styles.segmentItemMeta}>{meta}</span> : null}
-      <span className={styles.segmentItemOverview}>{formatResourceOverview(segment)}</span>
+      <div className={styles.segmentItemOverviewRow}>
+        <span className={styles.segmentItemOverview}>
+          {formatResourceOverview(segment)}
+        </span>
+        {gap.hasGap ? (
+          <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未生成应付`}>
+            <span
+              className={styles.segmentPayableGap}
+              aria-label={`生成 ${gap.generated}/${gap.total}`}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <span
+                className={styles.segmentPayableRing}
+                style={
+                  {
+                    '--ring-progress': `${gap.percent}%`,
+                    '--ring-color': token.colorPrimary,
+                    '--ring-track': token.colorFillSecondary,
+                  } as CSSProperties
+                }
+                aria-hidden
+              />
+              <span aria-hidden>
+                生成 {gap.generated}/{gap.total}
+              </span>
+            </span>
+          </Tooltip>
+        ) : null}
+      </div>
     </div>
   )
 }
