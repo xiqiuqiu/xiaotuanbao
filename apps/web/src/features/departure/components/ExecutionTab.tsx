@@ -15,7 +15,11 @@ import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import dayjs from 'dayjs'
-import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
+import type {
+  DepartureDetail,
+  ItinerarySegmentListResult,
+  ItinerarySegmentSummary,
+} from '@/types/api'
 import {
   createSegment,
   deleteSegment,
@@ -77,7 +81,7 @@ export function ExecutionTab({
   const segmentListRef = useRef<HTMLDivElement>(null)
   const mutationLocked = readOnly || amountReadOnly
 
-  const { data: listResult, isLoading, isError, refetch } = useQuery({
+  const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['segments', departure.id],
     queryFn: () => listSegments(departure.id),
   })
@@ -127,6 +131,16 @@ export function ExecutionTab({
     if (isLoading || isError || selectedSegmentId === segmentId) {
       return
     }
+    // After create, URL already has the new id while the list query may still
+    // be stale/refetching. Falling back to the first segment here would undo
+    // the intentional selection — wait until fetch settles.
+    if (
+      segmentId &&
+      isFetching &&
+      !segments.some((segment) => segment.id === segmentId)
+    ) {
+      return
+    }
 
     void navigate({
       to: '/departure/$departureId',
@@ -140,10 +154,12 @@ export function ExecutionTab({
   }, [
     departure.id,
     isError,
+    isFetching,
     isLoading,
     navigate,
     search.tab,
     segmentId,
+    segments,
     selectedSegmentId,
   ])
 
@@ -195,6 +211,30 @@ export function ExecutionTab({
       } else {
         message.success('行程段已添加')
         message.info('请在本段「资源安排」中添加用车、酒店、拼出等资源')
+        // Seed the list cache before URL sync so resolveSelectedSegmentId does
+        // not treat the new id as missing and fall back to the first segment.
+        queryClient.setQueryData(
+          ['segments', departure.id],
+          (prev: ItinerarySegmentListResult | undefined) => {
+            if (!prev) {
+              return prev
+            }
+            if (prev.items.some((item) => item.id === saved.id)) {
+              return prev
+            }
+            return {
+              ...prev,
+              items: [...prev.items, saved],
+              total: prev.total + 1,
+              summary: prev.summary
+                ? {
+                    ...prev.summary,
+                    segmentCount: prev.summary.segmentCount + 1,
+                  }
+                : prev.summary,
+            }
+          },
+        )
       }
       closeDrawer()
       invalidateSegments()
