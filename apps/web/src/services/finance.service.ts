@@ -13,6 +13,7 @@ import type {
   FinanceVerificationListResult,
   FinanceVerificationSummary,
   PaymentScheduleDetail,
+  PaymentScheduleCounterpartyOption,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
   ReopenPaymentScheduleDto,
@@ -41,6 +42,9 @@ export interface FinanceSourceOrderOption {
 
 export interface ListPaymentSchedulesParams {
   departureId?: string
+  counterpartyType?: string
+  counterpartyId?: string
+  counterpartyName?: string
   page?: number
   pageSize?: number
 }
@@ -226,6 +230,22 @@ export async function listDeparturePayables(
   return request.get<PaymentScheduleListResult>(`/departures/${departureId}/payables`, {
     params,
   })
+}
+
+export async function listDepartureReceivableCounterparties(
+  departureId: string,
+): Promise<PaymentScheduleCounterpartyOption[]> {
+  return request.get<PaymentScheduleCounterpartyOption[]>(
+    `/departures/${departureId}/receivables/counterparties`,
+  )
+}
+
+export async function listDeparturePayableCounterparties(
+  departureId: string,
+): Promise<PaymentScheduleCounterpartyOption[]> {
+  return request.get<PaymentScheduleCounterpartyOption[]>(
+    `/departures/${departureId}/payables/counterparties`,
+  )
 }
 
 export async function listDepartureVerifications(

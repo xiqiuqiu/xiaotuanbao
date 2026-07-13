@@ -2,7 +2,11 @@ import { useCallback, useMemo, useState } from 'react'
 import { theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import {
+  CounterpartyType,
+  PaymentScheduleStatus,
+  type PaymentScheduleSummary,
+} from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import {
   listDeparturePayables,
@@ -14,6 +18,7 @@ import {
 import type { DueDateRange } from '../components/PaymentScheduleFilters'
 import { buildPaymentScheduleColumns } from '../components/payment-schedule-table-columns'
 import { applyPaymentScheduleClientFilters } from '../utils/apply-payment-schedule-client-filters'
+import { decodeCounterpartyEntityKey } from '../utils/payment-schedule-counterparty-filter'
 import { usePaymentScheduleDialogs } from './usePaymentScheduleDialogs'
 import { usePaymentScheduleLocate } from './usePaymentScheduleLocate'
 import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
@@ -51,12 +56,16 @@ export function usePaymentScheduleWorkspace({
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatus | undefined>()
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
+  const [counterpartyType, setCounterpartyType] = useState<CounterpartyType | undefined>()
+  const [counterpartyEntityKey, setCounterpartyEntityKey] = useState<string | undefined>()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
   const dialogs = usePaymentScheduleDialogs(isReceivable)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
+  const counterpartyEntity = decodeCounterpartyEntityKey(counterpartyEntityKey)
+  const hasCounterpartyFilter = Boolean(counterpartyType)
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
   const locatingFinanceRow =
     isDepartureScope &&
@@ -65,6 +74,14 @@ export function usePaymentScheduleWorkspace({
   const useExpandedFetch = hasClientFilters || locatingFinanceRow
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
+  const counterpartyQuery = hasCounterpartyFilter
+    ? {
+        counterpartyType,
+        counterpartyId: counterpartyEntity?.counterpartyId,
+        counterpartyName: counterpartyEntity?.counterpartyName,
+      }
+    : {}
+
   const { data: schedulesResult, isLoading, isFetching } = useQuery({
     queryKey: [
       isDepartureScope ? departureListQueryKey : listQueryKey,
@@ -72,6 +89,8 @@ export function usePaymentScheduleWorkspace({
       page,
       fetchPageSize,
       useExpandedFetch,
+      counterpartyType,
+      counterpartyEntityKey,
     ],
     queryFn: () => {
       if (isDepartureScope) {
@@ -82,12 +101,14 @@ export function usePaymentScheduleWorkspace({
         return listFn(lockedDepartureId, {
           page: useExpandedFetch ? 1 : page,
           pageSize: fetchPageSize,
+          ...counterpartyQuery,
         })
       }
       return (isReceivable ? listReceivables : listPayables)({
         departureId: effectiveDepartureId,
         page: hasClientFilters ? 1 : page,
         pageSize: fetchPageSize,
+        ...counterpartyQuery,
       })
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
@@ -218,6 +239,8 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter(undefined)
     setKeyword('')
     setDueDateRange(null)
+    setCounterpartyType(undefined)
+    setCounterpartyEntityKey(undefined)
     setPage(1)
   }, [scope])
 
@@ -260,6 +283,8 @@ export function usePaymentScheduleWorkspace({
     statusFilter,
     keyword,
     dueDateRange,
+    counterpartyType,
+    counterpartyEntityKey,
     page,
     pageSize,
     setPage,
@@ -268,8 +293,11 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter,
     setKeyword,
     setDueDateRange,
+    setCounterpartyType,
+    setCounterpartyEntityKey,
     resetFilters,
     scope,
+    direction,
     isLoading,
     columns,
     tableItems,

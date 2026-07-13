@@ -30,6 +30,8 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     statusFilter,
     keyword,
     dueDateRange,
+    counterpartyType,
+    counterpartyEntityKey,
     page,
     pageSize,
     setPage,
@@ -38,8 +40,11 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     setStatusFilter,
     setKeyword,
     setDueDateRange,
+    setCounterpartyType,
+    setCounterpartyEntityKey,
     resetFilters,
     scope,
+    direction,
     isLoading,
     columns,
     tableItems,
@@ -74,6 +79,10 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         keyword={keyword}
         dueDateRange={dueDateRange}
         showDepartureFilter={scope === 'global'}
+        showCounterpartyFilter={scope === 'departure'}
+        direction={direction}
+        counterpartyType={counterpartyType}
+        counterpartyEntityKey={counterpartyEntityKey}
         onDepartureChange={(value) => {
           setDepartureFilter(value)
           setPage(1)
@@ -88,6 +97,14 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         }}
         onDueDateRangeChange={(value) => {
           setDueDateRange(value)
+          setPage(1)
+        }}
+        onCounterpartyTypeChange={(value) => {
+          setCounterpartyType(value)
+          setPage(1)
+        }}
+        onCounterpartyEntityKeyChange={(value) => {
+          setCounterpartyEntityKey(value)
           setPage(1)
         }}
         onReset={resetFilters}

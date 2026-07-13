@@ -22,6 +22,34 @@ export class DepartureFinanceReadController {
     private readonly verificationService: VerificationService,
   ) {}
 
+  @Get('departures/:departureId/receivables/counterparties')
+  @RequireMenu('/departure')
+  async listReceivableCounterparties(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+  ) {
+    await this.departureService.getById(request.user.organizationId, departureId)
+    return this.paymentScheduleService.listCounterparties(
+      request.user.organizationId,
+      PaymentScheduleDirection.receivable,
+      departureId,
+    )
+  }
+
+  @Get('departures/:departureId/payables/counterparties')
+  @RequireMenu('/departure')
+  async listPayableCounterparties(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+  ) {
+    await this.departureService.getById(request.user.organizationId, departureId)
+    return this.paymentScheduleService.listCounterparties(
+      request.user.organizationId,
+      PaymentScheduleDirection.payable,
+      departureId,
+    )
+  }
+
   @Get('departures/:departureId/receivables')
   @RequireMenu('/departure')
   async listReceivables(

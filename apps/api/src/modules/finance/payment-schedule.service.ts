@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common'
 import type {
   PaymentScheduleActivityItem,
+  PaymentScheduleCounterpartyOption,
   PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
@@ -40,6 +41,10 @@ import type {
   ReopenPaymentScheduleDto,
   UpdatePaymentScheduleDto,
 } from './dto/payment-schedule.dto'
+import {
+  buildPaymentScheduleCounterpartyWhere,
+  dedupePaymentScheduleCounterparties,
+} from './payment-schedule-list-filters'
 
 const FINANCE_ADJUSTMENT_FIELDS = [
   'amountCents',
@@ -66,11 +71,13 @@ export class PaymentScheduleService {
   ): Promise<PaymentScheduleListResult> {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
+    const counterpartyWhere = buildPaymentScheduleCounterpartyWhere(query)
 
     const where: Prisma.PaymentScheduleWhereInput = {
       organizationId,
       direction,
       ...(query.departureId ? { departureId: query.departureId } : {}),
+      ...counterpartyWhere,
     }
 
     const [items, total] = await Promise.all([
@@ -104,6 +111,27 @@ export class PaymentScheduleService {
       page,
       pageSize,
     }
+  }
+
+  async listCounterparties(
+    organizationId: string,
+    direction: PaymentScheduleDirection,
+    departureId: string,
+  ): Promise<PaymentScheduleCounterpartyOption[]> {
+    const rows = await this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        direction,
+        departureId,
+      },
+      select: {
+        counterpartyType: true,
+        counterpartyId: true,
+        counterpartyName: true,
+      },
+    })
+
+    return dedupePaymentScheduleCounterparties(rows)
   }
 
   async getById(

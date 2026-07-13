@@ -362,6 +362,13 @@ export interface PaymentScheduleListResult {
   pageSize: number
 }
 
+/** Distinct counterparty option for payment-schedule list filters. */
+export interface PaymentScheduleCounterpartyOption {
+  counterpartyType: string
+  counterpartyId: string | null
+  counterpartyName: string | null
+}
+
 export interface CancelPaymentScheduleDto {
   closeDisposition: string
   cancelReason: string

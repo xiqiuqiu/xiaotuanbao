@@ -87,6 +87,18 @@ export class ListPaymentSchedulesQueryDto {
   departureId?: string
 
   @IsOptional()
+  @IsEnum(PrismaCounterpartyType)
+  counterpartyType?: PrismaCounterpartyType
+
+  @IsOptional()
+  @IsString()
+  counterpartyId?: string
+
+  @IsOptional()
+  @IsString()
+  counterpartyName?: string
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
