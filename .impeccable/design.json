@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-13T00:00:00+08:00",
+  "title": "Design System: 小团宝",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "小团宝蓝", "canonical": "#1677FF" },
+      "ink": { "role": "neutral", "displayName": "主墨色", "canonical": "#1F1F1F" },
+      "layout": { "role": "neutral", "displayName": "布局底", "canonical": "#F5F5F5" },
+      "surface": { "role": "neutral", "displayName": "工作面", "canonical": "#FFFFFF" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "页面标题", "purpose": "模块页唯一标题" },
+      "body": { "displayName": "正文", "purpose": "表格、表单与说明" }
+    },
+    "elevation": {
+      "philosophy": "flat-by-default",
+      "rules": ["静态表面依靠底色和细边框分层", "只有浮层使用 Ant Design 阴影 token"]
+    },
+    "motion": {
+      "fast": "100ms",
+      "mid": "200ms",
+      "slow": "300ms",
+      "reducedMotion": "required"
+    },
+    "breakpoints": {
+      "mobile": "<768px",
+      "desktop": ">=768px"
+    },
+    "narrative": {
+      "northStar": "清晰运营台",
+      "rules": ["蓝色要稀有", "无裸色值", "标题不抢任务", "静态不漂浮"]
+    }
+  }
+}

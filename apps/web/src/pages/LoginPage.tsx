@@ -3,10 +3,15 @@ import {
   Alert,
   App,
   Button,
+  Card,
   Checkbox,
+  Flex,
   Form,
   Input,
+  Row,
+  Col,
   Typography,
+  theme,
 } from 'antd'
 import {
   FileDoneOutlined,
@@ -32,26 +37,24 @@ const FEATURES = [
     title: '项目经营',
     desc: '全过程管控',
     icon: <FolderOutlined />,
-    iconClassName: styles.featureIcon,
   },
   {
     key: 'contract',
     title: '合同履约',
     desc: '全周期跟踪',
     icon: <FileDoneOutlined />,
-    iconClassName: styles.featureIcon,
   },
   {
     key: 'fund',
     title: '资金协同',
     desc: '多维度联动',
     icon: <MoneyCollectOutlined />,
-    iconClassName: styles.featureIcon,
   },
 ] as const
 
 export function LoginPage() {
   const { message } = App.useApp()
+  const { token } = theme.useToken()
   const navigate = useNavigate()
   const setSession = useAuthStore((state) => state.setSession)
   const [form] = Form.useForm<{ username: string; password: string }>()
@@ -80,44 +83,63 @@ export function LoginPage() {
   return (
     <div className={styles.page}>
       <section className={styles.brand} aria-label="品牌介绍">
-        <div className={styles.brandLockup} aria-label={env.appName}>
+        <Flex vertical className={styles.brandInner}>
+          <Flex
+            align="center"
+            gap={token.marginMD}
+            className={styles.brandLockup}
+            aria-label={env.appName}
+          >
+            <img
+              className={styles.brandLogo}
+              src="/xiaotuanbao-brand-mark-v2.png"
+              alt=""
+              aria-hidden="true"
+            />
+            <Typography.Title level={2} className={styles.brandName}>
+              {env.appName}
+            </Typography.Title>
+          </Flex>
+
+          <div className={styles.copyBlock}>
+            <Typography.Title level={2} className={styles.headline}>
+              让项目、合同与资金协同流转
+            </Typography.Title>
+            <Typography.Paragraph className={styles.subheadline}>
+              企业项目经营与财务协作平台
+            </Typography.Paragraph>
+          </div>
+
+          <Row
+            className={styles.features}
+            gutter={[token.marginLG, token.marginMD]}
+            wrap={false}
+          >
+            {FEATURES.map((feature) => (
+              <Col key={feature.key} flex="1 1 0" className={styles.featureCol}>
+                <Flex vertical gap={token.marginXS}>
+                  <span className={styles.featureIcon}>{feature.icon}</span>
+                  <Typography.Text strong className={styles.featureTitle}>
+                    {feature.title}
+                  </Typography.Text>
+                  <Typography.Text type="secondary" className={styles.featureDesc}>
+                    {feature.desc}
+                  </Typography.Text>
+                </Flex>
+              </Col>
+            ))}
+          </Row>
+
           <img
-            className={styles.brandLogo}
-            src="/xiaotuanbao-brand-mark-v2.png"
-            alt=""
-            aria-hidden="true"
+            className={styles.illustration}
+            src="/login-travel-operations-transparent-v2.png"
+            alt="发团协同流程示意：出发地、行程计划、供应商资源、地接服务、酒店资源与结算对账"
           />
-          <Typography.Title level={2} className={styles.brandName}>
-            {env.appName}
-          </Typography.Title>
-        </div>
-
-        <Typography.Title level={2} className={styles.headline}>
-          让项目、合同与资金协同流转
-        </Typography.Title>
-        <Typography.Paragraph className={styles.subheadline}>
-          企业项目经营与财务协作平台
-        </Typography.Paragraph>
-
-        <div className={styles.features}>
-          {FEATURES.map((feature) => (
-            <div key={feature.key} className={styles.feature}>
-              <span className={feature.iconClassName}>{feature.icon}</span>
-              <p className={styles.featureTitle}>{feature.title}</p>
-              <p className={styles.featureDesc}>{feature.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        <img
-          className={styles.illustration}
-          src="/login-travel-operations-transparent-v2.png"
-          alt="发团协同流程示意：出发地、行程计划、供应商资源、地接服务、酒店资源与结算对账"
-        />
+        </Flex>
       </section>
 
       <main className={styles.panel} aria-label="登录">
-        <div className={styles.card}>
+        <Card className={styles.card} variant="outlined">
           <Typography.Title level={3} className={styles.cardTitle}>
             登录工作台
           </Typography.Title>
@@ -131,7 +153,7 @@ export function LoginPage() {
                   : '登录失败'
               }
               showIcon
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: token.marginMD }}
             />
           ) : null}
 
@@ -174,7 +196,11 @@ export function LoginPage() {
               />
             </Form.Item>
 
-            <div className={styles.formExtras}>
+            <Flex
+              className={styles.formExtras}
+              align="center"
+              justify="space-between"
+            >
               <Checkbox
                 checked={rememberUsername}
                 onChange={(event) => setRememberUsername(event.target.checked)}
@@ -188,7 +214,7 @@ export function LoginPage() {
               >
                 忘记密码？
               </Button>
-            </div>
+            </Flex>
 
             <Button
               className={styles.submit}
@@ -202,13 +228,15 @@ export function LoginPage() {
             </Button>
           </Form>
 
-          <div className={styles.secureHint}>
+          <Flex className={styles.secureHint} align="center" gap={token.marginXS}>
             <SafetyCertificateOutlined className={styles.secureIcon} />
             <span>安全连接，企业数据加密传输</span>
-          </div>
-        </div>
+          </Flex>
+        </Card>
 
-        <div className={styles.version}>版本 1.0</div>
+        <Typography.Text type="secondary" className={styles.version}>
+          版本 1.0
+        </Typography.Text>
       </main>
     </div>
   )
