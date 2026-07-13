@@ -40,13 +40,13 @@ type UsePaymentScheduleLocateOptions = {
   statusFilter?: PaymentScheduleStatus
   dueDateRange?: DueDateRange
   pageSize: number
-  setPage: (page: number) => void
   applyClientFilters: ApplyClientFilters
 }
 
 /**
- * One-shot row locate: derive highlight ids from props, jump page + flash during render
- * when data is ready, then clear via timeout + onHighlightConsumed.
+ * One-shot row locate: derive target page + flash during render when data is ready,
+ * then clear flash via timeout + onHighlightConsumed. Caller applies `pendingPage`
+ * with its own setState during render.
  */
 export function usePaymentScheduleLocate({
   isReceivable,
@@ -60,7 +60,6 @@ export function usePaymentScheduleLocate({
   statusFilter,
   dueDateRange,
   pageSize,
-  setPage,
   applyClientFilters,
 }: UsePaymentScheduleLocateOptions) {
   const highlightId = isReceivable ? highlightSourceOrderId : highlightSegmentResourceId
@@ -69,6 +68,7 @@ export function usePaymentScheduleLocate({
 
   const [locateFlashActive, setLocateFlashActive] = useState(false)
   const [locateStartedFor, setLocateStartedFor] = useState<string | null>(null)
+  const [pendingPage, setPendingPage] = useState<number | null>(null)
 
   // Parent cleared the highlight prop — allow a future locate for the same id.
   if (!highlightId && locateStartedFor !== null) {
@@ -94,7 +94,7 @@ export function usePaymentScheduleLocate({
       matchesLocateTarget(item, locateSourceOrderId, locateSegmentResourceId),
     )
     if (firstMatchIndex >= 0) {
-      setPage(Math.floor(firstMatchIndex / pageSize) + 1)
+      setPendingPage(Math.floor(firstMatchIndex / pageSize) + 1)
     }
     setLocateStartedFor(highlightId)
     setLocateFlashActive(true)
@@ -107,18 +107,19 @@ export function usePaymentScheduleLocate({
 
     const clearFlashTimer = window.setTimeout(() => {
       setLocateFlashActive(false)
-      setPage(1)
+      setPendingPage(1)
       onHighlightConsumed?.()
     }, LOCATE_FLASH_MS)
 
     return () => {
       window.clearTimeout(clearFlashTimer)
     }
-  }, [locateFlashActive, onHighlightConsumed, setPage])
+  }, [locateFlashActive, onHighlightConsumed])
 
   return {
     locateSourceOrderId,
     locateSegmentResourceId,
     locateFlashActive,
+    pendingPage,
   }
 }

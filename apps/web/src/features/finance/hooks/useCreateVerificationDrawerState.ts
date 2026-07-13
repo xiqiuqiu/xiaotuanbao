@@ -132,8 +132,9 @@ export function useCreateVerificationDrawerState({
     })
   }, [
     departureMap,
+    departureId,
     direction,
-    effectiveDepartureId,
+    lockedDepartureId,
     transactionSearchKeyword,
     transactionsResult?.items,
   ])
@@ -159,8 +160,9 @@ export function useCreateVerificationDrawerState({
       departureMap,
     })
   }, [
+    departureId,
     departureMap,
-    effectiveDepartureId,
+    lockedDepartureId,
     scheduleSearchKeyword,
     schedulesResult?.items,
     selectedTransaction,

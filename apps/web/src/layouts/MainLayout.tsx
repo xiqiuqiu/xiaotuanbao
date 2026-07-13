@@ -146,8 +146,3 @@ export function MainLayout({ children }: PropsWithChildren) {
     </Layout>
   )
 }
-
-/** 认证页全屏壳；具体布局由页面自行控制（如登录双栏）。 */
-export function AuthLayout({ children }: PropsWithChildren) {
-  return <>{children}</>
-}

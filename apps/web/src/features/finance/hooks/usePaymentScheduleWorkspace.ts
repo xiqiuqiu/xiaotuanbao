@@ -93,7 +93,7 @@ export function usePaymentScheduleWorkspace({
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
 
-  const { locateSourceOrderId, locateSegmentResourceId, locateFlashActive } =
+  const { locateSourceOrderId, locateSegmentResourceId, locateFlashActive, pendingPage } =
     usePaymentScheduleLocate({
       isReceivable,
       highlightSourceOrderId,
@@ -106,9 +106,12 @@ export function usePaymentScheduleWorkspace({
       statusFilter,
       dueDateRange,
       pageSize,
-      setPage,
       applyClientFilters: applyPaymentScheduleClientFilters,
     })
+
+  if (pendingPage != null && page !== pendingPage) {
+    setPage(pendingPage)
+  }
 
   const { data: departuresResult } = useQuery({
     queryKey: ['departures', 'finance-schedule-map'],
