@@ -337,4 +337,60 @@ describe('Departure batch finance generation (e2e)', () => {
 
     expect(response.body.message).toBe('发团已关闭，不可生成应收')
   })
+
+  it('exposes payableGeneratedCount on segment list', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    await createResource(segment.id, { title: '未生成用车' })
+    const generated = await createResource(segment.id, {
+      title: '已生成用车',
+      amountCents: 100000,
+    })
+    await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${generated.id}/generate-payable`)
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/segments`)
+      .expect(200)
+
+    const item = (response.body.data.items as Array<{
+      id: string
+      resourceCount: number
+      payableGeneratedCount: number
+      payableStatus: string
+    }>).find((row) => row.id === segment.id)
+
+    expect(item).toMatchObject({
+      id: segment.id,
+      resourceCount: 2,
+      payableGeneratedCount: 1,
+      payableStatus: 'partial',
+    })
+  })
+
+  it('rejects segment batch payables when departure is closed', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    await createResource(segment.id)
+
+    await prisma.departure.update({
+      where: { id: departure.id },
+      data: { status: DepartureStatus.closed },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.id}/generate-payables`)
+      .expect(409)
+
+    expect(response.body.message).toBe('发团已关闭，不可生成应付')
+  })
+
+  it('does not expose departure-level generate-payables', async () => {
+    const departure = await createDeparture()
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/generate-payables`)
+      .expect(404)
+  })
 })
