@@ -191,6 +191,7 @@ export function ExecutionResourcePane({
       title: '资源金额',
       dataIndex: 'amountCents',
       width: 110,
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {

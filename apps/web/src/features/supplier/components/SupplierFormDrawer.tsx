@@ -36,11 +36,11 @@ export function SupplierFormDrawer({
     <Drawer
       title={editing ? '编辑供应商' : '创建供应商'}
       open={open}
-      size={520}
+      size="min(480px, 100vw)"
       onClose={onClose}
       destroyOnHidden
       footer={
-        <Space style={{ float: 'right' }}>
+        <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" loading={loading} onClick={() => form.submit()}>
             保存

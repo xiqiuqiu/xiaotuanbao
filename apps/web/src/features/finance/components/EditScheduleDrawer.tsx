@@ -27,10 +27,10 @@ export function EditScheduleDrawer({
     <Drawer
       title="编辑节点"
       open={open}
-      size={480}
+      size="min(480px, 100vw)"
       onClose={onClose}
       footer={
-        <Space style={{ float: 'right' }}>
+        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" loading={loading} onClick={() => form.submit()}>
             保存

@@ -125,7 +125,7 @@ export function ResourceDrawer({
     <Drawer
       title={readOnly ? '查看资源' : editing ? '编辑资源' : '添加资源'}
       open={open}
-      size={520}
+      width="min(520px, 100vw)"
       destroyOnHidden
       onClose={handleClose}
       footer={

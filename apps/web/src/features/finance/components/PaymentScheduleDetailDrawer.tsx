@@ -1,4 +1,4 @@
-import { Descriptions, Drawer, Empty, Spin, Timeline, Typography } from 'antd'
+import { Alert, Button, Descriptions, Drawer, Empty, Timeline, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import {
   PaymentScheduleActivityType,
@@ -89,7 +89,7 @@ export function PaymentScheduleDetailDrawer({
   isReceivable,
   onClose,
 }: PaymentScheduleDetailDrawerProps) {
-  const { data: schedule, isLoading } = useQuery({
+  const { data: schedule, isLoading, isError, refetch } = useQuery({
     queryKey: ['payment-schedule-detail', isReceivable ? 'receivable' : 'payable', scheduleId],
     queryFn: () => {
       if (!scheduleId) {
@@ -114,14 +114,21 @@ export function PaymentScheduleDetailDrawer({
       title={isReceivable ? '应收节点详情' : '应付节点详情'}
       open={open}
       onClose={onClose}
-      size={560}
+      size="min(560px, 100vw)"
       destroyOnHidden
+      loading={isLoading}
     >
-      {isLoading ? (
-        <Spin />
-      ) : !schedule ? (
+      {isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="节点详情加载失败"
+          description="请检查网络后重试。"
+          action={<Button onClick={() => void refetch()}>重试</Button>}
+        />
+      ) : !isLoading && !schedule ? (
         <Empty description="节点不存在" />
-      ) : (
+      ) : schedule ? (
         <>
           <Descriptions column={1} size="small" bordered>
             <Descriptions.Item label="节点编号">{schedule.scheduleNo}</Descriptions.Item>
@@ -173,7 +180,7 @@ export function PaymentScheduleDetailDrawer({
             )}
           </div>
         </>
-      )}
+      ) : null}
     </Drawer>
   )
 }

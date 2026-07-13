@@ -134,16 +134,19 @@ function buildTransactionColumns(
     {
       title: '流水金额',
       dataIndex: 'amountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '已核销',
       dataIndex: 'allocatedAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '可核销余额',
       dataIndex: 'unallocatedAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
@@ -175,16 +178,19 @@ function buildScheduleColumns(
     {
       title: '总额',
       dataIndex: 'amountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '已结',
       dataIndex: 'settledAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '未结',
       dataIndex: 'unsettledAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     { title: '到期日', dataIndex: 'dueDate' },
@@ -225,7 +231,7 @@ function VerificationBasicsSection({
         </Col>
       </Row>
       <Row gutter={16}>
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Form.Item
             name="verificationDate"
             label="核销日期"
@@ -236,7 +242,7 @@ function VerificationBasicsSection({
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Form.Item name="departureId" label="关联发团">
             <Select
               allowClear
@@ -338,9 +344,11 @@ function TransactionSelectionSection({
             dataSource={candidateTransactions}
             pagination={false}
             scroll={{ x: 900, y: 240 }}
-            rowClassName={(record) =>
-              record.id === selectedTransactionId ? 'ant-table-row-selected' : ''
-            }
+            rowSelection={{
+              type: 'radio',
+              selectedRowKeys: selectedTransactionId ? [selectedTransactionId] : [],
+              onSelect: onSelectTransaction,
+            }}
             onRow={(record) => ({
               onClick: () => onSelectTransaction(record),
               style: { cursor: 'pointer' },
@@ -401,9 +409,11 @@ function ScheduleSelectionSection({
             dataSource={candidateSchedules}
             pagination={false}
             scroll={{ x: 900, y: 240 }}
-            rowClassName={(record) =>
-              record.id === selectedScheduleId ? 'ant-table-row-selected' : ''
-            }
+            rowSelection={{
+              type: 'radio',
+              selectedRowKeys: selectedScheduleId ? [selectedScheduleId] : [],
+              onSelect: onSelectSchedule,
+            }}
             onRow={(record) => ({
               onClick: () => onSelectSchedule(record),
               style: { cursor: 'pointer' },
@@ -460,12 +470,12 @@ function VerificationConfirmSection({
             <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item label="核销后流水余额">
                 <Input value={formatCents(postTransactionBalanceCents)} disabled />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item label="核销后节点未结金额">
                 <Input value={formatCents(postUnsettledCents)} disabled />
               </Form.Item>
@@ -494,7 +504,7 @@ function CreateVerificationFooter({
   onSubmit,
 }: CreateVerificationFooterProps) {
   return (
-    <Space style={{ float: 'right' }}>
+    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
       <Button onClick={onCancel}>取消</Button>
       <Button type="primary" loading={loading} disabled={submitDisabled} onClick={onSubmit}>
         确认核销
@@ -558,7 +568,7 @@ export function CreateVerificationDrawer({
     <Drawer
       title="新增核销"
       open={open}
-      size={960}
+      size="min(960px, 100vw)"
       onClose={onClose}
       destroyOnHidden
       footer={

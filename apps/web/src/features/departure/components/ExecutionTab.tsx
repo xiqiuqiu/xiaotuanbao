@@ -263,7 +263,11 @@ export function ExecutionTab({
       {listResult?.summary ? <ExecutionSummaryBar summary={listResult.summary} /> : null}
 
       <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
-        <Col className={styles.paneCol} flex="280px" style={{ maxWidth: 280 }}>
+        <Col
+          className={`${styles.paneCol} ${styles.segmentPaneCol}`}
+          flex="280px"
+          style={{ maxWidth: 280 }}
+        >
           <Card
             className={styles.paneCard}
             classNames={{ body: styles.paneCardBody }}
@@ -307,7 +311,11 @@ export function ExecutionTab({
           </Card>
         </Col>
 
-        <Col className={styles.paneCol} flex="auto" style={{ minWidth: 0 }}>
+        <Col
+          className={`${styles.paneCol} ${styles.resourcePaneCol}`}
+          flex="auto"
+          style={{ minWidth: 0 }}
+        >
           <Card
             className={styles.paneCard}
             classNames={{ body: styles.paneCardBody }}

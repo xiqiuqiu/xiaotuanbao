@@ -1,4 +1,4 @@
-import { Descriptions } from 'antd'
+import { Descriptions, Typography } from 'antd'
 import type { DescriptionsProps } from 'antd'
 import type { ReactNode } from 'react'
 import { InvoiceAvailable } from '@xiaotuanbao/shared'
@@ -77,8 +77,16 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
               label: '账期规则',
               children: catalogLabel(SETTLEMENT_CYCLE_LABELS, supplier.settlementCycle),
             },
-            { label: '结算说明', children: supplier.settlementNotes ?? '-', span: 3 },
-            { label: '参考报价说明', children: supplier.referenceQuoteNotes ?? '-', span: 3 },
+            {
+              label: '结算说明',
+              children: supplier.settlementNotes ?? '-',
+              span: 'filled',
+            },
+            {
+              label: '参考报价说明',
+              children: supplier.referenceQuoteNotes ?? '-',
+              span: 'filled',
+            },
           ]}
         />
       </ReadonlySection>
@@ -127,7 +135,9 @@ export function SupplierReadonlySections({ supplier }: SupplierReadonlySectionsP
 function ReadonlySection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontWeight: 600, marginBottom: 12 }}>{title}</div>
+      <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+        {title}
+      </Typography.Title>
       {children}
     </div>
   )

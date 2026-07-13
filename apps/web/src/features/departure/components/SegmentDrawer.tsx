@@ -93,7 +93,7 @@ export function SegmentDrawer({
   return (
     <Drawer
       title={readOnly ? '查看行程段' : editing ? '编辑行程段' : '添加行程段'}
-      size={480}
+      width="min(480px, 100vw)"
       open={open}
       onClose={handleClose}
       destroyOnHidden

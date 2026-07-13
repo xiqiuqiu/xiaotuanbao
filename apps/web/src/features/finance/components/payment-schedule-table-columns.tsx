@@ -152,16 +152,19 @@ export function buildPaymentScheduleColumns({
     {
       title: '金额',
       dataIndex: 'amountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '已结清',
       dataIndex: 'settledAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
       title: '未结清',
       dataIndex: 'unsettledAmountCents',
+      align: 'right',
       render: (value: number) => formatCents(value),
     },
     { title: '到期日', dataIndex: 'dueDate' },

@@ -37,6 +37,10 @@ export function CancelScheduleModal({
       okText="确认关闭"
       okType="danger"
       cancelText="取消"
+      cancelButtonProps={{ disabled: loading }}
+      closable={!loading}
+      keyboard={!loading}
+      maskClosable={!loading}
       destroyOnHidden
     >
       {schedule ? (
@@ -50,14 +54,17 @@ export function CancelScheduleModal({
               disabled
             />
           </Form.Item>
-          {hasVerifiedAmount ? (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-              title="关闭后将停止后续收付；已核销与未结清金额仍保留在节点上，不会撤销核销或改写约定金额。"
-            />
-          ) : null}
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title="关闭后将停止后续收付"
+            description={
+              hasVerifiedAmount
+                ? '已核销与未结清金额仍保留在节点上，不会撤销核销或改写约定金额。'
+                : '节点将不能继续登记收付或匹配流水；约定金额与当前未结清金额仍会保留。'
+            }
+          />
           <Form.Item
             name="closeDisposition"
             label="处置类型"

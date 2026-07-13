@@ -76,7 +76,7 @@ export function DepartureOperationsSheetDrawer({
     <Drawer
       title="发团运营表"
       placement="right"
-      width={960}
+      width="min(960px, 100vw)"
       open={open}
       onClose={onClose}
       destroyOnHidden

@@ -1,4 +1,4 @@
-import { Card, Table } from 'antd'
+import { Card, Table, theme } from 'antd'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { matchesLocateTarget } from '../hooks/usePaymentScheduleLocate'
 import { buildPaymentScheduleColumns } from './payment-schedule-table-columns'
@@ -31,6 +31,8 @@ export function PaymentScheduleTable({
   locateBg,
   onPageChange,
 }: PaymentScheduleTableProps) {
+  const { token } = theme.useToken()
+
   return (
     <Card>
       <Table
@@ -39,7 +41,10 @@ export function PaymentScheduleTable({
         columns={columns}
         dataSource={items}
         scroll={{ x: 'max-content' }}
-        style={{ ['--schedule-locate-bg' as string]: locateBg }}
+        style={{
+          ['--schedule-locate-bg' as string]: locateBg,
+          ['--schedule-container-bg' as string]: token.colorBgContainer,
+        }}
         rowClassName={(record) =>
           locateFlashActive &&
           matchesLocateTarget(record, locateSourceOrderId, locateSegmentResourceId)

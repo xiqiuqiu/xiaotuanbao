@@ -102,7 +102,7 @@ export function DepartureOverviewDrawer({
     <Drawer
       title="编辑基础信息"
       open={open}
-      size={520}
+      width="min(520px, 100vw)"
       onClose={handleClose}
       destroyOnHidden
       footer={

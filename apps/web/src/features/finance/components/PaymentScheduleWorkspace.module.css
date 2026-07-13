@@ -22,7 +22,7 @@
 .locateFlash > td:global(.ant-table-cell-fix) {
   /* Keep sticky 操作 above animated body cells for the flash duration. */
   z-index: 3;
-  background-color: var(--ant-color-bg-container, #fff);
+  background-color: var(--schedule-container-bg);
 }
 
 @media (prefers-reduced-motion: reduce) {

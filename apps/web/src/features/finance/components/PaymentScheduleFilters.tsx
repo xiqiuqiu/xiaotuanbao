@@ -46,13 +46,13 @@ export function PaymentScheduleFilters({
 
   return (
     <Card style={{ marginBottom: 16 }}>
-      <Space wrap>
+      <Space wrap style={{ width: '100%' }}>
         {showDepartureFilter ? (
           <Select
             allowClear
             showSearch
             placeholder="筛选发团"
-            style={{ width: 280 }}
+            style={{ width: 280, maxWidth: '100%' }}
             value={departureId}
             onChange={onDepartureChange}
             options={departureOptions}
@@ -62,7 +62,7 @@ export function PaymentScheduleFilters({
         <Input.Search
           allowClear
           placeholder="搜索节点编号 / 标题"
-          style={{ width: 220 }}
+          style={{ width: 220, maxWidth: '100%' }}
           value={keyword}
           onChange={(event) => onKeywordChange(event.target.value)}
           onSearch={(value) => onKeywordChange(value.trim())}
@@ -70,7 +70,7 @@ export function PaymentScheduleFilters({
         <Select
           allowClear
           placeholder="节点状态"
-          style={{ width: 140 }}
+          style={{ width: 140, maxWidth: '100%' }}
           value={statusFilter}
           onChange={onStatusChange}
           options={[...PAYMENT_SCHEDULE_STATUS_OPTIONS]}
@@ -93,6 +93,7 @@ export function PaymentScheduleFilters({
                 : null,
             )
           }
+          style={{ maxWidth: '100%' }}
         />
         <Button onClick={onReset}>重置</Button>
       </Space>

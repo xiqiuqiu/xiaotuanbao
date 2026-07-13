@@ -99,10 +99,10 @@ export function RegisterSettlementDrawer({
     <Drawer
       title={copy.title}
       open={open}
-      size={520}
+      size="min(520px, 100vw)"
       onClose={onClose}
       footer={
-        <Space style={{ float: 'right' }}>
+        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" loading={loading} onClick={() => form.submit()}>
             {copy.submitLabel}
@@ -127,17 +127,17 @@ export function RegisterSettlementDrawer({
             </Form.Item>
 
             <Row gutter={16}>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Form.Item label={copy.totalLabel}>
                   <Input value={formatCents(schedule.amountCents)} disabled />
                 </Form.Item>
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Form.Item label={copy.settledLabel}>
                   <Input value={formatCents(schedule.settledAmountCents)} disabled />
                 </Form.Item>
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Form.Item label={copy.unsettledLabel}>
                   <Input value={formatCents(schedule.unsettledAmountCents)} disabled />
                 </Form.Item>
