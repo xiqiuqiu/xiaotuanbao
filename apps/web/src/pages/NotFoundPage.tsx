@@ -8,8 +8,8 @@ export function NotFoundPage() {
       title="404"
       subTitle="抱歉，您访问的页面不存在。"
       extra={
-        <Link to="/">
-          <Button type="primary">返回工作台</Button>
+        <Link to="/departure">
+          <Button type="primary">前往发团管理</Button>
         </Link>
       }
     />

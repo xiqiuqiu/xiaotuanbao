@@ -37,7 +37,7 @@ const loginRoute = createRoute({
   component: LoginPage,
   beforeLoad: () => {
     if (useAuthStore.getState().isAuthenticated()) {
-      throw redirect({ to: '/' })
+      throw redirect({ to: '/departure' })
     }
   },
 })

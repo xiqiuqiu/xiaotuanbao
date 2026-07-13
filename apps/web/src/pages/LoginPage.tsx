@@ -76,7 +76,7 @@ export function LoginPage() {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
-      navigate({ to: '/' })
+      navigate({ to: '/departure' })
     },
   })
 
