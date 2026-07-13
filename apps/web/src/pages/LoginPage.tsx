@@ -39,7 +39,7 @@ const FEATURES = [
     title: '合同履约',
     desc: '全周期跟踪',
     icon: <FileDoneOutlined />,
-    iconClassName: `${styles.featureIcon} ${styles.featureIconTeal}`,
+    iconClassName: styles.featureIcon,
   },
   {
     key: 'fund',
@@ -116,7 +116,7 @@ export function LoginPage() {
         />
       </section>
 
-      <section className={styles.panel} aria-label="登录">
+      <main className={styles.panel} aria-label="登录">
         <div className={styles.card}>
           <Typography.Title level={3} className={styles.cardTitle}>
             登录工作台
@@ -157,7 +157,7 @@ export function LoginPage() {
             >
               <Input
                 size="large"
-                prefix={<UserOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+                prefix={<UserOutlined className={styles.inputIcon} />}
                 placeholder="请输入用户名"
               />
             </Form.Item>
@@ -169,7 +169,7 @@ export function LoginPage() {
             >
               <Input.Password
                 size="large"
-                prefix={<LockOutlined style={{ color: 'rgba(0,0,0,0.25)' }} />}
+                prefix={<LockOutlined className={styles.inputIcon} />}
                 placeholder="请输入密码"
               />
             </Form.Item>
@@ -209,7 +209,7 @@ export function LoginPage() {
         </div>
 
         <div className={styles.version}>版本 1.0</div>
-      </section>
+      </main>
     </div>
   )
 }

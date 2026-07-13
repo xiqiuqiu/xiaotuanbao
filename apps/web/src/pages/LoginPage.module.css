@@ -3,7 +3,7 @@
   display: flex;
   min-height: 100vh;
   overflow: hidden;
-  background: #f3f7ff;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, var(--ant-color-bg-layout));
 }
 
 .brand {
@@ -34,7 +34,7 @@
 
 .brandName {
   margin: 0 !important;
-  color: #102a56 !important;
+  color: var(--ant-color-text-heading) !important;
   font-size: 40px !important;
   font-weight: 600 !important;
   line-height: 1.1 !important;
@@ -44,7 +44,7 @@
 .headline {
   margin: 0 0 12px !important;
   max-width: 560px;
-  color: #1a2744 !important;
+  color: var(--ant-color-text-heading) !important;
   font-weight: 600 !important;
   line-height: 1.35 !important;
 }
@@ -52,7 +52,7 @@
 .subheadline {
   margin: 0 0 36px !important;
   max-width: 480px;
-  color: rgba(0, 0, 0, 0.45) !important;
+  color: var(--ant-color-text-secondary) !important;
   font-size: 16px !important;
 }
 
@@ -76,20 +76,15 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: var(--ant-border-radius-lg);
   font-size: 20px;
-  color: #1677ff;
-  background: rgba(22, 119, 255, 0.1);
-}
-
-.featureIconTeal {
-  color: #13c2c2;
-  background: rgba(19, 194, 194, 0.12);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 .featureTitle {
   margin: 0;
-  color: #1a2744;
+  color: var(--ant-color-text-heading);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.4;
@@ -97,8 +92,8 @@
 
 .featureDesc {
   margin: 0;
-  color: rgba(0, 0, 0, 0.45);
-  font-size: 13px;
+  color: var(--ant-color-text-secondary);
+  font-size: var(--ant-font-size-sm);
   line-height: 1.4;
 }
 
@@ -131,17 +126,14 @@
   width: 100%;
   max-width: 560px;
   padding: 64px 56px 48px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow:
-    0 8px 24px rgba(15, 35, 95, 0.06),
-    0 2px 8px rgba(15, 35, 95, 0.04);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: var(--ant-color-bg-container);
 }
 
 .cardTitle {
   margin: 0 0 48px !important;
-  color: #1a2744 !important;
+  color: var(--ant-color-text-heading) !important;
   font-weight: 600 !important;
   text-align: center;
 }
@@ -151,7 +143,7 @@
 }
 
 .form :global(.ant-form-item-label > label) {
-  color: rgba(0, 0, 0, 0.65);
+  color: var(--ant-color-text);
 }
 
 .form :global(.ant-input-affix-wrapper),
@@ -169,12 +161,23 @@
 .forgotLink {
   padding: 0;
   height: auto;
+  color: var(--ant-color-primary-active);
   font-size: 14px;
 }
 
 .submit {
   height: 52px;
+  background: var(--ant-color-primary-active);
   font-size: 16px;
+  font-weight: 600;
+}
+
+.submit:hover,
+.submit:focus-visible {
+  background: var(--ant-color-primary);
+}
+
+.submit :global(span) {
   font-weight: 600;
 }
 
@@ -183,7 +186,7 @@
   align-items: center;
   gap: 8px;
   margin-top: 24px;
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--ant-color-text-secondary);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -193,18 +196,22 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--ant-color-border-secondary);
 }
 
 .secureIcon {
-  color: rgba(0, 0, 0, 0.35);
+  color: var(--ant-color-text-secondary);
   font-size: 14px;
 }
 
 .version {
   margin-top: 20px;
-  color: rgba(0, 0, 0, 0.35);
-  font-size: 13px;
+  color: var(--ant-color-text-secondary);
+  font-size: var(--ant-font-size-sm);
+}
+
+.inputIcon {
+  color: var(--ant-color-text-tertiary);
 }
 
 @media (min-width: 961px) and (max-height: 800px) {
