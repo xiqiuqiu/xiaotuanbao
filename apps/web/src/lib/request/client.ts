@@ -78,18 +78,25 @@ http.interceptors.response.use(
 
     if (status === 401 && !skipAuthRedirect) {
       useAuthStore.getState().clearSession()
-      message.error('登录已过期，请重新登录')
+      const authMessage = apiMessage || '登录已过期，请重新登录'
+      message.error(authMessage)
       window.location.href = '/login'
-      return Promise.reject(error)
-    }
-
-    if (silentError) {
-      return Promise.reject(error)
+      return Promise.reject(new ApiError(authMessage, 401))
     }
 
     const errorMessage = apiMessage || error.message || '网络异常，请稍后重试'
+    const errorCode =
+      typeof error.response?.data?.code === 'number'
+        ? error.response.data.code
+        : (status ?? -1)
+    const apiError = new ApiError(errorMessage, errorCode)
+
+    if (silentError) {
+      return Promise.reject(apiError)
+    }
+
     message.error(errorMessage)
-    return Promise.reject(error)
+    return Promise.reject(apiError)
   },
 )
 

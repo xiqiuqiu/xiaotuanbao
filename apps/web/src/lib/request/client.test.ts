@@ -108,4 +108,58 @@ describe('authenticated request client', () => {
     await expect(downloadBinary('/finance/export')).rejects.toBe(canceledError)
     expect(mocks.messageError).not.toHaveBeenCalled()
   })
+
+  it('login 401 with skipAuthRedirect rejects with API reason (disabled account)', async () => {
+    await import('./client')
+
+    const errorHandler = mocks.responseInterceptor.mock.calls[0]?.[1] as (
+      error: AxiosError,
+    ) => Promise<unknown>
+
+    const disabledLoginError = {
+      message: 'Request failed with status code 401',
+      name: 'AxiosError',
+      isAxiosError: true,
+      config: { url: '/auth/login', skipAuthRedirect: true },
+      response: {
+        status: 401,
+        data: { code: 401, message: '账号已停用', data: null },
+      },
+      toJSON: () => ({}),
+    } as AxiosError
+
+    await expect(errorHandler(disabledLoginError)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: '账号已停用',
+      code: 401,
+    })
+    expect(mocks.messageError).toHaveBeenCalledWith('账号已停用')
+  })
+
+  it('authenticated 401 preserves API disable reason before redirect', async () => {
+    await import('./client')
+    const errorHandler = mocks.responseInterceptor.mock.calls[0]?.[1] as (
+      error: AxiosError,
+    ) => Promise<unknown>
+
+    const disabledSessionError = {
+      message: 'Request failed with status code 401',
+      name: 'AxiosError',
+      isAxiosError: true,
+      config: { url: '/users' },
+      response: {
+        status: 401,
+        data: { code: 401, message: '账号已停用', data: null },
+      },
+      toJSON: () => ({}),
+    } as AxiosError
+
+    await expect(errorHandler(disabledSessionError)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: '账号已停用',
+      code: 401,
+    })
+    expect(mocks.messageError).toHaveBeenCalledWith('账号已停用')
+  })
 })
+
