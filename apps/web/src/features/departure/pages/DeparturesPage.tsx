@@ -30,10 +30,13 @@ import {
   renderCompletionTags,
 } from '../catalog'
 
-function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }) {
+/** Exported for tests — list hover prefetches detail data, not route beforeLoad. */
+export function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }) {
   const queryClient = useQueryClient()
 
   const prefetchDetail = () => {
+    // Data-only prefetch. Disable route intent preload on this Link — that path
+    // runs app-layout beforeLoad → /auth/me and never loads departure detail.
     void queryClient.prefetchQuery({
       queryKey: ['departure', record.id],
       queryFn: () => getDeparture(record.id),
@@ -46,6 +49,7 @@ function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }) {
       to="/departure/$departureId"
       params={{ departureId: record.id }}
       search={{ tab: 'overview' }}
+      preload={false}
       onMouseEnter={prefetchDetail}
       onFocus={prefetchDetail}
     >

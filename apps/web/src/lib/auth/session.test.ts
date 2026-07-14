@@ -67,6 +67,26 @@ describe('cookie-backed route session', () => {
     expect(redirect.options).toMatchObject({ to: '/' })
   })
 
+  it('reuses an in-memory session without calling getMe again', async () => {
+    useAuthStore.getState().setSession(user, ['/departure', '/finance/payable'])
+
+    await ensureAuthenticatedSession('/finance/payable')
+
+    expect(getMe).not.toHaveBeenCalled()
+    expect(useAuthStore.getState().isAuthenticated()).toBe(true)
+  })
+
+  it('blocks unauthorized paths from the cached session without contacting /auth/me', async () => {
+    useAuthStore.getState().setSession(user, ['/departure'])
+
+    const redirect = await captureRedirect(() =>
+      ensureAuthenticatedSession('/finance/payable'),
+    )
+
+    expect(getMe).not.toHaveBeenCalled()
+    expect(redirect.options).toMatchObject({ to: '/' })
+  })
+
   it('redirects a login-page visit when an HttpOnly Cookie session already exists', async () => {
     vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'] })
 
