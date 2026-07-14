@@ -129,12 +129,6 @@ export function LoginPage() {
               </Col>
             ))}
           </Row>
-
-          <img
-            className={styles.illustration}
-            src="/login-travel-operations-transparent-v2.png"
-            alt="发团协同流程示意：出发地、行程计划、供应商资源、地接服务、酒店资源与结算对账"
-          />
         </Flex>
       </section>
 
