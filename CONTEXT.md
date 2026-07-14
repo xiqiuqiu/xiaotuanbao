@@ -13,8 +13,12 @@ _Avoid_: 租户, tenant, 公司, 账户
 _Avoid_: 私有化, 独立部署
 
 **User**:
-一家 Organization 内的员工账号，用于登录和操作后台。一个 User 只属于一家 Organization，不存在跨组织任职。
+一家 Organization 内可登录后台的员工身份。一个 User 只属于一家 Organization，不存在跨组织任职。登录标识见 Login Username。
 _Avoid_: 账户, 成员, 账号
+
+**Login Username（登录用户名）**:
+User 用于登录后台的标识字符串，在同一 Organization 内唯一；与显示名称（name）不同。企业管理员可在员工创建与编辑时设置或修改。
+_Avoid_: 账号, 账户（作该字段产品文案）
 
 **Employee**:
 与 User 同义，指 Organization 内的在职员工。

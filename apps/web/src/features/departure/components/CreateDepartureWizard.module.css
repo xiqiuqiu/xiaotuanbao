@@ -60,11 +60,9 @@
 .loadingState {
   display: flex;
   justify-content: center;
+  align-items: center;
+  min-height: 160px;
   padding: 48px 0;
-}
-
-.loadingPlaceholder {
-  min-height: 80px;
 }
 
 .hiddenForm {

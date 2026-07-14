@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -248,6 +250,34 @@ describe('CreateDepartureWizard', () => {
     expect(payload).not.toHaveProperty('copySegments')
     expect(payload).not.toHaveProperty('copyResources')
     expect(payload).not.toHaveProperty('copyReferencePrices')
+  })
+
+  it('keeps copy-source loading tip from nesting over a widthless placeholder', () => {
+    mockSearch = { copyFrom: 'source-departure-1' }
+    vi.mocked(getDeparture).mockImplementation(() => new Promise(() => {}))
+    vi.mocked(listSegments).mockImplementation(() => new Promise(() => {}))
+
+    renderWizard()
+
+    const tip = screen.getByText('正在加载源发团…')
+    const spin = tip.closest('.ant-spin')
+    expect(spin).toBeTruthy()
+
+    // Nested Spin positions the tip against a root sized by `.ant-spin-container` children.
+    // An empty widthless child collapses that root, so Chinese tip glyphs stack vertically
+    // (the weak-network screenshot). Non-nested Spin sizes to the tip content instead.
+    const nestedChild = spin!.querySelector('.ant-spin-container > *') as HTMLElement | null
+    if (!nestedChild) return
+
+    const css = readFileSync(resolve(__dirname, './CreateDepartureWizard.module.css'), 'utf8')
+    const hasWidthFloor = /\.loadingPlaceholder\s*\{[^}]*\b(min-width|width)\s*:/.test(css)
+    const hasContent =
+      Boolean(nestedChild.textContent?.trim()) || nestedChild.children.length > 0
+
+    expect(
+      hasContent || hasWidthFloor,
+      'nested Spin tip collapses vertically when the placeholder has no width floor',
+    ).toBe(true)
   })
 
   it('enters copy mode without copy modal and creates without copy flags', async () => {

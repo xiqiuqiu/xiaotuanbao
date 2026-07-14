@@ -192,9 +192,7 @@ export function CreateDepartureWizard() {
             ) : null}
             {showCopyBootstrap ? (
               <div className={styles.loadingState}>
-                <Spin description="正在加载源发团…">
-                  <div className={styles.loadingPlaceholder} />
-                </Spin>
+                <Spin description="正在加载源发团…" />
               </div>
             ) : !isCopyMode && currentStep === 0 ? (
               <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
