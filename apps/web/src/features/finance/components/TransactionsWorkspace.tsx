@@ -4,9 +4,16 @@ import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { FinanceTransactionSummary, TransactionDirection } from '@xiaotuanbao/shared'
-import { listTransactions } from '@/services/finance.service'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 import { PageHeader } from '@/layouts/PageHeader'
+import { listTransactions } from '@/services/finance.service'
 import { useTransactionListState } from '../hooks/useTransactionListState'
 import { useTransactionWorkspaceDialogs } from '../hooks/useTransactionWorkspaceDialogs'
 import { useTransactionWorkspaceMutations } from '../hooks/useTransactionWorkspaceMutations'
@@ -64,11 +71,27 @@ export function TransactionsWorkspace({
   const debouncedPartnerKeyword = useDebouncedValue(partnerKeyword.trim())
   const debouncedTransactionNo = useDebouncedValue(transactionNo.trim())
 
+  const listFilterKey = [
+    lockedDepartureId,
+    dateRange?.[0],
+    dateRange?.[1],
+    direction,
+    debouncedPartnerKeyword,
+    writeoffStatus,
+    debouncedTransactionNo,
+    effectiveDepartureId,
+    statusFilter,
+  ].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
   const {
     data: transactionsResult,
     isLoading,
+    isFetching,
     isError,
+    isPlaceholderData,
     error,
+    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -101,6 +124,15 @@ export function TransactionsWorkspace({
         signal,
       ),
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const { createMutation, updateMutation, voidMutation, verifyMutation } =
@@ -220,8 +252,18 @@ export function TransactionsWorkspace({
         extra={pageHeader ? undefined : createButton}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError && Boolean(transactionsResult)}
+        hasData={Boolean(transactionsResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <Card>
-        {isError ? (
+        {isError && !transactionsResult ? (
           <Alert
             type="error"
             showIcon
@@ -238,10 +280,11 @@ export function TransactionsWorkspace({
         ) : (
           <Table
             rowKey="id"
-            loading={isLoading}
+            loading={hardLoading}
             columns={columns}
             dataSource={transactionsResult?.items ?? []}
             scroll={{ x: 'max-content' }}
+            className={listSoftFetchingClassName(softFetching)}
             pagination={{
               current: page,
               pageSize,

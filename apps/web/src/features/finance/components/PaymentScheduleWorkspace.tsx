@@ -1,10 +1,12 @@
 import { Alert, Button } from 'antd'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import { listSoftFetchingClassName } from '@/lib/query/list-query-ux'
+import { PageHeader } from '@/layouts/PageHeader'
 import { PaymentScheduleFilters } from './PaymentScheduleFilters'
 import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
 import { PaymentScheduleDetailDrawer } from './PaymentScheduleDetailDrawer'
 import { PaymentScheduleTable } from './PaymentScheduleTable'
 import { usePaymentScheduleWorkspace } from '../hooks/usePaymentScheduleWorkspace'
-import { PageHeader } from '@/layouts/PageHeader'
 
 export type PaymentScheduleWorkspaceProps = {
   scope: 'global' | 'departure'
@@ -44,9 +46,13 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     setCounterpartyKeyword,
     resetFilters,
     scope,
-    isLoading,
+    hardLoading,
+    softFetching,
+    isFetching,
     isError,
     error,
+    dataUpdatedAt,
+    hasListData,
     refetch,
     columns,
     tableItems,
@@ -105,7 +111,17 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         onReset={resetFilters}
       />
 
-      {isError ? (
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError && hasListData}
+        hasData={hasListData}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
+      {isError && !hasListData ? (
         <Alert
           type="error"
           showIcon
@@ -120,22 +136,24 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
           }
         />
       ) : (
-        <PaymentScheduleTable
-          loading={isLoading}
-          columns={columns}
-          items={tableItems}
-          page={page}
-          pageSize={pageSize}
-          total={tableTotal}
-          locateSourceOrderId={locateSourceOrderId}
-          locateSegmentResourceId={locateSegmentResourceId}
-          locateFlashActive={locateFlashActive}
-          locateBg={locateBg}
-          onPageChange={(nextPage, nextPageSize) => {
-            setPage(nextPage)
-            setPageSize(nextPageSize)
-          }}
-        />
+        <div className={listSoftFetchingClassName(softFetching)}>
+          <PaymentScheduleTable
+            loading={hardLoading}
+            columns={columns}
+            items={tableItems}
+            page={page}
+            pageSize={pageSize}
+            total={tableTotal}
+            locateSourceOrderId={locateSourceOrderId}
+            locateSegmentResourceId={locateSegmentResourceId}
+            locateFlashActive={locateFlashActive}
+            locateBg={locateBg}
+            onPageChange={(nextPage, nextPageSize) => {
+              setPage(nextPage)
+              setPageSize(nextPageSize)
+            }}
+          />
+        </div>
       )}
 
       <PaymentScheduleActionDialogs

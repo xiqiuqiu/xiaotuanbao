@@ -6,6 +6,11 @@ import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao
 import { getDeparture } from '@/services/departure.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import {
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import {
   listDeparturePayables,
   listDepartureReceivables,
   listPayables,
@@ -82,12 +87,23 @@ export function usePaymentScheduleWorkspace({
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
+  // Only server-driven list inputs. Client-only filters (keyword/status/due date)
+  // reshape rows locally and must not clear the cached cohort.
+  const listFilterKey = [
+    effectiveDepartureId,
+    useExpandedFetch,
+    trimmedCounterpartyKeyword,
+  ].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
   const {
     data: schedulesResult,
     isLoading,
     isFetching,
     isError,
+    isPlaceholderData,
     error,
+    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -128,6 +144,15 @@ export function usePaymentScheduleWorkspace({
       )
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const { locateSourceOrderId, locateSegmentResourceId, locateFlashActive, pendingPage } =
@@ -322,8 +347,13 @@ export function usePaymentScheduleWorkspace({
     resetFilters,
     scope,
     isLoading,
+    isFetching,
+    hardLoading,
+    softFetching,
     isError,
     error,
+    dataUpdatedAt,
+    hasListData: Boolean(schedulesResult),
     refetch,
     columns,
     tableItems,

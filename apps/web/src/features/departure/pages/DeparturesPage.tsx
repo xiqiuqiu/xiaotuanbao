@@ -2,14 +2,22 @@ import { useCallback, useMemo, useReducer } from 'react'
 import { Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
 import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStatus } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
+import { getDeparture, listDepartures } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
 import { PageHeader } from '@/layouts/PageHeader'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
 import {
   DEPARTURE_PROGRESS_COLORS,
@@ -21,7 +29,30 @@ import {
   formatCents,
   renderCompletionTags,
 } from '../catalog'
-import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+
+function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }) {
+  const queryClient = useQueryClient()
+
+  const prefetchDetail = () => {
+    void queryClient.prefetchQuery({
+      queryKey: ['departure', record.id],
+      queryFn: () => getDeparture(record.id),
+      staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    })
+  }
+
+  return (
+    <Link
+      to="/departure/$departureId"
+      params={{ departureId: record.id }}
+      search={{ tab: 'overview' }}
+      onMouseEnter={prefetchDetail}
+      onFocus={prefetchDetail}
+    >
+      <Typography.Text strong>{record.departureNo}</Typography.Text>
+    </Link>
+  )
+}
 
 type DeparturesPageState = {
   keyword: string
@@ -107,15 +138,7 @@ export function buildDepartureColumns(
       dataIndex: 'departureNo',
       fixed: 'left',
       width: 140,
-      render: (value: string, record) => (
-        <Link
-          to="/departure/$departureId"
-          params={{ departureId: record.id }}
-          search={{ tab: 'overview' }}
-        >
-          <Typography.Text strong>{value}</Typography.Text>
-        </Link>
-      ),
+      render: (_value: string, record) => <DepartureNoPrefetchLink record={record} />,
     },
     {
       title: '团名',
@@ -253,7 +276,28 @@ export function DeparturesPage() {
       }),
   })
 
-  const { data: departuresResult, isLoading } = useQuery({
+  const listFilterKey = [
+    state.keyword,
+    state.routeName,
+    state.departureType,
+    state.departureProgress,
+    state.statusFilter,
+    state.ownerUserId,
+    state.partnerId,
+    startDateFrom,
+    startDateTo,
+  ].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
+  const {
+    data: departuresResult,
+    isLoading,
+    isFetching,
+    isError,
+    isPlaceholderData,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
     queryKey: [
       'departures',
       state.keyword,
@@ -282,6 +326,15 @@ export function DeparturesPage() {
         page: state.page,
         pageSize: state.pageSize,
       }),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const resetFilters = useCallback(() => {
@@ -345,13 +398,24 @@ export function DeparturesPage() {
         onReset={resetFilters}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError}
+        hasData={Boolean(departuresResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <Card>
         <Table
           rowKey="id"
-          loading={isLoading}
+          loading={hardLoading}
           columns={columns}
           dataSource={departuresResult?.items ?? []}
           scroll={{ x: 2100 }}
+          className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: state.page,
             pageSize: state.pageSize,

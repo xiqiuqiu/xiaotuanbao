@@ -2,9 +2,9 @@ import type { QueryClient } from '@tanstack/react-query'
 
 /**
  * Query-key prefixes owned by departure detail tabs / header.
- * Tab panes use destroyOnHidden + global staleTime, so switching tabs can
- * remount with a still-fresh cache; invalidate these before/when the active
- * tab changes so each pane refetches server state.
+ * Use after mutations or an explicit user refresh — not on every tab switch.
+ * Read-path freshness comes from per-query staleTime / refetchOnWindowFocus
+ * on departure header, execution/source-order panes, and finance workspaces.
  */
 export const DEPARTURE_DETAIL_QUERY_KEYS = [
   'departure',

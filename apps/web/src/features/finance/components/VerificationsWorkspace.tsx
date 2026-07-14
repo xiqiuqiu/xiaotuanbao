@@ -3,9 +3,17 @@ import { Alert, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceVerificationListItem } from '@xiaotuanbao/shared'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { PageHeader } from '@/layouts/PageHeader'
 import {
   listDepartureVerifications,
   listVerifications,
@@ -30,7 +38,6 @@ import {
   createVerificationListReducer,
 } from '../utils/verification-list-state'
 import { useVerificationWorkspaceMutations } from '../hooks/useVerificationWorkspaceMutations'
-import { PageHeader } from '@/layouts/PageHeader'
 import { buildVerificationColumns } from './verification-table-columns'
 
 export type VerificationsWorkspaceProps = {
@@ -46,6 +53,7 @@ export type VerificationsWorkspaceProps = {
 
 function VerificationTable({
   loading,
+  softFetching = false,
   columns,
   items,
   page,
@@ -54,6 +62,7 @@ function VerificationTable({
   onPageChange,
 }: {
   loading: boolean
+  softFetching?: boolean
   columns: ColumnsType<FinanceVerificationListItem>
   items: FinanceVerificationListItem[]
   page: number
@@ -69,6 +78,7 @@ function VerificationTable({
         columns={columns}
         dataSource={items}
         scroll={{ x: 'max-content' }}
+        className={listSoftFetchingClassName(softFetching)}
         pagination={{
           current: page,
           pageSize,
@@ -86,13 +96,15 @@ function VerificationListContent({
   isError,
   error,
   onRetry,
+  hasData,
   ...tableProps
 }: ComponentProps<typeof VerificationTable> & {
   isError: boolean
   error: unknown
   onRetry: () => void
+  hasData: boolean
 }) {
-  if (isError) {
+  if (isError && !hasData) {
     return (
       <Card>
         <Alert
@@ -224,11 +236,20 @@ export function VerificationsWorkspace({
     lock,
   ])
 
+  const listFilterKey = useMemo(() => {
+    const { page: _page, pageSize: _pageSize, ...filters } = listParams
+    return JSON.stringify({ lockedDepartureId, ...filters })
+  }, [listParams, lockedDepartureId])
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
   const {
     data: verificationsResult,
     isLoading,
+    isFetching,
     isError,
+    isPlaceholderData,
     error,
+    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -246,6 +267,15 @@ export function VerificationsWorkspace({
       return listVerifications(listParams, signal)
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const handleOpenDetail = useCallback((verificationId: string) => {
@@ -367,11 +397,23 @@ export function VerificationsWorkspace({
         extra={pageHeader ? undefined : createButton}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError && Boolean(verificationsResult)}
+        hasData={Boolean(verificationsResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <VerificationListContent
         isError={isError}
         error={error}
+        hasData={Boolean(verificationsResult)}
         onRetry={() => void refetch()}
-        loading={isLoading}
+        loading={hardLoading}
+        softFetching={softFetching}
         columns={columns}
         items={verificationsResult?.items ?? []}
         page={page}

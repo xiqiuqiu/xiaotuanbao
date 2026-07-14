@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { DirectoryProfileStatus, SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 import { listPartners } from '@/services/partner.service'
 import {
   createSourceOrder,
@@ -161,6 +162,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         hasDiscount: filters.applied.hasDiscount,
         keyword: filters.applied.keyword || undefined,
       }),
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   })
 
   /** 批量生成按全团未生成客源单计数；与筛选列表解耦，空筛选时与主查询共享缓存。 */
@@ -173,6 +176,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         hasDiscount: EMPTY_SOURCE_ORDER_FILTERS.hasDiscount,
         keyword: EMPTY_SOURCE_ORDER_FILTERS.keyword || undefined,
       }),
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   })
 
   const saveMutation = useMutation({

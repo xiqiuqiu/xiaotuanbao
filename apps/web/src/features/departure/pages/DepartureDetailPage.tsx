@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
-import { Spin, Tabs, Typography } from 'antd'
+import { useCallback } from 'react'
+import { Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
@@ -9,10 +9,13 @@ import {
 } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { useAuthStore } from '@/app/store/auth.store'
+import { DepartureDetailShellSkeleton } from '@/components/DepartureDetailShellSkeleton'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
 import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
 import { TransactionsWorkspace } from '@/features/finance/components/TransactionsWorkspace'
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
@@ -45,41 +48,32 @@ export function DepartureDetailPage() {
   const menuKeys = useAuthStore((state) => state.menuKeys)
 
   const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
-  const previousTabRef = useRef(activeTab)
 
-  const { data: departure, isLoading, isError } = useQuery({
+  const {
+    data: departure,
+    isLoading,
+    isError,
+    isFetching,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
     queryKey: ['departure', departureId],
     queryFn: () => getDeparture(departureId!),
     enabled: Boolean(departureId),
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   })
-
-  // Tab panes destroyOnHidden + global staleTime can remount with a still-fresh
-  // cache. Invalidate departure-detail queries whenever the active tab changes
-  // (Tabs click or deep-link URL) so each pane refetches current server state.
-  useEffect(() => {
-    if (!departureId || previousTabRef.current === activeTab) {
-      return
-    }
-    previousTabRef.current = activeTab
-    invalidateDepartureDetailQueries(queryClient, departureId)
-  }, [activeTab, departureId, queryClient])
 
   const handleTabChange = (key: string) => {
     if (!departureId) {
       return
     }
 
-    const nextTab = key as DepartureDetailTabKey
-    if (nextTab !== previousTabRef.current) {
-      previousTabRef.current = nextTab
-      invalidateDepartureDetailQueries(queryClient, departureId)
-    }
-
     navigate({
       to: '/departure/$departureId',
       params: { departureId },
       search: {
-        tab: nextTab,
+        tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
       },
     })
@@ -120,6 +114,14 @@ export function DepartureDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['departures'] })
   }
 
+  const handleRefreshDetail = useCallback(() => {
+    if (!departureId) {
+      return
+    }
+    invalidateDepartureDetailQueries(queryClient, departureId)
+    void refetch()
+  }, [departureId, queryClient, refetch])
+
   if (!departureId) {
     return (
       <div>
@@ -131,15 +133,10 @@ export function DepartureDetailPage() {
     )
   }
 
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-        <Spin />
-      </div>
-    )
-  }
-
-  if (isError || !departure) {
+  if (!departure) {
+    if (isLoading) {
+      return <DepartureDetailShellSkeleton activeTab={activeTab} />
+    }
     return (
       <div>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -269,6 +266,13 @@ export function DepartureDetailPage() {
 
   return (
     <div>
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError}
+        hasData={Boolean(departure)}
+        onRefresh={handleRefreshDetail}
+      />
       <DepartureHeader departure={departure} onUpdated={handleUpdated} />
 
       <Tabs
