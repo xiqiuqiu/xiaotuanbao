@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -66,7 +66,14 @@ export function usePaymentScheduleWorkspace({
     isDepartureScope &&
     ((isReceivable && Boolean(highlightSourceOrderId)) ||
       (!isReceivable && Boolean(highlightSegmentResourceId)))
-  const useExpandedFetch = hasClientFilters || locatingFinanceRow
+  // Latch expanded fetch for the rest of this mount once locate runs. Clearing the
+  // one-shot highlight must not shrink pageSize (100→10) and refetch the same list.
+  const locateExpandedLatchRef = useRef(false)
+  if (locatingFinanceRow) {
+    locateExpandedLatchRef.current = true
+  }
+  const useExpandedFetch =
+    hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
   const { data: schedulesResult, isLoading, isFetching } = useQuery({
@@ -230,6 +237,7 @@ export function usePaymentScheduleWorkspace({
     setDueDateRange(null)
     setCounterpartyKeyword('')
     setPage(1)
+    locateExpandedLatchRef.current = false
     if (isDepartureScope && lockedDepartureId) {
       void navigate({
         to: '/departure/$departureId',

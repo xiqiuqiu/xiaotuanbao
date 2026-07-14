@@ -2,13 +2,15 @@
   color: var(--ant-color-link, var(--ant-color-primary));
   font-weight: 600;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: color 150ms ease;
   cursor: pointer;
 }
 
-.nameLink:hover {
-  color: var(--ant-color-link-hover, var(--ant-color-primary-hover));
-  text-decoration: underline;
+@media (hover: hover) and (pointer: fine) {
+  .nameLink:hover {
+    color: var(--ant-color-link-hover, var(--ant-color-primary-hover));
+    text-decoration: underline;
+  }
 }
 
 .nameLink:active {

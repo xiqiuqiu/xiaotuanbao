@@ -111,7 +111,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
-          placeholder="发客客户"
+          placeholder="发团客源"
           style={{ width: 160 }}
           value={partnerIdFilter}
           onChange={onPartnerChange}

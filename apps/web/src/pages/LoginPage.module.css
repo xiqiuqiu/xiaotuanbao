@@ -45,7 +45,7 @@
   z-index: 0;
   pointer-events: none;
   border-radius: 50%;
-  filter: blur(48px);
+  filter: blur(20px);
 }
 
 .page::before {
@@ -85,7 +85,7 @@
 .brandInner {
   width: 100%;
   gap: 24px;
-  animation: loginRise 480ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: loginRise 300ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 @keyframes loginRise {
@@ -188,7 +188,7 @@
   flex: 0 1 440px;
   align-items: stretch;
   padding-block: 48px;
-  animation: loginRise 560ms 60ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: loginRise 320ms 40ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 .card {

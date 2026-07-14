@@ -4,8 +4,8 @@ import { matchesSegmentResourceSchedule } from '@/features/departure/utils/match
 import { matchesSourceOrderSchedule } from '@/features/departure/utils/matches-source-order-schedule'
 import type { DueDateRange } from '../components/PaymentScheduleFilters'
 
-/** Two antd-Slow (0.3s) animation iterations. */
-const LOCATE_FLASH_MS = 600
+/** Matches `.locateFlash` duration in PaymentScheduleWorkspace.module.css. */
+const LOCATE_FLASH_MS = 480
 
 export function matchesLocateTarget(
   schedule: PaymentScheduleSummary,

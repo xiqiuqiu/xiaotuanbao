@@ -1,7 +1,8 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, act } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useState } from 'react'
 import { PaymentScheduleSourceType, PaymentScheduleStatus } from '@xiaotuanbao/shared'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { PaymentScheduleWorkspace } from './PaymentScheduleWorkspace'
@@ -255,6 +256,88 @@ describe('PaymentScheduleWorkspace initial counterparty filter', () => {
       'departure-1',
       expect.objectContaining({
         counterpartyKeyword: '杭州同行',
+      }),
+    )
+  })
+})
+
+/**
+ * Repro: 执行安排「查看应付」→ 应付管理带 highlight + counterpartyKeyword。
+ * 高亮结束后父级清掉 highlight 时，列表接口不应因 queryKey 变化再打一次。
+ */
+describe('PaymentScheduleWorkspace view-payable fetch count', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    cleanup()
+    listDeparturePayables.mockReset()
+    vi.useRealTimers()
+  })
+
+  it('fetches departure payables only once after locate flash clears highlight', async () => {
+    listDeparturePayables.mockResolvedValue({
+      items: [
+        schedule({
+          id: 'payable-1',
+          direction: 'payable',
+          scheduleNo: 'AP2026070001',
+          title: '地接费用',
+          counterpartyType: 'partner',
+          counterpartyId: 'partner-1',
+          counterpartyName: '巴州博湖旅行社',
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: 'resource-1',
+        }),
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 100,
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+
+    function Parent() {
+      const [highlightId, setHighlightId] = useState<string | undefined>('resource-1')
+      return (
+        <QueryClientProvider client={queryClient}>
+          <ConfigProvider>
+            <PaymentScheduleWorkspace
+              scope="departure"
+              direction="payable"
+              departureId="departure-1"
+              highlightSegmentResourceId={highlightId}
+              initialCounterpartyKeyword="巴州博湖旅行社"
+              onHighlightConsumed={() => setHighlightId(undefined)}
+            />
+          </ConfigProvider>
+        </QueryClientProvider>
+      )
+    }
+
+    render(<Parent />)
+
+    await waitFor(() => {
+      expect(listDeparturePayables).toHaveBeenCalled()
+    })
+
+    // Locate flash is LOCATE_FLASH_MS = 480; then parent clears highlight.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+
+    await waitFor(() => {
+      expect(listDeparturePayables.mock.calls.length).toBe(1)
+    })
+
+    expect(listDeparturePayables).toHaveBeenCalledWith(
+      'departure-1',
+      expect.objectContaining({
+        counterpartyKeyword: '巴州博湖旅行社',
+        pageSize: 100,
       }),
     )
   })
