@@ -14,6 +14,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Abort / superseded refetch — not a user-facing failure. */
+function isCanceledRequest(error: unknown): boolean {
+  return (
+    axios.isCancel(error) ||
+    (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')
+  )
+}
+
 const http = axios.create({
   baseURL: env.apiBaseUrl,
   timeout: 30_000,
@@ -50,6 +58,12 @@ http.interceptors.response.use(
     return response.data
   },
   (error: AxiosError<ApiResponse>) => {
+    // React Query aborts in-flight GETs on unmount / superseded refetch.
+    // Abort is not a user-facing failure — do not toast "canceled".
+    if (isCanceledRequest(error)) {
+      return Promise.reject(error)
+    }
+
     const status = error.response?.status
     const apiMessage = error.response?.data?.message
 
@@ -162,6 +176,9 @@ export async function downloadBinary(
       ),
     }
   } catch (error) {
+    if (isCanceledRequest(error)) {
+      throw error
+    }
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
       if (status === 401) {

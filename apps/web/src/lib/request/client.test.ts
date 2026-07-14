@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AxiosError } from 'axios'
 
 const mocks = vi.hoisted(() => ({
   axiosGet: vi.fn(),
   requestInterceptor: vi.fn(),
   responseInterceptor: vi.fn(),
   axiosCreate: vi.fn(),
+  messageError: vi.fn(),
+}))
+
+vi.mock('antd', () => ({
+  message: {
+    error: mocks.messageError,
+  },
 }))
 
 vi.mock('axios', () => {
@@ -25,6 +33,7 @@ vi.mock('axios', () => {
       create: mocks.axiosCreate,
       get: mocks.axiosGet,
       isAxiosError: vi.fn(() => false),
+      isCancel: (error: { code?: string }) => error?.code === 'ERR_CANCELED',
     },
   }
 })
@@ -32,6 +41,7 @@ vi.mock('axios', () => {
 describe('authenticated request client', () => {
   beforeEach(() => {
     mocks.axiosGet.mockReset()
+    mocks.messageError.mockReset()
   })
 
   it('uses browser credentials and never injects an Authorization header', async () => {
@@ -61,5 +71,41 @@ describe('authenticated request client', () => {
       expect.objectContaining({ withCredentials: true, responseType: 'blob' }),
     )
     expect(mocks.axiosGet.mock.calls[0]?.[1]?.headers).toBeUndefined()
+  })
+
+  it('does not toast when a request is aborted (axios canceled)', async () => {
+    await import('./client')
+
+    const errorHandler = mocks.responseInterceptor.mock.calls[0]?.[1] as (
+      error: AxiosError,
+    ) => Promise<unknown>
+
+    const canceledError = {
+      message: 'canceled',
+      name: 'CanceledError',
+      code: 'ERR_CANCELED',
+      isAxiosError: true,
+      config: { url: '/finance/receivables' },
+      toJSON: () => ({}),
+    } as AxiosError
+
+    await expect(errorHandler(canceledError)).rejects.toBe(canceledError)
+    expect(mocks.messageError).not.toHaveBeenCalled()
+  })
+
+  it('does not toast when a binary download is aborted', async () => {
+    const canceledError = {
+      message: 'canceled',
+      name: 'CanceledError',
+      code: 'ERR_CANCELED',
+      isAxiosError: true,
+      config: { url: '/finance/export' },
+      toJSON: () => ({}),
+    }
+    mocks.axiosGet.mockRejectedValue(canceledError)
+    const { downloadBinary } = await import('./client')
+
+    await expect(downloadBinary('/finance/export')).rejects.toBe(canceledError)
+    expect(mocks.messageError).not.toHaveBeenCalled()
   })
 })
