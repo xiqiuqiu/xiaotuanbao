@@ -158,7 +158,7 @@ export function ExecutionTab({
   }
 
   const openEdit = (segment: ItinerarySegmentSummary) => {
-    setEditingSegment(segment)
+    setEditingSegment(() => segment)
     setDrawerOpen(true)
   }
 

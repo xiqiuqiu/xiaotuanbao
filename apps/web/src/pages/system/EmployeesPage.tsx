@@ -120,7 +120,7 @@ export function EmployeesPage() {
 
   const openEditDrawer = useCallback(
     (employee: EmployeeSummary) => {
-      setEditingEmployee(employee)
+      setEditingEmployee(() => employee)
       form.setFieldsValue({
         name: employee.name,
         remark: employee.remark ?? undefined,
@@ -220,7 +220,7 @@ export function EmployeesPage() {
         onStatusChange={setStatusFilter}
         onRoleChange={setRoleFilter}
         onSearch={(value) => {
-          setSearch(value)
+          setSearch(() => value)
           setPage(1)
         }}
       />
@@ -239,8 +239,8 @@ export function EmployeesPage() {
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
+              setPage(() => nextPage)
+              setPageSize(() => nextPageSize)
             },
           }}
         />

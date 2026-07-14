@@ -231,7 +231,7 @@ export function PartnersPage() {
 
   const openEditDrawer = useCallback(
     (partner: PartnerSummary) => {
-      setEditingPartner(partner)
+      setEditingPartner(() => partner)
       form.setFieldsValue(partnerToFormValues(partner))
       setDrawerOpen(true)
     },

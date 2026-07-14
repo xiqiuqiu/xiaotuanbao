@@ -18,11 +18,14 @@ export function formatBusinessDateTime(value: string | null | undefined): string
     return '-'
   }
 
-  const parts = Object.fromEntries(
-    businessDateTimeFormatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
+  const parts = businessDateTimeFormatter.formatToParts(date).reduce<Record<string, string>>(
+    (result, part) => {
+      if (part.type !== 'literal') {
+        result[part.type] = part.value
+      }
+      return result
+    },
+    {},
   )
 
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`

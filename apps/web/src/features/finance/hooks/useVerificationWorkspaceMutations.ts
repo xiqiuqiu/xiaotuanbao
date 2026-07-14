@@ -68,7 +68,7 @@ export function useVerificationWorkspaceMutations({
   })
 
   const openCancelModal = useCallback((verification: FinanceVerificationListItem) => {
-    setCancellingVerification(verification)
+    setCancellingVerification(() => verification)
   }, [])
 
   const closeCancelModal = useCallback(() => {

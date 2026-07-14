@@ -249,7 +249,7 @@ export function VerificationsWorkspace({
   })
 
   const handleOpenDetail = useCallback((verificationId: string) => {
-    setDetailVerificationId(verificationId)
+    setDetailVerificationId(() => verificationId)
     setDetailDrawerOpen(true)
   }, [])
 
@@ -298,7 +298,7 @@ export function VerificationsWorkspace({
 
   const handleOpenCancelModal = useCallback(
     (verification: FinanceVerificationListItem) => {
-      openCancelModal(verification)
+      openCancelModal({ ...verification })
       setCancelModalOpen(true)
     },
     [openCancelModal],

@@ -75,7 +75,7 @@ export function usePaymentScheduleDialogs(isReceivable: boolean) {
 
   const openConfirm = useCallback(
     (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
+      setActiveSchedule(() => schedule)
       confirmForm.resetFields()
       if (isReceivable) {
         confirmForm.setFieldsValue(scheduleToConfirmCollectionValues(schedule))
@@ -88,13 +88,13 @@ export function usePaymentScheduleDialogs(isReceivable: boolean) {
   )
 
   const openVerify = useCallback((schedule: PaymentScheduleSummary) => {
-    setActiveSchedule(schedule)
+    setActiveSchedule(() => schedule)
     setVerifyOpen(true)
   }, [])
 
   const openCancel = useCallback(
     (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
+      setActiveSchedule(() => schedule)
       cancelForm.resetFields()
       setCancelOpen(true)
     },
@@ -103,7 +103,7 @@ export function usePaymentScheduleDialogs(isReceivable: boolean) {
 
   const openReopen = useCallback(
     (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
+      setActiveSchedule(() => schedule)
       reopenForm.resetFields()
       setReopenOpen(true)
     },
@@ -112,7 +112,7 @@ export function usePaymentScheduleDialogs(isReceivable: boolean) {
 
   const openAdjust = useCallback(
     (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
+      setActiveSchedule(() => schedule)
       adjustForm.resetFields()
       adjustForm.setFieldsValue({
         amountYuan: centsToYuan(schedule.amountCents),
@@ -124,7 +124,7 @@ export function usePaymentScheduleDialogs(isReceivable: boolean) {
 
   const openEdit = useCallback(
     (schedule: PaymentScheduleSummary) => {
-      setActiveSchedule(schedule)
+      setActiveSchedule(() => schedule)
       editForm.resetFields()
       editForm.setFieldsValue(scheduleToEditValues(schedule))
       setEditOpen(true)

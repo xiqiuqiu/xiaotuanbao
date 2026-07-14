@@ -22,7 +22,7 @@ export function useTransactionWorkspaceDialogs() {
   const [verifyTransaction, setVerifyTransaction] = useState<FinanceTransactionSummary | null>(null)
 
   const openDetail = useCallback((id: string) => {
-    setDetailTransactionId(id)
+    setDetailTransactionId(() => id)
   }, [])
 
   const closeDetail = useCallback(() => {
@@ -30,7 +30,7 @@ export function useTransactionWorkspaceDialogs() {
   }, [])
 
   const openVerify = useCallback((transaction: FinanceTransactionSummary) => {
-    setVerifyTransaction(transaction)
+    setVerifyTransaction(() => transaction)
   }, [])
 
   const closeVerify = useCallback(() => {
@@ -39,7 +39,7 @@ export function useTransactionWorkspaceDialogs() {
   }, [verifyForm])
 
   const openVoidModal = useCallback((transaction: FinanceTransactionSummary) => {
-    setVoidingTransaction(transaction)
+    setVoidingTransaction(() => transaction)
     setVoidModalOpen(true)
   }, [])
 
@@ -51,7 +51,7 @@ export function useTransactionWorkspaceDialogs() {
 
   const openEdit = useCallback((transaction: FinanceTransactionSummary) => {
     setDrawerMode('edit')
-    setEditingTransaction(transaction)
+    setEditingTransaction(() => transaction)
     setDrawerOpen(true)
   }, [])
 

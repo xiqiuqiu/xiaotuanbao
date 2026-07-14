@@ -269,19 +269,19 @@ export function SuppliersPage() {
         statusFilter={statusFilter}
         includeArchived={includeArchived}
         onCategoryChange={(value) => {
-          setCategoryFilter(value)
+          setCategoryFilter(() => value)
           setPage(1)
         }}
         onStatusChange={(value) => {
-          setStatusFilter(value)
+          setStatusFilter(() => value)
           setPage(1)
         }}
         onIncludeArchivedChange={(value) => {
-          setIncludeArchived(value)
+          setIncludeArchived(() => value)
           setPage(1)
         }}
         onSearch={(value) => {
-          setSearch(value)
+          setSearch(() => value)
           setPage(1)
         }}
       />
@@ -300,8 +300,8 @@ export function SuppliersPage() {
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (nextPage, nextPageSize) => {
-              setPage(nextPage)
-              setPageSize(nextPageSize)
+              setPage(() => nextPage)
+              setPageSize(() => nextPageSize)
             },
           }}
         />

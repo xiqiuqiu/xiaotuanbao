@@ -88,7 +88,7 @@ export function ExecutionResourcePane({
   }
 
   const openEdit = (resource: SegmentResourceSummary, view = false) => {
-    setEditingResource(resource)
+    setEditingResource(() => resource)
     setViewOnly(view || resource.amountFieldsLocked)
     setDrawerOpen(true)
   }
