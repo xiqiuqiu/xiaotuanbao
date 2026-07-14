@@ -35,6 +35,13 @@ import {
 import { PageHeader } from '@/layouts/PageHeader'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 
 type PartnersPageState = {
   search: string
@@ -190,7 +197,24 @@ export function PartnersPage() {
   const [editingPartner, setEditingPartner] = useState<PartnerSummary | null>(null)
   const [state, dispatch] = useReducer(partnersPageReducer, initialPartnersPageState)
 
-  const { data: partnersResult, isLoading } = useQuery({
+  const listFilterKey = [
+    state.search,
+    state.partnerKindFilter,
+    state.partnerTypeFilter,
+    state.statusFilter,
+    state.includeArchived,
+  ].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
+  const {
+    data: partnersResult,
+    isLoading,
+    isFetching,
+    isError,
+    isPlaceholderData,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
     queryKey: [
       'partners',
       state.search,
@@ -211,6 +235,15 @@ export function PartnersPage() {
         page: state.page,
         pageSize: state.pageSize,
       }),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const resetFilters = useCallback(() => {
@@ -330,13 +363,24 @@ export function PartnersPage() {
         onReset={resetFilters}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError}
+        hasData={Boolean(partnersResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <Card>
         <Table
           rowKey="id"
-          loading={isLoading}
+          loading={hardLoading}
           columns={columns}
           dataSource={partnersResult?.items ?? []}
           scroll={{ x: 'max-content' }}
+          className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: state.page,
             pageSize: state.pageSize,

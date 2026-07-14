@@ -40,7 +40,7 @@ export function CancelScheduleModal({
       cancelButtonProps={{ disabled: loading }}
       closable={!loading}
       keyboard={!loading}
-      maskClosable={!loading}
+      mask={{ closable: !loading }}
       destroyOnHidden
     >
       {schedule ? (

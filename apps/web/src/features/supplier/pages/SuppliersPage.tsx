@@ -36,6 +36,13 @@ import {
 import { PageHeader } from '@/layouts/PageHeader'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 
 export function buildSupplierColumns(
   includeArchived: boolean,
@@ -133,7 +140,18 @@ export function SuppliersPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  const { data: suppliersResult, isLoading } = useQuery({
+  const listFilterKey = [search, categoryFilter, statusFilter, includeArchived].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
+  const {
+    data: suppliersResult,
+    isLoading,
+    isFetching,
+    isError,
+    isPlaceholderData,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
     queryKey: [
       'suppliers',
       search,
@@ -152,6 +170,15 @@ export function SuppliersPage() {
         page,
         pageSize,
       }),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const closeDrawer = () => {
@@ -286,13 +313,24 @@ export function SuppliersPage() {
         }}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError}
+        hasData={Boolean(suppliersResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <Card>
         <Table
           rowKey="id"
-          loading={isLoading}
+          loading={hardLoading}
           columns={columns}
           dataSource={suppliersResult?.items ?? []}
           scroll={{ x: 'max-content' }}
+          className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: page,
             pageSize,

@@ -18,6 +18,13 @@ import { EmployeeFormDrawer, type EmployeeFormValues } from './employees/Employe
 import { EmployeeStatsCards } from './employees/EmployeeStatsCards'
 import { formatLastLogin } from './employees/formatLastLogin'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { StaleDataAlert } from '@/components/StaleDataAlert'
+import {
+  listSoftFetchingClassName,
+  resolveListTableLoading,
+  useListPlaceholderData,
+} from '@/lib/query/list-query-ux'
+import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
 
 export function buildEmployeeColumns(
   onEdit: (employee: EmployeeSummary) => void,
@@ -85,9 +92,17 @@ export function EmployeesPage() {
     queryFn: listRoles,
   })
 
+  const listFilterKey = [search, statusFilter, roleFilter].join('\0')
+  const placeholderData = useListPlaceholderData(listFilterKey)
+
   const {
     data: employeesResult,
-    isLoading: employeesLoading,
+    isLoading,
+    isFetching,
+    isError,
+    isPlaceholderData,
+    dataUpdatedAt,
+    refetch,
   } = useQuery({
     queryKey: ['employees', search, statusFilter, roleFilter, page, pageSize],
     queryFn: () =>
@@ -98,6 +113,15 @@ export function EmployeesPage() {
         page,
         pageSize,
       }),
+    placeholderData,
+    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+  })
+
+  const { hardLoading, softFetching } = resolveListTableLoading({
+    isLoading,
+    isFetching,
+    isPlaceholderData,
   })
 
   const roleOptions = useMemo(
@@ -219,21 +243,38 @@ export function EmployeesPage() {
         statusFilter={statusFilter}
         roleFilter={roleFilter}
         roleOptions={roleOptions}
-        onStatusChange={setStatusFilter}
-        onRoleChange={setRoleFilter}
+        onStatusChange={(value) => {
+          setStatusFilter(() => value)
+          setPage(1)
+        }}
+        onRoleChange={(value) => {
+          setRoleFilter(() => value)
+          setPage(1)
+        }}
         onSearch={(value) => {
           setSearch(() => value)
           setPage(1)
         }}
       />
 
+      <StaleDataAlert
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+        isError={isError}
+        hasData={Boolean(employeesResult)}
+        onRefresh={() => {
+          void refetch()
+        }}
+      />
+
       <Card>
         <Table
           rowKey="id"
-          loading={employeesLoading}
+          loading={hardLoading}
           columns={columns}
           dataSource={employeesResult?.items ?? []}
           scroll={{ x: 1060 }}
+          className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: page,
             pageSize,
