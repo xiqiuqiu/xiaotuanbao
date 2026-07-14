@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { DepartureSummary } from '@/types/api'
-import { buildDepartureColumns } from './DeparturesPage'
+import { buildDepartureColumns } from './departure-columns'
 
 describe('发团列表操作列', () => {
   it('复制按钮是单一交互控件并传出正确发团 ID', async () => {

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useReducer, useState, type ComponentProps } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+  type ComponentProps,
+  type Dispatch,
+  type ReactNode,
+} from 'react'
 import { Alert, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
@@ -36,6 +45,8 @@ import {
 import {
   createInitialVerificationListState,
   createVerificationListReducer,
+  type VerificationListAction,
+  type VerificationListState,
 } from '../utils/verification-list-state'
 import { useVerificationWorkspaceMutations } from '../hooks/useVerificationWorkspaceMutations'
 import { buildVerificationColumns } from './verification-table-columns'
@@ -136,6 +147,59 @@ function deepLinkKey(search?: VerificationDeepLinkSearch): string {
     return `sch:${resolved.scheduleNo}`
   }
   return ''
+}
+
+function VerificationWorkspaceFilters({
+  scope,
+  pageHeader,
+  createButton,
+  listState,
+  dispatchList,
+  onTransactionNoChange,
+  onScheduleNoChange,
+  onReset,
+}: {
+  scope: VerificationsWorkspaceProps['scope']
+  pageHeader: VerificationsWorkspaceProps['pageHeader']
+  createButton: ReactNode
+  listState: VerificationListState
+  dispatchList: Dispatch<VerificationListAction>
+  onTransactionNoChange: (value: string) => void
+  onScheduleNoChange: (value: string) => void
+  onReset: () => void
+}) {
+  return (
+    <>
+      {pageHeader ? <PageHeader title={pageHeader.title} action={createButton} /> : null}
+      <VerificationFilters
+        scope={scope}
+        dateRange={listState.dateRange}
+        direction={listState.direction}
+        status={listState.status}
+        transactionNo={listState.transactionNo}
+        scheduleNo={listState.scheduleNo}
+        departureKeyword={listState.departureKeyword}
+        onDateRangeChange={(value) => dispatchList({ type: 'setDateRange', value })}
+        onDirectionChange={(value) => dispatchList({ type: 'setDirection', value })}
+        onStatusChange={(value) => dispatchList({ type: 'setStatus', value })}
+        onTransactionNoChange={onTransactionNoChange}
+        onScheduleNoChange={onScheduleNoChange}
+        onDepartureKeywordChange={(value) =>
+          dispatchList({ type: 'setDepartureKeyword', value })
+        }
+        onReset={onReset}
+        extra={pageHeader ? undefined : createButton}
+      />
+    </>
+  )
+}
+
+function CreateVerificationButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button type="primary" icon={<PlusOutlined />} onClick={onClick}>
+      新增核销
+    </Button>
+  )
 }
 
 export function VerificationsWorkspace({
@@ -349,50 +413,20 @@ export function VerificationsWorkspace({
   )
 
   const createButton = !readOnly ? (
-    <Button
-      type="primary"
-      icon={<PlusOutlined />}
-      onClick={() => {
-        setModalOpen(true)
-      }}
-    >
-      新增核销
-    </Button>
+    <CreateVerificationButton onClick={() => setModalOpen(true)} />
   ) : null
 
   return (
     <div>
-      {pageHeader ? (
-        <PageHeader
-          title={pageHeader.title}
-          action={createButton}
-        />
-      ) : null}
-
-      <VerificationFilters
+      <VerificationWorkspaceFilters
         scope={scope}
-        dateRange={dateRange}
-        direction={direction}
-        status={status}
-        transactionNo={transactionNo}
-        scheduleNo={scheduleNo}
-        departureKeyword={departureKeyword}
-        onDateRangeChange={(value) => {
-          dispatchList({ type: 'setDateRange', value })
-        }}
-        onDirectionChange={(value) => {
-          dispatchList({ type: 'setDirection', value })
-        }}
-        onStatusChange={(value) => {
-          dispatchList({ type: 'setStatus', value })
-        }}
+        pageHeader={pageHeader}
+        createButton={createButton}
+        listState={listState}
+        dispatchList={dispatchList}
         onTransactionNoChange={handleTransactionNoChange}
         onScheduleNoChange={handleScheduleNoChange}
-        onDepartureKeywordChange={(value) => {
-          dispatchList({ type: 'setDepartureKeyword', value })
-        }}
         onReset={handleResetFilters}
-        extra={pageHeader ? undefined : createButton}
       />
 
       <StaleDataAlert

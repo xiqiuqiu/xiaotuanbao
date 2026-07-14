@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { keepPreviousData } from '@tanstack/react-query'
 import styles from './list-query-ux.module.css'
 
@@ -46,6 +46,10 @@ export function resolveListTableLoading(args: {
 export function useListPlaceholderData(filterKey: string) {
   const previousFilterKeyRef = useRef<string | undefined>(undefined)
   const keep = shouldKeepPreviousListData(previousFilterKeyRef.current, filterKey)
-  previousFilterKeyRef.current = filterKey
+
+  useEffect(() => {
+    previousFilterKeyRef.current = filterKey
+  }, [filterKey])
+
   return keep ? keepPreviousData : undefined
 }

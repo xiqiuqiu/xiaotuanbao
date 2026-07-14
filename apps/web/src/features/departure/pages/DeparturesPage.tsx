@@ -1,17 +1,14 @@
-import { useCallback, useMemo, useReducer, type ReactNode } from 'react'
-import { Button, Card, Space, Table, Tag, Typography } from 'antd'
-import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ColumnsType } from 'antd/es/table'
-import type { DepartureSummary } from '@/types/api'
+import { useCallback, useMemo, useReducer } from 'react'
+import { Button, Card, Table } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
+import { useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStatus } from '@xiaotuanbao/shared'
-import { getDeparture, listDepartures } from '@/services/departure.service'
+import { listDepartures } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
 import { PageHeader } from '@/layouts/PageHeader'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
-import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 import {
   listSoftFetchingClassName,
   resolveListTableLoading,
@@ -19,52 +16,7 @@ import {
 } from '@/lib/query/list-query-ux'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
-import {
-  DEPARTURE_PROGRESS_COLORS,
-  DEPARTURE_PROGRESS_LABELS,
-  DEPARTURE_STATUS_COLORS,
-  DEPARTURE_STATUS_LABELS,
-  DEPARTURE_TYPE_LABELS,
-  catalogLabel,
-  formatCents,
-  renderCompletionTags,
-} from '../catalog'
-
-/** Exported for tests — list hover prefetches detail data, not route beforeLoad. */
-export function DepartureDetailPrefetchLink({
-  record,
-  children,
-  strong = false,
-}: {
-  record: DepartureSummary
-  children: ReactNode
-  strong?: boolean
-}) {
-  const queryClient = useQueryClient()
-
-  const prefetchDetail = () => {
-    // Data-only prefetch. Disable route intent preload on this Link — that path
-    // runs app-layout beforeLoad → /auth/me and never loads departure detail.
-    void queryClient.prefetchQuery({
-      queryKey: ['departure', record.id],
-      queryFn: () => getDeparture(record.id),
-      ...operationalQueryOptions(),
-    })
-  }
-
-  return (
-    <Link
-      to="/departure/$departureId"
-      params={{ departureId: record.id }}
-      search={{ tab: 'overview' }}
-      preload={false}
-      onMouseEnter={prefetchDetail}
-      onFocus={prefetchDetail}
-    >
-      {strong ? <Typography.Text strong>{children}</Typography.Text> : children}
-    </Link>
-  )
-}
+import { buildDepartureColumns } from './departure-columns'
 
 type DeparturesPageState = {
   keyword: string
@@ -139,130 +91,6 @@ function departuresPageReducer(
         filtersKey: state.filtersKey + 1,
       }
   }
-}
-
-export function buildDepartureColumns(
-  onCopy: (departureId: string) => void,
-): ColumnsType<DepartureSummary> {
-  return [
-    {
-      title: '团号',
-      dataIndex: 'departureNo',
-      fixed: 'left',
-      width: 140,
-      render: (_value: string, record) => (
-        <DepartureDetailPrefetchLink record={record} strong>
-          {record.departureNo}
-        </DepartureDetailPrefetchLink>
-      ),
-    },
-    {
-      title: '团名',
-      dataIndex: 'name',
-      width: 180,
-      render: (name: string, record) => (
-        <DepartureDetailPrefetchLink record={record}>{name}</DepartureDetailPrefetchLink>
-      ),
-    },
-    {
-      title: '路线名称',
-      dataIndex: 'routeName',
-      width: 160,
-    },
-    {
-      title: '发团类型',
-      dataIndex: 'departureType',
-      width: 90,
-      render: (value: string) => catalogLabel(DEPARTURE_TYPE_LABELS, value),
-    },
-    {
-      title: '出团日期',
-      dataIndex: 'startDate',
-      width: 180,
-      render: (value: string, record) => `${value} ~ ${record.endDate}`,
-    },
-    {
-      title: '出团进度',
-      dataIndex: 'departureProgress',
-      width: 90,
-      render: (value: string) => (
-        <Tag color={DEPARTURE_PROGRESS_COLORS[value] ?? 'default'}>
-          {catalogLabel(DEPARTURE_PROGRESS_LABELS, value)}
-        </Tag>
-      ),
-    },
-    {
-      title: '发团状态',
-      dataIndex: 'status',
-      width: 90,
-      render: (status: DepartureStatus) => (
-        <Tag color={DEPARTURE_STATUS_COLORS[status] ?? 'default'}>
-          {catalogLabel(DEPARTURE_STATUS_LABELS, status)}
-        </Tag>
-      ),
-    },
-    {
-      title: '总人数',
-      dataIndex: 'totalGuests',
-      width: 80,
-      render: (value: number) => `${value}人`,
-    },
-    {
-      title: '完成情况',
-      key: 'completionTags',
-      width: 320,
-      render: (_value, record) => (
-        <Space size={[0, 4]} wrap>
-          {renderCompletionTags(record.completionTags).map((tag) => (
-            <Tag key={tag.label}>{tag.label}</Tag>
-          ))}
-        </Space>
-      ),
-    },
-    {
-      title: '实际应收',
-      dataIndex: 'netReceivableCents',
-      width: 110,
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '应付合计',
-      dataIndex: 'payableCents',
-      width: 110,
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '预估毛利',
-      dataIndex: 'estimatedMarginCents',
-      width: 110,
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '负责人',
-      dataIndex: 'ownerName',
-      width: 100,
-      render: (value: string | undefined, record) => value ?? record.ownerUserId,
-    },
-    ...buildBusinessTimestampColumns<DepartureSummary>(),
-    {
-      title: '操作',
-      key: 'actions',
-      fixed: 'right',
-      width: 80,
-      render: (_value, record) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<CopyOutlined />}
-            onClick={() => onCopy(record.id)}
-          >
-            复制
-          </Button>
-        </Space>
-      ),
-    },
-  ]
 }
 
 export function DeparturesPage() {
