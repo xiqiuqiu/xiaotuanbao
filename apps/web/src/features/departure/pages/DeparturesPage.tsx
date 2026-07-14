@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from 'react'
+import { useCallback, useMemo, useReducer, type ReactNode } from 'react'
 import { Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from '@tanstack/react-router'
@@ -31,7 +31,15 @@ import {
 } from '../catalog'
 
 /** Exported for tests — list hover prefetches detail data, not route beforeLoad. */
-export function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }) {
+export function DepartureDetailPrefetchLink({
+  record,
+  children,
+  strong = false,
+}: {
+  record: DepartureSummary
+  children: ReactNode
+  strong?: boolean
+}) {
   const queryClient = useQueryClient()
 
   const prefetchDetail = () => {
@@ -53,7 +61,7 @@ export function DepartureNoPrefetchLink({ record }: { record: DepartureSummary }
       onMouseEnter={prefetchDetail}
       onFocus={prefetchDetail}
     >
-      <Typography.Text strong>{record.departureNo}</Typography.Text>
+      {strong ? <Typography.Text strong>{children}</Typography.Text> : children}
     </Link>
   )
 }
@@ -142,20 +150,18 @@ export function buildDepartureColumns(
       dataIndex: 'departureNo',
       fixed: 'left',
       width: 140,
-      render: (_value: string, record) => <DepartureNoPrefetchLink record={record} />,
+      render: (_value: string, record) => (
+        <DepartureDetailPrefetchLink record={record} strong>
+          {record.departureNo}
+        </DepartureDetailPrefetchLink>
+      ),
     },
     {
       title: '团名',
       dataIndex: 'name',
       width: 180,
       render: (name: string, record) => (
-        <Link
-          to="/departure/$departureId"
-          params={{ departureId: record.id }}
-          search={{ tab: 'overview' }}
-        >
-          {name}
-        </Link>
+        <DepartureDetailPrefetchLink record={record}>{name}</DepartureDetailPrefetchLink>
       ),
     },
     {

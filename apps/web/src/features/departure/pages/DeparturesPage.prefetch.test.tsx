@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DepartureSummary } from '@/types/api'
-import { DepartureNoPrefetchLink } from './DeparturesPage'
+import { DepartureDetailPrefetchLink } from './DeparturesPage'
 
 const prefetchQuery = vi.fn()
 
@@ -45,7 +45,7 @@ vi.mock('@/services/departure.service', () => ({
   listDepartures: vi.fn(),
 }))
 
-describe('DepartureNoPrefetchLink', () => {
+describe('DepartureDetailPrefetchLink', () => {
   afterEach(() => {
     cleanup()
     prefetchQuery.mockReset()
@@ -55,7 +55,11 @@ describe('DepartureNoPrefetchLink', () => {
     const user = userEvent.setup()
     const record = { id: 'dep-1', departureNo: 'HT-001' } as DepartureSummary
 
-    render(<DepartureNoPrefetchLink record={record} />)
+    render(
+      <DepartureDetailPrefetchLink record={record} strong>
+        {record.departureNo}
+      </DepartureDetailPrefetchLink>,
+    )
 
     const link = screen.getByRole('link', { name: 'HT-001' })
     expect(link).toHaveAttribute('data-preload', 'false')
