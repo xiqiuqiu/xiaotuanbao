@@ -42,7 +42,7 @@ import {
   resolveListTableLoading,
   useListPlaceholderData,
 } from '@/lib/query/list-query-ux'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 
 export function buildSupplierColumns(
   includeArchived: boolean,
@@ -149,7 +149,6 @@ export function SuppliersPage() {
     isFetching,
     isError,
     isPlaceholderData,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -171,8 +170,7 @@ export function SuppliersPage() {
         pageSize,
       }),
     placeholderData,
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const { hardLoading, softFetching } = resolveListTableLoading({
@@ -314,7 +312,6 @@ export function SuppliersPage() {
       />
 
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError}
         hasData={Boolean(suppliersResult)}

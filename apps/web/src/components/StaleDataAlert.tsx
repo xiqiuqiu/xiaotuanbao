@@ -1,57 +1,29 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { Alert, Button } from 'antd'
-import {
-  STALE_DATA_PROMPT_AFTER_MS,
-  shouldShowStaleDataPrompt,
-} from '@/lib/query/stale-data-prompt'
+import { shouldShowManualRefreshPrompt } from '@/lib/query/stale-data-prompt'
 
 type StaleDataAlertProps = {
-  dataUpdatedAt: number
   isFetching: boolean
   isError: boolean
   hasData: boolean
   onRefresh: () => void
-  /** Optional override for tests / tighter surfaces. */
-  stalePromptAfterMs?: number
   style?: CSSProperties
 }
 
 /**
- * Restrained freshness affordance: no always-on refresh button.
- * Appears only after a failed refresh or when the on-screen snapshot is old.
+ * Fallback when automatic refresh fails. Healthy auto-refresh paths stay silent.
  */
 export function StaleDataAlert({
-  dataUpdatedAt,
   isFetching,
   isError,
   hasData,
   onRefresh,
-  stalePromptAfterMs = STALE_DATA_PROMPT_AFTER_MS,
   style,
 }: StaleDataAlertProps) {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!hasData || isFetching) {
-      return
-    }
-    const age = Date.now() - dataUpdatedAt
-    const remaining = stalePromptAfterMs - age
-    if (remaining <= 0) {
-      setNow(Date.now())
-      return
-    }
-    const timer = window.setTimeout(() => setNow(Date.now()), remaining)
-    return () => window.clearTimeout(timer)
-  }, [dataUpdatedAt, hasData, isFetching, stalePromptAfterMs])
-
-  const visible = shouldShowStaleDataPrompt({
-    now,
-    dataUpdatedAt,
+  const visible = shouldShowManualRefreshPrompt({
     isFetching,
     isError,
     hasData,
-    stalePromptAfterMs,
   })
 
   if (!visible) {
@@ -60,13 +32,13 @@ export function StaleDataAlert({
 
   return (
     <Alert
-      type="warning"
+      type="info"
       showIcon
-      title={isError ? '数据刷新失败，当前可能不是最新' : '数据可能不是最新'}
+      title="自动更新失败，仍显示上次数据"
       style={{ marginBottom: 16, ...style }}
       action={
         <Button size="small" loading={isFetching} onClick={onRefresh}>
-          点击更新
+          重试
         </Button>
       }
     />

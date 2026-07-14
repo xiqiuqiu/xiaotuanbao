@@ -24,7 +24,7 @@ import {
   resolveListTableLoading,
   useListPlaceholderData,
 } from '@/lib/query/list-query-ux'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 
 export function buildEmployeeColumns(
   onEdit: (employee: EmployeeSummary) => void,
@@ -101,7 +101,6 @@ export function EmployeesPage() {
     isFetching,
     isError,
     isPlaceholderData,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: ['employees', search, statusFilter, roleFilter, page, pageSize],
@@ -114,8 +113,7 @@ export function EmployeesPage() {
         pageSize,
       }),
     placeholderData,
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const { hardLoading, softFetching } = resolveListTableLoading({
@@ -258,7 +256,6 @@ export function EmployeesPage() {
       />
 
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError}
         hasData={Boolean(employeesResult)}

@@ -17,7 +17,7 @@ import type {
   ItinerarySegmentListResult,
   ItinerarySegmentSummary,
 } from '@/types/api'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import {
   createSegment,
   deleteSegment,
@@ -64,8 +64,7 @@ export function ExecutionTab({
   const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['segments', departure.id],
     queryFn: () => listSegments(departure.id),
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const segments = sortSegmentsBySortOrder(listResult?.items ?? [])

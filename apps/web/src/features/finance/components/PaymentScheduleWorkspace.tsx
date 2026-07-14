@@ -51,7 +51,6 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     isFetching,
     isError,
     error,
-    dataUpdatedAt,
     hasListData,
     refetch,
     columns,
@@ -112,7 +111,6 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
       />
 
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError && hasListData}
         hasData={hasListData}

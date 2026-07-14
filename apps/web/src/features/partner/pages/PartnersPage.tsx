@@ -41,7 +41,7 @@ import {
   resolveListTableLoading,
   useListPlaceholderData,
 } from '@/lib/query/list-query-ux'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 
 type PartnersPageState = {
   search: string
@@ -212,7 +212,6 @@ export function PartnersPage() {
     isFetching,
     isError,
     isPlaceholderData,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -236,8 +235,7 @@ export function PartnersPage() {
         pageSize: state.pageSize,
       }),
     placeholderData,
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const { hardLoading, softFetching } = resolveListTableLoading({
@@ -364,7 +362,6 @@ export function PartnersPage() {
       />
 
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError}
         hasData={Boolean(partnersResult)}

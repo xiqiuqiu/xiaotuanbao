@@ -15,7 +15,7 @@ import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentS
 import { TransactionsWorkspace } from '@/features/finance/components/TransactionsWorkspace'
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
@@ -54,14 +54,12 @@ export function DepartureDetailPage() {
     isLoading,
     isError,
     isFetching,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: ['departure', departureId],
     queryFn: () => getDeparture(departureId!),
     enabled: Boolean(departureId),
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const handleTabChange = (key: string) => {
@@ -267,7 +265,6 @@ export function DepartureDetailPage() {
   return (
     <div>
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError}
         hasData={Boolean(departure)}

@@ -17,7 +17,7 @@ import {
   resolveListTableLoading,
   useListPlaceholderData,
 } from '@/lib/query/list-query-ux'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
 import {
   DEPARTURE_PROGRESS_COLORS,
@@ -48,7 +48,7 @@ export function DepartureDetailPrefetchLink({
     void queryClient.prefetchQuery({
       queryKey: ['departure', record.id],
       queryFn: () => getDeparture(record.id),
-      staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
+      ...operationalQueryOptions(),
     })
   }
 
@@ -305,7 +305,6 @@ export function DeparturesPage() {
     isFetching,
     isError,
     isPlaceholderData,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -337,8 +336,7 @@ export function DeparturesPage() {
         pageSize: state.pageSize,
       }),
     placeholderData,
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const { hardLoading, softFetching } = resolveListTableLoading({
@@ -409,7 +407,6 @@ export function DeparturesPage() {
       />
 
       <StaleDataAlert
-        dataUpdatedAt={dataUpdatedAt}
         isFetching={isFetching}
         isError={isError}
         hasData={Boolean(departuresResult)}

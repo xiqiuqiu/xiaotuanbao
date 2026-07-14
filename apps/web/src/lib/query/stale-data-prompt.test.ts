@@ -1,56 +1,58 @@
 import { describe, expect, it } from 'vitest'
 import {
-  STALE_DATA_PROMPT_AFTER_MS,
-  shouldShowStaleDataPrompt,
+  OPERATIONAL_QUERY_STALE_TIME_MS,
+  OPERATIONAL_REFETCH_INTERVAL_MS,
+  operationalQueryOptions,
+  shouldShowManualRefreshPrompt,
 } from './stale-data-prompt'
 
-describe('shouldShowStaleDataPrompt', () => {
+describe('operationalQueryOptions', () => {
+  it('prefers auto refresh: focus + quiet poll, with a longer fresh window than the poll', () => {
+    const options = operationalQueryOptions()
+    expect(options.staleTime).toBe(OPERATIONAL_QUERY_STALE_TIME_MS)
+    expect(options.refetchOnWindowFocus).toBe(true)
+    expect(options.refetchInterval).toBe(OPERATIONAL_REFETCH_INTERVAL_MS)
+    expect(options.refetchIntervalInBackground).toBe(false)
+    expect(OPERATIONAL_REFETCH_INTERVAL_MS).toBeGreaterThan(OPERATIONAL_QUERY_STALE_TIME_MS)
+  })
+})
+
+describe('shouldShowManualRefreshPrompt', () => {
   const base = {
-    now: 100_000,
-    dataUpdatedAt: 100_000,
     isFetching: false,
     isError: false,
     hasData: true,
   }
 
-  it('hides when there is no data yet', () => {
-    expect(shouldShowStaleDataPrompt({ ...base, hasData: false })).toBe(false)
+  it('stays hidden while auto refresh is healthy', () => {
+    expect(shouldShowManualRefreshPrompt(base)).toBe(false)
   })
 
-  it('hides while a refresh is already in flight', () => {
+  it('stays hidden while an auto refresh is in flight', () => {
     expect(
-      shouldShowStaleDataPrompt({
+      shouldShowManualRefreshPrompt({
         ...base,
-        dataUpdatedAt: 0,
         isFetching: true,
+        isError: true,
       }),
     ).toBe(false)
   })
 
-  it('shows when a refresh failed but prior data is still on screen', () => {
+  it('stays hidden when there is nothing on screen to keep', () => {
     expect(
-      shouldShowStaleDataPrompt({
+      shouldShowManualRefreshPrompt({
+        ...base,
+        hasData: false,
+        isError: true,
+      }),
+    ).toBe(false)
+  })
+
+  it('shows only after automatic refresh failed and last good data is still shown', () => {
+    expect(
+      shouldShowManualRefreshPrompt({
         ...base,
         isError: true,
-        dataUpdatedAt: 99_000,
-      }),
-    ).toBe(true)
-  })
-
-  it('hides while data is fresher than the prompt threshold', () => {
-    expect(
-      shouldShowStaleDataPrompt({
-        ...base,
-        dataUpdatedAt: base.now - (STALE_DATA_PROMPT_AFTER_MS - 1),
-      }),
-    ).toBe(false)
-  })
-
-  it('shows after the user has been looking at the same snapshot long enough', () => {
-    expect(
-      shouldShowStaleDataPrompt({
-        ...base,
-        dataUpdatedAt: base.now - STALE_DATA_PROMPT_AFTER_MS,
       }),
     ).toBe(true)
   })

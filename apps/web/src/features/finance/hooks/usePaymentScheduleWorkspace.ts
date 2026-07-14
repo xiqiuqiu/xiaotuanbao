@@ -9,7 +9,7 @@ import {
   resolveListTableLoading,
   useListPlaceholderData,
 } from '@/lib/query/list-query-ux'
-import { OPERATIONAL_QUERY_STALE_TIME_MS } from '@/lib/query/stale-data-prompt'
+import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import {
   listDeparturePayables,
   listDepartureReceivables,
@@ -103,7 +103,6 @@ export function usePaymentScheduleWorkspace({
     isError,
     isPlaceholderData,
     error,
-    dataUpdatedAt,
     refetch,
   } = useQuery({
     queryKey: [
@@ -145,8 +144,7 @@ export function usePaymentScheduleWorkspace({
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
     placeholderData,
-    staleTime: OPERATIONAL_QUERY_STALE_TIME_MS,
-    refetchOnWindowFocus: true,
+    ...operationalQueryOptions(),
   })
 
   const { hardLoading, softFetching } = resolveListTableLoading({
@@ -352,7 +350,6 @@ export function usePaymentScheduleWorkspace({
     softFetching,
     isError,
     error,
-    dataUpdatedAt,
     hasListData: Boolean(schedulesResult),
     refetch,
     columns,

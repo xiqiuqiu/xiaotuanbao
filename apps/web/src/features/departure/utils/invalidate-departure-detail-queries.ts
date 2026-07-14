@@ -3,8 +3,8 @@ import type { QueryClient } from '@tanstack/react-query'
 /**
  * Query-key prefixes owned by departure detail tabs / header.
  * Use after mutations or an explicit user refresh — not on every tab switch.
- * Read-path freshness comes from per-query staleTime / refetchOnWindowFocus
- * on departure header, execution/source-order panes, and finance workspaces.
+ * Read-path freshness comes from operationalQueryOptions (staleTime + focus +
+ * quiet poll); manual refresh is only offered after an auto refresh fails.
  */
 export const DEPARTURE_DETAIL_QUERY_KEYS = [
   'departure',
