@@ -14,6 +14,7 @@ import {
 } from '../catalog'
 import { DepartureArchiveHistory } from './DepartureArchiveHistory'
 import { DepartureSettlementHistory } from './DepartureSettlementHistory'
+import { formatBusinessDateTime } from '@/utils/formatBusinessDateTime'
 
 const responsiveColumns = { xs: 1, sm: 2, md: 3, xl: 4 } as const
 
@@ -70,6 +71,8 @@ export function DepartureHeaderCard({ departure, menuItems }: DepartureHeaderCar
           { label: '结束日期', children: departure.endDate },
           { label: '团期天数', children: `${departure.dayCount} 天` },
           { label: '发团负责人', children: ownerLabel },
+          { label: '创建时间', children: formatBusinessDateTime(departure.createdAt) },
+          { label: '更新时间', children: formatBusinessDateTime(departure.updatedAt) },
         ]}
       />
 

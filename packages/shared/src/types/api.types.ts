@@ -64,6 +64,7 @@ export interface EmployeeSummary {
   roles: string[]
   lastLoginAt: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface EmployeeListStats {

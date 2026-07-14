@@ -21,6 +21,7 @@ import {
   formatCents,
   renderCompletionTags,
 } from '../catalog'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
 type DeparturesPageState = {
   keyword: string
@@ -97,7 +98,7 @@ function departuresPageReducer(
   }
 }
 
-function buildColumns(): ColumnsType<DepartureSummary> {
+export function buildDepartureColumns(): ColumnsType<DepartureSummary> {
   return [
     {
       title: '团号',
@@ -207,6 +208,7 @@ function buildColumns(): ColumnsType<DepartureSummary> {
       width: 100,
       render: (value: string | undefined, record) => value ?? record.ownerUserId,
     },
+    ...buildBusinessTimestampColumns<DepartureSummary>(),
     {
       title: '操作',
       key: 'actions',
@@ -283,7 +285,7 @@ export function DeparturesPage() {
     dispatch({ type: 'RESET_FILTERS' })
   }, [])
 
-  const columns = useMemo(() => buildColumns(), [])
+  const columns = useMemo(() => buildDepartureColumns(), [])
 
   const ownerOptions =
     employeeOptionsResult?.map((employee) => ({
@@ -337,7 +339,7 @@ export function DeparturesPage() {
           loading={isLoading}
           columns={columns}
           dataSource={departuresResult?.items ?? []}
-          scroll={{ x: 1800 }}
+          scroll={{ x: 2100 }}
           pagination={{
             current: state.page,
             pageSize: state.pageSize,

@@ -14,16 +14,7 @@ import {
   formatCents,
 } from '../catalog'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
 export function buildTransactionColumns({
   isDepartureScope,
@@ -136,11 +127,9 @@ export function buildTransactionColumns({
         </Tag>
       ),
     },
-    {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      render: (value: string) => formatDateTime(value),
-    },
+    ...(isDepartureScope
+      ? []
+      : buildBusinessTimestampColumns<FinanceTransactionSummary>()),
     {
       title: '操作',
       key: 'actions',

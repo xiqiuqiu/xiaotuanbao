@@ -35,8 +35,9 @@ import {
 } from '../utils/supplier-form'
 import { PageHeader } from '@/layouts/PageHeader'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
-function buildColumns(
+export function buildSupplierColumns(
   includeArchived: boolean,
   onEdit: (supplier: SupplierSummary) => void,
   onArchive: (supplier: SupplierSummary) => void,
@@ -88,6 +89,7 @@ function buildColumns(
         return <Tag color={color}>{DIRECTORY_PROFILE_STATUS_LABELS[status] ?? status}</Tag>
       },
     },
+    ...buildBusinessTimestampColumns<SupplierSummary>(),
     {
       title: '操作',
       key: 'actions',
@@ -247,7 +249,7 @@ export function SuppliersPage() {
   )
 
   const columns = useMemo(
-    () => buildColumns(includeArchived, openEditDrawer, handleArchive, handleRestore),
+    () => buildSupplierColumns(includeArchived, openEditDrawer, handleArchive, handleRestore),
     [includeArchived, openEditDrawer, handleArchive, handleRestore],
   )
 

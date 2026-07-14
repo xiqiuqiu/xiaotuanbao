@@ -34,6 +34,7 @@ import {
 } from '../utils/partner-form'
 import { PageHeader } from '@/layouts/PageHeader'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
 type PartnersPageState = {
   search: string
@@ -95,7 +96,7 @@ function partnersPageReducer(
   }
 }
 
-function buildColumns(
+export function buildPartnerColumns(
   includeArchived: boolean,
   onEdit: (partner: PartnerSummary) => void,
   onArchive: (partner: PartnerSummary) => void,
@@ -150,6 +151,7 @@ function buildColumns(
         return <Tag color={color}>{DIRECTORY_PROFILE_STATUS_LABELS[status] ?? status}</Tag>
       },
     },
+    ...buildBusinessTimestampColumns<PartnerSummary>(),
     {
       title: '操作',
       key: 'actions',
@@ -297,7 +299,7 @@ export function PartnersPage() {
   )
 
   const columns = useMemo(
-    () => buildColumns(state.includeArchived, openEditDrawer, handleArchive, handleRestore),
+    () => buildPartnerColumns(state.includeArchived, openEditDrawer, handleArchive, handleRestore),
     [handleArchive, handleRestore, openEditDrawer, state.includeArchived],
   )
 

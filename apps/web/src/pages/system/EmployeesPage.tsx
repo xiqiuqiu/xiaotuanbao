@@ -17,8 +17,9 @@ import { EmployeeFilters } from './employees/EmployeeFilters'
 import { EmployeeFormDrawer, type EmployeeFormValues } from './employees/EmployeeFormDrawer'
 import { EmployeeStatsCards } from './employees/EmployeeStatsCards'
 import { formatLastLogin } from './employees/formatLastLogin'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
-function buildColumns(
+export function buildEmployeeColumns(
   onEdit: (employee: EmployeeSummary) => void,
   onDisable: (employee: EmployeeSummary) => void,
 ): ColumnsType<EmployeeSummary> {
@@ -48,6 +49,7 @@ function buildColumns(
         </Tag>
       ),
     },
+    ...buildBusinessTimestampColumns<EmployeeSummary>(),
     {
       title: '操作',
       key: 'actions',
@@ -194,7 +196,7 @@ export function EmployeesPage() {
   )
 
   const columns = useMemo(
-    () => buildColumns(openEditDrawer, handleDisable),
+    () => buildEmployeeColumns(openEditDrawer, handleDisable),
     [openEditDrawer, handleDisable],
   )
 
@@ -229,7 +231,7 @@ export function EmployeesPage() {
           loading={employeesLoading}
           columns={columns}
           dataSource={employeesResult?.items ?? []}
-          scroll={{ x: 760 }}
+          scroll={{ x: 1060 }}
           pagination={{
             current: page,
             pageSize,

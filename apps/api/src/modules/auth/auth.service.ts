@@ -58,10 +58,11 @@ export class AuthService {
       throw new UnauthorizedException('用户名或密码错误')
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    })
+    await this.prisma.$executeRaw`
+      UPDATE "users"
+      SET "last_login_at" = ${new Date()}
+      WHERE "id" = ${user.id}
+    `
 
     const session = this.buildSession(user)
     const payload: JwtPayload = {

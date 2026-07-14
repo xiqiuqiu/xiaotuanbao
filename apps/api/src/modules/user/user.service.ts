@@ -228,6 +228,7 @@ export class UserService {
     status: UserStatus
     lastLoginAt: Date | null
     createdAt: Date
+    updatedAt: Date
     roles: Array<{ role: { name: string } }>
   }): EmployeeSummary {
     return {
@@ -239,6 +240,7 @@ export class UserService {
       roles: user.roles.map((item) => item.role.name),
       lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString(),
     }
   }
 }
