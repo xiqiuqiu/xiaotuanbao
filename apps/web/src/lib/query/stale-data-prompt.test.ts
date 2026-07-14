@@ -8,12 +8,16 @@ import {
 
 describe('operationalQueryOptions', () => {
   it('prefers auto refresh: focus + quiet poll, with a longer fresh window than the poll', () => {
+    // Frequency budget agreed for operational lists/details (independent literals).
+    expect(OPERATIONAL_QUERY_STALE_TIME_MS).toBe(30_000)
+    expect(OPERATIONAL_REFETCH_INTERVAL_MS).toBe(90_000)
+
     const options = operationalQueryOptions()
-    expect(options.staleTime).toBe(OPERATIONAL_QUERY_STALE_TIME_MS)
+    expect(options.staleTime).toBe(30_000)
     expect(options.refetchOnWindowFocus).toBe(true)
-    expect(options.refetchInterval).toBe(OPERATIONAL_REFETCH_INTERVAL_MS)
+    expect(options.refetchInterval).toBe(90_000)
     expect(options.refetchIntervalInBackground).toBe(false)
-    expect(OPERATIONAL_REFETCH_INTERVAL_MS).toBeGreaterThan(OPERATIONAL_QUERY_STALE_TIME_MS)
+    expect(options.refetchInterval).toBeGreaterThan(options.staleTime)
   })
 })
 
