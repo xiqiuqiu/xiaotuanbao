@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { BatchFinanceGenerationResult } from '@xiaotuanbao/shared'
-import { formatBatchFinanceGenerationMessage } from './batch-finance-generation-message'
+import {
+  formatBatchFinanceGenerationConfirmContent,
+  formatBatchFinanceGenerationMessage,
+} from './batch-finance-generation-message'
+
+describe('formatBatchFinanceGenerationConfirmContent', () => {
+  it('summarizes receivable candidate count', () => {
+    expect(formatBatchFinanceGenerationConfirmContent(3, '应收')).toBe(
+      '确认后将生成 3 条应收记录',
+    )
+  })
+
+  it('summarizes payable candidate count and clamps invalid counts', () => {
+    expect(formatBatchFinanceGenerationConfirmContent(-2.7, '应付')).toBe(
+      '确认后将生成 0 条应付记录',
+    )
+  })
+})
 
 describe('formatBatchFinanceGenerationMessage', () => {
   it('reports empty candidate set', () => {

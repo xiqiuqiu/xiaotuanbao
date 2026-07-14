@@ -302,7 +302,7 @@ describe('ExecutionResourcePane action buttons', () => {
 
       expect(confirmConfig).toMatchObject({
         title: '批量生成应付',
-        content: '将为本段所有尚未生成应付的资源生成应付，是否继续？',
+        content: '确认后将生成 1 条应付记录',
         okText: '生成',
       })
 

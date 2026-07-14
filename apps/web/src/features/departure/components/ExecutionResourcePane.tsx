@@ -27,7 +27,10 @@ import {
   updateSegmentResource,
 } from '@/services/segment-resource.service'
 import { formValuesToPayload } from '../utils/resource-form'
-import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
+import {
+  formatBatchFinanceGenerationConfirmContent,
+  formatBatchFinanceGenerationMessage,
+} from '../utils/batch-finance-generation-message'
 import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
@@ -159,9 +162,10 @@ export function ExecutionResourcePane({
   })
 
   const confirmBatchGenerate = () => {
+    if (!payableGap.hasGap) return
     Modal.confirm({
       title: '批量生成应付',
-      content: '将为本段所有尚未生成应付的资源生成应付，是否继续？',
+      content: formatBatchFinanceGenerationConfirmContent(payableGap.ungenerated, '应付'),
       okText: '生成',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),

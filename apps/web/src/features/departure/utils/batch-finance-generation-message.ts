@@ -1,5 +1,14 @@
 import type { BatchFinanceGenerationResult } from '@xiaotuanbao/shared'
 
+/** 批量生成应收/应付二次确认弹窗正文（含本次候选条数）。 */
+export function formatBatchFinanceGenerationConfirmContent(
+  candidateCount: number,
+  noun: '应收' | '应付',
+): string {
+  const count = Math.max(0, Math.floor(Number(candidateCount) || 0))
+  return `确认后将生成 ${count} 条${noun}记录`
+}
+
 /** 将批量生成应收/应付结果收成一句 Toast 文案。 */
 export function formatBatchFinanceGenerationMessage(
   result: BatchFinanceGenerationResult,

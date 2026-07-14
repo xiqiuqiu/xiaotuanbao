@@ -4,7 +4,7 @@ import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
-import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { DirectoryProfileStatus, SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import { listPartners } from '@/services/partner.service'
 import {
   createSourceOrder,
@@ -24,7 +24,10 @@ import {
   type SourceOrderFilterDraft,
 } from '../utils/source-order-filter-state'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
-import { formatBatchFinanceGenerationMessage } from '../utils/batch-finance-generation-message'
+import {
+  formatBatchFinanceGenerationConfirmContent,
+  formatBatchFinanceGenerationMessage,
+} from '../utils/batch-finance-generation-message'
 
 interface SourceOrdersTabProps {
   departure: DepartureDetail
@@ -160,6 +163,18 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       }),
   })
 
+  /** 批量生成按全团未生成客源单计数；与筛选列表解耦，空筛选时与主查询共享缓存。 */
+  const { data: allOrdersForBatchCount } = useQuery({
+    queryKey: ['source-orders', departure.id, EMPTY_SOURCE_ORDER_FILTERS],
+    queryFn: () =>
+      listSourceOrders(departure.id, {
+        partnerId: EMPTY_SOURCE_ORDER_FILTERS.partnerId,
+        collectionMode: EMPTY_SOURCE_ORDER_FILTERS.collectionMode,
+        hasDiscount: EMPTY_SOURCE_ORDER_FILTERS.hasDiscount,
+        keyword: EMPTY_SOURCE_ORDER_FILTERS.keyword || undefined,
+      }),
+  })
+
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
       if (drawer.editingOrder) {
@@ -220,10 +235,20 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     },
   })
 
+  const pendingReceivableCount = useMemo(
+    () =>
+      (allOrdersForBatchCount?.items ?? []).filter(
+        (order) => order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED,
+      ).length,
+    [allOrdersForBatchCount?.items],
+  )
+  const showBatchGenerate = !readOnly && pendingReceivableCount > 0
+
   const confirmBatchGenerate = () => {
+    if (pendingReceivableCount <= 0) return
     Modal.confirm({
       title: '批量生成应收',
-      content: '将为本团所有尚未生成应收的客源单生成应收，是否继续？',
+      content: formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收'),
       okText: '生成',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),
@@ -297,9 +322,11 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         extra={
           !readOnly ? (
             <Space>
-              <Button onClick={confirmBatchGenerate} loading={batchGenerateMutation.isPending}>
-                批量生成应收
-              </Button>
+              {showBatchGenerate ? (
+                <Button onClick={confirmBatchGenerate} loading={batchGenerateMutation.isPending}>
+                  批量生成应收
+                </Button>
+              ) : null}
               <Button
                 type="primary"
                 icon={<PlusOutlined />}

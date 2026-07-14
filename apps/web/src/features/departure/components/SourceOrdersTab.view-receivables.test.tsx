@@ -23,6 +23,7 @@ vi.mock('@/services/source-order.service', () => ({
   updateSourceOrder: vi.fn(),
   deleteSourceOrder: vi.fn(),
   generateReceivables: vi.fn(),
+  generateReceivablesForDeparture: vi.fn(),
 }))
 
 const departure = {
@@ -116,5 +117,52 @@ describe('SourceOrdersTab 查看应收 navigation', () => {
         counterpartyKeyword: '杭州同行',
       },
     })
+  })
+})
+
+describe('SourceOrdersTab 批量生成应收', () => {
+  afterEach(() => {
+    cleanup()
+    navigate.mockReset()
+    listSourceOrders.mockReset()
+  })
+
+  it('shows 批量生成应收 only when ungenerated source orders exist', async () => {
+    listSourceOrders.mockResolvedValue({
+      items: [baseOrder({ receivableStatus: 'not_generated', hasPaymentSchedule: false })],
+      summary: {
+        orderCount: 1,
+        totalGuests: 10,
+        partnerCount: 1,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 1000000,
+        totalGuestCollectCents: 1000000,
+      },
+      total: 1,
+    })
+
+    const { unmount } = renderTab()
+
+    expect(await screen.findByRole('button', { name: '批量生成应收' })).toBeTruthy()
+    unmount()
+
+    listSourceOrders.mockResolvedValue({
+      items: [baseOrder()],
+      summary: {
+        orderCount: 1,
+        totalGuests: 10,
+        partnerCount: 1,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 1000000,
+        totalGuestCollectCents: 1000000,
+      },
+      total: 1,
+    })
+    renderTab()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
+    })
+    expect(screen.queryByRole('button', { name: '批量生成应收' })).toBeNull()
   })
 })
