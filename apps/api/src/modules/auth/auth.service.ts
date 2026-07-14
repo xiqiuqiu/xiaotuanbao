@@ -7,6 +7,11 @@ import type { JwtPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { LoginDto } from './dto/login.dto'
 
+export interface CreatedSession {
+  token: string
+  session: LoginResult
+}
+
 const userWithRolesInclude = {
   organization: true,
   roles: {
@@ -31,7 +36,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async login(dto: LoginDto): Promise<LoginResult> {
+  async login(dto: LoginDto): Promise<CreatedSession> {
     const username = dto.username.trim()
 
     const user = await this.prisma.user.findFirst({
@@ -64,17 +69,14 @@ export class AuthService {
       WHERE "id" = ${user.id}
     `
 
-    const session = this.buildSession(user)
     const payload: JwtPayload = {
       sub: user.id,
       organizationId: user.organizationId,
       isPlatformAdmin: user.isPlatformAdmin,
     }
-    const accessToken = await this.jwtService.signAsync(payload)
-
     return {
-      accessToken,
-      ...session,
+      token: await this.jwtService.signAsync(payload),
+      session: this.buildSession(user),
     }
   }
 

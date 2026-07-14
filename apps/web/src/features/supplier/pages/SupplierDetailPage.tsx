@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Card, Form, Spin, Tabs, Typography, message } from 'antd'
 import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from '@tanstack/react-router'
+import { useNavigate, useParams } from '@tanstack/react-router'
 import { getSupplier, updateSupplier } from '@/services/supplier.service'
 import { SupplierComingSoonPanel } from '../components/SupplierComingSoonPanel'
 import { SupplierFormDrawer } from '../components/SupplierFormDrawer'
@@ -16,9 +16,11 @@ import {
 
 export function SupplierDetailPage() {
   const { supplierId } = useParams({ strict: false })
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<SupplierFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const goBack = () => void navigate({ to: '/supplier' })
 
   const { data: supplier, isLoading, isError } = useQuery({
     queryKey: ['supplier', supplierId],
@@ -58,11 +60,9 @@ export function SupplierDetailPage() {
   if (!supplierId) {
     return (
       <div>
-        <Link to="/supplier">
-          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
-            返回供应商列表
-          </Button>
-        </Link>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+          返回供应商列表
+        </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           供应商不存在
         </Typography.Title>
@@ -81,11 +81,9 @@ export function SupplierDetailPage() {
   if (isError || !supplier) {
     return (
       <div>
-        <Link to="/supplier">
-          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
-            返回供应商列表
-          </Button>
-        </Link>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+          返回供应商列表
+        </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
           供应商不存在
         </Typography.Title>
@@ -98,11 +96,9 @@ export function SupplierDetailPage() {
 
   return (
     <div>
-      <Link to="/supplier">
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
-          返回供应商列表
-        </Button>
-      </Link>
+      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+        返回供应商列表
+      </Button>
       <div
         style={{
           display: 'flex',

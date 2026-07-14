@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react'
-import { Button, Card, Table } from 'antd'
+import { Alert, Button, Card, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { FinanceTransactionSummary, TransactionDirection } from '@xiaotuanbao/shared'
 import { listTransactions } from '@/services/finance.service'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { PageHeader } from '@/layouts/PageHeader'
 import { useTransactionListState } from '../hooks/useTransactionListState'
 import { useTransactionWorkspaceDialogs } from '../hooks/useTransactionWorkspaceDialogs'
@@ -60,34 +61,45 @@ export function TransactionsWorkspace({
   } = listState
 
   const effectiveDepartureId = isDepartureScope ? lockedDepartureId : departureFilter
+  const debouncedPartnerKeyword = useDebouncedValue(partnerKeyword.trim())
+  const debouncedTransactionNo = useDebouncedValue(transactionNo.trim())
 
-  const { data: transactionsResult, isLoading } = useQuery({
+  const {
+    data: transactionsResult,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: [
       listQueryKey,
       lockedDepartureId,
       dateRange,
       direction,
-      partnerKeyword,
+      debouncedPartnerKeyword,
       writeoffStatus,
-      transactionNo,
+      debouncedTransactionNo,
       effectiveDepartureId,
       statusFilter,
       page,
       pageSize,
     ],
-    queryFn: () =>
-      listTransactions({
-        dateStart: dateRange?.[0],
-        dateEnd: dateRange?.[1],
-        direction,
-        partnerKeyword: partnerKeyword || undefined,
-        writeoffStatus,
-        transactionNo: transactionNo || undefined,
-        departureId: effectiveDepartureId,
-        status: statusFilter,
-        page,
-        pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listTransactions(
+        {
+          dateStart: dateRange?.[0],
+          dateEnd: dateRange?.[1],
+          direction,
+          partnerKeyword: debouncedPartnerKeyword || undefined,
+          writeoffStatus,
+          transactionNo: debouncedTransactionNo || undefined,
+          departureId: effectiveDepartureId,
+          status: statusFilter,
+          page,
+          pageSize,
+        },
+        signal,
+      ),
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
 
@@ -209,24 +221,40 @@ export function TransactionsWorkspace({
       />
 
       <Card>
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={transactionsResult?.items ?? []}
-          scroll={{ x: 'max-content' }}
-          pagination={{
-            current: page,
-            pageSize,
-            total: transactionsResult?.total ?? 0,
-            showSizeChanger: true,
-            showTotal: (count) => `共 ${count} 条`,
-            onChange: (nextPage, nextPageSize) => {
-              dispatchList({ type: 'setPage', value: nextPage })
-              dispatchList({ type: 'setPageSize', value: nextPageSize })
-            },
-          }}
-        />
+        {isError ? (
+          <Alert
+            type="error"
+            showIcon
+            title="流水列表加载失败"
+            description={
+              error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+            }
+            action={
+              <Button size="small" onClick={() => void refetch()}>
+                重试
+              </Button>
+            }
+          />
+        ) : (
+          <Table
+            rowKey="id"
+            loading={isLoading}
+            columns={columns}
+            dataSource={transactionsResult?.items ?? []}
+            scroll={{ x: 'max-content' }}
+            pagination={{
+              current: page,
+              pageSize,
+              total: transactionsResult?.total ?? 0,
+              showSizeChanger: true,
+              showTotal: (count) => `共 ${count} 条`,
+              onChange: (nextPage, nextPageSize) => {
+                dispatchList({ type: 'setPage', value: nextPage })
+                dispatchList({ type: 'setPageSize', value: nextPageSize })
+              },
+            }}
+          />
+        )}
       </Card>
 
       <TransactionActionDialogs

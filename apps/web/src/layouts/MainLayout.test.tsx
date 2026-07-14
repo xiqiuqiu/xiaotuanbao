@@ -1,0 +1,101 @@
+import { ConfigProvider, message } from 'antd'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuthStore } from '@/app/store/auth.store'
+import { useUiStore } from '@/app/store/ui.store'
+import { logout } from '@/services/auth.service'
+import { MainLayout } from './MainLayout'
+
+const navigate = vi.fn()
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
+  useNavigate: () => navigate,
+  useRouterState: () => ({ location: { pathname: '/departure' } }),
+}))
+
+vi.mock('@/services/auth.service', () => ({
+  logout: vi.fn(),
+}))
+
+describe('MainLayout 侧栏开关', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useAuthStore.setState({
+      user: { id: 'user-1', name: '张三' },
+      menuKeys: ['/departure'],
+      sessionStatus: 'authenticated',
+    })
+    useUiStore.setState({ sidebarCollapsed: false })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('Tooltip 与可访问名称随折叠状态同步', async () => {
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    const collapseButton = screen.getByRole('button', { name: '折叠侧边栏' })
+    await user.hover(collapseButton)
+    expect(await screen.findByRole('tooltip', { name: '折叠侧边栏' })).toBeInTheDocument()
+
+    await user.unhover(collapseButton)
+    await user.click(collapseButton)
+
+    const expandButton = await screen.findByRole('button', { name: '展开侧边栏' })
+    await user.hover(expandButton)
+    expect(await screen.findByRole('tooltip', { name: '展开侧边栏' })).toBeInTheDocument()
+  })
+
+  it('快速重复退出只请求一次并清空本地会话', async () => {
+    let resolveLogout!: () => void
+    vi.mocked(logout).mockReturnValue(new Promise<void>((resolve) => {
+      resolveLogout = resolve
+    }))
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /张三/ }))
+    const logoutItem = await screen.findByText('退出登录')
+    fireEvent.click(logoutItem)
+    fireEvent.click(logoutItem)
+
+    expect(logout).toHaveBeenCalledTimes(1)
+    resolveLogout()
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
+    expect(useAuthStore.getState().isAuthenticated()).toBe(false)
+  })
+
+  it('服务端退出失败仍清空本地会话并提示风险', async () => {
+    vi.mocked(logout).mockRejectedValue(new Error('network error'))
+    const warning = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never)
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /张三/ }))
+    await user.click(await screen.findByText('退出登录'))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
+    expect(useAuthStore.getState().isAuthenticated()).toBe(false)
+    expect(warning).toHaveBeenCalledWith('服务器会话可能未清除，请勿在公共设备上继续使用')
+  })
+})

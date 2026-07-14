@@ -32,6 +32,11 @@ cp .env.example .env
 | `API_PORT` | 否 | 3000 | API 监听端口 |
 | `JWT_SECRET` | **是（生产）** | — | JWT 签名密钥，生产必须修改 |
 | `JWT_EXPIRES_IN` | 否 | 7d | Token 有效期 |
+| `WEB_ORIGINS` | **是（生产）** | 本地 Vite origins | 允许携带 Cookie 访问 API 的精确前端 Origin，多个值用逗号分隔，不支持通配符 |
+| `AUTH_COOKIE_SECURE` | **是（生产）** | 生产 `true`，开发 `false` | 认证 Cookie 仅经 HTTPS 发送；生产设为 `false` 会拒绝启动 |
+| `AUTH_COOKIE_SAME_SITE` | 否 | `lax` | `lax` / `strict` / `none`；仅跨站部署用 `none`，且必须启用 Secure |
+| `AUTH_COOKIE_DOMAIN` | 否 | host-only | 通常不要设置；只有经安全评审确认需要跨子域共享时配置 |
+| `AUTH_ALLOW_LEGACY_BEARER` | 否 | `false` | Web 迁移窗口临时兼容旧 Bearer Header，到期必须关闭 |
 
 ### 数据库
 
@@ -75,6 +80,9 @@ CADDY_DOMAIN=:80
 DATABASE_URL=postgresql://xiaotuanbao:please-change-this-password@localhost:5432/xiaotuanbao?schema=public
 UPLOAD_DIR=./uploads
 VITE_APP_ENV=development
+WEB_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAME_SITE=lax
 ```
 
 PostgreSQL 通过 `pnpm db:up` 启动，暴露 `localhost:5432`。
@@ -86,6 +94,9 @@ NODE_ENV=production
 CADDY_DOMAIN=:80                    # 本地 Docker 测试
 # CADDY_DOMAIN=your-domain.com    # 生产环境
 JWT_SECRET=<强随机字符串>
+WEB_ORIGINS=https://your-domain.com
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAME_SITE=lax
 POSTGRES_PASSWORD=<强密码>
 UPLOAD_DIR=/app/uploads
 VITE_APP_ENV=production
@@ -99,3 +110,10 @@ VITE_APP_ENV=production
 2. `POSTGRES_PASSWORD`
 3. `CADDY_DOMAIN=your-domain.com`
 4. `SEED_ADMIN_PASSWORD`（若使用 seed 初始化）
+5. `WEB_ORIGINS=https://实际前端域名`
+6. `AUTH_COOKIE_SECURE=true` 并通过 HTTPS 访问
+
+认证使用服务端 `HttpOnly` Cookie。默认 Docker/Caddy 的 Web 与 `/api` 同源，保持
+`VITE_API_BASE_URL=/api` 与 `AUTH_COOKIE_SAME_SITE=lax`。若 Web 和 API 跨 Origin 但仍同站，
+将 Web 的精确 Origin 加入 `WEB_ORIGINS`；只有两者确实跨站时才使用
+`AUTH_COOKIE_SAME_SITE=none`，此时 `AUTH_COOKIE_SECURE=true` 是强制条件。

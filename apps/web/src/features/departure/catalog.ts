@@ -181,11 +181,3 @@ export const SEGMENT_PAYABLE_STATUS_LABELS: Record<string, string> = {
   [SegmentPayableStatus.CLOSED]: '已关闭',
 }
 
-export const SEGMENT_PAYABLE_OVERVIEW_LABELS: Record<string, string> = {
-  [SegmentPayableStatus.NOT_GENERATED]: '应付未生成',
-  [SegmentPayableStatus.PENDING]: '应付待付',
-  [SegmentPayableStatus.PARTIAL]: '应付部分付款',
-  [SegmentPayableStatus.PAID]: '应付已付清',
-  [SegmentPayableStatus.CLOSED]: '应付已关闭',
-}
-

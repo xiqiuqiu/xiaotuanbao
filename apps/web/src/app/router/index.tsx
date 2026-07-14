@@ -2,11 +2,9 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  redirect,
   Outlet,
 } from '@tanstack/react-router'
-import { useAuthStore } from '@/app/store/auth.store'
-import { ensureAuthenticatedSession } from '@/lib/auth/session'
+import { ensureAnonymousSession, ensureAuthenticatedSession } from '@/lib/auth/session'
 import { AppLayout } from '@/layouts/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { HomePage } from '@/pages/HomePage'
@@ -34,10 +32,8 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
   component: LoginPage,
-  beforeLoad: () => {
-    if (useAuthStore.getState().isAuthenticated()) {
-      throw redirect({ to: '/departure' })
-    }
+  beforeLoad: async () => {
+    await ensureAnonymousSession()
   },
 })
 

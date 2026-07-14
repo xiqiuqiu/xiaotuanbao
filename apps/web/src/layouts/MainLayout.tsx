@@ -1,4 +1,4 @@
-import { Layout, Menu, Breadcrumb, Button, Dropdown, theme } from 'antd'
+import { Layout, Menu, Breadcrumb, Button, Dropdown, Tooltip, message, theme } from 'antd'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -7,12 +7,14 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties, PropsWithChildren } from 'react'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { filterMenuItems } from '@/utils/menu-permission'
+import { logout as logoutSession } from '@/services/auth.service'
+import { queryClient } from '@/lib/query/client'
 import styles from './MainLayout.module.css'
 
 const { Header, Sider } = Layout
@@ -24,10 +26,11 @@ export function MainLayout({ children }: PropsWithChildren) {
   const pathname = routerState.location.pathname
   const user = useAuthStore((state) => state.user)
   const menuKeys = useAuthStore((state) => state.menuKeys)
-  const logout = useAuthStore((state) => state.logout)
+  const clearSession = useAuthStore((state) => state.clearSession)
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed)
+  const logoutPendingRef = useRef(false)
 
   const visibleMenuItems = useMemo(
     () => filterMenuItems(mainMenuItems, menuKeys),
@@ -36,6 +39,7 @@ export function MainLayout({ children }: PropsWithChildren) {
 
   const menuSelectedKey = pathname.startsWith('/supplier/') ? '/supplier' : pathname
   const selectedKeys = [menuSelectedKey]
+  const sidebarToggleLabel = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'
   const openKeys = pathname.startsWith('/finance')
     ? ['finance']
     : pathname.startsWith('/system')
@@ -110,13 +114,15 @@ export function MainLayout({ children }: PropsWithChildren) {
           className={styles.header}
         >
           <div className={styles.headerLeading}>
-            <Button
-              className={styles.collapseButton}
-              type="text"
-              icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={toggleSidebar}
-              aria-label={sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'}
-            />
+            <Tooltip title={sidebarToggleLabel} placement="bottom">
+              <Button
+                className={styles.collapseButton}
+                type="text"
+                icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={toggleSidebar}
+                aria-label={sidebarToggleLabel}
+              />
+            </Tooltip>
             <Breadcrumb className={styles.breadcrumb} items={breadcrumbItems} />
           </div>
 
@@ -127,9 +133,21 @@ export function MainLayout({ children }: PropsWithChildren) {
                   key: 'logout',
                   icon: <LogoutOutlined />,
                   label: '退出登录',
-                  onClick: () => {
-                    logout()
-                    navigate({ to: '/login' })
+                  onClick: async () => {
+                    if (logoutPendingRef.current) {
+                      return
+                    }
+                    logoutPendingRef.current = true
+                    try {
+                      await logoutSession()
+                    } catch {
+                      message.warning('服务器会话可能未清除，请勿在公共设备上继续使用')
+                    } finally {
+                      clearSession()
+                      queryClient.clear()
+                      navigate({ to: '/login' })
+                      logoutPendingRef.current = false
+                    }
                   },
                 },
               ],

@@ -1,7 +1,7 @@
 import { Button, Card, Col, Descriptions, Dropdown, Row, Space, Tag, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { ArrowLeftOutlined, DownOutlined } from '@ant-design/icons'
-import { Link } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import {
@@ -24,15 +24,19 @@ type DepartureHeaderCardProps = {
 }
 
 export function DepartureHeaderCard({ departure, menuItems }: DepartureHeaderCardProps) {
+  const navigate = useNavigate()
   const ownerLabel = departure.ownerName ?? '-'
 
   return (
     <Card style={{ marginBottom: 16 }}>
-      <Link to="/departure">
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }}>
-          返回发团列表
-        </Button>
-      </Link>
+      <Button
+        type="text"
+        icon={<ArrowLeftOutlined />}
+        style={{ paddingLeft: 0, marginBottom: 16 }}
+        onClick={() => void navigate({ to: '/departure' })}
+      >
+        返回发团列表
+      </Button>
 
       <Row justify="space-between" align="top" gutter={[16, 12]} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={14}>

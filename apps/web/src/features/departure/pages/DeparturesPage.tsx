@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useReducer } from 'react'
 import { Button, Card, Space, Table, Tag, Typography } from 'antd'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
@@ -98,7 +98,9 @@ function departuresPageReducer(
   }
 }
 
-export function buildDepartureColumns(): ColumnsType<DepartureSummary> {
+export function buildDepartureColumns(
+  onCopy: (departureId: string) => void,
+): ColumnsType<DepartureSummary> {
   return [
     {
       title: '团号',
@@ -216,14 +218,14 @@ export function buildDepartureColumns(): ColumnsType<DepartureSummary> {
       width: 80,
       render: (_value, record) => (
         <Space size="small">
-          <Link
-            to="/departure/new"
-            search={{ copyFrom: record.id }}
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => onCopy(record.id)}
           >
-            <Button type="link" size="small" icon={<CopyOutlined />}>
-              复制
-            </Button>
-          </Link>
+            复制
+          </Button>
         </Space>
       ),
     },
@@ -231,6 +233,7 @@ export function buildDepartureColumns(): ColumnsType<DepartureSummary> {
 }
 
 export function DeparturesPage() {
+  const navigate = useNavigate()
   const [state, dispatch] = useReducer(departuresPageReducer, initialDeparturesPageState)
 
   const startDateFrom = state.startDateRange?.[0]
@@ -285,7 +288,14 @@ export function DeparturesPage() {
     dispatch({ type: 'RESET_FILTERS' })
   }, [])
 
-  const columns = useMemo(() => buildDepartureColumns(), [])
+  const handleCopy = useCallback(
+    (departureId: string) => {
+      void navigate({ to: '/departure/new', search: { copyFrom: departureId } })
+    },
+    [navigate],
+  )
+
+  const columns = useMemo(() => buildDepartureColumns(handleCopy), [handleCopy])
 
   const ownerOptions =
     employeeOptionsResult?.map((employee) => ({
@@ -304,11 +314,13 @@ export function DeparturesPage() {
       <PageHeader
         title="发团管理"
         action={
-          <Link to="/departure/new">
-            <Button type="primary" icon={<PlusOutlined />}>
-              新建发团
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => void navigate({ to: '/departure/new' })}
+          >
+            新建发团
+          </Button>
         }
       />
 

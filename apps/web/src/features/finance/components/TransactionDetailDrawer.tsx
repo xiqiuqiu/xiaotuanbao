@@ -1,4 +1,15 @@
-import { Button, Descriptions, Drawer, Empty, Space, Spin, Table, Tag, Typography } from 'antd'
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Drawer,
+  Empty,
+  Space,
+  Spin,
+  Table,
+  Tag,
+  Typography,
+} from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionVerificationSummary } from '@xiaotuanbao/shared'
@@ -64,7 +75,13 @@ export function TransactionDetailDrawer({
   transactionId,
   onClose,
 }: TransactionDetailDrawerProps) {
-  const { data: transaction, isLoading } = useQuery({
+  const {
+    data: transaction,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['finance-transaction', transactionId],
     queryFn: () => {
       if (!transactionId) {
@@ -132,6 +149,20 @@ export function TransactionDetailDrawer({
     >
       {isLoading ? (
         <Spin />
+      ) : isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="流水详情加载失败"
+          description={
+            error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+          }
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              重试
+            </Button>
+          }
+        />
       ) : transaction ? (
         <>
           <Typography.Title level={5} style={{ marginTop: 0 }}>

@@ -25,9 +25,7 @@ export interface SessionPayload {
   menuKeys: string[]
 }
 
-export interface LoginResult extends SessionPayload {
-  accessToken: string
-}
+export interface LoginResult extends SessionPayload {}
 
 export interface MeResult extends SessionPayload {}
 

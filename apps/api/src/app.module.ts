@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { APP_GUARD } from '@nestjs/core'
+import { CsrfOriginGuard } from './common/guards/csrf-origin.guard'
 import appConfig from './config/app.config'
 import { AuthModule } from './modules/auth/auth.module'
 import { HealthModule } from './modules/health/health.module'
@@ -31,6 +33,12 @@ import { PrismaModule } from './database/prisma/prisma.module'
     PartnerModule,
     DepartureModule,
     FinanceModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: CsrfOriginGuard,
+    },
   ],
 })
 export class AppModule {}

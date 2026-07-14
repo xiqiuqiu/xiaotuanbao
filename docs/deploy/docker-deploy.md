@@ -24,6 +24,7 @@ cp .env.example .env
 
 1. 设置 `CADDY_DOMAIN=:80`（本地）或 `your-domain.com`（生产）
 2. 生产环境修改 `JWT_SECRET`、`POSTGRES_PASSWORD`
+3. 配置 `WEB_ORIGINS=https://实际前端域名`、`AUTH_COOKIE_SECURE=true`
 
 启动：
 
@@ -88,9 +89,13 @@ pnpm docker:up    # 重新构建并启动
 ```bash
 curl http://localhost/api/health
 curl -X POST http://localhost/api/auth/login \
+  -H 'Origin: http://localhost' \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin123"}'
 ```
+
+登录响应通过 `HttpOnly` Cookie 建立会话。生产环境必须使用 HTTPS；上面的 HTTP curl
+只适用于 `NODE_ENV=development` 且 `AUTH_COOKIE_SECURE=false` 的本地开发，不适用于生产容器。
 
 ## 相关文档
 

@@ -17,16 +17,13 @@ export class ApiError extends Error {
 const http = axios.create({
   baseURL: env.apiBaseUrl,
   timeout: 30_000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
 http.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
   const method = config.method?.toUpperCase()
   if (
     config.url?.startsWith('/finance/') &&
@@ -56,10 +53,23 @@ http.interceptors.response.use(
     const status = error.response?.status
     const apiMessage = error.response?.data?.message
 
-    if (status === 401) {
-      useAuthStore.getState().logout()
+    const skipAuthRedirect = Boolean(
+      (error.config as (AxiosRequestConfig & { skipAuthRedirect?: boolean }) | undefined)
+        ?.skipAuthRedirect,
+    )
+    const silentError = Boolean(
+      (error.config as (AxiosRequestConfig & { silentError?: boolean }) | undefined)
+        ?.silentError,
+    )
+
+    if (status === 401 && !skipAuthRedirect) {
+      useAuthStore.getState().clearSession()
       message.error('登录已过期，请重新登录')
       window.location.href = '/login'
+      return Promise.reject(error)
+    }
+
+    if (silentError) {
       return Promise.reject(error)
     }
 
@@ -69,20 +79,25 @@ http.interceptors.response.use(
   },
 )
 
+export type RequestConfig = AxiosRequestConfig & {
+  skipAuthRedirect?: boolean
+  silentError?: boolean
+}
+
 export const request = {
-  get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  get<T>(url: string, config?: RequestConfig): Promise<T> {
     return http.get<T, T>(url, config)
   },
-  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  post<T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
     return http.post<T, T>(url, data, config)
   },
-  patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  patch<T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
     return http.patch<T, T>(url, data, config)
   },
-  put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  put<T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
     return http.put<T, T>(url, data, config)
   },
-  delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  delete<T>(url: string, config?: RequestConfig): Promise<T> {
     return http.delete<T, T>(url, config)
   },
 }
@@ -128,15 +143,11 @@ export async function downloadBinary(
   url: string,
   config?: AxiosRequestConfig,
 ): Promise<BinaryDownload> {
-  const token = useAuthStore.getState().token
   try {
     const response = await axios.get(`${env.apiBaseUrl}${url}`, {
       ...config,
       responseType: 'blob',
-      headers: {
-        ...(config?.headers ?? {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      withCredentials: true,
     })
     const blob = response.data as Blob
     const jsonError = await readApiErrorFromBlob(blob)
@@ -154,7 +165,7 @@ export async function downloadBinary(
     if (axios.isAxiosError(error)) {
       const status = error.response?.status
       if (status === 401) {
-        useAuthStore.getState().logout()
+        useAuthStore.getState().clearSession()
         message.error('登录已过期，请重新登录')
         window.location.href = '/login'
         throw error

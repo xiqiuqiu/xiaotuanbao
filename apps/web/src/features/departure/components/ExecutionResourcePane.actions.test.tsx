@@ -12,6 +12,8 @@ import type {
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 
 const listSegmentResources = vi.fn()
+const deleteSegmentResource = vi.fn()
+const generatePayable = vi.fn()
 const generatePayablesForSegment = vi.fn()
 const navigate = vi.fn()
 
@@ -23,9 +25,14 @@ vi.mock('@/services/segment-resource.service', () => ({
   listSegmentResources: (...args: unknown[]) => listSegmentResources(...args),
   createSegmentResource: vi.fn(),
   updateSegmentResource: vi.fn(),
-  deleteSegmentResource: vi.fn(),
-  generatePayable: vi.fn(),
+  deleteSegmentResource: (...args: unknown[]) => deleteSegmentResource(...args),
+  generatePayable: (...args: unknown[]) => generatePayable(...args),
   generatePayablesForSegment: (...args: unknown[]) => generatePayablesForSegment(...args),
+}))
+
+vi.mock('./ResourceDrawer', () => ({
+  ResourceDrawer: ({ open, editing }: { open: boolean; editing: SegmentResourceSummary | null }) =>
+    open ? <div>{editing ? '编辑资源' : '添加资源'}</div> : null,
 }))
 
 const segment: ItinerarySegmentSummary = {
@@ -98,6 +105,8 @@ describe('ExecutionResourcePane action buttons', () => {
   afterEach(() => {
     cleanup()
     listSegmentResources.mockReset()
+    deleteSegmentResource.mockReset()
+    generatePayable.mockReset()
     generatePayablesForSegment.mockReset()
     navigate.mockReset()
   })
@@ -111,6 +120,44 @@ describe('ExecutionResourcePane action buttons', () => {
     expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看应付' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
+  })
+
+  it('opens edit drawer from the extracted action column', async () => {
+    const user = userEvent.setup()
+    listSegmentResources.mockResolvedValue({ items: [baseResource()] })
+    renderPane()
+
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+
+    expect(await screen.findByText('编辑资源')).toBeTruthy()
+  })
+
+  it('generates a payable from the extracted action column', async () => {
+    const user = userEvent.setup()
+    listSegmentResources.mockResolvedValue({ items: [baseResource()] })
+    generatePayable.mockResolvedValue({ sourceAmountMismatch: false })
+    renderPane()
+
+    await user.click(await screen.findByRole('button', { name: '生成应付' }))
+
+    await waitFor(() => {
+      expect(generatePayable).toHaveBeenCalledWith('resource-1')
+    })
+  })
+
+  it('deletes an ungenerated resource from the extracted action column', async () => {
+    const user = userEvent.setup()
+    listSegmentResources.mockResolvedValue({ items: [baseResource()] })
+    deleteSegmentResource.mockResolvedValue(undefined)
+    renderPane()
+
+    await user.click(await screen.findByRole('button', { name: '删除' }))
+    expect(await screen.findByText('确定删除该资源？')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: /^(OK|确\s*定)$/ }))
+
+    await waitFor(() => {
+      expect(deleteSegmentResource).toHaveBeenCalledWith('resource-1')
+    })
   })
 
   it('shows 查看应付 instead of 生成应付 / 重新生成 after payable is created', async () => {

@@ -1,4 +1,4 @@
-import { Button, Descriptions, Drawer, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Descriptions, Drawer, Space, Spin, Tag, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { VerificationStatus } from '@xiaotuanbao/shared'
 import { getVerification } from '@/services/finance.service'
@@ -47,7 +47,13 @@ export function VerificationDetailDrawer({
   verificationId,
   onClose,
 }: VerificationDetailDrawerProps) {
-  const { data: detail, isLoading } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['finance-verification', verificationId],
     queryFn: () => {
       if (!verificationId) {
@@ -77,6 +83,20 @@ export function VerificationDetailDrawer({
     >
       {isLoading ? (
         <Spin />
+      ) : isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="核销详情加载失败"
+          description={
+            error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+          }
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              重试
+            </Button>
+          }
+        />
       ) : detail ? (
         <>
           <Typography.Title level={5} style={{ marginTop: 0 }}>

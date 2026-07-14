@@ -33,7 +33,7 @@ describe('AuthService', () => {
       jwtService as unknown as JwtService,
     )
 
-    await service.login({ username: ' employee ', password: 'password123' })
+    const result = await service.login({ username: ' employee ', password: 'password123' })
 
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
     const [queryParts, lastLoginAt, userId] = prisma.$executeRaw.mock.calls[0]
@@ -42,5 +42,7 @@ describe('AuthService', () => {
     expect(lastLoginAt).toEqual(expect.any(Date))
     expect(userId).toBe(user.id)
     expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(result.token).toBe('access-token')
+    expect(result.session).not.toHaveProperty('accessToken')
   })
 })

@@ -20,15 +20,16 @@ export function useCopyFromDepartureSearch({
   enterInfoStep,
   onLoadError,
 }: UseCopyFromDepartureSearchOptions) {
-  const copyFromInitialized = useRef(false)
+  const initializedCopyFromRef = useRef<string | null>(null)
 
   useEffect(() => {
     const copyFromDepartureId = copyFrom?.trim()
-    if (!copyFromDepartureId || copyFromInitialized.current) {
+    if (!copyFromDepartureId || initializedCopyFromRef.current === copyFromDepartureId) {
       return
     }
 
-    copyFromInitialized.current = true
+    initializedCopyFromRef.current = copyFromDepartureId
+    let cancelled = false
 
     void (async () => {
       try {
@@ -36,6 +37,10 @@ export function useCopyFromDepartureSearch({
           getDeparture(copyFromDepartureId),
           listSegments(copyFromDepartureId),
         ])
+
+        if (cancelled) {
+          return
+        }
 
         const nextRouteValues: RouteStepValues = {
           mode: 'copy',
@@ -49,10 +54,17 @@ export function useCopyFromDepartureSearch({
         setRouteValues(nextRouteValues)
         await enterInfoStep(nextRouteValues)
       } catch (error) {
+        if (cancelled) {
+          return
+        }
         onLoadError?.()
         message.error(error instanceof Error ? error.message : '加载源发团失败')
         navigate({ to: '/departure/new', search: {} })
       }
     })()
+
+    return () => {
+      cancelled = true
+    }
   }, [copyFrom, enterInfoStep, navigate, onLoadError, setRouteValues])
 }

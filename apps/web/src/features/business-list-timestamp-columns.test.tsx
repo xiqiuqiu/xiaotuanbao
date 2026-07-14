@@ -23,7 +23,7 @@ describe('业务主列表时间列', () => {
     expectTimestampsBeforeActions(titles(buildEmployeeColumns(noop, noop)))
     expectTimestampsBeforeActions(titles(buildPartnerColumns(false, noop, noop, noop)))
     expectTimestampsBeforeActions(titles(buildSupplierColumns(false, noop, noop, noop)))
-    expectTimestampsBeforeActions(titles(buildDepartureColumns()))
+    expectTimestampsBeforeActions(titles(buildDepartureColumns(vi.fn())))
   })
 
   it('顶层财务列表显示两列，发团详情内嵌列表不显示', () => {

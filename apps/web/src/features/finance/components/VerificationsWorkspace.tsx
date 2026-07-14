@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Table } from 'antd'
+import { useCallback, useEffect, useMemo, useReducer, useState, type ComponentProps } from 'react'
+import { Alert, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceVerificationListItem } from '@xiaotuanbao/shared'
 import {
@@ -81,6 +82,39 @@ function VerificationTable({
   )
 }
 
+function VerificationListContent({
+  isError,
+  error,
+  onRetry,
+  ...tableProps
+}: ComponentProps<typeof VerificationTable> & {
+  isError: boolean
+  error: unknown
+  onRetry: () => void
+}) {
+  if (isError) {
+    return (
+      <Card>
+        <Alert
+          type="error"
+          showIcon
+          title="核销列表加载失败"
+          description={
+            error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+          }
+          action={
+            <Button size="small" onClick={onRetry}>
+              重试
+            </Button>
+          }
+        />
+      </Card>
+    )
+  }
+
+  return <VerificationTable {...tableProps} />
+}
+
 function deepLinkKey(search?: VerificationDeepLinkSearch): string {
   const resolved = resolveVerificationDeepLinkSearch(search ?? {})
   if (resolved.transactionNo) {
@@ -125,6 +159,9 @@ export function VerificationsWorkspace({
   const isDepartureScope = scope === 'departure'
   const listQueryKey = isDepartureScope ? 'departure-verifications' : 'finance-verifications'
   const currentDeepLinkKey = deepLinkKey(deepLinkSearch)
+  const debouncedTransactionNo = useDebouncedValue(transactionNo.trim())
+  const debouncedScheduleNo = useDebouncedValue(scheduleNo.trim())
+  const debouncedDepartureKeyword = useDebouncedValue(departureKeyword.trim())
 
   useEffect(() => {
     if (!currentDeepLinkKey) {
@@ -161,8 +198,8 @@ export function VerificationsWorkspace({
 
   const listParams = useMemo(() => {
     const matchParams = buildVerificationListMatchParams({
-      transactionNo,
-      scheduleNo,
+      transactionNo: debouncedTransactionNo,
+      scheduleNo: debouncedScheduleNo,
       lock,
     })
     return {
@@ -172,7 +209,7 @@ export function VerificationsWorkspace({
       verificationDateEnd: dateRange?.[1],
       direction,
       status,
-      departureKeyword: departureKeyword.trim() || undefined,
+      departureKeyword: debouncedDepartureKeyword || undefined,
       ...matchParams,
     }
   }, [
@@ -181,26 +218,32 @@ export function VerificationsWorkspace({
     dateRange,
     direction,
     status,
-    transactionNo,
-    scheduleNo,
-    departureKeyword,
+    debouncedTransactionNo,
+    debouncedScheduleNo,
+    debouncedDepartureKeyword,
     lock,
   ])
 
-  const { data: verificationsResult, isLoading } = useQuery({
+  const {
+    data: verificationsResult,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: [
       listQueryKey,
       lockedDepartureId,
       listParams,
     ],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (isDepartureScope) {
         if (!lockedDepartureId) {
           throw new Error('发团 ID 缺失')
         }
-        return listDepartureVerifications(lockedDepartureId, listParams)
+        return listDepartureVerifications(lockedDepartureId, listParams, signal)
       }
-      return listVerifications(listParams)
+      return listVerifications(listParams, signal)
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
@@ -324,7 +367,10 @@ export function VerificationsWorkspace({
         extra={pageHeader ? undefined : createButton}
       />
 
-      <VerificationTable
+      <VerificationListContent
+        isError={isError}
+        error={error}
+        onRetry={() => void refetch()}
         loading={isLoading}
         columns={columns}
         items={verificationsResult?.items ?? []}

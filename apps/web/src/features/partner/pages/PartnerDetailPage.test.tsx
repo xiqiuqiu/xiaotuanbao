@@ -28,9 +28,7 @@ const mockPartner: PartnerSummary = {
 
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ partnerId: 'partner-1' }),
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  useNavigate: () => vi.fn(),
 }))
 
 vi.mock('@/services/partner.service', () => ({
@@ -66,7 +64,7 @@ describe('PartnerDetailPage', () => {
     renderDetailPage()
 
     expect(await screen.findByRole('heading', { level: 4, name: '华东国旅' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /返回合作伙伴列表/ })).toHaveAttribute('href', '/partner')
+    expect(screen.getByRole('button', { name: /返回合作伙伴列表/ })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑合作伙伴')).toBeInTheDocument()

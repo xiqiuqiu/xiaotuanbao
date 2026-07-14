@@ -4,21 +4,32 @@ import { getMe } from '@/services/auth.service'
 import { isMenuPathAllowed } from '@/utils/menu-permission'
 
 export async function ensureAuthenticatedSession(pathname: string) {
-  const state = useAuthStore.getState()
-
-  if (!state.isAuthenticated()) {
-    throw redirect({ to: '/login', search: { redirect: pathname } })
-  }
-
   try {
-    const me = await getMe()
-    state.setSession(state.token!, me.user, me.menuKeys)
+    const me = await getMe({ skipAuthRedirect: true, silentError: true })
+    useAuthStore.getState().setSession(me.user, me.menuKeys)
   } catch {
-    state.logout()
+    useAuthStore.getState().clearSession()
     throw redirect({ to: '/login', search: { redirect: pathname } })
   }
 
   if (!isMenuPathAllowed(pathname, useAuthStore.getState().menuKeys)) {
     throw redirect({ to: '/' })
+  }
+}
+
+export async function hasAuthenticatedSession(): Promise<boolean> {
+  try {
+    const me = await getMe({ skipAuthRedirect: true, silentError: true })
+    useAuthStore.getState().setSession(me.user, me.menuKeys)
+    return true
+  } catch {
+    useAuthStore.getState().clearSession()
+    return false
+  }
+}
+
+export async function ensureAnonymousSession(): Promise<void> {
+  if (useAuthStore.getState().isAuthenticated() || (await hasAuthenticatedSession())) {
+    throw redirect({ to: '/departure' })
   }
 }

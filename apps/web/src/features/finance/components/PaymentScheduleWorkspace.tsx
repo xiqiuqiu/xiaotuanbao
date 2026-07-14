@@ -1,3 +1,4 @@
+import { Alert, Button } from 'antd'
 import { PaymentScheduleFilters } from './PaymentScheduleFilters'
 import { PaymentScheduleActionDialogs } from './PaymentScheduleActionDialogs'
 import { PaymentScheduleDetailDrawer } from './PaymentScheduleDetailDrawer'
@@ -44,6 +45,9 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     resetFilters,
     scope,
     isLoading,
+    isError,
+    error,
+    refetch,
     columns,
     tableItems,
     tableTotal,
@@ -101,22 +105,38 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         onReset={resetFilters}
       />
 
-      <PaymentScheduleTable
-        loading={isLoading}
-        columns={columns}
-        items={tableItems}
-        page={page}
-        pageSize={pageSize}
-        total={tableTotal}
-        locateSourceOrderId={locateSourceOrderId}
-        locateSegmentResourceId={locateSegmentResourceId}
-        locateFlashActive={locateFlashActive}
-        locateBg={locateBg}
-        onPageChange={(nextPage, nextPageSize) => {
-          setPage(nextPage)
-          setPageSize(nextPageSize)
-        }}
-      />
+      {isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title={`${isReceivable ? '应收单' : '应付单'}加载失败`}
+          description={
+            error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+          }
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              重试
+            </Button>
+          }
+        />
+      ) : (
+        <PaymentScheduleTable
+          loading={isLoading}
+          columns={columns}
+          items={tableItems}
+          page={page}
+          pageSize={pageSize}
+          total={tableTotal}
+          locateSourceOrderId={locateSourceOrderId}
+          locateSegmentResourceId={locateSegmentResourceId}
+          locateFlashActive={locateFlashActive}
+          locateBg={locateBg}
+          onPageChange={(nextPage, nextPageSize) => {
+            setPage(nextPage)
+            setPageSize(nextPageSize)
+          }}
+        />
+      )}
 
       <PaymentScheduleActionDialogs
         isReceivable={isReceivable}

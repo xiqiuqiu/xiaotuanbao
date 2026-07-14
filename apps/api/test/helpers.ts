@@ -6,6 +6,8 @@ import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor'
 import { PrismaService } from '../src/database/prisma/prisma.service'
 
+const TEST_ORIGIN = 'http://localhost:5173'
+
 export async function createTestApp(): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
@@ -43,22 +45,30 @@ export async function loginAs(
 ): Promise<string> {
   const response = await request(app.getHttpServer())
     .post('/api/auth/login')
+    .set('Origin', TEST_ORIGIN)
     .send({ username, password })
     .expect(201)
 
-  return response.body.data.accessToken as string
+  const rawSetCookie = response.headers['set-cookie'] as string | string[] | undefined
+  const setCookie = Array.isArray(rawSetCookie) ? rawSetCookie : rawSetCookie ? [rawSetCookie] : []
+  const sessionCookie = setCookie?.find((cookie) => cookie.startsWith('xtb_session='))
+  if (!sessionCookie) {
+    throw new Error('登录响应缺少 xtb_session Cookie')
+  }
+  return sessionCookie.split(';', 1)[0]
 }
 
-export function authRequest(app: INestApplication, token: string) {
+export function authRequest(app: INestApplication, sessionCookie: string) {
   const mutation = (method: 'post' | 'patch' | 'put' | 'delete', url: string) =>
     request(app.getHttpServer())
       [method](url)
-      .set('Authorization', `Bearer ${token}`)
+      .set('Cookie', sessionCookie)
+      .set('Origin', TEST_ORIGIN)
       .set('Idempotency-Key', `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   return {
     get: (url: string) =>
-      request(app.getHttpServer()).get(url).set('Authorization', `Bearer ${token}`),
+      request(app.getHttpServer()).get(url).set('Cookie', sessionCookie),
     post: (url: string) => mutation('post', url),
     patch: (url: string) => mutation('patch', url),
     put: (url: string) => mutation('put', url),

@@ -4,7 +4,7 @@ import type { DepartureDetail } from '@/types/api'
 import { DepartureHeaderCard } from './DepartureHeaderCard'
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  useNavigate: () => vi.fn(),
 }))
 
 describe('DepartureHeaderCard 时间信息', () => {

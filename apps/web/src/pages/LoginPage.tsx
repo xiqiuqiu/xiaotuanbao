@@ -71,7 +71,7 @@ export function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (result) => {
-      setSession(result.accessToken, result.user, result.menuKeys)
+      setSession(result.user, result.menuKeys)
       queryClient.invalidateQueries({ queryKey: ['roles'] })
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       queryClient.invalidateQueries({ queryKey: ['organization'] })

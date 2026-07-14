@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { TransactionDirection, TransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import dayjs from 'dayjs'
 import { listFinanceDepartureOptions } from '@/services/finance.service'
+import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 import {
   TRANSACTION_DIRECTION_OPTIONS,
   TRANSACTION_STATUS_OPTIONS,
@@ -52,7 +53,7 @@ export function TransactionFilters({
 }: TransactionFiltersProps) {
   const showDepartureFilter = scope === 'global'
   const { data: departuresResult } = useQuery({
-    queryKey: ['departures', 'transaction-filter'],
+    queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,
     queryFn: listFinanceDepartureOptions,
     enabled: showDepartureFilter,
   })

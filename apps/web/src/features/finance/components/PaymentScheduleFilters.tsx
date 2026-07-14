@@ -3,6 +3,7 @@ import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
 import { listFinanceDepartureOptions } from '@/services/finance.service'
+import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 import {
   PAYABLE_SCHEDULE_STATUS_OPTIONS,
   PAYMENT_SCHEDULE_STATUS_OPTIONS,
@@ -43,7 +44,7 @@ export function PaymentScheduleFilters({
   onReset,
 }: PaymentScheduleFiltersProps) {
   const { data: departuresResult } = useQuery({
-    queryKey: ['departures', 'finance-filter'],
+    queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,
     queryFn: listFinanceDepartureOptions,
     enabled: showDepartureFilter,
   })

@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -217,6 +218,69 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
   })
 })
 
+describe('PaymentScheduleWorkspace query error', () => {
+  afterEach(() => {
+    cleanup()
+    listDepartureReceivables.mockReset()
+  })
+
+  it('shows an error instead of an empty table and retries the query', async () => {
+    listDepartureReceivables
+      .mockRejectedValueOnce(new Error('应收接口不可用'))
+      .mockResolvedValueOnce({
+        items: [schedule()],
+        total: 1,
+        page: 1,
+        pageSize: 10,
+      })
+
+    renderReceivableWorkspace()
+
+    expect(await screen.findByText('应收单加载失败')).toBeInTheDocument()
+    expect(screen.getByText('应收接口不可用')).toBeInTheDocument()
+    expect(screen.queryByText('共 0 条')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /重\s*试/ }))
+
+    expect(await screen.findByText('AR2026070001')).toBeInTheDocument()
+    expect(listDepartureReceivables).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('PaymentScheduleWorkspace server search debounce', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    cleanup()
+    listDepartureReceivables.mockReset()
+    vi.useRealTimers()
+  })
+
+  it('waits for the final counterparty value and aborts the obsolete query', async () => {
+    listDepartureReceivables.mockImplementation(() => new Promise(() => undefined))
+    renderReceivableWorkspace()
+
+    await waitFor(() => expect(listDepartureReceivables).toHaveBeenCalledTimes(1))
+    const firstSignal = listDepartureReceivables.mock.calls[0]?.[2] as AbortSignal
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+    await user.type(screen.getByPlaceholderText('往来对象'), '上海')
+    expect(listDepartureReceivables).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+
+    await waitFor(() => expect(listDepartureReceivables).toHaveBeenCalledTimes(2))
+    expect(listDepartureReceivables.mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ counterpartyKeyword: '上海' }),
+    )
+    expect(firstSignal.aborted).toBe(true)
+  })
+})
+
 describe('PaymentScheduleWorkspace initial counterparty filter', () => {
   afterEach(() => {
     cleanup()
@@ -257,6 +321,7 @@ describe('PaymentScheduleWorkspace initial counterparty filter', () => {
       expect.objectContaining({
         counterpartyKeyword: '杭州同行',
       }),
+      expect.any(AbortSignal),
     )
   })
 })
@@ -339,6 +404,32 @@ describe('PaymentScheduleWorkspace view-payable fetch count', () => {
         counterpartyKeyword: '巴州博湖旅行社',
         pageSize: 100,
       }),
+      expect.any(AbortSignal),
+    )
+
+    cleanup()
+    listDeparturePayables.mockClear()
+    const remountQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={remountQueryClient}>
+        <ConfigProvider>
+          <PaymentScheduleWorkspace
+            scope="departure"
+            direction="payable"
+            departureId="departure-1"
+            initialCounterpartyKeyword="巴州博湖旅行社"
+          />
+        </ConfigProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(listDeparturePayables).toHaveBeenCalledTimes(1))
+    expect(listDeparturePayables).toHaveBeenCalledWith(
+      'departure-1',
+      expect.objectContaining({ pageSize: 10 }),
+      expect.any(AbortSignal),
     )
   })
 })

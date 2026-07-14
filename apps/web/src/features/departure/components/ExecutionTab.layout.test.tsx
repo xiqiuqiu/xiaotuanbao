@@ -1,12 +1,15 @@
 import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
 import { ExecutionTab } from './ExecutionTab'
 
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }))
+
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useSearch: () => ({ tab: 'execution', segmentId: 'segment-1' }),
 }))
 
@@ -160,5 +163,27 @@ describe('ExecutionTab layout', () => {
 
     expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
     expect(screen.queryByText('模板')).not.toBeInTheDocument()
+  })
+
+  it('keeps segment selection and editing as separate keyboard actions', async () => {
+    const user = userEvent.setup()
+    const { container } = renderExecutionTab()
+
+    const selectButton = await screen.findByRole('button', { name: /^西栅夜游/ })
+    const editButton = screen.getByRole('button', { name: '编辑西栅夜游' })
+
+    expect(container.querySelector('[role="button"] button')).toBeNull()
+    expect(container.querySelector('button button')).toBeNull()
+
+    mockNavigate.mockClear()
+    selectButton.focus()
+    await user.keyboard('{Enter}')
+    expect(mockNavigate).toHaveBeenCalledTimes(1)
+
+    mockNavigate.mockClear()
+    editButton.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByText('编辑行程段')).toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

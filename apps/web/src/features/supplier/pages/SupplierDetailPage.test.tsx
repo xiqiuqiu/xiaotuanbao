@@ -30,9 +30,7 @@ const mockSupplier: SupplierSummary = {
 
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ supplierId: 'sup-1' }),
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  useNavigate: () => vi.fn(),
 }))
 
 vi.mock('@/services/supplier.service', () => ({
@@ -68,7 +66,7 @@ describe('SupplierDetailPage', () => {
     renderDetailPage()
 
     expect(await screen.findByRole('heading', { level: 4, name: '西湖国宾馆' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /返回供应商列表/ })).toHaveAttribute('href', '/supplier')
+    expect(screen.getByRole('button', { name: /返回供应商列表/ })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑供应商')).toBeInTheDocument()

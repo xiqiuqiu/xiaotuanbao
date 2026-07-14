@@ -1,7 +1,7 @@
 import { useCallback, useState, type CSSProperties } from 'react'
 import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
-import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
 import { copyDeparture, createDeparture, previewDepartureNo } from '@/services/departure.service'
@@ -76,12 +76,16 @@ export function CreateDepartureWizard() {
     [infoForm, loadDepartureNo, user],
   )
 
+  const handleCopyLoadError = useCallback(() => {
+    setInitializingStep2(false)
+  }, [])
+
   useCopyFromDepartureSearch({
     copyFrom: copyFromId,
     navigate,
     setRouteValues,
     enterInfoStep,
-    onLoadError: () => setInitializingStep2(false),
+    onLoadError: handleCopyLoadError,
   })
 
   const handleRouteStepNext = async () => {
@@ -139,6 +143,9 @@ export function CreateDepartureWizard() {
   }
 
   const showSteps = !isCopyMode && !copyFromId
+  const goBack = useCallback(() => {
+    void navigate({ to: '/departure' })
+  }, [navigate])
 
   return (
     <div
@@ -146,11 +153,14 @@ export function CreateDepartureWizard() {
       style={{ '--wizard-border': token.colorBorderSecondary } as CSSProperties}
     >
       <div className={styles.pageHeader}>
-        <Link to="/departure">
-          <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }}>
-            返回发团列表
-          </Button>
-        </Link>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          style={{ paddingLeft: 0 }}
+          onClick={goBack}
+        >
+          返回发团列表
+        </Button>
         <Typography.Title level={4} className={styles.title}>
           {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
         </Typography.Title>
@@ -199,9 +209,7 @@ export function CreateDepartureWizard() {
             {showSteps && currentStep === 1 ? (
               <Button onClick={() => setCurrentStep(0)}>上一步</Button>
             ) : (
-              <Link to="/departure">
-                <Button>返回</Button>
-              </Link>
+              <Button onClick={goBack}>返回</Button>
             )}
           </div>
           <div>

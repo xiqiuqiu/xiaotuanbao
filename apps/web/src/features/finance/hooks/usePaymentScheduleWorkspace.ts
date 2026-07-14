@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import {
   listDeparturePayables,
   listDepartureReceivables,
@@ -17,6 +18,7 @@ import { applyPaymentScheduleClientFilters } from '../utils/apply-payment-schedu
 import { usePaymentScheduleDialogs } from './usePaymentScheduleDialogs'
 import { usePaymentScheduleLocate } from './usePaymentScheduleLocate'
 import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
+import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 
 export type UsePaymentScheduleWorkspaceOptions = {
   scope: 'global' | 'departure'
@@ -60,7 +62,7 @@ export function usePaymentScheduleWorkspace({
   const dialogs = usePaymentScheduleDialogs(isReceivable)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
-  const trimmedCounterpartyKeyword = counterpartyKeyword.trim()
+  const trimmedCounterpartyKeyword = useDebouncedValue(counterpartyKeyword.trim())
   const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
   const locatingFinanceRow =
     isDepartureScope &&
@@ -69,14 +71,25 @@ export function usePaymentScheduleWorkspace({
   // Latch expanded fetch for the rest of this mount once locate runs. Clearing the
   // one-shot highlight must not shrink pageSize (100→10) and refetch the same list.
   const locateExpandedLatchRef = useRef(false)
-  if (locatingFinanceRow) {
-    locateExpandedLatchRef.current = true
-  }
+
+  useEffect(() => {
+    if (locatingFinanceRow) {
+      locateExpandedLatchRef.current = true
+    }
+  }, [locatingFinanceRow])
+
   const useExpandedFetch =
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
-  const { data: schedulesResult, isLoading, isFetching } = useQuery({
+  const {
+    data: schedulesResult,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: [
       isDepartureScope ? departureListQueryKey : listQueryKey,
       effectiveDepartureId,
@@ -85,7 +98,7 @@ export function usePaymentScheduleWorkspace({
       useExpandedFetch,
       trimmedCounterpartyKeyword,
     ],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const counterpartyQuery = trimmedCounterpartyKeyword
         ? { counterpartyKeyword: trimmedCounterpartyKeyword }
         : {}
@@ -94,18 +107,25 @@ export function usePaymentScheduleWorkspace({
           throw new Error('发团 ID 缺失')
         }
         const listFn = isReceivable ? listDepartureReceivables : listDeparturePayables
-        return listFn(lockedDepartureId, {
-          page: useExpandedFetch ? 1 : page,
+        return listFn(
+          lockedDepartureId,
+          {
+            page: useExpandedFetch ? 1 : page,
+            pageSize: fetchPageSize,
+            ...counterpartyQuery,
+          },
+          signal,
+        )
+      }
+      return (isReceivable ? listReceivables : listPayables)(
+        {
+          departureId: effectiveDepartureId,
+          page: hasClientFilters ? 1 : page,
           pageSize: fetchPageSize,
           ...counterpartyQuery,
-        })
-      }
-      return (isReceivable ? listReceivables : listPayables)({
-        departureId: effectiveDepartureId,
-        page: hasClientFilters ? 1 : page,
-        pageSize: fetchPageSize,
-        ...counterpartyQuery,
-      })
+        },
+        signal,
+      )
     },
     enabled: !isDepartureScope || Boolean(lockedDepartureId),
   })
@@ -131,7 +151,7 @@ export function usePaymentScheduleWorkspace({
   }
 
   const { data: departuresResult } = useQuery({
-    queryKey: ['departures', 'finance-schedule-map'],
+    queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,
     queryFn: listFinanceDepartureOptions,
     enabled: !isDepartureScope,
   })
@@ -302,6 +322,9 @@ export function usePaymentScheduleWorkspace({
     resetFilters,
     scope,
     isLoading,
+    isError,
+    error,
+    refetch,
     columns,
     tableItems,
     tableTotal,

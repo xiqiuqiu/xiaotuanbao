@@ -12,7 +12,7 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService)
   const port = configService.get<number>('app.port', 3000)
-  const nodeEnv = configService.get<string>('app.nodeEnv', 'development')
+  const allowedOrigins = configService.getOrThrow<string[]>('app.authAllowedOrigins')
 
   app.setGlobalPrefix('api')
   app.useGlobalPipes(
@@ -26,7 +26,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor())
 
   app.enableCors({
-    origin: nodeEnv === 'production' ? false : true,
+    origin: allowedOrigins,
     credentials: true,
   })
 

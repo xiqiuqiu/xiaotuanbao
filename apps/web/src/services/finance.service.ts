@@ -104,14 +104,16 @@ export async function listFinanceSourceOrderOptions(
 
 export async function listReceivables(
   params: ListPaymentSchedulesParams,
+  signal?: AbortSignal,
 ): Promise<PaymentScheduleListResult> {
-  return request.get<PaymentScheduleListResult>('/finance/receivables', { params })
+  return request.get<PaymentScheduleListResult>('/finance/receivables', { params, signal })
 }
 
 export async function listPayables(
   params: ListPaymentSchedulesParams,
+  signal?: AbortSignal,
 ): Promise<PaymentScheduleListResult> {
-  return request.get<PaymentScheduleListResult>('/finance/payables', { params })
+  return request.get<PaymentScheduleListResult>('/finance/payables', { params, signal })
 }
 
 export async function getReceivable(id: string): Promise<PaymentScheduleDetail> {
@@ -176,8 +178,9 @@ export async function adjustScheduleAmount(
 
 export async function listTransactions(
   params: ListFinanceTransactionsParams,
+  signal?: AbortSignal,
 ): Promise<FinanceTransactionListResult> {
-  return request.get<FinanceTransactionListResult>('/finance/transactions', { params })
+  return request.get<FinanceTransactionListResult>('/finance/transactions', { params, signal })
 }
 
 export async function getTransaction(id: string): Promise<FinanceTransactionDetail> {
@@ -206,8 +209,9 @@ export async function voidTransaction(
 
 export async function listVerifications(
   params: ListFinanceVerificationsParams,
+  signal?: AbortSignal,
 ): Promise<FinanceVerificationListResult> {
-  return request.get<FinanceVerificationListResult>('/finance/verifications', { params })
+  return request.get<FinanceVerificationListResult>('/finance/verifications', { params, signal })
 }
 
 export async function getVerification(id: string): Promise<FinanceVerificationDetail> {
@@ -217,28 +221,33 @@ export async function getVerification(id: string): Promise<FinanceVerificationDe
 export async function listDepartureReceivables(
   departureId: string,
   params: Omit<ListPaymentSchedulesParams, 'departureId'> = {},
+  signal?: AbortSignal,
 ): Promise<PaymentScheduleListResult> {
   return request.get<PaymentScheduleListResult>(`/departures/${departureId}/receivables`, {
     params,
+    signal,
   })
 }
 
 export async function listDeparturePayables(
   departureId: string,
   params: Omit<ListPaymentSchedulesParams, 'departureId'> = {},
+  signal?: AbortSignal,
 ): Promise<PaymentScheduleListResult> {
   return request.get<PaymentScheduleListResult>(`/departures/${departureId}/payables`, {
     params,
+    signal,
   })
 }
 
 export async function listDepartureVerifications(
   departureId: string,
   params: Omit<ListFinanceVerificationsParams, 'departureId'> = {},
+  signal?: AbortSignal,
 ): Promise<FinanceVerificationListResult> {
   return request.get<FinanceVerificationListResult>(
     `/departures/${departureId}/verifications`,
-    { params },
+    { params, signal },
   )
 }
 

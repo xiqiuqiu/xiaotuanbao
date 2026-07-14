@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Alert,
   Button,
@@ -7,15 +7,11 @@ import {
   Empty,
   Row,
   Spin,
-  Tooltip,
-  Typography,
   message,
-  theme,
 } from 'antd'
-import { EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import dayjs from 'dayjs'
 import type {
   DepartureDetail,
   ItinerarySegmentListResult,
@@ -31,12 +27,9 @@ import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
 } from '../utils/execution-segment-selection'
-import {
-  formatResourceOverview,
-  formValuesToPayload,
-} from '../utils/segment-form'
-import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
+import { formValuesToPayload } from '../utils/segment-form'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
+import { ExecutionSegmentListPane } from './ExecutionSegmentListPane'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
 
@@ -45,19 +38,6 @@ interface ExecutionTabProps {
   segmentId?: string
   readOnly: boolean
   amountReadOnly?: boolean
-}
-
-function formatNavDateRange(
-  startDate: string | null,
-  endDate: string | null,
-): string | null {
-  if (!startDate || !endDate) {
-    return null
-  }
-
-  const start = dayjs(startDate).format('MM-DD')
-  const end = dayjs(endDate).format('MM-DD')
-  return `${start}–${end}`
 }
 
 function sortSegmentsBySortOrder(
@@ -72,14 +52,12 @@ export function ExecutionTab({
   readOnly,
   amountReadOnly = false,
 }: ExecutionTabProps) {
-  const { token } = theme.useToken()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const queryClient = useQueryClient()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  const segmentListRef = useRef<HTMLDivElement>(null)
   const mutationLocked = readOnly || amountReadOnly
 
   const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({
@@ -163,21 +141,6 @@ export function ExecutionTab({
     segments,
     selectedSegmentId,
   ])
-
-  useEffect(() => {
-    if (!selectedSegmentId || !segmentListRef.current) {
-      return
-    }
-    const selectedNode = segmentListRef.current.querySelector(
-      `[data-segment-id="${selectedSegmentId}"]`,
-    )
-    if (
-      selectedNode instanceof HTMLElement &&
-      typeof selectedNode.scrollIntoView === 'function'
-    ) {
-      selectedNode.scrollIntoView({ block: 'nearest', behavior: 'auto' })
-    }
-  }, [selectedSegmentId, segments.length])
 
   const invalidateSegments = () => {
     void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
@@ -284,72 +247,17 @@ export function ExecutionTab({
     )
   }
 
-  const segmentTokenStyle = {
-    '--execution-border': token.colorBorderSecondary,
-    '--execution-fill-hover': token.colorFillTertiary,
-    '--execution-primary-bg': token.colorPrimaryBg,
-    '--execution-primary-border': token.colorPrimaryBorder,
-    '--execution-item-bg': token.colorBgContainer,
-    '--execution-item-border': token.colorBorderSecondary,
-    '--execution-radius': `${token.borderRadiusLG}px`,
-    '--execution-font-sm': `${token.fontSizeSM}px`,
-    '--execution-font-strong': String(token.fontWeightStrong),
-    '--execution-text': token.colorText,
-    '--execution-text-secondary': token.colorTextSecondary,
-    '--execution-text-tertiary': token.colorTextTertiary,
-  } as CSSProperties
-
   return (
     <div className={styles.workspace} ref={workspaceRef}>
       <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
-        <Col
-          className={`${styles.paneCol} ${styles.segmentPaneCol}`}
-          flex="280px"
-          style={{ maxWidth: 280 }}
-        >
-          <Card
-            className={styles.paneCard}
-            classNames={{ body: styles.paneCardBody }}
-            title="行程段"
-            styles={{ body: { padding: 12 } }}
-          >
-            <div className={styles.segmentPane} style={segmentTokenStyle}>
-              <div ref={segmentListRef} className={styles.segmentList}>
-                {segments.length === 0 ? (
-                  <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                    暂无行程段
-                  </Typography.Paragraph>
-                ) : (
-                  segments.map((segment) => (
-                    <SegmentNavItem
-                      key={segment.id}
-                      segment={segment}
-                      selected={segment.id === selectedSegmentId}
-                      showEdit={!mutationLocked}
-                      onSelect={() => navigateExecution(segment.id)}
-                      onEdit={() => openEdit(segment)}
-                    />
-                  ))
-                )}
-                {!mutationLocked ? (
-                  <>
-                    <div className={styles.segmentListGrow} aria-hidden />
-                    <div className={styles.segmentListFooter}>
-                      <Button
-                        block
-                        icon={<PlusOutlined />}
-                        aria-label="添加"
-                        onClick={openCreate}
-                      >
-                        添加
-                      </Button>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </Card>
-        </Col>
+        <ExecutionSegmentListPane
+          segments={segments}
+          selectedSegmentId={selectedSegmentId}
+          mutationLocked={mutationLocked}
+          onSelect={(id) => navigateExecution(id)}
+          onEdit={openEdit}
+          onCreate={openCreate}
+        />
 
         <Col
           className={`${styles.paneCol} ${styles.resourcePaneCol}`}
@@ -395,94 +303,6 @@ export function ExecutionTab({
             : undefined
         }
       />
-    </div>
-  )
-}
-
-function SegmentNavItem({
-  segment,
-  selected,
-  showEdit,
-  onSelect,
-  onEdit,
-}: {
-  segment: ItinerarySegmentSummary
-  selected: boolean
-  showEdit: boolean
-  onSelect: () => void
-  onEdit: () => void
-}) {
-  const { token } = theme.useToken()
-  const dateRange = formatNavDateRange(segment.startDate, segment.endDate)
-  const meta = dateRange
-  const gap = segmentPayableGenerationGap(
-    segment.payableGeneratedCount,
-    segment.resourceCount,
-  )
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      data-segment-id={segment.id}
-      className={`${styles.segmentItem}${selected ? ` ${styles.segmentItemSelected}` : ''}`}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onSelect()
-        }
-      }}
-    >
-      <div className={styles.segmentItemHeader}>
-        <div className={styles.segmentItemTitle}>
-          <span>{segment.name}</span>
-        </div>
-        {showEdit ? (
-          <Button
-            type="text"
-            size="small"
-            className={styles.segmentItemEdit}
-            icon={<EditOutlined />}
-            aria-label={`编辑${segment.name}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              onEdit()
-            }}
-          />
-        ) : null}
-      </div>
-      {meta ? <span className={styles.segmentItemMeta}>{meta}</span> : null}
-      <div className={styles.segmentItemOverviewRow}>
-        <span className={styles.segmentItemOverview}>
-          {formatResourceOverview(segment)}
-        </span>
-        {gap.hasGap ? (
-          <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未生成应付`}>
-            <span
-              className={styles.segmentPayableGap}
-              aria-label={`生成 ${gap.generated}/${gap.total}`}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
-              <span
-                className={styles.segmentPayableRing}
-                style={
-                  {
-                    '--ring-progress': `${gap.percent}%`,
-                    '--ring-color': token.colorPrimary,
-                    '--ring-track': token.colorFillSecondary,
-                  } as CSSProperties
-                }
-                aria-hidden
-              />
-              <span aria-hidden>
-                生成 {gap.generated}/{gap.total}
-              </span>
-            </span>
-          </Tooltip>
-        ) : null}
-      </div>
     </div>
   )
 }
