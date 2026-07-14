@@ -16,4 +16,8 @@ Departure 到 Finance 的 seam 由 Finance 拥有：Finance module 内新增 `De
 
 - `DepartureFinanceFacade` 是主要测试 surface；重点覆盖 snapshot、finance-touched、source amount mismatch、金额锁定、已关闭节点与部分/全部核销。
 - 迁移顺序先从 `getDepartureFinanceSnapshot(organizationId, departureIds)` 开始，让 `DepartureReadModelService` 停止直接读取 Finance implementation；之后迁 Finance Generation，最后迁 Source Order / Segment Resource 的 finance state 派生。
-- `DepartureFinanceSnapshot` 返回结构化金额、节点数量与 closed 状态，不返回中文 completion tag；Departure read model 继续负责生成发团概览展示标签。
+- `DepartureFinanceSnapshot` 只返回 Finance 拥有的原子财务事实：收付款节点的约定金额、已核销金额、节点数量与人工关闭状态，以及未作废流水的收入/支出总额与其中未核销部分；不返回中文 completion tag，也不读取客源单实际应收或行程段资源预计成本。
+- Snapshot 是按发团汇总的窄聚合 interface，不向 Departure 暴露 Payment Schedule 明细。每个收付方向同时提供「全部节点」与「未被人工关闭节点」两组聚合事实，以分别支持既有发团级核销字段和概览专用口径；节点数量、人工关闭数与账款结束状态亦以聚合值表达。
+- Departure read model 负责将 Finance Snapshot 与 Departure 拥有的实际应收、预计成本组合为未收、未付、预估毛利和确认毛利等跨上下文指标，并生成发团概览展示标签。现金净流入则由 Snapshot 中的未作废收入/支出流水总额相减，不复用概览已收/已付口径。
+- 发团详情 API 以嵌套 `overviewStats` 承载概览专用口径，包含确认应付、概览已收/未收、已付/未付、确认毛利与现金净流入；既有平铺 `verified*` 和 `openUnsettled*` 字段保持原位与原语义。实际应收、预计成本和预估毛利继续复用既有发团字段，不在 `overviewStats` 重复。
+- 收款/付款进度百分比不进入 `overviewStats` API；Web 使用已收、已付与对应分母实时派生。分母为零的「—」、百分比四舍五入和进度条视觉封顶属于展示规则，不由 Finance Snapshot 或 Departure read model 固化。
