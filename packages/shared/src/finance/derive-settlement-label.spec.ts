@@ -44,7 +44,7 @@ describe('deriveSettlementLabel', () => {
         5000,
         PaymentScheduleStatus.OVERDUE,
       ),
-    ).toEqual({ label: '部分付款', isOverdue: true })
+    ).toEqual({ label: '部分付款', isOverdue: false })
 
     expect(
       deriveSettlementLabel(

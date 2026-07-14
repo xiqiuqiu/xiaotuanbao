@@ -1,4 +1,5 @@
 import { PaymentScheduleStatus } from '../enums/payment-schedule-status.enum'
+import { PaymentScheduleDirection } from '../enums/payment-schedule-direction.enum'
 import { deriveScheduleState } from './derive-schedule-state'
 
 describe('deriveScheduleState', () => {
@@ -8,6 +9,7 @@ describe('deriveScheduleState', () => {
     dueDate: '2026-08-15',
     cancelledAt: null,
     businessDate: '2026-08-01',
+    direction: PaymentScheduleDirection.RECEIVABLE,
   }
 
   it('returns cancelled when cancelledAt is set', () => {
@@ -36,7 +38,7 @@ describe('deriveScheduleState', () => {
     ).toBe(PaymentScheduleStatus.SETTLED)
   })
 
-  it('returns overdue when dueDate is before businessDate and not settled', () => {
+  it('returns overdue when receivable dueDate is before businessDate and not settled', () => {
     expect(
       deriveScheduleState({
         ...base,
@@ -44,6 +46,17 @@ describe('deriveScheduleState', () => {
         businessDate: '2026-08-01',
       }),
     ).toBe(PaymentScheduleStatus.OVERDUE)
+  })
+
+  it('returns pending for payable even when dueDate is before businessDate', () => {
+    expect(
+      deriveScheduleState({
+        ...base,
+        direction: PaymentScheduleDirection.PAYABLE,
+        dueDate: '2026-07-31',
+        businessDate: '2026-08-01',
+      }),
+    ).toBe(PaymentScheduleStatus.PENDING)
   })
 
   it('returns pending when dueDate is on or after businessDate', () => {

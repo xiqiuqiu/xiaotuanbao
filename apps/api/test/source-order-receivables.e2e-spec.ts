@@ -170,6 +170,8 @@ describe('Source order generate receivables (e2e)', () => {
       expect(schedule.departureId).toBe(departure.id)
       expect(schedule.sourceId).toBe(sourceOrder.id)
       expect(schedule.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
+      // 出团 2026-07-01 → 应收到期日下月 10 日
+      expect(schedule.dueDate).toBe('2026-08-10')
     }
 
     const customerSchedule = response.body.data.schedules.find(

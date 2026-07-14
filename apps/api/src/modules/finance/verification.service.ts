@@ -836,6 +836,7 @@ export class VerificationService {
         dueDate: formatDateOnly(schedule.dueDate),
         cancelledAt: schedule.cancelledAt,
         businessDate,
+        direction: schedule.direction,
       }),
       financeTouched: isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory),
       settledAmountCents,

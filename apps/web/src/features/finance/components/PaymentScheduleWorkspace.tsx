@@ -77,6 +77,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         counterpartyKeyword={counterpartyKeyword}
         dueDateRange={dueDateRange}
         showDepartureFilter={scope === 'global'}
+        isReceivable={isReceivable}
         onDepartureChange={(value) => {
           setDepartureFilter(value)
           setPage(1)

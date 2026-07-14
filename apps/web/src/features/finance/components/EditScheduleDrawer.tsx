@@ -9,6 +9,8 @@ interface EditScheduleDrawerProps {
   schedule: PaymentScheduleSummary | null
   loading: boolean
   form: FormInstance<EditScheduleFormValues>
+  /** 应付本版不暴露到期日编辑（ADR-0019）。 */
+  isReceivable: boolean
   onClose: () => void
   onSubmit: (values: EditScheduleFormValues) => void
 }
@@ -18,6 +20,7 @@ export function EditScheduleDrawer({
   schedule,
   loading,
   form,
+  isReceivable,
   onClose,
   onSubmit,
 }: EditScheduleDrawerProps) {
@@ -62,13 +65,15 @@ export function EditScheduleDrawer({
               disabled={financeLocked}
             />
           </Form.Item>
-          <Form.Item
-            name="dueDate"
-            label="到期日"
-            rules={financeLocked ? undefined : [{ required: true, message: '请选择到期日' }]}
-          >
-            <DatePicker style={{ width: '100%' }} disabled={financeLocked} />
-          </Form.Item>
+          {isReceivable ? (
+            <Form.Item
+              name="dueDate"
+              label="到期日"
+              rules={financeLocked ? undefined : [{ required: true, message: '请选择到期日' }]}
+            >
+              <DatePicker style={{ width: '100%' }} disabled={financeLocked} />
+            </Form.Item>
+          ) : null}
           <Form.Item label="往来对象类型">
             <Select
               disabled

@@ -3,7 +3,10 @@ import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
 import { listFinanceDepartureOptions } from '@/services/finance.service'
-import { PAYMENT_SCHEDULE_STATUS_OPTIONS } from '../catalog'
+import {
+  PAYABLE_SCHEDULE_STATUS_OPTIONS,
+  PAYMENT_SCHEDULE_STATUS_OPTIONS,
+} from '../catalog'
 
 export type DueDateRange = [string | undefined, string | undefined] | null
 
@@ -14,6 +17,8 @@ interface PaymentScheduleFiltersProps {
   counterpartyKeyword: string
   dueDateRange: DueDateRange
   showDepartureFilter: boolean
+  /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
+  isReceivable: boolean
   onDepartureChange: (value?: string) => void
   onStatusChange: (value?: PaymentScheduleStatus) => void
   onKeywordChange: (value: string) => void
@@ -29,6 +34,7 @@ export function PaymentScheduleFilters({
   counterpartyKeyword,
   dueDateRange,
   showDepartureFilter,
+  isReceivable,
   onDepartureChange,
   onStatusChange,
   onKeywordChange,
@@ -47,6 +53,10 @@ export function PaymentScheduleFilters({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []
+
+  const statusOptions = isReceivable
+    ? PAYMENT_SCHEDULE_STATUS_OPTIONS
+    : PAYABLE_SCHEDULE_STATUS_OPTIONS
 
   return (
     <Card style={{ marginBottom: 16 }}>
@@ -85,28 +95,30 @@ export function PaymentScheduleFilters({
           style={{ width: 140, maxWidth: '100%' }}
           value={statusFilter}
           onChange={onStatusChange}
-          options={[...PAYMENT_SCHEDULE_STATUS_OPTIONS]}
+          options={[...statusOptions]}
         />
-        <DatePicker.RangePicker
-          allowClear
-          placeholder={['到期日起', '到期日止']}
-          value={
-            dueDateRange
-              ? [
-                  dueDateRange[0] ? dayjs(dueDateRange[0]) : null,
-                  dueDateRange[1] ? dayjs(dueDateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(values) =>
-            onDueDateRangeChange(
-              values
-                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                : null,
-            )
-          }
-          style={{ maxWidth: '100%' }}
-        />
+        {isReceivable ? (
+          <DatePicker.RangePicker
+            allowClear
+            placeholder={['到期日起', '到期日止']}
+            value={
+              dueDateRange
+                ? [
+                    dueDateRange[0] ? dayjs(dueDateRange[0]) : null,
+                    dueDateRange[1] ? dayjs(dueDateRange[1]) : null,
+                  ]
+                : null
+            }
+            onChange={(values) =>
+              onDueDateRangeChange(
+                values
+                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                  : null,
+              )
+            }
+            style={{ maxWidth: '100%' }}
+          />
+        ) : null}
         <Button onClick={onReset}>重置</Button>
       </Space>
     </Card>

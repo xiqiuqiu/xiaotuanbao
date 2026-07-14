@@ -167,7 +167,7 @@ export function buildPaymentScheduleColumns({
       align: 'right',
       render: (value: number) => formatCents(value),
     },
-    { title: '到期日', dataIndex: 'dueDate' },
+    ...(isReceivable ? [{ title: '到期日', dataIndex: 'dueDate' as const }] : []),
     {
       title: '结清进度',
       key: 'settlementLabel',

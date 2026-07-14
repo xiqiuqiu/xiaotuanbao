@@ -1,4 +1,5 @@
 export { deriveScheduleState, type DeriveScheduleStateInput } from './derive-schedule-state'
+export { computeReceivableDueDate } from './compute-receivable-due-date'
 export {
   deriveSettlementLabel,
   type SettlementLabelResult,

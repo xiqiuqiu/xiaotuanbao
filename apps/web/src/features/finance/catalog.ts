@@ -40,6 +40,11 @@ export const PAYMENT_SCHEDULE_STATUS_OPTIONS = [
   { value: PaymentScheduleStatus.CANCELLED, label: '已关闭' },
 ] as const
 
+/** 应付本版无逾期（ADR-0019），状态筛不含「已逾期」。 */
+export const PAYABLE_SCHEDULE_STATUS_OPTIONS = PAYMENT_SCHEDULE_STATUS_OPTIONS.filter(
+  (item) => item.value !== PaymentScheduleStatus.OVERDUE,
+)
+
 export const PAYMENT_SCHEDULE_STATUS_LABELS = Object.fromEntries(
   PAYMENT_SCHEDULE_STATUS_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<PaymentScheduleStatus, string>

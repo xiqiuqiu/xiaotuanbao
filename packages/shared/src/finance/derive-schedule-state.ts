@@ -6,6 +6,8 @@ export interface DeriveScheduleStateInput {
   dueDate: string
   cancelledAt: string | Date | null
   businessDate: string
+  /** Overdue applies to receivable only (ADR-0019). */
+  direction: 'receivable' | 'payable'
 }
 
 export function deriveScheduleState(input: DeriveScheduleStateInput): PaymentScheduleStatus {
@@ -17,7 +19,9 @@ export function deriveScheduleState(input: DeriveScheduleStateInput): PaymentSch
     return PaymentScheduleStatus.SETTLED
   }
 
-  if (input.dueDate < input.businessDate) {
+  const isReceivable = input.direction === 'receivable'
+
+  if (isReceivable && input.dueDate < input.businessDate) {
     return PaymentScheduleStatus.OVERDUE
   }
 

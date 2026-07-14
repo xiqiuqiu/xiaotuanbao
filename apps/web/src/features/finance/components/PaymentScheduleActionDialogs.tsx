@@ -148,6 +148,7 @@ export function PaymentScheduleActionDialogs({
         schedule={activeSchedule}
         loading={editMutation.isPending}
         form={editForm}
+        isReceivable={isReceivable}
         onClose={onCloseEdit}
         onSubmit={(values) => editMutation.mutate(values)}
       />

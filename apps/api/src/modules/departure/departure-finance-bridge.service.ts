@@ -14,6 +14,7 @@ import {
   PaymentScheduleSourceType,
   SourceOrderReceivableStatus,
   deriveScheduleState,
+  computeReceivableDueDate,
   PaymentScheduleStatus,
   ResourceKind,
 } from '@xiaotuanbao/shared'
@@ -42,7 +43,13 @@ export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
 
 type SourceOrderWithRelations = SourceOrder & {
   partner: Partner
-  departure: { id: string; organizationId: string; status: string; endDate: Date }
+  departure: {
+    id: string
+    organizationId: string
+    status: string
+    startDate: Date
+    endDate: Date
+  }
 }
 
 export interface SourceOrderFinanceMeta {
@@ -114,7 +121,7 @@ export class DepartureFinanceBridgeService {
       }
 
       const createdSchedules: PaymentScheduleSummary[] = []
-      const dueDate = formatDateOnly(lockedOrder.departure.endDate)
+      const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
 
       for (const path of this.buildReceivablePaths(lockedOrder)) {
         if (path.amountCents <= 0) {
@@ -191,7 +198,7 @@ export class DepartureFinanceBridgeService {
       const existingActiveSourceTypes = new Set(
         activeSchedules.map((schedule) => schedule.sourceType),
       )
-      const dueDate = formatDateOnly(order.departure.endDate)
+      const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
 
       for (const path of this.buildReceivablePaths(order)) {
         if (path.amountCents <= 0 || existingActiveSourceTypes.has(path.sourceType)) {
@@ -285,6 +292,7 @@ export class DepartureFinanceBridgeService {
           dueDate: formatDateOnly(schedule.dueDate),
           cancelledAt: schedule.cancelledAt,
           businessDate: getShanghaiTodayString(),
+          direction: schedule.direction,
         }),
       }
     })
@@ -668,6 +676,7 @@ export class DepartureFinanceBridgeService {
             id: true,
             organizationId: true,
             status: true,
+            startDate: true,
             endDate: true,
           },
         },

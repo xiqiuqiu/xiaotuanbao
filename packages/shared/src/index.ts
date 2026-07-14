@@ -142,6 +142,7 @@ export { SourceOrderReceivableStatus } from './enums/source-order-receivable-sta
 export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
+  computeReceivableDueDate,
   deriveSettlementLabel,
   deriveTransactionWriteoffStatus,
   isFinanceTouched,

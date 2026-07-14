@@ -22,7 +22,8 @@ export function deriveSettlementLabel(
     return { label: isReceivable ? '已收清' : '已付清', isOverdue: false }
   }
 
-  const isOverdue = status === PaymentScheduleStatus.OVERDUE
+  const isOverdue =
+    isReceivable && status === PaymentScheduleStatus.OVERDUE
 
   if (settledAmountCents > 0) {
     return { label: isReceivable ? '部分收款' : '部分付款', isOverdue }

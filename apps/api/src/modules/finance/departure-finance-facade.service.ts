@@ -742,6 +742,7 @@ export class DepartureFinanceFacade {
       dueDate: formatDateOnly(schedule.dueDate),
       cancelledAt: schedule.cancelledAt,
       businessDate: getShanghaiTodayString(),
+      direction: schedule.direction,
     })
 
     let receivableStatus = SourceOrderReceivableStatus.PENDING
@@ -819,6 +820,7 @@ export class DepartureFinanceFacade {
       dueDate: formatDateOnly(schedule.dueDate),
       cancelledAt: schedule.cancelledAt,
       businessDate: getShanghaiTodayString(),
+      direction: schedule.direction,
     })
 
     let payableStatus = SegmentPayableStatus.PENDING

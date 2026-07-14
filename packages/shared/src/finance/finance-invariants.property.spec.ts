@@ -1,3 +1,4 @@
+import { PaymentScheduleDirection } from '../enums/payment-schedule-direction.enum'
 import { PaymentScheduleStatus } from '../enums/payment-schedule-status.enum'
 import { TransactionWriteoffStatus } from '../enums/transaction-writeoff-status.enum'
 import { deriveScheduleState } from './derive-schedule-state'
@@ -28,6 +29,7 @@ describe('finance invariants (fixed-seed property)', () => {
         dueDate: '2026-07-10',
         businessDate: '2026-07-10',
         cancelledAt: null,
+        direction: PaymentScheduleDirection.RECEIVABLE,
       })
 
       expect(amountCents - allocatedAmountCents).toBeGreaterThanOrEqual(0)
@@ -58,6 +60,7 @@ describe('finance invariants (fixed-seed property)', () => {
           dueDate: '2026-07-09',
           businessDate: '2026-07-10',
           cancelledAt: '2026-07-08T00:00:00.000Z',
+          direction: PaymentScheduleDirection.RECEIVABLE,
         }),
       ).toBe(PaymentScheduleStatus.CANCELLED)
 
@@ -68,8 +71,20 @@ describe('finance invariants (fixed-seed property)', () => {
           dueDate: '2026-07-09',
           businessDate: '2026-07-10',
           cancelledAt: null,
+          direction: PaymentScheduleDirection.RECEIVABLE,
         }),
       ).toBe(PaymentScheduleStatus.OVERDUE)
+
+      expect(
+        deriveScheduleState({
+          amountCents,
+          settledAmountCents: partialCents,
+          dueDate: '2026-07-09',
+          businessDate: '2026-07-10',
+          cancelledAt: null,
+          direction: PaymentScheduleDirection.PAYABLE,
+        }),
+      ).toBe(PaymentScheduleStatus.PENDING)
 
       expect(
         deriveScheduleState({
@@ -78,6 +93,7 @@ describe('finance invariants (fixed-seed property)', () => {
           dueDate: '2026-07-10',
           businessDate: '2026-07-10',
           cancelledAt: null,
+          direction: PaymentScheduleDirection.RECEIVABLE,
         }),
       ).toBe(PaymentScheduleStatus.PENDING)
     }

@@ -159,6 +159,7 @@ function buildTransactionColumns(
 
 function buildScheduleColumns(
   departureMap: Map<string, { departureNo: string; name: string }>,
+  isReceivable: boolean,
 ): ColumnsType<PaymentScheduleSummary> {
   return [
     {
@@ -193,7 +194,7 @@ function buildScheduleColumns(
       align: 'right',
       render: (value: number) => formatCents(value),
     },
-    { title: '到期日', dataIndex: 'dueDate' },
+    ...(isReceivable ? [{ title: '到期日', dataIndex: 'dueDate' as const }] : []),
   ]
 }
 
@@ -560,8 +561,8 @@ export function CreateVerificationDrawer({
     [state.departureMap],
   )
   const scheduleColumns = useMemo(
-    () => buildScheduleColumns(state.departureMap),
-    [state.departureMap],
+    () => buildScheduleColumns(state.departureMap, state.direction === 'receivable'),
+    [state.departureMap, state.direction],
   )
 
   return (
