@@ -8,7 +8,7 @@ interface RoleOption {
 }
 
 export interface EmployeeFormValues {
-  username?: string
+  username: string
   name: string
   remark?: string
   roleId: string
@@ -52,15 +52,13 @@ export function EmployeeFormDrawer({
       }
     >
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        {!editing ? (
-          <Form.Item
-            label="登录用户名"
-            name="username"
-            rules={[{ required: true, message: '请输入登录用户名' }]}
-          >
-            <Input placeholder="例如: xiaoli" />
-          </Form.Item>
-        ) : null}
+        <Form.Item
+          label="登录用户名"
+          name="username"
+          rules={[{ required: true, message: '请输入登录用户名' }]}
+        >
+          <Input placeholder="例如: xiaoli" />
+        </Form.Item>
 
         <Form.Item
           label="显示名称"

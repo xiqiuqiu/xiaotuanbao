@@ -29,7 +29,7 @@ export function buildEmployeeColumns(
       dataIndex: 'name',
       render: (name: string) => <Typography.Text strong>{name}</Typography.Text>,
     },
-    { title: '账号', dataIndex: 'username' },
+    { title: '登录用户名', dataIndex: 'username' },
     {
       title: '角色',
       dataIndex: 'roles',
@@ -122,6 +122,7 @@ export function EmployeesPage() {
     (employee: EmployeeSummary) => {
       setEditingEmployee(() => employee)
       form.setFieldsValue({
+        username: employee.username,
         name: employee.name,
         remark: employee.remark ?? undefined,
         roleId: roles.find((role) => role.name === employee.roles[0])?.id,
@@ -136,6 +137,7 @@ export function EmployeesPage() {
     mutationFn: async (values: EmployeeFormValues) => {
       if (editingEmployee) {
         return updateEmployee(editingEmployee.id, {
+          username: values.username,
           name: values.name,
           remark: values.remark,
           roleId: values.roleId,

@@ -23,26 +23,26 @@ afterEach(() => {
   cleanup()
 })
 
-describe('EmployeeFormDrawer username field (screenshot feedback)', () => {
+describe('EmployeeFormDrawer login username', () => {
   it('create mode shows login username', () => {
     render(<RenderDrawer editing={false} />)
     const drawer = screen.getByRole('dialog')
     expect(within(drawer).getByLabelText('登录用户名')).toBeInTheDocument()
   })
 
-  // Expected failure: edit drawer intentionally omits username today (FE + UpdateEmployeeDto).
-  it.fails('edit mode should allow changing username (user expectation)', () => {
+  it('edit mode allows changing login username', () => {
     render(<RenderDrawer editing={true} />)
     const drawer = screen.getByRole('dialog')
     expect(within(drawer).getByLabelText('登录用户名')).toBeInTheDocument()
   })
 
-  it('update API payload currently has no username field', () => {
+  it('update API payload includes login username', () => {
     const payload = {
+      username: 'mazong',
       name: '马总',
       roleId: 'role-1',
       status: 'enabled',
     } satisfies UpdateEmployeePayload
-    expect(Object.prototype.hasOwnProperty.call(payload, 'username')).toBe(false)
+    expect(payload.username).toBe('mazong')
   })
 })

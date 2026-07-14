@@ -47,7 +47,7 @@ export function EmployeeFilters({
         />
         <Input.Search
           allowClear
-          placeholder="搜索姓名 / 账号"
+          placeholder="搜索姓名 / 登录用户名"
           style={{ width: 240 }}
           onSearch={(value) => onSearch(value.trim())}
         />

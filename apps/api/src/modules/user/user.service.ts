@@ -146,6 +146,19 @@ export class UserService {
     dto: UpdateEmployeeDto,
   ): Promise<EmployeeSummary> {
     const user = await this.findEmployeeOrThrow(organizationId, userId)
+    const username = dto.username.trim()
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        organizationId,
+        username,
+        id: { not: user.id },
+      },
+    })
+
+    if (existing) {
+      throw new ConflictException('用户名已存在')
+    }
+
     await this.ensureRoleExists(dto.roleId)
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -153,6 +166,7 @@ export class UserService {
       return tx.user.update({
         where: { id: user.id },
         data: {
+          username,
           name: dto.name.trim(),
           remark: dto.remark?.trim() || null,
           status: dto.status,

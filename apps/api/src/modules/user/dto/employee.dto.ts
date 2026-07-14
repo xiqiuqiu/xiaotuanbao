@@ -38,6 +38,10 @@ export class CreateEmployeeDto {
 export class UpdateEmployeeDto {
   @IsString()
   @IsNotEmpty()
+  username!: string
+
+  @IsString()
+  @IsNotEmpty()
   name!: string
 
   @IsOptional()

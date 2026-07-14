@@ -20,6 +20,7 @@ export interface CreateEmployeePayload {
 }
 
 export interface UpdateEmployeePayload {
+  username: string
   name: string
   remark?: string
   roleId: string
