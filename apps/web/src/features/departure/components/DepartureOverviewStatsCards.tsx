@@ -13,7 +13,7 @@ import {
   Typography,
   theme,
 } from 'antd'
-import { InfoCircleOutlined } from '@ant-design/icons'
+import { EllipsisOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { TransactionDirection } from '@xiaotuanbao/shared'
 import type { DepartureDetail, DepartureOverviewAnomaly } from '@xiaotuanbao/shared'
 import { formatCents as formatUnsignedCents } from '../catalog'
@@ -22,7 +22,6 @@ import styles from './DepartureOverviewStatsCards.module.css'
 
 const { Text } = Typography
 const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
-const COMPACT_CARD_STYLES = { body: { padding: '12px 16px' } } as const
 
 function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
@@ -97,9 +96,13 @@ function OverviewDetailsPopover({
         </Space>
       }
     >
-      <Button type="link" size="small">
-        {buttonLabel}
-      </Button>
+      <Button
+        type="text"
+        size="small"
+        icon={<EllipsisOutlined />}
+        aria-label={buttonLabel}
+        style={{ width: 24, minWidth: 24, height: 24, padding: 0 }}
+      />
     </Popover>
   )
 }
@@ -116,6 +119,24 @@ function ProgressValue({ numerator, denominator }: { numerator: number; denomina
     <Flex align="center" gap={12}>
       <Progress percent={visualPercent} showInfo={false} style={{ flex: 1 }} />
       <Text strong>{`${actualPercent.toFixed(1)}%`}</Text>
+    </Flex>
+  )
+}
+
+/** 进度条下方的金额构成行：已收/未收、已付/未付，保留有符号真实金额。 */
+function ProgressBreakdown({
+  items,
+}: {
+  items: { label: string; amountCents: number }[]
+}) {
+  return (
+    <Flex justify="space-between" gap={12} wrap className={styles.progressBreakdown}>
+      {items.map(({ label, amountCents }) => (
+        <Flex key={label} align="baseline" gap={8}>
+          <Text type="secondary">{label}</Text>
+          <Text strong>{formatCents(amountCents)}</Text>
+        </Flex>
+      ))}
     </Flex>
   )
 }
@@ -159,33 +180,39 @@ function SummaryCard({
   suffix,
   equationDescription,
   equation,
-  details,
+  entry,
 }: {
   title: string
   value: string | number
   suffix?: string
   equationDescription?: string
   equation?: string
-  details?: React.ReactNode
+  /** 卡片右上角的明细入口图标按钮 */
+  entry?: React.ReactNode
 }) {
+  const titleNode =
+    equation && equationDescription ? (
+      <CalculationTitle label={title} description={equationDescription} equation={equation} />
+    ) : (
+      <span>{title}</span>
+    )
+
   return (
     <Card className={styles.metricCard} style={EQUAL_HEIGHT_CARD_STYLE}>
       <Statistic
         title={
-          equation && equationDescription ? (
-            <CalculationTitle
-              label={title}
-              description={equationDescription}
-              equation={equation}
-            />
+          entry ? (
+            <Flex component="span" align="center" justify="space-between" style={{ width: '100%' }}>
+              {titleNode}
+              {entry}
+            </Flex>
           ) : (
-            title
+            titleNode
           )
         }
         value={value}
         suffix={suffix}
       />
-      {details}
     </Card>
   )
 }
@@ -261,7 +288,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             value={formatCents(departure.payableCents)}
             equationDescription="成本合计是全部行程资源约定金额合计，无论是否已生成应付；确认应付来自全部非作废应付节点，两者差额由组成项解释。"
             equation={costEquation}
-            details={
+            entry={
               hasCostDetails ? (
                 <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
                   <AmountDetail label="确认应付" amountCents={stats.confirmedPayableCents} />
@@ -282,7 +309,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             value={formatCents(departure.estimatedMarginCents)}
             equationDescription="当前毛利是实时经营预估：结算应收减成本合计；确认毛利按财务已确认的应付计算，见毛利对照。"
             equation={marginEquation}
-            details={
+            entry={
               stats.confirmedPayableCents !== 0 ? (
                 <OverviewDetailsPopover title="毛利对照" buttonLabel="查看毛利对照">
                   <Text type="secondary">
@@ -343,11 +370,16 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label={receivableAnomaly ? '收款进度（数据异常）' : '收款进度'}
             style={anomalyCardStyle}
-            styles={COMPACT_CARD_STYLES}
           >
             <ProgressValue
               numerator={stats.receivedCents}
               denominator={departure.netReceivableCents}
+            />
+            <ProgressBreakdown
+              items={[
+                { label: '已收', amountCents: stats.receivedCents },
+                { label: '未收', amountCents: unreceivedCents },
+              ]}
             />
             {receivableAnomaly ? <ReceivableAnomalyAlert anomaly={receivableAnomaly} /> : null}
           </Card>
@@ -384,11 +416,16 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label="付款进度"
             style={EQUAL_HEIGHT_CARD_STYLE}
-            styles={COMPACT_CARD_STYLES}
           >
             <ProgressValue
               numerator={stats.resourcePaidCents}
               denominator={departure.payableCents}
+            />
+            <ProgressBreakdown
+              items={[
+                { label: '已付', amountCents: stats.resourcePaidCents },
+                { label: '未付', amountCents: departure.payableCents - stats.resourcePaidCents },
+              ]}
             />
           </Card>
         </Col>

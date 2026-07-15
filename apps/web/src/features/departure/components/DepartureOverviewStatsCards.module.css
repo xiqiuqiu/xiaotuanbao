@@ -7,6 +7,10 @@
   margin-left: auto;
 }
 
+.progressBreakdown {
+  margin-top: 8px;
+}
+
 .firstRow > :global(.ant-col):nth-child(2) .metricCard {
   animation-delay: 30ms;
 }

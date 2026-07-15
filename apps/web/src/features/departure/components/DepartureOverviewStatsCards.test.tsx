@@ -149,6 +149,23 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.getByText('-12.5%')).toBeInTheDocument()
   })
 
+  it('明细入口是右上角图标按钮，不再渲染蓝色文字链接', () => {
+    renderCards()
+
+    // 可访问名保留「查看…」语义，但不再以文字形式出现在卡面上。
+    expect(screen.getByRole('button', { name: '查看成本组成' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看毛利对照' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看收款组成' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看付款组成' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看资金提示' })).toBeInTheDocument()
+
+    expect(screen.queryByText('查看成本组成')).not.toBeInTheDocument()
+    expect(screen.queryByText('查看毛利对照')).not.toBeInTheDocument()
+    expect(screen.queryByText('查看收款组成')).not.toBeInTheDocument()
+    expect(screen.queryByText('查看付款组成')).not.toBeInTheDocument()
+    expect(screen.queryByText('查看资金提示')).not.toBeInTheDocument()
+  })
+
   it('成本合计入口就近解释确认应付、尚未生成应付、其他应付与资源账款差异', async () => {
     const user = userEvent.setup()
     renderCards()
@@ -197,6 +214,39 @@ describe('DepartureOverviewStatsCards', () => {
     )
 
     expect(screen.getByText('确认毛利 ¥2,500.00')).toBeInTheDocument()
+  })
+
+  it('进度卡面直接展示已收/未收与已付/未付金额，满足守恒', () => {
+    renderCards()
+
+    // 已收 400000 + 未收 (300000+100000+200000) = 结算应收 1000000
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    expect(within(receiptCard).getByText('已收')).toBeInTheDocument()
+    expect(within(receiptCard).getByText('¥4,000.00')).toBeInTheDocument()
+    expect(within(receiptCard).getByText('未收')).toBeInTheDocument()
+    expect(within(receiptCard).getByText('¥6,000.00')).toBeInTheDocument()
+
+    // 已付（资源应付已核销）210000 + 未付 490000 = 成本合计 700000
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(within(paymentCard).getByText('已付')).toBeInTheDocument()
+    expect(within(paymentCard).getByText('¥2,100.00')).toBeInTheDocument()
+    expect(within(paymentCard).getByText('未付')).toBeInTheDocument()
+    expect(within(paymentCard).getByText('¥4,900.00')).toBeInTheDocument()
+  })
+
+  it('付款进度超过 100% 时未付展示真实负数金额，不归零', () => {
+    renderCards(
+      makeDeparture({
+        payableCents: 200_000,
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          resourcePaidCents: 250_000,
+        },
+      }),
+    )
+
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(within(paymentCard).getByText('-¥500.00')).toBeInTheDocument()
   })
 
   it('收款进度按客源路径已收÷结算应收，并保留收款组成入口', async () => {
