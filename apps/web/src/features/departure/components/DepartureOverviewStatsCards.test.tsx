@@ -94,6 +94,8 @@ describe('DepartureOverviewStatsCards', () => {
 
     expect(screen.getByText('已核销应收 / 未结清应收')).toBeInTheDocument()
     expect(screen.getByText('已核销应付 / 未结清应付')).toBeInTheDocument()
+    expect(screen.getByText('预计成本')).toBeInTheDocument()
+    expect(screen.queryByText('应付合计')).not.toBeInTheDocument()
     expect(screen.queryByText('已收 / 未收')).not.toBeInTheDocument()
     expect(screen.queryByText('已付 / 未付')).not.toBeInTheDocument()
 

@@ -92,12 +92,12 @@ export function deriveReceivableTagFromSchedules(
     return '应收未生成'
   }
 
-  const allClosed = receivable.every((schedule) => {
+  const allSettled = receivable.every((schedule) => {
     const settled = settledByScheduleId.get(schedule.id) ?? 0
-    return isScheduleClosed(schedule, settled)
+    return settled >= schedule.amountCents
   })
 
-  return allClosed ? '已收齐' : '应收已生成'
+  return allSettled ? '已收齐' : '应收已生成'
 }
 
 export function derivePayableTagFromSchedules(
@@ -109,12 +109,12 @@ export function derivePayableTagFromSchedules(
     return '应付未生成'
   }
 
-  const allClosed = payable.every((schedule) => {
+  const allSettled = payable.every((schedule) => {
     const settled = settledByScheduleId.get(schedule.id) ?? 0
-    return isScheduleClosed(schedule, settled)
+    return settled >= schedule.amountCents
   })
 
-  return allClosed ? '已付清' : '应付已生成'
+  return allSettled ? '已付清' : '应付已生成'
 }
 
 export function deriveCompletionTags(input: {

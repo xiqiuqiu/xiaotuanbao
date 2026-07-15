@@ -54,6 +54,23 @@ describe('departure-read-model.utils', () => {
       expect(derivePayableTagFromSchedules([payableSchedule], new Map())).toBe('应付已生成')
     })
 
+    it('does not label closed schedules with remaining amounts as fully settled', () => {
+      const cancelledAt = new Date('2026-07-01')
+
+      expect(
+        deriveReceivableTagFromSchedules(
+          [{ ...receivableSchedule, cancelledAt }],
+          new Map([['ar-1', 400_000]]),
+        ),
+      ).toBe('应收已生成')
+      expect(
+        derivePayableTagFromSchedules(
+          [{ ...payableSchedule, cancelledAt }],
+          new Map([['ap-1', 200_000]]),
+        ),
+      ).toBe('应付已生成')
+    })
+
     it('matches ider completionTags example', () => {
       const tags = deriveCompletionTags({
         sourceOrderCount: 3,
@@ -101,6 +118,20 @@ describe('departure-read-model.utils', () => {
         ['ap-1', 500000],
       ])
       expect(deriveIsFinanciallySettled(schedules, settled)).toBe(true)
+    })
+
+    it('keeps closed schedules with remaining amounts inside the settlement gate', () => {
+      const cancelledAt = new Date('2026-07-01')
+      const schedules = [
+        { ...receivableSchedule, cancelledAt },
+        { ...payableSchedule, cancelledAt },
+      ]
+      const partiallySettled = new Map([
+        ['ar-1', 400_000],
+        ['ap-1', 200_000],
+      ])
+
+      expect(deriveIsFinanciallySettled(schedules, partiallySettled)).toBe(true)
     })
   })
 

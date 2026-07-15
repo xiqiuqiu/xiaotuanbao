@@ -66,7 +66,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
         </Col>
         <Col xs={12} sm={8} md={6} lg={6}>
           <Card>
-            <Statistic title="应付合计" value={formatCents(departure.payableCents)} />
+            <Statistic title="预计成本" value={formatCents(departure.payableCents)} />
           </Card>
         </Col>
         <Col xs={12} sm={8} md={6} lg={6}>
