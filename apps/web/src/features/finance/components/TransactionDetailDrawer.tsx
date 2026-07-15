@@ -1,14 +1,18 @@
+import type { ReactNode } from 'react'
 import {
   Alert,
   Button,
+  Col,
   Descriptions,
+  Divider,
   Drawer,
   Empty,
-  Space,
-  Spin,
+  Flex,
+  Row,
   Table,
   Tag,
   Typography,
+  theme,
 } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
@@ -70,11 +74,65 @@ function formatCounterpartyLabel(
   return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
 }
 
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 12 }}>
+        {title}
+      </Typography.Title>
+      <Flex vertical gap={12}>
+        {children}
+      </Flex>
+    </section>
+  )
+}
+
+function AmountStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: string; emphasis?: boolean }>
+}) {
+  const { token } = theme.useToken()
+  return (
+    <Row
+      gutter={[token.padding, token.paddingSM]}
+      style={{
+        marginInline: 0,
+        padding: `${token.paddingSM}px 0`,
+        background: token.colorBgContainer,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadiusLG,
+      }}
+    >
+      {items.map((item) => (
+        <Col key={item.label} xs={24} sm={8}>
+          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            {item.label}
+          </Typography.Text>
+          <div
+            style={{
+              color: token.colorText,
+              fontSize: item.emphasis ? token.fontSizeHeading4 : token.fontSizeLG,
+              fontWeight: 600,
+              lineHeight: 1.4,
+              marginTop: token.marginXXS,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {item.value}
+          </div>
+        </Col>
+      ))}
+    </Row>
+  )
+}
+
 export function TransactionDetailDrawer({
   open,
   transactionId,
   onClose,
 }: TransactionDetailDrawerProps) {
+  const { token } = theme.useToken()
   const {
     data: transaction,
     isLoading,
@@ -136,20 +194,28 @@ export function TransactionDetailDrawer({
 
   return (
     <Drawer
-      title="流水详情"
+      title={
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          流水详情
+        </Typography.Title>
+      }
       open={open}
-      size={640}
+      size="min(940px, 100vw)"
+      styles={{
+        header: { padding: `${token.paddingMD}px ${token.paddingXL}px` },
+        body: { padding: `${token.paddingLG}px ${token.paddingXL}px` },
+        footer: { padding: `${token.padding}px ${token.paddingXL}px` },
+      }}
       onClose={onClose}
       destroyOnHidden
+      loading={isLoading}
       footer={
-        <Space style={{ float: 'right' }}>
+        <Flex justify="flex-end">
           <Button onClick={onClose}>关闭</Button>
-        </Space>
+        </Flex>
       }
     >
-      {isLoading ? (
-        <Spin />
-      ) : isError ? (
+      {isError ? (
         <Alert
           type="error"
           showIcon
@@ -164,102 +230,116 @@ export function TransactionDetailDrawer({
           }
         />
       ) : transaction ? (
-        <>
-          <Typography.Title level={5} style={{ marginTop: 0 }}>
-            基础信息
-          </Typography.Title>
-          <Descriptions column={2} size="small">
-            <Descriptions.Item label="流水号">{transaction.transactionNo}</Descriptions.Item>
-            <Descriptions.Item label="收支方向">
-              <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
-                {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="流水金额">
-              {formatCents(transaction.amountCents)}
-            </Descriptions.Item>
-            <Descriptions.Item label="交易日期">{transaction.transactionDate}</Descriptions.Item>
-            <Descriptions.Item label="收付款通道">
-              {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
-            </Descriptions.Item>
-            <Descriptions.Item label="往来对象">
-              {formatCounterpartyLabel(transaction.counterpartyType, transaction.counterpartyName)}
-            </Descriptions.Item>
-            <Descriptions.Item label="关联发团">
-              {formatDepartureLink(
-                transaction.departureId,
-                transaction.departureNo,
-                transaction.departureName,
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="流水状态">
-              <Tag color={transaction.voidedAt ? 'default' : 'success'}>
-                {transaction.voidedAt
-                  ? TRANSACTION_STATUS_LABELS.voided
-                  : TRANSACTION_STATUS_LABELS.normal}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="核销状态">
-              {writeoff ? (
-                <Tag color={TRANSACTION_WRITEOFF_STATUS_COLORS[writeoff.status]}>
-                  {TRANSACTION_WRITEOFF_STATUS_LABELS[writeoff.status]}
-                </Tag>
-              ) : (
-                '-'
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="创建时间">
-              {formatDateTime(transaction.createdAt)}
-            </Descriptions.Item>
-            <Descriptions.Item label="流水备注" span={2}>
-              {transaction.notes?.trim() || '-'}
-            </Descriptions.Item>
+        <Flex vertical>
+          <DetailSection title="流水概览">
             {transaction.voidedAt ? (
-              <>
-                <Descriptions.Item label="作废原因" span={2}>
-                  {transaction.voidReason?.trim() || '-'}
-                </Descriptions.Item>
-                <Descriptions.Item label="作废时间" span={2}>
-                  {formatDateTime(transaction.voidedAt)}
-                </Descriptions.Item>
-              </>
+              <Alert
+                type="warning"
+                showIcon
+                title="该流水已作废"
+                description={`作废时间：${formatDateTime(transaction.voidedAt)} · 原因：${transaction.voidReason?.trim() || '-'}`}
+              />
             ) : null}
-          </Descriptions>
-
-          <Typography.Title level={5} style={{ marginTop: 24 }}>
-            核销信息
-          </Typography.Title>
-          <Descriptions column={2} size="small">
-            <Descriptions.Item label="已核销">
-              {formatCents(transaction.allocatedAmountCents)}
-            </Descriptions.Item>
-            <Descriptions.Item label="未核销">
-              {formatCents(transaction.unallocatedAmountCents)}
-            </Descriptions.Item>
-            <Descriptions.Item label="核销笔数">{transaction.verificationCount}</Descriptions.Item>
-            <Descriptions.Item label="最近核销时间">
-              {transaction.lastVerificationAt
-                ? formatDateTime(transaction.lastVerificationAt)
-                : '-'}
-            </Descriptions.Item>
-          </Descriptions>
-
-          <Typography.Title level={5} style={{ marginTop: 24 }}>
-            核销记录
-          </Typography.Title>
-          {transaction.verifications.length > 0 ? (
-            <Table
-              rowKey="id"
-              size="small"
-              columns={verificationColumns}
-              dataSource={transaction.verifications}
-              pagination={false}
-              scroll={{ x: 'max-content' }}
+            <Descriptions column={{ xs: 1, sm: 2 }} size="small">
+              <Descriptions.Item label="流水号">
+                <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="收支方向">
+                <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
+                  {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="交易日期">
+                {transaction.transactionDate}
+              </Descriptions.Item>
+              <Descriptions.Item label="收付款通道">
+                {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
+              </Descriptions.Item>
+              <Descriptions.Item label="往来对象">
+                {formatCounterpartyLabel(
+                  transaction.counterpartyType,
+                  transaction.counterpartyName,
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="关联发团">
+                {formatDepartureLink(
+                  transaction.departureId,
+                  transaction.departureNo,
+                  transaction.departureName,
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="流水状态">
+                <Tag color={transaction.voidedAt ? 'default' : 'success'}>
+                  {transaction.voidedAt
+                    ? TRANSACTION_STATUS_LABELS.voided
+                    : TRANSACTION_STATUS_LABELS.normal}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {formatDateTime(transaction.createdAt)}
+              </Descriptions.Item>
+              <Descriptions.Item label="流水备注" span="filled">
+                {transaction.notes?.trim() || '-'}
+              </Descriptions.Item>
+            </Descriptions>
+            <AmountStrip
+              items={[
+                {
+                  label: '流水金额',
+                  value: formatCents(transaction.amountCents),
+                  emphasis: true,
+                },
+                {
+                  label: '已核销金额',
+                  value: formatCents(transaction.allocatedAmountCents),
+                },
+                {
+                  label: '未核销金额',
+                  value: formatCents(transaction.unallocatedAmountCents),
+                },
+              ]}
             />
-          ) : (
-            <Empty description="暂无核销记录" />
-          )}
-        </>
+          </DetailSection>
+
+          <Divider style={{ margin: '24px 0' }} />
+          <DetailSection title="核销概况">
+            <Descriptions column={{ xs: 1, sm: 3 }} size="small">
+              <Descriptions.Item label="核销状态">
+                {writeoff ? (
+                  <Tag color={TRANSACTION_WRITEOFF_STATUS_COLORS[writeoff.status]}>
+                    {TRANSACTION_WRITEOFF_STATUS_LABELS[writeoff.status]}
+                  </Tag>
+                ) : (
+                  '-'
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="核销笔数">
+                {transaction.verificationCount}
+              </Descriptions.Item>
+              <Descriptions.Item label="最近核销时间">
+                {transaction.lastVerificationAt
+                  ? formatDateTime(transaction.lastVerificationAt)
+                  : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </DetailSection>
+
+          <Divider style={{ margin: '24px 0' }} />
+          <DetailSection title="核销记录">
+            {transaction.verifications.length > 0 ? (
+              <Table
+                rowKey="id"
+                size="small"
+                columns={verificationColumns}
+                dataSource={transaction.verifications}
+                pagination={false}
+                scroll={{ x: 'max-content' }}
+              />
+            ) : (
+              <Empty description="暂无核销记录" />
+            )}
+          </DetailSection>
+        </Flex>
       ) : null}
     </Drawer>
   )

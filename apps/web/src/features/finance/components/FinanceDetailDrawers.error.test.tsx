@@ -157,4 +157,55 @@ describe('finance detail drawer query errors', () => {
     expect(screen.getAllByText('TXXTB20260715000004')).toHaveLength(2)
     expect(screen.getAllByText('ARXTB202607000002')).toHaveLength(2)
   })
+
+  it('presents a transaction with the same overview-first information hierarchy', async () => {
+    getTransaction.mockResolvedValueOnce({
+      id: 'transaction-1',
+      transactionNo: 'TXXTB20260715000005',
+      direction: 'income',
+      amountCents: 2304000,
+      allocatedAmountCents: 1500000,
+      unallocatedAmountCents: 804000,
+      transactionDate: '2026-07-08',
+      paymentChannel: 'bank_transfer',
+      counterpartyType: 'partner',
+      counterpartyName: '浙旅集团杭州分公司',
+      departureId: null,
+      departureNo: null,
+      departureName: null,
+      voidedAt: null,
+      voidReason: null,
+      notes: '首笔回款',
+      createdAt: '2026-07-15T03:20:00.000Z',
+      updatedAt: '2026-07-15T03:20:00.000Z',
+      verificationCount: 1,
+      lastVerificationAt: '2026-07-15T03:30:00.000Z',
+      verifications: [
+        {
+          id: 'verification-1',
+          verificationNo: 'CLXTB202607000005',
+          paymentScheduleId: 'schedule-1',
+          scheduleNo: 'ARXTB202607000003',
+          scheduleDirection: 'receivable',
+          amountCents: 1500000,
+          status: 'normal',
+          cancelledAt: null,
+          createdAt: '2026-07-15T03:30:00.000Z',
+        },
+      ],
+    })
+
+    renderWithQueryClient(
+      <TransactionDetailDrawer open transactionId="transaction-1" onClose={vi.fn()} />,
+    )
+
+    expect(await screen.findByRole('heading', { name: '流水概览' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '核销概况' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '核销记录' })).toBeInTheDocument()
+    expect(screen.getByText('流水金额')).toBeInTheDocument()
+    expect(screen.getByText('已核销金额')).toBeInTheDocument()
+    expect(screen.getByText('未核销金额')).toBeInTheDocument()
+    expect(screen.getByText('TXXTB20260715000005')).toBeInTheDocument()
+    expect(screen.getByText('CLXTB202607000005')).toBeInTheDocument()
+  })
 })
