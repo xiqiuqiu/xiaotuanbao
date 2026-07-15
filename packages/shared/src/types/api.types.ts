@@ -695,6 +695,73 @@ export interface PartnerSourceOrderListResult {
   summary: SourceOrderListSummary
 }
 
+/**
+ * 《往来账确认单》明细行（对外单据，客户习惯名映射见 CONTEXT.md
+ * 「Partner Reconciliation Statement」词条）。字段仍用系统规范语义命名，
+ * 客户习惯名（原始应收/实际应收/客户已收押金）只出现在渲染层文案。
+ */
+export interface PartnerReconciliationStatementRow {
+  sourceOrderId: string
+  departureId: string
+  /** 出团日期（YYYY-MM-DD），行按此正序 */
+  departureDate: string
+  departureNo: string
+  /** 线路/团单名称 */
+  routeName: string
+  /** 游客代表：客人名单最早一条的姓名；名单空则 null（渲染留空） */
+  guestRepresentativeName: string | null
+  guestRepresentativePhone: string | null
+  adultGuestCount: number
+  childGuestCount: number
+  totalGuestCount: number
+  /** 拼入单价（成人） */
+  adultUnitPriceCents: number
+  /** 拼入单价（儿童）；儿童数为 0 时渲染层显示「-」 */
+  childUnitPriceCents: number
+  /** 原始应收（拼入合计）＝原始团款＝成人×成人价＋儿童×儿童价 */
+  originalReceivableCents: number
+  discountCents: number
+  /** 实际应收＝结算金额＝原始应收−优惠 */
+  actualReceivableCents: number
+  /** 客户已收押金＝客户补款 */
+  customerDepositCents: number
+  /** 游客代收＝实际应收−客户已收押金 */
+  guestCollectCents: number
+  notes: string | null
+}
+
+/** 合计行与六项汇总共用的求和口径（覆盖周期内全部行，无分页概念）。 */
+export interface PartnerReconciliationStatementTotals {
+  orderCount: number
+  adultGuestCount: number
+  childGuestCount: number
+  totalGuestCount: number
+  originalReceivableCents: number
+  discountCents: number
+  actualReceivableCents: number
+  customerDepositCents: number
+  guestCollectCents: number
+}
+
+/**
+ * 《往来账确认单》结构化快照：同一份数据供抽屉预览与 xlsx 渲染，
+ * 即时生成、不存副本（沿 ADR-0018 快照＋渲染边界模式）。
+ */
+export interface PartnerReconciliationStatementSnapshot {
+  /** 标题由周期自动生成（同月/同年跨月/跨年三种格式） */
+  title: string
+  organizationName: string
+  partnerId: string
+  partnerName: string
+  /** 对账周期（所属发团出团日期区间，YYYY-MM-DD） */
+  periodStart: string
+  periodEnd: string
+  exportedAt: string
+  totals: PartnerReconciliationStatementTotals
+  /** 周期内该 Partner 全部客源单，含已关闭应收（不标记），按出团日期正序 */
+  rows: PartnerReconciliationStatementRow[]
+}
+
 export interface CreateSourceOrderDto {
   partnerId: string
   adultGuestCount: number

@@ -1,9 +1,10 @@
-import { request } from '@/lib/request'
+import { downloadBinary, request, triggerBrowserDownload } from '@/lib/request'
 import type {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  PartnerReconciliationStatementSnapshot,
   PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
@@ -44,6 +45,34 @@ export async function listPartnerSourceOrders(
   return request.get<PartnerSourceOrderListResult>(`/partners/${partnerId}/source-orders`, {
     params,
   })
+}
+
+export interface ReconciliationStatementPeriod {
+  periodStart: string
+  periodEnd: string
+}
+
+/** 《往来账确认单》JSON 快照（抽屉预览），即时生成不存副本。 */
+export async function getPartnerReconciliationStatement(
+  partnerId: string,
+  period: ReconciliationStatementPeriod,
+): Promise<PartnerReconciliationStatementSnapshot> {
+  return request.get<PartnerReconciliationStatementSnapshot>(
+    `/partners/${partnerId}/reconciliation-statement`,
+    { params: period },
+  )
+}
+
+/** 《往来账确认单》xlsx 下载。 */
+export async function downloadPartnerReconciliationStatement(
+  partnerId: string,
+  period: ReconciliationStatementPeriod,
+): Promise<void> {
+  const { blob, filename } = await downloadBinary(
+    `/partners/${partnerId}/reconciliation-statement.xlsx`,
+    { params: period },
+  )
+  triggerBrowserDownload(blob, filename ?? `往来账确认单_${partnerId}.xlsx`)
 }
 
 export async function createSourceOrder(

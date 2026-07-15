@@ -66,6 +66,9 @@ export type {
   SourceOrderListResult,
   PartnerSourceOrderItem,
   PartnerSourceOrderListResult,
+  PartnerReconciliationStatementRow,
+  PartnerReconciliationStatementTotals,
+  PartnerReconciliationStatementSnapshot,
   GenerateReceivablesResult,
   BatchFinanceGenerationOutcome,
   BatchFinanceGenerationItem,
@@ -99,6 +102,7 @@ export type {
   DepartureOperationsSheetSnapshot,
 } from './types/api.types'
 
+export { PARTNER_RECONCILIATION_CONFIRMATION_NOTES } from './constants/partner-reconciliation'
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
 export { PRESET_ROLE_NAMES, PRESET_ROLE_MENU_KEYS, EARLY_LAUNCH_BUSINESS_MENU_KEYS, type PresetRoleName } from './constants/roles'
 export { planRolePermissionSync } from './constants/plan-role-permission-sync'
