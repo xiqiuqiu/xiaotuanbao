@@ -627,6 +627,7 @@ export interface BatchFinanceGenerationItem {
   sourceId: string
   sourceLabel: string
   outcome: BatchFinanceGenerationOutcome
+  generatedCount?: number
   reason?: string
 }
 
@@ -634,6 +635,7 @@ export interface BatchFinanceGenerationItem {
 export interface BatchFinanceGenerationResult {
   attempted: number
   succeeded: number
+  generated: number
   skipped: number
   failed: number
   items: BatchFinanceGenerationItem[]

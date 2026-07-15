@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useReducer } from 'react'
-import { Button, Modal, Space, Table, message } from 'antd'
+import { Button, Modal, Space, Table, Typography, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -165,7 +165,7 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     ...operationalQueryOptions(),
   })
 
-  /** 批量生成按全团未生成客源单计数；与筛选列表解耦，空筛选时与主查询共享缓存。 */
+  /** 批量生成按全团未生成客源单的有效应收路径计数；与筛选列表解耦。 */
   const { data: allOrdersForBatchCount } = useQuery({
     queryKey: ['source-orders', departure.id, EMPTY_SOURCE_ORDER_FILTERS],
     queryFn: () =>
@@ -240,9 +240,16 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
 
   const pendingReceivableCount = useMemo(
     () =>
-      (allOrdersForBatchCount?.items ?? []).filter(
-        (order) => order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED,
-      ).length,
+      (allOrdersForBatchCount?.items ?? []).reduce((count, order) => {
+        if (order.receivableStatus !== SourceOrderReceivableStatus.NOT_GENERATED) {
+          return count
+        }
+        return (
+          count +
+          Number(order.partnerCollectedCents > 0) +
+          Number(order.guestCollectCents > 0)
+        )
+      }, 0),
     [allOrdersForBatchCount?.items],
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
@@ -251,7 +258,14 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
     if (pendingReceivableCount <= 0) return
     Modal.confirm({
       title: '批量生成应收',
-      content: formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收'),
+      content: (
+        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+          <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            收款方式为「客户已收 + 我方代收」的客源单会拆分为两条应收记录。
+          </Typography.Text>
+        </Space>
+      ),
       okText: '生成',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),

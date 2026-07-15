@@ -267,6 +267,7 @@ describe('ExecutionResourcePane action buttons', () => {
     const batchResult: BatchFinanceGenerationResult = {
       attempted: 1,
       succeeded: 1,
+      generated: 1,
       skipped: 0,
       failed: 0,
       items: [
@@ -324,6 +325,7 @@ describe('ExecutionResourcePane action buttons', () => {
     generatePayablesForSegment.mockResolvedValue({
       attempted: 2,
       succeeded: 1,
+      generated: 1,
       skipped: 0,
       failed: 1,
       items: [

@@ -214,6 +214,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(response.body.data).toMatchObject({
       attempted: 2,
       succeeded: 1,
+      generated: 2,
       skipped: 1,
       failed: 0,
     })
@@ -240,6 +241,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(second.body.data).toMatchObject({
       attempted: 1,
       succeeded: 0,
+      generated: 0,
       skipped: 1,
       failed: 0,
     })
@@ -292,6 +294,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(response.body.data).toMatchObject({
       attempted: 2,
       succeeded: 1,
+      generated: 1,
       skipped: 1,
       failed: 0,
     })

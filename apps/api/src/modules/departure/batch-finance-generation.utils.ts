@@ -30,12 +30,14 @@ export function summarizeBatchFinanceGeneration(
   items: BatchFinanceGenerationItem[],
 ): BatchFinanceGenerationResult {
   let succeeded = 0
+  let generated = 0
   let skipped = 0
   let failed = 0
 
   for (const item of items) {
     if (item.outcome === 'succeeded') {
       succeeded += 1
+      generated += item.generatedCount ?? 1
     } else if (item.outcome === 'skipped') {
       skipped += 1
     } else {
@@ -46,6 +48,7 @@ export function summarizeBatchFinanceGeneration(
   return {
     attempted: items.length,
     succeeded,
+    generated,
     skipped,
     failed,
     items,

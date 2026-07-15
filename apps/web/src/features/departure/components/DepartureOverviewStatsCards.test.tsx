@@ -112,6 +112,30 @@ function renderCards(departure = makeDeparture()) {
 describe('DepartureOverviewStatsCards', () => {
   afterEach(cleanup)
 
+  it('窄桌面下资金指标改为纵排，超宽桌面再恢复三列', () => {
+    renderCards()
+
+    const cashCard = screen.getByRole('region', { name: '资金情况' })
+    const incomeColumn = within(cashCard).getByText('有效收入').closest('.ant-col')
+
+    expect(incomeColumn).toHaveClass('ant-col-sm-8', 'ant-col-lg-24', 'ant-col-xxl-8')
+  })
+
+  it('计算公式仅通过文字提示展示', async () => {
+    const user = userEvent.setup()
+    renderCards()
+
+    const equation = '有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00'
+    expect(screen.queryByText(equation)).not.toBeInTheDocument()
+
+    await user.hover(screen.getByRole('button', { name: '查看资金情况计算方式' }))
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent(
+      '有效收入和有效支出统计本团全部未作废流水，包含已核销与未核销；现金净流入表示实际资金净流动，不代表利润。',
+    )
+    expect(tooltip).toHaveTextContent(equation)
+  })
+
   it('按三行展示可复算的经营、账款进度与资金数据', async () => {
     const user = userEvent.setup()
     renderCards()
@@ -124,31 +148,47 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.getByText('确认应付')).toBeInTheDocument()
     expect(screen.getByText('预估毛利')).toBeInTheDocument()
     expect(screen.getByText('确认毛利')).toBeInTheDocument()
-    expect(screen.getByText('计调报价 / 财务已确认')).toBeInTheDocument()
-    expect(screen.getByText('业务预计 / 财务已确认')).toBeInTheDocument()
-    expect(
-      screen.getByText('¥7,500.00 − ¥7,000.00 = ¥1,000.00 + ¥300.00 − ¥800.00'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('¥10,000.00 − ¥7,000.00 = ¥3,000.00；¥10,000.00 − ¥7,500.00 = ¥2,500.00'),
-    ).toBeInTheDocument()
+    expect(screen.queryByText('计调报价 / 财务已确认')).not.toBeInTheDocument()
+    expect(screen.queryByText('业务预计 / 财务已确认')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看实际应收计算方式' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看成本对照计算方式' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看毛利对照计算方式' })).toBeInTheDocument()
 
     expect(screen.getByText('收款进度')).toBeInTheDocument()
-    expect(screen.getByText('已收 ¥4,000.00 + 未收 ¥6,000.00 = 实际应收 ¥10,000.00')).toBeInTheDocument()
-    await user.click(screen.getByText('查看收款组成'))
+    expect(screen.getByRole('button', { name: '查看收款进度计算方式' })).toBeInTheDocument()
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptDetailsTrigger = within(receiptCard).getByRole('button', {
+      name: '查看收款组成',
+    })
+    expect(receiptDetailsTrigger.closest('.ant-card-extra')).toBeInTheDocument()
+
+    await user.click(receiptDetailsTrigger)
     expect(screen.getByText('尚未生成应收 ¥2,000.00')).toBeInTheDocument()
     expect(screen.getByText('其中已关闭未收 ¥1,000.00')).toBeInTheDocument()
     expect(screen.getByText('其他应收 ¥500.00')).toBeInTheDocument()
 
     expect(screen.getByText('付款进度')).toBeInTheDocument()
-    expect(screen.getByText('已付 ¥3,000.00 + 未付 ¥4,500.00 = 确认应付 ¥7,500.00')).toBeInTheDocument()
-    await user.click(screen.getByText('查看付款组成'))
+    expect(screen.getByRole('button', { name: '查看付款进度计算方式' })).toBeInTheDocument()
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    const paymentDetailsTrigger = within(paymentCard).getByRole('button', {
+      name: '查看付款组成',
+    })
+    expect(paymentDetailsTrigger.closest('.ant-card-extra')).toBeInTheDocument()
+
+    await user.click(paymentDetailsTrigger)
     expect(screen.getByText('其中已关闭未付 ¥1,000.00')).toBeInTheDocument()
     expect(screen.queryByText(/付款进度.*尚未生成应付/)).not.toBeInTheDocument()
 
     expect(screen.getByText('资金情况')).toBeInTheDocument()
-    expect(screen.getByText('有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00')).toBeInTheDocument()
-    await user.click(screen.getByText('查看资金提示'))
+    expect(screen.getByRole('button', { name: '查看资金情况计算方式' })).toBeInTheDocument()
+    const cashCard = screen.getByRole('region', { name: '资金情况' })
+    const cashHintsTrigger = within(cashCard).getByRole('button', { name: '查看资金提示' })
+    expect(cashHintsTrigger.closest('.ant-card-extra')).toBeInTheDocument()
+    expect(within(cashCard).queryByRole('button', { name: '查看资金提示' })).toBe(
+      cashHintsTrigger,
+    )
+
+    await user.click(cashHintsTrigger)
     expect(screen.getByText('未核销收入 ¥1,000.00')).toBeInTheDocument()
     expect(screen.getByText('未核销支出 ¥200.00')).toBeInTheDocument()
     expect(screen.getByText('核销自他团流水 ¥400.00')).toBeInTheDocument()
@@ -170,7 +210,14 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    await user.click(screen.getByText('查看成本组成'))
+    const costCard = screen.getByText('成本对照').closest('.ant-card')
+    expect(costCard).not.toBeNull()
+    const costDetailsTrigger = within(costCard as HTMLElement).getByRole('button', {
+      name: '查看成本组成',
+    })
+    expect(costDetailsTrigger.closest('.ant-card-extra')).toBeInTheDocument()
+
+    await user.click(costDetailsTrigger)
     expect(screen.getByText('尚未生成应付 ¥800.00')).toBeInTheDocument()
     expect(screen.getByText('其他应付 -¥1,000.00')).toBeInTheDocument()
     expect(screen.queryByText(/^资源账款差异 ¥/)).not.toBeInTheDocument()

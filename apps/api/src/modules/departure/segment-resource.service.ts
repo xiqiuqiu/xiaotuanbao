@@ -345,6 +345,7 @@ export class SegmentResourceService {
           sourceId: resource.id,
           sourceLabel,
           outcome: 'succeeded',
+          generatedCount: 1,
         })
       } catch (error) {
         if (isAlreadyGeneratedConflict(error)) {

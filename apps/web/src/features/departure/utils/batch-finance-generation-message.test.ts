@@ -24,6 +24,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
     const result: BatchFinanceGenerationResult = {
       attempted: 0,
       succeeded: 0,
+      generated: 0,
       skipped: 0,
       failed: 0,
       items: [],
@@ -37,6 +38,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
     const result: BatchFinanceGenerationResult = {
       attempted: 3,
       succeeded: 1,
+      generated: 2,
       skipped: 1,
       failed: 1,
       items: [
@@ -56,7 +58,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
       ],
     }
     expect(formatBatchFinanceGenerationMessage(result, '应付')).toBe(
-      '应付批量生成完成：成功 1 · 跳过 1 · 失败 1。丙：网络错误',
+      '应付批量生成完成：成功 2 · 跳过 1 · 失败 1。丙：网络错误',
     )
   })
 })

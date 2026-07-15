@@ -9,7 +9,12 @@ describe('batch-finance-generation.utils', () => {
   it('summarizes mixed outcomes', () => {
     expect(
       summarizeBatchFinanceGeneration([
-        { sourceId: 'a', sourceLabel: 'A', outcome: 'succeeded' },
+        {
+          sourceId: 'a',
+          sourceLabel: 'A',
+          outcome: 'succeeded',
+          generatedCount: 2,
+        },
         { sourceId: 'b', sourceLabel: 'B', outcome: 'skipped', reason: '金额为 0' },
         { sourceId: 'c', sourceLabel: 'C', outcome: 'failed', reason: '出错' },
         { sourceId: 'd', sourceLabel: 'D', outcome: 'skipped' },
@@ -17,6 +22,7 @@ describe('batch-finance-generation.utils', () => {
     ).toEqual({
       attempted: 4,
       succeeded: 1,
+      generated: 2,
       skipped: 2,
       failed: 1,
       items: expect.any(Array),

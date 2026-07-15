@@ -18,7 +18,7 @@ export function formatBatchFinanceGenerationMessage(
     return `没有可生成的未生成${noun}`
   }
 
-  const parts = [`成功 ${result.succeeded}`]
+  const parts = [`成功 ${result.generated}`]
   if (result.skipped > 0) {
     parts.push(`跳过 ${result.skipped}`)
   }

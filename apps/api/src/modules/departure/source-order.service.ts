@@ -231,11 +231,12 @@ export class SourceOrderService {
       }
 
       try {
-        await this.generateReceivables(organizationId, order.id)
+        const generated = await this.generateReceivables(organizationId, order.id)
         items.push({
           sourceId: order.id,
           sourceLabel,
           outcome: 'succeeded',
+          generatedCount: generated.schedules.length,
         })
       } catch (error) {
         if (isAlreadyGeneratedConflict(error)) {

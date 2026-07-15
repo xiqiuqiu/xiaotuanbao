@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { ConfigProvider, Modal } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
@@ -164,5 +164,70 @@ describe('SourceOrdersTab 批量生成应收', () => {
       expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     })
     expect(screen.queryByRole('button', { name: '批量生成应收' })).toBeNull()
+  })
+
+  it('counts both receivable paths for split source orders in batch confirmation', async () => {
+    const user = userEvent.setup()
+    listSourceOrders.mockResolvedValue({
+      items: [
+        baseOrder({
+          id: 'order-split-1',
+          collectionMode: 'split',
+          partnerCollectedCents: 300000,
+          guestCollectCents: 700000,
+          receivableStatus: 'not_generated',
+          hasPaymentSchedule: false,
+        }),
+        baseOrder({
+          id: 'order-split-2',
+          collectionMode: 'split',
+          partnerCollectedCents: 400000,
+          guestCollectCents: 600000,
+          receivableStatus: 'not_generated',
+          hasPaymentSchedule: false,
+        }),
+      ],
+      summary: {
+        orderCount: 2,
+        totalGuests: 20,
+        partnerCount: 1,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 2000000,
+        totalGuestCollectCents: 1300000,
+      },
+      total: 2,
+    })
+
+    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
+    let confirmConfig: ConfirmConfig | undefined
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      confirmConfig = config
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+        then: undefined,
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    try {
+      renderTab()
+      await user.click(await screen.findByRole('button', { name: '批量生成应收' }))
+
+      expect(confirmConfig).toMatchObject({ title: '批量生成应收', okText: '生成' })
+
+      render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
+      const summary = screen.getByText('确认后将生成 4 条应收记录')
+      const explanation = screen.getByText(
+        '收款方式为「客户已收 + 我方代收」的客源单会拆分为两条应收记录。',
+      )
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(explanation).toHaveClass('ant-typography-secondary')
+      expect(explanation).toHaveStyle({ fontSize: '12px' })
+      expect(summary.compareDocumentPosition(explanation) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 })
