@@ -1,7 +1,24 @@
 import type { ReactNode } from 'react'
-import { Alert, Button, Descriptions, Drawer, Flex, Space, Tag, Typography, theme } from 'antd'
+import { ArrowRightOutlined } from '@ant-design/icons'
+import {
+  Alert,
+  Button,
+  Col,
+  Descriptions,
+  Divider,
+  Drawer,
+  Flex,
+  Row,
+  Tag,
+  Typography,
+  theme,
+} from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { VerificationStatus } from '@xiaotuanbao/shared'
+import {
+  VerificationStatus,
+  type FinanceTransactionSummary,
+  type PaymentScheduleSummary,
+} from '@xiaotuanbao/shared'
 import { getVerification } from '@/services/finance.service'
 import {
   COUNTERPARTY_TYPE_LABELS,
@@ -59,7 +76,8 @@ function AmountStrip({ items }: { items: AmountStripItem[] }) {
   return (
     <Flex
       style={{
-        background: token.colorFillQuaternary,
+        background: token.colorBgContainer,
+        border: `1px solid ${token.colorBorderSecondary}`,
         borderRadius: token.borderRadiusLG,
         padding: `${token.paddingSM}px ${token.padding}px`,
       }}
@@ -87,6 +105,129 @@ function AmountStrip({ items }: { items: AmountStripItem[] }) {
   )
 }
 
+function AmountValue({ children }: { children: ReactNode }) {
+  return (
+    <Typography.Text style={{ fontVariantNumeric: 'tabular-nums' }}>{children}</Typography.Text>
+  )
+}
+
+function DetailColumns({ left, right }: { left: ReactNode; right: ReactNode }) {
+  return (
+    <Row gutter={[24, 0]}>
+      <Col xs={24} md={12}>
+        <Descriptions column={1} size="small">
+          {left}
+        </Descriptions>
+      </Col>
+      <Col xs={24} md={12}>
+        <Descriptions column={1} size="small">
+          {right}
+        </Descriptions>
+      </Col>
+    </Row>
+  )
+}
+
+function VerificationFlowNode({
+  label,
+  value,
+  footer,
+  emphasis = false,
+}: {
+  label: string
+  value: ReactNode
+  footer?: ReactNode
+  emphasis?: boolean
+}) {
+  const { token } = theme.useToken()
+  return (
+    <Flex
+      vertical
+      align="center"
+      justify="center"
+      gap={token.marginXXS}
+      style={{
+        minHeight: 96,
+        padding: token.paddingSM,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: token.borderRadiusLG,
+        background: token.colorFillQuaternary,
+        textAlign: 'center',
+      }}
+    >
+      <Typography.Text strong>{label}</Typography.Text>
+      <Typography.Text
+        style={{
+          color: emphasis ? token.colorPrimary : token.colorText,
+          fontSize: emphasis ? token.fontSizeLG : token.fontSize,
+          fontWeight: emphasis ? 600 : 400,
+          fontVariantNumeric: 'tabular-nums',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value}
+      </Typography.Text>
+      {footer}
+    </Flex>
+  )
+}
+
+function VerificationFlow({
+  transaction,
+  schedule,
+  amount,
+}: {
+  transaction: FinanceTransactionSummary
+  schedule: PaymentScheduleSummary
+  amount: string
+}) {
+  const { token } = theme.useToken()
+  const scheduleLabel =
+    schedule.direction === 'receivable'
+      ? '应收节点'
+      : schedule.direction === 'payable'
+        ? '应付节点'
+        : '收付款节点'
+
+  return (
+    <DetailSection title="核销链路">
+      <Row gutter={[12, 12]} align="middle">
+        <Col xs={24} md={7}>
+          <VerificationFlowNode
+            label="资金流水"
+            value={transaction.transactionNo}
+            footer={
+              <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
+                {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
+              </Tag>
+            }
+          />
+        </Col>
+        <Col xs={0} md={2} style={{ color: token.colorTextTertiary, textAlign: 'center' }}>
+          <ArrowRightOutlined aria-hidden />
+        </Col>
+        <Col xs={24} md={6}>
+          <VerificationFlowNode label="本次核销" value={amount} emphasis />
+        </Col>
+        <Col xs={0} md={2} style={{ color: token.colorTextTertiary, textAlign: 'center' }}>
+          <ArrowRightOutlined aria-hidden />
+        </Col>
+        <Col xs={24} md={7}>
+          <VerificationFlowNode
+            label={scheduleLabel}
+            value={schedule.scheduleNo}
+            footer={
+              <Tag color={PAYMENT_SCHEDULE_STATUS_COLORS[schedule.status]}>
+                {catalogLabel(PAYMENT_SCHEDULE_STATUS_LABELS, schedule.status)}
+              </Tag>
+            }
+          />
+        </Col>
+      </Row>
+    </DetailSection>
+  )
+}
+
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
@@ -105,6 +246,7 @@ export function VerificationDetailDrawer({
   verificationId,
   onClose,
 }: VerificationDetailDrawerProps) {
+  const { token } = theme.useToken()
   const {
     data: detail,
     isLoading,
@@ -138,16 +280,25 @@ export function VerificationDetailDrawer({
 
   return (
     <Drawer
-      title="核销详情"
+      title={
+        <Typography.Title level={4} style={{ margin: 0 }}>
+          核销详情
+        </Typography.Title>
+      }
       open={open}
-      size={680}
+      size="min(940px, 100vw)"
+      styles={{
+        header: { padding: `${token.paddingMD}px ${token.paddingXL}px` },
+        body: { padding: `${token.paddingLG}px ${token.paddingXL}px` },
+        footer: { padding: `${token.padding}px ${token.paddingXL}px` },
+      }}
       onClose={onClose}
       destroyOnHidden
       loading={isLoading}
       footer={
-        <Space style={{ float: 'right' }}>
+        <Flex justify="flex-end">
           <Button onClick={onClose}>关闭</Button>
-        </Space>
+        </Flex>
       }
     >
       {isError ? (
@@ -165,8 +316,8 @@ export function VerificationDetailDrawer({
           }
         />
       ) : detail ? (
-        <Flex vertical gap={24}>
-          <DetailSection title="核销信息">
+        <Flex vertical>
+          <DetailSection title="核销概览">
             {isCancelled ? (
               <Alert
                 type="warning"
@@ -179,20 +330,7 @@ export function VerificationDetailDrawer({
                 ].join(' · ')}
               />
             ) : null}
-            <AmountStrip
-              items={[
-                {
-                  label: '本次核销金额',
-                  value: formatCents(verification?.amountCents ?? 0),
-                  emphasis: true,
-                },
-                {
-                  label: '核销后未结金额',
-                  value: formatCents(verification?.billUnsettledAfterCents ?? 0),
-                },
-              ]}
-            />
-            <Descriptions column={2} size="small">
+            <Descriptions column={{ xs: 1, sm: 2 }} size="small">
               <Descriptions.Item label="核销单号">
                 <Typography.Text copyable>{verification?.verificationNo}</Typography.Text>
               </Descriptions.Item>
@@ -217,82 +355,129 @@ export function VerificationDetailDrawer({
                 {verification?.remark?.trim() || '-'}
               </Descriptions.Item>
             </Descriptions>
+            <AmountStrip
+              items={[
+                {
+                  label: '本次核销金额',
+                  value: formatCents(verification?.amountCents ?? 0),
+                  emphasis: true,
+                },
+                {
+                  label: '核销后未结金额',
+                  value: formatCents(verification?.billUnsettledAfterCents ?? 0),
+                },
+              ]}
+            />
           </DetailSection>
 
-          {transaction ? (
-            <DetailSection title="流水信息">
-              <AmountStrip
-                items={[
-                  { label: '流水金额', value: formatCents(transaction.amountCents) },
-                  { label: '已核销', value: formatCents(transaction.allocatedAmountCents) },
-                  { label: '未核销', value: formatCents(transaction.unallocatedAmountCents) },
-                ]}
+          {transaction && schedule ? (
+            <>
+              <Divider style={{ margin: '24px 0' }} />
+              <VerificationFlow
+                transaction={transaction}
+                schedule={schedule}
+                amount={formatCents(verification?.amountCents ?? 0)}
               />
-              <Descriptions column={2} size="small">
-                <Descriptions.Item label="流水号">
-                  <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="收支方向">
-                  <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
-                    {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="交易日期">
-                  {transaction.transactionDate}
-                </Descriptions.Item>
-                <Descriptions.Item label="收付款通道">
-                  {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
-                </Descriptions.Item>
-                <Descriptions.Item label="往来对象" span={2}>
-                  {formatCounterpartyLabel(
-                    transaction.counterpartyType,
-                    transaction.counterpartyName ?? null,
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="关联发团" span={2}>
-                  {departureLink(transaction.departureId)}
-                </Descriptions.Item>
-              </Descriptions>
-            </DetailSection>
+            </>
+          ) : null}
+
+          {transaction ? (
+            <>
+              <Divider style={{ margin: '24px 0' }} />
+              <DetailSection title="流水信息">
+                <DetailColumns
+                  left={
+                    <>
+                      <Descriptions.Item label="流水号">
+                        <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="流水金额">
+                        <AmountValue>{formatCents(transaction.amountCents)}</AmountValue>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="已核销">
+                        <AmountValue>{formatCents(transaction.allocatedAmountCents)}</AmountValue>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="未核销">
+                        <AmountValue>{formatCents(transaction.unallocatedAmountCents)}</AmountValue>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="收支方向">
+                        <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
+                          {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
+                        </Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="交易日期">
+                        {transaction.transactionDate}
+                      </Descriptions.Item>
+                    </>
+                  }
+                  right={
+                    <>
+                      <Descriptions.Item label="收付款通道">
+                        {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="往来对象">
+                        {formatCounterpartyLabel(
+                          transaction.counterpartyType,
+                          transaction.counterpartyName ?? null,
+                        )}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="关联发团">
+                        {departureLink(transaction.departureId)}
+                      </Descriptions.Item>
+                    </>
+                  }
+                />
+              </DetailSection>
+            </>
           ) : null}
 
           {schedule ? (
-            <DetailSection title="收付款节点信息">
-              <AmountStrip
-                items={[
-                  { label: '节点金额', value: formatCents(schedule.amountCents) },
-                  { label: '已结', value: formatCents(schedule.settledAmountCents) },
-                  { label: '未结', value: formatCents(schedule.unsettledAmountCents) },
-                  {
-                    label: '状态',
-                    value: (
-                      <Tag color={PAYMENT_SCHEDULE_STATUS_COLORS[schedule.status]}>
-                        {catalogLabel(PAYMENT_SCHEDULE_STATUS_LABELS, schedule.status)}
-                      </Tag>
-                    ),
-                  },
-                ]}
-              />
-              <Descriptions column={2} size="small">
-                <Descriptions.Item label="收付款节点编号">
-                  <Typography.Text copyable>{schedule.scheduleNo}</Typography.Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="类型">
-                  <Tag color={VERIFICATION_DIRECTION_COLORS[schedule.direction]}>
-                    {catalogLabel(VERIFICATION_DIRECTION_LABELS, schedule.direction)}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="往来对象" span={2}>
-                  {formatCounterpartyLabel(
-                    schedule.counterpartyType,
-                    schedule.counterpartyName ?? null,
-                  )}
-                </Descriptions.Item>
-                <Descriptions.Item label="关联发团" span={2}>
-                  {departureLink(schedule.departureId)}
-                </Descriptions.Item>
-              </Descriptions>
-            </DetailSection>
+            <>
+              <Divider style={{ margin: '24px 0' }} />
+              <DetailSection title="收付款节点">
+                <DetailColumns
+                  left={
+                    <>
+                      <Descriptions.Item label="收付款节点编号">
+                        <Typography.Text copyable>{schedule.scheduleNo}</Typography.Text>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="节点金额">
+                        <AmountValue>{formatCents(schedule.amountCents)}</AmountValue>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="已结">
+                        <AmountValue>{formatCents(schedule.settledAmountCents)}</AmountValue>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="未结">
+                        <AmountValue>{formatCents(schedule.unsettledAmountCents)}</AmountValue>
+                      </Descriptions.Item>
+                    </>
+                  }
+                  right={
+                    <>
+                      <Descriptions.Item label="状态">
+                        <Tag color={PAYMENT_SCHEDULE_STATUS_COLORS[schedule.status]}>
+                          {catalogLabel(PAYMENT_SCHEDULE_STATUS_LABELS, schedule.status)}
+                        </Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="类型">
+                        <Tag color={VERIFICATION_DIRECTION_COLORS[schedule.direction]}>
+                          {catalogLabel(VERIFICATION_DIRECTION_LABELS, schedule.direction)}
+                        </Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="往来对象">
+                        {formatCounterpartyLabel(
+                          schedule.counterpartyType,
+                          schedule.counterpartyName ?? null,
+                        )}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="关联发团">
+                        {departureLink(schedule.departureId)}
+                      </Descriptions.Item>
+                    </>
+                  }
+                />
+              </DetailSection>
+            </>
           ) : null}
         </Flex>
       ) : null}

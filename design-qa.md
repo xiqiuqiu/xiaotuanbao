@@ -45,3 +45,49 @@
 - P3：若后续有正式品牌源文件，可替换当前从视觉稿提取的品牌锁定图，进一步提升高 DPI 清晰度。
 
 final result: passed
+
+---
+
+# 核销详情 Design QA
+
+- source visual truth path: `docs/design/screenshots/verification-detail-reference.png`
+- implementation screenshot path: `docs/design/screenshots/verification-detail-1328x1216-v2.png`
+- comparison evidence: `docs/design/screenshots/verification-detail-comparison.png`
+- mobile evidence: `docs/design/screenshots/verification-detail-390x844.png`
+- viewport: desktop 1328 × 1216；mobile 390 × 844
+- state: 核销管理列表打开 `CLXTB202607000004` 详情抽屉
+
+## Full-view comparison evidence
+
+最终并排证据显示：抽屉左边界、940px 桌面宽度、标题栏、概览双列、金额摘要、三段核销链路、流水双列、收付款节点双列与底部关闭操作均与视觉稿一致。背景应用壳保留项目现状，不属于本次详情抽屉改造范围。
+
+## Focused region comparison evidence
+
+- 字体与排版：继续使用项目系统字体与 `DESIGN.md` 的 20px 抽屉标题、16px 分区标题、14px 正文层级；金额使用 600 字重与等宽数字特性。
+- 间距与布局：正文横向 32px、纵向 24px；分区以 24px 分隔线组织；详情不嵌套卡片墙。
+- 颜色与 Token：全部来自 antd Token 与既有 catalog；品牌蓝只用于链接、复制和链路重点，状态同时保留中文文本。
+- 图像与图标：视觉稿没有业务位图资产；关闭、复制、链路箭头均使用既有 Ant Design 图标库，无手绘 SVG、CSS 图形或占位素材。
+- 文案与内容：仅复用现有核销、流水、收付款节点 API 字段，没有新增操作、数据或接口。
+
+## Findings
+
+无未解决的 P0 / P1 / P2 问题。
+
+## Comparison history
+
+1. 首轮：抽屉沿用 680px，链路编号与关联发团发生明显换行，且与视觉稿左边界不一致（P1）。调整为 `min(940px, 100vw)`，桌面视口与视觉稿对齐。
+2. 第二轮：390px 窄屏下概览仍固定两列，核销单号和创建时间被挤压换行（P2）。改为 `<576px` 单列，复验无水平溢出。
+3. 最终轮：桌面并排证据无可执行 P0 / P1 / P2；移动端抽屉占满可用宽度、链路纵向堆叠、底部关闭按钮可触达。
+
+## Interaction verification
+
+- 点击核销单号可打开详情抽屉。
+- 底部「关闭」可关闭详情抽屉。
+- 加载错误、重试与关闭交互继续由现有组件测试覆盖。
+- 新浏览器页控制台：0 warning，0 error。
+
+## Follow-up Polish
+
+- 无阻塞项；视觉稿的字号与项目 `DESIGN.md` 有轻微比例差异，按项目唯一视觉规范保留现有字体阶梯。
+
+final result: passed
