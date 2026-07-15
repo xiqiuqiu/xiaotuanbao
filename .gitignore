@@ -39,3 +39,5 @@ caddy/config/
 
 # Test
 coverage/
+
+tmp/

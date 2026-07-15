@@ -9,9 +9,11 @@ import { PaymentScheduleTable } from './PaymentScheduleTable'
 import { usePaymentScheduleWorkspace } from '../hooks/usePaymentScheduleWorkspace'
 
 export type PaymentScheduleWorkspaceProps = {
-  scope: 'global' | 'departure'
+  scope: 'global' | 'departure' | 'partner'
   direction: 'receivable' | 'payable'
   departureId?: string
+  /** Partner 维度精确过滤（scope='partner' 时必传），同名 Partner 不串。 */
+  partnerId?: string
   readOnly?: boolean
   /** One-shot locate: flash rows for this source order, then clear via onHighlightConsumed. */
   highlightSourceOrderId?: string
@@ -86,6 +88,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         counterpartyKeyword={counterpartyKeyword}
         dueDateRange={dueDateRange}
         showDepartureFilter={scope === 'global'}
+        showCounterpartyFilter={scope !== 'partner'}
         isReceivable={isReceivable}
         onDepartureChange={(value) => {
           setDepartureFilter(value)

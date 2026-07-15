@@ -13,6 +13,8 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import {
   listDeparturePayables,
   listDepartureReceivables,
+  listPartnerPayables,
+  listPartnerReceivables,
   listPayables,
   listReceivables,
   listFinanceDepartureOptions,
@@ -29,9 +31,11 @@ import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
 import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 
 export type UsePaymentScheduleWorkspaceOptions = {
-  scope: 'global' | 'departure'
+  scope: 'global' | 'departure' | 'partner'
   direction: 'receivable' | 'payable'
   departureId?: string
+  /** Partner 维度精确过滤（scope='partner' 时必传），走 Partner 专属端点。 */
+  partnerId?: string
   readOnly?: boolean
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
@@ -43,6 +47,7 @@ export function usePaymentScheduleWorkspace({
   scope,
   direction,
   departureId: lockedDepartureId,
+  partnerId,
   readOnly = false,
   highlightSourceOrderId,
   highlightSegmentResourceId,
@@ -54,10 +59,17 @@ export function usePaymentScheduleWorkspace({
   const { token } = theme.useToken()
   const isReceivable = direction === 'receivable'
   const isDepartureScope = scope === 'departure'
+  const isPartnerScope = scope === 'partner'
   const listQueryKey = isReceivable ? 'finance-receivables' : 'finance-payables'
   const departureListQueryKey = isReceivable
     ? 'departure-receivables'
     : 'departure-payables'
+  const partnerListQueryKey = isReceivable ? 'partner-receivables' : 'partner-payables'
+  const activeListQueryKey = isDepartureScope
+    ? departureListQueryKey
+    : isPartnerScope
+      ? partnerListQueryKey
+      : listQueryKey
 
   const [departureFilter, setDepartureFilter] = useState<string | undefined>()
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatusFilter | undefined>()
@@ -115,8 +127,9 @@ export function usePaymentScheduleWorkspace({
     refetch,
   } = useQuery({
     queryKey: [
-      isDepartureScope ? departureListQueryKey : listQueryKey,
+      activeListQueryKey,
       effectiveDepartureId,
+      partnerId,
       page,
       fetchPageSize,
       useExpandedFetch,
@@ -144,6 +157,21 @@ export function usePaymentScheduleWorkspace({
           signal,
         )
       }
+      if (isPartnerScope) {
+        if (!partnerId) {
+          throw new Error('合作伙伴 ID 缺失')
+        }
+        const listFn = isReceivable ? listPartnerReceivables : listPartnerPayables
+        return listFn(
+          partnerId,
+          {
+            page: useExpandedFetch ? 1 : page,
+            pageSize: fetchPageSize,
+            ...statusQuery,
+          },
+          signal,
+        )
+      }
       return (isReceivable ? listReceivables : listPayables)(
         {
           departureId: effectiveDepartureId,
@@ -155,7 +183,9 @@ export function usePaymentScheduleWorkspace({
         signal,
       )
     },
-    enabled: !isDepartureScope || Boolean(lockedDepartureId),
+    enabled:
+      (!isDepartureScope || Boolean(lockedDepartureId)) &&
+      (!isPartnerScope || Boolean(partnerId)),
     placeholderData,
     ...operationalQueryOptions(),
   })
@@ -248,6 +278,7 @@ export function usePaymentScheduleWorkspace({
     isReceivable,
     listQueryKey,
     departureListQueryKey,
+    partnerListQueryKey,
     activeSchedule: dialogs.activeSchedule,
     confirmForm: dialogs.confirmForm,
     verifyForm: dialogs.verifyForm,
@@ -343,6 +374,7 @@ export function usePaymentScheduleWorkspace({
   return {
     isReceivable,
     isDepartureScope,
+    isPartnerScope,
     effectiveDepartureId,
     statusFilter,
     keyword,

@@ -41,6 +41,36 @@ vi.mock('@/services/source-order.service', () => ({
   listPartnerSourceOrders: vi.fn(),
 }))
 
+const listPartnerReceivables = vi.fn(async () => ({
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+}))
+const listPartnerPayables = vi.fn(async () => ({
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+}))
+
+vi.mock('@/services/finance.service', () => ({
+  listPartnerReceivables: (...args: unknown[]) => listPartnerReceivables(...(args as [])),
+  listPartnerPayables: (...args: unknown[]) => listPartnerPayables(...(args as [])),
+  listReceivables: vi.fn(),
+  listPayables: vi.fn(),
+  listDepartureReceivables: vi.fn(),
+  listDeparturePayables: vi.fn(),
+  listFinanceDepartureOptions: vi.fn(async () => []),
+  listFinancePartnerOptions: vi.fn(async () => []),
+  listFinanceSupplierOptions: vi.fn(async () => []),
+  listFinanceSourceOrderOptions: vi.fn(async () => []),
+}))
+
+vi.mock('@/services/departure.service', () => ({
+  getDeparture: vi.fn(),
+}))
+
 import { getPartner } from '@/services/partner.service'
 import { listPartnerSourceOrders } from '@/services/source-order.service'
 
@@ -92,15 +122,32 @@ describe('PartnerDetailPage', () => {
     expect(screen.getByLabelText('合作伙伴名称')).toHaveValue('华东国旅')
   })
 
-  it('shows coming soon panel on ledger placeholder tab', async () => {
+  it('renders receivable and payable ledger sections on the accounts tab', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
     await screen.findByRole('heading', { level: 4, name: '华东国旅' })
 
     await user.click(screen.getByRole('tab', { name: '往来账款' }))
+    expect(
+      await screen.findByRole('heading', { level: 5, name: '应收（我收他）' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 5, name: '应付（我付他）' }),
+    ).toBeInTheDocument()
+
+    // 双子区各自向 Partner 维度端点精确取数
     await waitFor(() => {
-      expect(screen.getByText('功能建设中，暂不可用')).toBeInTheDocument()
+      expect(listPartnerReceivables).toHaveBeenCalledWith(
+        'partner-1',
+        expect.anything(),
+        expect.anything(),
+      )
+      expect(listPartnerPayables).toHaveBeenCalledWith(
+        'partner-1',
+        expect.anything(),
+        expect.anything(),
+      )
     })
   })
 

@@ -19,6 +19,8 @@ interface PaymentScheduleFiltersProps {
   counterpartyKeyword: string
   dueDateRange: DueDateRange
   showDepartureFilter: boolean
+  /** Partner 往来账款 Tab 往来对象已锚定，隐藏 keyword 模糊搜索。 */
+  showCounterpartyFilter?: boolean
   /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
   isReceivable: boolean
   onDepartureChange: (value?: string) => void
@@ -36,6 +38,7 @@ export function PaymentScheduleFilters({
   counterpartyKeyword,
   dueDateRange,
   showDepartureFilter,
+  showCounterpartyFilter = true,
   isReceivable,
   onDepartureChange,
   onStatusChange,
@@ -83,14 +86,16 @@ export function PaymentScheduleFilters({
           onChange={(event) => onKeywordChange(event.target.value)}
           onSearch={(value) => onKeywordChange(value.trim())}
         />
-        <Input.Search
-          allowClear
-          placeholder="往来对象"
-          style={{ width: 200, maxWidth: '100%' }}
-          value={counterpartyKeyword}
-          onChange={(event) => onCounterpartyKeywordChange(event.target.value)}
-          onSearch={(value) => onCounterpartyKeywordChange(value.trim())}
-        />
+        {showCounterpartyFilter ? (
+          <Input.Search
+            allowClear
+            placeholder="往来对象"
+            style={{ width: 200, maxWidth: '100%' }}
+            value={counterpartyKeyword}
+            onChange={(event) => onCounterpartyKeywordChange(event.target.value)}
+            onSearch={(value) => onCounterpartyKeywordChange(value.trim())}
+          />
+        ) : null}
         <Select
           allowClear
           placeholder="节点状态"

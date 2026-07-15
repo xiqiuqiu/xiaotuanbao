@@ -252,6 +252,30 @@ export async function listDeparturePayables(
   })
 }
 
+/** 往来账款 Tab：Partner 维度应收列表（counterpartyId 精确过滤在服务端强制）。 */
+export async function listPartnerReceivables(
+  partnerId: string,
+  params: Omit<ListPaymentSchedulesParams, 'counterpartyType' | 'counterpartyId'> = {},
+  signal?: AbortSignal,
+): Promise<PaymentScheduleListResult> {
+  return request.get<PaymentScheduleListResult>(`/partners/${partnerId}/receivables`, {
+    params,
+    signal,
+  })
+}
+
+/** 往来账款 Tab：Partner 维度应付列表（counterpartyId 精确过滤在服务端强制）。 */
+export async function listPartnerPayables(
+  partnerId: string,
+  params: Omit<ListPaymentSchedulesParams, 'counterpartyType' | 'counterpartyId'> = {},
+  signal?: AbortSignal,
+): Promise<PaymentScheduleListResult> {
+  return request.get<PaymentScheduleListResult>(`/partners/${partnerId}/payables`, {
+    params,
+    signal,
+  })
+}
+
 export async function listDepartureVerifications(
   departureId: string,
   params: Omit<ListFinanceVerificationsParams, 'departureId'> = {},
