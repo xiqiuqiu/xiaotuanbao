@@ -98,9 +98,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         counterpartyKeyword={counterpartyKeyword}
         dueDateRange={dueDateRange}
         departureDateRange={departureDateRange}
-        showDepartureFilter={scope === 'global'}
-        showCounterpartyFilter={scope !== 'partner'}
-        showDepartureDateFilter={scope === 'partner'}
+        scope={scope}
         isReceivable={isReceivable}
         onDepartureChange={(value) => {
           setDepartureFilter(value)

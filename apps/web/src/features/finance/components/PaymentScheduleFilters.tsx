@@ -14,6 +14,8 @@ export type DueDateRange = [string | undefined, string | undefined] | null
 export type DepartureDateRange = [string | undefined, string | undefined] | null
 export type PaymentScheduleStatusFilter = PaymentScheduleStatus | 'voided'
 
+export type PaymentScheduleFiltersScope = 'global' | 'departure' | 'partner'
+
 interface PaymentScheduleFiltersProps {
   departureId?: string
   statusFilter?: PaymentScheduleStatusFilter
@@ -21,11 +23,14 @@ interface PaymentScheduleFiltersProps {
   counterpartyKeyword: string
   dueDateRange: DueDateRange
   departureDateRange?: DepartureDateRange
-  showDepartureFilter: boolean
-  /** Partner 往来账款 Tab 往来对象已锚定，隐藏 keyword 模糊搜索。 */
-  showCounterpartyFilter?: boolean
-  /** 往来账款 Tab 主时间轴：所属发团出团日期区间（与确认单周期同口径）。 */
-  showDepartureDateFilter?: boolean
+  /**
+   * 场景决定筛选项组合：
+   * - global：显示发团筛选与往来对象搜索；
+   * - departure：发团已锚定，隐藏发团筛选；
+   * - partner：往来对象已锚定，隐藏往来对象搜索，
+   *   改为出团日期区间主时间轴（与确认单周期同口径）。
+   */
+  scope: PaymentScheduleFiltersScope
   /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
   isReceivable: boolean
   onDepartureChange: (value?: string) => void
@@ -44,9 +49,7 @@ export function PaymentScheduleFilters({
   counterpartyKeyword,
   dueDateRange,
   departureDateRange = null,
-  showDepartureFilter,
-  showCounterpartyFilter = true,
-  showDepartureDateFilter = false,
+  scope,
   isReceivable,
   onDepartureChange,
   onStatusChange,
@@ -56,6 +59,10 @@ export function PaymentScheduleFilters({
   onDepartureDateRangeChange,
   onReset,
 }: PaymentScheduleFiltersProps) {
+  const showDepartureFilter = scope === 'global'
+  const showCounterpartyFilter = scope !== 'partner'
+  const showDepartureDateFilter = scope === 'partner'
+
   const { data: departuresResult } = useQuery({
     queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,
     queryFn: listFinanceDepartureOptions,
