@@ -93,6 +93,7 @@ function buildDepartureOverviewStats(input: {
     otherReceivableCents: finance.otherReceivableCents,
     confirmedPayableCents: finance.confirmedPayableCents,
     paidCents: finance.paidCents,
+    resourcePaidCents: finance.resourcePaidCents,
     openUnpaidCents: finance.openUnpaidCents,
     closedUnpaidCents: finance.closedUnpaidCents,
     ungeneratedPayableCents,
@@ -104,7 +105,7 @@ function buildDepartureOverviewStats(input: {
     cashNetInflowCents,
     unverifiedIncomeCents: finance.unverifiedIncomeCents,
     unverifiedExpenseCents: finance.unverifiedExpenseCents,
-    verifiedFromOtherDeparturesCents: finance.verifiedFromOtherDeparturesCents,
+    verifiedFromExternalCents: finance.verifiedFromExternalCents,
     verifiedToOtherDeparturesCents: finance.verifiedToOtherDeparturesCents,
     anomalies: [],
   }

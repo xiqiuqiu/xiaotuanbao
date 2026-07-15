@@ -1,4 +1,5 @@
 import { PaymentScheduleDirection, TransactionDirection } from '@prisma/client'
+import { emptyDepartureFinanceSnapshot } from '../finance/departure-finance-facade.service'
 import {
   aggregateUnverifiedCashAmounts,
   buildDepartureReadModelAggregate,
@@ -220,6 +221,44 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.openUnsettledPayableCents).toBe(1_000_000)
       expect(aggregate.unverifiedIncomeCents).toBe(400_000)
       expect(aggregate.unverifiedExpenseCents).toBe(400_000)
+    })
+
+    it('exposes resource-paid and external-verification aggregates on overviewStats', () => {
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 4,
+          grossReceivableCents: 1_000_000,
+          discountCents: 0,
+          netReceivableCents: 1_000_000,
+        },
+        segmentCount: 1,
+        resourceCount: 2,
+        payableCents: 600_000,
+        schedules: [],
+        settledByScheduleId: new Map(),
+        financeSnapshot: {
+          ...emptyDepartureFinanceSnapshot(),
+          confirmedPayableCents: 500_000,
+          paidCents: 450_000,
+          resourcePayableCents: 400_000,
+          resourcePaidCents: 380_000,
+          otherPayableCents: 100_000,
+          verifiedFromExternalCents: 70_000,
+          verifiedToOtherDeparturesCents: 20_000,
+        },
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 1_000_000,
+          generatedResourceAgreedCents: 400_000,
+        },
+      })
+
+      // 主付款进度分子：只含资源应付的有效核销，独立于全部已付。
+      expect(aggregate.overviewStats.resourcePaidCents).toBe(380_000)
+      expect(aggregate.overviewStats.paidCents).toBe(450_000)
+      // 外部核销含他团与无归属流水，合并为一个口径。
+      expect(aggregate.overviewStats.verifiedFromExternalCents).toBe(70_000)
+      expect(aggregate.overviewStats.verifiedToOtherDeparturesCents).toBe(20_000)
     })
 
     it('returns empty aggregate defaults', () => {

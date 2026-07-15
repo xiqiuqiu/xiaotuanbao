@@ -1637,6 +1637,7 @@ describe('Departure API (e2e)', () => {
         otherReceivableCents: 0,
         confirmedPayableCents: 0,
         paidCents: 0,
+        resourcePaidCents: 0,
         openUnpaidCents: 0,
         closedUnpaidCents: 0,
         ungeneratedPayableCents: 360000,
@@ -1648,7 +1649,7 @@ describe('Departure API (e2e)', () => {
         cashNetInflowCents: 0,
         unverifiedIncomeCents: 0,
         unverifiedExpenseCents: 0,
-        verifiedFromOtherDeparturesCents: 0,
+        verifiedFromExternalCents: 0,
         verifiedToOtherDeparturesCents: 0,
         anomalies: [],
       })
@@ -1787,6 +1788,7 @@ describe('Departure API (e2e)', () => {
         openUnreceivedCents: 0,
         confirmedPayableCents: 360000,
         paidCents: 360000,
+        resourcePaidCents: 360000,
         openUnpaidCents: 0,
         closedUnpaidCents: 0,
         ungeneratedPayableCents: 0,
@@ -1872,6 +1874,7 @@ describe('Departure API (e2e)', () => {
         otherReceivableCents: 70000,
         confirmedPayableCents: 50000,
         paidCents: 0,
+        resourcePaidCents: 0,
         openUnpaidCents: 0,
         closedUnpaidCents: 50000,
         ungeneratedPayableCents: 360000,
@@ -1972,7 +1975,7 @@ describe('Departure API (e2e)', () => {
         receivedCents: 200000,
         incomeTransactionCents: 0,
         cashNetInflowCents: 0,
-        verifiedFromOtherDeparturesCents: 200000,
+        verifiedFromExternalCents: 200000,
         verifiedToOtherDeparturesCents: 0,
       })
       expect(cashDetail.body.data.overviewStats).toMatchObject({
@@ -1980,8 +1983,51 @@ describe('Departure API (e2e)', () => {
         incomeTransactionCents: 300000,
         cashNetInflowCents: 300000,
         unverifiedIncomeCents: 100000,
-        verifiedFromOtherDeparturesCents: 0,
+        verifiedFromExternalCents: 0,
         verifiedToOtherDeparturesCents: 200000,
+      })
+    })
+
+    it('counts verification from an unattributed transaction as external cash', async () => {
+      const departure = await createReadModelDeparture('-overview-unattributed')
+      const seeded = await seedDepartureData(departure.id)
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 300000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: seeded.sourceOrderId,
+          counterpartyName: seeded.displayName,
+          departureId: departure.id,
+        })
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${generated.body.data.schedules[0].id}/link-transaction`)
+        .send({ transactionId: transaction.body.data.id, amountCents: 200000 })
+        .expect(201)
+      // 写入侧已强制流水必须归属发团；无归属流水只可能是存量数据，直接改库模拟。
+      await prisma.financeTransaction.update({
+        where: { id: transaction.body.data.id },
+        data: { departureId: null },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      // 无归属发团的流水不进本团资金卡，其核销与他团流水合并为「核销自外部流水」。
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 200000,
+        incomeTransactionCents: 0,
+        cashNetInflowCents: 0,
+        verifiedFromExternalCents: 200000,
+        verifiedToOtherDeparturesCents: 0,
       })
     })
 

@@ -28,6 +28,14 @@ function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
 }
 
+/** 分母为零返回 null（展示「暂无数据」）；否则固定 1 位小数，保留负数与超 100% 真实值。 */
+function formatPercent(numerator: number, denominator: number): string | null {
+  if (denominator === 0) {
+    return null
+  }
+  return `${((numerator / denominator) * 100).toFixed(1)}%`
+}
+
 interface DepartureOverviewStatsCardsProps {
   departure: DepartureDetail
 }
@@ -96,105 +104,18 @@ function OverviewDetailsPopover({
   )
 }
 
-function CostDetailsPopover({
-  ungeneratedPayableCents,
-  otherPayableCents,
-  resourcePayableDifferenceCents,
-}: {
-  ungeneratedPayableCents: number
-  otherPayableCents: number
-  resourcePayableDifferenceCents: number
-}) {
-  return (
-    <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
-      <AmountDetail label="尚未生成应付" amountCents={ungeneratedPayableCents} />
-      <AmountDetail label="其他应付" amountCents={otherPayableCents} />
-      <AmountDetail label="资源账款差异" amountCents={resourcePayableDifferenceCents} />
-    </OverviewDetailsPopover>
-  )
-}
-
-function ReceivableDetailsPopover({
-  ungeneratedReceivableCents,
-  closedUnreceivedCents,
-  otherReceivableCents,
-}: {
-  ungeneratedReceivableCents: number
-  closedUnreceivedCents: number
-  otherReceivableCents: number
-}) {
-  return (
-    <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
-      <AmountDetail label="尚未生成应收" amountCents={ungeneratedReceivableCents} />
-      <AmountDetail label="其中已关闭未收" amountCents={closedUnreceivedCents} danger />
-      <AmountDetail label="其他应收" amountCents={otherReceivableCents} />
-    </OverviewDetailsPopover>
-  )
-}
-
-function PaymentDetailsPopover({ closedUnpaidCents }: { closedUnpaidCents: number }) {
-  return (
-    <OverviewDetailsPopover title="付款组成" buttonLabel="查看付款组成">
-      <AmountDetail label="其中已关闭未付" amountCents={closedUnpaidCents} danger />
-    </OverviewDetailsPopover>
-  )
-}
-
-function CashHintsPopover({
-  departureId,
-  unverifiedIncomeCents,
-  unverifiedExpenseCents,
-  verifiedFromOtherDeparturesCents,
-  verifiedToOtherDeparturesCents,
-}: {
-  departureId: string
-  unverifiedIncomeCents: number
-  unverifiedExpenseCents: number
-  verifiedFromOtherDeparturesCents: number
-  verifiedToOtherDeparturesCents: number
-}) {
-  return (
-    <OverviewDetailsPopover title="资金提示" buttonLabel="查看资金提示">
-      <AmountDetail
-        label="未核销收入"
-        amountCents={unverifiedIncomeCents}
-        transactionLink={{
-          departureId,
-          direction: TransactionDirection.INFLOW,
-        }}
-      />
-      <AmountDetail
-        label="未核销支出"
-        amountCents={unverifiedExpenseCents}
-        transactionLink={{
-          departureId,
-          direction: TransactionDirection.OUTFLOW,
-        }}
-      />
-      <AmountDetail
-        label="核销自他团流水"
-        amountCents={verifiedFromOtherDeparturesCents}
-      />
-      <AmountDetail
-        label="本团流水核销至他团"
-        amountCents={verifiedToOtherDeparturesCents}
-      />
-    </OverviewDetailsPopover>
-  )
-}
-
 function ProgressValue({ numerator, denominator }: { numerator: number; denominator: number }) {
   if (denominator === 0) {
-    return <Text strong>—</Text>
+    return <Text strong>暂无数据</Text>
   }
 
-  const actualPercent = Math.round((numerator / denominator) * 1_000) / 10
+  const actualPercent = (numerator / denominator) * 100
   const visualPercent = Math.min(100, Math.max(0, actualPercent))
 
   return (
     <Flex align="center" gap={12}>
       <Progress percent={visualPercent} showInfo={false} style={{ flex: 1 }} />
-      <Text strong>{actualPercent}%</Text>
+      <Text strong>{`${actualPercent.toFixed(1)}%`}</Text>
     </Flex>
   )
 }
@@ -238,12 +159,14 @@ function SummaryCard({
   suffix,
   equationDescription,
   equation,
+  details,
 }: {
   title: string
   value: string | number
   suffix?: string
   equationDescription?: string
   equation?: string
+  details?: React.ReactNode
 }) {
   return (
     <Card className={styles.metricCard} style={EQUAL_HEIGHT_CARD_STYLE}>
@@ -262,6 +185,7 @@ function SummaryCard({
         value={value}
         suffix={suffix}
       />
+      {details}
     </Card>
   )
 }
@@ -285,8 +209,8 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
     stats.openUnreceivedCents +
     stats.closedUnreceivedCents +
     stats.ungeneratedReceivableCents
-  const unpaidCents = stats.openUnpaidCents + stats.closedUnpaidCents
   const hasCostDetails =
+    stats.confirmedPayableCents !== 0 ||
     stats.ungeneratedPayableCents !== 0 ||
     stats.otherPayableCents !== 0 ||
     stats.resourcePayableDifferenceCents !== 0
@@ -294,19 +218,27 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
     stats.ungeneratedReceivableCents !== 0 ||
     stats.closedUnreceivedCents !== 0 ||
     stats.otherReceivableCents !== 0
+  const hasPaymentDetails =
+    stats.confirmedPayableCents !== 0 || stats.closedUnpaidCents !== 0
   const hasCashHints =
     stats.unverifiedIncomeCents !== 0 ||
     stats.unverifiedExpenseCents !== 0 ||
-    stats.verifiedFromOtherDeparturesCents !== 0 ||
+    stats.verifiedFromExternalCents !== 0 ||
     stats.verifiedToOtherDeparturesCents !== 0
   const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
   const anomalyCardStyle = receivableAnomaly
     ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
     : EQUAL_HEIGHT_CARD_STYLE
-  const costEquation = `${formatCents(stats.confirmedPayableCents)} − ${formatCents(departure.payableCents)} = ${formatCents(stats.otherPayableCents)} + ${formatCents(stats.resourcePayableDifferenceCents)} − ${formatCents(stats.ungeneratedPayableCents)}`
-  const marginEquation = `${formatCents(departure.netReceivableCents)} − ${formatCents(departure.payableCents)} = ${formatCents(departure.estimatedMarginCents)}；${formatCents(departure.netReceivableCents)} − ${formatCents(stats.confirmedPayableCents)} = ${formatCents(stats.confirmedMarginCents)}`
-  const receivableEquation = `已收 ${formatCents(stats.receivedCents)} + 未收 ${formatCents(unreceivedCents)} = 实际应收 ${formatCents(departure.netReceivableCents)}`
-  const payableEquation = `已付 ${formatCents(stats.paidCents)} + 未付 ${formatCents(unpaidCents)} = 确认应付 ${formatCents(stats.confirmedPayableCents)}`
+
+  const marginRateLabel = formatPercent(departure.estimatedMarginCents, departure.netReceivableCents)
+  const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
+
+  const settlementEquation = `原始团款 ${formatCents(departure.grossReceivableCents)} − 优惠合计 ${formatCents(departure.discountCents)} = 结算应收 ${formatCents(departure.netReceivableCents)}`
+  const costEquation = `确认应付 ${formatCents(stats.confirmedPayableCents)} − 成本合计 ${formatCents(departure.payableCents)} = 其他应付 ${formatCents(stats.otherPayableCents)} + 资源账款差异 ${formatCents(stats.resourcePayableDifferenceCents)} − 尚未生成应付 ${formatCents(stats.ungeneratedPayableCents)}`
+  const marginEquation = `结算应收 ${formatCents(departure.netReceivableCents)} − 成本合计 ${formatCents(departure.payableCents)} = 当前毛利 ${formatCents(departure.estimatedMarginCents)}`
+  const marginRateEquation = `当前毛利 ${formatCents(departure.estimatedMarginCents)} ÷ 结算应收 ${formatCents(departure.netReceivableCents)}`
+  const receivableEquation = `已收 ${formatCents(stats.receivedCents)} + 未收 ${formatCents(unreceivedCents)} = 结算应收 ${formatCents(departure.netReceivableCents)}`
+  const payableEquation = `资源应付已核销 ${formatCents(stats.resourcePaidCents)} ÷ 成本合计 ${formatCents(departure.payableCents)}`
   const cashEquation = `有效收入 ${formatCents(stats.incomeTransactionCents)} − 有效支出 ${formatCents(stats.expenseTransactionCents)} = 现金净流入 ${formatCents(stats.cashNetInflowCents)}`
 
   return (
@@ -316,74 +248,68 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
           <SummaryCard title="总人数" value={departure.totalGuests} suffix="人" />
         </Col>
         <Col xs={24} sm={12} xl={6}>
-          <SummaryCard title="原始应收" value={formatCents(departure.grossReceivableCents)} />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard title="优惠合计" value={formatCents(departure.discountCents)} />
+          <SummaryCard
+            title="结算应收"
+            value={formatCents(departure.netReceivableCents)}
+            equationDescription="结算应收是全部客源单优惠后的团款合计，不含手工创建的其他应收。"
+            equation={settlementEquation}
+          />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
-            title="实际应收"
-            value={formatCents(departure.netReceivableCents)}
-            equationDescription="原始应收是优惠前团款，优惠合计是全部优惠金额；实际应收是优惠后的应收金额。"
-            equation={`${formatCents(departure.grossReceivableCents)} − ${formatCents(departure.discountCents)} = ${formatCents(departure.netReceivableCents)}`}
+            title="成本合计"
+            value={formatCents(departure.payableCents)}
+            equationDescription="成本合计是全部行程资源约定金额合计，无论是否已生成应付；确认应付来自全部非作废应付节点，两者差额由组成项解释。"
+            equation={costEquation}
+            details={
+              hasCostDetails ? (
+                <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
+                  <AmountDetail label="确认应付" amountCents={stats.confirmedPayableCents} />
+                  <AmountDetail label="尚未生成应付" amountCents={stats.ungeneratedPayableCents} />
+                  <AmountDetail label="其他应付" amountCents={stats.otherPayableCents} />
+                  <AmountDetail
+                    label="资源账款差异"
+                    amountCents={stats.resourcePayableDifferenceCents}
+                  />
+                </OverviewDetailsPopover>
+              ) : null
+            }
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <SummaryCard
+            title="当前毛利"
+            value={formatCents(departure.estimatedMarginCents)}
+            equationDescription="当前毛利是实时经营预估：结算应收减成本合计；确认毛利按财务已确认的应付计算，见毛利对照。"
+            equation={marginEquation}
+            details={
+              stats.confirmedPayableCents !== 0 ? (
+                <OverviewDetailsPopover title="毛利对照" buttonLabel="查看毛利对照">
+                  <Text type="secondary">
+                    确认毛利 {formatCents(stats.confirmedMarginCents)}
+                  </Text>
+                  <Text type="secondary">确认毛利 = 结算应收 − 确认应付</Text>
+                </OverviewDetailsPopover>
+              ) : null
+            }
           />
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} className={styles.secondRow}>
-        <Col xs={24} lg={12}>
-          <Card
-            className={styles.metricCard}
-            title={
-              <CalculationTitle
-                label="成本对照"
-                description="预计成本来自本团全部行程资源约定金额；确认应付来自全部非作废应付节点。两者差额由其他应付、资源账款差异和尚未生成应付共同解释。"
-                equation={costEquation}
-              />
-            }
-            extra={
-              hasCostDetails ? (
-                <CostDetailsPopover
-                  ungeneratedPayableCents={stats.ungeneratedPayableCents}
-                  otherPayableCents={stats.otherPayableCents}
-                  resourcePayableDifferenceCents={stats.resourcePayableDifferenceCents}
-                />
-              ) : null
-            }
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <Statistic title="预计成本" value={formatCents(departure.payableCents)} />
-              </Col>
-              <Col xs={24} sm={12}>
-                <Statistic title="确认应付" value={formatCents(stats.confirmedPayableCents)} />
-              </Col>
-            </Row>
-          </Card>
+      <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
+        <Col xs={24} sm={12} xl={8}>
+          <SummaryCard title="原始团款" value={formatCents(departure.grossReceivableCents)} />
         </Col>
-        <Col xs={24} lg={12}>
-          <Card
-            className={styles.metricCard}
-            title={
-              <CalculationTitle
-                label="毛利对照"
-                description="预估毛利按预计成本计算，确认毛利按财务已确认的应付计算；两者都以实际应收作为收入。"
-                equation={marginEquation}
-              />
-            }
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <Statistic title="预估毛利" value={formatCents(departure.estimatedMarginCents)} />
-              </Col>
-              <Col xs={24} sm={12}>
-                <Statistic title="确认毛利" value={formatCents(stats.confirmedMarginCents)} />
-              </Col>
-            </Row>
-          </Card>
+        <Col xs={24} sm={12} xl={8}>
+          <SummaryCard title="优惠合计" value={formatCents(departure.discountCents)} />
+        </Col>
+        <Col xs={24} sm={12} xl={8}>
+          <SummaryCard
+            title="毛利率"
+            value={marginRateLabel ?? '暂无数据'}
+            equationDescription="毛利率是当前毛利占结算应收的比例；结算应收为零时无可计算比例。"
+            equation={marginRateEquation}
+          />
         </Col>
       </Row>
 
@@ -400,11 +326,18 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             }
             extra={
               hasReceivableDetails ? (
-                <ReceivableDetailsPopover
-                  ungeneratedReceivableCents={stats.ungeneratedReceivableCents}
-                  closedUnreceivedCents={stats.closedUnreceivedCents}
-                  otherReceivableCents={stats.otherReceivableCents}
-                />
+                <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
+                  <AmountDetail
+                    label="尚未生成应收"
+                    amountCents={stats.ungeneratedReceivableCents}
+                  />
+                  <AmountDetail
+                    label="其中已关闭未收"
+                    amountCents={stats.closedUnreceivedCents}
+                    danger
+                  />
+                  <AmountDetail label="其他应收" amountCents={stats.otherReceivableCents} />
+                </OverviewDetailsPopover>
               ) : null
             }
             role="region"
@@ -426,13 +359,26 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             title={
               <CalculationTitle
                 label="付款进度"
-                description="已付统计全部非作废应付节点的有效核销金额；未付包含开放未付和已关闭未付。"
+                description="只统计资源应付的有效核销，以成本合计为分母；手工应付与资源账款差异留在付款组成，进度可合法超过 100% 或偏低。"
                 equation={payableEquation}
               />
             }
             extra={
-              stats.closedUnpaidCents !== 0 ? (
-                <PaymentDetailsPopover closedUnpaidCents={stats.closedUnpaidCents} />
+              hasPaymentDetails ? (
+                <OverviewDetailsPopover title="付款组成" buttonLabel="查看付款组成">
+                  {allPayableProgressLabel != null ? (
+                    <Text type="secondary">
+                      全部应付核销进度 {allPayableProgressLabel}（全部已付{' '}
+                      {formatCents(stats.paidCents)} ÷ 确认应付{' '}
+                      {formatCents(stats.confirmedPayableCents)}）
+                    </Text>
+                  ) : null}
+                  <AmountDetail
+                    label="其中已关闭未付"
+                    amountCents={stats.closedUnpaidCents}
+                    danger
+                  />
+                </OverviewDetailsPopover>
               ) : null
             }
             role="region"
@@ -441,8 +387,8 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             styles={COMPACT_CARD_STYLES}
           >
             <ProgressValue
-              numerator={stats.paidCents}
-              denominator={stats.confirmedPayableCents}
+              numerator={stats.resourcePaidCents}
+              denominator={departure.payableCents}
             />
           </Card>
         </Col>
@@ -459,13 +405,32 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             }
             extra={
               hasCashHints ? (
-                <CashHintsPopover
-                  departureId={departure.id}
-                  unverifiedIncomeCents={stats.unverifiedIncomeCents}
-                  unverifiedExpenseCents={stats.unverifiedExpenseCents}
-                  verifiedFromOtherDeparturesCents={stats.verifiedFromOtherDeparturesCents}
-                  verifiedToOtherDeparturesCents={stats.verifiedToOtherDeparturesCents}
-                />
+                <OverviewDetailsPopover title="资金提示" buttonLabel="查看资金提示">
+                  <AmountDetail
+                    label="未核销收入"
+                    amountCents={stats.unverifiedIncomeCents}
+                    transactionLink={{
+                      departureId: departure.id,
+                      direction: TransactionDirection.INFLOW,
+                    }}
+                  />
+                  <AmountDetail
+                    label="未核销支出"
+                    amountCents={stats.unverifiedExpenseCents}
+                    transactionLink={{
+                      departureId: departure.id,
+                      direction: TransactionDirection.OUTFLOW,
+                    }}
+                  />
+                  <AmountDetail
+                    label="核销自外部流水"
+                    amountCents={stats.verifiedFromExternalCents}
+                  />
+                  <AmountDetail
+                    label="本团流水核销至他团"
+                    amountCents={stats.verifiedToOtherDeparturesCents}
+                  />
+                </OverviewDetailsPopover>
               ) : null
             }
             role="region"

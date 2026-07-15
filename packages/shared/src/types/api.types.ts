@@ -263,6 +263,8 @@ export interface DepartureOverviewStats {
   otherReceivableCents: number
   confirmedPayableCents: number
   paidCents: number
+  /** 资源应付节点的有效核销合计，主付款进度分子（ADR-0020）；不等于 paidCents。 */
+  resourcePaidCents: number
   openUnpaidCents: number
   closedUnpaidCents: number
   ungeneratedPayableCents: number
@@ -274,7 +276,8 @@ export interface DepartureOverviewStats {
   cashNetInflowCents: number
   unverifiedIncomeCents: number
   unverifiedExpenseCents: number
-  verifiedFromOtherDeparturesCents: number
+  /** 核销自外部流水：归属他团或未归属任何发团的流水核销到本团账款。 */
+  verifiedFromExternalCents: number
   verifiedToOtherDeparturesCents: number
   anomalies: DepartureOverviewAnomaly[]
 }

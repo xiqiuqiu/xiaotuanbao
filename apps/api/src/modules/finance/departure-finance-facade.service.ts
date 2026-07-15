@@ -107,6 +107,8 @@ export interface DepartureFinanceSnapshot {
   otherReceivableCents: number
   confirmedPayableCents: number
   paidCents: number
+  /** 资源应付节点的有效核销合计，主付款进度分子（ADR-0020）。 */
+  resourcePaidCents: number
   openUnpaidCents: number
   closedUnpaidCents: number
   resourcePayableCents: number
@@ -115,7 +117,8 @@ export interface DepartureFinanceSnapshot {
   expenseTransactionCents: number
   unverifiedIncomeCents: number
   unverifiedExpenseCents: number
-  verifiedFromOtherDeparturesCents: number
+  /** 核销自外部流水（他团 + 无归属发团）到本团账款的金额。 */
+  verifiedFromExternalCents: number
   verifiedToOtherDeparturesCents: number
 }
 
@@ -126,6 +129,7 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
   otherReceivableCents: 0,
   confirmedPayableCents: 0,
   paidCents: 0,
+  resourcePaidCents: 0,
   openUnpaidCents: 0,
   closedUnpaidCents: 0,
   resourcePayableCents: 0,
@@ -134,7 +138,7 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
   expenseTransactionCents: 0,
   unverifiedIncomeCents: 0,
   unverifiedExpenseCents: 0,
-  verifiedFromOtherDeparturesCents: 0,
+  verifiedFromExternalCents: 0,
   verifiedToOtherDeparturesCents: 0,
 })
 
@@ -244,15 +248,16 @@ export class DepartureFinanceFacade {
           schedule.sourceId
         ) {
           snapshot.resourcePayableCents += schedule.amountCents
+          snapshot.resourcePaidCents += receivedOrPaidCents
         } else {
           snapshot.otherPayableCents += schedule.amountCents
         }
       }
 
       for (const verification of schedule.verifications) {
-        const transactionDepartureId = verification.transaction.departureId
-        if (transactionDepartureId && transactionDepartureId !== schedule.departureId) {
-          snapshot.verifiedFromOtherDeparturesCents += verification.amountCents
+        // 无归属发团的流水同样不进本团资金卡，与他团流水合并为外部核销口径。
+        if (verification.transaction.departureId !== schedule.departureId) {
+          snapshot.verifiedFromExternalCents += verification.amountCents
         }
       }
     }

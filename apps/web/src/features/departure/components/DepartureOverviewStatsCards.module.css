@@ -27,6 +27,10 @@
   animation-delay: 75ms;
 }
 
+.secondRow > :global(.ant-col):nth-child(3) .metricCard {
+  animation-delay: 105ms;
+}
+
 .thirdRow > :global(.ant-col):nth-child(1) .metricCard {
   animation-delay: 60ms;
 }
