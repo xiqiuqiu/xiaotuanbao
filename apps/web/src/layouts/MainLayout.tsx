@@ -12,7 +12,7 @@ import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
-import { filterMenuItems } from '@/utils/menu-permission'
+import { filterMenuItems, findMenuKeyForPathname } from '@/utils/menu-permission'
 import { logout as logoutSession } from '@/services/auth.service'
 import { queryClient } from '@/lib/query/client'
 import styles from './MainLayout.module.css'
@@ -37,7 +37,7 @@ export function MainLayout({ children }: PropsWithChildren) {
     [menuKeys],
   )
 
-  const menuSelectedKey = pathname.startsWith('/supplier/') ? '/supplier' : pathname
+  const menuSelectedKey = findMenuKeyForPathname(pathname, menuKeys) ?? pathname
   const selectedKeys = [menuSelectedKey]
   const sidebarToggleLabel = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'
   const openKeys = pathname.startsWith('/finance')

@@ -37,13 +37,18 @@ function filterMenuItemsByKeySet(
 }
 
 export function isMenuPathAllowed(pathname: string, menuKeys: string[]): boolean {
-  if (pathname === '/') {
-    return menuKeys.includes('/')
-  }
+  return findMenuKeyForPathname(pathname, menuKeys) !== undefined
+}
 
-  if (menuKeys.includes(pathname)) {
-    return true
-  }
-
-  return menuKeys.some((key) => key !== '/' && pathname.startsWith(`${key}/`))
+export function findMenuKeyForPathname(
+  pathname: string,
+  menuKeys: string[],
+): string | undefined {
+  return menuKeys.reduce<string | undefined>((matchedKey, key) => {
+    const matches = key === pathname || (key !== '/' && pathname.startsWith(`${key}/`))
+    if (!matches || (matchedKey && matchedKey.length >= key.length)) {
+      return matchedKey
+    }
+    return key
+  }, undefined)
 }

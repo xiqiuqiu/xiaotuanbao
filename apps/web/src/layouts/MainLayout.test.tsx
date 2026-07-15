@@ -8,13 +8,14 @@ import { logout } from '@/services/auth.service'
 import { MainLayout } from './MainLayout'
 
 const navigate = vi.fn()
+let pathname = '/departure'
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
   useNavigate: () => navigate,
-  useRouterState: () => ({ location: { pathname: '/departure' } }),
+  useRouterState: () => ({ location: { pathname } }),
 }))
 
 vi.mock('@/services/auth.service', () => ({
@@ -24,6 +25,7 @@ vi.mock('@/services/auth.service', () => ({
 describe('MainLayout 侧栏开关', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    pathname = '/departure'
     useAuthStore.setState({
       user: { id: 'user-1', name: '张三' },
       menuKeys: ['/departure'],
@@ -97,5 +99,27 @@ describe('MainLayout 侧栏开关', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
     expect(useAuthStore.getState().isAuthenticated()).toBe(false)
     expect(warning).toHaveBeenCalledWith('服务器会话可能未清除，请勿在公共设备上继续使用')
+  })
+
+  it.each([
+    ['/departure/departure-1', '/departure', '发团管理'],
+    ['/departure/new', '/departure', '发团管理'],
+    ['/partner/partner-1', '/partner', '合作伙伴'],
+    ['/supplier/supplier-1', '/supplier', '供应商管理'],
+  ])('子页面 %s 保持父级菜单 %s 选中', (currentPathname, menuKey, menuLabel) => {
+    pathname = currentPathname
+    useAuthStore.setState({
+      menuKeys: ['/departure', '/partner', '/supplier'],
+    })
+
+    render(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    const menuItem = screen.getByRole('menuitem', { name: new RegExp(`${menuLabel}$`) })
+    expect(menuItem).toHaveAttribute('data-menu-id', expect.stringContaining(menuKey))
+    expect(menuItem).toHaveClass('ant-menu-item-selected')
   })
 })

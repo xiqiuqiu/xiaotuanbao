@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isMenuPathAllowed } from './menu-permission'
+import { findMenuKeyForPathname, isMenuPathAllowed } from './menu-permission'
 
 describe('isMenuPathAllowed', () => {
   const menuKeys = ['/', '/supplier', '/system/users']
@@ -22,5 +22,20 @@ describe('isMenuPathAllowed', () => {
 
   it('denies sub-route when parent menu key is missing', () => {
     expect(isMenuPathAllowed('/partner/abc', menuKeys)).toBe(false)
+  })
+})
+
+describe('findMenuKeyForPathname', () => {
+  it('returns the parent menu key for a child route', () => {
+    expect(findMenuKeyForPathname('/partner/abc', ['/', '/partner'])).toBe('/partner')
+  })
+
+  it('prefers the most specific matching menu key', () => {
+    expect(
+      findMenuKeyForPathname('/finance/receivable/detail', [
+        '/finance',
+        '/finance/receivable',
+      ]),
+    ).toBe('/finance/receivable')
   })
 })
