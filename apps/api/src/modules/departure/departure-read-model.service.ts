@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common'
-import type { DepartureCompletionTags } from '@xiaotuanbao/shared'
+import {
+  PaymentScheduleSourceType,
+  type DepartureCompletionTags,
+} from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { VerificationService } from '../finance/verification.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import {
   buildDepartureReadModelAggregate,
   emptyDepartureReadModelAggregate,
   type DepartureReadModelAggregate,
+  type DepartureOverviewSourceFacts,
   type ScheduleWithId,
   type SourceOrderAggregate,
   EMPTY_UNVERIFIED_CASH,
@@ -15,6 +20,14 @@ interface SegmentRollup {
   segmentCount: number
   resourceCount: number
   payableCents: number
+  resources: Array<{ id: string; amountCents: number }>
+}
+
+interface SourceOrderPathFact {
+  id: string
+  departureId: string
+  partnerCollectedCents: number
+  guestCollectCents: number
 }
 
 @Injectable()
@@ -22,15 +35,24 @@ export class DepartureReadModelService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly verificationService: VerificationService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
-  async getForDeparture(departureId: string): Promise<DepartureReadModelAggregate> {
-    const map = await this.batchGetForDepartures([departureId])
+  async getForDeparture(
+    organizationId: string,
+    departureId: string,
+    options: { includeOverviewStats?: boolean } = { includeOverviewStats: true },
+  ): Promise<DepartureReadModelAggregate> {
+    const map = await this.batchGetForDepartures(organizationId, [departureId], {
+      includeOverviewStats: options.includeOverviewStats ?? true,
+    })
     return map.get(departureId) ?? emptyDepartureReadModelAggregate()
   }
 
   async batchGetForDepartures(
+    organizationId: string,
     departureIds: string[],
+    options: { includeOverviewStats?: boolean } = {},
   ): Promise<Map<string, DepartureReadModelAggregate>> {
     const result = new Map<string, DepartureReadModelAggregate>()
     if (departureIds.length === 0) {
@@ -39,7 +61,14 @@ export class DepartureReadModelService {
 
     const uniqueIds = [...new Set(departureIds)]
 
-    const [sourceOrderMap, segmentRollupMap, schedules, unverifiedCashByDeparture] =
+    const [
+      sourceOrderMap,
+      segmentRollupMap,
+      schedules,
+      unverifiedCashByDeparture,
+      financeSnapshotMap,
+      sourceOrderPathFacts,
+    ] =
       await Promise.all([
         this.batchSourceOrderAggregates(uniqueIds),
         this.batchSegmentRollups(uniqueIds),
@@ -53,8 +82,75 @@ export class DepartureReadModelService {
             cancelledAt: true,
           },
         }),
+        // Keep legacy flat fields on their historical clamped semantics; overviewStats
+        // consumes the facade's signed cash aggregates instead.
         this.verificationService.batchGetUnverifiedCashByDeparture(uniqueIds),
+        options.includeOverviewStats
+          ? this.departureFinanceFacade.getDepartureFinanceSnapshots(organizationId, uniqueIds)
+          : Promise.resolve(new Map()),
+        options.includeOverviewStats
+          ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
+          : Promise.resolve([]),
       ])
+
+    const overviewSourceFactsMap = new Map<string, DepartureOverviewSourceFacts>()
+    if (options.includeOverviewStats) {
+      const resources = [...segmentRollupMap.values()].flatMap((rollup) => rollup.resources)
+      const [sourceOrderStates, resourceStates] = await Promise.all([
+        this.departureFinanceFacade.getSourceOrderPathFinanceStates(
+          organizationId,
+          sourceOrderPathFacts.map((fact) => fact.id),
+          new Map(
+            sourceOrderPathFacts.map((fact) => [
+              fact.id,
+              {
+                partnerCollectedCents: fact.partnerCollectedCents,
+                guestCollectCents: fact.guestCollectCents,
+              },
+            ]),
+          ),
+        ),
+        this.departureFinanceFacade.getSegmentResourceFinanceStates(
+          organizationId,
+          resources.map((resource) => resource.id),
+          new Map(resources.map((resource) => [resource.id, resource.amountCents])),
+        ),
+      ])
+
+      for (const departureId of uniqueIds) {
+        overviewSourceFactsMap.set(departureId, {
+          sourceReceivableUngeneratedCents: 0,
+          generatedResourceAgreedCents: 0,
+        })
+      }
+      for (const fact of sourceOrderPathFacts) {
+        const sourceFacts = overviewSourceFactsMap.get(fact.departureId)!
+        const states = sourceOrderStates.get(fact.id) ?? []
+        const customerState = states.find(
+          (state) =>
+            state.pathType ===
+            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        )
+        const guestState = states.find(
+          (state) =>
+            state.pathType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        )
+        if (!customerState?.hasSchedule) {
+          sourceFacts.sourceReceivableUngeneratedCents += fact.partnerCollectedCents
+        }
+        if (!guestState?.hasSchedule) {
+          sourceFacts.sourceReceivableUngeneratedCents += fact.guestCollectCents
+        }
+      }
+      for (const [departureId, rollup] of segmentRollupMap) {
+        const sourceFacts = overviewSourceFactsMap.get(departureId)!
+        for (const resource of rollup.resources) {
+          if (resourceStates.get(resource.id)?.hasSchedule) {
+            sourceFacts.generatedResourceAgreedCents += resource.amountCents
+          }
+        }
+      }
+    }
 
     const scheduleIds = schedules.map((schedule) => schedule.id)
     const settledByScheduleId = await this.verificationService.batchGetSettledAmounts(scheduleIds)
@@ -83,6 +179,7 @@ export class DepartureReadModelService {
         segmentCount: 0,
         resourceCount: 0,
         payableCents: 0,
+        resources: [],
       }
       const departureSchedules = schedulesByDeparture.get(departureId) ?? []
       const unverifiedCash = unverifiedCashByDeparture.get(departureId) ?? EMPTY_UNVERIFIED_CASH
@@ -97,6 +194,8 @@ export class DepartureReadModelService {
           schedules: departureSchedules,
           settledByScheduleId,
           unverifiedCash,
+          financeSnapshot: financeSnapshotMap.get(departureId),
+          overviewSourceFacts: overviewSourceFactsMap.get(departureId),
         }),
       )
     }
@@ -146,6 +245,24 @@ export class DepartureReadModelService {
     return map
   }
 
+  private loadSourceOrderPathFacts(
+    organizationId: string,
+    departureIds: string[],
+  ): Promise<SourceOrderPathFact[]> {
+    return this.prisma.sourceOrder.findMany({
+      where: {
+        departureId: { in: departureIds },
+        departure: { organizationId },
+      },
+      select: {
+        id: true,
+        departureId: true,
+        partnerCollectedCents: true,
+        guestCollectCents: true,
+      },
+    })
+  }
+
   private async batchSegmentRollups(departureIds: string[]): Promise<Map<string, SegmentRollup>> {
     const segments = await this.prisma.itinerarySegment.findMany({
       where: { departureId: { in: departureIds } },
@@ -153,14 +270,19 @@ export class DepartureReadModelService {
         id: true,
         departureId: true,
         resources: {
-          select: { amountCents: true },
+          select: { id: true, amountCents: true },
         },
       },
     })
 
     const map = new Map<string, SegmentRollup>()
     for (const departureId of departureIds) {
-      map.set(departureId, { segmentCount: 0, resourceCount: 0, payableCents: 0 })
+      map.set(departureId, {
+        segmentCount: 0,
+        resourceCount: 0,
+        payableCents: 0,
+        resources: [],
+      })
     }
 
     for (const segment of segments) {
@@ -168,6 +290,7 @@ export class DepartureReadModelService {
       rollup.segmentCount += 1
       rollup.resourceCount += segment.resources.length
       rollup.payableCents += segment.resources.reduce((sum, resource) => sum + resource.amountCents, 0)
+      rollup.resources.push(...segment.resources)
     }
 
     return map

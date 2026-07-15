@@ -388,7 +388,11 @@ export class DepartureService {
         dto.targetStatus === DepartureStatus.settled &&
         departure.status === DepartureStatus.pending_settlement
       ) {
-        const readModel = await this.departureReadModelService.getForDeparture(departure.id)
+        const readModel = await this.departureReadModelService.getForDeparture(
+          organizationId,
+          departure.id,
+          { includeOverviewStats: false },
+        )
         if (!readModel.isFinanciallySettled) {
           throw new BadRequestException('全部账款尚未结清，不可标记为已结清')
         }
@@ -501,7 +505,10 @@ export class DepartureService {
     const departureIds = departures.map((departure) => departure.id)
     const ownerUserIds = departures.map((departure) => departure.ownerUserId)
     const [readModelMap, ownerNameMap] = await Promise.all([
-      this.departureReadModelService.batchGetForDepartures(departureIds),
+      this.departureReadModelService.batchGetForDepartures(
+        departures[0].organizationId,
+        departureIds,
+      ),
       this.departureReadModelService.batchGetOwnerNames(ownerUserIds),
     ])
 
@@ -513,7 +520,7 @@ export class DepartureService {
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
     const [readModel, ownerNameMap, archiveHistory, settlementHistory] = await Promise.all([
-      this.departureReadModelService.getForDeparture(departure.id),
+      this.departureReadModelService.getForDeparture(departure.organizationId, departure.id),
       this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
       this.loadArchiveHistory(departure.id),
       this.loadSettlementHistory(departure.id),
@@ -634,6 +641,7 @@ export class DepartureService {
       openUnsettledPayableCents: readModel.openUnsettledPayableCents,
       unverifiedIncomeCents: readModel.unverifiedIncomeCents,
       unverifiedExpenseCents: readModel.unverifiedExpenseCents,
+      overviewStats: readModel.overviewStats,
       isFinanciallySettled: readModel.isFinanciallySettled,
       archiveHistory,
       settlementHistory,

@@ -246,6 +246,39 @@ export interface DepartureSettlementHistoryItem {
   operatedAt: string
 }
 
+export type DepartureOverviewAnomalyCode = 'receivable_balance'
+
+export interface DepartureOverviewAnomaly {
+  code: DepartureOverviewAnomalyCode
+  expectedCents: number
+  actualCents: number
+  differenceCents: number
+}
+
+export interface DepartureOverviewStats {
+  receivedCents: number
+  openUnreceivedCents: number
+  closedUnreceivedCents: number
+  ungeneratedReceivableCents: number
+  otherReceivableCents: number
+  confirmedPayableCents: number
+  paidCents: number
+  openUnpaidCents: number
+  closedUnpaidCents: number
+  ungeneratedPayableCents: number
+  otherPayableCents: number
+  resourcePayableDifferenceCents: number
+  confirmedMarginCents: number
+  incomeTransactionCents: number
+  expenseTransactionCents: number
+  cashNetInflowCents: number
+  unverifiedIncomeCents: number
+  unverifiedExpenseCents: number
+  verifiedFromOtherDeparturesCents: number
+  verifiedToOtherDeparturesCents: number
+  anomalies: DepartureOverviewAnomaly[]
+}
+
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
   grossReceivableCents: number
@@ -256,6 +289,7 @@ export interface DepartureDetail extends DepartureSummary {
   openUnsettledPayableCents: number
   unverifiedIncomeCents: number
   unverifiedExpenseCents: number
+  overviewStats: DepartureOverviewStats
   isFinanciallySettled: boolean
   archiveHistory: DepartureArchiveHistoryItem[]
   settlementHistory: DepartureSettlementHistoryItem[]

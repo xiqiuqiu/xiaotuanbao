@@ -1629,6 +1629,29 @@ describe('Departure API (e2e)', () => {
         receivables: '应收未生成',
         payables: '应付未生成',
       })
+      expect(response.body.data.overviewStats).toEqual({
+        receivedCents: 0,
+        openUnreceivedCents: 0,
+        closedUnreceivedCents: 0,
+        ungeneratedReceivableCents: 1000000,
+        otherReceivableCents: 0,
+        confirmedPayableCents: 0,
+        paidCents: 0,
+        openUnpaidCents: 0,
+        closedUnpaidCents: 0,
+        ungeneratedPayableCents: 360000,
+        otherPayableCents: 0,
+        resourcePayableDifferenceCents: 0,
+        confirmedMarginCents: 1000000,
+        incomeTransactionCents: 0,
+        expenseTransactionCents: 0,
+        cashNetInflowCents: 0,
+        unverifiedIncomeCents: 0,
+        unverifiedExpenseCents: 0,
+        verifiedFromOtherDeparturesCents: 0,
+        verifiedToOtherDeparturesCents: 0,
+        anomalies: [],
+      })
     })
 
     it('returns completionTags on list items', async () => {
@@ -1698,6 +1721,18 @@ describe('Departure API (e2e)', () => {
       expect(response.body.data.openUnsettledReceivableCents).toBe(500000)
       expect(response.body.data.completionTags.receivables).toBe('应收已生成')
       expect(response.body.data.isFinanciallySettled).toBe(false)
+      expect(response.body.data.overviewStats).toMatchObject({
+        receivedCents: 500000,
+        openUnreceivedCents: 500000,
+        closedUnreceivedCents: 0,
+        ungeneratedReceivableCents: 0,
+        otherReceivableCents: 0,
+        incomeTransactionCents: 500000,
+        expenseTransactionCents: 0,
+        cashNetInflowCents: 500000,
+        unverifiedIncomeCents: 0,
+        anomalies: [],
+      })
     })
 
     it('sets isFinanciallySettled when all schedules are settled or cancelled', async () => {
@@ -1747,6 +1782,307 @@ describe('Departure API (e2e)', () => {
       expect(detail.body.data.openUnsettledReceivableCents).toBe(0)
       expect(detail.body.data.verifiedPayableCents).toBe(360000)
       expect(detail.body.data.openUnsettledPayableCents).toBe(0)
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 1000000,
+        openUnreceivedCents: 0,
+        confirmedPayableCents: 360000,
+        paidCents: 360000,
+        openUnpaidCents: 0,
+        closedUnpaidCents: 0,
+        ungeneratedPayableCents: 0,
+        confirmedMarginCents: 640000,
+        incomeTransactionCents: 1000000,
+        expenseTransactionCents: 360000,
+        cashNetInflowCents: 640000,
+        anomalies: [],
+      })
+    })
+
+    it('keeps closed balances, manual obligations, and voided payables in their overview buckets', async () => {
+      const departure = await createReadModelDeparture('-overview-buckets')
+      const seeded = await seedDepartureData(departure.id)
+
+      const receivable = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const receivableScheduleId = receivable.body.data.schedules[0].id as string
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${receivableScheduleId}/confirm-collection`)
+        .send({
+          amountCents: 400000,
+          transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.CASH,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${receivableScheduleId}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '剩余应收线下处理' })
+        .expect(201)
+
+      const voidedPayable = await authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${seeded.resourceId}/generate-payable`)
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(
+          `/api/finance/payment-schedules/${voidedPayable.body.data.schedule.id}/void-resource-payable`,
+        )
+        .send({ voidReason: '误生成' })
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send({
+          departureId: departure.id,
+          title: '其他应收',
+          amountCents: 70000,
+          dueDate: '2026-08-10',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: rmPartnerId,
+          counterpartyName: `${testPrefix}-rm-partner`,
+        })
+        .expect(201)
+      const manualPayable = await authRequest(app, financeToken)
+        .post('/api/finance/payables')
+        .send({
+          departureId: departure.id,
+          title: '其他应付',
+          amountCents: 50000,
+          dueDate: '2026-08-10',
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: rmSupplierId,
+          counterpartyName: `${testPrefix}-rm-supplier`,
+        })
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/payment-schedules/${manualPayable.body.data.id}/cancel`)
+        .send({ closeDisposition: 'other', cancelReason: '其他应付线下处理' })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 400000,
+        openUnreceivedCents: 0,
+        closedUnreceivedCents: 600000,
+        ungeneratedReceivableCents: 0,
+        otherReceivableCents: 70000,
+        confirmedPayableCents: 50000,
+        paidCents: 0,
+        openUnpaidCents: 0,
+        closedUnpaidCents: 50000,
+        ungeneratedPayableCents: 360000,
+        otherPayableCents: 50000,
+        resourcePayableDifferenceCents: 0,
+        anomalies: [],
+      })
+      expect(detail.body.data.verifiedReceivableCents).toBe(400000)
+      expect(detail.body.data.openUnsettledReceivableCents).toBe(70000)
+      expect(detail.body.data.verifiedPayableCents).toBe(0)
+      expect(detail.body.data.openUnsettledPayableCents).toBe(0)
+    })
+
+    it('moves cancelled verification back to unreceived and unverified cash', async () => {
+      const departure = await createReadModelDeparture('-overview-revoke')
+      const seeded = await seedDepartureData(departure.id)
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const schedule = generated.body.data.schedules[0]
+
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${schedule.id}/confirm-collection`)
+        .send({
+          amountCents: 300000,
+          transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.CASH,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+      const verifications = await authRequest(app, financeToken)
+        .get('/api/finance/verifications')
+        .query({ scheduleNo: schedule.scheduleNo, scheduleNoMatch: 'exact' })
+        .expect(200)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+        .send({ cancelReason: '测试撤销核销' })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 0,
+        openUnreceivedCents: 1000000,
+        incomeTransactionCents: 300000,
+        cashNetInflowCents: 300000,
+        unverifiedIncomeCents: 300000,
+        anomalies: [],
+      })
+    })
+
+    it('reports both directions of cross-departure verification without moving cash ownership', async () => {
+      const scheduleDeparture = await createReadModelDeparture('-overview-cross-schedule')
+      const cashDeparture = await createReadModelDeparture('-overview-cross-cash')
+      const sourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${scheduleDeparture.id}/source-orders`)
+        .send({
+          partnerId: rmPartnerId,
+          adultGuestCount: 3,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+        })
+        .expect(201)
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const transaction = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send({
+          direction: 'inflow',
+          paymentChannel: PaymentChannel.CASH,
+          amountCents: 300000,
+          transactionDate: '2026-08-01',
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: rmPartnerId,
+          counterpartyName: `${testPrefix}-rm-partner`,
+          departureId: cashDeparture.id,
+        })
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${generated.body.data.schedules[0].id}/link-transaction`)
+        .send({ transactionId: transaction.body.data.id, amountCents: 200000 })
+        .expect(201)
+
+      const scheduleDetail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${scheduleDeparture.id}`)
+        .expect(200)
+      const cashDetail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${cashDeparture.id}`)
+        .expect(200)
+
+      expect(scheduleDetail.body.data.overviewStats).toMatchObject({
+        receivedCents: 200000,
+        incomeTransactionCents: 0,
+        cashNetInflowCents: 0,
+        verifiedFromOtherDeparturesCents: 200000,
+        verifiedToOtherDeparturesCents: 0,
+      })
+      expect(cashDetail.body.data.overviewStats).toMatchObject({
+        receivedCents: 0,
+        incomeTransactionCents: 300000,
+        cashNetInflowCents: 300000,
+        unverifiedIncomeCents: 100000,
+        verifiedFromOtherDeparturesCents: 0,
+        verifiedToOtherDeparturesCents: 200000,
+      })
+    })
+
+    it('returns signed reconciliation facts and a structured anomaly instead of masking bad data', async () => {
+      const departure = await createReadModelDeparture('-overview-anomaly')
+      const seeded = await seedDepartureData(departure.id)
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      const scheduleId = generated.body.data.schedules[0].id as string
+      await authRequest(app, financeToken)
+        .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+        .send({
+          amountCents: 1000000,
+          transactionDate: '2026-08-01',
+          paymentChannel: PaymentChannel.CASH,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyName: seeded.displayName,
+        })
+        .expect(201)
+
+      // Simulate legacy-corrupt data that write-path invariants would reject.
+      await prisma.paymentSchedule.update({
+        where: { id: scheduleId },
+        data: { amountCents: 900000 },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 1000000,
+        openUnreceivedCents: -100000,
+        ungeneratedReceivableCents: 0,
+        anomalies: [
+          {
+            code: 'receivable_balance',
+            expectedCents: 1000000,
+            actualCents: 900000,
+            differenceCents: -100000,
+          },
+        ],
+      })
+    })
+
+    it('preserves a signed ungenerated source-path amount from legacy-corrupt data', async () => {
+      const departure = await createReadModelDeparture('-overview-negative-source')
+      const seeded = await seedDepartureData(departure.id)
+      await prisma.sourceOrder.update({
+        where: { id: seeded.sourceOrderId },
+        data: {
+          guestCollectCents: -100000,
+          netReceivableCents: -100000,
+          grossReceivableCents: -100000,
+        },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 0,
+        openUnreceivedCents: 0,
+        closedUnreceivedCents: 0,
+        ungeneratedReceivableCents: -100000,
+        confirmedMarginCents: -100000,
+        anomalies: [],
+      })
+    })
+
+    it('does not misclassify a generated path after its source amount becomes negative', async () => {
+      const departure = await createReadModelDeparture('-overview-negative-generated')
+      const seeded = await seedDepartureData(departure.id)
+      await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${seeded.sourceOrderId}/generate-receivables`)
+        .expect(201)
+      await prisma.sourceOrder.update({
+        where: { id: seeded.sourceOrderId },
+        data: {
+          guestCollectCents: -100000,
+          netReceivableCents: -100000,
+          grossReceivableCents: -100000,
+        },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+      expect(detail.body.data.overviewStats).toMatchObject({
+        receivedCents: 0,
+        openUnreceivedCents: 1000000,
+        ungeneratedReceivableCents: 0,
+        anomalies: [
+          {
+            code: 'receivable_balance',
+            expectedCents: -100000,
+            actualCents: 1000000,
+            differenceCents: 1100000,
+          },
+        ],
+      })
     })
 
     it('rejects pending_settlement to settled when not financially settled', async () => {

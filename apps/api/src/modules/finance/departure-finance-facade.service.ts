@@ -8,6 +8,7 @@ import {
   DepartureStatus,
   DirectoryProfileStatus,
   PaymentScheduleDirection,
+  TransactionDirection,
   VerificationStatus as PrismaVerificationStatus,
   type PaymentSchedule,
   type Prisma,
@@ -99,6 +100,44 @@ export interface SourceOrderPathAmountInput {
   guestCollectCents: number
 }
 
+export interface DepartureFinanceSnapshot {
+  sourceReceivableReceivedCents: number
+  sourceReceivableOpenUnreceivedCents: number
+  sourceReceivableClosedUnreceivedCents: number
+  otherReceivableCents: number
+  confirmedPayableCents: number
+  paidCents: number
+  openUnpaidCents: number
+  closedUnpaidCents: number
+  resourcePayableCents: number
+  otherPayableCents: number
+  incomeTransactionCents: number
+  expenseTransactionCents: number
+  unverifiedIncomeCents: number
+  unverifiedExpenseCents: number
+  verifiedFromOtherDeparturesCents: number
+  verifiedToOtherDeparturesCents: number
+}
+
+export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
+  sourceReceivableReceivedCents: 0,
+  sourceReceivableOpenUnreceivedCents: 0,
+  sourceReceivableClosedUnreceivedCents: 0,
+  otherReceivableCents: 0,
+  confirmedPayableCents: 0,
+  paidCents: 0,
+  openUnpaidCents: 0,
+  closedUnpaidCents: 0,
+  resourcePayableCents: 0,
+  otherPayableCents: 0,
+  incomeTransactionCents: 0,
+  expenseTransactionCents: 0,
+  unverifiedIncomeCents: 0,
+  unverifiedExpenseCents: 0,
+  verifiedFromOtherDeparturesCents: 0,
+  verifiedToOtherDeparturesCents: 0,
+})
+
 /**
  * Authoritative Departure write gate owned by Finance (ADR-0004 / #86).
  * Archive-period mutability checks live here so callers share one judgment.
@@ -107,6 +146,149 @@ export interface SourceOrderPathAmountInput {
 @Injectable()
 export class DepartureFinanceFacade {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getDepartureFinanceSnapshots(
+    organizationId: string,
+    departureIds: string[],
+  ): Promise<Map<string, DepartureFinanceSnapshot>> {
+    const uniqueIds = [...new Set(departureIds)]
+    const result = new Map(
+      uniqueIds.map((departureId) => [departureId, emptyDepartureFinanceSnapshot()]),
+    )
+    if (uniqueIds.length === 0) {
+      return result
+    }
+
+    const [schedules, transactions] = await Promise.all([
+      this.prisma.paymentSchedule.findMany({
+        where: {
+          organizationId,
+          departureId: { in: uniqueIds },
+          voidedAt: null,
+        },
+        select: {
+          departureId: true,
+          direction: true,
+          amountCents: true,
+          cancelledAt: true,
+          sourceType: true,
+          sourceId: true,
+          verifications: {
+            where: {
+              status: PrismaVerificationStatus.normal,
+              transaction: { voidedAt: null },
+            },
+            select: {
+              amountCents: true,
+              transaction: { select: { departureId: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.financeTransaction.findMany({
+        where: {
+          organizationId,
+          departureId: { in: uniqueIds },
+          voidedAt: null,
+        },
+        select: {
+          departureId: true,
+          direction: true,
+          amountCents: true,
+          verifications: {
+            where: { status: PrismaVerificationStatus.normal },
+            select: {
+              amountCents: true,
+              paymentSchedule: {
+                select: { departureId: true, voidedAt: true },
+              },
+            },
+          },
+        },
+      }),
+    ])
+
+    for (const schedule of schedules) {
+      const snapshot = result.get(schedule.departureId)!
+      const receivedOrPaidCents = schedule.verifications.reduce(
+        (sum, verification) => sum + verification.amountCents,
+        0,
+      )
+      const remainingCents = schedule.amountCents - receivedOrPaidCents
+
+      if (schedule.direction === PaymentScheduleDirection.receivable) {
+        const isSourceReceivable =
+          schedule.sourceType ===
+            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
+          schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
+        if (isSourceReceivable) {
+          snapshot.sourceReceivableReceivedCents += receivedOrPaidCents
+          if (schedule.cancelledAt) {
+            snapshot.sourceReceivableClosedUnreceivedCents += remainingCents
+          } else {
+            snapshot.sourceReceivableOpenUnreceivedCents += remainingCents
+          }
+        } else {
+          snapshot.otherReceivableCents += schedule.amountCents
+        }
+      } else {
+        snapshot.confirmedPayableCents += schedule.amountCents
+        snapshot.paidCents += receivedOrPaidCents
+        if (schedule.cancelledAt) {
+          snapshot.closedUnpaidCents += remainingCents
+        } else {
+          snapshot.openUnpaidCents += remainingCents
+        }
+        if (
+          schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+          schedule.sourceId
+        ) {
+          snapshot.resourcePayableCents += schedule.amountCents
+        } else {
+          snapshot.otherPayableCents += schedule.amountCents
+        }
+      }
+
+      for (const verification of schedule.verifications) {
+        const transactionDepartureId = verification.transaction.departureId
+        if (transactionDepartureId && transactionDepartureId !== schedule.departureId) {
+          snapshot.verifiedFromOtherDeparturesCents += verification.amountCents
+        }
+      }
+    }
+
+    for (const transaction of transactions) {
+      if (!transaction.departureId) {
+        continue
+      }
+      const snapshot = result.get(transaction.departureId)!
+      const allocatedCents = transaction.verifications.reduce(
+        (sum, verification) =>
+          verification.paymentSchedule.voidedAt == null
+            ? sum + verification.amountCents
+            : sum,
+        0,
+      )
+      const unverifiedCents = transaction.amountCents - allocatedCents
+      if (transaction.direction === TransactionDirection.inflow) {
+        snapshot.incomeTransactionCents += transaction.amountCents
+        snapshot.unverifiedIncomeCents += unverifiedCents
+      } else {
+        snapshot.expenseTransactionCents += transaction.amountCents
+        snapshot.unverifiedExpenseCents += unverifiedCents
+      }
+      for (const verification of transaction.verifications) {
+        if (
+          verification.paymentSchedule.voidedAt == null &&
+          verification.paymentSchedule.departureId !== transaction.departureId
+        ) {
+          snapshot.verifiedToOtherDeparturesCents += verification.amountCents
+        }
+      }
+    }
+
+    return result
+  }
 
   assertMutable(departure: { status: string }, action = '编辑'): void {
     if (departure.status === DepartureStatus.closed) {
@@ -500,7 +682,8 @@ export class DepartureFinanceFacade {
 
   /**
    * Source Order receivable-path finance states (ADR-0004 / #97).
-   * Returns one entry per present business path (partnerCollected > 0 / guestCollect > 0).
+   * Returns one entry per present business path, plus any path with an existing schedule
+   * so legacy-corrupt signed source amounts do not hide finance history.
    * Operations Sheet consumes this — it must not re-derive verification rules.
    */
   async getSourceOrderPathFinanceStates(
@@ -569,31 +752,31 @@ export class DepartureFinanceFacade {
         guestCollectCents: 0,
       }
       const paths: SourceOrderPathFinanceState[] = []
+      const customerKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
+      const guestKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION}`
+      const customerSchedule = scheduleByKey.get(customerKey) ?? null
+      const guestSchedule = scheduleByKey.get(guestKey) ?? null
 
-      if (amounts.partnerCollectedCents > 0) {
-        const key = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
-        const schedule = scheduleByKey.get(key) ?? null
+      if (amounts.partnerCollectedCents > 0 || customerSchedule) {
         paths.push(
           this.toPathFinanceState(
             PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
             amounts.partnerCollectedCents,
-            schedule,
-            schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
-            schedule ? (historyMap.get(schedule.id) ?? false) : false,
+            customerSchedule,
+            customerSchedule ? (settledMap.get(customerSchedule.id) ?? 0) : 0,
+            customerSchedule ? (historyMap.get(customerSchedule.id) ?? false) : false,
           ),
         )
       }
 
-      if (amounts.guestCollectCents > 0) {
-        const key = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION}`
-        const schedule = scheduleByKey.get(key) ?? null
+      if (amounts.guestCollectCents > 0 || guestSchedule) {
         paths.push(
           this.toPathFinanceState(
             PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
             amounts.guestCollectCents,
-            schedule,
-            schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
-            schedule ? (historyMap.get(schedule.id) ?? false) : false,
+            guestSchedule,
+            guestSchedule ? (settledMap.get(guestSchedule.id) ?? 0) : 0,
+            guestSchedule ? (historyMap.get(guestSchedule.id) ?? false) : false,
           ),
         )
       }

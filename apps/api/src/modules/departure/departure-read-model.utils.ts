@@ -1,5 +1,9 @@
-import type { DepartureCompletionTags } from '@xiaotuanbao/shared'
+import type { DepartureCompletionTags, DepartureOverviewStats } from '@xiaotuanbao/shared'
 import { PaymentScheduleDirection, TransactionDirection } from '@prisma/client'
+import {
+  emptyDepartureFinanceSnapshot,
+  type DepartureFinanceSnapshot,
+} from '../finance/departure-finance-facade.service'
 
 export interface ScheduleSnapshot {
   direction: PaymentScheduleDirection
@@ -43,6 +47,7 @@ export interface DepartureReadModelAggregate {
   openUnsettledPayableCents: number
   unverifiedIncomeCents: number
   unverifiedExpenseCents: number
+  overviewStats: DepartureOverviewStats
   completionTags: DepartureCompletionTags
   isFinanciallySettled: boolean
 }
@@ -58,6 +63,68 @@ export const EMPTY_SOURCE_ORDER_AGGREGATE: SourceOrderAggregate = {
 export const EMPTY_UNVERIFIED_CASH: UnverifiedCashAggregate = {
   unverifiedIncomeCents: 0,
   unverifiedExpenseCents: 0,
+}
+
+export interface DepartureOverviewSourceFacts {
+  sourceReceivableUngeneratedCents: number
+  generatedResourceAgreedCents: number
+}
+
+function buildDepartureOverviewStats(input: {
+  netReceivableCents: number
+  estimatedPayableCents: number
+  finance: DepartureFinanceSnapshot
+  sourceFacts: DepartureOverviewSourceFacts
+}): DepartureOverviewStats {
+  const { finance } = input
+  const ungeneratedPayableCents =
+    input.estimatedPayableCents - input.sourceFacts.generatedResourceAgreedCents
+  const resourcePayableDifferenceCents =
+    finance.resourcePayableCents - input.sourceFacts.generatedResourceAgreedCents
+  const confirmedMarginCents = input.netReceivableCents - finance.confirmedPayableCents
+  const cashNetInflowCents =
+    finance.incomeTransactionCents - finance.expenseTransactionCents
+
+  const stats: DepartureOverviewStats = {
+    receivedCents: finance.sourceReceivableReceivedCents,
+    openUnreceivedCents: finance.sourceReceivableOpenUnreceivedCents,
+    closedUnreceivedCents: finance.sourceReceivableClosedUnreceivedCents,
+    ungeneratedReceivableCents: input.sourceFacts.sourceReceivableUngeneratedCents,
+    otherReceivableCents: finance.otherReceivableCents,
+    confirmedPayableCents: finance.confirmedPayableCents,
+    paidCents: finance.paidCents,
+    openUnpaidCents: finance.openUnpaidCents,
+    closedUnpaidCents: finance.closedUnpaidCents,
+    ungeneratedPayableCents,
+    otherPayableCents: finance.otherPayableCents,
+    resourcePayableDifferenceCents,
+    confirmedMarginCents,
+    incomeTransactionCents: finance.incomeTransactionCents,
+    expenseTransactionCents: finance.expenseTransactionCents,
+    cashNetInflowCents,
+    unverifiedIncomeCents: finance.unverifiedIncomeCents,
+    unverifiedExpenseCents: finance.unverifiedExpenseCents,
+    verifiedFromOtherDeparturesCents: finance.verifiedFromOtherDeparturesCents,
+    verifiedToOtherDeparturesCents: finance.verifiedToOtherDeparturesCents,
+    anomalies: [],
+  }
+
+  const receivableActualCents =
+    stats.receivedCents +
+    stats.openUnreceivedCents +
+    stats.closedUnreceivedCents +
+    stats.ungeneratedReceivableCents
+  const receivableDifferenceCents = receivableActualCents - input.netReceivableCents
+  if (receivableDifferenceCents !== 0) {
+    stats.anomalies.push({
+      code: 'receivable_balance',
+      expectedCents: input.netReceivableCents,
+      actualCents: receivableActualCents,
+      differenceCents: receivableDifferenceCents,
+    })
+  }
+
+  return stats
 }
 
 export function isScheduleClosed(schedule: ScheduleSnapshot, settledAmountCents: number): boolean {
@@ -217,6 +284,8 @@ export function buildDepartureReadModelAggregate(input: {
   schedules: ScheduleWithId[]
   settledByScheduleId: Map<string, number>
   unverifiedCash?: UnverifiedCashAggregate
+  financeSnapshot?: DepartureFinanceSnapshot
+  overviewSourceFacts?: DepartureOverviewSourceFacts
 }): DepartureReadModelAggregate {
   const {
     sourceOrders,
@@ -230,6 +299,11 @@ export function buildDepartureReadModelAggregate(input: {
 
   const financial = computeFinancialAmounts(schedules, settledByScheduleId)
   const estimatedMarginCents = sourceOrders.netReceivableCents - payableCents
+  const financeSnapshot = input.financeSnapshot ?? emptyDepartureFinanceSnapshot()
+  const overviewSourceFacts = input.overviewSourceFacts ?? {
+    sourceReceivableUngeneratedCents: sourceOrders.netReceivableCents,
+    generatedResourceAgreedCents: 0,
+  }
 
   return {
     totalGuests: sourceOrders.totalGuests,
@@ -244,6 +318,12 @@ export function buildDepartureReadModelAggregate(input: {
     ...financial,
     unverifiedIncomeCents: unverifiedCash.unverifiedIncomeCents,
     unverifiedExpenseCents: unverifiedCash.unverifiedExpenseCents,
+    overviewStats: buildDepartureOverviewStats({
+      netReceivableCents: sourceOrders.netReceivableCents,
+      estimatedPayableCents: payableCents,
+      finance: financeSnapshot,
+      sourceFacts: overviewSourceFacts,
+    }),
     completionTags: deriveCompletionTags({
       sourceOrderCount: sourceOrders.count,
       segmentCount,
