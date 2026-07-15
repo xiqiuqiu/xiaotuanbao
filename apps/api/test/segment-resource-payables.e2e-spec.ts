@@ -19,6 +19,7 @@ describe('Segment resource generate payables (e2e)', () => {
   let financeToken: string
   let organizationId: string
   let ownerUserId: string
+  let ownerUserName: string
   let partnerId: string
   let supplierId: string
   const testPrefix = `e2e-sr-ap-${Date.now()}`
@@ -37,6 +38,7 @@ describe('Segment resource generate payables (e2e)', () => {
     }
     organizationId = user.organizationId
     ownerUserId = user.id
+    ownerUserName = user.name
 
     const partner = await prisma.partner.create({
       data: {
@@ -541,6 +543,45 @@ describe('Segment resource generate payables (e2e)', () => {
       voidedBy: ownerUserId,
     })
     expect(voided.body.data.voidedAt).toEqual(expect.any(String))
+
+    const defaultGlobalList = await authRequest(app, financeToken)
+      .get('/api/finance/payables')
+      .expect(200)
+    expect(defaultGlobalList.body.data.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: voidedScheduleId })]),
+    )
+
+    const defaultDepartureList = await authRequest(app, financeToken)
+      .get(`/api/departures/${departure.id}/payables`)
+      .expect(200)
+    expect(defaultDepartureList.body.data.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: voidedScheduleId })]),
+    )
+
+    const voidedGlobalList = await authRequest(app, financeToken)
+      .get('/api/finance/payables?status=voided')
+      .expect(200)
+    expect(voidedGlobalList.body.data.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: voidedScheduleId,
+          sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          sourceId: resource.id,
+          voidReason: '供应商报价录入错误',
+          voidedAmountCents: 160000,
+          voidedBy: ownerUserId,
+          voidedByName: ownerUserName,
+          voidedAt: expect.any(String),
+        }),
+      ]),
+    )
+
+    const voidedDepartureList = await authRequest(app, financeToken)
+      .get(`/api/departures/${departure.id}/payables?status=voided`)
+      .expect(200)
+    expect(voidedDepartureList.body.data.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: voidedScheduleId })]),
+    )
 
     const audit = await authRequest(app, financeToken)
       .get(`/api/finance/payables/${voidedScheduleId}`)

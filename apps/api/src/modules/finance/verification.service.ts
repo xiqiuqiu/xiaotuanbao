@@ -850,6 +850,7 @@ export class VerificationService {
       cancelReason: schedule.cancelReason,
       voidedAt: schedule.voidedAt?.toISOString() ?? null,
       voidedBy: schedule.voidedBy,
+      voidedByName: null,
       voidReason: schedule.voidReason,
       voidedAmountCents: schedule.voidedAmountCents,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,

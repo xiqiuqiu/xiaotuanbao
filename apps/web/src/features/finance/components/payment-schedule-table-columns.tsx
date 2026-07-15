@@ -2,6 +2,7 @@ import type { MenuProps } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import {
   DepartureStatus,
   PaymentScheduleDirection,
@@ -12,6 +13,7 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   COUNTERPARTY_TYPE_LABELS,
+  PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS,
   SETTLEMENT_LABEL_COLORS,
   catalogLabel,
   formatCents,
@@ -91,6 +93,7 @@ interface BuildPaymentScheduleColumnsOptions {
   isDepartureScope: boolean
   isReceivable: boolean
   readOnly: boolean
+  voidedAudit?: boolean
   departureMap: Map<string, { departureNo: string; name: string }>
   onConfirm: (schedule: PaymentScheduleSummary) => void
   onVerify: (schedule: PaymentScheduleSummary) => void
@@ -106,6 +109,7 @@ export function buildPaymentScheduleColumns({
   isDepartureScope,
   isReceivable,
   readOnly,
+  voidedAudit = false,
   departureMap,
   onConfirm,
   onVerify,
@@ -116,6 +120,69 @@ export function buildPaymentScheduleColumns({
   onViewDetail,
   onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
+  if (voidedAudit) {
+    return [
+      {
+        title: '节点编号',
+        dataIndex: 'scheduleNo',
+        render: (value: string, record) => (
+          <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
+            {value}
+          </Button>
+        ),
+      },
+      { title: '标题', dataIndex: 'title' },
+      ...(isDepartureScope
+        ? []
+        : [
+            {
+              title: '关联发团',
+              dataIndex: 'departureId',
+              render: (departureId: string) => {
+                const departure = departureMap.get(departureId)
+                return departure ? (
+                  <Tooltip title={departure.departureNo}>
+                    <FinanceDepartureLink departureId={departureId}>
+                      {departure.name}
+                    </FinanceDepartureLink>
+                  </Tooltip>
+                ) : '-'
+              },
+            },
+          ]),
+      {
+        title: '来源',
+        render: (_, record) => (
+          <Space size={4} orientation="vertical">
+            <span>{catalogLabel(PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS, record.sourceType)}</span>
+            <span>{record.sourceId ?? '-'}</span>
+          </Space>
+        ),
+      },
+      {
+        title: '作废前金额',
+        dataIndex: 'voidedAmountCents',
+        align: 'right',
+        render: (value: number | null) => value == null ? '-' : formatCents(value),
+      },
+      {
+        title: '操作人',
+        dataIndex: 'voidedByName',
+        render: (value: string | null) => value || '-',
+      },
+      {
+        title: '作废时间',
+        dataIndex: 'voidedAt',
+        render: (value: string | null) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-',
+      },
+      {
+        title: '作废原因',
+        dataIndex: 'voidReason',
+        render: (value: string | null) => value || '-',
+      },
+    ]
+  }
+
   return [
     {
       title: '节点编号',

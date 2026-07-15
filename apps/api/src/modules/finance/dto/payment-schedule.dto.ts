@@ -3,6 +3,7 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -102,6 +103,10 @@ export class ListPaymentSchedulesQueryDto {
   @IsOptional()
   @IsString()
   counterpartyKeyword?: string
+
+  @IsOptional()
+  @IsIn(['voided'])
+  status?: 'voided'
 
   @IsOptional()
   @Type(() => Number)

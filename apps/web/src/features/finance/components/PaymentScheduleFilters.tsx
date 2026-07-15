@@ -5,15 +5,16 @@ import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
 import { listFinanceDepartureOptions } from '@/services/finance.service'
 import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 import {
-  PAYABLE_SCHEDULE_STATUS_OPTIONS,
+  PAYABLE_SCHEDULE_FILTER_OPTIONS,
   PAYMENT_SCHEDULE_STATUS_OPTIONS,
 } from '../catalog'
 
 export type DueDateRange = [string | undefined, string | undefined] | null
+export type PaymentScheduleStatusFilter = PaymentScheduleStatus | 'voided'
 
 interface PaymentScheduleFiltersProps {
   departureId?: string
-  statusFilter?: PaymentScheduleStatus
+  statusFilter?: PaymentScheduleStatusFilter
   keyword: string
   counterpartyKeyword: string
   dueDateRange: DueDateRange
@@ -21,7 +22,7 @@ interface PaymentScheduleFiltersProps {
   /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
   isReceivable: boolean
   onDepartureChange: (value?: string) => void
-  onStatusChange: (value?: PaymentScheduleStatus) => void
+  onStatusChange: (value?: PaymentScheduleStatusFilter) => void
   onKeywordChange: (value: string) => void
   onCounterpartyKeywordChange: (value: string) => void
   onDueDateRangeChange: (value: DueDateRange) => void
@@ -57,7 +58,7 @@ export function PaymentScheduleFilters({
 
   const statusOptions = isReceivable
     ? PAYMENT_SCHEDULE_STATUS_OPTIONS
-    : PAYABLE_SCHEDULE_STATUS_OPTIONS
+    : PAYABLE_SCHEDULE_FILTER_OPTIONS
 
   return (
     <Card style={{ marginBottom: 16 }}>

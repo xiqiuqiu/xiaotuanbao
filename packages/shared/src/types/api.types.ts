@@ -329,6 +329,7 @@ export interface PaymentScheduleSummary {
   cancelReason: string | null
   voidedAt: string | null
   voidedBy: string | null
+  voidedByName: string | null
   voidReason: string | null
   voidedAmountCents: number | null
   amountAdjustedAt: string | null

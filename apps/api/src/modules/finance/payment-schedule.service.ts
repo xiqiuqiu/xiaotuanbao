@@ -73,7 +73,7 @@ export class PaymentScheduleService {
     const where: Prisma.PaymentScheduleWhereInput = {
       organizationId,
       direction,
-      voidedAt: null,
+      voidedAt: query.status === 'voided' ? { not: null } : null,
       ...(query.departureId ? { departureId: query.departureId } : {}),
       ...counterpartyWhere,
     }
@@ -84,7 +84,10 @@ export class PaymentScheduleService {
         orderBy: { updatedAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { departure: { select: { status: true } } },
+        include: {
+          departure: { select: { status: true } },
+          voidOperator: { select: { name: true } },
+        },
       }),
       this.prisma.paymentSchedule.count({ where }),
     ])
@@ -103,6 +106,7 @@ export class PaymentScheduleService {
           settledMap.get(schedule.id) ?? 0,
           historyMap.get(schedule.id) ?? false,
           schedule.departure.status,
+          schedule.voidOperator?.name ?? null,
         ),
       ),
       total,
@@ -125,7 +129,13 @@ export class PaymentScheduleService {
         this.departureFinanceFacade.getStatusById(organizationId, schedule.departureId),
       ])
     return {
-      ...this.toSummary(schedule, settledAmountCents, hasVerificationHistory, departureStatus),
+      ...this.toSummary(
+        schedule,
+        settledAmountCents,
+        hasVerificationHistory,
+        departureStatus,
+        schedule.voidOperator?.name ?? null,
+      ),
       activities,
     }
   }
@@ -845,6 +855,7 @@ export class PaymentScheduleService {
   ) {
     const schedule = await this.prisma.paymentSchedule.findFirst({
       where: { id: scheduleId, organizationId, direction },
+      include: { voidOperator: { select: { name: true } } },
     })
 
     if (!schedule) {
@@ -889,6 +900,7 @@ export class PaymentScheduleService {
     settledAmountCents: number,
     hasVerificationHistory = settledAmountCents > 0,
     departureStatus: string,
+    voidedByName: string | null = null,
   ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
@@ -924,6 +936,7 @@ export class PaymentScheduleService {
       cancelReason: schedule.cancelReason,
       voidedAt: schedule.voidedAt?.toISOString() ?? null,
       voidedBy: schedule.voidedBy,
+      voidedByName,
       voidReason: schedule.voidReason,
       voidedAmountCents: schedule.voidedAmountCents,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,

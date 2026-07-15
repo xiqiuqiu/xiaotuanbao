@@ -3,6 +3,7 @@ import {
   PAYMENT_CHANNEL_LABELS,
   PAYMENT_CHANNEL_OPTIONS,
   PaymentScheduleCloseDisposition,
+  PaymentScheduleSourceType,
   PaymentScheduleStatus,
   TransactionDirection,
   TransactionWriteoffStatus,
@@ -44,6 +45,18 @@ export const PAYMENT_SCHEDULE_STATUS_OPTIONS = [
 export const PAYABLE_SCHEDULE_STATUS_OPTIONS = PAYMENT_SCHEDULE_STATUS_OPTIONS.filter(
   (item) => item.value !== PaymentScheduleStatus.OVERDUE,
 )
+
+export const PAYABLE_SCHEDULE_FILTER_OPTIONS = [
+  ...PAYABLE_SCHEDULE_STATUS_OPTIONS,
+  { value: 'voided', label: '已作废' },
+] as const
+
+export const PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS: Record<string, string> = {
+  [PaymentScheduleSourceType.MANUAL]: '手工录入',
+  [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客源单客户结算',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '客源单游客代收',
+  [PaymentScheduleSourceType.SEGMENT_RESOURCE]: '行程段资源',
+}
 
 export const PAYMENT_SCHEDULE_STATUS_LABELS = Object.fromEntries(
   PAYMENT_SCHEDULE_STATUS_OPTIONS.map((item) => [item.value, item.label]),

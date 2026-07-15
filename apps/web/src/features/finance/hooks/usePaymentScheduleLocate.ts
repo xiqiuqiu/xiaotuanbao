@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { PaymentScheduleStatus, PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { matchesSegmentResourceSchedule } from '@/features/departure/utils/matches-segment-resource-schedule'
 import { matchesSourceOrderSchedule } from '@/features/departure/utils/matches-source-order-schedule'
-import type { DueDateRange } from '../components/PaymentScheduleFilters'
+import type {
+  DueDateRange,
+  PaymentScheduleStatusFilter,
+} from '../components/PaymentScheduleFilters'
 
 /** Matches `.locateFlash` duration in PaymentScheduleWorkspace.module.css. */
 const LOCATE_FLASH_MS = 480
@@ -24,7 +27,7 @@ export function matchesLocateTarget(
 type ApplyClientFilters = (
   items: PaymentScheduleSummary[],
   keyword: string,
-  statusFilter?: PaymentScheduleStatus,
+  statusFilter?: PaymentScheduleStatusFilter,
   dueDateRange?: DueDateRange,
 ) => PaymentScheduleSummary[]
 
@@ -37,7 +40,7 @@ type UsePaymentScheduleLocateOptions = {
   isFetching: boolean
   schedulesResult?: { items: PaymentScheduleSummary[] }
   keyword: string
-  statusFilter?: PaymentScheduleStatus
+  statusFilter?: PaymentScheduleStatusFilter
   dueDateRange?: DueDateRange
   pageSize: number
   applyClientFilters: ApplyClientFilters

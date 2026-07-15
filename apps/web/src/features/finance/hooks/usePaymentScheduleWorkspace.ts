@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { theme } from 'antd'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import {
@@ -17,7 +17,10 @@ import {
   listReceivables,
   listFinanceDepartureOptions,
 } from '@/services/finance.service'
-import type { DueDateRange } from '../components/PaymentScheduleFilters'
+import type {
+  DueDateRange,
+  PaymentScheduleStatusFilter,
+} from '../components/PaymentScheduleFilters'
 import { buildPaymentScheduleColumns } from '../components/payment-schedule-table-columns'
 import { applyPaymentScheduleClientFilters } from '../utils/apply-payment-schedule-client-filters'
 import { usePaymentScheduleDialogs } from './usePaymentScheduleDialogs'
@@ -57,7 +60,7 @@ export function usePaymentScheduleWorkspace({
     : 'departure-payables'
 
   const [departureFilter, setDepartureFilter] = useState<string | undefined>()
-  const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatus | undefined>()
+  const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatusFilter | undefined>()
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
   const [counterpartyKeyword, setCounterpartyKeyword] = useState(initialCounterpartyKeyword)
@@ -67,8 +70,13 @@ export function usePaymentScheduleWorkspace({
   const dialogs = usePaymentScheduleDialogs(isReceivable)
 
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
+  const voidedAudit = !isReceivable && statusFilter === 'voided'
   const trimmedCounterpartyKeyword = useDebouncedValue(counterpartyKeyword.trim())
-  const hasClientFilters = Boolean(keyword.trim() || statusFilter || dueDateRange)
+  const hasClientFilters = Boolean(
+    keyword.trim() ||
+    (statusFilter && statusFilter !== 'voided') ||
+    dueDateRange,
+  )
   const locatingFinanceRow =
     isDepartureScope &&
     ((isReceivable && Boolean(highlightSourceOrderId)) ||
@@ -93,6 +101,7 @@ export function usePaymentScheduleWorkspace({
     effectiveDepartureId,
     useExpandedFetch,
     trimmedCounterpartyKeyword,
+    voidedAudit,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -112,11 +121,13 @@ export function usePaymentScheduleWorkspace({
       fetchPageSize,
       useExpandedFetch,
       trimmedCounterpartyKeyword,
+      voidedAudit,
     ],
     queryFn: ({ signal }) => {
       const counterpartyQuery = trimmedCounterpartyKeyword
         ? { counterpartyKeyword: trimmedCounterpartyKeyword }
         : {}
+      const statusQuery = voidedAudit ? { status: 'voided' as const } : {}
       if (isDepartureScope) {
         if (!lockedDepartureId) {
           throw new Error('发团 ID 缺失')
@@ -128,6 +139,7 @@ export function usePaymentScheduleWorkspace({
             page: useExpandedFetch ? 1 : page,
             pageSize: fetchPageSize,
             ...counterpartyQuery,
+            ...statusQuery,
           },
           signal,
         )
@@ -138,6 +150,7 @@ export function usePaymentScheduleWorkspace({
           page: hasClientFilters ? 1 : page,
           pageSize: fetchPageSize,
           ...counterpartyQuery,
+          ...statusQuery,
         },
         signal,
       )
@@ -299,6 +312,7 @@ export function usePaymentScheduleWorkspace({
         isDepartureScope,
         isReceivable,
         readOnly,
+        voidedAudit,
         departureMap,
         onConfirm: dialogs.openConfirm,
         onVerify: dialogs.openVerify,
@@ -322,6 +336,7 @@ export function usePaymentScheduleWorkspace({
       isReceivable,
       openViewVerifications,
       readOnly,
+      voidedAudit,
     ],
   )
 

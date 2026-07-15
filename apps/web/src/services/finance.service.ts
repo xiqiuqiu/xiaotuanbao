@@ -46,6 +46,7 @@ export interface ListPaymentSchedulesParams {
   counterpartyId?: string
   counterpartyName?: string
   counterpartyKeyword?: string
+  status?: 'voided'
   page?: number
   pageSize?: number
 }

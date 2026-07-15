@@ -1,16 +1,19 @@
-import { PaymentScheduleStatus, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import type { DueDateRange } from '../components/PaymentScheduleFilters'
+import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import type {
+  DueDateRange,
+  PaymentScheduleStatusFilter,
+} from '../components/PaymentScheduleFilters'
 
 export function applyPaymentScheduleClientFilters(
   items: PaymentScheduleSummary[],
   keyword: string,
-  statusFilter?: PaymentScheduleStatus,
+  statusFilter?: PaymentScheduleStatusFilter,
   dueDateRange?: DueDateRange,
 ): PaymentScheduleSummary[] {
   const normalizedKeyword = keyword.trim().toLowerCase()
 
   return items.filter((item) => {
-    if (statusFilter && item.status !== statusFilter) {
+    if (statusFilter === 'voided' ? !item.voidedAt : statusFilter && item.status !== statusFilter) {
       return false
     }
 
