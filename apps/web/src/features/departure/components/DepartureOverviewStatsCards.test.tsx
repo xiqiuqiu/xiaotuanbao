@@ -112,13 +112,18 @@ function renderCards(departure = makeDeparture()) {
 describe('DepartureOverviewStatsCards', () => {
   afterEach(cleanup)
 
-  it('窄桌面下资金指标改为纵排，超宽桌面再恢复三列', () => {
+  it('资金情况突出现金净流入，并将收入支出降为辅助信息', () => {
     renderCards()
 
     const cashCard = screen.getByRole('region', { name: '资金情况' })
-    const incomeColumn = within(cashCard).getByText('有效收入').closest('.ant-col')
+    const cashNetStatistic = within(cashCard).getByText('现金净流入').closest('.ant-statistic')
+    const breakdown = within(cashCard).getByRole('group', { name: '资金收支明细' })
 
-    expect(incomeColumn).toHaveClass('ant-col-sm-8', 'ant-col-lg-24', 'ant-col-xxl-8')
+    expect(cashNetStatistic).not.toBeNull()
+    expect(within(breakdown).getByText('有效收入')).toBeInTheDocument()
+    expect(within(breakdown).getByText('有效支出')).toBeInTheDocument()
+    expect(within(breakdown).getByText('有效收入').closest('.ant-statistic')).toBeNull()
+    expect(within(breakdown).getByText('有效支出').closest('.ant-statistic')).toBeNull()
   })
 
   it('计算公式仅通过文字提示展示', async () => {

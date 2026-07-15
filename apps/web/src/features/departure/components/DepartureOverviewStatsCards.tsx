@@ -22,6 +22,7 @@ import styles from './DepartureOverviewStatsCards.module.css'
 
 const { Text } = Typography
 const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
+const COMPACT_CARD_STYLES = { body: { padding: '12px 16px' } } as const
 
 function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
@@ -409,6 +410,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label={receivableAnomaly ? '收款进度（数据异常）' : '收款进度'}
             style={anomalyCardStyle}
+            styles={COMPACT_CARD_STYLES}
           >
             <ProgressValue
               numerator={stats.receivedCents}
@@ -436,6 +438,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label="付款进度"
             style={EQUAL_HEIGHT_CARD_STYLE}
+            styles={COMPACT_CARD_STYLES}
           >
             <ProgressValue
               numerator={stats.paidCents}
@@ -468,18 +471,35 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label="资金情况"
             style={EQUAL_HEIGHT_CARD_STYLE}
+            styles={COMPACT_CARD_STYLES}
           >
-            <Row gutter={[8, 12]}>
-              <Col xs={24} sm={8} lg={24} xxl={8}>
-                <Statistic title="有效收入" value={formatCents(stats.incomeTransactionCents)} />
-              </Col>
-              <Col xs={24} sm={8} lg={24} xxl={8}>
-                <Statistic title="有效支出" value={formatCents(stats.expenseTransactionCents)} />
-              </Col>
-              <Col xs={24} sm={8} lg={24} xxl={8}>
-                <Statistic title="现金净流入" value={formatCents(stats.cashNetInflowCents)} />
-              </Col>
-            </Row>
+            <Flex align="flex-end" justify="space-between" gap={8} wrap>
+              <Statistic
+                title="现金净流入"
+                value={formatCents(stats.cashNetInflowCents)}
+                valueStyle={{ fontSize: token.fontSizeHeading4 }}
+              />
+              <Flex
+                gap={12}
+                wrap
+                role="group"
+                aria-label="资金收支明细"
+                className={styles.cashBreakdown}
+              >
+                <Text
+                  type="secondary"
+                  style={{ fontSize: token.fontSizeSM, lineHeight: token.lineHeightSM }}
+                >
+                  有效收入 <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
+                </Text>
+                <Text
+                  type="secondary"
+                  style={{ fontSize: token.fontSizeSM, lineHeight: token.lineHeightSM }}
+                >
+                  有效支出 <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
+                </Text>
+              </Flex>
+            </Flex>
           </Card>
         </Col>
       </Row>
