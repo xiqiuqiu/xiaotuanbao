@@ -8,6 +8,7 @@ import type {
   BatchFinanceGenerationItem,
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -29,10 +30,12 @@ import { DepartureFinanceFacade } from '../finance/departure-finance-facade.serv
 import type {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
+  ListPartnerSourceOrdersQueryDto,
   ListSourceOrdersQueryDto,
   UpdateSourceOrderDto,
   UpdateSourceOrderGuestDto,
 } from './dto/source-order.dto'
+import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import {
   buildSourceOrderDisplayName,
   computeSourceOrderAmounts,
@@ -106,9 +109,117 @@ export class SourceOrderService {
         orderCount: items.length,
         totalGuests: items.reduce((sum, item) => sum + item.guestCount, 0),
         partnerCount: partnerIds.size,
+        totalGrossReceivableCents: items.reduce(
+          (sum, item) => sum + item.grossReceivableCents,
+          0,
+        ),
         totalDiscountCents: items.reduce((sum, item) => sum + item.discountCents, 0),
         totalNetReceivableCents: items.reduce((sum, item) => sum + item.netReceivableCents, 0),
         totalGuestCollectCents: items.reduce((sum, item) => sum + item.guestCollectCents, 0),
+      },
+    }
+  }
+
+  /** 合作团单 Tab：按 Partner 跨发团查询客源单，出团日期区间过滤＋倒序＋分页。 */
+  async listByPartner(
+    organizationId: string,
+    partnerId: string,
+    query: ListPartnerSourceOrdersQueryDto,
+  ): Promise<PartnerSourceOrderListResult> {
+    const partner = await this.prisma.partner.findFirst({
+      where: { id: partnerId, organizationId },
+    })
+    if (!partner) {
+      throw new NotFoundException('合作伙伴不存在')
+    }
+
+    if (
+      query.departureDateFrom &&
+      query.departureDateTo &&
+      query.departureDateFrom > query.departureDateTo
+    ) {
+      throw new BadRequestException('出团日期区间非法')
+    }
+
+    const page = Math.max(Number(query.page) || 1, 1)
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
+
+    const where: Prisma.SourceOrderWhereInput = {
+      partnerId: partner.id,
+      departure: {
+        organizationId,
+        ...(query.departureDateFrom || query.departureDateTo
+          ? {
+              startDate: {
+                ...(query.departureDateFrom
+                  ? { gte: parseDateOnly(query.departureDateFrom) }
+                  : {}),
+                ...(query.departureDateTo
+                  ? { lte: parseDateOnly(query.departureDateTo) }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+    }
+
+    const [orders, total, aggregate] = await Promise.all([
+      this.prisma.sourceOrder.findMany({
+        where,
+        include: {
+          departure: {
+            select: { departureNo: true, name: true, routeName: true, startDate: true },
+          },
+        },
+        orderBy: [{ departure: { startDate: 'desc' } }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.sourceOrder.count({ where }),
+      this.prisma.sourceOrder.aggregate({
+        where,
+        _sum: {
+          guestCount: true,
+          grossReceivableCents: true,
+          discountCents: true,
+          netReceivableCents: true,
+          guestCollectCents: true,
+        },
+      }),
+    ])
+
+    return {
+      items: orders.map((order) => ({
+        id: order.id,
+        departureId: order.departureId,
+        departureNo: order.departure.departureNo,
+        departureName: order.departure.name,
+        routeName: order.departure.routeName,
+        departureStartDate: formatDateOnly(order.departure.startDate),
+        displayName: order.displayName,
+        guestCount: order.guestCount,
+        adultGuestCount: order.adultGuestCount,
+        childGuestCount: order.childGuestCount,
+        adultUnitPriceCents: order.adultUnitPriceCents,
+        childUnitPriceCents: order.childUnitPriceCents,
+        grossReceivableCents: order.grossReceivableCents,
+        discountCents: order.discountCents,
+        netReceivableCents: order.netReceivableCents,
+        partnerCollectedCents: order.partnerCollectedCents,
+        guestCollectCents: order.guestCollectCents,
+        notes: order.notes,
+      })),
+      total,
+      page,
+      pageSize,
+      summary: {
+        orderCount: total,
+        totalGuests: aggregate._sum.guestCount ?? 0,
+        partnerCount: total > 0 ? 1 : 0,
+        totalGrossReceivableCents: aggregate._sum.grossReceivableCents ?? 0,
+        totalDiscountCents: aggregate._sum.discountCents ?? 0,
+        totalNetReceivableCents: aggregate._sum.netReceivableCents ?? 0,
+        totalGuestCollectCents: aggregate._sum.guestCollectCents ?? 0,
       },
     }
   }

@@ -33,6 +33,8 @@ export type {
   SourceOrderSummary,
   SourceOrderListResult,
   SourceOrderListSummary,
+  PartnerSourceOrderItem,
+  PartnerSourceOrderListResult,
   GenerateReceivablesResult,
   BatchFinanceGenerationResult,
   BatchFinanceGenerationItem,

@@ -648,6 +648,7 @@ export interface SourceOrderListSummary {
   orderCount: number
   totalGuests: number
   partnerCount: number
+  totalGrossReceivableCents: number
   totalDiscountCents: number
   totalNetReceivableCents: number
   totalGuestCollectCents: number
@@ -657,6 +658,41 @@ export interface SourceOrderListResult {
   items: SourceOrderSummary[]
   summary: SourceOrderListSummary
   total: number
+}
+
+/**
+ * 合作团单 Tab 行（业务事实层）：跨发团的客源单快照，附所属发团信息。
+ * 有意不含应收状态与已收/未收字段（归往来账款 Tab）。
+ */
+export interface PartnerSourceOrderItem {
+  id: string
+  departureId: string
+  departureNo: string
+  departureName: string
+  routeName: string
+  /** 所属发团出团日期（YYYY-MM-DD） */
+  departureStartDate: string
+  displayName: string
+  guestCount: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents: number
+  childUnitPriceCents: number
+  grossReceivableCents: number
+  discountCents: number
+  netReceivableCents: number
+  partnerCollectedCents: number
+  guestCollectCents: number
+  notes: string | null
+}
+
+export interface PartnerSourceOrderListResult {
+  items: PartnerSourceOrderItem[]
+  total: number
+  page: number
+  pageSize: number
+  /** 六项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
+  summary: SourceOrderListSummary
 }
 
 export interface CreateSourceOrderDto {

@@ -1,4 +1,5 @@
 import {
+  IsDateString,
   IsEnum,
   IsIn,
   IsInt,
@@ -13,6 +14,28 @@ import {
   SourceOrderCollectionMode as PrismaCollectionMode,
   SourceOrderDiscountType as PrismaDiscountType,
 } from '@prisma/client'
+
+export class ListPartnerSourceOrdersQueryDto {
+  @IsOptional()
+  @IsDateString()
+  departureDateFrom?: string
+
+  @IsOptional()
+  @IsDateString()
+  departureDateTo?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number
+}
 
 export class ListSourceOrdersQueryDto {
   @IsOptional()

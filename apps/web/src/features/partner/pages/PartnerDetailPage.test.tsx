@@ -29,6 +29,7 @@ const mockPartner: PartnerSummary = {
 vi.mock('@tanstack/react-router', () => ({
   useParams: () => ({ partnerId: 'partner-1' }),
   useNavigate: () => vi.fn(),
+  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 
 vi.mock('@/services/partner.service', () => ({
@@ -36,7 +37,12 @@ vi.mock('@/services/partner.service', () => ({
   updatePartner: vi.fn(),
 }))
 
+vi.mock('@/services/source-order.service', () => ({
+  listPartnerSourceOrders: vi.fn(),
+}))
+
 import { getPartner } from '@/services/partner.service'
+import { listPartnerSourceOrders } from '@/services/source-order.service'
 
 function renderDetailPage() {
   const queryClient = new QueryClient({
@@ -57,6 +63,21 @@ describe('PartnerDetailPage', () => {
 
   beforeEach(() => {
     vi.mocked(getPartner).mockResolvedValue(mockPartner)
+    vi.mocked(listPartnerSourceOrders).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      summary: {
+        orderCount: 0,
+        totalGuests: 0,
+        partnerCount: 0,
+        totalGrossReceivableCents: 0,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 0,
+        totalGuestCollectCents: 0,
+      },
+    })
   })
 
   it('shows partner name and opens shared edit drawer from header', async () => {
@@ -71,7 +92,7 @@ describe('PartnerDetailPage', () => {
     expect(screen.getByLabelText('合作伙伴名称')).toHaveValue('华东国旅')
   })
 
-  it('shows coming soon panels on placeholder tabs', async () => {
+  it('shows coming soon panel on ledger placeholder tab', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
@@ -81,10 +102,17 @@ describe('PartnerDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('功能建设中，暂不可用')).toBeInTheDocument()
     })
+  })
 
-    await user.click(screen.getAllByRole('tab', { name: '合作团单' })[0]!)
+  it('renders source orders tab with empty state when partner has no data', async () => {
+    const user = userEvent.setup()
+    renderDetailPage()
+
+    await screen.findByRole('heading', { level: 4, name: '华东国旅' })
+
+    await user.click(screen.getByRole('tab', { name: '合作团单' }))
     await waitFor(() => {
-      expect(screen.getAllByText('功能建设中，暂不可用').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('该合作伙伴暂无客源团单')).toBeInTheDocument()
     })
   })
 })

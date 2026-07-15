@@ -899,6 +899,7 @@ describe('Departure API (e2e)', () => {
         orderCount: 1,
         totalGuests: 5,
         partnerCount: 1,
+        totalGrossReceivableCents: 500000,
         totalDiscountCents: 50000,
         totalNetReceivableCents: 450000,
       })

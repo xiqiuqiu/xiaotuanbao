@@ -64,6 +64,8 @@ export type {
   SourceOrderSummary,
   SourceOrderListSummary,
   SourceOrderListResult,
+  PartnerSourceOrderItem,
+  PartnerSourceOrderListResult,
   GenerateReceivablesResult,
   BatchFinanceGenerationOutcome,
   BatchFinanceGenerationItem,

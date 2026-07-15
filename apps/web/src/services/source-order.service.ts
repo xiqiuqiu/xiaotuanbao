@@ -4,6 +4,7 @@ import type {
   CreateSourceOrderGuestDto,
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -24,6 +25,23 @@ export async function listSourceOrders(
   params: ListSourceOrdersParams = {},
 ): Promise<SourceOrderListResult> {
   return request.get<SourceOrderListResult>(`/departures/${departureId}/source-orders`, {
+    params,
+  })
+}
+
+export interface ListPartnerSourceOrdersParams {
+  departureDateFrom?: string
+  departureDateTo?: string
+  page?: number
+  pageSize?: number
+}
+
+/** 合作团单 Tab：按 Partner 跨发团查询客源单（业务事实层）。 */
+export async function listPartnerSourceOrders(
+  partnerId: string,
+  params: ListPartnerSourceOrdersParams = {},
+): Promise<PartnerSourceOrderListResult> {
+  return request.get<PartnerSourceOrderListResult>(`/partners/${partnerId}/source-orders`, {
     params,
   })
 }

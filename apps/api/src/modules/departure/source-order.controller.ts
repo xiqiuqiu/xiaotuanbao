@@ -13,6 +13,7 @@ import {
 import type {
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -23,6 +24,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
+  ListPartnerSourceOrdersQueryDto,
   ListSourceOrdersQueryDto,
   UpdateSourceOrderDto,
   UpdateSourceOrderGuestDto,
@@ -44,6 +46,21 @@ export class SourceOrderController {
     return this.sourceOrderService.listByDeparture(
       request.user.organizationId,
       departureId,
+      query,
+    )
+  }
+
+  /** 合作团单 Tab：按 Partner 跨发团查询客源单（业务事实层）。 */
+  @Get('partners/:partnerId/source-orders')
+  @RequireMenu('/partner')
+  listByPartner(
+    @Req() request: { user: { organizationId: string } },
+    @Param('partnerId') partnerId: string,
+    @Query() query: ListPartnerSourceOrdersQueryDto,
+  ): Promise<PartnerSourceOrderListResult> {
+    return this.sourceOrderService.listByPartner(
+      request.user.organizationId,
+      partnerId,
       query,
     )
   }

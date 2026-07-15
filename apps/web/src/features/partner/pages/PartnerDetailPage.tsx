@@ -6,6 +6,7 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { getPartner, updatePartner } from '@/services/partner.service'
 import { SupplierComingSoonPanel } from '@/features/supplier/components/SupplierComingSoonPanel'
 import { PartnerFormDrawer } from '../components/PartnerFormDrawer'
+import { PartnerSourceOrdersTab } from '../components/PartnerSourceOrdersTab'
 import type { PartnerFormValues } from '../components/PartnerProfileSections'
 import { PartnerReadonlySections } from '../components/PartnerReadonlySections'
 import { buildUpdatePayload, partnerToFormValues } from '../utils/partner-form'
@@ -119,7 +120,7 @@ export function PartnerDetailPage() {
             {
               key: 'groups',
               label: '合作团单',
-              children: <SupplierComingSoonPanel />,
+              children: <PartnerSourceOrdersTab partner={partner} />,
             },
           ]}
         />
