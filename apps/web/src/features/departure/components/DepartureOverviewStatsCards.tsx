@@ -471,33 +471,24 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             role="region"
             aria-label="资金情况"
             style={EQUAL_HEIGHT_CARD_STYLE}
-            styles={COMPACT_CARD_STYLES}
           >
-            <Flex align="flex-end" justify="space-between" gap={8} wrap>
-              <Statistic
-                title="现金净流入"
-                value={formatCents(stats.cashNetInflowCents)}
-                valueStyle={{ fontSize: token.fontSizeHeading4 }}
-              />
+            <Flex align="center" justify="space-between" gap={16} wrap>
+              <Statistic title="现金净流入" value={formatCents(stats.cashNetInflowCents)} />
               <Flex
-                gap={12}
-                wrap
+                vertical
+                gap={4}
                 role="group"
                 aria-label="资金收支明细"
                 className={styles.cashBreakdown}
               >
-                <Text
-                  type="secondary"
-                  style={{ fontSize: token.fontSizeSM, lineHeight: token.lineHeightSM }}
-                >
-                  有效收入 <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
-                </Text>
-                <Text
-                  type="secondary"
-                  style={{ fontSize: token.fontSizeSM, lineHeight: token.lineHeightSM }}
-                >
-                  有效支出 <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
-                </Text>
+                <Flex justify="space-between" gap={12}>
+                  <Text type="secondary">有效收入</Text>
+                  <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
+                </Flex>
+                <Flex justify="space-between" gap={12}>
+                  <Text type="secondary">有效支出</Text>
+                  <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
+                </Flex>
               </Flex>
             </Flex>
           </Card>

@@ -3,6 +3,7 @@
 }
 
 .cashBreakdown {
+  min-width: 144px;
   margin-left: auto;
 }
 
