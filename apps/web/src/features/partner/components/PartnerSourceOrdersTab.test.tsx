@@ -15,6 +15,8 @@ vi.mock('@tanstack/react-router', () => ({
 
 vi.mock('@/services/source-order.service', () => ({
   listPartnerSourceOrders: vi.fn(),
+  getPartnerReconciliationStatement: vi.fn(),
+  downloadPartnerReconciliationStatement: vi.fn(),
 }))
 
 import { listPartnerSourceOrders } from '@/services/source-order.service'
@@ -141,8 +143,23 @@ describe('PartnerSourceOrdersTab', () => {
     expect(screen.getByText('2026-06-10')).toBeInTheDocument()
     expect(screen.getByText('2/1')).toBeInTheDocument()
 
-    // 导出确认单占位按钮：禁用
+    // 导出确认单入口（全系统唯一，位于本 Tab 工具栏）
     const exportButton = screen.getByRole('button', { name: /导出确认单/ })
-    expect(exportButton).toBeDisabled()
+    expect(exportButton).toBeEnabled()
+  })
+
+  it('opens statement drawer and guides period selection when filter is unlimited', async () => {
+    vi.mocked(listPartnerSourceOrders).mockResolvedValue(DATA_RESULT)
+    renderTab(buildPartner())
+
+    const exportButton = await screen.findByRole('button', { name: /导出确认单/ })
+    exportButton.click()
+
+    await waitFor(() => {
+      expect(screen.getByText('往来账确认单')).toBeInTheDocument()
+    })
+    // 当前筛选为不限时间：先引导选区间，不发起预览请求
+    expect(screen.getByText('请先选择对账周期')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /导出 Excel/ })).toBeDisabled()
   })
 })

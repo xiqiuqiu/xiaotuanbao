@@ -10,7 +10,6 @@ import {
   Space,
   Statistic,
   Table,
-  Tooltip,
   Typography,
 } from 'antd'
 import { ExportOutlined } from '@ant-design/icons'
@@ -23,6 +22,7 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartnerSourceOrders } from '@/services/source-order.service'
 import { formatCents } from '@/features/departure/catalog'
 import { buildDepartureDateRangePresets } from '@/utils/dateRangePresets'
+import { PartnerReconciliationStatementDrawer } from './PartnerReconciliationStatementDrawer'
 
 type DepartureDateRange = [string | undefined, string | undefined] | null
 
@@ -115,6 +115,7 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
   const [dateRange, setDateRange] = useState<DepartureDateRange>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [statementOpen, setStatementOpen] = useState(false)
 
   const isPeerOnly = partner.partnerKind === PartnerKind.PEER
 
@@ -174,11 +175,9 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
             setPage(1)
           }}
         />
-        <Tooltip title="功能建设中，随《往来账确认单》导出一并上线">
-          <Button icon={<ExportOutlined />} disabled>
-            导出确认单
-          </Button>
-        </Tooltip>
+        <Button icon={<ExportOutlined />} onClick={() => setStatementOpen(true)}>
+          导出确认单
+        </Button>
       </Flex>
 
       <Row gutter={[16, 16]} role="group" aria-label="合作团单汇总">
@@ -235,6 +234,15 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
             setPageSize(nextPageSize)
           },
         }}
+      />
+
+      <PartnerReconciliationStatementDrawer
+        open={statementOpen}
+        partner={partner}
+        initialPeriod={
+          dateRange?.[0] && dateRange?.[1] ? [dateRange[0], dateRange[1]] : null
+        }
+        onClose={() => setStatementOpen(false)}
       />
     </Space>
   )
