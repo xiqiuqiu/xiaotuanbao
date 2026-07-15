@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { PropsWithChildren } from 'react'
@@ -21,6 +21,7 @@ vi.mock('@/services/finance.service', () => ({
   listDeparturePayables: vi.fn(),
   listDepartureReceivables: vi.fn(),
   listFinanceDepartureOptions: vi.fn(async () => []),
+  getPartnerPaymentScheduleSummary: vi.fn(async () => ({ groups: [] })),
 }))
 
 vi.mock('@/services/departure.service', () => ({
@@ -91,6 +92,40 @@ describe('PaymentScheduleWorkspace partner scope', () => {
         expect.any(AbortSignal),
       )
     })
+  })
+
+  it('passes the departure date range to the partner endpoint as server-side filters', async () => {
+    listPartnerReceivables.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 })
+
+    const { result } = renderHook(
+      () =>
+        usePaymentScheduleWorkspace({
+          scope: 'partner',
+          direction: 'receivable',
+          partnerId: 'partner-1',
+        }),
+      { wrapper: createWrapper() },
+    )
+
+    await waitFor(() => {
+      expect(listPartnerReceivables).toHaveBeenCalled()
+    })
+
+    act(() => {
+      result.current.setDepartureDateRange(['2026-07-01', '2026-07-31'])
+    })
+
+    await waitFor(() => {
+      expect(listPartnerReceivables).toHaveBeenCalledWith(
+        'partner-1',
+        expect.objectContaining({
+          departureDateFrom: '2026-07-01',
+          departureDateTo: '2026-07-31',
+        }),
+        expect.any(AbortSignal),
+      )
+    })
+    expect(result.current.departureDateRange).toEqual(['2026-07-01', '2026-07-31'])
   })
 
   it('does not fetch until partnerId is provided', async () => {

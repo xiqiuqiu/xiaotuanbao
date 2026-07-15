@@ -33,6 +33,7 @@ import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
 } from '../utils/verification-form'
+import { PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY } from '../queries/finance-query-keys'
 
 interface UsePaymentScheduleMutationsOptions {
   queryClient: QueryClient
@@ -92,6 +93,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -111,6 +113,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -137,6 +140,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -165,6 +169,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -192,6 +197,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -222,6 +228,7 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })

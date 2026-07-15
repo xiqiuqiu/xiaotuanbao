@@ -1,10 +1,41 @@
+import { BadRequestException } from '@nestjs/common'
 import type { CounterpartyType, Prisma } from '@prisma/client'
+import { parseDateOnly } from '../departure/departure-date.utils'
 
 export type PaymentScheduleCounterpartyFilterQuery = {
   counterpartyType?: string
   counterpartyId?: string
   counterpartyName?: string
   counterpartyKeyword?: string
+}
+
+export type PaymentScheduleDepartureDateFilterQuery = {
+  departureDateFrom?: string
+  departureDateTo?: string
+}
+
+/**
+ * 按关联发团出团日期（Departure.startDate）过滤收付款节点；
+ * 手工节点（sourceType=manual）随其归属发团的出团日期落入区间。
+ */
+export function buildPaymentScheduleDepartureDateWhere(
+  query: PaymentScheduleDepartureDateFilterQuery,
+): Prisma.PaymentScheduleWhereInput | undefined {
+  const { departureDateFrom, departureDateTo } = query
+  if (!departureDateFrom && !departureDateTo) {
+    return undefined
+  }
+  if (departureDateFrom && departureDateTo && departureDateFrom > departureDateTo) {
+    throw new BadRequestException('出团日期区间非法')
+  }
+  return {
+    departure: {
+      startDate: {
+        ...(departureDateFrom ? { gte: parseDateOnly(departureDateFrom) } : {}),
+        ...(departureDateTo ? { lte: parseDateOnly(departureDateTo) } : {}),
+      },
+    },
+  }
 }
 
 export function buildPaymentScheduleCounterpartyWhere(

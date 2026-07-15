@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import dayjs, { type Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 import {
   Button,
   Col,
@@ -22,24 +22,9 @@ import type { PartnerSourceOrderItem, PartnerSummary } from '@/types/api'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartnerSourceOrders } from '@/services/source-order.service'
 import { formatCents } from '@/features/departure/catalog'
+import { buildDepartureDateRangePresets } from '@/utils/dateRangePresets'
 
 type DepartureDateRange = [string | undefined, string | undefined] | null
-
-/** 每次渲染取当前时间，避免跨天/跨月后快捷项过期。 */
-function buildRangePresets(): { label: string; value: [Dayjs, Dayjs] }[] {
-  const now = dayjs()
-  return [
-    { label: '本月', value: [now.startOf('month'), now.endOf('month')] },
-    {
-      label: '上月',
-      value: [
-        now.subtract(1, 'month').startOf('month'),
-        now.subtract(1, 'month').endOf('month'),
-      ],
-    },
-    { label: '近 3 个月', value: [now.subtract(3, 'month').startOf('day'), now.endOf('day')] },
-  ]
-}
 
 const COLUMNS: ColumnsType<PartnerSourceOrderItem> = [
   { title: '出团日期', dataIndex: 'departureStartDate', width: 110 },
@@ -171,7 +156,7 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
           allowClear
           allowEmpty={[true, true]}
           placeholder={['出团日期起', '出团日期止']}
-          presets={buildRangePresets()}
+          presets={buildDepartureDateRangePresets()}
           value={
             dateRange
               ? [

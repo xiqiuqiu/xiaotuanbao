@@ -4,10 +4,12 @@ import {
   DirectoryProfileStatus,
   PartnerKind,
   PartnerType,
+  ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
+import { PaymentChannel, PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 describe('Partner ledger receivables/payables API (e2e)', () => {
@@ -20,6 +22,9 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
   let partnerId: string
   let similarNamePartnerId: string
   let departureId: string
+  // 聚合/日期过滤专用 Partner（独立于精确过滤 fixtures，出团日期分布在 6/7 两个月）
+  let summaryPartnerId: string
+  let julyDepartureId: string
   const testPrefix = `e2e-partner-ledger-${Date.now()}`
 
   beforeAll(async () => {
@@ -132,7 +137,194 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
         counterpartyName: `${testPrefix}-华东国旅分社`,
       })
       .expect(201)
+
+    await setupSummaryFixtures()
   })
+
+  /**
+   * 聚合/出团日期过滤 fixtures（P3）：
+   * 6 月团（复用 departureId，出团 2026-06-10）：
+   *   - 客源单 split：客户补款 120000（部分收款 50000）＋游客代收 80000
+   *   - 手工应收 40000 → 关闭（不计入汇总）
+   *   - 手工应付 50000
+   * 7 月团（julyDepartureId，出团 2026-07-05）：
+   *   - 客源单 split：客户补款 90000＋游客代收 60000
+   *   - 手工应收（其他应收）30000
+   *   - 拼出资源应付 80000（有效）＋ 99900（作废，不计入汇总）
+   */
+  async function setupSummaryFixtures() {
+    const summaryPartner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-汇总伙伴`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    summaryPartnerId = summaryPartner.id
+
+    const julyDepartureResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-d2-july`,
+        routeName: '吐鲁番3日线',
+        startDate: '2026-07-05',
+        endDate: '2026-07-07',
+        ownerUserId,
+      })
+      .expect(201)
+    julyDepartureId = julyDepartureResponse.body.data.id as string
+
+    // 6 月客源单：客户补款 120000
+    const juneOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId: summaryPartnerId,
+        adultGuestCount: 2,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.split,
+        partnerCollectedCents: 120000,
+      })
+      .expect(201)
+    const juneGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${juneOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+    const juneCustomerSchedule = juneGenerated.body.data.schedules.find(
+      (schedule: { sourceType: string }) =>
+        schedule.sourceType ===
+        PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    ) as { id: string }
+
+    // 部分收款 50000 → 已核销合计要能反映核销进度
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${juneCustomerSchedule.id}/confirm-collection`)
+      .send({
+        amountCents: 50000,
+        transactionDate: '2026-06-15',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: summaryPartnerId,
+        counterpartyName: `${testPrefix}-汇总伙伴`,
+      })
+      .expect(201)
+
+    // 6 月手工应收 40000 → 关闭（cancelled 不计入汇总）
+    const closedReceivable = await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId,
+        title: `${testPrefix}-p3-closed-receivable`,
+        amountCents: 40000,
+        dueDate: '2026-07-10',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: summaryPartnerId,
+        counterpartyName: `${testPrefix}-汇总伙伴`,
+      })
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(
+        `/api/finance/payment-schedules/${closedReceivable.body.data.id as string}/cancel`,
+      )
+      .send({
+        closeDisposition: 'other',
+        cancelReason: '测试关闭：不计入汇总',
+      })
+      .expect(201)
+
+    // 6 月手工应付 50000
+    await authRequest(app, financeToken)
+      .post('/api/finance/payables')
+      .send({
+        departureId,
+        title: `${testPrefix}-p3-june-payable`,
+        amountCents: 50000,
+        dueDate: '2026-06-25',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: summaryPartnerId,
+        counterpartyName: `${testPrefix}-汇总伙伴`,
+      })
+      .expect(201)
+
+    // 7 月客源单：客户补款 90000
+    const julyOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${julyDepartureId}/source-orders`)
+      .send({
+        partnerId: summaryPartnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 150000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.split,
+        partnerCollectedCents: 90000,
+      })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${julyOrder.body.data.id}/generate-receivables`)
+      .expect(201)
+
+    // 7 月手工应收（其他应收）30000：随归属发团出团日期落入 7 月区间
+    await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: julyDepartureId,
+        title: `${testPrefix}-p3-other-receivable`,
+        amountCents: 30000,
+        dueDate: '2026-08-10',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: summaryPartnerId,
+        counterpartyName: `${testPrefix}-汇总伙伴`,
+      })
+      .expect(201)
+
+    // 7 月拼出资源应付：一条有效 80000，一条作废 99900（不计入汇总）
+    const segmentResponse = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${julyDepartureId}/segments`)
+      .send({
+        name: '吐鲁番段',
+        startDate: '2026-07-05',
+        endDate: '2026-07-07',
+        destination: '吐鲁番',
+      })
+      .expect(201)
+    const segmentId = segmentResponse.body.data.id as string
+
+    const activeResource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segmentId}/resources`)
+      .send({
+        resourceKind: ResourceKind.outsource,
+        partnerId: summaryPartnerId,
+        title: `${testPrefix}-拼出`,
+        amountCents: 80000,
+      })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${activeResource.body.data.id as string}/generate-payable`)
+      .expect(201)
+
+    const voidedResource = await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segmentId}/resources`)
+      .send({
+        resourceKind: ResourceKind.outsource,
+        partnerId: summaryPartnerId,
+        title: `${testPrefix}-拼出-误生成`,
+        amountCents: 99900,
+      })
+      .expect(201)
+    const voidedGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${voidedResource.body.data.id as string}/generate-payable`)
+      .expect(201)
+    await authRequest(app, financeToken)
+      .post(
+        `/api/finance/payment-schedules/${voidedGenerated.body.data.schedule.id as string}/void-resource-payable`,
+      )
+      .send({ voidReason: '测试作废：不计入汇总' })
+      .expect(201)
+  }
 
   afterAll(async () => {
     await prisma.financeVerification.deleteMany({
@@ -141,6 +333,12 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
         paymentSchedule: {
           departure: { organizationId, name: { startsWith: testPrefix } },
         },
+      },
+    })
+    await prisma.financeTransaction.deleteMany({
+      where: {
+        organizationId,
+        departure: { name: { startsWith: testPrefix } },
       },
     })
     await prisma.paymentSchedule.deleteMany({
@@ -188,6 +386,11 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(403)
     expect(payablesResponse.body.message).toBe('无权访问')
 
+    const summaryResponse = await authRequest(app, token)
+      .get(`/api/partners/${partnerId}/payment-schedule-summary`)
+      .expect(403)
+    expect(summaryResponse.body.message).toBe('无权访问')
+
     await prisma.user.delete({ where: { id: user.id } })
   })
 
@@ -198,6 +401,9 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
     await authRequest(app, financeToken)
       .get(`/api/partners/${partnerId}/payables`)
       .expect(200)
+    await authRequest(app, financeToken)
+      .get(`/api/partners/${partnerId}/payment-schedule-summary`)
+      .expect(200)
   })
 
   it('returns 404 for unknown partner', async () => {
@@ -206,6 +412,10 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(404)
 
     expect(response.body.message).toBe('合作伙伴不存在')
+
+    await authRequest(app, coordinatorToken)
+      .get('/api/partners/nonexistent-partner-id/payment-schedule-summary')
+      .expect(404)
   })
 
   it('returns 404 for partner in another organization', async () => {
@@ -230,6 +440,9 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(404)
     await authRequest(app, coordinatorToken)
       .get(`/api/partners/${foreignPartner.id}/payables`)
+      .expect(404)
+    await authRequest(app, coordinatorToken)
+      .get(`/api/partners/${foreignPartner.id}/payment-schedule-summary`)
       .expect(404)
 
     await prisma.partner.delete({ where: { id: foreignPartner.id } })
@@ -307,5 +520,178 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
     const data = response.body.data
     expect(data.total).toBe(1)
     expect(data.items[0].counterpartyId).toBe(partnerId)
+  })
+
+  type AggregateGroup = {
+    direction: string
+    sourceType: string
+    count: number
+    amountCents: number
+    settledAmountCents: number
+    unsettledAmountCents: number
+  }
+
+  function findGroup(groups: AggregateGroup[], direction: string, sourceType: string) {
+    return groups.find(
+      (group) => group.direction === direction && group.sourceType === sourceType,
+    )
+  }
+
+  describe('departure date range filter on ledger lists', () => {
+    it('filters receivables by departure start date, manual nodes follow their departure', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/receivables`)
+        .query({ departureDateFrom: '2026-07-01', departureDateTo: '2026-07-31' })
+        .expect(200)
+
+      const data = response.body.data
+      expect(data.total).toBe(2)
+      const amounts = data.items
+        .map((item: { amountCents: number }) => item.amountCents)
+        .sort((a: number, b: number) => a - b)
+      expect(amounts).toEqual([30000, 90000])
+      for (const item of data.items) {
+        expect(item.departureId).toBe(julyDepartureId)
+      }
+    })
+
+    it('includes boundary dates and supports open-ended ranges', async () => {
+      const boundary = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/receivables`)
+        .query({ departureDateFrom: '2026-06-10', departureDateTo: '2026-07-05' })
+        .expect(200)
+      // 6 月：客户补款 120000＋已关闭手工应收 40000（列表仍展示已关闭）；7 月：90000＋30000
+      expect(boundary.body.data.total).toBe(4)
+
+      const openEnded = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/receivables`)
+        .query({ departureDateFrom: '2026-07-01' })
+        .expect(200)
+      expect(openEnded.body.data.total).toBe(2)
+    })
+
+    it('filters payables by departure start date', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/payables`)
+        .query({ departureDateFrom: '2026-06-01', departureDateTo: '2026-06-30' })
+        .expect(200)
+
+      const data = response.body.data
+      expect(data.total).toBe(1)
+      expect(data.items[0]).toMatchObject({
+        amountCents: 50000,
+        sourceType: 'manual',
+      })
+    })
+
+    it('rejects invalid range (from after to)', async () => {
+      await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/receivables`)
+        .query({ departureDateFrom: '2026-08-01', departureDateTo: '2026-07-01' })
+        .expect(400)
+    })
+  })
+
+  describe('payment schedule summary aggregation', () => {
+    it('groups by direction × sourceType, excluding cancelled and voided nodes', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/payment-schedule-summary`)
+        .expect(200)
+
+      const groups = response.body.data.groups as AggregateGroup[]
+
+      // 应收侧：客户补款（6 月 120000 部分收款 50000 ＋ 7 月 90000）
+      expect(
+        findGroup(groups, 'receivable', 'source_order_customer_settlement'),
+      ).toMatchObject({
+        count: 2,
+        amountCents: 210000,
+        settledAmountCents: 50000,
+        unsettledAmountCents: 160000,
+      })
+      // 其他应收：仅 7 月 30000；6 月已关闭的 40000 不计入
+      expect(findGroup(groups, 'receivable', 'manual')).toMatchObject({
+        count: 1,
+        amountCents: 30000,
+        settledAmountCents: 0,
+        unsettledAmountCents: 30000,
+      })
+
+      // 应付侧：手工 50000＋资源 80000；已作废 99900 不计入
+      expect(findGroup(groups, 'payable', 'manual')).toMatchObject({
+        count: 1,
+        amountCents: 50000,
+      })
+      expect(findGroup(groups, 'payable', 'segment_resource')).toMatchObject({
+        count: 1,
+        amountCents: 80000,
+      })
+
+      // 游客代收节点（counterparty=guest）不进入该 Partner 聚合
+      for (const group of groups) {
+        expect(['receivable', 'payable']).toContain(group.direction)
+      }
+      const receivableTotal = groups
+        .filter((group) => group.direction === 'receivable')
+        .reduce((sum, group) => sum + group.amountCents, 0)
+      expect(receivableTotal).toBe(240000)
+    })
+
+    it('follows the departure date range filter', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/payment-schedule-summary`)
+        .query({ departureDateFrom: '2026-06-01', departureDateTo: '2026-06-30' })
+        .expect(200)
+
+      const groups = response.body.data.groups as AggregateGroup[]
+      expect(
+        findGroup(groups, 'receivable', 'source_order_customer_settlement'),
+      ).toMatchObject({
+        count: 1,
+        amountCents: 120000,
+        settledAmountCents: 50000,
+        unsettledAmountCents: 70000,
+      })
+      // 6 月唯一的手工应收已关闭，不出现 manual 分组
+      expect(findGroup(groups, 'receivable', 'manual')).toBeUndefined()
+      expect(findGroup(groups, 'payable', 'manual')).toMatchObject({
+        amountCents: 50000,
+      })
+      expect(findGroup(groups, 'payable', 'segment_resource')).toBeUndefined()
+    })
+
+    it('customer settlement total strictly matches the reconciliation-period source order partnerCollectedCents sum', async () => {
+      const period = { departureDateFrom: '2026-07-01', departureDateTo: '2026-07-31' }
+
+      const [summaryResponse, sourceOrdersResponse] = await Promise.all([
+        authRequest(app, coordinatorToken)
+          .get(`/api/partners/${summaryPartnerId}/payment-schedule-summary`)
+          .query(period)
+          .expect(200),
+        authRequest(app, coordinatorToken)
+          .get(`/api/partners/${summaryPartnerId}/source-orders`)
+          .query(period)
+          .expect(200),
+      ])
+
+      const groups = summaryResponse.body.data.groups as AggregateGroup[]
+      const customerSettlementCents =
+        findGroup(groups, 'receivable', 'source_order_customer_settlement')
+          ?.amountCents ?? 0
+
+      const partnerCollectedSum = (
+        sourceOrdersResponse.body.data.items as { partnerCollectedCents: number }[]
+      ).reduce((sum, order) => sum + order.partnerCollectedCents, 0)
+
+      expect(partnerCollectedSum).toBe(90000)
+      expect(customerSettlementCents).toBe(partnerCollectedSum)
+    })
+
+    it('rejects invalid range (from after to)', async () => {
+      await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${summaryPartnerId}/payment-schedule-summary`)
+        .query({ departureDateFrom: '2026-08-01', departureDateTo: '2026-07-01' })
+        .expect(400)
+    })
   })
 })

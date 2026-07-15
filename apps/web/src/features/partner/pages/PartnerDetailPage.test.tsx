@@ -65,6 +65,7 @@ vi.mock('@/services/finance.service', () => ({
   listFinancePartnerOptions: vi.fn(async () => []),
   listFinanceSupplierOptions: vi.fn(async () => []),
   listFinanceSourceOrderOptions: vi.fn(async () => []),
+  getPartnerPaymentScheduleSummary: vi.fn(async () => ({ groups: [] })),
 }))
 
 vi.mock('@/services/departure.service', () => ({

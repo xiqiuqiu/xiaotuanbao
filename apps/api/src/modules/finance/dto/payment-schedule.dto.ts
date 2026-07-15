@@ -88,6 +88,15 @@ export class ListPaymentSchedulesQueryDto {
   @IsString()
   departureId?: string
 
+  /** 按关联发团出团日期（Departure.startDate）过滤；手工节点随其归属发团落入区间。 */
+  @IsOptional()
+  @IsDateString()
+  departureDateFrom?: string
+
+  @IsOptional()
+  @IsDateString()
+  departureDateTo?: string
+
   @IsOptional()
   @IsEnum(PrismaCounterpartyType)
   counterpartyType?: PrismaCounterpartyType
@@ -119,6 +128,16 @@ export class ListPaymentSchedulesQueryDto {
   @IsInt()
   @Min(1)
   pageSize?: number
+}
+
+export class PaymentScheduleAggregateQueryDto {
+  @IsOptional()
+  @IsDateString()
+  departureDateFrom?: string
+
+  @IsOptional()
+  @IsDateString()
+  departureDateTo?: string
 }
 
 export class CancelPaymentScheduleDto {

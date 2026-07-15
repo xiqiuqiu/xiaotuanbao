@@ -12,6 +12,7 @@ import type {
   FinanceVerificationDetail,
   FinanceVerificationListResult,
   FinanceVerificationSummary,
+  PaymentScheduleAggregateResult,
   PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
@@ -42,6 +43,9 @@ export interface FinanceSourceOrderOption {
 
 export interface ListPaymentSchedulesParams {
   departureId?: string
+  /** 按关联发团出团日期过滤；手工节点随其归属发团落入区间。 */
+  departureDateFrom?: string
+  departureDateTo?: string
   counterpartyType?: string
   counterpartyId?: string
   counterpartyName?: string
@@ -49,6 +53,11 @@ export interface ListPaymentSchedulesParams {
   status?: 'voided'
   page?: number
   pageSize?: number
+}
+
+export interface PartnerPaymentScheduleSummaryParams {
+  departureDateFrom?: string
+  departureDateTo?: string
 }
 
 export interface ListFinanceTransactionsParams {
@@ -274,6 +283,21 @@ export async function listPartnerPayables(
     params,
     signal,
   })
+}
+
+/**
+ * 往来账款 Tab 汇总卡：direction × sourceType 分组的约定/已核销/未结清合计。
+ * 已关闭、已作废节点不计入；出团日期区间与列表同口径。
+ */
+export async function getPartnerPaymentScheduleSummary(
+  partnerId: string,
+  params: PartnerPaymentScheduleSummaryParams = {},
+  signal?: AbortSignal,
+): Promise<PaymentScheduleAggregateResult> {
+  return request.get<PaymentScheduleAggregateResult>(
+    `/partners/${partnerId}/payment-schedule-summary`,
+    { params, signal },
+  )
 }
 
 export async function listDepartureVerifications(

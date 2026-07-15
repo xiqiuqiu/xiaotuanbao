@@ -39,6 +39,8 @@ export type {
   PaymentScheduleDetail,
   PaymentScheduleActivityItem,
   PaymentScheduleListResult,
+  PaymentScheduleAggregateGroup,
+  PaymentScheduleAggregateResult,
   CancelPaymentScheduleDto,
   ReopenPaymentScheduleDto,
   AdjustPaymentScheduleAmountDto,

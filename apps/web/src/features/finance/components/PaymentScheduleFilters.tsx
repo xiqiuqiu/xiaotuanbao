@@ -3,6 +3,7 @@ import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { PaymentScheduleStatus } from '@xiaotuanbao/shared'
 import { listFinanceDepartureOptions } from '@/services/finance.service'
+import { buildDepartureDateRangePresets } from '@/utils/dateRangePresets'
 import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 import {
   PAYABLE_SCHEDULE_FILTER_OPTIONS,
@@ -10,6 +11,7 @@ import {
 } from '../catalog'
 
 export type DueDateRange = [string | undefined, string | undefined] | null
+export type DepartureDateRange = [string | undefined, string | undefined] | null
 export type PaymentScheduleStatusFilter = PaymentScheduleStatus | 'voided'
 
 interface PaymentScheduleFiltersProps {
@@ -18,9 +20,12 @@ interface PaymentScheduleFiltersProps {
   keyword: string
   counterpartyKeyword: string
   dueDateRange: DueDateRange
+  departureDateRange?: DepartureDateRange
   showDepartureFilter: boolean
   /** Partner 往来账款 Tab 往来对象已锚定，隐藏 keyword 模糊搜索。 */
   showCounterpartyFilter?: boolean
+  /** 往来账款 Tab 主时间轴：所属发团出团日期区间（与确认单周期同口径）。 */
+  showDepartureDateFilter?: boolean
   /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
   isReceivable: boolean
   onDepartureChange: (value?: string) => void
@@ -28,6 +33,7 @@ interface PaymentScheduleFiltersProps {
   onKeywordChange: (value: string) => void
   onCounterpartyKeywordChange: (value: string) => void
   onDueDateRangeChange: (value: DueDateRange) => void
+  onDepartureDateRangeChange?: (value: DepartureDateRange) => void
   onReset: () => void
 }
 
@@ -37,14 +43,17 @@ export function PaymentScheduleFilters({
   keyword,
   counterpartyKeyword,
   dueDateRange,
+  departureDateRange = null,
   showDepartureFilter,
   showCounterpartyFilter = true,
+  showDepartureDateFilter = false,
   isReceivable,
   onDepartureChange,
   onStatusChange,
   onKeywordChange,
   onCounterpartyKeywordChange,
   onDueDateRangeChange,
+  onDepartureDateRangeChange,
   onReset,
 }: PaymentScheduleFiltersProps) {
   const { data: departuresResult } = useQuery({
@@ -104,6 +113,30 @@ export function PaymentScheduleFilters({
           onChange={onStatusChange}
           options={[...statusOptions]}
         />
+        {showDepartureDateFilter ? (
+          <DatePicker.RangePicker
+            allowClear
+            allowEmpty={[true, true]}
+            placeholder={['出团日期起', '出团日期止']}
+            presets={buildDepartureDateRangePresets()}
+            value={
+              departureDateRange
+                ? [
+                    departureDateRange[0] ? dayjs(departureDateRange[0]) : null,
+                    departureDateRange[1] ? dayjs(departureDateRange[1]) : null,
+                  ]
+                : null
+            }
+            onChange={(values) =>
+              onDepartureDateRangeChange?.(
+                values
+                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                  : null,
+              )
+            }
+            style={{ maxWidth: '100%' }}
+          />
+        ) : null}
         {isReceivable ? (
           <DatePicker.RangePicker
             allowClear

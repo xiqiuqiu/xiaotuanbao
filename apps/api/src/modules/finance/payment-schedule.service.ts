@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common'
 import type {
   PaymentScheduleActivityItem,
+  PaymentScheduleAggregateGroup,
+  PaymentScheduleAggregateResult,
   PaymentScheduleDetail,
   PaymentScheduleListResult,
   PaymentScheduleSummary,
@@ -18,6 +20,7 @@ import {
 import {
   PaymentScheduleActivityType,
   PaymentScheduleDirection,
+  type CounterpartyType,
   type PaymentSchedule,
   type PaymentScheduleActivity,
   type Prisma,
@@ -41,7 +44,10 @@ import type {
   UpdatePaymentScheduleDto,
   VoidResourcePayableDto,
 } from './dto/payment-schedule.dto'
-import { buildPaymentScheduleCounterpartyWhere } from './payment-schedule-list-filters'
+import {
+  buildPaymentScheduleCounterpartyWhere,
+  buildPaymentScheduleDepartureDateWhere,
+} from './payment-schedule-list-filters'
 
 const FINANCE_ADJUSTMENT_FIELDS = [
   'amountCents',
@@ -69,6 +75,7 @@ export class PaymentScheduleService {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
     const counterpartyWhere = buildPaymentScheduleCounterpartyWhere(query)
+    const departureDateWhere = buildPaymentScheduleDepartureDateWhere(query)
 
     const where: Prisma.PaymentScheduleWhereInput = {
       organizationId,
@@ -76,6 +83,7 @@ export class PaymentScheduleService {
       voidedAt: query.status === 'voided' ? { not: null } : null,
       ...(query.departureId ? { departureId: query.departureId } : {}),
       ...counterpartyWhere,
+      ...departureDateWhere,
     }
 
     const [items, total] = await Promise.all([
@@ -113,6 +121,63 @@ export class PaymentScheduleService {
       page,
       pageSize,
     }
+  }
+
+  /**
+   * 按往来对象的账款聚合：direction × sourceType 分组的约定/已核销/未结清合计。
+   * 已关闭（cancelled）、已作废（voided）节点不计入；未结清按节点级 clamp 后求和，
+   * 与列表行的 unsettledAmountCents 口径一致。
+   */
+  async aggregateByCounterparty(
+    organizationId: string,
+    filters: {
+      counterpartyType: CounterpartyType
+      counterpartyId: string
+      departureDateFrom?: string
+      departureDateTo?: string
+    },
+  ): Promise<PaymentScheduleAggregateResult> {
+    const departureDateWhere = buildPaymentScheduleDepartureDateWhere(filters)
+
+    const schedules = await this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        counterpartyType: filters.counterpartyType,
+        counterpartyId: filters.counterpartyId,
+        cancelledAt: null,
+        voidedAt: null,
+        ...departureDateWhere,
+      },
+      select: { id: true, direction: true, sourceType: true, amountCents: true },
+    })
+
+    const settledMap = await this.verificationService.batchGetSettledAmounts(
+      schedules.map((schedule) => schedule.id),
+    )
+
+    const groupMap = new Map<string, PaymentScheduleAggregateGroup>()
+    for (const schedule of schedules) {
+      const key = `${schedule.direction}\0${schedule.sourceType}`
+      let group = groupMap.get(key)
+      if (!group) {
+        group = {
+          direction: schedule.direction,
+          sourceType: schedule.sourceType,
+          count: 0,
+          amountCents: 0,
+          settledAmountCents: 0,
+          unsettledAmountCents: 0,
+        }
+        groupMap.set(key, group)
+      }
+      const settledAmountCents = settledMap.get(schedule.id) ?? 0
+      group.count += 1
+      group.amountCents += schedule.amountCents
+      group.settledAmountCents += settledAmountCents
+      group.unsettledAmountCents += Math.max(schedule.amountCents - settledAmountCents, 0)
+    }
+
+    return { groups: [...groupMap.values()] }
   }
 
   async getById(

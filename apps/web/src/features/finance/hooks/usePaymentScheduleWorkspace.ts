@@ -20,6 +20,7 @@ import {
   listFinanceDepartureOptions,
 } from '@/services/finance.service'
 import type {
+  DepartureDateRange,
   DueDateRange,
   PaymentScheduleStatusFilter,
 } from '../components/PaymentScheduleFilters'
@@ -75,6 +76,8 @@ export function usePaymentScheduleWorkspace({
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatusFilter | undefined>()
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
+  /** Partner scope 主时间轴：所属发团出团日期区间（服务端过滤，与汇总卡同口径）。 */
+  const [departureDateRange, setDepartureDateRange] = useState<DepartureDateRange>(null)
   const [counterpartyKeyword, setCounterpartyKeyword] = useState(initialCounterpartyKeyword)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -107,6 +110,9 @@ export function usePaymentScheduleWorkspace({
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
+  const departureDateFrom = isPartnerScope ? departureDateRange?.[0] : undefined
+  const departureDateTo = isPartnerScope ? departureDateRange?.[1] : undefined
+
   // Only server-driven list inputs. Client-only filters (keyword/status/due date)
   // reshape rows locally and must not clear the cached cohort.
   const listFilterKey = [
@@ -114,6 +120,8 @@ export function usePaymentScheduleWorkspace({
     useExpandedFetch,
     trimmedCounterpartyKeyword,
     voidedAudit,
+    departureDateFrom,
+    departureDateTo,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -135,6 +143,8 @@ export function usePaymentScheduleWorkspace({
       useExpandedFetch,
       trimmedCounterpartyKeyword,
       voidedAudit,
+      departureDateFrom,
+      departureDateTo,
     ],
     queryFn: ({ signal }) => {
       const counterpartyQuery = trimmedCounterpartyKeyword
@@ -167,6 +177,8 @@ export function usePaymentScheduleWorkspace({
           {
             page: useExpandedFetch ? 1 : page,
             pageSize: fetchPageSize,
+            ...(departureDateFrom ? { departureDateFrom } : {}),
+            ...(departureDateTo ? { departureDateTo } : {}),
             ...statusQuery,
           },
           signal,
@@ -322,6 +334,7 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter(undefined)
     setKeyword('')
     setDueDateRange(null)
+    setDepartureDateRange(null)
     setCounterpartyKeyword('')
     setPage(1)
     locateExpandedLatchRef.current = false
@@ -379,6 +392,7 @@ export function usePaymentScheduleWorkspace({
     statusFilter,
     keyword,
     dueDateRange,
+    departureDateRange,
     counterpartyKeyword,
     page,
     pageSize,
@@ -388,6 +402,7 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter,
     setKeyword,
     setDueDateRange,
+    setDepartureDateRange,
     setCounterpartyKeyword,
     resetFilters,
     scope,

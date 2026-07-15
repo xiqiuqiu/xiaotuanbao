@@ -26,6 +26,14 @@ export type PaymentScheduleWorkspaceProps = {
   pageHeader?: {
     title: string
   }
+  /**
+   * 汇总卡插槽：渲染在筛选区与列表之间，跟随出团日期筛选
+   * （Partner 往来账款 Tab 每方向三项汇总卡）。
+   */
+  renderSummary?: (filters: {
+    departureDateFrom?: string
+    departureDateTo?: string
+  }) => React.ReactNode
 }
 
 export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
@@ -36,6 +44,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     statusFilter,
     keyword,
     dueDateRange,
+    departureDateRange,
     counterpartyKeyword,
     page,
     pageSize,
@@ -45,6 +54,7 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     setStatusFilter,
     setKeyword,
     setDueDateRange,
+    setDepartureDateRange,
     setCounterpartyKeyword,
     resetFilters,
     scope,
@@ -87,8 +97,10 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         keyword={keyword}
         counterpartyKeyword={counterpartyKeyword}
         dueDateRange={dueDateRange}
+        departureDateRange={departureDateRange}
         showDepartureFilter={scope === 'global'}
         showCounterpartyFilter={scope !== 'partner'}
+        showDepartureDateFilter={scope === 'partner'}
         isReceivable={isReceivable}
         onDepartureChange={(value) => {
           setDepartureFilter(value)
@@ -110,8 +122,19 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
           setDueDateRange(value)
           setPage(1)
         }}
+        onDepartureDateRangeChange={(value) => {
+          setDepartureDateRange(value)
+          setPage(1)
+        }}
         onReset={resetFilters}
       />
+
+      {props.renderSummary
+        ? props.renderSummary({
+            departureDateFrom: departureDateRange?.[0],
+            departureDateTo: departureDateRange?.[1],
+          })
+        : null}
 
       <StaleDataAlert
         isFetching={isFetching}

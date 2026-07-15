@@ -403,6 +403,23 @@ export interface PaymentScheduleListResult {
   pageSize: number
 }
 
+/**
+ * 按往来对象的账款聚合分组（direction × sourceType）。
+ * 已关闭（cancelled）、已作废（voided）节点不计入。
+ */
+export interface PaymentScheduleAggregateGroup {
+  direction: string
+  sourceType: string
+  count: number
+  amountCents: number
+  settledAmountCents: number
+  unsettledAmountCents: number
+}
+
+export interface PaymentScheduleAggregateResult {
+  groups: PaymentScheduleAggregateGroup[]
+}
+
 export interface CancelPaymentScheduleDto {
   closeDisposition: string
   cancelReason: string
