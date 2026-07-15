@@ -96,7 +96,7 @@ export function filterCandidateSchedules(params: {
   departureMap: Map<string, { departureNo: string; name: string }>
 }): PaymentScheduleSummary[] {
   const { schedules, selectedTransaction, departureId, searchKeyword, departureMap } = params
-  const scopeDepartureId = departureId ?? selectedTransaction.departureId ?? undefined
+  const scopeDepartureId = departureId
   const normalizedSearchKeyword = searchKeyword?.trim().toLowerCase() ?? ''
 
   return schedules.filter((schedule) => {

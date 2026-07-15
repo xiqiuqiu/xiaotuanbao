@@ -108,7 +108,7 @@ export function PaymentScheduleActionDialogs({
           key={activeSchedule.id}
           open={verifyOpen}
           initialSchedule={activeSchedule}
-          lockedDepartureId={lockedDepartureId ?? activeSchedule.departureId}
+          lockedDepartureId={lockedDepartureId}
           loading={verifyCreateMutation.isPending}
           form={verifyForm}
           onClose={onCloseVerify}

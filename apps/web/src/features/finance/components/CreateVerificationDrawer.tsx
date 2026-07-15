@@ -11,6 +11,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Radio,
   Row,
   Select,
@@ -565,6 +566,26 @@ export function CreateVerificationDrawer({
     [state.departureMap, state.direction],
   )
 
+  const handleSubmit = (values: CreateVerificationFormValues) => {
+    const transactionDepartureId = state.selectedTransaction?.departureId
+    const scheduleDepartureId = state.selectedSchedule?.departureId
+    if (
+      transactionDepartureId &&
+      scheduleDepartureId &&
+      transactionDepartureId !== scheduleDepartureId
+    ) {
+      Modal.confirm({
+        title: '确认跨团核销？',
+        content: `流水关联「${formatDepartureLabel(transactionDepartureId, state.departureMap)}」，收付款节点关联「${formatDepartureLabel(scheduleDepartureId, state.departureMap)}」。跨团核销将正常计入双方发团，请确认业务归属无误。`,
+        okText: '继续核销',
+        cancelText: '取消',
+        onOk: () => onSubmit(values),
+      })
+      return
+    }
+    onSubmit(values)
+  }
+
   return (
     <Drawer
       title="新增核销"
@@ -587,7 +608,7 @@ export function CreateVerificationDrawer({
         form={form}
         layout="vertical"
         initialValues={state.initialValues}
-        onFinish={onSubmit}
+        onFinish={handleSubmit}
       >
         <VerificationHiddenFields />
 

@@ -73,18 +73,12 @@ export function getInitialVerificationValues({
   if (initialTransaction) {
     initialValues.transactionId = initialTransaction.id
     initialValues.direction = directionFromTransaction(initialTransaction)
-    if (initialTransaction.departureId && !lockedDepartureId) {
-      initialValues.departureId = initialTransaction.departureId
-    }
   }
 
   if (initialSchedule) {
     initialValues.paymentScheduleId = initialSchedule.id
     initialValues.direction =
       initialSchedule.direction === 'receivable' ? 'receivable' : 'payable'
-    if (initialSchedule.departureId && !lockedDepartureId) {
-      initialValues.departureId = initialSchedule.departureId
-    }
   }
 
   if (

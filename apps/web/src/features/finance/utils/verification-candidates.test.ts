@@ -111,6 +111,49 @@ describe('filterCandidateTransactions', () => {
   })
 })
 
+describe('filterCandidateSchedules', () => {
+  it('keeps matching-counterparty schedules from other departures when no departure filter is selected', () => {
+    const transaction = makeTransaction({ departureId: 'dep-1' })
+    const crossDepartureSchedule = {
+      id: 'ar-2',
+      scheduleNo: 'ARXTB202607000034',
+      direction: 'receivable',
+      title: '跨团团款',
+      amountCents: 100000,
+      settledAmountCents: 0,
+      unsettledAmountCents: 100000,
+      status: 'pending',
+      dueDate: '2026-07-15',
+      counterpartyType: 'customer',
+      counterpartyId: 'cp-1',
+      counterpartyName: '华东国旅',
+      departureId: 'dep-2',
+      sourceType: 'manual',
+      sourceId: null,
+      financeTouched: false,
+      cancelledAt: null,
+      cancelledBy: null,
+      closeDisposition: null,
+      cancelReason: null,
+      voidedAt: null,
+      voidedBy: null,
+      voidReason: null,
+      voidedAmountCents: null,
+      amountAdjustedAt: null,
+      createdAt: '2026-01-15T00:00:00.000Z',
+      updatedAt: '2026-01-15T00:00:00.000Z',
+    } satisfies PaymentScheduleSummary
+
+    expect(
+      filterCandidateSchedules({
+        schedules: [crossDepartureSchedule],
+        selectedTransaction: transaction,
+        departureMap,
+      }),
+    ).toEqual([crossDepartureSchedule])
+  })
+})
+
 describe('matchesCounterparty for guest collection', () => {
   function makeSchedule(
     overrides: Partial<PaymentScheduleSummary> = {},

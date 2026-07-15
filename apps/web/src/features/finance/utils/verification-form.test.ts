@@ -72,7 +72,7 @@ describe('getInitialVerificationValues', () => {
 
     expect(values.transactionId).toBe('tx-1')
     expect(values.direction).toBe('receivable')
-    expect(values.departureId).toBe('dep-1')
+    expect(values.departureId).toBeUndefined()
   })
 
   it('defaults schedule and direction from the opened payment schedule', () => {
@@ -82,7 +82,7 @@ describe('getInitialVerificationValues', () => {
 
     expect(values.paymentScheduleId).toBe('sch-1')
     expect(values.direction).toBe('receivable')
-    expect(values.departureId).toBe('dep-1')
+    expect(values.departureId).toBeUndefined()
   })
 
   it('prefills amount when opened with matching transaction and schedule', () => {
