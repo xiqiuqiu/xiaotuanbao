@@ -39,6 +39,7 @@ interface UsePaymentScheduleMutationsOptions {
   isReceivable: boolean
   listQueryKey: string
   departureListQueryKey: string
+  partnerListQueryKey: string
   activeSchedule: PaymentScheduleSummary | null
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
   verifyForm: FormInstance<CreateVerificationFormValues>
@@ -59,6 +60,7 @@ export function usePaymentScheduleMutations({
   isReceivable,
   listQueryKey,
   departureListQueryKey,
+  partnerListQueryKey,
   activeSchedule,
   confirmForm,
   verifyForm,
@@ -89,6 +91,7 @@ export function usePaymentScheduleMutations({
       onConfirmSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -107,6 +110,7 @@ export function usePaymentScheduleMutations({
       onVerifySuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -132,6 +136,7 @@ export function usePaymentScheduleMutations({
       onCancelSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -159,6 +164,7 @@ export function usePaymentScheduleMutations({
       onReopenSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -185,6 +191,7 @@ export function usePaymentScheduleMutations({
       onAdjustSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -214,6 +221,7 @@ export function usePaymentScheduleMutations({
       onEditSuccess()
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })

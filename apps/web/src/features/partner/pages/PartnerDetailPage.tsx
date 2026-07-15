@@ -6,6 +6,7 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { getPartner, updatePartner } from '@/services/partner.service'
 import { SupplierComingSoonPanel } from '@/features/supplier/components/SupplierComingSoonPanel'
 import { PartnerFormDrawer } from '../components/PartnerFormDrawer'
+import { PartnerLedgerPanel } from '../components/PartnerLedgerPanel'
 import type { PartnerFormValues } from '../components/PartnerProfileSections'
 import { PartnerReadonlySections } from '../components/PartnerReadonlySections'
 import { buildUpdatePayload, partnerToFormValues } from '../utils/partner-form'
@@ -114,7 +115,7 @@ export function PartnerDetailPage() {
             {
               key: 'accounts',
               label: '往来账款',
-              children: <SupplierComingSoonPanel />,
+              children: <PartnerLedgerPanel partnerId={partner.id} />,
             },
             {
               key: 'groups',
