@@ -5,6 +5,7 @@ import {
   AdjustPaymentScheduleAmountDto,
   CancelPaymentScheduleDto,
   ReopenPaymentScheduleDto,
+  VoidResourcePayableDto,
 } from './dto/payment-schedule.dto'
 import { PaymentScheduleService } from './payment-schedule.service'
 import { FinanceIdempotencyService } from './finance-idempotency.service'
@@ -77,6 +78,29 @@ export class PaymentScheduleCancelController {
       request: { scheduleId: id, dto, userId: request.user.userId },
       handler: (tx) =>
         this.paymentScheduleService.adjustAmount(
+          request.user.organizationId,
+          id,
+          request.user.userId,
+          dto,
+          tx,
+        ),
+    })
+  }
+
+  @Post(':id/void-resource-payable')
+  voidResourcePayable(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Body() dto: VoidResourcePayableDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<PaymentScheduleSummary> {
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'void-resource-payable',
+      idempotencyKey,
+      request: { scheduleId: id, dto, userId: request.user.userId },
+      handler: (tx) =>
+        this.paymentScheduleService.voidResourcePayable(
           request.user.organizationId,
           id,
           request.user.userId,

@@ -164,6 +164,7 @@ enum PaymentScheduleCloseDisposition {
 
 enum PaymentScheduleActivityType {
   close
+  void
   verification_cancelled
   reopen
   amount_adjust
@@ -293,6 +294,7 @@ model User {
   departureArchiveOperations DepartureArchiveHistory[] @relation("DepartureArchiveOperator")
   departureSettlementOperations DepartureSettlementHistory[] @relation("DepartureSettlementOperator")
   paymentScheduleCancellations PaymentSchedule[] @relation("PaymentScheduleCancelOperator")
+  paymentScheduleVoids PaymentSchedule[] @relation("PaymentScheduleVoidOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
 
   @@unique([organizationId, username])
@@ -606,6 +608,11 @@ model PaymentSchedule {
   cancelOperator   User?                    @relation("PaymentScheduleCancelOperator", fields: [cancelledBy], references: [id])
   closeDisposition PaymentScheduleCloseDisposition? @map("close_disposition")
   cancelReason     String?                  @map("cancel_reason")
+  voidedAt         DateTime?                @map("voided_at")
+  voidedBy         String?                  @map("voided_by")
+  voidOperator     User?                    @relation("PaymentScheduleVoidOperator", fields: [voidedBy], references: [id])
+  voidReason       String?                  @map("void_reason")
+  voidedAmountCents Int?                    @map("voided_amount_cents")
   amountAdjustedAt DateTime?                @map("amount_adjusted_at")
   createdAt        DateTime                 @default(now()) @map("created_at")
   updatedAt        DateTime                 @updatedAt @map("updated_at")
@@ -615,7 +622,6 @@ model PaymentSchedule {
   settlementHistories DepartureSettlementHistory[]
 
   @@unique([organizationId, scheduleNo])
-  @@unique([organizationId, direction, sourceType, sourceId])
   @@index([organizationId, departureId])
   @@map("payment_schedules")
 }

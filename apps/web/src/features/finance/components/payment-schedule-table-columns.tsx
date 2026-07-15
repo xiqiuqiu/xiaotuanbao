@@ -27,7 +27,14 @@ function canSettle(schedule: PaymentScheduleSummary): boolean {
   return isScheduleActionable(schedule) && schedule.unsettledAmountCents > 0
 }
 
-function canClose(schedule: PaymentScheduleSummary): boolean {
+export function canCloseSchedule(schedule: PaymentScheduleSummary): boolean {
+  if (
+    schedule.direction === PaymentScheduleDirection.PAYABLE &&
+    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+    !schedule.financeTouched
+  ) {
+    return false
+  }
   return canSettle(schedule)
 }
 
@@ -232,7 +239,7 @@ export function buildPaymentScheduleColumns({
           })
         }
 
-        if (canClose(record)) {
+        if (canCloseSchedule(record)) {
           moreItems.push({
             key: 'cancel',
             label: '关闭节点',

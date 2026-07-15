@@ -322,6 +322,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(201)
     const scheduleId = generated.body.data.schedule.id as string
+
     expect(generated.body.data.schedule.amountCents).toBe(originalAmountCents)
 
     const edited = await authRequest(app, financeToken)
@@ -485,6 +486,17 @@ describe('Segment resource generate payables (e2e)', () => {
     const scheduleId = generated.body.data.schedule.id as string
 
     await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${scheduleId}/confirm-payment`)
+      .send({
+        amountCents: 10000,
+        transactionDate: '2026-07-02',
+        paymentChannel: PaymentChannel.OTHER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
       .send({ closeDisposition: 'other', cancelReason: '测试关闭应付' })
       .expect(201)
@@ -505,5 +517,231 @@ describe('Segment resource generate payables (e2e)', () => {
       .expect(409)
 
     expect(rejected.body.message).toBe('当前资源已生成应付，不能再次生成')
+  })
+
+  it('voids an untouched payable, unlocks the resource, and allows regeneration and payment', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+    const voidedScheduleId = generated.body.data.schedule.id as string
+
+    const voided = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${voidedScheduleId}/void-resource-payable`)
+      .send({ voidReason: '供应商报价录入错误' })
+      .expect(201)
+
+    expect(voided.body.data).toMatchObject({
+      id: voidedScheduleId,
+      voidReason: '供应商报价录入错误',
+      voidedAmountCents: 160000,
+      voidedBy: ownerUserId,
+    })
+    expect(voided.body.data.voidedAt).toEqual(expect.any(String))
+
+    const audit = await authRequest(app, financeToken)
+      .get(`/api/finance/payables/${voidedScheduleId}`)
+      .expect(200)
+    expect(audit.body.data.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activityType: 'void',
+          note: '供应商报价录入错误',
+          amountCents: 160000,
+          operatedBy: ownerUserId,
+          operatedAt: expect.any(String),
+        }),
+      ]),
+    )
+
+    const unlocked = await authRequest(app, coordinatorToken)
+      .get(`/api/segment-resources/${resource.id}`)
+      .expect(200)
+    expect(unlocked.body.data).toMatchObject({
+      hasPaymentSchedule: false,
+      payableStatus: 'not_generated',
+      amountFieldsLocked: false,
+    })
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/segment-resources/${resource.id}`)
+      .send({ amountCents: 180000 })
+      .expect(200)
+
+    const regenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+
+    expect(regenerated.body.data.schedule).toMatchObject({
+      sourceId: resource.id,
+      amountCents: 180000,
+    })
+    expect(regenerated.body.data.schedule.id).not.toBe(voidedScheduleId)
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${regenerated.body.data.schedule.id}/confirm-payment`)
+      .send({
+        amountCents: 180000,
+        transactionDate: '2026-07-02',
+        paymentChannel: PaymentChannel.OTHER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+      })
+      .expect(201)
+  })
+
+  it('keeps untouched resource payable close and void actions mutually exclusive', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+
+    const rejected = await authRequest(app, financeToken)
+      .post(`/api/finance/payment-schedules/${generated.body.data.schedule.id}/cancel`)
+      .send({ closeDisposition: 'other', cancelReason: '未介入不应关闭' })
+      .expect(400)
+
+    expect(rejected.body.message).toBe('财务未介入的资源应付请使用作废')
+  })
+
+  it('validates void reason and replays the same idempotent void result once', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+    const scheduleId = generated.body.data.schedule.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/void-resource-payable`)
+      .send({ voidReason: '   ' })
+      .expect(400)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/void-resource-payable`)
+      .send({ voidReason: '误'.repeat(201) })
+      .expect(400)
+
+    const key = `${testPrefix}-void-replay-${scheduleId}`
+    const first = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/void-resource-payable`)
+      .set('Idempotency-Key', key)
+      .send({ voidReason: '重复请求测试' })
+      .expect(201)
+    const replay = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${scheduleId}/void-resource-payable`)
+      .set('Idempotency-Key', key)
+      .send({ voidReason: '重复请求测试' })
+      .expect(201)
+
+    expect(replay.body.data).toEqual(first.body.data)
+    expect(
+      await prisma.paymentScheduleActivity.count({
+        where: { paymentScheduleId: scheduleId, activityType: 'void' },
+      }),
+    ).toBe(1)
+  })
+
+  it('rejects void after any verification history, even when the verification was cancelled', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+    const schedule = generated.body.data.schedule as { id: string; scheduleNo: string }
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${schedule.id}/confirm-payment`)
+      .send({
+        amountCents: 10000,
+        transactionDate: '2026-07-02',
+        paymentChannel: PaymentChannel.OTHER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+      })
+      .expect(201)
+    const verifications = await authRequest(app, financeToken)
+      .get('/api/finance/verifications')
+      .query({ scheduleNo: schedule.scheduleNo, scheduleNoMatch: 'exact' })
+      .expect(200)
+    await authRequest(app, financeToken)
+      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
+      .send({ cancelReason: '撤销测试核销' })
+      .expect(201)
+
+    const rejected = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${schedule.id}/void-resource-payable`)
+      .send({ voidReason: '不应允许' })
+      .expect(400)
+    expect(rejected.body.message).toBe('已有核销历史的资源应付不可作废')
+  })
+
+  it('rejects void after an explicit amount adjustment or close', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const adjustedResource = await createResource(segment.id)
+    const adjusted = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${adjustedResource.id}/generate-payable`)
+      .expect(201)
+    await prisma.paymentSchedule.update({
+      where: { id: adjusted.body.data.schedule.id },
+      data: { amountAdjustedAt: new Date() },
+    })
+
+    const adjustedReject = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${adjusted.body.data.schedule.id}/void-resource-payable`)
+      .send({ voidReason: '不应允许' })
+      .expect(400)
+    expect(adjustedReject.body.message).toBe('已调整约定金额的资源应付不可作废')
+
+    const closedResource = await createResource(segment.id, { title: '已关闭资源' })
+    const closed = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${closedResource.id}/generate-payable`)
+      .expect(201)
+    await prisma.paymentSchedule.update({
+      where: { id: closed.body.data.schedule.id },
+      data: { cancelledAt: new Date(), cancelledBy: ownerUserId, cancelReason: '测试关闭' },
+    })
+
+    const closedReject = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${closed.body.data.schedule.id}/void-resource-payable`)
+      .send({ voidReason: '不应允许' })
+      .expect(400)
+    expect(closedReject.body.message).toBe('已关闭的资源应付不可作废')
+  })
+
+  it('keeps at most one active payable during concurrent void and generation', async () => {
+    const departure = await createDeparture()
+    const segment = await createSegment(departure.id)
+    const resource = await createResource(segment.id)
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/segment-resources/${resource.id}/generate-payable`)
+      .expect(201)
+
+    const [voidResponse, generateResponse] = await Promise.all([
+      authRequest(app, coordinatorToken)
+        .post(`/api/finance/payment-schedules/${generated.body.data.schedule.id}/void-resource-payable`)
+        .send({ voidReason: '并发纠错' }),
+      authRequest(app, coordinatorToken)
+        .post(`/api/segment-resources/${resource.id}/generate-payable`),
+    ])
+
+    expect(voidResponse.status).toBe(201)
+    expect([201, 409]).toContain(generateResponse.status)
+    const activeCount = await prisma.paymentSchedule.count({
+      where: {
+        organizationId,
+        sourceId: resource.id,
+        direction: PaymentScheduleDirection.payable,
+        voidedAt: null,
+      },
+    })
+    expect(activeCount).toBeLessThanOrEqual(1)
   })
 })

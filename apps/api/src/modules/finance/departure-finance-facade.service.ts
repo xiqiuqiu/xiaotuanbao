@@ -35,6 +35,8 @@ type TxClient = Prisma.TransactionClient
  */
 export interface SegmentResourceFinanceState {
   hasSchedule: boolean
+  paymentScheduleId: string | null
+  financeTouched: boolean
   payableStatus: SegmentPayableStatus
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
@@ -425,6 +427,7 @@ export class DepartureFinanceFacade {
         sourceId: { in: uniqueIds },
         sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
         direction: PaymentScheduleDirection.payable,
+        voidedAt: null,
       },
     })
 
@@ -776,6 +779,8 @@ export class DepartureFinanceFacade {
     if (!schedule) {
       return {
         hasSchedule: false,
+        paymentScheduleId: null,
+        financeTouched: false,
         payableStatus: SegmentPayableStatus.NOT_GENERATED,
         hasSourceAmountMismatch: false,
         amountFieldsLocked: false,
@@ -792,6 +797,8 @@ export class DepartureFinanceFacade {
     if (schedule.cancelledAt != null) {
       return {
         hasSchedule: true,
+        paymentScheduleId: schedule.id,
+        financeTouched: true,
         payableStatus: SegmentPayableStatus.CLOSED,
         hasSourceAmountMismatch: false,
         amountFieldsLocked: true,
@@ -833,6 +840,8 @@ export class DepartureFinanceFacade {
 
     return {
       hasSchedule: true,
+      paymentScheduleId: schedule.id,
+      financeTouched: touched,
       payableStatus,
       hasSourceAmountMismatch,
       amountFieldsLocked,

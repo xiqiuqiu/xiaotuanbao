@@ -19,6 +19,7 @@ import type {
   UpdateFinanceTransactionDto,
   UpdatePaymentScheduleDto,
   VoidFinanceTransactionDto,
+  VoidResourcePayableDto,
   DepartureStatus,
 } from '@xiaotuanbao/shared'
 
@@ -227,6 +228,16 @@ export async function listDepartureReceivables(
     params,
     signal,
   })
+}
+
+export async function voidResourcePayable(
+  id: string,
+  payload: VoidResourcePayableDto,
+): Promise<PaymentScheduleSummary> {
+  return request.post<PaymentScheduleSummary>(
+    `/finance/payment-schedules/${id}/void-resource-payable`,
+    payload,
+  )
 }
 
 export async function listDeparturePayables(

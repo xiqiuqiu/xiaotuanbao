@@ -166,6 +166,8 @@ export class DepartureOperationsSheetService {
             resourceFinanceStates.get(resource.id) ??
             ({
               hasSchedule: false,
+              paymentScheduleId: null,
+              financeTouched: false,
               payableStatus: SegmentPayableStatus.NOT_GENERATED,
               hasSourceAmountMismatch: false,
               amountFieldsLocked: false,

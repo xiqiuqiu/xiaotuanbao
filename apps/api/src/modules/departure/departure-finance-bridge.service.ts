@@ -565,6 +565,7 @@ export class DepartureFinanceBridgeService {
         sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
         direction: PaymentScheduleDirection.payable,
         cancelledAt: null,
+        voidedAt: null,
       },
     })
   }
@@ -580,6 +581,7 @@ export class DepartureFinanceBridgeService {
         sourceId: resourceId,
         sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
         direction: PaymentScheduleDirection.payable,
+        voidedAt: null,
       },
     })
   }

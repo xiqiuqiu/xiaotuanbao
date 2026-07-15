@@ -149,6 +149,8 @@ export class SegmentResourceService {
 
     return this.toResourceSummary(created, {
       hasSchedule: false,
+      paymentScheduleId: null,
+      financeTouched: false,
       payableStatus: SegmentPayableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: false,
       amountFieldsLocked: false,
@@ -305,6 +307,7 @@ export class SegmentResourceService {
             departureId: segment.departureId,
             direction: PaymentScheduleDirection.payable,
             sourceId: { in: resources.map((resource) => resource.id) },
+            voidedAt: null,
           },
           select: { sourceId: true },
           distinct: ['sourceId'],
@@ -477,6 +480,9 @@ export class SegmentResourceService {
       payableStatus: meta?.payableStatus ?? SegmentPayableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: meta?.hasSourceAmountMismatch ?? false,
       amountFieldsLocked: meta?.amountFieldsLocked ?? false,
+      paymentScheduleId: meta?.paymentScheduleId ?? null,
+      financeTouched: meta?.financeTouched ?? false,
+      unsettledAmountCents: meta?.unpaidCents ?? null,
     }
   }
 }

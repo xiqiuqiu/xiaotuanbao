@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator'
 import { Type } from 'class-transformer'
@@ -143,6 +144,13 @@ export class AdjustPaymentScheduleAmountDto {
   @IsString()
   @IsNotEmpty({ message: '调整原因不能为空' })
   adjustReason!: string
+}
+
+export class VoidResourcePayableDto {
+  @IsString()
+  @IsNotEmpty({ message: '作废原因不能为空' })
+  @MaxLength(200, { message: '作废原因不能超过 200 个字符' })
+  voidReason!: string
 }
 
 export {

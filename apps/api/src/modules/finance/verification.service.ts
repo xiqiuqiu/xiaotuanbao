@@ -183,6 +183,9 @@ export class VerificationService {
     if (!schedule) {
       throw new NotFoundException('收付款节点不存在')
     }
+    if (schedule.voidedAt) {
+      throw new BadRequestException('已作废节点不可核销')
+    }
     if (schedule.cancelledAt) {
       throw new BadRequestException('已关闭节点不可核销')
     }
@@ -845,6 +848,10 @@ export class VerificationService {
       cancelledBy: schedule.cancelledBy,
       closeDisposition: schedule.closeDisposition,
       cancelReason: schedule.cancelReason,
+      voidedAt: schedule.voidedAt?.toISOString() ?? null,
+      voidedBy: schedule.voidedBy,
+      voidReason: schedule.voidReason,
+      voidedAmountCents: schedule.voidedAmountCents,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,
       createdAt: schedule.createdAt.toISOString(),
       updatedAt: schedule.updatedAt.toISOString(),

@@ -34,6 +34,9 @@ function activityTitle(item: PaymentScheduleActivityItem): string {
     const disposition = catalogLabel(CLOSE_DISPOSITION_LABELS, item.closeDisposition)
     return `关闭节点 · ${disposition}`
   }
+  if (item.activityType === PaymentScheduleActivityType.VOID) {
+    return '作废资源应付'
+  }
   if (item.activityType === PaymentScheduleActivityType.VERIFICATION_CANCELLED) {
     return '关闭后撤销核销'
   }
@@ -54,6 +57,10 @@ function activityDescription(item: PaymentScheduleActivityItem): string {
       `未结清 ${formatCents(item.unsettledAmountCents ?? 0)}`,
       `说明：${item.note}`,
     ].join(' · ')
+  }
+
+  if (item.activityType === PaymentScheduleActivityType.VOID) {
+    return [`作废前金额 ${formatCents(item.amountCents ?? 0)}`, `原因：${item.note}`].join(' · ')
   }
 
   if (item.activityType === PaymentScheduleActivityType.VERIFICATION_CANCELLED) {
@@ -145,6 +152,15 @@ export function PaymentScheduleDetailDrawer({
             {schedule.cancelReason ? (
               <Descriptions.Item label="关闭说明">{schedule.cancelReason}</Descriptions.Item>
             ) : null}
+            {schedule.voidedAt ? (
+              <Descriptions.Item label="作废时间">{formatDateTime(schedule.voidedAt)}</Descriptions.Item>
+            ) : null}
+            {schedule.voidedAmountCents != null ? (
+              <Descriptions.Item label="作废前金额">{formatCents(schedule.voidedAmountCents)}</Descriptions.Item>
+            ) : null}
+            {schedule.voidReason ? (
+              <Descriptions.Item label="作废原因">{schedule.voidReason}</Descriptions.Item>
+            ) : null}
           </Descriptions>
 
           <div style={{ marginTop: 24 }}>
@@ -156,7 +172,8 @@ export function PaymentScheduleDetailDrawer({
                 style={{ marginTop: 12, marginBottom: 0 }}
                 items={schedule.activities.map((item) => ({
                   color:
-                    item.activityType === PaymentScheduleActivityType.CLOSE
+                    item.activityType === PaymentScheduleActivityType.CLOSE ||
+                    item.activityType === PaymentScheduleActivityType.VOID
                       ? 'gray'
                       : item.activityType === PaymentScheduleActivityType.REOPEN
                         ? 'green'

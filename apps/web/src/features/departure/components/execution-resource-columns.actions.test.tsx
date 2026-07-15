@@ -1,0 +1,80 @@
+import { cleanup, render, screen } from '@testing-library/react'
+import { ConfigProvider, Table } from 'antd'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SegmentResourceSummary } from '@/types/api'
+import { buildExecutionResourceColumns } from './execution-resource-columns'
+
+function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResourceSummary {
+  return {
+    id: 'resource-1',
+    segmentId: 'segment-1',
+    departureId: 'departure-1',
+    resourceKind: 'transport',
+    counterpartyType: 'supplier',
+    partnerId: null,
+    partnerName: null,
+    supplierId: 'supplier-1',
+    supplierName: '测试车队',
+    counterpartyName: '测试车队',
+    title: '测试用车',
+    amountCents: 100000,
+    notes: null,
+    hasPaymentSchedule: true,
+    payableStatus: 'pending',
+    hasSourceAmountMismatch: false,
+    amountFieldsLocked: false,
+    paymentScheduleId: 'schedule-1',
+    financeTouched: false,
+    unsettledAmountCents: 100000,
+    ...overrides,
+  }
+}
+
+function renderActions(row: SegmentResourceSummary) {
+  const columns = buildExecutionResourceColumns({
+    mutationLocked: false,
+    onEdit: vi.fn(),
+    onViewPayables: vi.fn(),
+    onGenerate: vi.fn(),
+    onDelete: vi.fn(),
+    onVoidPayable: vi.fn(),
+    onClosePayable: vi.fn(),
+  })
+  render(
+    <ConfigProvider>
+      <Table rowKey="id" columns={columns} dataSource={[row]} pagination={false} />
+    </ConfigProvider>,
+  )
+}
+
+describe('resource payable actions', () => {
+  afterEach(cleanup)
+
+  it('shows only 作废应付 before finance is touched', () => {
+    renderActions(resource())
+
+    expect(screen.getByRole('button', { name: '作废应付' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '关闭节点' })).toBeNull()
+  })
+
+  it('shows only 关闭节点 after finance is touched and remains unsettled', () => {
+    renderActions(resource({ financeTouched: true, amountFieldsLocked: true }))
+
+    expect(screen.getByRole('button', { name: '关闭节点' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '作废应付' })).toBeNull()
+  })
+
+  it('shows neither action after the payable is settled', () => {
+    renderActions(
+      resource({
+        financeTouched: true,
+        amountFieldsLocked: true,
+        payableStatus: 'paid',
+        unsettledAmountCents: 0,
+      }),
+    )
+
+    expect(screen.queryByRole('button', { name: '关闭节点' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '作废应付' })).toBeNull()
+  })
+})

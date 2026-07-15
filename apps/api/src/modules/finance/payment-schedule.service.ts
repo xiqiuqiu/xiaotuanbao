@@ -39,6 +39,7 @@ import type {
   ListPaymentSchedulesQueryDto,
   ReopenPaymentScheduleDto,
   UpdatePaymentScheduleDto,
+  VoidResourcePayableDto,
 } from './dto/payment-schedule.dto'
 import { buildPaymentScheduleCounterpartyWhere } from './payment-schedule-list-filters'
 
@@ -72,6 +73,7 @@ export class PaymentScheduleService {
     const where: Prisma.PaymentScheduleWhereInput = {
       organizationId,
       direction,
+      voidedAt: null,
       ...(query.departureId ? { departureId: query.departureId } : {}),
       ...counterpartyWhere,
     }
@@ -217,6 +219,9 @@ export class PaymentScheduleService {
         schedule.departureId,
         '编辑收付款节点',
       )
+      if (schedule.voidedAt) {
+        throw new BadRequestException('已作废节点不可编辑')
+      }
       if (schedule.cancelledAt) {
         throw new BadRequestException('已关闭节点不可编辑')
       }
@@ -337,6 +342,9 @@ export class PaymentScheduleService {
       if (!menuKeys.includes(menuKey)) {
         throw new ForbiddenException('无权访问')
       }
+      if (schedule.voidedAt) {
+        throw new BadRequestException('已作废节点不可关闭')
+      }
       if (schedule.cancelledAt) {
         throw new BadRequestException('节点已关闭')
       }
@@ -352,6 +360,16 @@ export class PaymentScheduleService {
         this.verificationService.getSettledAmountCents(schedule.id, tx),
         this.verificationService.hasVerificationHistory(schedule.id, tx),
       ])
+      const isResourcePayable =
+        schedule.direction === PaymentScheduleDirection.payable &&
+        schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+        Boolean(schedule.sourceId)
+      if (
+        isResourcePayable &&
+        !isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
+      ) {
+        throw new BadRequestException('财务未介入的资源应付请使用作废')
+      }
       const unsettledAmountCents = schedule.amountCents - settledAmountCents
       if (unsettledAmountCents <= 0) {
         throw new BadRequestException('已结清节点不可关闭')
@@ -439,6 +457,9 @@ export class PaymentScheduleService {
       const menuKeys = await this.authService.getMenuKeysForUser(userId)
       if (!menuKeys.includes(menuKey)) {
         throw new ForbiddenException('无权访问')
+      }
+      if (schedule.voidedAt) {
+        throw new BadRequestException('已作废节点不可重新打开')
       }
       if (!schedule.cancelledAt) {
         throw new BadRequestException('仅已关闭节点可以重新打开')
@@ -562,6 +583,9 @@ export class PaymentScheduleService {
       if (!isPayableResource && !isReceivableSourcePath) {
         throw new BadRequestException('仅资源应付或客源应收节点可调整约定金额')
       }
+      if (schedule.voidedAt) {
+        throw new BadRequestException('已作废节点不可调整约定金额')
+      }
       if (schedule.cancelledAt) {
         throw new BadRequestException('已关闭节点不可调整约定金额')
       }
@@ -650,6 +674,119 @@ export class PaymentScheduleService {
       result.hasVerificationHistory,
       departureStatus,
     )
+  }
+
+  async voidResourcePayable(
+    organizationId: string,
+    scheduleId: string,
+    userId: string,
+    dto: VoidResourcePayableDto,
+    client?: Prisma.TransactionClient,
+  ): Promise<PaymentScheduleSummary> {
+    const voidReason = dto.voidReason?.trim()
+    if (!voidReason) {
+      throw new BadRequestException('作废原因不能为空')
+    }
+    if (voidReason.length > 200) {
+      throw new BadRequestException('作废原因不能超过 200 个字符')
+    }
+
+    const run = async (tx: Prisma.TransactionClient) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM payment_schedules
+        WHERE id = ${scheduleId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+
+      const schedule = await tx.paymentSchedule.findFirst({
+        where: { id: scheduleId, organizationId },
+      })
+      if (!schedule) {
+        throw new NotFoundException('收付款节点不存在')
+      }
+      if (
+        schedule.direction !== PaymentScheduleDirection.payable ||
+        schedule.sourceType !== PaymentScheduleSourceType.SEGMENT_RESOURCE ||
+        !schedule.sourceId
+      ) {
+        throw new BadRequestException('仅资源应付节点可作废')
+      }
+
+      const menuKeys = await this.authService.getMenuKeysForUser(userId)
+      if (!menuKeys.includes('/departure')) {
+        throw new ForbiddenException('无权访问')
+      }
+      if (schedule.voidedAt) {
+        throw new BadRequestException('节点已作废')
+      }
+
+      await tx.$queryRaw`
+        SELECT sr.id
+        FROM segment_resources sr
+        JOIN itinerary_segments segment ON segment.id = sr.segment_id
+        JOIN departures departure ON departure.id = segment.departure_id
+        WHERE sr.id = ${schedule.sourceId}
+          AND departure.organization_id = ${organizationId}
+        FOR UPDATE OF sr
+      `
+
+      await this.departureFinanceFacade.lockMutableById(
+        tx,
+        organizationId,
+        schedule.departureId,
+        '作废资源应付',
+      )
+
+      const hasVerificationHistory = await this.verificationService.hasVerificationHistory(
+        schedule.id,
+        tx,
+      )
+      if (hasVerificationHistory) {
+        throw new BadRequestException('已有核销历史的资源应付不可作废')
+      }
+      if (schedule.amountAdjustedAt) {
+        throw new BadRequestException('已调整约定金额的资源应付不可作废')
+      }
+      if (schedule.cancelledAt) {
+        throw new BadRequestException('已关闭的资源应付不可作废')
+      }
+
+      const voidedAt = new Date()
+      const voided = await tx.paymentSchedule.update({
+        where: { id: schedule.id },
+        data: {
+          voidedAt,
+          voidedBy: userId,
+          voidReason,
+          voidedAmountCents: schedule.amountCents,
+        },
+      })
+
+      await tx.paymentScheduleActivity.create({
+        data: {
+          organizationId,
+          paymentScheduleId: schedule.id,
+          activityType: PaymentScheduleActivityType.void,
+          note: voidReason,
+          amountCents: schedule.amountCents,
+          settledAmountCents: 0,
+          unsettledAmountCents: schedule.amountCents,
+          operatedBy: userId,
+          operatedAt: voidedAt,
+        },
+      })
+
+      return { voided, departureId: schedule.departureId }
+    }
+
+    const result = client ? await run(client) : await this.prisma.$transaction(run)
+    const departureStatus = await this.departureFinanceFacade.getStatusById(
+      organizationId,
+      result.departureId,
+    )
+    return this.toSummary(result.voided, 0, false, departureStatus)
   }
 
   private hasUpdateFields(dto: UpdatePaymentScheduleDto): boolean {
@@ -785,6 +922,10 @@ export class PaymentScheduleService {
       cancelledBy: schedule.cancelledBy,
       closeDisposition: schedule.closeDisposition,
       cancelReason: schedule.cancelReason,
+      voidedAt: schedule.voidedAt?.toISOString() ?? null,
+      voidedBy: schedule.voidedBy,
+      voidReason: schedule.voidReason,
+      voidedAmountCents: schedule.voidedAmountCents,
       amountAdjustedAt: schedule.amountAdjustedAt?.toISOString() ?? null,
       createdAt: schedule.createdAt.toISOString(),
       updatedAt: schedule.updatedAt.toISOString(),

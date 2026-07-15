@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Empty,
+  Form,
   Modal,
   Space,
   Spin,
@@ -35,6 +36,13 @@ import { segmentPayableGenerationGap } from '../utils/segment-payable-generation
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
 import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
+import { cancelSchedule, voidResourcePayable } from '@/services/finance.service'
+import {
+  CloseResourcePayableModal,
+  VoidResourcePayableModal,
+  type CloseResourcePayableFormValues,
+  type VoidResourcePayableFormValues,
+} from './ResourcePayableActionModals'
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
@@ -59,6 +67,10 @@ export function ExecutionResourcePane({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
+  const [voidingResource, setVoidingResource] = useState<SegmentResourceSummary | null>(null)
+  const [closingResource, setClosingResource] = useState<SegmentResourceSummary | null>(null)
+  const [voidForm] = Form.useForm<VoidResourcePayableFormValues>()
+  const [closeForm] = Form.useForm<CloseResourcePayableFormValues>()
 
   const { data: listResult, isLoading, isError, refetch } = useQuery({
     queryKey: ['segment-resources', segment.id],
@@ -161,6 +173,43 @@ export function ExecutionResourcePane({
     },
   })
 
+  const voidMutation = useMutation({
+    mutationFn: (values: VoidResourcePayableFormValues) => {
+      if (!voidingResource?.paymentScheduleId) throw new Error('未找到待作废应付节点')
+      return voidResourcePayable(voidingResource.paymentScheduleId, {
+        voidReason: values.voidReason.trim(),
+      })
+    },
+    onSuccess: () => {
+      message.success('应付已作废，可修正资源后重新生成')
+      setVoidingResource(null)
+      voidForm.resetFields()
+      invalidateResourceQueries()
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+    },
+    onError: (error) => message.error(mutationErrorMessage(error, '作废应付失败')),
+  })
+
+  const closeMutation = useMutation({
+    mutationFn: (values: CloseResourcePayableFormValues) => {
+      if (!closingResource?.paymentScheduleId) throw new Error('未找到待关闭应付节点')
+      return cancelSchedule(closingResource.paymentScheduleId, {
+        closeDisposition: values.closeDisposition,
+        cancelReason: values.cancelReason.trim(),
+      })
+    },
+    onSuccess: () => {
+      message.success('应付节点已关闭')
+      setClosingResource(null)
+      closeForm.resetFields()
+      invalidateResourceQueries()
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+    },
+    onError: (error) => message.error(mutationErrorMessage(error, '关闭节点失败')),
+  })
+
   const confirmBatchGenerate = () => {
     if (!payableGap.hasGap) return
     Modal.confirm({
@@ -198,6 +247,8 @@ export function ExecutionResourcePane({
     onViewPayables,
     onGenerate: (id) => generateMutation.mutate(id),
     onDelete: (id) => deleteMutation.mutate(id),
+    onVoidPayable: (resource) => setVoidingResource(resource),
+    onClosePayable: (resource) => setClosingResource(resource),
   })
 
   return (
@@ -272,6 +323,26 @@ export function ExecutionResourcePane({
         loading={saveMutation.isPending}
         onClose={closeDrawer}
         onSubmit={(values) => saveMutation.mutate(values)}
+      />
+      <VoidResourcePayableModal
+        resource={voidingResource}
+        form={voidForm}
+        loading={voidMutation.isPending}
+        onClose={() => {
+          setVoidingResource(null)
+          voidForm.resetFields()
+        }}
+        onSubmit={(values) => voidMutation.mutate(values)}
+      />
+      <CloseResourcePayableModal
+        resource={closingResource}
+        form={closeForm}
+        loading={closeMutation.isPending}
+        onClose={() => {
+          setClosingResource(null)
+          closeForm.resetFields()
+        }}
+        onSubmit={(values) => closeMutation.mutate(values)}
       />
     </div>
   )

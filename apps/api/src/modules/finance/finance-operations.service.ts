@@ -222,6 +222,9 @@ export class FinanceOperationsService {
   }
 
   private assertScheduleOpen(schedule: PaymentSchedule) {
+    if (schedule.voidedAt) {
+      throw new BadRequestException('已作废节点不可核销')
+    }
     if (schedule.cancelledAt) {
       throw new BadRequestException('已关闭节点不可核销')
     }

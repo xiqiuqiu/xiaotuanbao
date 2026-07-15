@@ -327,6 +327,10 @@ export interface PaymentScheduleSummary {
   cancelledBy: string | null
   closeDisposition: string | null
   cancelReason: string | null
+  voidedAt: string | null
+  voidedBy: string | null
+  voidReason: string | null
+  voidedAmountCents: number | null
   amountAdjustedAt: string | null
   createdAt: string
   updatedAt: string
@@ -374,6 +378,10 @@ export interface ReopenPaymentScheduleDto {
 export interface AdjustPaymentScheduleAmountDto {
   amountCents: number
   adjustReason: string
+}
+
+export interface VoidResourcePayableDto {
+  voidReason: string
 }
 
 export interface CreatePaymentScheduleDto {
@@ -731,6 +739,9 @@ export interface SegmentResourceSummary {
   payableStatus: string
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
+  paymentScheduleId: string | null
+  financeTouched: boolean
+  unsettledAmountCents: number | null
 }
 
 export interface SegmentResourceListResult {

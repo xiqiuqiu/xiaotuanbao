@@ -44,7 +44,7 @@ export class DepartureReadModelService {
         this.batchSourceOrderAggregates(uniqueIds),
         this.batchSegmentRollups(uniqueIds),
         this.prisma.paymentSchedule.findMany({
-          where: { departureId: { in: uniqueIds } },
+          where: { departureId: { in: uniqueIds }, voidedAt: null },
           select: {
             id: true,
             departureId: true,

@@ -33,6 +33,8 @@ export type BuildExecutionResourceColumnsOptions = {
   onViewPayables: (resource: SegmentResourceSummary) => void
   onGenerate: (resourceId: string) => void
   onDelete: (resourceId: string) => void
+  onVoidPayable: (resource: SegmentResourceSummary) => void
+  onClosePayable: (resource: SegmentResourceSummary) => void
 }
 
 export function buildExecutionResourceColumns({
@@ -42,6 +44,8 @@ export function buildExecutionResourceColumns({
   onViewPayables,
   onGenerate,
   onDelete,
+  onVoidPayable,
+  onClosePayable,
 }: BuildExecutionResourceColumnsOptions): ColumnsType<SegmentResourceSummary> {
   return [
     {
@@ -90,6 +94,17 @@ export function buildExecutionResourceColumns({
       fixed: 'right',
       render: (_, record) => {
         const allowGenerate = canGeneratePayable(record)
+        const allowVoid =
+          !mutationLocked &&
+          Boolean(record.paymentScheduleId) &&
+          !record.financeTouched &&
+          record.payableStatus !== SegmentPayableStatus.CLOSED
+        const allowClose =
+          !mutationLocked &&
+          Boolean(record.paymentScheduleId) &&
+          record.financeTouched &&
+          (record.unsettledAmountCents ?? 0) > 0 &&
+          record.payableStatus !== SegmentPayableStatus.CLOSED
 
         return (
           <Space size={0} wrap>
@@ -113,6 +128,16 @@ export function buildExecutionResourceColumns({
                 loading={generatingId === record.id}
               >
                 生成应付
+              </Button>
+            ) : null}
+            {allowVoid ? (
+              <Button type="link" size="small" danger onClick={() => onVoidPayable(record)}>
+                作废应付
+              </Button>
+            ) : null}
+            {allowClose ? (
+              <Button type="link" size="small" danger onClick={() => onClosePayable(record)}>
+                关闭节点
               </Button>
             ) : null}
             {!mutationLocked && allowGenerate ? (

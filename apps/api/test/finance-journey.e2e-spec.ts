@@ -1254,7 +1254,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(detail.body.data.completionTags.receivables).toBe('已收齐')
   })
 
-  it('reaches financially settled by cancelling unpaid payable schedule', async () => {
+  it('reaches financially settled by voiding an untouched payable schedule', async () => {
     const departure = await createDeparture('cancel-payable')
     const ops = await seedOps(departure.id)
     const schedules = await generateSchedules(ops)
@@ -1276,14 +1276,11 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(beforeCancel.body.data.isFinanciallySettled).toBe(false)
     expect(beforeCancel.body.data.openUnsettledPayableCents).toBe(360000)
 
-    const cancelled = await authRequest(app, financeToken)
-      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
-      .send({
-        closeDisposition: 'external_or_special',
-        cancelReason: '供应商改免费接待，关闭应付',
-      })
+    const voided = await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/void-resource-payable`)
+      .send({ voidReason: '供应商改免费接待，原应付误生成' })
       .expect(201)
-    expect(cancelled.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+    expect(voided.body.data.voidedAt).toBeTruthy()
 
     const afterCancel = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
@@ -1295,14 +1292,17 @@ describe('Finance journeys (cross-module e2e)', () => {
       openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
-        payables: '已付清',
+        payables: '应付未生成',
       },
     })
 
-    const cancelledPayable = await authRequest(app, financeToken)
+    const voidedPayable = await authRequest(app, financeToken)
       .get(`/api/finance/payables/${schedules.payableScheduleId}`)
       .expect(200)
-    expect(cancelledPayable.body.data.status).toBe(PaymentScheduleStatus.CANCELLED)
+    expect(voidedPayable.body.data).toMatchObject({
+      voidReason: '供应商改免费接待，原应付误生成',
+      voidedAmountCents: 360000,
+    })
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/transition`)
@@ -1862,12 +1862,9 @@ describe('Finance journeys (cross-module e2e)', () => {
       .send({ voidReason: '解档后作废未核销关联流水' })
       .expect(201)
 
-    await authRequest(app, financeToken)
-      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
-      .send({
-        closeDisposition: 'external_or_special',
-        cancelReason: '解档后可关闭应付',
-      })
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/void-resource-payable`)
+      .send({ voidReason: '解档后可作废未介入应付' })
       .expect(201)
   })
 
@@ -2326,6 +2323,18 @@ describe('Finance journeys (cross-module e2e)', () => {
       })
       .expect(201)
 
+    await authRequest(app, financeToken)
+      .post(`/api/finance/payables/${schedules.payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: 10000,
+        transactionDate: '2026-08-09',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
+      })
+      .expect(201)
+
     const closedPayable = await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${schedules.payableScheduleId}/cancel`)
       .send({
@@ -2471,7 +2480,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     await authRequest(app, financeToken)
       .post(`/api/finance/payables/${schedules.payableScheduleId}/confirm-payment`)
       .send({
-        amountCents: 360000,
+        amountCents: 350000,
         transactionDate: '2026-08-10',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
         counterpartyType: CounterpartyType.supplier,
@@ -2507,6 +2516,18 @@ describe('Finance journeys (cross-module e2e)', () => {
         counterpartyType: CounterpartyType.guest,
         counterpartyId: adminOps.sourceOrderId,
         counterpartyName: adminOps.displayName,
+      })
+      .expect(201)
+
+    await authRequest(app, adminToken)
+      .post(`/api/finance/payables/${adminSchedules.payableScheduleId}/confirm-payment`)
+      .send({
+        amountCents: 10000,
+        transactionDate: '2026-08-09',
+        paymentChannel: PaymentChannel.BANK_TRANSFER,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
       })
       .expect(201)
 
