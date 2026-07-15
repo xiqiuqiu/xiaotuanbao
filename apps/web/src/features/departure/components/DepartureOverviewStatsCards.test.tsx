@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,10 +24,7 @@ vi.mock('@tanstack/react-router', () => ({
       to,
     )
     return (
-      <a
-        href={`${path}?${new URLSearchParams(search).toString()}`}
-        data-testid="tx-link"
-      >
+      <a href={`${path}?${new URLSearchParams(search).toString()}`} data-testid="tx-link">
         {children}
       </a>
     )
@@ -51,7 +49,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
     notes: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
-    totalGuests: 1,
+    totalGuests: 12,
     sourceOrderCount: 1,
     segmentCount: 1,
     resourceCount: 1,
@@ -62,17 +60,40 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       receivables: '应收已生成',
       payables: '应付已生成',
     },
+    grossReceivableCents: 1_200_000,
+    discountCents: 200_000,
     netReceivableCents: 1_000_000,
-    payableCents: 1_000_000,
-    estimatedMarginCents: 0,
-    grossReceivableCents: 1_000_000,
-    discountCents: 0,
+    payableCents: 700_000,
+    estimatedMarginCents: 300_000,
     verifiedReceivableCents: 0,
     openUnsettledReceivableCents: 1_000_000,
     verifiedPayableCents: 0,
     openUnsettledPayableCents: 1_000_000,
-    unverifiedIncomeCents: 400_000,
-    unverifiedExpenseCents: 400_000,
+    unverifiedIncomeCents: 0,
+    unverifiedExpenseCents: 0,
+    overviewStats: {
+      receivedCents: 400_000,
+      openUnreceivedCents: 300_000,
+      closedUnreceivedCents: 100_000,
+      ungeneratedReceivableCents: 200_000,
+      otherReceivableCents: 50_000,
+      confirmedPayableCents: 750_000,
+      paidCents: 300_000,
+      openUnpaidCents: 350_000,
+      closedUnpaidCents: 100_000,
+      ungeneratedPayableCents: 80_000,
+      otherPayableCents: 100_000,
+      resourcePayableDifferenceCents: 30_000,
+      confirmedMarginCents: 250_000,
+      incomeTransactionCents: 500_000,
+      expenseTransactionCents: 320_000,
+      cashNetInflowCents: 180_000,
+      unverifiedIncomeCents: 100_000,
+      unverifiedExpenseCents: 20_000,
+      verifiedFromOtherDeparturesCents: 40_000,
+      verifiedToOtherDeparturesCents: 10_000,
+      anomalies: [],
+    },
     isFinanciallySettled: false,
     archiveHistory: [],
     settlementHistory: [],
@@ -80,60 +101,146 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
   }
 }
 
+function renderCards(departure = makeDeparture()) {
+  return render(
+    <ConfigProvider locale={zhCN}>
+      <DepartureOverviewStatsCards departure={departure} />
+    </ConfigProvider>,
+  )
+}
+
 describe('DepartureOverviewStatsCards', () => {
-  afterEach(() => {
-    cleanup()
-  })
+  afterEach(cleanup)
 
-  it('shows obligation progress and unverified cash after revoking a 4000 verification', () => {
-    render(
-      <ConfigProvider locale={zhCN}>
-        <DepartureOverviewStatsCards departure={makeDeparture()} />
-      </ConfigProvider>,
-    )
+  it('按三行展示可复算的经营、账款进度与资金数据', async () => {
+    const user = userEvent.setup()
+    renderCards()
 
-    expect(screen.getByText('已核销应收 / 未结清应收')).toBeInTheDocument()
-    expect(screen.getByText('已核销应付 / 未结清应付')).toBeInTheDocument()
+    expect(screen.getByText('总人数')).toBeInTheDocument()
+    expect(screen.getByText('原始应收')).toBeInTheDocument()
+    expect(screen.getByText('优惠合计')).toBeInTheDocument()
+    expect(screen.getByText('实际应收')).toBeInTheDocument()
     expect(screen.getByText('预计成本')).toBeInTheDocument()
+    expect(screen.getByText('确认应付')).toBeInTheDocument()
+    expect(screen.getByText('预估毛利')).toBeInTheDocument()
+    expect(screen.getByText('确认毛利')).toBeInTheDocument()
+    expect(screen.getByText('计调报价 / 财务已确认')).toBeInTheDocument()
+    expect(screen.getByText('业务预计 / 财务已确认')).toBeInTheDocument()
+    expect(
+      screen.getByText('¥7,500.00 − ¥7,000.00 = ¥1,000.00 + ¥300.00 − ¥800.00'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('¥10,000.00 − ¥7,000.00 = ¥3,000.00；¥10,000.00 − ¥7,500.00 = ¥2,500.00'),
+    ).toBeInTheDocument()
+
+    expect(screen.getByText('收款进度')).toBeInTheDocument()
+    expect(screen.getByText('已收 ¥4,000.00 + 未收 ¥6,000.00 = 实际应收 ¥10,000.00')).toBeInTheDocument()
+    await user.click(screen.getByText('查看收款组成'))
+    expect(screen.getByText('尚未生成应收 ¥2,000.00')).toBeInTheDocument()
+    expect(screen.getByText('其中已关闭未收 ¥1,000.00')).toBeInTheDocument()
+    expect(screen.getByText('其他应收 ¥500.00')).toBeInTheDocument()
+
+    expect(screen.getByText('付款进度')).toBeInTheDocument()
+    expect(screen.getByText('已付 ¥3,000.00 + 未付 ¥4,500.00 = 确认应付 ¥7,500.00')).toBeInTheDocument()
+    await user.click(screen.getByText('查看付款组成'))
+    expect(screen.getByText('其中已关闭未付 ¥1,000.00')).toBeInTheDocument()
+    expect(screen.queryByText(/付款进度.*尚未生成应付/)).not.toBeInTheDocument()
+
+    expect(screen.getByText('资金情况')).toBeInTheDocument()
+    expect(screen.getByText('有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00')).toBeInTheDocument()
+    await user.click(screen.getByText('查看资金提示'))
+    expect(screen.getByText('未核销收入 ¥1,000.00')).toBeInTheDocument()
+    expect(screen.getByText('未核销支出 ¥200.00')).toBeInTheDocument()
+    expect(screen.getByText('核销自他团流水 ¥400.00')).toBeInTheDocument()
+    expect(screen.getByText('本团流水核销至他团 ¥100.00')).toBeInTheDocument()
+
     expect(screen.queryByText('应付合计')).not.toBeInTheDocument()
-    expect(screen.queryByText('已收 / 未收')).not.toBeInTheDocument()
-    expect(screen.queryByText('已付 / 未付')).not.toBeInTheDocument()
-
-    expect(screen.getByText(/未核销收入/)).toBeInTheDocument()
-    expect(screen.getByText(/未核销支出/)).toBeInTheDocument()
-
-    const links = screen.getAllByTestId('tx-link')
-    expect(links).toHaveLength(2)
-    expect(links[0]).toHaveAttribute(
-      'href',
-      expect.stringContaining('/departure/departure-88?'),
-    )
-    expect(links[0]).toHaveAttribute('href', expect.stringContaining('tab=transactions'))
-    expect(links[0]).toHaveAttribute(
-      'href',
-      expect.stringContaining(`direction=${TransactionDirection.INFLOW}`),
-    )
-    expect(links[0]).not.toHaveAttribute('href', expect.stringContaining('writeoffStatus='))
-    expect(links[1]).toHaveAttribute('href', expect.stringContaining('tab=transactions'))
-    expect(links[1]).toHaveAttribute(
-      'href',
-      expect.stringContaining(`direction=${TransactionDirection.OUTFLOW}`),
-    )
+    expect(screen.queryByText(/已核销应收|未结清应收/)).not.toBeInTheDocument()
   })
 
-  it('hides unverified cash hints when both amounts are zero', () => {
-    render(
-      <ConfigProvider locale={zhCN}>
-        <DepartureOverviewStatsCards
-          departure={makeDeparture({
-            unverifiedIncomeCents: 0,
-            unverifiedExpenseCents: 0,
-          })}
-        />
-      </ConfigProvider>,
+  it('独立展示成本差异组成，并隐藏零值提示', async () => {
+    const user = userEvent.setup()
+    renderCards(
+      makeDeparture({
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          otherPayableCents: -100_000,
+          resourcePayableDifferenceCents: 0,
+        },
+      }),
     )
 
-    expect(screen.queryByText(/未核销收入/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/未核销支出/)).not.toBeInTheDocument()
+    await user.click(screen.getByText('查看成本组成'))
+    expect(screen.getByText('尚未生成应付 ¥800.00')).toBeInTheDocument()
+    expect(screen.getByText('其他应付 -¥1,000.00')).toBeInTheDocument()
+    expect(screen.queryByText(/^资源账款差异 ¥/)).not.toBeInTheDocument()
+  })
+
+  it('分母为零时显示短横，不把无账可收付显示为 0%', () => {
+    renderCards(
+      makeDeparture({
+        netReceivableCents: 0,
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          receivedCents: 0,
+          openUnreceivedCents: 0,
+          closedUnreceivedCents: 0,
+          ungeneratedReceivableCents: 0,
+          confirmedPayableCents: 0,
+          paidCents: 0,
+          openUnpaidCents: 0,
+          closedUnpaidCents: 0,
+        },
+      }),
+    )
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(within(receiptCard).getByText('—')).toBeInTheDocument()
+    expect(within(paymentCard).getByText('—')).toBeInTheDocument()
+    expect(within(receiptCard).queryByText('0%')).not.toBeInTheDocument()
+    expect(within(paymentCard).queryByText('0%')).not.toBeInTheDocument()
+  })
+
+  it('文字展示真实超额百分比，进度条视觉封顶 100%', () => {
+    renderCards(
+      makeDeparture({
+        netReceivableCents: 800_000,
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          receivedCents: 1_000_000,
+          openUnreceivedCents: -200_000,
+          closedUnreceivedCents: 0,
+          ungeneratedReceivableCents: 0,
+        },
+      }),
+    )
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    expect(within(receiptCard).getByText('125%')).toBeInTheDocument()
+    expect(within(receiptCard).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100')
+  })
+
+  it('守恒异常不阻止读取，并在对应卡片展示原始差额', () => {
+    renderCards(
+      makeDeparture({
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          anomalies: [
+            {
+              code: 'receivable_balance',
+              expectedCents: 1_000_000,
+              actualCents: 1_100_000,
+              differenceCents: 100_000,
+            },
+          ],
+        },
+      }),
+    )
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度（数据异常）' })
+    expect(within(receiptCard).getByText('收款守恒异常')).toBeInTheDocument()
+    expect(within(receiptCard).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00')).toBeInTheDocument()
+    expect(screen.getByText('资金情况')).toBeInTheDocument()
   })
 })
