@@ -37,6 +37,7 @@ function formatPercent(numerator: number, denominator: number): string | null {
 
 interface DepartureOverviewStatsCardsProps {
   departure: DepartureDetail
+  animateProgress?: boolean
 }
 
 interface AmountDetailProps {
@@ -107,17 +108,31 @@ function OverviewDetailsPopover({
   )
 }
 
-function ProgressValue({ numerator, denominator }: { numerator: number; denominator: number }) {
-  if (denominator === 0) {
+function ProgressValue({
+  numerator,
+  denominator,
+  animate,
+}: {
+  numerator: number
+  denominator: number
+  animate: boolean
+}) {
+  const hasData = denominator !== 0
+  const actualPercent = hasData ? (numerator / denominator) * 100 : 0
+  const visualPercent = Math.min(100, Math.max(0, actualPercent))
+
+  if (!hasData) {
     return <Text strong>暂无数据</Text>
   }
 
-  const actualPercent = (numerator / denominator) * 100
-  const visualPercent = Math.min(100, Math.max(0, actualPercent))
-
   return (
     <Flex align="center" gap={12}>
-      <Progress percent={visualPercent} showInfo={false} style={{ flex: 1 }} />
+      <Progress
+        className={animate ? styles.progressLoad : undefined}
+        percent={visualPercent}
+        showInfo={false}
+        style={{ flex: 1 }}
+      />
       <Text strong>{`${actualPercent.toFixed(1)}%`}</Text>
     </Flex>
   )
@@ -229,7 +244,10 @@ function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly
   )
 }
 
-export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStatsCardsProps) {
+export function DepartureOverviewStatsCards({
+  departure,
+  animateProgress = false,
+}: DepartureOverviewStatsCardsProps) {
   const { token } = theme.useToken()
   const stats = departure.overviewStats
   const unreceivedCents =
@@ -374,6 +392,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             <ProgressValue
               numerator={stats.receivedCents}
               denominator={departure.netReceivableCents}
+              animate={animateProgress}
             />
             <ProgressBreakdown
               items={[
@@ -420,6 +439,7 @@ export function DepartureOverviewStatsCards({ departure }: DepartureOverviewStat
             <ProgressValue
               numerator={stats.resourcePaidCents}
               denominator={departure.payableCents}
+              animate={animateProgress}
             />
             <ProgressBreakdown
               items={[

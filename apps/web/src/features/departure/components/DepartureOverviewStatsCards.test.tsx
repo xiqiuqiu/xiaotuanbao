@@ -102,16 +102,31 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
   }
 }
 
-function renderCards(departure = makeDeparture()) {
+function renderCards(departure = makeDeparture(), animateProgress = false) {
   return render(
     <ConfigProvider locale={zhCN}>
-      <DepartureOverviewStatsCards departure={departure} />
+      <DepartureOverviewStatsCards departure={departure} animateProgress={animateProgress} />
     </ConfigProvider>,
   )
 }
 
 describe('DepartureOverviewStatsCards', () => {
   afterEach(cleanup)
+
+  it('初始化加载动效不延迟进度条语义值与百分比文字', () => {
+    renderCards(makeDeparture(), true)
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(within(receiptCard).getByText('40.0%')).toBeInTheDocument()
+    expect(within(paymentCard).getByText('30.0%')).toBeInTheDocument()
+    const receiptProgress = within(receiptCard).getByRole('progressbar')
+    const paymentProgress = within(paymentCard).getByRole('progressbar')
+    expect(receiptProgress).toHaveAttribute('aria-valuenow', '40')
+    expect(paymentProgress).toHaveAttribute('aria-valuenow', '30')
+    expect(receiptProgress.className).toContain('progressLoad')
+    expect(paymentProgress.className).toContain('progressLoad')
+  })
 
   it('主层展示总人数、结算应收、成本合计、当前毛利，不再使用旧口径文案', () => {
     renderCards()

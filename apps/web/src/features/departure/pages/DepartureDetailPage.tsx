@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -46,6 +46,7 @@ export function DepartureDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const menuKeys = useAuthStore((state) => state.menuKeys)
+  const animatedOverviewDepartureIds = useRef(new Set<string>())
 
   const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
 
@@ -120,6 +121,13 @@ export function DepartureDetailPage() {
     void refetch()
   }, [departureId, queryClient, refetch])
 
+  const currentDepartureId = departure?.id
+  useEffect(() => {
+    if (activeTab === 'overview' && currentDepartureId) {
+      animatedOverviewDepartureIds.current.add(currentDepartureId)
+    }
+  }, [activeTab, currentDepartureId])
+
   if (!departureId) {
     return (
       <div>
@@ -161,7 +169,12 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: <DepartureOverview departure={departure} />,
+        children: (
+          <DepartureOverview
+            departure={departure}
+            animateProgress={!animatedOverviewDepartureIds.current.has(departure.id)}
+          />
+        ),
       }
     }
 

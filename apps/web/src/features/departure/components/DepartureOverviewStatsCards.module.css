@@ -11,6 +11,20 @@
   margin-top: 8px;
 }
 
+.progressLoad :global(.ant-progress-track) {
+  animation: progress-load 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes progress-load {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
 .firstRow > :global(.ant-col):nth-child(2) .metricCard {
   animation-delay: 30ms;
 }
@@ -39,8 +53,16 @@
   animation-delay: 60ms;
 }
 
+.thirdRow > :global(.ant-col):nth-child(1) .progressLoad :global(.ant-progress-track) {
+  animation-delay: 120ms;
+}
+
 .thirdRow > :global(.ant-col):nth-child(2) .metricCard {
   animation-delay: 90ms;
+}
+
+.thirdRow > :global(.ant-col):nth-child(2) .progressLoad :global(.ant-progress-track) {
+  animation-delay: 150ms;
 }
 
 .thirdRow > :global(.ant-col):nth-child(3) .metricCard {
@@ -64,6 +86,10 @@
     animation-name: metric-card-fade;
     animation-duration: 120ms !important;
     animation-delay: 0ms;
+  }
+
+  .progressLoad :global(.ant-progress-track) {
+    animation: none;
   }
 }
 
