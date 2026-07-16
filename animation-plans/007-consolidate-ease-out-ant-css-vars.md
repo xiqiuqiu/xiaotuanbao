@@ -1,6 +1,6 @@
 # 007 — Consolidate hand-copied ease-out via Ant Design CSS vars
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: LOW
 - **Category**: Cohesion & tokens

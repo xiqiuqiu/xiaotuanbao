@@ -1,6 +1,6 @@
 # 006 — Login submit: ease for color, ease-out for transform
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: LOW
 - **Category**: Easing & duration

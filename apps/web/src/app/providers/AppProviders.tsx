@@ -29,6 +29,8 @@ const theme = {
     borderRadius: 6,
     borderRadiusLG: 8,
     wireframe: false,
+    // Same curve as custom CSS: var(--ant-motion-ease-out-quint, ...)
+    motionEaseOutQuint: 'cubic-bezier(0.23, 1, 0.32, 1)',
   },
   components: {
     Layout: {

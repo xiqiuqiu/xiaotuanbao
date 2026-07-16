@@ -1,6 +1,6 @@
 # 005 — Unify press feedback scale and duration
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: MEDIUM
 - **Category**: Cohesion & tokens

@@ -11,9 +11,9 @@ Execution target: `apps/web` only. Do **not** invent a parallel CSS token system
 | 002 | Soften global prefers-reduced-motion | MEDIUM | DONE | — |
 | 003 | Keep softFetching opacity under reduced motion | MEDIUM | DONE | 002 (optional; safer after) |
 | 004 | Progress reveal via transform, not clip-path | MEDIUM | DONE | 001 (same CSS file — merge carefully) |
-| 005 | Unify press feedback scale/duration | MEDIUM | TODO | 007 (optional) |
-| 006 | Login submit color uses `ease` | LOW | TODO | 005 (overlap on `.submit`) |
-| 007 | Consolidate ease-out via ant CSS vars | LOW | TODO | — |
+| 005 | Unify press feedback scale/duration | MEDIUM | DONE | 007 (optional) |
+| 006 | Login submit color uses `ease` | LOW | DONE | 005 (overlap on `.submit`) |
+| 007 | Consolidate ease-out via ant CSS vars | LOW | DONE | — |
 | 008 | Departure tab opacity bridge | LOW | TODO | **001** (required) |
 | 009 | Execution segment pane opacity | LOW | TODO | 005 (optional) |
 | 010 | Lock antd motion durations to DESIGN | LOW | TODO | 007 (optional merge) |
