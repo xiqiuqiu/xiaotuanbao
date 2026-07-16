@@ -1,6 +1,6 @@
 # 003 — Keep softFetching opacity under reduced motion
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: MEDIUM
 - **Category**: Accessibility

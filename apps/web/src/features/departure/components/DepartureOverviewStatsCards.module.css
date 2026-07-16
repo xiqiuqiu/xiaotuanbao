@@ -85,7 +85,7 @@
 @media (prefers-reduced-motion: reduce) {
   .metricCardEnter {
     animation-name: metric-card-fade;
-    animation-duration: 120ms !important;
+    animation-duration: 120ms;
     animation-delay: 0ms;
   }
 

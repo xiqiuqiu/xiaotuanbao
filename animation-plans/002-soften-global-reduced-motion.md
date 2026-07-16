@@ -1,6 +1,6 @@
 # 002 — Soften global prefers-reduced-motion (stop nuking all animations)
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: MEDIUM
 - **Category**: Accessibility

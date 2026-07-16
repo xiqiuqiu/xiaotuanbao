@@ -8,8 +8,8 @@ Execution target: `apps/web` only. Do **not** invent a parallel CSS token system
 | # | Title | Severity | Status | Depends on |
 | --- | --- | --- | --- | --- |
 | 001 | Gate overview metric-card enter to first visit | HIGH | DONE | — |
-| 002 | Soften global prefers-reduced-motion | MEDIUM | TODO | — |
-| 003 | Keep softFetching opacity under reduced motion | MEDIUM | TODO | 002 (optional; safer after) |
+| 002 | Soften global prefers-reduced-motion | MEDIUM | DONE | — |
+| 003 | Keep softFetching opacity under reduced motion | MEDIUM | DONE | 002 (optional; safer after) |
 | 004 | Progress reveal via transform, not clip-path | MEDIUM | DONE | 001 (same CSS file — merge carefully) |
 | 005 | Unify press feedback scale/duration | MEDIUM | TODO | 007 (optional) |
 | 006 | Login submit color uses `ease` | LOW | TODO | 005 (overlap on `.submit`) |
