@@ -1,0 +1,10 @@
+.footerActions {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+  .footerActions :global(.ant-btn) {
+    min-height: 44px;
+  }
+}

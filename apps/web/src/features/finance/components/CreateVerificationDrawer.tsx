@@ -8,6 +8,7 @@ import {
   Descriptions,
   Divider,
   Drawer,
+  Empty,
   Form,
   Input,
   InputNumber,
@@ -16,7 +17,6 @@ import {
   Row,
   Select,
   Space,
-  Steps,
   Table,
   Tag,
   Typography,
@@ -36,15 +36,7 @@ import {
 import { dateStringToDayjs, dayjsToDateString, yuanToCents } from '../utils/finance-form'
 import type { CreateVerificationFormValues, VerificationDirection } from '../utils/verification-form'
 import { useCreateVerificationDrawerState } from '../hooks/useCreateVerificationDrawerState'
-
-const STEP_ITEMS = [
-  { title: '基础信息' },
-  { title: '选择流水' },
-  { title: '匹配节点' },
-  { title: '确认核销' },
-]
-
-const SECTION_CONFIRM_TITLE = '④ 确认核销'
+import styles from './CreateVerificationDrawer.module.css'
 
 interface CreateVerificationDrawerProps {
   open: boolean
@@ -87,50 +79,39 @@ function formatScheduleCounterpartyLabel(schedule: PaymentScheduleSummary): stri
   return formatCounterpartyLabel(schedule.counterpartyType, schedule.counterpartyName)
 }
 
-function resolveStepsCurrent(values: {
-  direction?: VerificationDirection
-  transactionId?: string
-  paymentScheduleId?: string
-  amountYuan?: number
-}): number {
-  if (!values.direction) {
-    return 0
-  }
-  if (!values.transactionId) {
-    return 1
-  }
-  if (!values.paymentScheduleId) {
-    return 2
-  }
-  return 3
-}
-
 function buildTransactionColumns(
   departureMap: Map<string, { departureNo: string; name: string }>,
 ): ColumnsType<FinanceTransactionSummary> {
   return [
     {
-      title: '流水号',
-      dataIndex: 'transactionNo',
-    },
-    { title: '日期', dataIndex: 'transactionDate' },
-    {
-      title: '方向',
-      dataIndex: 'direction',
-      render: (itemDirection: string) => (
-        <Tag color={TRANSACTION_DIRECTION_COLORS[itemDirection]}>
-          {catalogLabel(TRANSACTION_DIRECTION_LABELS, itemDirection)}
-        </Tag>
+      title: '流水信息',
+      width: 224,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text strong>{record.transactionNo}</Typography.Text>
+          <Space size={4} wrap>
+            <Typography.Text type="secondary">{record.transactionDate}</Typography.Text>
+            <Tag color={TRANSACTION_DIRECTION_COLORS[record.direction]}>
+              {catalogLabel(TRANSACTION_DIRECTION_LABELS, record.direction)}
+            </Tag>
+            <Typography.Text type="secondary">
+              {catalogLabel(PAYMENT_CHANNEL_LABELS, record.paymentChannel)}
+            </Typography.Text>
+          </Space>
+        </Space>
       ),
     },
     {
-      title: '往来对象',
-      render: (_, record) => formatTransactionCounterpartyLabel(record),
-    },
-    {
-      title: '发团',
-      dataIndex: 'departureId',
-      render: (itemDepartureId: string | null) => formatDepartureLabel(itemDepartureId, departureMap),
+      title: '往来对象 / 发团',
+      width: 260,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text>{formatTransactionCounterpartyLabel(record)}</Typography.Text>
+          <Typography.Text type="secondary">
+            {formatDepartureLabel(record.departureId, departureMap)}
+          </Typography.Text>
+        </Space>
+      ),
     },
     {
       title: '流水金额',
@@ -150,11 +131,6 @@ function buildTransactionColumns(
       align: 'right',
       render: (value: number) => formatCents(value),
     },
-    {
-      title: '收付款通道',
-      dataIndex: 'paymentChannel',
-      render: (value: string) => catalogLabel(PAYMENT_CHANNEL_LABELS, value),
-    },
   ]
 }
 
@@ -164,18 +140,26 @@ function buildScheduleColumns(
 ): ColumnsType<PaymentScheduleSummary> {
   return [
     {
-      title: '收付款节点编号',
-      dataIndex: 'scheduleNo',
+      title: '节点信息',
+      width: 224,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text strong>{record.scheduleNo}</Typography.Text>
+          <Typography.Text type="secondary">{record.title}</Typography.Text>
+        </Space>
+      ),
     },
-    { title: '标题', dataIndex: 'title' },
     {
-      title: '发团',
-      dataIndex: 'departureId',
-      render: (itemDepartureId: string) => formatDepartureLabel(itemDepartureId, departureMap),
-    },
-    {
-      title: '往来对象',
-      render: (_, record) => formatScheduleCounterpartyLabel(record),
+      title: '往来对象 / 发团',
+      width: 260,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text>{formatScheduleCounterpartyLabel(record)}</Typography.Text>
+          <Typography.Text type="secondary">
+            {formatDepartureLabel(record.departureId, departureMap)}
+          </Typography.Text>
+        </Space>
+      ),
     },
     {
       title: '总额',
@@ -214,11 +198,11 @@ function VerificationBasicsSection({
 }: VerificationBasicsSectionProps) {
   return (
     <>
-      <Typography.Title level={5} style={{ marginTop: 0 }}>
-        ① 基础信息
+      <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 16 }}>
+        核销条件
       </Typography.Title>
       <Row gutter={16}>
-        <Col span={24}>
+        <Col xs={24} md={7}>
           <Form.Item
             name="direction"
             label="核销方向"
@@ -231,9 +215,7 @@ function VerificationBasicsSection({
             />
           </Form.Item>
         </Col>
-      </Row>
-      <Row gutter={16}>
-        <Col xs={24} sm={12}>
+        <Col xs={24} md={7}>
           <Form.Item
             name="verificationDate"
             label="核销日期"
@@ -244,14 +226,13 @@ function VerificationBasicsSection({
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Col>
-        <Col xs={24} sm={12}>
+        <Col xs={24} md={10}>
           <Form.Item name="departureId" label="关联发团">
             <Select
               allowClear
-              showSearch
+              showSearch={{ optionFilterProp: 'label' }}
               placeholder="可选，缩小候选范围"
               options={departureOptions}
-              optionFilterProp="label"
               disabled={Boolean(lockedDepartureId)}
             />
           </Form.Item>
@@ -290,19 +271,18 @@ function TransactionSelectionSection({
 }: TransactionSelectionSectionProps) {
   return (
     <>
-      <Typography.Title level={5}>② 选择流水</Typography.Title>
-      {!direction ? (
-        <Typography.Text type="secondary">请先选择核销方向</Typography.Text>
-      ) : selectedTransaction ? (
+      {selectedTransaction ? (
         <Card
           size="small"
+          title="资金流水"
+          style={{ height: '100%' }}
           extra={
             <Button type="link" onClick={onClearTransaction}>
               重新选择
             </Button>
           }
         >
-          <Descriptions column={2} size="small">
+          <Descriptions column={1} size="small">
             <Descriptions.Item label="流水号">
               {selectedTransaction.transactionNo}
             </Descriptions.Item>
@@ -327,8 +307,13 @@ function TransactionSelectionSection({
         </Card>
       ) : loadError ? (
         <Alert type="error" showIcon title="流水候选加载失败，请关闭抽屉后重试" />
+      ) : !direction ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先选择核销方向" />
       ) : (
         <>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>
+            选择流水
+          </Typography.Title>
           <Input.Search
             allowClear
             placeholder="搜索流水号、往来对象或发团"
@@ -345,7 +330,15 @@ function TransactionSelectionSection({
             columns={columns}
             dataSource={candidateTransactions}
             pagination={false}
-            scroll={{ x: 900, y: 240 }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="暂无可核销流水，请调整发团或搜索条件"
+                />
+              ),
+            }}
+            scroll={{ x: 760, y: 280 }}
             rowSelection={{
               type: 'radio',
               selectedRowKeys: selectedTransactionId ? [selectedTransactionId] : [],
@@ -364,6 +357,8 @@ function TransactionSelectionSection({
 
 interface ScheduleSelectionSectionProps {
   selectedTransaction: FinanceTransactionSummary | null
+  selectedSchedule: PaymentScheduleSummary | null
+  departureMap: Map<string, { departureNo: string; name: string }>
   searchKeyword: string
   loading: boolean
   loadError: boolean
@@ -371,11 +366,14 @@ interface ScheduleSelectionSectionProps {
   candidateSchedules: PaymentScheduleSummary[]
   selectedScheduleId?: string
   onSearchKeywordChange: (keyword: string) => void
+  onClearSchedule: () => void
   onSelectSchedule: (schedule: PaymentScheduleSummary) => void
 }
 
 function ScheduleSelectionSection({
   selectedTransaction,
+  selectedSchedule,
+  departureMap,
   searchKeyword,
   loading,
   loadError,
@@ -383,17 +381,54 @@ function ScheduleSelectionSection({
   candidateSchedules,
   selectedScheduleId,
   onSearchKeywordChange,
+  onClearSchedule,
   onSelectSchedule,
 }: ScheduleSelectionSectionProps) {
   return (
     <>
-      <Typography.Title level={5}>③ 可匹配收付款节点</Typography.Title>
-      {!selectedTransaction ? (
-        <Typography.Text type="secondary">请先选择流水</Typography.Text>
+      {selectedSchedule ? (
+        <Card
+          size="small"
+          title="收付款节点"
+          style={{ height: '100%' }}
+          extra={
+            <Button type="link" onClick={onClearSchedule}>
+              重新选择
+            </Button>
+          }
+        >
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="节点编号">{selectedSchedule.scheduleNo}</Descriptions.Item>
+            <Descriptions.Item label="标题">{selectedSchedule.title}</Descriptions.Item>
+            <Descriptions.Item label="往来对象">
+              {formatScheduleCounterpartyLabel(selectedSchedule)}
+            </Descriptions.Item>
+            <Descriptions.Item label="发团">
+              {formatDepartureLabel(selectedSchedule.departureId, departureMap)}
+            </Descriptions.Item>
+            <Descriptions.Item label="总额">
+              {formatCents(selectedSchedule.amountCents)}
+            </Descriptions.Item>
+            <Descriptions.Item label="已结">
+              {formatCents(selectedSchedule.settledAmountCents)}
+            </Descriptions.Item>
+            <Descriptions.Item label="未结">
+              {formatCents(selectedSchedule.unsettledAmountCents)}
+            </Descriptions.Item>
+            {selectedSchedule.dueDate ? (
+              <Descriptions.Item label="到期日">{selectedSchedule.dueDate}</Descriptions.Item>
+            ) : null}
+          </Descriptions>
+        </Card>
       ) : loadError ? (
         <Alert type="error" showIcon title="收付款节点候选加载失败，请关闭抽屉后重试" />
+      ) : !selectedTransaction ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先选择资金流水" />
       ) : (
         <>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>
+            选择收付款节点
+          </Typography.Title>
           <Input.Search
             allowClear
             placeholder="搜索单号、标题、往来对象或发团"
@@ -410,7 +445,15 @@ function ScheduleSelectionSection({
             columns={columns}
             dataSource={candidateSchedules}
             pagination={false}
-            scroll={{ x: 900, y: 240 }}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="暂无同一往来对象的未结清节点，请调整发团或搜索条件"
+                />
+              ),
+            }}
+            scroll={{ x: 760, y: 280 }}
             rowSelection={{
               type: 'radio',
               selectedRowKeys: selectedScheduleId ? [selectedScheduleId] : [],
@@ -442,45 +485,57 @@ function VerificationConfirmSection({
 }: VerificationConfirmSectionProps) {
   return (
     <>
-      <Typography.Title level={5}>{SECTION_CONFIRM_TITLE}</Typography.Title>
+      <Typography.Title level={5}>核销金额</Typography.Title>
       {!selectedSchedule || !selectedTransaction ? (
         <Typography.Text type="secondary">请先选择流水与收付款节点</Typography.Text>
       ) : (
         <>
-          <Form.Item
-            name="amountYuan"
-            label="本次核销金额（元）"
-            rules={[
-              { required: true, message: '请输入核销金额' },
-              {
-                validator: (_, value) => {
-                  if (value == null || value <= 0) {
-                    return Promise.reject(new Error('金额必须大于 0'))
-                  }
-                  const amountCents = yuanToCents(value)
-                  if (amountCents > selectedTransaction.unallocatedAmountCents) {
-                    return Promise.reject(new Error('金额不能超过流水可核销余额'))
-                  }
-                  if (amountCents > selectedSchedule.unsettledAmountCents) {
-                    return Promise.reject(new Error('金额不能超过节点未结清金额'))
-                  }
-                  return Promise.resolve()
-                },
-              },
-            ]}
-          >
-            <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
-          </Form.Item>
           <Row gutter={16}>
-            <Col xs={24} sm={12}>
-              <Form.Item label="核销后流水余额">
-                <Input value={formatCents(postTransactionBalanceCents)} disabled />
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="amountYuan"
+                label="本次核销金额（元）"
+                extra={`最多可核销 ${formatCents(
+                  Math.min(
+                    selectedTransaction.unallocatedAmountCents,
+                    selectedSchedule.unsettledAmountCents,
+                  ),
+                )}`}
+                rules={[
+                  { required: true, message: '请输入核销金额' },
+                  {
+                    validator: (_, value) => {
+                      if (value == null || value <= 0) {
+                        return Promise.reject(new Error('金额必须大于 0'))
+                      }
+                      const amountCents = yuanToCents(value)
+                      if (amountCents > selectedTransaction.unallocatedAmountCents) {
+                        return Promise.reject(new Error('金额不能超过流水可核销余额'))
+                      }
+                      if (amountCents > selectedSchedule.unsettledAmountCents) {
+                        return Promise.reject(new Error('金额不能超过节点未结清金额'))
+                      }
+                      return Promise.resolve()
+                    },
+                  },
+                ]}
+              >
+                <InputNumber min={0.01} precision={2} prefix="¥" style={{ width: '100%' }} />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12}>
-              <Form.Item label="核销后节点未结金额">
-                <Input value={formatCents(postUnsettledCents)} disabled />
-              </Form.Item>
+            <Col xs={24} md={12}>
+              <Card size="small">
+                <Descriptions column={2} layout="vertical" size="small">
+                  <Descriptions.Item label="核销后流水余额">
+                    <Typography.Text strong>
+                      {formatCents(postTransactionBalanceCents)}
+                    </Typography.Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="核销后节点未结金额">
+                    <Typography.Text strong>{formatCents(postUnsettledCents)}</Typography.Text>
+                  </Descriptions.Item>
+                </Descriptions>
+              </Card>
             </Col>
           </Row>
           <Form.Item name="remark" label="备注">
@@ -506,7 +561,7 @@ function CreateVerificationFooter({
   onSubmit,
 }: CreateVerificationFooterProps) {
   return (
-    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+    <Space className={styles.footerActions}>
       <Button onClick={onCancel}>取消</Button>
       <Button type="primary" loading={loading} disabled={submitDisabled} onClick={onSubmit}>
         确认核销
@@ -548,13 +603,6 @@ export function CreateVerificationDrawer({
     lockedDepartureId,
     initialTransaction,
     initialSchedule,
-  })
-
-  const stepsCurrent = resolveStepsCurrent({
-    direction: state.direction,
-    transactionId: state.selectedTransactionId,
-    paymentScheduleId: state.selectedScheduleId,
-    amountYuan: state.amountYuan,
   })
 
   const transactionColumns = useMemo(
@@ -602,8 +650,6 @@ export function CreateVerificationDrawer({
         />
       }
     >
-      <Steps current={stepsCurrent} items={STEP_ITEMS} style={{ marginBottom: 24 }} />
-
       <Form
         form={form}
         layout="vertical"
@@ -621,33 +667,80 @@ export function CreateVerificationDrawer({
 
         <Divider />
 
-        <TransactionSelectionSection
-          direction={state.direction}
-          selectedTransaction={state.selectedTransaction}
-          searchKeyword={state.transactionSearchKeyword}
-          loading={state.transactionsLoading}
-          loadError={state.transactionsError}
-          columns={transactionColumns}
-          candidateTransactions={state.candidateTransactions}
-          selectedTransactionId={state.selectedTransactionId}
-          onSearchKeywordChange={state.setTransactionSearchKeyword}
-          onClearTransaction={state.handleClearTransaction}
-          onSelectTransaction={state.handleSelectTransaction}
-        />
+        <Typography.Title level={5} style={{ marginTop: 0, marginBottom: 4 }}>
+          匹配关系
+        </Typography.Title>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          先选择有可核销余额的资金流水，再匹配同一往来对象的未结清收付款节点。
+        </Typography.Paragraph>
 
-        <Divider />
-
-        <ScheduleSelectionSection
-          selectedTransaction={state.selectedTransaction}
-          searchKeyword={state.scheduleSearchKeyword}
-          loading={state.schedulesLoading}
-          loadError={state.schedulesError}
-          columns={scheduleColumns}
-          candidateSchedules={state.candidateSchedules}
-          selectedScheduleId={state.selectedScheduleId}
-          onSearchKeywordChange={state.setScheduleSearchKeyword}
-          onSelectSchedule={state.handleSelectSchedule}
-        />
+        {state.selectedTransaction && state.selectedSchedule ? (
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={12}>
+              <TransactionSelectionSection
+                direction={state.direction}
+                selectedTransaction={state.selectedTransaction}
+                searchKeyword={state.transactionSearchKeyword}
+                loading={state.transactionsLoading}
+                loadError={state.transactionsError}
+                columns={transactionColumns}
+                candidateTransactions={state.candidateTransactions}
+                selectedTransactionId={state.selectedTransactionId}
+                onSearchKeywordChange={state.setTransactionSearchKeyword}
+                onClearTransaction={state.handleClearTransaction}
+                onSelectTransaction={state.handleSelectTransaction}
+              />
+            </Col>
+            <Col xs={24} md={12}>
+              <ScheduleSelectionSection
+                selectedTransaction={state.selectedTransaction}
+                selectedSchedule={state.selectedSchedule}
+                departureMap={state.departureMap}
+                searchKeyword={state.scheduleSearchKeyword}
+                loading={state.schedulesLoading}
+                loadError={state.schedulesError}
+                columns={scheduleColumns}
+                candidateSchedules={state.candidateSchedules}
+                selectedScheduleId={state.selectedScheduleId}
+                onSearchKeywordChange={state.setScheduleSearchKeyword}
+                onClearSchedule={state.handleClearSchedule}
+                onSelectSchedule={state.handleSelectSchedule}
+              />
+            </Col>
+          </Row>
+        ) : (
+          <Space orientation="vertical" size={24} style={{ width: '100%' }}>
+            <TransactionSelectionSection
+              direction={state.direction}
+              selectedTransaction={state.selectedTransaction}
+              searchKeyword={state.transactionSearchKeyword}
+              loading={state.transactionsLoading}
+              loadError={state.transactionsError}
+              columns={transactionColumns}
+              candidateTransactions={state.candidateTransactions}
+              selectedTransactionId={state.selectedTransactionId}
+              onSearchKeywordChange={state.setTransactionSearchKeyword}
+              onClearTransaction={state.handleClearTransaction}
+              onSelectTransaction={state.handleSelectTransaction}
+            />
+            {state.selectedTransaction ? (
+              <ScheduleSelectionSection
+                selectedTransaction={state.selectedTransaction}
+                selectedSchedule={state.selectedSchedule}
+                departureMap={state.departureMap}
+                searchKeyword={state.scheduleSearchKeyword}
+                loading={state.schedulesLoading}
+                loadError={state.schedulesError}
+                columns={scheduleColumns}
+                candidateSchedules={state.candidateSchedules}
+                selectedScheduleId={state.selectedScheduleId}
+                onSearchKeywordChange={state.setScheduleSearchKeyword}
+                onClearSchedule={state.handleClearSchedule}
+                onSelectSchedule={state.handleSelectSchedule}
+              />
+            ) : null}
+          </Space>
+        )}
 
         <Divider />
 

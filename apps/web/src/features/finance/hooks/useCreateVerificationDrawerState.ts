@@ -225,6 +225,13 @@ export function useCreateVerificationDrawerState({
     setScheduleSearchKeyword('')
   }
 
+  const handleClearSchedule = () => {
+    form.setFieldsValue({
+      paymentScheduleId: '',
+      amountYuan: 0,
+    })
+  }
+
   const handleSelectSchedule = (schedule: PaymentScheduleSummary) => {
     if (!selectedTransaction) {
       return
@@ -273,6 +280,7 @@ export function useCreateVerificationDrawerState({
     handleDirectionChange,
     handleSelectTransaction,
     handleClearTransaction,
+    handleClearSchedule,
     handleSelectSchedule,
     submitDisabled,
   }

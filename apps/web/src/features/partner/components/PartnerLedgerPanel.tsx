@@ -23,8 +23,8 @@ export function PartnerLedgerPanel({ partnerId }: { partnerId: string }) {
       <Segmented<LedgerDirection>
         value={direction}
         options={[
-          { label: '应收（我收他）', value: 'receivable' },
-          { label: '应付（我付他）', value: 'payable' },
+          { label: '应收', value: 'receivable' },
+          { label: '应付', value: 'payable' },
         ]}
         onChange={setDirection}
       />

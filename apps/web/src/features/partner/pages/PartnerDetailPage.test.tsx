@@ -131,9 +131,9 @@ describe('PartnerDetailPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '往来账款' }))
 
-    expect(await screen.findByText('应收（我收他）')).toBeInTheDocument()
+    expect(await screen.findByText('应收')).toBeInTheDocument()
     expect(
-      screen.getByText('应收（我收他）').closest('.ant-segmented-item'),
+      screen.getByText('应收').closest('.ant-segmented-item'),
     ).toHaveClass('ant-segmented-item-selected')
 
     // 默认只挂载应收 Workspace，不并行请求应付
@@ -146,9 +146,9 @@ describe('PartnerDetailPage', () => {
     })
     expect(listPartnerPayables).not.toHaveBeenCalled()
 
-    await user.click(screen.getByText('应付（我付他）'))
+    await user.click(screen.getByText('应付'))
     expect(
-      screen.getByText('应付（我付他）').closest('.ant-segmented-item'),
+      screen.getByText('应付').closest('.ant-segmented-item'),
     ).toHaveClass('ant-segmented-item-selected')
     await waitFor(() => {
       expect(listPartnerPayables).toHaveBeenCalledWith(

@@ -345,7 +345,7 @@ Partner 详情中的**业务事实层** Tab，行＝该 Partner 名下客源单�
 _Avoid_: 与往来账款合并成一个对账视图, 列上放已收/未收或应收状态, Tab 内用客户习惯名, 第一版做拼出方向, 别处再开确认单导出入口
 
 **Partner Ledger Tab（往来账款 Tab）**:
-Partner 详情中的**财务账款层** Tab，行＝与该 Partner 往来的收付款节点，回答「这家欠我/我欠这家多少、收付到哪一步」。应收（我收他）、应付（我付他）两个子区各复用一次 PaymentScheduleWorkspace，数据按 `counterpartyType=partner + counterpartyId` 精确过滤；游客代收节点（counterparty=guest）不属于该 Partner 账款、不出现在本 Tab。汇总卡每方向三项（约定/已核销/未结清）跟随筛选，已关闭、已作废节点不计入；应收侧约定合计拆显「客户补款／其他应收」以对确认单。主时间轴为所属发团出团日期区间（与确认单周期同口径，手工其他应收随其归属发团落入区间），另保留到期日筛选做催收。Tab 内完整操作，与全局应收/应付页一致。
+Partner 详情中的**财务账款层** Tab，行＝与该 Partner 往来的收付款节点，回答「这家欠我/我欠这家多少、收付到哪一步」。应收、应付两个子区各复用一次 PaymentScheduleWorkspace，数据按 `counterpartyType=partner + counterpartyId` 精确过滤；游客代收节点（counterparty=guest）不属于该 Partner 账款、不出现在本 Tab。汇总卡每方向三项（约定/已核销/未结清）跟随筛选，已关闭、已作废节点不计入；应收侧约定合计拆显「客户补款／其他应收」以对确认单。主时间轴为所属发团出团日期区间（与确认单周期同口径，手工其他应收随其归属发团落入区间），另保留到期日筛选做催收。Tab 内完整操作，与全局应收/应付页一致。
 _Avoid_: 列上放人数/单价/优惠, keyword 模糊匹配往来对象, 游客代收计入该 Partner 账款, 汇总含已关闭或已作废节点, 只读＋跳全局页
 
 **Partner Reconciliation Statement（往来账确认单）**:

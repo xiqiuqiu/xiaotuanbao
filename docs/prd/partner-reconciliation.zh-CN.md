@@ -100,7 +100,7 @@
 
 #### 双向组织
 
-两个子区「应收（我收他）」「应付（我付他）」，各自复用一次 `PaymentScheduleWorkspace`；数据用 `counterpartyType=partner + counterpartyId` **精确过滤**（不走 keyword 模糊匹配，同名 Partner 不串）。后端列表 API 已支持精确过滤，Workspace 需扩展 props 接线。
+两个子区「应收」「应付」，各自复用一次 `PaymentScheduleWorkspace`；数据用 `counterpartyType=partner + counterpartyId` **精确过滤**（不走 keyword 模糊匹配，同名 Partner 不串）。后端列表 API 已支持精确过滤，Workspace 需扩展 props 接线。
 
 #### 汇总卡（每方向三项，跟随列表筛选）
 
