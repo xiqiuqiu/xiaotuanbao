@@ -37,7 +37,8 @@ function formatPercent(numerator: number, denominator: number): string | null {
 
 interface DepartureOverviewStatsCardsProps {
   departure: DepartureDetail
-  animateProgress?: boolean
+  /** First overview visit in session: card enter + progress reveal. */
+  animateEnter?: boolean
 }
 
 interface AmountDetailProps {
@@ -196,6 +197,7 @@ function SummaryCard({
   equationDescription,
   equation,
   entry,
+  animateEnter = false,
 }: {
   title: string
   value: string | number
@@ -204,6 +206,7 @@ function SummaryCard({
   equation?: string
   /** 卡片右上角的明细入口图标按钮 */
   entry?: React.ReactNode
+  animateEnter?: boolean
 }) {
   const titleNode =
     equation && equationDescription ? (
@@ -213,7 +216,10 @@ function SummaryCard({
     )
 
   return (
-    <Card className={styles.metricCard} style={EQUAL_HEIGHT_CARD_STYLE}>
+    <Card
+      className={animateEnter ? styles.metricCardEnter : undefined}
+      style={EQUAL_HEIGHT_CARD_STYLE}
+    >
       <Statistic
         title={
           entry ? (
@@ -246,7 +252,7 @@ function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly
 
 export function DepartureOverviewStatsCards({
   departure,
-  animateProgress = false,
+  animateEnter = false,
 }: DepartureOverviewStatsCardsProps) {
   const { token } = theme.useToken()
   const stats = departure.overviewStats
@@ -290,7 +296,12 @@ export function DepartureOverviewStatsCards({
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Row gutter={[16, 16]} className={styles.firstRow}>
         <Col xs={24} sm={12} xl={6}>
-          <SummaryCard title="总人数" value={departure.totalGuests} suffix="人" />
+          <SummaryCard
+            title="总人数"
+            value={departure.totalGuests}
+            suffix="人"
+            animateEnter={animateEnter}
+          />
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
@@ -298,6 +309,7 @@ export function DepartureOverviewStatsCards({
             value={formatCents(departure.netReceivableCents)}
             equationDescription="结算应收是全部客源单优惠后的团款合计，不含手工创建的其他应收。"
             equation={settlementEquation}
+            animateEnter={animateEnter}
           />
         </Col>
         <Col xs={24} sm={12} xl={6}>
@@ -306,6 +318,7 @@ export function DepartureOverviewStatsCards({
             value={formatCents(departure.payableCents)}
             equationDescription="成本合计是全部行程资源约定金额合计，无论是否已生成应付；确认应付来自全部非作废应付节点，两者差额由组成项解释。"
             equation={costEquation}
+            animateEnter={animateEnter}
             entry={
               hasCostDetails ? (
                 <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
@@ -327,6 +340,7 @@ export function DepartureOverviewStatsCards({
             value={formatCents(departure.estimatedMarginCents)}
             equationDescription="当前毛利是实时经营预估：结算应收减成本合计；确认毛利按财务已确认的应付计算，见毛利对照。"
             equation={marginEquation}
+            animateEnter={animateEnter}
             entry={
               stats.confirmedPayableCents !== 0 ? (
                 <OverviewDetailsPopover title="毛利对照" buttonLabel="查看毛利对照">
@@ -343,10 +357,18 @@ export function DepartureOverviewStatsCards({
 
       <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
         <Col xs={24} sm={12} xl={8}>
-          <SummaryCard title="原始团款" value={formatCents(departure.grossReceivableCents)} />
+          <SummaryCard
+            title="原始团款"
+            value={formatCents(departure.grossReceivableCents)}
+            animateEnter={animateEnter}
+          />
         </Col>
         <Col xs={24} sm={12} xl={8}>
-          <SummaryCard title="优惠合计" value={formatCents(departure.discountCents)} />
+          <SummaryCard
+            title="优惠合计"
+            value={formatCents(departure.discountCents)}
+            animateEnter={animateEnter}
+          />
         </Col>
         <Col xs={24} sm={12} xl={8}>
           <SummaryCard
@@ -354,6 +376,7 @@ export function DepartureOverviewStatsCards({
             value={marginRateLabel ?? '暂无数据'}
             equationDescription="毛利率是当前毛利占结算应收的比例；结算应收为零时无可计算比例。"
             equation={marginRateEquation}
+            animateEnter={animateEnter}
           />
         </Col>
       </Row>
@@ -361,7 +384,7 @@ export function DepartureOverviewStatsCards({
       <Row gutter={[16, 16]} className={styles.thirdRow}>
         <Col xs={24} lg={8}>
           <Card
-            className={styles.metricCard}
+            className={animateEnter ? styles.metricCardEnter : undefined}
             title={
               <CalculationTitle
                 label="收款进度"
@@ -392,7 +415,7 @@ export function DepartureOverviewStatsCards({
             <ProgressValue
               numerator={stats.receivedCents}
               denominator={departure.netReceivableCents}
-              animate={animateProgress}
+              animate={animateEnter}
             />
             <ProgressBreakdown
               items={[
@@ -406,7 +429,7 @@ export function DepartureOverviewStatsCards({
 
         <Col xs={24} lg={8}>
           <Card
-            className={styles.metricCard}
+            className={animateEnter ? styles.metricCardEnter : undefined}
             title={
               <CalculationTitle
                 label="付款进度"
@@ -439,7 +462,7 @@ export function DepartureOverviewStatsCards({
             <ProgressValue
               numerator={stats.resourcePaidCents}
               denominator={departure.payableCents}
-              animate={animateProgress}
+              animate={animateEnter}
             />
             <ProgressBreakdown
               items={[
@@ -452,7 +475,7 @@ export function DepartureOverviewStatsCards({
 
         <Col xs={24} lg={8}>
           <Card
-            className={styles.metricCard}
+            className={animateEnter ? styles.metricCardEnter : undefined}
             title={
               <CalculationTitle
                 label="资金情况"

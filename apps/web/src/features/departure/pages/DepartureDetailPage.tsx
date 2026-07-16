@@ -172,7 +172,7 @@ export function DepartureDetailPage() {
         children: (
           <DepartureOverview
             departure={departure}
-            animateProgress={!animatedOverviewDepartureIds.current.has(departure.id)}
+            animateEnter={!animatedOverviewDepartureIds.current.has(departure.id)}
           />
         ),
       }

@@ -3,11 +3,11 @@ import { DepartureOverviewStatsCards } from './DepartureOverviewStatsCards'
 
 interface DepartureOverviewProps {
   departure: DepartureDetail
-  animateProgress: boolean
+  animateEnter: boolean
 }
 
-export function DepartureOverview({ departure, animateProgress }: DepartureOverviewProps) {
+export function DepartureOverview({ departure, animateEnter }: DepartureOverviewProps) {
   return (
-    <DepartureOverviewStatsCards departure={departure} animateProgress={animateProgress} />
+    <DepartureOverviewStatsCards departure={departure} animateEnter={animateEnter} />
   )
 }

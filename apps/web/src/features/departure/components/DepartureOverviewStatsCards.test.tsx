@@ -102,16 +102,47 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
   }
 }
 
-function renderCards(departure = makeDeparture(), animateProgress = false) {
+function renderCards(departure = makeDeparture(), animateEnter = false) {
   return render(
     <ConfigProvider locale={zhCN}>
-      <DepartureOverviewStatsCards departure={departure} animateProgress={animateProgress} />
+      <DepartureOverviewStatsCards departure={departure} animateEnter={animateEnter} />
     </ConfigProvider>,
   )
 }
 
 describe('DepartureOverviewStatsCards', () => {
   afterEach(cleanup)
+
+  it('首次进入时卡片与进度条挂载入场 class', () => {
+    renderCards(makeDeparture(), true)
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(receiptCard.className).toContain('metricCardEnter')
+    expect(paymentCard.className).toContain('metricCardEnter')
+    expect(screen.getByText('总人数').closest('.ant-card')?.className).toContain(
+      'metricCardEnter',
+    )
+
+    const receiptProgress = within(receiptCard).getByRole('progressbar')
+    const paymentProgress = within(paymentCard).getByRole('progressbar')
+    expect(receiptProgress.className).toContain('progressLoad')
+    expect(paymentProgress.className).toContain('progressLoad')
+  })
+
+  it('非首次进入时不挂载卡片入场与进度条揭示 class', () => {
+    renderCards(makeDeparture(), false)
+
+    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    expect(receiptCard.className).not.toContain('metricCardEnter')
+    expect(paymentCard.className).not.toContain('metricCardEnter')
+    expect(screen.getByText('总人数').closest('.ant-card')?.className).not.toContain(
+      'metricCardEnter',
+    )
+    expect(within(receiptCard).getByRole('progressbar').className).not.toContain('progressLoad')
+    expect(within(paymentCard).getByRole('progressbar').className).not.toContain('progressLoad')
+  })
 
   it('初始化加载动效不延迟进度条语义值与百分比文字', () => {
     renderCards(makeDeparture(), true)
