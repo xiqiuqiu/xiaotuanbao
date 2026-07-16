@@ -1,10 +1,15 @@
 import { App, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from '@tanstack/react-router'
 import type { PropsWithChildren } from 'react'
 import { queryClient } from '@/lib/query/client'
 import { router } from '@/app/router'
+
+// DatePicker/Calendar 的月份、星期等文案依赖 dayjs locale；与 ConfigProvider zhCN 配套。
+dayjs.locale('zh-cn')
 
 const theme = {
   cssVar: {},
