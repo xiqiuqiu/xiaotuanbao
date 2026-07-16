@@ -3,7 +3,130 @@
   justify-content: flex-end;
 }
 
+.selectionSection,
+.amountSection {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: 8px;
+}
+
+.sectionHeader {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.selectionContent,
+.amountContent {
+  padding: 0 16px 16px;
+}
+
+.dependentEmpty {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.matchedSelectionGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.matchArrow {
+  font-size: 16px;
+}
+
+.amountSection {
+  margin-top: 16px;
+}
+
+.resultMetric,
+.previewResult {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 6px;
+}
+
+.preview section > :global(.ant-typography) {
+  margin-top: 0;
+}
+
+.previewRelationship {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 16px;
+}
+
+.previewObject {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid;
+  border-radius: 8px;
+}
+
+.previewAmounts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.previewArrow {
+  display: grid;
+  grid-template-columns: auto;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.previewAmount {
+  font-size: 20px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 @media (max-width: 767px) {
+  .sectionHeader {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .selectionContent,
+  .amountContent {
+    padding: 0 12px 12px;
+  }
+
+  .matchedSelectionGrid,
+  .previewRelationship {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .matchArrow,
+  .previewArrow :global(svg) {
+    transform: rotate(90deg);
+  }
+
+  .previewArrow {
+    padding: 4px 0;
+  }
+
   .footerActions :global(.ant-btn) {
     min-height: 44px;
   }

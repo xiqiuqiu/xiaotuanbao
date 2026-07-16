@@ -48,6 +48,53 @@ final result: passed
 
 ---
 
+# 新增核销 Design QA
+
+- source visual truth path: `docs/design/screenshots/create-verification-reference.png`
+- implementation screenshot path: `docs/design/screenshots/create-verification-default-1440x1000.png`
+- comparison evidence: `docs/design/screenshots/create-verification-default-comparison.png`
+- mobile evidence: `docs/design/screenshots/create-verification-default-390x844.png`
+- viewport: desktop 1440 × 1000；mobile 390 × 844
+- same state: 默认无可核销流水、无收付款节点，预览按钮禁用
+
+## Full-view comparison evidence
+
+同屏对照显示：实现保留视觉稿的「核销条件 → 资金流水 → 收付款节点」任务顺序，并在没有候选数据时明确说明当前为空及下一步动作。实现采用项目既有右侧抽屉承载，宽度为 `min(960px, 100vw)`，桌面保留足够的信息密度，移动端占满可用宽度。
+
+## Focused region comparison evidence
+
+- 默认态：资金流水表保留搜索入口和字段表头；空态说明可调整发团或搜索条件。
+- 依赖态：未选择流水时不展示无意义的节点表格，直接说明需先选择流水。
+- 已选与金额核对态：选中双方后才出现本次核销金额、流水余额与节点未结金额，避免提前暴露无效输入。
+- 预览态：只读展示核销条件、流水到节点的匹配关系、核销金额及核销后余额；返回修改保留已填数据。
+- 颜色与间距：使用 antd Token、项目 catalog 与 `DESIGN.md` 既有层级，无新增原始色值或独立视觉体系。
+
+## Findings
+
+无未解决的 P0 / P1 / P2 问题。
+
+## Comparison history
+
+1. 首轮：默认态、空态文案、选择依赖关系和底部主操作与参考稿一致，无需视觉修复。
+2. 移动端复验：390px 下页面与抽屉宽度均为 390px，无页面级水平溢出；表格在自身容器内保留横向浏览能力。
+
+## Interaction verification
+
+- 默认无流水时，「预览核销」禁用；收付款节点区明确提示先选择流水。
+- 已选流水与节点后可核对金额；金额受双方可用余额约束。
+- 「预览核销 → 返回修改」保留核销金额；「确认核销」才触发最终提交。
+- 跨团核销继续保留二次确认，并改用 antd 上下文反馈 API。
+- 浏览器控制台：0 warning，0 error。
+- 自动验证：finance components 41 个测试通过；TypeScript、antd lint、React Doctor、`git diff --check` 通过。
+
+## Follow-up Polish
+
+- P3：本地 seed 当前没有可核销余额，已选态与预览态由组件交互测试覆盖；为避免污染演示财务数据，本轮未额外创建浏览器验收数据。
+
+final result: passed
+
+---
+
 # 核销详情 Design QA
 
 - source visual truth path: `docs/design/screenshots/verification-detail-reference.png`

@@ -7,7 +7,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Form, Modal } from 'antd'
+import { App, ConfigProvider, Form } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CreateVerificationDrawer } from './CreateVerificationDrawer'
 import type { CreateVerificationFormValues } from '../utils/verification-form'
@@ -17,7 +17,8 @@ const listTransactions = vi.fn()
 const listReceivables = vi.fn()
 
 vi.mock('@/services/finance.service', () => ({
-  listFinanceDepartureOptions: (...args: unknown[]) => listFinanceDepartureOptions(...args),
+  listFinanceDepartureOptions: (...args: unknown[]) =>
+    listFinanceDepartureOptions(...args),
   listTransactions: (...args: unknown[]) => listTransactions(...args),
   listReceivables: (...args: unknown[]) => listReceivables(...args),
   listPayables: vi.fn(),
@@ -89,17 +90,21 @@ function Harness({
 
   return (
     <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
     >
       <ConfigProvider>
-        <CreateVerificationDrawer
-          open
-          loading={false}
-          form={form}
-          initialTransaction={makeTransaction()}
-          onClose={vi.fn()}
-          onSubmit={onSubmit}
-        />
+        <App>
+          <CreateVerificationDrawer
+            open
+            loading={false}
+            form={form}
+            initialTransaction={makeTransaction()}
+            onClose={vi.fn()}
+            onSubmit={onSubmit}
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>
   )
@@ -119,6 +124,10 @@ async function selectScheduleAndSubmit(
   render(<Harness onSubmit={onSubmit} />)
 
   await userEvent.click(await screen.findByText('AR202607000001'))
+  const previewButton = screen.getByRole('button', { name: '预览核销' })
+  await waitFor(() => expect(previewButton).toBeEnabled())
+  await userEvent.click(previewButton)
+  await screen.findByText('核销预览')
   await userEvent.click(screen.getByRole('button', { name: '确认核销' }))
 }
 
@@ -133,42 +142,73 @@ describe('CreateVerificationDrawer cross-departure confirmation', () => {
 
   it('submits same-departure verification without an extra warning', async () => {
     const onSubmit = vi.fn()
-    const confirmSpy = vi.spyOn(Modal, 'confirm')
 
     await selectScheduleAndSubmit(makeSchedule('dep-1'), onSubmit)
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(screen.queryByText('确认跨团核销？')).not.toBeInTheDocument()
   })
 
   it('submits cross-departure verification only after confirmation', async () => {
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
     const onSubmit = vi.fn()
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
 
     await selectScheduleAndSubmit(makeSchedule('dep-2'), onSubmit)
 
-    await waitFor(() => expect(confirmConfig).toBeDefined())
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
-    expect(confirmConfig).toMatchObject({
-      title: '确认跨团核销？',
-      okText: '继续核销',
-      cancelText: '取消',
-    })
+    expect((await screen.findAllByText('确认跨团核销？')).length).toBeGreaterThan(
+      0,
+    )
+    expect(screen.getByRole('button', { name: '继续核销' })).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
 
-    confirmConfig?.onCancel?.()
+    await userEvent.click(screen.getByRole('button', { name: '继续核销' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+  })
+
+  it('keeps the entered verification when returning from preview', async () => {
+    const onSubmit = vi.fn()
+
+    listFinanceDepartureOptions.mockResolvedValue([
+      { id: 'dep-1', departureNo: 'XTB2026070001', name: '乌镇一团' },
+    ])
+    listTransactions.mockResolvedValue({ items: [makeTransaction()] })
+    listReceivables.mockResolvedValue({ items: [makeSchedule('dep-1')] })
+
+    render(<Harness onSubmit={onSubmit} />)
+
+    await userEvent.click(await screen.findByText('AR202607000001'))
+    const previewButton = screen.getByRole('button', { name: '预览核销' })
+    await waitFor(() => expect(previewButton).toBeEnabled())
+    await userEvent.click(previewButton)
+
+    expect(await screen.findByText('核销预览')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
 
-    await confirmConfig?.onOk?.()
-    expect(onSubmit).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: '返回修改' }))
+
+    expect(screen.getByText('新增核销')).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: '本次核销金额（元）' }),
+    ).toHaveValue('1000.00')
+
+    await userEvent.click(screen.getByRole('button', { name: '预览核销' }))
+    await userEvent.click(screen.getByRole('button', { name: '确认核销' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+  })
+
+  it('explains the dependent empty states before a transaction is selected', async () => {
+    listFinanceDepartureOptions.mockResolvedValue([])
+    listTransactions.mockResolvedValue({ items: [] })
+    listReceivables.mockResolvedValue({ items: [] })
+
+    render(<Harness onSubmit={vi.fn()} />)
+
+    expect(
+      await screen.findByText('暂无可核销流水，请调整发团或搜索条件'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('选择资金流水后显示同一往来对象的未结清节点'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '预览核销' })).toBeDisabled()
   })
 })
