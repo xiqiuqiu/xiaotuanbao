@@ -138,6 +138,24 @@
   .segmentItem:has(.segmentItemSelect:active) {
     transform: none;
   }
+
+  .resourcePaneEnter {
+    animation: none;
+  }
+}
+
+.resourcePaneEnter {
+  animation: resource-pane-fade 100ms ease both;
+}
+
+@keyframes resource-pane-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .segmentItemSelected {

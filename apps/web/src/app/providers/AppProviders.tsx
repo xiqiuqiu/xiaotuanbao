@@ -29,6 +29,10 @@ const theme = {
     borderRadius: 6,
     borderRadiusLG: 8,
     wireframe: false,
+    // DESIGN.md Elevation - lock antd motion scale
+    motionDurationFast: '0.1s',
+    motionDurationMid: '0.2s',
+    motionDurationSlow: '0.3s',
     // Same curve as custom CSS: var(--ant-motion-ease-out-quint, ...)
     motionEaseOutQuint: 'cubic-bezier(0.23, 1, 0.32, 1)',
   },

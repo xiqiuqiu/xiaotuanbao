@@ -1,6 +1,6 @@
 # 009 — Soft opacity when execution segment selection swaps the resource pane
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunities

@@ -1,0 +1,19 @@
+.tabPaneEnter {
+  animation: tab-pane-fade 120ms ease both;
+}
+
+@keyframes tab-pane-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabPaneEnter {
+    animation: none;
+  }
+}

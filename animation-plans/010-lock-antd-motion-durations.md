@@ -1,6 +1,6 @@
 # 010 — Lock Ant Design motion durations to DESIGN.md
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunities / Cohesion

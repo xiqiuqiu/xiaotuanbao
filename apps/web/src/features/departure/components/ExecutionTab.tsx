@@ -279,12 +279,14 @@ export function ExecutionTab({
                 ) : null}
               </Empty>
             ) : selectedSegment ? (
-              <ExecutionResourcePane
-                departure={departure}
-                segment={selectedSegment}
-                readOnly={readOnly}
-                amountReadOnly={amountReadOnly}
-              />
+              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+                <ExecutionResourcePane
+                  departure={departure}
+                  segment={selectedSegment}
+                  readOnly={readOnly}
+                  amountReadOnly={amountReadOnly}
+                />
+              </div>
             ) : null}
           </Card>
         </Col>

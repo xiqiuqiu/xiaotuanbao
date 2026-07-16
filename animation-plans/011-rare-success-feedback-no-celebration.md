@@ -1,6 +1,18 @@
 # 011 — Rare success feedback without decorative motion
 
-- **Status**: TODO
+- **Status**: DONE (no code change)
+
+## Outcome
+
+Reviewed rare `message.success` call sites under `apps/web/src/features/departure`.
+
+- **创建发团** (`CreateDepartureWizard`): success toast + navigate to `/departure/$id` overview — destination page is an obvious cue.
+- **批量生成应付** (`ExecutionResourcePane`): success/warning toast + `invalidateResourceQueries` refreshes the resource table (payable columns / batch button visibility change on screen).
+- Status / archive / settle header actions update visible departure status in the header.
+
+No call site left where the only signal is a corner toast with a static underlying view. Adding inline Alerts would duplicate already-visible state changes on a crisp ops UI.
+
+**Decision**: no code change.
 - **Commit**: 2894e53
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunities

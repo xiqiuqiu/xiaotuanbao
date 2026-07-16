@@ -1,6 +1,6 @@
 # 008 — Soft opacity bridge for departure detail tab content
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 2894e53
 - **Severity**: LOW (missed opportunity)
 - **Category**: Missed opportunities

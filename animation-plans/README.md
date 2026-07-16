@@ -14,10 +14,10 @@ Execution target: `apps/web` only. Do **not** invent a parallel CSS token system
 | 005 | Unify press feedback scale/duration | MEDIUM | DONE | 007 (optional) |
 | 006 | Login submit color uses `ease` | LOW | DONE | 005 (overlap on `.submit`) |
 | 007 | Consolidate ease-out via ant CSS vars | LOW | DONE | — |
-| 008 | Departure tab opacity bridge | LOW | TODO | **001** (required) |
-| 009 | Execution segment pane opacity | LOW | TODO | 005 (optional) |
-| 010 | Lock antd motion durations to DESIGN | LOW | TODO | 007 (optional merge) |
-| 011 | Rare success feedback without celebration | LOW | TODO | — |
+| 008 | Departure tab opacity bridge | LOW | DONE | **001** (required) |
+| 009 | Execution segment pane opacity | LOW | DONE | 005 (optional) |
+| 010 | Lock antd motion durations to DESIGN | LOW | DONE | 007 (optional merge) |
+| 011 | Rare success feedback without celebration | LOW | DONE (no-op) | — |
 
 ## Recommended execution order
 

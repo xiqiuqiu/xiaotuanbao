@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { Tabs, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -26,8 +26,13 @@ import {
   type DepartureDetailTabKey,
 } from '../catalog'
 import { invalidateDepartureDetailQueries } from '../utils/invalidate-departure-detail-queries'
+import styles from './DepartureDetailPage.module.css'
 
 const DEFAULT_TAB: DepartureDetailTabKey = 'overview'
+
+function wrapTabPane(children: ReactNode) {
+  return <div className={styles.tabPaneEnter}>{children}</div>
+}
 
 function resolveTransactionDirection(
   value: string | undefined,
@@ -169,11 +174,11 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <DepartureOverview
             departure={departure}
             animateEnter={!animatedOverviewDepartureIds.current.has(departure.id)}
-          />
+          />,
         ),
       }
     }
@@ -182,12 +187,12 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <SourceOrdersTab
             departure={departure}
             readOnly={readOnly}
             amountReadOnly={amountReadOnly}
-          />
+          />,
         ),
       }
     }
@@ -196,13 +201,13 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <ExecutionTab
             departure={departure}
             segmentId={search.segmentId}
             readOnly={readOnly}
             amountReadOnly={amountReadOnly}
-          />
+          />,
         ),
       }
     }
@@ -211,7 +216,7 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <PaymentScheduleWorkspace
             scope="departure"
             direction="receivable"
@@ -220,7 +225,7 @@ export function DepartureDetailPage() {
             highlightSourceOrderId={search.highlightSourceOrderId}
             initialCounterpartyKeyword={counterpartyKeyword}
             onHighlightConsumed={clearFinanceHighlight}
-          />
+          />,
         ),
       }
     }
@@ -229,7 +234,7 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <PaymentScheduleWorkspace
             scope="departure"
             direction="payable"
@@ -238,7 +243,7 @@ export function DepartureDetailPage() {
             highlightSegmentResourceId={search.highlightSegmentResourceId}
             initialCounterpartyKeyword={counterpartyKeyword}
             onHighlightConsumed={clearFinanceHighlight}
-          />
+          />,
         ),
       }
     }
@@ -247,13 +252,13 @@ export function DepartureDetailPage() {
       return {
         key: tab.key,
         label: tab.label,
-        children: (
+        children: wrapTabPane(
           <TransactionsWorkspace
             scope="departure"
             departureId={departure.id}
             readOnly={financeReadOnly}
             initialDirection={resolveTransactionDirection(search.direction)}
-          />
+          />,
         ),
       }
     }
@@ -261,7 +266,7 @@ export function DepartureDetailPage() {
     return {
       key: tab.key,
       label: tab.label,
-      children: (
+      children: wrapTabPane(
         <VerificationsWorkspace
           scope="departure"
           departureId={departure.id}
@@ -270,7 +275,7 @@ export function DepartureDetailPage() {
             transactionNo: search.transactionNo,
             scheduleNo: search.scheduleNo,
           }}
-        />
+        />,
       ),
     }
   })
