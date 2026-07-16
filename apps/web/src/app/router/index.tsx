@@ -2,27 +2,15 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   Outlet,
 } from '@tanstack/react-router'
 import { ensureAnonymousSession, ensureAuthenticatedSession } from '@/lib/auth/session'
 import { RouteErrorState } from '@/components/RouteErrorState'
+import { RoutePendingState } from '@/components/RoutePendingState'
 import { AppLayout } from '@/layouts/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
-import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
-import { PartnersPage } from '@/features/partner/pages/PartnersPage'
-import { DeparturesPage } from '@/features/departure/pages/DeparturesPage'
-import { CreateDeparturePage } from '@/features/departure/pages/CreateDeparturePage'
-import { DepartureDetailPage } from '@/features/departure/pages/DepartureDetailPage'
-import { EmployeesPage } from '@/pages/system/EmployeesPage'
-import { SuppliersPage } from '@/features/supplier/pages/SuppliersPage'
-import { SupplierDetailPage } from '@/features/supplier/pages/SupplierDetailPage'
-import { PartnerDetailPage } from '@/features/partner/pages/PartnerDetailPage'
-import { ReceivablesPage } from '@/features/finance/pages/ReceivablesPage'
-import { PayablesPage } from '@/features/finance/pages/PayablesPage'
-import { TransactionsPage } from '@/features/finance/pages/TransactionsPage'
-import { VerificationsPage } from '@/features/finance/pages/VerificationsPage'
-import { OrganizationPage } from '@/pages/system/OrganizationPage'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -50,13 +38,16 @@ const appLayoutRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/',
-  component: HomePage,
+  component: lazyRouteComponent(() => import('@/pages/HomePage'), 'HomePage'),
 })
 
 const departureRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure',
-  component: DeparturesPage,
+  component: lazyRouteComponent(
+    () => import('@/features/departure/pages/DeparturesPage'),
+    'DeparturesPage',
+  ),
 })
 
 const departureNewRoute = createRoute({
@@ -65,7 +56,10 @@ const departureNewRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { copyFrom?: string } => ({
     copyFrom: typeof search.copyFrom === 'string' ? search.copyFrom : undefined,
   }),
-  component: CreateDeparturePage,
+  component: lazyRouteComponent(
+    () => import('@/features/departure/pages/CreateDeparturePage'),
+    'CreateDeparturePage',
+  ),
 })
 
 const departureDetailRoute = createRoute({
@@ -104,19 +98,28 @@ const departureDetailRoute = createRoute({
       ...(scheduleNo ? { scheduleNo } : {}),
     }
   },
-  component: DepartureDetailPage,
+  component: lazyRouteComponent(
+    () => import('@/features/departure/pages/DepartureDetailPage'),
+    'DepartureDetailPage',
+  ),
 })
 
 const financeReceivableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/receivable',
-  component: ReceivablesPage,
+  component: lazyRouteComponent(
+    () => import('@/features/finance/pages/ReceivablesPage'),
+    'ReceivablesPage',
+  ),
 })
 
 const financePayableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/payable',
-  component: PayablesPage,
+  component: lazyRouteComponent(
+    () => import('@/features/finance/pages/PayablesPage'),
+    'PayablesPage',
+  ),
 })
 
 const financeTransactionsRoute = createRoute({
@@ -133,7 +136,10 @@ const financeTransactionsRoute = createRoute({
       ...(direction ? { direction } : {}),
     }
   },
-  component: TransactionsPage,
+  component: lazyRouteComponent(
+    () => import('@/features/finance/pages/TransactionsPage'),
+    'TransactionsPage',
+  ),
 })
 
 const financeVerificationRoute = createRoute({
@@ -150,43 +156,64 @@ const financeVerificationRoute = createRoute({
     }
     return {}
   },
-  component: VerificationsPage,
+  component: lazyRouteComponent(
+    () => import('@/features/finance/pages/VerificationsPage'),
+    'VerificationsPage',
+  ),
 })
 
 const partnerRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/partner',
-  component: PartnersPage,
+  component: lazyRouteComponent(
+    () => import('@/features/partner/pages/PartnersPage'),
+    'PartnersPage',
+  ),
 })
 
 const partnerDetailRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/partner/$partnerId',
-  component: PartnerDetailPage,
+  component: lazyRouteComponent(
+    () => import('@/features/partner/pages/PartnerDetailPage'),
+    'PartnerDetailPage',
+  ),
 })
 
 const supplierRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/supplier',
-  component: SuppliersPage,
+  component: lazyRouteComponent(
+    () => import('@/features/supplier/pages/SuppliersPage'),
+    'SuppliersPage',
+  ),
 })
 
 const supplierDetailRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/supplier/$supplierId',
-  component: SupplierDetailPage,
+  component: lazyRouteComponent(
+    () => import('@/features/supplier/pages/SupplierDetailPage'),
+    'SupplierDetailPage',
+  ),
 })
 
 const systemOrganizationRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/organization',
-  component: OrganizationPage,
+  component: lazyRouteComponent(
+    () => import('@/pages/system/OrganizationPage'),
+    'OrganizationPage',
+  ),
 })
 
 const systemUsersRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/users',
-  component: EmployeesPage,
+  component: lazyRouteComponent(
+    () => import('@/pages/system/EmployeesPage'),
+    'EmployeesPage',
+  ),
 })
 
 const routeTree = rootRoute.addChildren([
@@ -212,6 +239,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultPendingComponent: RoutePendingState,
   defaultErrorComponent: RouteErrorState,
   defaultOnCatch: (error) => {
     console.error('[router] uncaught render error', error)

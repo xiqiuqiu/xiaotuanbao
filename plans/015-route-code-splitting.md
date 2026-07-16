@@ -1,6 +1,6 @@
 # 015 — 路由级代码分割（懒加载页面）
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 3876d55
 - **Severity**: MEDIUM
 - **Category**: Performance

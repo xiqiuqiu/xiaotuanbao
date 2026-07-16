@@ -27,7 +27,7 @@
 | 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
 | --- | --- | --- | --- | --- |
 | 14 | [014 — 路由错误边界](014-route-error-boundary.md) | HIGH | DONE | 无；建议优先 |
-| 15 | [015 — 路由级代码分割](015-route-code-splitting.md) | MEDIUM | TODO | 无；与 014 同改 `createRouter`，合并时两选项都保留 |
+| 15 | [015 — 路由级代码分割](015-route-code-splitting.md) | MEDIUM | DONE | 无；与 014 同改 `createRouter`，合并时两选项都保留 |
 
 ## 批次与验证门
 
