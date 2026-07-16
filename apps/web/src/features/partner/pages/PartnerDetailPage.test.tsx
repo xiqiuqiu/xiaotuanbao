@@ -123,27 +123,34 @@ describe('PartnerDetailPage', () => {
     expect(screen.getByLabelText('合作伙伴名称')).toHaveValue('华东国旅')
   })
 
-  it('renders receivable and payable ledger sections on the accounts tab', async () => {
+  it('defaults to receivable on the accounts tab and switches to payable via Segmented', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
     await screen.findByRole('heading', { level: 4, name: '华东国旅' })
 
     await user.click(screen.getByRole('tab', { name: '往来账款' }))
-    expect(
-      await screen.findByRole('heading', { level: 5, name: '应收（我收他）' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { level: 5, name: '应付（我付他）' }),
-    ).toBeInTheDocument()
 
-    // 双子区各自向 Partner 维度端点精确取数
+    expect(await screen.findByText('应收（我收他）')).toBeInTheDocument()
+    expect(
+      screen.getByText('应收（我收他）').closest('.ant-segmented-item'),
+    ).toHaveClass('ant-segmented-item-selected')
+
+    // 默认只挂载应收 Workspace，不并行请求应付
     await waitFor(() => {
       expect(listPartnerReceivables).toHaveBeenCalledWith(
         'partner-1',
         expect.anything(),
         expect.anything(),
       )
+    })
+    expect(listPartnerPayables).not.toHaveBeenCalled()
+
+    await user.click(screen.getByText('应付（我付他）'))
+    expect(
+      screen.getByText('应付（我付他）').closest('.ant-segmented-item'),
+    ).toHaveClass('ant-segmented-item-selected')
+    await waitFor(() => {
       expect(listPartnerPayables).toHaveBeenCalledWith(
         'partner-1',
         expect.anything(),

@@ -3,6 +3,7 @@ import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { UseMutationResult } from '@tanstack/react-query'
 import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   SOURCE_ORDER_COLLECTION_LABELS,
   SOURCE_ORDER_RECEIVABLE_STATUS_LABELS,
@@ -83,8 +84,8 @@ export function buildSourceOrdersColumns({
     {
       title: '备注',
       dataIndex: 'notes',
-      ellipsis: true,
-      render: (value: string | null) => value ?? '-',
+      ellipsis: { showTitle: false },
+      render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
     },
     {
       title: '操作',

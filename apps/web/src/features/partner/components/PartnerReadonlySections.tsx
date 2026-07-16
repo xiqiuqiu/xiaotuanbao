@@ -2,6 +2,7 @@ import { Descriptions } from 'antd'
 import type { DescriptionsProps } from 'antd'
 import type { ReactNode } from 'react'
 import type { PartnerSummary } from '@/types/api'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   DIRECTORY_PROFILE_STATUS_LABELS,
   SETTLEMENT_CYCLE_LABELS,
@@ -13,6 +14,7 @@ import {
   PARTNER_TYPE_LABELS,
   catalogLabel,
 } from '../catalog'
+import styles from './PartnerReadonlySections.module.css'
 
 interface PartnerReadonlySectionsProps {
   partner: PartnerSummary
@@ -26,6 +28,13 @@ const PARTNER_CONTACT_ROLE_LABELS = Object.fromEntries(
   PARTNER_CONTACT_ROLE_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<string, string>
 
+function textValue(value: ReactNode): ReactNode {
+  if (value === null || value === undefined) {
+    return <EllipsisTooltipText>{null}</EllipsisTooltipText>
+  }
+  return <EllipsisTooltipText empty="">{value}</EllipsisTooltipText>
+}
+
 function ProfileDescriptions({
   column,
   items,
@@ -34,7 +43,14 @@ function ProfileDescriptions({
   items: DescriptionItem[]
 }) {
   return (
-    <Descriptions layout="vertical" bordered size="small" column={column} items={items} />
+    <Descriptions
+      className={styles.equalWidth}
+      layout="vertical"
+      bordered
+      size="small"
+      column={column}
+      items={items}
+    />
   )
 }
 
@@ -45,18 +61,20 @@ export function PartnerReadonlySections({ partner }: PartnerReadonlySectionsProp
         <ProfileDescriptions
           column={responsiveColumns}
           items={[
-            { label: '合作伙伴名称', children: partner.name },
+            { label: '合作伙伴名称', children: textValue(partner.name) },
             {
               label: '合作伙伴类型',
-              children: catalogLabel(PARTNER_TYPE_LABELS, partner.partnerType),
+              children: textValue(catalogLabel(PARTNER_TYPE_LABELS, partner.partnerType)),
             },
             {
               label: '合作方向',
-              children: catalogLabel(PARTNER_KIND_LABELS, partner.partnerKind),
+              children: textValue(catalogLabel(PARTNER_KIND_LABELS, partner.partnerKind)),
             },
             {
               label: '状态',
-              children: DIRECTORY_PROFILE_STATUS_LABELS[partner.status] ?? partner.status,
+              children: textValue(
+                DIRECTORY_PROFILE_STATUS_LABELS[partner.status] ?? partner.status,
+              ),
             },
           ]}
         />
@@ -64,14 +82,16 @@ export function PartnerReadonlySections({ partner }: PartnerReadonlySectionsProp
 
       <ReadonlySection title="联系人信息">
         <ProfileDescriptions
-          column={{ xs: 1, sm: 2, lg: 3 }}
+          column={responsiveColumns}
           items={[
-            { label: '主联系人', children: partner.contactName ?? '-' },
+            { label: '主联系人', children: textValue(partner.contactName ?? '-') },
             {
               label: '联系人角色',
-              children: catalogLabel(PARTNER_CONTACT_ROLE_LABELS, partner.contactRole),
+              children: textValue(
+                catalogLabel(PARTNER_CONTACT_ROLE_LABELS, partner.contactRole),
+              ),
             },
-            { label: '联系方式', children: partner.contactPhone ?? '-' },
+            { label: '联系方式', children: textValue(partner.contactPhone ?? '-') },
           ]}
         />
       </ReadonlySection>
@@ -82,13 +102,20 @@ export function PartnerReadonlySections({ partner }: PartnerReadonlySectionsProp
           items={[
             {
               label: '结算方式',
-              children: catalogLabel(SETTLEMENT_METHOD_LABELS, partner.settlementMethod),
+              children: textValue(
+                catalogLabel(SETTLEMENT_METHOD_LABELS, partner.settlementMethod),
+              ),
             },
             {
               label: '账期规则',
-              children: catalogLabel(SETTLEMENT_CYCLE_LABELS, partner.paymentTermRule),
+              children: textValue(
+                catalogLabel(SETTLEMENT_CYCLE_LABELS, partner.paymentTermRule),
+              ),
             },
-            { label: '结算说明', children: partner.settlementNotes ?? '-', span: 3 },
+            {
+              label: '结算说明',
+              children: textValue(partner.settlementNotes ?? '-'),
+            },
           ]}
         />
       </ReadonlySection>

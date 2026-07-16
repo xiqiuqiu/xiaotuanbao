@@ -1,0 +1,13 @@
+/* 覆盖 antd bordered Descriptions 的 table-layout:auto，强制等分列宽 */
+.equalWidth:global(.ant-descriptions.ant-descriptions-bordered)
+  > :global(.ant-descriptions-view)
+  > :global(table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.equalWidth:global(.ant-descriptions)
+  :global(.ant-descriptions-item-content) {
+  overflow: hidden;
+  max-width: 100%;
+}

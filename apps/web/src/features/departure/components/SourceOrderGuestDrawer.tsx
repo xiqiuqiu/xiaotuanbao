@@ -24,6 +24,7 @@ import {
   updateSourceOrderGuest,
 } from '@/services/source-order.service'
 import { GUEST_GENDER_OPTIONS, GUEST_GENDER_LABELS, catalogLabel } from '../catalog'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   formatGuestCountContrast,
   guestFormFieldRules,
@@ -277,8 +278,8 @@ function SourceOrderGuestDrawerPanel({
       dataIndex: 'notes',
       editable: true,
       inputType: 'text',
-      ellipsis: true,
-      render: (value: string | null) => value ?? '-',
+      ellipsis: { showTitle: false },
+      render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
     },
   ]
 

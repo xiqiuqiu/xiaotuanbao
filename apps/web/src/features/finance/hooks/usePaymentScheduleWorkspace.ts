@@ -42,6 +42,12 @@ export type UsePaymentScheduleWorkspaceOptions = {
   highlightSegmentResourceId?: string
   initialCounterpartyKeyword?: string
   onHighlightConsumed?: () => void
+  /**
+   * 受控出团日期区间（Partner 往来账款 Tab 跨应收/应付共用）。
+   * 传入 `onDepartureDateRangeChange` 时生效；未传则内部自管。
+   */
+  departureDateRange?: DepartureDateRange
+  onDepartureDateRangeChange?: (value: DepartureDateRange) => void
 }
 
 export function usePaymentScheduleWorkspace({
@@ -54,6 +60,8 @@ export function usePaymentScheduleWorkspace({
   highlightSegmentResourceId,
   initialCounterpartyKeyword = '',
   onHighlightConsumed,
+  departureDateRange: controlledDepartureDateRange,
+  onDepartureDateRangeChange,
 }: UsePaymentScheduleWorkspaceOptions) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -77,7 +85,15 @@ export function usePaymentScheduleWorkspace({
   const [keyword, setKeyword] = useState('')
   const [dueDateRange, setDueDateRange] = useState<DueDateRange>(null)
   /** Partner scope 主时间轴：所属发团出团日期区间（服务端过滤，与汇总卡同口径）。 */
-  const [departureDateRange, setDepartureDateRange] = useState<DepartureDateRange>(null)
+  const [internalDepartureDateRange, setInternalDepartureDateRange] =
+    useState<DepartureDateRange>(null)
+  const departureDateControlled = typeof onDepartureDateRangeChange === 'function'
+  const departureDateRange = departureDateControlled
+    ? (controlledDepartureDateRange ?? null)
+    : internalDepartureDateRange
+  const setDepartureDateRange = departureDateControlled
+    ? onDepartureDateRangeChange
+    : setInternalDepartureDateRange
   const [counterpartyKeyword, setCounterpartyKeyword] = useState(initialCounterpartyKeyword)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -105,6 +121,14 @@ export function usePaymentScheduleWorkspace({
       locateExpandedLatchRef.current = true
     }
   }, [locatingFinanceRow])
+
+  // 父级共用出团日期变化时回到第一页（筛选项内改区间时由 onChange 自行 setPage）
+  useEffect(() => {
+    if (!departureDateControlled) {
+      return
+    }
+    setPage(1)
+  }, [controlledDepartureDateRange, departureDateControlled])
 
   const useExpandedFetch =
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
@@ -334,7 +358,10 @@ export function usePaymentScheduleWorkspace({
     setStatusFilter(undefined)
     setKeyword('')
     setDueDateRange(null)
-    setDepartureDateRange(null)
+    // 出团日期在父级主行共用时，重置只清次要条件，不碰主时间轴
+    if (!departureDateControlled) {
+      setDepartureDateRange(null)
+    }
     setCounterpartyKeyword('')
     setPage(1)
     locateExpandedLatchRef.current = false
@@ -348,7 +375,15 @@ export function usePaymentScheduleWorkspace({
         replace: true,
       })
     }
-  }, [isDepartureScope, isReceivable, lockedDepartureId, navigate, scope])
+  }, [
+    departureDateControlled,
+    isDepartureScope,
+    isReceivable,
+    lockedDepartureId,
+    navigate,
+    scope,
+    setDepartureDateRange,
+  ])
 
   const columns = useMemo(
     () =>

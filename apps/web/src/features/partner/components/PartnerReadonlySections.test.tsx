@@ -39,4 +39,13 @@ describe('PartnerReadonlySections', () => {
     expect(screen.getByText('计调')).toBeInTheDocument()
     expect(screen.getByText('月结 30 天')).toBeInTheDocument()
   })
+
+  it('applies equal-width layout class to profile descriptions', () => {
+    const { container } = render(<PartnerReadonlySections partner={mockPartner} />)
+    const descriptions = container.querySelectorAll('.ant-descriptions')
+    expect(descriptions.length).toBe(3)
+    for (const node of descriptions) {
+      expect(node.className).toMatch(/equalWidth/)
+    }
+  })
 })

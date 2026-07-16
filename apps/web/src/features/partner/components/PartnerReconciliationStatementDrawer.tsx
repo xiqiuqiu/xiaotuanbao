@@ -23,6 +23,7 @@ import type {
   PartnerReconciliationStatementSnapshot,
   PartnerSummary,
 } from '@/types/api'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   downloadPartnerReconciliationStatement,
   getPartnerReconciliationStatement,
@@ -42,19 +43,31 @@ const DETAIL_COLUMNS: ColumnsType<PartnerReconciliationStatementRow> = [
   },
   { title: '出团日期', dataIndex: 'departureDate', width: 110 },
   { title: '团单编号', dataIndex: 'departureNo', width: 150 },
-  { title: '线路/团单名称', dataIndex: 'routeName', width: 180, ellipsis: true },
+  {
+    title: '线路/团单名称',
+    dataIndex: 'routeName',
+    width: 180,
+    ellipsis: { showTitle: false },
+    render: (value: string) => <EllipsisTooltipText empty="">{value}</EllipsisTooltipText>,
+  },
   // 游客代表/联系电话：名单空则留空（#112 决议），与导出物同构，不显示占位符
   {
     title: '游客代表',
     dataIndex: 'guestRepresentativeName',
     width: 100,
-    render: (value: string | null) => value ?? '',
+    ellipsis: { showTitle: false },
+    render: (value: string | null) => (
+      <EllipsisTooltipText empty="">{value}</EllipsisTooltipText>
+    ),
   },
   {
     title: '联系电话',
     dataIndex: 'guestRepresentativePhone',
     width: 130,
-    render: (value: string | null) => value ?? '',
+    ellipsis: { showTitle: false },
+    render: (value: string | null) => (
+      <EllipsisTooltipText empty="">{value}</EllipsisTooltipText>
+    ),
   },
   { title: '成人', dataIndex: 'adultGuestCount', width: 60, align: 'center' },
   { title: '儿童', dataIndex: 'childGuestCount', width: 60, align: 'center' },
@@ -113,8 +126,8 @@ const DETAIL_COLUMNS: ColumnsType<PartnerReconciliationStatementRow> = [
     title: '备注',
     dataIndex: 'notes',
     width: 160,
-    ellipsis: true,
-    render: (value: string | null) => value ?? '-',
+    ellipsis: { showTitle: false },
+    render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
   },
 ]
 

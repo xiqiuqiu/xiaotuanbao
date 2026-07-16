@@ -5,19 +5,20 @@ import {
   Col,
   DatePicker,
   Empty,
-  Flex,
   Row,
   Space,
   Statistic,
   Table,
-  Typography,
+  Tooltip,
 } from 'antd'
 import { ExportOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
 import { PartnerKind } from '@xiaotuanbao/shared'
 import type { PartnerSourceOrderItem, PartnerSummary } from '@/types/api'
+import { CollapsibleFilterBar } from '@/components/CollapsibleFilterBar'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
+import { FinanceDepartureLink } from '@/features/finance/components/FinanceDepartureLink'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartnerSourceOrders } from '@/services/source-order.service'
 import { formatCents } from '@/features/departure/catalog'
@@ -29,25 +30,24 @@ type DepartureDateRange = [string | undefined, string | undefined] | null
 const COLUMNS: ColumnsType<PartnerSourceOrderItem> = [
   { title: '出团日期', dataIndex: 'departureStartDate', width: 110 },
   {
-    title: '发团',
+    title: '关联发团',
     key: 'departure',
     width: 220,
     render: (_: unknown, record) => (
-      <Link
-        to="/departure/$departureId"
-        params={{ departureId: record.departureId }}
-        search={{ tab: 'overview' }}
-      >
-        <Space orientation="vertical" size={0}>
-          <span>{record.departureNo}</span>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {record.routeName}
-          </Typography.Text>
-        </Space>
-      </Link>
+      <Tooltip title={record.departureNo}>
+        <FinanceDepartureLink departureId={record.departureId}>
+          {record.departureName || record.departureNo}
+        </FinanceDepartureLink>
+      </Tooltip>
     ),
   },
-  { title: '客源单', dataIndex: 'displayName', width: 200, ellipsis: true },
+  {
+    title: '客源单',
+    dataIndex: 'displayName',
+    width: 200,
+    ellipsis: { showTitle: false },
+    render: (value: string) => <EllipsisTooltipText empty="">{value}</EllipsisTooltipText>,
+  },
   {
     title: '成人/儿童',
     key: 'guests',
@@ -102,8 +102,9 @@ const COLUMNS: ColumnsType<PartnerSourceOrderItem> = [
   {
     title: '备注',
     dataIndex: 'notes',
-    ellipsis: true,
-    render: (value: string | null) => value ?? '-',
+    width: 160,
+    ellipsis: { showTitle: false },
+    render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
   },
 ]
 
@@ -152,33 +153,38 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <Flex justify="space-between" align="center" gap={12} wrap>
-        <DatePicker.RangePicker
-          allowClear
-          allowEmpty={[true, true]}
-          placeholder={['出团日期起', '出团日期止']}
-          presets={buildDepartureDateRangePresets()}
-          value={
-            dateRange
-              ? [
-                  dateRange[0] ? dayjs(dateRange[0]) : null,
-                  dateRange[1] ? dayjs(dateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(values) => {
-            setDateRange(
-              values
-                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                : null,
-            )
-            setPage(1)
-          }}
-        />
-        <Button icon={<ExportOutlined />} onClick={() => setStatementOpen(true)}>
-          导出确认单
-        </Button>
-      </Flex>
+      <CollapsibleFilterBar
+        primary={
+          <>
+            <DatePicker.RangePicker
+              allowClear
+              allowEmpty={[true, true]}
+              placeholder={['出团日期起', '出团日期止']}
+              presets={buildDepartureDateRangePresets()}
+              value={
+                dateRange
+                  ? [
+                      dateRange[0] ? dayjs(dateRange[0]) : null,
+                      dateRange[1] ? dayjs(dateRange[1]) : null,
+                    ]
+                  : null
+              }
+              onChange={(values) => {
+                setDateRange(
+                  values
+                    ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                    : null,
+                )
+                setPage(1)
+              }}
+            />
+            <div style={{ flex: 1 }} />
+            <Button icon={<ExportOutlined />} onClick={() => setStatementOpen(true)}>
+              导出确认单
+            </Button>
+          </>
+        }
+      />
 
       <Row gutter={[16, 16]} role="group" aria-label="合作团单汇总">
         <Col xs={12} sm={8} xl={4}>
@@ -222,7 +228,7 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
         loading={isLoading}
         columns={COLUMNS}
         dataSource={listResult?.items ?? []}
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1600 }}
         pagination={{
           current: page,
           pageSize,

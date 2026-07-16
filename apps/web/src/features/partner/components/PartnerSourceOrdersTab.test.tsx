@@ -138,10 +138,12 @@ describe('PartnerSourceOrdersTab', () => {
     expect(screen.getByText('客源单数')).toBeInTheDocument()
     expect(screen.getByText('原始团款合计')).toBeInTheDocument()
     expect(screen.getByText('游客代收合计')).toBeInTheDocument()
-    expect(screen.getByText('XTB2606010001')).toBeInTheDocument()
-    expect(screen.getByText('喀纳斯阿勒泰10日线')).toBeInTheDocument()
+    // 与往来账款「关联发团」同口径：展示团名，团号在悬停 Tooltip
+    expect(screen.getByRole('columnheader', { name: '关联发团' })).toBeInTheDocument()
+    expect(screen.getByText('喀纳斯6月团')).toBeInTheDocument()
     expect(screen.getByText('2026-06-10')).toBeInTheDocument()
     expect(screen.getByText('2/1')).toBeInTheDocument()
+    expect(screen.getByText('窗口位')).toBeInTheDocument()
 
     // 导出确认单入口（全系统唯一，位于本 Tab 工具栏）
     const exportButton = screen.getByRole('button', { name: /导出确认单/ })

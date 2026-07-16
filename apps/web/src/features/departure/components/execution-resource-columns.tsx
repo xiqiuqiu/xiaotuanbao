@@ -2,6 +2,7 @@ import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type { SegmentResourceSummary } from '@/types/api'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   RESOURCE_KIND_LABELS,
   SEGMENT_PAYABLE_STATUS_LABELS,
@@ -85,8 +86,8 @@ export function buildExecutionResourceColumns({
     {
       title: '备注',
       dataIndex: 'notes',
-      ellipsis: true,
-      render: (value: string | null) => value || '-',
+      ellipsis: { showTitle: false },
+      render: (value: string | null) => <EllipsisTooltipText>{value || null}</EllipsisTooltipText>,
     },
     {
       title: '操作',
