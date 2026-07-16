@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ColumnsType } from 'antd/es/table'
+import type { UseMutationResult } from '@tanstack/react-query'
 import { buildEmployeeColumns } from '@/pages/system/employees/employee-columns'
 import { buildPartnerColumns } from '@/features/partner/pages/partner-columns'
 import { buildSupplierColumns } from '@/features/supplier/pages/supplier-columns'
 import { buildDepartureColumns } from '@/features/departure/pages/departure-columns'
+import { buildSourceOrdersColumns } from '@/features/departure/components/source-orders-table-columns'
 import { buildPaymentScheduleColumns } from '@/features/finance/components/payment-schedule-table-columns'
 import { buildTransactionColumns } from '@/features/finance/components/transaction-table-columns'
 import { buildVerificationColumns } from '@/features/finance/components/verification-table-columns'
@@ -18,7 +20,15 @@ function expectTimestampsBeforeActions(columnTitles: string[]) {
 
 const noop = vi.fn()
 
-describe('业务主列表时间列', () => {
+function stubMutation(): UseMutationResult<unknown, Error, string, unknown> {
+  return {
+    mutate: vi.fn(),
+    isPending: false,
+    variables: undefined,
+  } as unknown as UseMutationResult<unknown, Error, string, unknown>
+}
+
+describe('业务列表时间列', () => {
   it('员工、合作伙伴、供应商和发团在操作列前显示创建及更新时间', () => {
     expectTimestampsBeforeActions(titles(buildEmployeeColumns(noop, noop)))
     expectTimestampsBeforeActions(titles(buildPartnerColumns(false, noop, noop, noop)))
@@ -26,7 +36,23 @@ describe('业务主列表时间列', () => {
     expectTimestampsBeforeActions(titles(buildDepartureColumns(vi.fn())))
   })
 
-  it('顶层财务列表显示两列，发团详情内嵌列表不显示', () => {
+  it('发团详情客源单列表在操作列前显示创建及更新时间', () => {
+    expectTimestampsBeforeActions(
+      titles(
+        buildSourceOrdersColumns({
+          readOnly: false,
+          deleteMutation: stubMutation(),
+          generateMutation: stubMutation(),
+          onView: noop,
+          onEdit: noop,
+          onOpenGuests: noop,
+          onViewReceivables: noop,
+        }),
+      ),
+    )
+  })
+
+  it('顶层与发团详情内嵌财务列表均在操作列前显示创建及更新时间', () => {
     const scheduleOptions = {
       isReceivable: true,
       readOnly: false,
@@ -54,23 +80,24 @@ describe('业务主列表时间列', () => {
       onOpenCancelModal: noop,
     }
 
-    expectTimestampsBeforeActions(
-      titles(buildPaymentScheduleColumns({ ...scheduleOptions, isDepartureScope: false })),
-    )
-    expectTimestampsBeforeActions(
-      titles(buildTransactionColumns({ ...transactionOptions, isDepartureScope: false })),
-    )
-    expectTimestampsBeforeActions(
-      titles(buildVerificationColumns({ ...verificationOptions, isDepartureScope: false })),
-    )
+    for (const isDepartureScope of [false, true]) {
+      expectTimestampsBeforeActions(
+        titles(buildPaymentScheduleColumns({ ...scheduleOptions, isDepartureScope })),
+      )
+      expectTimestampsBeforeActions(
+        titles(buildTransactionColumns({ ...transactionOptions, isDepartureScope })),
+      )
+      expectTimestampsBeforeActions(
+        titles(buildVerificationColumns({ ...verificationOptions, isDepartureScope })),
+      )
+    }
 
     for (const columnTitles of [
       titles(buildPaymentScheduleColumns({ ...scheduleOptions, isDepartureScope: true })),
       titles(buildTransactionColumns({ ...transactionOptions, isDepartureScope: true })),
       titles(buildVerificationColumns({ ...verificationOptions, isDepartureScope: true })),
     ]) {
-      expect(columnTitles).not.toContain('创建时间')
-      expect(columnTitles).not.toContain('更新时间')
+      expect(columnTitles).not.toContain('关联发团')
     }
   })
 })

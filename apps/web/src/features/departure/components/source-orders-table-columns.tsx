@@ -4,6 +4,7 @@ import type { UseMutationResult } from '@tanstack/react-query'
 import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 import {
   SOURCE_ORDER_COLLECTION_LABELS,
   SOURCE_ORDER_RECEIVABLE_STATUS_LABELS,
@@ -87,6 +88,7 @@ export function buildSourceOrdersColumns({
       ellipsis: { showTitle: false },
       render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
     },
+    ...buildBusinessTimestampColumns<SourceOrderSummary>(),
     {
       title: '操作',
       key: 'actions',

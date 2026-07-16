@@ -270,9 +270,7 @@ export function buildPaymentScheduleColumns({
       dataIndex: 'financeTouched',
       render: (value: boolean) => (value ? <Tag color="gold">已介入</Tag> : '-'),
     },
-    ...(isDepartureScope
-      ? []
-      : buildBusinessTimestampColumns<PaymentScheduleSummary>()),
+    ...buildBusinessTimestampColumns<PaymentScheduleSummary>(),
     {
       title: '操作',
       key: 'actions',

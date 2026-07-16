@@ -95,9 +95,7 @@ export function buildVerificationColumns({
       ),
     },
     { title: '核销人', dataIndex: 'createdByName' },
-    ...(isDepartureScope
-      ? []
-      : buildBusinessTimestampColumns<FinanceVerificationListItem>()),
+    ...buildBusinessTimestampColumns<FinanceVerificationListItem>(),
     {
       title: '操作',
       key: 'actions',

@@ -127,9 +127,7 @@ export function buildTransactionColumns({
         </Tag>
       ),
     },
-    ...(isDepartureScope
-      ? []
-      : buildBusinessTimestampColumns<FinanceTransactionSummary>()),
+    ...buildBusinessTimestampColumns<FinanceTransactionSummary>(),
     {
       title: '操作',
       key: 'actions',
