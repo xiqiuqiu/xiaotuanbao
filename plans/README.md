@@ -20,6 +20,15 @@
 | 12 | [011 — 提取资源表格列配置](011-extract-resource-table-columns.md) | MEDIUM | DONE | 无 |
 | 13 | [013 — 删除未使用应付标签](013-remove-unused-payable-labels.md) | LOW | DONE | 无 |
 
+## 2026-07-16 追加（基线 commit `3876d55`）
+
+来源：2026-07-16 `improve-react` 全库审查。React Doctor 静态扫描 100/100、0 诊断；以下为「扫描之外」的架构缺口。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 14 | [014 — 路由错误边界](014-route-error-boundary.md) | HIGH | DONE | 无；建议优先 |
+| 15 | [015 — 路由级代码分割](015-route-code-splitting.md) | MEDIUM | TODO | 无；与 014 同改 `createRouter`，合并时两选项都保留 |
+
 ## 批次与验证门
 
 1. **安全与正确性**：001、002、004、005、006、007。每个计划先跑聚焦测试；批次结束跑 web/api typecheck 与认证/财务相关测试。

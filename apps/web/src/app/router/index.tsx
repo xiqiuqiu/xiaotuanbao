@@ -5,6 +5,7 @@ import {
   Outlet,
 } from '@tanstack/react-router'
 import { ensureAnonymousSession, ensureAuthenticatedSession } from '@/lib/auth/session'
+import { RouteErrorState } from '@/components/RouteErrorState'
 import { AppLayout } from '@/layouts/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { HomePage } from '@/pages/HomePage'
@@ -211,6 +212,10 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultErrorComponent: RouteErrorState,
+  defaultOnCatch: (error) => {
+    console.error('[router] uncaught render error', error)
+  },
 })
 
 declare module '@tanstack/react-router' {
