@@ -316,7 +316,7 @@ export function DepartureOverviewStatsCards({
           <SummaryCard
             title="成本合计"
             value={formatCents(departure.payableCents)}
-            equationDescription="成本合计是全部行程资源约定金额合计，无论是否已生成应付；确认应付来自全部非作废应付节点，两者差额由组成项解释。"
+            equationDescription="本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需生成应付。"
             equation={costEquation}
             animateEnter={animateEnter}
             entry={
@@ -338,7 +338,7 @@ export function DepartureOverviewStatsCards({
           <SummaryCard
             title="当前毛利"
             value={formatCents(departure.estimatedMarginCents)}
-            equationDescription="当前毛利是实时经营预估：结算应收减成本合计；确认毛利按财务已确认的应付计算，见毛利对照。"
+            equationDescription="本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。"
             equation={marginEquation}
             animateEnter={animateEnter}
             entry={
@@ -374,7 +374,9 @@ export function DepartureOverviewStatsCards({
           <SummaryCard
             title="毛利率"
             value={marginRateLabel ?? '暂无数据'}
-            equationDescription="毛利率是当前毛利占结算应收的比例；结算应收为零时无可计算比例。"
+            equationDescription="本团当前毛利占结算应收的比例。
+计算：当前毛利 ÷ 结算应收 × 100%。
+根据当前毛利和结算应收实时统计；"
             equation={marginRateEquation}
             animateEnter={animateEnter}
           />
@@ -388,7 +390,9 @@ export function DepartureOverviewStatsCards({
             title={
               <CalculationTitle
                 label="收款进度"
-                description="已收仅统计客源路径已核销金额；未收包含开放未收、已关闭未收和尚未生成应收，其他应收不计入本进度。"
+                description="本团结算应收的实际收回进度。
+计算：已收金额 ÷ 结算应收 × 100%。
+已收仅统计已核销金额实时统计；"
                 equation={receivableEquation}
               />
             }
@@ -433,7 +437,9 @@ export function DepartureOverviewStatsCards({
             title={
               <CalculationTitle
                 label="付款进度"
-                description="只统计资源应付的有效核销，以成本合计为分母；手工应付与资源账款差异留在付款组成，进度可合法超过 100% 或偏低。"
+                description="本团资源成本的实际支付进度。
+计算：已付金额 ÷ 成本合计 × 100%。
+已付仅统计资源应付的有效核销；手工应付等不计入本进度。"
                 equation={payableEquation}
               />
             }
@@ -479,7 +485,9 @@ export function DepartureOverviewStatsCards({
             title={
               <CalculationTitle
                 label="资金情况"
-                description="有效收入和有效支出统计本团全部未作废流水，包含已核销与未核销；现金净流入表示实际资金净流动，不代表利润。"
+                description="本团当前实际发生的资金收支情况。
+计算：现金净流入 = 有效收入 − 有效支出。
+根据已关联本团的未作废收支流水实时统计。"
                 equation={cashEquation}
               />
             }

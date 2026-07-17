@@ -442,7 +442,9 @@ describe('DepartureOverviewStatsCards', () => {
     await user.hover(screen.getByRole('button', { name: '查看资金情况计算方式' }))
     const tooltip = await screen.findByRole('tooltip')
     expect(tooltip).toHaveTextContent(
-      '有效收入和有效支出统计本团全部未作废流水，包含已核销与未核销；现金净流入表示实际资金净流动，不代表利润。',
+      '本团当前实际发生的资金收支情况。
+计算：现金净流入 = 有效收入 − 有效支出。
+根据已关联本团的未作废收支流水实时统计。',
     )
     expect(tooltip).toHaveTextContent(equation)
   })
