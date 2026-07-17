@@ -1,10 +1,11 @@
-import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
   PlatformOrganizationListResult,
   PlatformOrganizationProfile,
 } from '@xiaotuanbao/shared'
 import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 import { ListPlatformOrganizationsQueryDto } from './dto/list-platform-organizations.dto'
 import { PlatformOrganizationsService } from './platform-organizations.service'
 
@@ -26,6 +27,13 @@ export class PlatformController {
     @Query() query: ListPlatformOrganizationsQueryDto,
   ): Promise<PlatformOrganizationListResult> {
     return this.platformOrganizationsService.list(query)
+  }
+
+  @Post('organizations')
+  createOrganization(
+    @Body() dto: CreatePlatformOrganizationDto,
+  ): Promise<PlatformOrganizationProfile> {
+    return this.platformOrganizationsService.create(dto)
   }
 
   @Get('organizations/:id')

@@ -1,12 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import {
   PLATFORM_ORGANIZATION_NAME,
   PLATFORM_ORGANIZATION_PREFIX,
   type PlatformOrganizationListResult,
   type PlatformOrganizationProfile,
 } from '@xiaotuanbao/shared'
-import type { OrganizationStatus } from '@prisma/client'
+import { OrganizationStatus, Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import type { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 
 function platformOrganizationIdentity() {
   return {
@@ -59,6 +60,59 @@ export class PlatformOrganizationsService {
     }
 
     return this.toProfile(organization)
+  }
+
+  async create(dto: CreatePlatformOrganizationDto): Promise<PlatformOrganizationProfile> {
+    const name = dto.name.trim()
+    const businessPrefix = dto.businessPrefix.trim()
+
+    await this.ensureNameAvailable(name)
+    await this.ensureBusinessPrefixAvailable(businessPrefix)
+
+    try {
+      const organization = await this.prisma.organization.create({
+        data: {
+          name,
+          businessPrefix,
+          status: OrganizationStatus.enabled,
+        },
+      })
+      return this.toProfile(organization)
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const target = error.meta?.target
+        const fields = Array.isArray(target) ? target.map(String) : []
+        if (fields.some((field) => field.includes('business_prefix') || field === 'businessPrefix')) {
+          throw new ConflictException('组织业务前缀已存在')
+        }
+        if (fields.some((field) => field === 'name')) {
+          throw new ConflictException('组织名称已存在')
+        }
+        throw new ConflictException('组织名称或业务前缀已存在')
+      }
+      throw error
+    }
+  }
+
+  private async ensureNameAvailable(name: string) {
+    const existing = await this.prisma.organization.findFirst({
+      where: { name, deletedAt: null },
+    })
+    if (existing) {
+      throw new ConflictException('组织名称已存在')
+    }
+  }
+
+  private async ensureBusinessPrefixAvailable(businessPrefix: string) {
+    const existing = await this.prisma.organization.findFirst({
+      where: { businessPrefix, deletedAt: null },
+    })
+    if (existing) {
+      throw new ConflictException('组织业务前缀已存在')
+    }
   }
 
   private customerOrganizationWhere() {

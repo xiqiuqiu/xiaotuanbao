@@ -2,6 +2,16 @@ import { INestApplication } from '@nestjs/common'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { PrismaService } from '../src/database/prisma/prisma.service'
 
+/** 4-letter A–Z prefix unlikely to collide across e2e runs. */
+function freshBusinessPrefix(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  let prefix = ''
+  for (let i = 0; i < 4; i += 1) {
+    prefix += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return prefix
+}
+
 describe('Platform organizations catalog (e2e)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -82,6 +92,74 @@ describe('Platform organizations catalog (e2e)', () => {
     await authRequest(app, tenantCookie).get('/api/platform/organizations').expect(403)
     await authRequest(app, tenantCookie)
       .get(`/api/platform/organizations/${demo.id}`)
+      .expect(403)
+  })
+
+  it('creates a customer organization shell with enabled status and no users', async () => {
+    const name = `E2E创建壳${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+
+    const response = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name, businessPrefix })
+      .expect(201)
+
+    const created = response.body.data as {
+      id: string
+      name: string
+      businessPrefix: string
+      status: string
+    }
+
+    expect(created).toMatchObject({
+      name,
+      businessPrefix,
+      status: 'enabled',
+    })
+    expect(created.id).toBeTruthy()
+
+    const userCount = await prisma.user.count({
+      where: { organizationId: created.id },
+    })
+    expect(userCount).toBe(0)
+
+    const listed = await authRequest(app, platformCookie)
+      .get('/api/platform/organizations')
+      .expect(200)
+    const items = listed.body.data.items as Array<{ id: string }>
+    expect(items.some((item) => item.id === created.id)).toBe(true)
+  })
+
+  it('rejects duplicate organization name and business prefix', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const name = `E2E重名壳${stamp}`
+    const businessPrefix = freshBusinessPrefix()
+
+    await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name, businessPrefix })
+      .expect(201)
+
+    const nameConflict = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name, businessPrefix: freshBusinessPrefix() })
+      .expect(409)
+    expect(nameConflict.body.message).toBe('组织名称已存在')
+
+    const prefixConflict = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: `E2E重前缀壳${stamp}`, businessPrefix })
+      .expect(409)
+    expect(prefixConflict.body.message).toBe('组织业务前缀已存在')
+  })
+
+  it('rejects tenant users from create organization API', async () => {
+    await authRequest(app, tenantCookie)
+      .post('/api/platform/organizations')
+      .send({
+        name: `E2E租户拒绝${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        businessPrefix: freshBusinessPrefix(),
+      })
       .expect(403)
   })
 })

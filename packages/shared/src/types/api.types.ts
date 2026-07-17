@@ -71,6 +71,11 @@ export interface PlatformOrganizationListResult {
   pageSize: number
 }
 
+export interface CreatePlatformOrganizationDto {
+  name: string
+  businessPrefix: string
+}
+
 export interface EmployeeSummary {
   id: string
   username: string

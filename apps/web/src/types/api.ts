@@ -10,6 +10,7 @@ export type {
   OrganizationSummary,
   PlatformOrganizationProfile,
   PlatformOrganizationListResult,
+  CreatePlatformOrganizationDto,
   EmployeeSummary,
   EmployeeListStats,
   EmployeeListResult,
