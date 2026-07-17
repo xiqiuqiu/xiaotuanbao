@@ -198,7 +198,7 @@ export function PlatformOrganizationDetailPage() {
         </Space>
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-        组织档案元数据；不含发团、财务、员工等业务数据。可修改名称、启用或停用；业务前缀不可改。停用后该组织用户无法登录。
+        组织档案元数据；不含发团、财务、员工等业务数据。可修改名称、启用或停用；业务前缀不可改。停用后该组织用户无法登录。初始企业管理员仅只读核对，不在此管理。
       </Typography.Paragraph>
       <Descriptions bordered column={1} size="middle">
         <Descriptions.Item label="组织名称">{organization.name}</Descriptions.Item>
@@ -211,6 +211,12 @@ export function PlatformOrganizationDetailPage() {
           >
             {organization.status === OrganizationStatus.ENABLED ? '启用' : '停用'}
           </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="初始企业管理员登录用户名">
+          {organization.initialOrganizationAdmin?.username ?? '未设置'}
+        </Descriptions.Item>
+        <Descriptions.Item label="初始企业管理员显示名称">
+          {organization.initialOrganizationAdmin?.name ?? '未设置'}
         </Descriptions.Item>
         <Descriptions.Item label="创建时间">
           {formatBusinessDateTime(organization.createdAt)}

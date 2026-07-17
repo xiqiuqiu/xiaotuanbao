@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
+  PlatformOrganizationDetail,
   PlatformOrganizationListResult,
   PlatformOrganizationProfile,
 } from '@xiaotuanbao/shared'
@@ -38,7 +39,7 @@ export class PlatformController {
   }
 
   @Get('organizations/:id')
-  getOrganization(@Param('id') id: string): Promise<PlatformOrganizationProfile> {
+  getOrganization(@Param('id') id: string): Promise<PlatformOrganizationDetail> {
     return this.platformOrganizationsService.getById(id)
   }
 

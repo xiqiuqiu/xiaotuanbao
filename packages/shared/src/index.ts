@@ -9,6 +9,8 @@ export type {
   RoleSummary,
   OrganizationSummary,
   PlatformOrganizationProfile,
+  PlatformOrganizationDetail,
+  InitialOrganizationAdminSummary,
   PlatformOrganizationListResult,
   CreatePlatformOrganizationDto,
   UpdatePlatformOrganizationDto,

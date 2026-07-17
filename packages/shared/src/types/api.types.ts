@@ -54,7 +54,7 @@ export interface OrganizationSummary {
   }
 }
 
-/** Platform Admin 客户 Organization 名录 / 档案（只读元数据） */
+/** Platform Admin 客户 Organization 名录项 / 写操作响应（不含初始管理员） */
 export interface PlatformOrganizationProfile {
   id: string
   name: string
@@ -62,6 +62,17 @@ export interface PlatformOrganizationProfile {
   status: 'enabled' | 'disabled'
   createdAt: string
   updatedAt: string
+}
+
+/** 客户 Organization 档案详情中的 Initial Organization Admin（只读；不含密码） */
+export interface InitialOrganizationAdminSummary {
+  username: string
+  name: string
+}
+
+/** Platform Admin 客户 Organization 档案详情（含初始管理员只读块） */
+export interface PlatformOrganizationDetail extends PlatformOrganizationProfile {
+  initialOrganizationAdmin: InitialOrganizationAdminSummary | null
 }
 
 export interface PlatformOrganizationListResult {

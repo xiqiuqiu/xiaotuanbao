@@ -1,6 +1,7 @@
 import { request } from '@/lib/request'
 import type {
   CreatePlatformOrganizationDto,
+  PlatformOrganizationDetail,
   PlatformOrganizationListResult,
   PlatformOrganizationProfile,
   UpdatePlatformOrganizationDto,
@@ -19,8 +20,8 @@ export async function listPlatformOrganizations(
 
 export async function getPlatformOrganization(
   id: string,
-): Promise<PlatformOrganizationProfile> {
-  return request.get<PlatformOrganizationProfile>(`/platform/organizations/${id}`)
+): Promise<PlatformOrganizationDetail> {
+  return request.get<PlatformOrganizationDetail>(`/platform/organizations/${id}`)
 }
 
 export async function createPlatformOrganization(

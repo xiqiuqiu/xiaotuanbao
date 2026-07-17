@@ -8,6 +8,7 @@ import {
   PLATFORM_ORGANIZATION_NAME,
   PLATFORM_ORGANIZATION_PREFIX,
   PRESET_ROLE_NAMES,
+  type PlatformOrganizationDetail,
   type PlatformOrganizationListResult,
   type PlatformOrganizationProfile,
 } from '@xiaotuanbao/shared'
@@ -55,7 +56,7 @@ export class PlatformOrganizationsService {
     }
   }
 
-  async getById(id: string): Promise<PlatformOrganizationProfile> {
+  async getById(id: string): Promise<PlatformOrganizationDetail> {
     const organization = await this.prisma.organization.findFirst({
       where: {
         id,
@@ -67,7 +68,10 @@ export class PlatformOrganizationsService {
       throw new NotFoundException('Organization 不存在')
     }
 
-    return this.toProfile(organization)
+    return {
+      ...this.toProfile(organization),
+      initialOrganizationAdmin: await this.findInitialOrganizationAdmin(organization.id),
+    }
   }
 
   async create(dto: CreatePlatformOrganizationDto): Promise<PlatformOrganizationProfile> {
@@ -224,6 +228,38 @@ export class PlatformOrganizationsService {
       NOT: {
         OR: [{ name: platform.name }, { businessPrefix: platform.businessPrefix }],
       },
+    }
+  }
+
+  /**
+   * 认定开户时那一名企业管理员：该组织最早创建的企业管理员 User（含停用）。
+   * 读当前 username/name；认定不到返回 null（空态）。
+   */
+  private async findInitialOrganizationAdmin(organizationId: string) {
+    const admin = await this.prisma.user.findFirst({
+      where: {
+        organizationId,
+        deletedAt: null,
+        roles: {
+          some: {
+            role: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        username: true,
+        name: true,
+      },
+    })
+
+    if (!admin) {
+      return null
+    }
+
+    return {
+      username: admin.username,
+      name: admin.name,
     }
   }
 

@@ -44,20 +44,20 @@ describe('Platform organizations catalog (e2e)', () => {
   })
 
   it('lists customer organizations and excludes Platform Organization', async () => {
-    const response = await authRequest(app, platformCookie)
+    const firstPage = await authRequest(app, platformCookie)
       .get('/api/platform/organizations')
-      .query({ pageSize: 100 })
+      .query({ page: 1, pageSize: 100 })
       .expect(200)
 
-    const { items, total } = response.body.data as {
+    const { items, total, pageSize } = firstPage.body.data as {
       items: Array<{ id: string; name: string; businessPrefix: string; status: string }>
       total: number
+      pageSize: number
     }
 
     expect(total).toBeGreaterThanOrEqual(1)
     expect(items.every((item) => item.name !== '平台运营组织')).toBe(true)
     expect(items.every((item) => item.businessPrefix !== 'PLAT')).toBe(true)
-    expect(items.some((item) => item.name === '演示旅行社')).toBe(true)
 
     const platformOrg = await prisma.organization.findFirstOrThrow({
       where: { name: '平台运营组织', deletedAt: null },
@@ -66,11 +66,34 @@ describe('Platform organizations catalog (e2e)', () => {
     expect(items.every((item) => item.status === 'enabled' || item.status === 'disabled')).toBe(
       true,
     )
+
+    const demo = await prisma.organization.findFirstOrThrow({
+      where: { name: '演示旅行社', deletedAt: null },
+    })
+    const lastPage = Math.max(1, Math.ceil(total / pageSize))
+    let demoListed = items.some((item) => item.id === demo.id)
+    for (let page = 2; page <= lastPage && !demoListed; page += 1) {
+      const pageResponse = await authRequest(app, platformCookie)
+        .get('/api/platform/organizations')
+        .query({ page, pageSize })
+        .expect(200)
+      const pageItems = pageResponse.body.data.items as Array<{ id: string }>
+      demoListed = pageItems.some((item) => item.id === demo.id)
+    }
+    expect(demoListed).toBe(true)
   })
 
   it('returns organization profile metadata without business payload fields', async () => {
     const demo = await prisma.organization.findFirstOrThrow({
       where: { name: '演示旅行社', deletedAt: null },
+    })
+    const initialAdmin = await prisma.user.findFirstOrThrow({
+      where: {
+        organizationId: demo.id,
+        deletedAt: null,
+        roles: { some: { role: { name: PRESET_ROLE_NAMES.ORG_ADMIN } } },
+      },
+      orderBy: { createdAt: 'asc' },
     })
 
     const response = await authRequest(app, platformCookie)
@@ -84,9 +107,154 @@ describe('Platform organizations catalog (e2e)', () => {
       status: 'enabled',
       createdAt: demo.createdAt.toISOString(),
       updatedAt: demo.updatedAt.toISOString(),
+      initialOrganizationAdmin: {
+        username: initialAdmin.username,
+        name: initialAdmin.name,
+      },
     })
     expect(response.body.data).not.toHaveProperty('users')
     expect(response.body.data).not.toHaveProperty('departures')
+    expect(response.body.data.initialOrganizationAdmin).not.toHaveProperty('password')
+    expect(response.body.data.initialOrganizationAdmin).not.toHaveProperty('passwordHash')
+  })
+
+  it('lists customer organizations without Initial Organization Admin block', async () => {
+    const response = await authRequest(app, platformCookie)
+      .get('/api/platform/organizations')
+      .query({ pageSize: 100 })
+      .expect(200)
+
+    const items = response.body.data.items as Array<Record<string, unknown>>
+    expect(items.length).toBeGreaterThan(0)
+    expect(items.every((item) => !Object.hasOwn(item, 'initialOrganizationAdmin'))).toBe(true)
+  })
+
+  it('exposes Initial Organization Admin on profile after onboarding', async () => {
+    const payload = onboardPayload()
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(payload)
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    expect(created.body.data).not.toHaveProperty('initialOrganizationAdmin')
+
+    const profile = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organizationId}`)
+      .expect(200)
+
+    expect(profile.body.data.initialOrganizationAdmin).toEqual({
+      username: payload.adminUsername,
+      name: payload.adminName,
+    })
+  })
+
+  it('follows tenant rename of Initial Organization Admin on profile', async () => {
+    const payload = onboardPayload()
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(payload)
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    const admin = await prisma.user.findFirstOrThrow({
+      where: { organizationId, deletedAt: null },
+      include: { roles: true },
+    })
+    const orgAdminRoleId = admin.roles[0].roleId
+    const tenantSession = await loginAs(app, payload.adminUsername, payload.adminPassword)
+
+    const renamedUsername = `${payload.adminUsername}-renamed`
+    const renamedName = '档案跟随改名'
+    await authRequest(app, tenantSession)
+      .patch(`/api/users/${admin.id}`)
+      .send({
+        username: renamedUsername,
+        name: renamedName,
+        roleId: orgAdminRoleId,
+        status: 'enabled',
+      })
+      .expect(200)
+
+    const profile = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organizationId}`)
+      .expect(200)
+
+    expect(profile.body.data.initialOrganizationAdmin).toEqual({
+      username: renamedUsername,
+      name: renamedName,
+    })
+  })
+
+  it('keeps Initial Organization Admin visible on profile after the user is disabled', async () => {
+    const payload = onboardPayload()
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(payload)
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    const admin = await prisma.user.findFirstOrThrow({
+      where: { organizationId, deletedAt: null },
+    })
+
+    await prisma.user.update({
+      where: { id: admin.id },
+      data: { status: 'disabled' },
+    })
+
+    const profile = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organizationId}`)
+      .expect(200)
+
+    expect(profile.body.data.initialOrganizationAdmin).toEqual({
+      username: payload.adminUsername,
+      name: payload.adminName,
+    })
+  })
+
+  it('returns empty Initial Organization Admin when none can be resolved, without blocking rename/disable', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+    const organization = await prisma.organization.create({
+      data: {
+        name: `E2E无初始管理员${stamp}`,
+        businessPrefix,
+        status: 'enabled',
+      },
+    })
+
+    const profile = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organization.id}`)
+      .expect(200)
+
+    expect(profile.body.data).toMatchObject({
+      id: organization.id,
+      name: organization.name,
+      businessPrefix,
+      status: 'enabled',
+      initialOrganizationAdmin: null,
+    })
+
+    const renamedName = `E2E无初始管理员改名${stamp}`
+    const renamed = await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organization.id}`)
+      .send({ name: renamedName })
+      .expect(200)
+    expect(renamed.body.data).toMatchObject({
+      id: organization.id,
+      name: renamedName,
+    })
+    expect(renamed.body.data).not.toHaveProperty('initialOrganizationAdmin')
+
+    const disabled = await authRequest(app, platformCookie)
+      .post(`/api/platform/organizations/${organization.id}/disable`)
+      .expect(201)
+    expect(disabled.body.data).toMatchObject({
+      id: organization.id,
+      status: 'disabled',
+    })
   })
 
   it('hides Platform Organization profile from the catalog API', async () => {
