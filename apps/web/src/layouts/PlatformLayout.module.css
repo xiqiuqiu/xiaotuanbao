@@ -16,6 +16,7 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -28,8 +29,10 @@
 }
 
 .nav {
-  flex: 1;
-  min-width: 0;
+  /* 平台顶栏菜单项少：按内容宽度展开，避免横向 Menu 被 flex 压窄后收进「…」 */
+  flex: none;
+  flex-shrink: 0;
+  width: max-content;
   border-bottom: none !important;
   background: transparent;
   line-height: 64px;

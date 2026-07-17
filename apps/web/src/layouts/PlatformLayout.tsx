@@ -55,7 +55,7 @@ export function PlatformLayout() {
               {
                 key: 'organizations',
                 icon: <TeamOutlined />,
-                label: <Link to="/platform/organizations">客户 Organization</Link>,
+                label: <Link to="/platform/organizations">客户</Link>,
               },
             ]}
           />
