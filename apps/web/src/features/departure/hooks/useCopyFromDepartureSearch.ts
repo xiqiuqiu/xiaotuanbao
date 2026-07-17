@@ -20,15 +20,22 @@ export function useCopyFromDepartureSearch({
   enterInfoStep,
   onLoadError,
 }: UseCopyFromDepartureSearchOptions) {
-  const initializedCopyFromRef = useRef<string | null>(null)
+  const navigateRef = useRef(navigate)
+  const setRouteValuesRef = useRef(setRouteValues)
+  const enterInfoStepRef = useRef(enterInfoStep)
+  const onLoadErrorRef = useRef(onLoadError)
+
+  navigateRef.current = navigate
+  setRouteValuesRef.current = setRouteValues
+  enterInfoStepRef.current = enterInfoStep
+  onLoadErrorRef.current = onLoadError
 
   useEffect(() => {
     const copyFromDepartureId = copyFrom?.trim()
-    if (!copyFromDepartureId || initializedCopyFromRef.current === copyFromDepartureId) {
+    if (!copyFromDepartureId) {
       return
     }
 
-    initializedCopyFromRef.current = copyFromDepartureId
     let cancelled = false
 
     void (async () => {
@@ -51,20 +58,20 @@ export function useCopyFromDepartureSearch({
           previewSegmentCount: segmentList.summary.segmentCount,
           previewResourceCount: segmentList.summary.resourceCount,
         }
-        setRouteValues(nextRouteValues)
-        await enterInfoStep(nextRouteValues)
+        setRouteValuesRef.current(nextRouteValues)
+        await enterInfoStepRef.current(nextRouteValues)
       } catch (error) {
         if (cancelled) {
           return
         }
-        onLoadError?.()
+        onLoadErrorRef.current?.()
         message.error(error instanceof Error ? error.message : '加载源发团失败')
-        navigate({ to: '/departure/new', search: {} })
+        navigateRef.current({ to: '/departure/new', search: {} })
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [copyFrom, enterInfoStep, navigate, onLoadError, setRouteValues])
+  }, [copyFrom])
 }

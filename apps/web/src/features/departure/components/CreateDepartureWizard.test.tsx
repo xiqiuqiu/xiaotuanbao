@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Modal } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
@@ -104,18 +105,20 @@ const mockDeparture: DepartureSummary = {
   estimatedMarginCents: 0,
 }
 
-function renderWizard() {
+function renderWizard({ strict = false }: { strict?: boolean } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
 
-  return render(
+  const tree = (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider locale={zhCN}>
         <CreateDepartureWizard />
       </ConfigProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
+
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
 }
 
 describe('CreateDepartureWizard', () => {
@@ -279,6 +282,42 @@ describe('CreateDepartureWizard', () => {
       hasContent || hasWidthFloor,
       'nested Spin tip collapses vertically when the placeholder has no width floor',
     ).toBe(true)
+  })
+
+  it('exits copy-source loading under StrictMode after source resolves', async () => {
+    mockSearch = { copyFrom: 'source-departure-1' }
+    vi.mocked(getDeparture).mockResolvedValue({
+      ...mockDeparture,
+      id: 'source-departure-1',
+      departureNo: 'XTB2026060009',
+      routeName: '喀纳斯阿勒泰10日线',
+      dayCount: 10,
+      grossReceivableCents: 0,
+      discountCents: 0,
+      verifiedReceivableCents: 0,
+      openUnsettledReceivableCents: 0,
+      verifiedPayableCents: 0,
+      openUnsettledPayableCents: 0,
+      unverifiedIncomeCents: 0,
+      unverifiedExpenseCents: 0,
+      isFinanciallySettled: false,
+    })
+    vi.mocked(listSegments).mockResolvedValue({
+      items: [],
+      summary: {
+        segmentCount: 3,
+        totalDays: 10,
+        resourceCount: 7,
+        payableOverview: '应付未生成',
+      },
+      total: 0,
+    })
+
+    renderWizard({ strict: true })
+
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.queryByText('正在加载源发团…')).not.toBeInTheDocument()
+    expect(screen.getByText('复制自发团 XTB2026060009，不含客源与财务')).toBeInTheDocument()
   })
 
   it('enters copy mode without copy modal and creates without copy flags', async () => {

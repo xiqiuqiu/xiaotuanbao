@@ -1,5 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { message } from 'antd'
+import { StrictMode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useCopyFromDepartureSearch } from './useCopyFromDepartureSearch'
 
@@ -48,6 +49,70 @@ describe('useCopyFromDepartureSearch', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  it('still enters info step when enterInfoStep identity changes mid-load', async () => {
+    const source = deferred<ReturnType<typeof departure>>()
+    getDeparture.mockReturnValue(source.promise)
+    listSegments.mockResolvedValue(segmentResult)
+    const setRouteValues = vi.fn()
+    const enterInfoStepA = vi.fn().mockResolvedValue(undefined)
+    const enterInfoStepB = vi.fn().mockResolvedValue(undefined)
+    const navigate = vi.fn()
+
+    const { rerender } = renderHook(
+      ({ enterInfoStep }) =>
+        useCopyFromDepartureSearch({
+          copyFrom: 'A',
+          navigate,
+          setRouteValues,
+          enterInfoStep,
+        }),
+      { initialProps: { enterInfoStep: enterInfoStepA } },
+    )
+
+    await waitFor(() => expect(getDeparture).toHaveBeenCalledWith('A'))
+    rerender({ enterInfoStep: enterInfoStepB })
+
+    await act(async () => {
+      source.resolve(departure('A'))
+      await source.promise
+    })
+
+    await waitFor(() => {
+      expect(setRouteValues).toHaveBeenCalledWith(
+        expect.objectContaining({ copyFromDepartureId: 'A', sourceDepartureNo: 'NO-A' }),
+      )
+    })
+    // Latest callback via ref; in-flight request must not be abandoned when identity changes.
+    expect(enterInfoStepA).not.toHaveBeenCalled()
+    expect(enterInfoStepB).toHaveBeenCalledTimes(1)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('enters info step under StrictMode when the first effect pass is cancelled', async () => {
+    getDeparture.mockResolvedValue(departure('A'))
+    listSegments.mockResolvedValue(segmentResult)
+    const setRouteValues = vi.fn()
+    const enterInfoStep = vi.fn().mockResolvedValue(undefined)
+
+    renderHook(
+      () =>
+        useCopyFromDepartureSearch({
+          copyFrom: 'A',
+          navigate: vi.fn(),
+          setRouteValues,
+          enterInfoStep,
+        }),
+      { wrapper: StrictMode },
+    )
+
+    await waitFor(() => {
+      expect(setRouteValues).toHaveBeenCalledWith(
+        expect.objectContaining({ copyFromDepartureId: 'A', sourceDepartureNo: 'NO-A' }),
+      )
+    })
+    expect(enterInfoStep).toHaveBeenCalledTimes(1)
   })
 
   it('ignores an older copy request that resolves after the source changes', async () => {
