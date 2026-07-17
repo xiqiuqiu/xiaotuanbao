@@ -113,3 +113,23 @@
     padding: 16px;
   }
 }
+
+.stepEnter {
+  animation: wizard-step-fade 120ms ease both;
+}
+
+@keyframes wizard-step-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stepEnter {
+    animation: none;
+  }
+}

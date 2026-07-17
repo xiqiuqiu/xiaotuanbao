@@ -143,6 +143,11 @@ export function CreateDepartureWizard() {
   }
 
   const showSteps = !isCopyMode && !copyFromId
+  const stepEnterKey = showCopyBootstrap
+    ? 'bootstrap'
+    : !isCopyMode && currentStep === 0
+      ? 'route'
+      : 'info'
   const goBack = useCallback(() => {
     void navigate({ to: '/departure' })
   }, [navigate])
@@ -190,15 +195,17 @@ export function CreateDepartureWizard() {
             {currentStep === 0 || showCopyBootstrap ? (
               <Form form={infoForm} className={styles.hiddenForm} aria-hidden />
             ) : null}
-            {showCopyBootstrap ? (
-              <div className={styles.loadingState}>
-                <Spin description="正在加载源发团…" />
-              </div>
-            ) : !isCopyMode && currentStep === 0 ? (
-              <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
-            ) : (
-              <CreateDepartureStepInfo form={infoForm} route={routeValues} />
-            )}
+            <div key={stepEnterKey} className={styles.stepEnter}>
+              {showCopyBootstrap ? (
+                <div className={styles.loadingState}>
+                  <Spin description="正在加载源发团…" />
+                </div>
+              ) : !isCopyMode && currentStep === 0 ? (
+                <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
+              ) : (
+                <CreateDepartureStepInfo form={infoForm} route={routeValues} />
+              )}
+            </div>
           </main>
         </div>
 
