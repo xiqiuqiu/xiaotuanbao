@@ -944,6 +944,8 @@ export interface SegmentResourceSummary {
   paymentScheduleId: string | null
   financeTouched: boolean
   unsettledAmountCents: number | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface SegmentResourceListResult {

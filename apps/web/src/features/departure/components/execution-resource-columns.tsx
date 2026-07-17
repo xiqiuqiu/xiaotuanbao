@@ -2,6 +2,7 @@ import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type { SegmentResourceSummary } from '@/types/api'
+import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
   RESOURCE_KIND_LABELS,
@@ -89,6 +90,7 @@ export function buildExecutionResourceColumns({
       ellipsis: { showTitle: false },
       render: (value: string | null) => <EllipsisTooltipText>{value || null}</EllipsisTooltipText>,
     },
+    ...buildBusinessTimestampColumns<SegmentResourceSummary>(),
     {
       title: '操作',
       width: 260,

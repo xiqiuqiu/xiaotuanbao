@@ -26,6 +26,8 @@ function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResou
     paymentScheduleId: 'schedule-1',
     financeTouched: false,
     unsettledAmountCents: 100000,
+    createdAt: '2026-07-14T00:05:59.000Z',
+    updatedAt: '2026-07-14T01:06:59.000Z',
     ...overrides,
   }
 }

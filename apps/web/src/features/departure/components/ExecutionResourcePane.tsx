@@ -310,7 +310,7 @@ export function ExecutionResourcePane({
           columns={columns}
           dataSource={resources}
           pagination={false}
-          scroll={{ x: 1000 }}
+          scroll={{ x: 1300 }}
         />
       )}
 

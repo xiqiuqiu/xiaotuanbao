@@ -1448,6 +1448,8 @@ describe('Departure API (e2e)', () => {
         supplierId: supplier.id,
       })
       expect(hotel.body.data).not.toHaveProperty('fromTemplate')
+      expect(typeof hotel.body.data.createdAt).toBe('string')
+      expect(typeof hotel.body.data.updatedAt).toBe('string')
       expect(meal.body.data).toMatchObject({
         resourceKind: ResourceKind.meal,
         supplierId: supplier.id,

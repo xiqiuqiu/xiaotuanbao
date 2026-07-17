@@ -80,6 +80,11 @@ function baseResource(
     payableStatus: 'not_generated',
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    paymentScheduleId: null,
+    financeTouched: false,
+    unsettledAmountCents: null,
+    createdAt: '2026-07-14T00:05:59.000Z',
+    updatedAt: '2026-07-14T01:06:59.000Z',
     ...overrides,
   }
 }

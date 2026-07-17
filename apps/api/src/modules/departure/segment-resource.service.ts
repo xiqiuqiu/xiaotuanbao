@@ -484,6 +484,8 @@ export class SegmentResourceService {
       paymentScheduleId: meta?.paymentScheduleId ?? null,
       financeTouched: meta?.financeTouched ?? false,
       unsettledAmountCents: meta?.unpaidCents ?? null,
+      createdAt: resource.createdAt.toISOString(),
+      updatedAt: resource.updatedAt.toISOString(),
     }
   }
 }
