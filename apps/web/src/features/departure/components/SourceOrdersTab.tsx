@@ -361,7 +361,7 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         loading={isLoading}
         columns={columns}
         dataSource={listResult?.items ?? []}
-        scroll={{ x: 1600 }}
+        scroll={{ x: 1760 }}
         pagination={false}
       />
 

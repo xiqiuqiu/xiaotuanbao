@@ -85,6 +85,7 @@ export function buildSourceOrdersColumns({
     {
       title: '备注',
       dataIndex: 'notes',
+      width: 160,
       ellipsis: { showTitle: false },
       render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
     },
