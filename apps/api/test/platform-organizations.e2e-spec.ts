@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
+import { PRESET_ROLE_NAMES } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { PrismaService } from '../src/database/prisma/prisma.service'
 
@@ -11,6 +12,18 @@ function freshBusinessPrefix(): string {
     prefix += alphabet[Math.floor(Math.random() * alphabet.length)]
   }
   return prefix
+}
+
+function onboardPayload(overrides: Record<string, unknown> = {}) {
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  return {
+    name: `E2E开户${stamp}`,
+    businessPrefix: freshBusinessPrefix(),
+    adminUsername: `e2e-admin-${stamp}`,
+    adminName: '开户管理员',
+    adminPassword: 'admin1234',
+    ...overrides,
+  }
 }
 
 describe('Platform organizations catalog (e2e)', () => {
@@ -97,13 +110,12 @@ describe('Platform organizations catalog (e2e)', () => {
       .expect(403)
   })
 
-  it('creates a customer organization shell with enabled status and no users', async () => {
-    const name = `E2E创建壳${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const businessPrefix = freshBusinessPrefix()
+  it('creates a customer organization with initial org admin who can log in', async () => {
+    const payload = onboardPayload()
 
     const response = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name, businessPrefix })
+      .send(payload)
       .expect(201)
 
     const created = response.body.data as {
@@ -114,16 +126,32 @@ describe('Platform organizations catalog (e2e)', () => {
     }
 
     expect(created).toMatchObject({
-      name,
-      businessPrefix,
+      name: payload.name,
+      businessPrefix: payload.businessPrefix,
       status: 'enabled',
     })
     expect(created.id).toBeTruthy()
 
-    const userCount = await prisma.user.count({
-      where: { organizationId: created.id },
+    const users = await prisma.user.findMany({
+      where: { organizationId: created.id, deletedAt: null },
+      include: { roles: { include: { role: true } } },
     })
-    expect(userCount).toBe(0)
+    expect(users).toHaveLength(1)
+    expect(users[0]).toMatchObject({
+      username: payload.adminUsername,
+      name: payload.adminName,
+      isPlatformAdmin: false,
+    })
+    expect(users[0].roles.map((row) => row.role.name)).toEqual([PRESET_ROLE_NAMES.ORG_ADMIN])
+
+    const tenantSession = await loginAs(app, payload.adminUsername, payload.adminPassword)
+    const me = await authRequest(app, tenantSession).get('/api/auth/me').expect(200)
+    expect(me.body.data.user).toMatchObject({
+      username: payload.adminUsername,
+      organizationId: created.id,
+      isPlatformAdmin: false,
+    })
+    expect(me.body.data.menuKeys).toEqual(expect.arrayContaining(['/system/users']))
 
     const listed = await authRequest(app, platformCookie)
       .get('/api/platform/organizations')
@@ -132,25 +160,94 @@ describe('Platform organizations catalog (e2e)', () => {
     expect(items.some((item) => item.id === created.id)).toBe(true)
   })
 
+  it('rejects create when admin fields are missing or password is too short, leaving no orphan organization', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const base = {
+      name: `E2E缺字段${stamp}`,
+      businessPrefix: freshBusinessPrefix(),
+      adminUsername: `e2e-missing-${stamp}`,
+      adminName: '缺字段管理员',
+      adminPassword: 'admin1234',
+    }
+
+    const incompleteBodies = [
+      { name: base.name, businessPrefix: base.businessPrefix },
+      { ...base, adminUsername: undefined },
+      { ...base, adminName: undefined },
+      { ...base, adminPassword: undefined },
+      { ...base, adminPassword: 'short' },
+    ]
+
+    for (const body of incompleteBodies) {
+      await authRequest(app, platformCookie)
+        .post('/api/platform/organizations')
+        .send(body)
+        .expect(400)
+    }
+
+    const orphan = await prisma.organization.findFirst({
+      where: { name: base.name, deletedAt: null },
+    })
+    expect(orphan).toBeNull()
+  })
+
+  it('keeps admin username unique within the onboarded organization', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const adminUsername = `e2e-dup-admin-${stamp}`
+    const first = onboardPayload({
+      name: `E2E用户名冲突甲${stamp}`,
+      adminUsername,
+    })
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(first)
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    const orgAdminRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
+    })
+
+    const adminSession = await loginAs(app, first.adminUsername, first.adminPassword)
+    const conflict = await authRequest(app, adminSession)
+      .post('/api/users')
+      .send({
+        username: adminUsername,
+        name: '冲突员工',
+        roleId: orgAdminRole.id,
+        status: 'enabled',
+        password: 'admin1234',
+      })
+      .expect(409)
+    expect(conflict.body.message).toBe('用户名已存在')
+
+    const userCount = await prisma.user.count({
+      where: { organizationId, deletedAt: null },
+    })
+    expect(userCount).toBe(1)
+  })
+
   it('rejects duplicate organization name and business prefix', async () => {
     const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const name = `E2E重名壳${stamp}`
     const businessPrefix = freshBusinessPrefix()
+    const first = onboardPayload({ name, businessPrefix })
 
     await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name, businessPrefix })
+      .send(first)
       .expect(201)
 
     const nameConflict = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name, businessPrefix: freshBusinessPrefix() })
+      .send(onboardPayload({ name, businessPrefix: freshBusinessPrefix() }))
       .expect(409)
     expect(nameConflict.body.message).toBe('组织名称已存在')
 
     const prefixConflict = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: `E2E重前缀壳${stamp}`, businessPrefix })
+      .send(onboardPayload({ name: `E2E重前缀壳${stamp}`, businessPrefix }))
       .expect(409)
     expect(prefixConflict.body.message).toBe('组织业务前缀已存在')
   })
@@ -158,10 +255,7 @@ describe('Platform organizations catalog (e2e)', () => {
   it('rejects tenant users from create organization API', async () => {
     await authRequest(app, tenantCookie)
       .post('/api/platform/organizations')
-      .send({
-        name: `E2E租户拒绝${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        businessPrefix: freshBusinessPrefix(),
-      })
+      .send(onboardPayload({ name: `E2E租户拒绝${Date.now()}` }))
       .expect(403)
   })
 
@@ -171,7 +265,7 @@ describe('Platform organizations catalog (e2e)', () => {
 
     const created = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: `E2E改名前${stamp}`, businessPrefix })
+      .send(onboardPayload({ name: `E2E改名前${stamp}`, businessPrefix }))
       .expect(201)
 
     const organizationId = created.body.data.id as string
@@ -210,12 +304,12 @@ describe('Platform organizations catalog (e2e)', () => {
 
     await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: firstName, businessPrefix: freshBusinessPrefix() })
+      .send(onboardPayload({ name: firstName }))
       .expect(201)
 
     const second = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: secondName, businessPrefix: freshBusinessPrefix() })
+      .send(onboardPayload({ name: secondName }))
       .expect(201)
 
     const conflict = await authRequest(app, platformCookie)
@@ -231,7 +325,7 @@ describe('Platform organizations catalog (e2e)', () => {
 
     const created = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: `E2E停用改名前${stamp}`, businessPrefix })
+      .send(onboardPayload({ name: `E2E停用改名前${stamp}`, businessPrefix }))
       .expect(201)
 
     const organizationId = created.body.data.id as string
@@ -265,26 +359,25 @@ describe('Platform organizations catalog (e2e)', () => {
   })
 
   it('disables and re-enables a customer organization; blocks tenant login and sessions while disabled', async () => {
-    const { hash } = await import('bcryptjs')
     const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const businessPrefix = freshBusinessPrefix()
-    const password = 'admin123'
+    const password = 'admin1234'
     const username = `e2e-org-status-${stamp}`
 
     const created = await authRequest(app, platformCookie)
       .post('/api/platform/organizations')
-      .send({ name: `E2E停用组织${stamp}`, businessPrefix })
+      .send(
+        onboardPayload({
+          name: `E2E停用组织${stamp}`,
+          businessPrefix,
+          adminUsername: username,
+          adminName: '停用组织测试用户',
+          adminPassword: password,
+        }),
+      )
       .expect(201)
 
     const organizationId = created.body.data.id as string
-    await prisma.user.create({
-      data: {
-        organizationId,
-        username,
-        passwordHash: await hash(password, 10),
-        name: '停用组织测试用户',
-      },
-    })
 
     const tenantSession = await loginAs(app, username, password)
     await authRequest(app, tenantSession).get('/api/auth/me').expect(200)

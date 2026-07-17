@@ -64,6 +64,9 @@ export function PlatformOrganizationsPage() {
       createPlatformOrganization({
         name: values.name.trim(),
         businessPrefix: values.businessPrefix.trim().toUpperCase(),
+        adminUsername: values.adminUsername.trim(),
+        adminName: values.adminName.trim(),
+        adminPassword: values.adminPassword,
       }),
     onSuccess: () => {
       message.success('客户 Organization 已创建')
@@ -78,6 +81,10 @@ export function PlatformOrganizationsPage() {
       }
       if (errorMessage.includes('业务前缀') || errorMessage.includes('组织业务前缀')) {
         form.setFields([{ name: 'businessPrefix', errors: [errorMessage] }])
+        return
+      }
+      if (errorMessage.includes('用户名')) {
+        form.setFields([{ name: 'adminUsername', errors: [errorMessage] }])
         return
       }
       message.error(errorMessage)

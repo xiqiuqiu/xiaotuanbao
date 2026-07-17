@@ -17,8 +17,8 @@ _Avoid_: 私有化, 独立部署
 _Avoid_: 账户, 成员, 账号
 
 **Login Username（登录用户名）**:
-User 用于登录后台的标识字符串，在同一 Organization 内唯一；与显示名称（name）不同。企业管理员可在员工创建与编辑时设置或修改。
-_Avoid_: 账号, 账户（作该字段产品文案）
+User 用于登录后台的标识字符串，在同一 Organization 内唯一；与显示名称（name）不同。企业管理员可在员工创建与编辑时设置或修改。Platform Admin 开户创建的初始企业管理员与租户员工管理使用同一规则：表单填写的登录名原样持久化，不做业务前缀拼装。跨 Organization 的登录名撞车不在本轮消除（登录仍按用户名全局查找，运营需避免常见名冲突）。
+_Avoid_: 账号, 账户（作该字段产品文案）, 开户自动加业务前缀, 登录名按前缀改写入库
 
 **Employee**:
 与 User 同义，指 Organization 内的在职员工。
@@ -41,12 +41,12 @@ _Avoid_: 最近活跃作在线状态, 实时在线
 _Avoid_: 把 Platform Admin 挂在客户 Organization 下, organizationId 为空的平台账号, 平台组织当客户开户
 
 **Platform Admin**:
-平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization。邀请激活见 Organization Onboarding，与名录维护分开交付。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
-_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号
+平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。创建客户组织时须同事务建立初始企业管理员（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
+_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码
 
 **Organization Onboarding**:
-新 Organization 由 Platform Admin 创建，并生成邀请链接发给客户；客户通过邀请链接设置密码后激活 Organization，并绑定企业管理员 Role。与 Organization 名录维护分开；邀请激活链路后置，不阻塞名录维护交付。名录阶段创建 Organization 只建组织壳（名称、业务前缀、组织状态），不创建任何 User。
-_Avoid_: 自助注册, 开放注册, 创建组织时强制建企业管理员
+客户 Organization 的开通交付。现行开户：Platform Admin 创建组织时同事务写入初始企业管理员（登录用户名、显示名称、初始密码必填），绑定企业管理员 Role，账号立即可登录租户后台；登录用户名规则与租户员工管理相同，不拼业务前缀。邀请链接让客户自设密码仍为后置可选能力，非开户必经。Platform Admin 开户后不在平台区重置该管理员密码或管理其员工档案。
+_Avoid_: 自助注册, 开放注册, 创建组织只建壳不建管理员, 开户必经邀请链接, 平台区事后管理租户员工, 开户登录名强制加业务前缀
 
 **Organization Business Prefix（组织业务前缀）**:
 Organization 创建时必填、仅可设置一次的 2–4 位大写英文字母标识，用于生成发团编号及财务类业务编号。未设置前缀的 Organization 不得创建发团、收付款节点、流水或核销。前缀建议全系统唯一。

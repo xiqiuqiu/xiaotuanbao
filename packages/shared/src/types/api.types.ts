@@ -74,6 +74,9 @@ export interface PlatformOrganizationListResult {
 export interface CreatePlatformOrganizationDto {
   name: string
   businessPrefix: string
+  adminUsername: string
+  adminName: string
+  adminPassword: string
 }
 
 /** Platform Admin 修改客户 Organization 名称（不含业务前缀） */

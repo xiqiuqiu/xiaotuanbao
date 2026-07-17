@@ -7,10 +7,12 @@ import {
 import {
   PLATFORM_ORGANIZATION_NAME,
   PLATFORM_ORGANIZATION_PREFIX,
+  PRESET_ROLE_NAMES,
   type PlatformOrganizationListResult,
   type PlatformOrganizationProfile,
 } from '@xiaotuanbao/shared'
-import { OrganizationStatus, Prisma } from '@prisma/client'
+import { OrganizationStatus, Prisma, UserStatus } from '@prisma/client'
+import { hash } from 'bcryptjs'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 import type { UpdatePlatformOrganizationDto } from './dto/update-platform-organization.dto'
@@ -71,9 +73,20 @@ export class PlatformOrganizationsService {
   async create(dto: CreatePlatformOrganizationDto): Promise<PlatformOrganizationProfile> {
     const name = dto.name.trim()
     const businessPrefix = dto.businessPrefix.trim()
+    const adminUsername = dto.adminUsername.trim()
+    const adminName = dto.adminName.trim()
 
     await this.ensureNameAvailable(name)
     await this.ensureBusinessPrefixAvailable(businessPrefix)
+
+    const orgAdminRole = await this.prisma.role.findUnique({
+      where: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
+    })
+    if (!orgAdminRole) {
+      throw new BadRequestException('企业管理员角色未配置')
+    }
+
+    const passwordHash = await hash(dto.adminPassword, 10)
 
     try {
       const organization = await this.prisma.organization.create({
@@ -81,6 +94,20 @@ export class PlatformOrganizationsService {
           name,
           businessPrefix,
           status: OrganizationStatus.enabled,
+          users: {
+            create: {
+              username: adminUsername,
+              name: adminName,
+              passwordHash,
+              isPlatformAdmin: false,
+              status: UserStatus.enabled,
+              roles: {
+                create: {
+                  roleId: orgAdminRole.id,
+                },
+              },
+            },
+          },
         },
       })
       return this.toProfile(organization)
@@ -96,6 +123,9 @@ export class PlatformOrganizationsService {
         }
         if (fields.some((field) => field === 'name')) {
           throw new ConflictException('组织名称已存在')
+        }
+        if (fields.some((field) => field.includes('username'))) {
+          throw new ConflictException('用户名已存在')
         }
         throw new ConflictException('组织名称或业务前缀已存在')
       }
