@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @xiaotuanbao/shared build && concurrently -k -n shared,api,reload -c blue,green,magenta \"pnpm --filter @xiaotuanbao/shared build:watch\" \"nest start --watch\" \"node scripts/watch-shared-reload.js\"",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "lint": "pnpm typecheck",
     "test": "jest --config jest.config.js",
     "test:e2e": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand",
