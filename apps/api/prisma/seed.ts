@@ -21,6 +21,7 @@ import {
   ResourceKind,
 } from '@prisma/client'
 import { hash } from 'bcryptjs'
+import { normalizeUsername } from '../src/common/username'
 
 const prisma = new PrismaClient()
 
@@ -82,8 +83,9 @@ async function seedRoleCatalog() {
 }
 
 async function assignRole(username: string, organizationId: string, roleName: string) {
+  const normalizedUsername = normalizeUsername(username)
   const user = await prisma.user.findFirst({
-    where: { username, organizationId, deletedAt: null },
+    where: { username: normalizedUsername, organizationId, deletedAt: null },
   })
   const role = await prisma.role.findUnique({ where: { name: roleName } })
 
@@ -99,7 +101,9 @@ async function assignRole(username: string, organizationId: string, roleName: st
 
 async function seedPlatformOrganization() {
   const orgName = process.env.SEED_PLATFORM_ORG_NAME ?? PLATFORM_ORGANIZATION_NAME
-  const adminUsername = process.env.SEED_PLATFORM_ADMIN_USERNAME ?? 'platform'
+  const adminUsername = normalizeUsername(
+    process.env.SEED_PLATFORM_ADMIN_USERNAME ?? 'platform',
+  )
   const adminPassword = process.env.SEED_PLATFORM_ADMIN_PASSWORD ?? 'admin123'
   const adminName = process.env.SEED_PLATFORM_ADMIN_NAME ?? '平台管理员'
   const businessPrefix = process.env.SEED_PLATFORM_ORG_BUSINESS_PREFIX ?? PLATFORM_ORGANIZATION_PREFIX
@@ -125,7 +129,6 @@ async function seedPlatformOrganization() {
 
   const existingAdmin = await prisma.user.findFirst({
     where: {
-      organizationId: organization.id,
       username: adminUsername,
       deletedAt: null,
     },
@@ -144,6 +147,10 @@ async function seedPlatformOrganization() {
       },
     })
     console.log(`Seeded Platform Admin "${adminUsername}".`)
+  } else if (existingAdmin.organizationId !== organization.id) {
+    throw new Error(
+      `Login username "${adminUsername}" is already occupied outside the Platform Organization`,
+    )
   } else if (!existingAdmin.isPlatformAdmin) {
     await prisma.user.update({
       where: { id: existingAdmin.id },
@@ -156,7 +163,7 @@ async function seedPlatformOrganization() {
 
 async function seedDemoOrganization() {
   const orgName = process.env.SEED_ORG_NAME ?? '演示旅行社'
-  const adminUsername = process.env.SEED_ADMIN_USERNAME ?? 'admin'
+  const adminUsername = normalizeUsername(process.env.SEED_ADMIN_USERNAME ?? 'admin')
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'admin123'
   const adminName = process.env.SEED_ADMIN_NAME ?? '演示管理员'
 
@@ -213,10 +220,10 @@ async function seedDemoOrganization() {
   ] as const
 
   for (const demoUser of demoUsers) {
+    const username = normalizeUsername(demoUser.username)
     const existing = await prisma.user.findFirst({
       where: {
-        organizationId: organization.id,
-        username: demoUser.username,
+        username,
         deletedAt: null,
       },
     })
@@ -226,16 +233,20 @@ async function seedDemoOrganization() {
       await prisma.user.create({
         data: {
           organizationId: organization.id,
-          username: demoUser.username,
+          username,
           passwordHash,
           name: demoUser.name,
           status: UserStatus.ENABLED,
         },
       })
-      console.log(`Seeded demo user "${demoUser.username}".`)
+      console.log(`Seeded demo user "${username}".`)
+    } else if (existing.organizationId !== organization.id) {
+      throw new Error(
+        `Login username "${username}" is already occupied outside the demo organization`,
+      )
     }
 
-    await assignRole(demoUser.username, organization.id, demoUser.roleName)
+    await assignRole(username, organization.id, demoUser.roleName)
   }
 
   await seedDemoSuppliers(organization.id)

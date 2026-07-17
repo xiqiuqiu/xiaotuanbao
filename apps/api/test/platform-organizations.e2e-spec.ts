@@ -359,7 +359,7 @@ describe('Platform organizations catalog (e2e)', () => {
     expect(orphan).toBeNull()
   })
 
-  it('keeps admin username unique within the onboarded organization', async () => {
+  it('keeps admin username unique platform-wide when creating employees in the onboarded organization', async () => {
     const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const adminUsername = `e2e-dup-admin-${stamp}`
     const first = onboardPayload({

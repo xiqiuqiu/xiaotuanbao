@@ -17,8 +17,8 @@ _Avoid_: 私有化, 独立部署
 _Avoid_: 账户, 成员, 账号
 
 **Login Username（登录用户名）**:
-User 用于登录后台的标识字符串，在同一 Organization 内唯一；与显示名称（name）不同。企业管理员可在员工创建与编辑时设置或修改。Platform Admin 开户创建的初始企业管理员与租户员工管理使用同一规则：表单填写的登录名原样持久化，不做业务前缀拼装。跨 Organization 的登录名撞车不在本轮消除（登录仍按用户名全局查找，运营需避免常见名冲突）。
-_Avoid_: 账号, 账户（作该字段产品文案）, 开户自动加业务前缀, 登录名按前缀改写入库
+User 用于登录后台的标识字符串，在全平台唯一（含 Platform Organization 上的 Platform Admin 与各客户 Organization 的员工，同一命名空间）。持久化为规范小写（创建、编辑、开户与登录输入均先 trim 再转小写后存储或查找）；唯一性因此不区分大小写。与显示名称（name）不同。企业管理员可在员工创建与编辑时设置或修改；Platform Admin 开户时的初始企业管理员使用同一规则：不做业务前缀拼装。登录页只凭登录用户名与密码定位 User，不要求填写 Organization 标识。凡未彻底删除（`deletedAt` 为空）的 User 均占用其登录名，含停用 Employee 与所属 Organization 已停用的 User；停用或组织停用不会释放该登录名。
+_Avoid_: 账号, 账户（作该字段产品文案）, 开户自动加业务前缀, 登录名按前缀改写入库, 登录页填写企业/组织 ID 消歧, 仅组织内唯一而跨组织可撞车, 停用后释放登录名供他人使用, 大小写不同视为不同登录名, 库内保留任意大小写仅靠比较时折叠
 
 **Employee**:
 与 User 同义，指 Organization 内的在职员工。
@@ -41,12 +41,16 @@ _Avoid_: 最近活跃作在线状态, 实时在线
 _Avoid_: 把 Platform Admin 挂在客户 Organization 下, organizationId 为空的平台账号, 平台组织当客户开户
 
 **Platform Admin**:
-平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。创建客户组织时须同事务建立初始企业管理员（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
-_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码
+平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。创建客户组织时须同事务建立 Initial Organization Admin（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization；客户组织档案可只读展示 Initial Organization Admin 的登录用户名与显示名称，不因此开放平台侧员工管理。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
+_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码, 平台档案展示等同员工管理
+
+**Initial Organization Admin（初始企业管理员）**:
+Platform Admin 开户时同事务写入的那一名企业管理员 User，是客户 Organization 的开户联系人。平台区客户 Organization **档案详情**只读展示其登录用户名与显示名称（名录列表不展示），读的是该 User 的**当前**字段（租户侧改名后档案跟随变化）；停用后仍展示这两项，不因此从档案抹去。认定规则：该组织内开户写入的那一名；实现上可用该组织最早创建的企业管理员 User 代表（第一版无员工删除 UI 时与开户那人一致）。认定不到时详情仍展示该区块并为空态（如「未设置」），不阻断改名/停用等名录操作。不是 Platform Admin，也不表示组织内只能有一名企业管理员。
+_Avoid_: 平台超管, 把租户内全部企业管理员当成初始联系人, 平台档案列出全部员工, 开户快照与现网登录名长期分叉, 停用后从平台档案隐藏初始管理员, 名录列表展示初始管理员, 缺初始管理员时详情接口报错
 
 **Organization Onboarding**:
-客户 Organization 的开通交付。现行开户：Platform Admin 创建组织时同事务写入初始企业管理员（登录用户名、显示名称、初始密码必填），绑定企业管理员 Role，账号立即可登录租户后台；登录用户名规则与租户员工管理相同，不拼业务前缀。邀请链接让客户自设密码仍为后置可选能力，非开户必经。Platform Admin 开户后不在平台区重置该管理员密码或管理其员工档案。
-_Avoid_: 自助注册, 开放注册, 创建组织只建壳不建管理员, 开户必经邀请链接, 平台区事后管理租户员工, 开户登录名强制加业务前缀
+客户 Organization 的开通交付。现行开户：Platform Admin 创建组织时同事务写入 Initial Organization Admin（登录用户名、显示名称、初始密码必填），绑定企业管理员 Role，创建后可立即登录租户后台；登录用户名规则与租户员工管理相同（见 Login Username），不拼业务前缀。邀请链接让客户自设密码仍为后置可选能力，非开户必经。Platform Admin 开户后不在平台区重置该管理员密码或管理其员工档案；平台区客户 Organization 档案可只读展示 Initial Organization Admin 的登录用户名与显示名称（不含密码，不提供改密/停用/改名等操作）。
+_Avoid_: 自助注册, 开放注册, 创建组织只建壳不建管理员, 开户必经邀请链接, 平台区事后管理租户员工, 开户登录名强制加业务前缀, 平台档案展示初始密码, 平台档案做成员工管理入口
 
 **Organization Business Prefix（组织业务前缀）**:
 Organization 创建时必填、仅可设置一次的 2–4 位大写英文字母标识，用于生成发团编号及财务类业务编号。未设置前缀的 Organization 不得创建发团、收付款节点、流水或核销。前缀建议全系统唯一。

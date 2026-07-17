@@ -305,7 +305,8 @@ model User {
   paymentScheduleVoids PaymentSchedule[] @relation("PaymentScheduleVoidOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
 
-  @@unique([organizationId, username])
+  // Global uniqueness for non-deleted usernames is enforced by partial unique index
+  // users_username_active_key (see migration); soft-deleted rows may reuse names.
   @@map("users")
 }
 

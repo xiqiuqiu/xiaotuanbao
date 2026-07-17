@@ -14,6 +14,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { OrganizationStatus, Prisma, UserStatus } from '@prisma/client'
 import { hash } from 'bcryptjs'
+import { normalizeUsername } from '../../common/username'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 import type { UpdatePlatformOrganizationDto } from './dto/update-platform-organization.dto'
@@ -77,11 +78,12 @@ export class PlatformOrganizationsService {
   async create(dto: CreatePlatformOrganizationDto): Promise<PlatformOrganizationProfile> {
     const name = dto.name.trim()
     const businessPrefix = dto.businessPrefix.trim()
-    const adminUsername = dto.adminUsername.trim()
+    const adminUsername = normalizeUsername(dto.adminUsername)
     const adminName = dto.adminName.trim()
 
     await this.ensureNameAvailable(name)
     await this.ensureBusinessPrefixAvailable(businessPrefix)
+    await this.ensureUsernameAvailable(adminUsername)
 
     const orgAdminRole = await this.prisma.role.findUnique({
       where: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
@@ -218,6 +220,15 @@ export class PlatformOrganizationsService {
     })
     if (existing) {
       throw new ConflictException('组织业务前缀已存在')
+    }
+  }
+
+  private async ensureUsernameAvailable(username: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { username, deletedAt: null },
+    })
+    if (existing) {
+      throw new ConflictException('用户名已存在')
     }
   }
 

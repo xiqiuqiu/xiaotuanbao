@@ -5,8 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type { EmployeeListResult, EmployeeSummary } from '@xiaotuanbao/shared'
-import { UserStatus } from '@prisma/client'
+import { Prisma, UserStatus } from '@prisma/client'
 import { hash } from 'bcryptjs'
+import { normalizeUsername } from '../../common/username'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreateEmployeeDto, ListEmployeesQueryDto, UpdateEmployeeDto } from './dto/employee.dto'
 
@@ -102,74 +103,21 @@ export class UserService {
   }
 
   async create(organizationId: string, dto: CreateEmployeeDto): Promise<EmployeeSummary> {
-    const username = dto.username.trim()
-    const existing = await this.prisma.user.findFirst({
-      where: { organizationId, username, deletedAt: null },
-    })
-
-    if (existing) {
-      throw new ConflictException('用户名已存在')
-    }
+    const username = normalizeUsername(dto.username)
+    await this.ensureUsernameAvailable(username)
 
     await this.ensureRoleExists(dto.roleId)
 
     const passwordHash = await hash(dto.password, 10)
-    const user = await this.prisma.user.create({
-      data: {
-        organizationId,
-        username,
-        name: dto.name.trim(),
-        remark: dto.remark?.trim() || null,
-        status: dto.status,
-        passwordHash,
-        roles: {
-          create: {
-            roleId: dto.roleId,
-          },
-        },
-      },
-      include: {
-        roles: {
-          include: {
-            role: true,
-          },
-        },
-      },
-    })
-
-    return this.toEmployeeSummary(user)
-  }
-
-  async update(
-    organizationId: string,
-    userId: string,
-    dto: UpdateEmployeeDto,
-  ): Promise<EmployeeSummary> {
-    const user = await this.findEmployeeOrThrow(organizationId, userId)
-    const username = dto.username.trim()
-    const existing = await this.prisma.user.findFirst({
-      where: {
-        organizationId,
-        username,
-        id: { not: user.id },
-      },
-    })
-
-    if (existing) {
-      throw new ConflictException('用户名已存在')
-    }
-
-    await this.ensureRoleExists(dto.roleId)
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.userRole.deleteMany({ where: { userId: user.id } })
-      return tx.user.update({
-        where: { id: user.id },
+    try {
+      const user = await this.prisma.user.create({
         data: {
+          organizationId,
           username,
           name: dto.name.trim(),
           remark: dto.remark?.trim() || null,
           status: dto.status,
+          passwordHash,
           roles: {
             create: {
               roleId: dto.roleId,
@@ -184,9 +132,54 @@ export class UserService {
           },
         },
       })
-    })
 
-    return this.toEmployeeSummary(updated)
+      return this.toEmployeeSummary(user)
+    } catch (error) {
+      this.rethrowUsernameConflict(error)
+    }
+  }
+
+  async update(
+    organizationId: string,
+    userId: string,
+    dto: UpdateEmployeeDto,
+  ): Promise<EmployeeSummary> {
+    const user = await this.findEmployeeOrThrow(organizationId, userId)
+    const username = normalizeUsername(dto.username)
+    await this.ensureUsernameAvailable(username, user.id)
+
+    await this.ensureRoleExists(dto.roleId)
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await tx.userRole.deleteMany({ where: { userId: user.id } })
+        return tx.user.update({
+          where: { id: user.id },
+          data: {
+            username,
+            name: dto.name.trim(),
+            remark: dto.remark?.trim() || null,
+            status: dto.status,
+            roles: {
+              create: {
+                roleId: dto.roleId,
+              },
+            },
+          },
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+        })
+      })
+
+      return this.toEmployeeSummary(updated)
+    } catch (error) {
+      this.rethrowUsernameConflict(error)
+    }
   }
 
   async disable(organizationId: string, userId: string): Promise<EmployeeSummary> {
@@ -232,6 +225,34 @@ export class UserService {
     if (!role) {
       throw new BadRequestException('Role 不存在')
     }
+  }
+
+  private async ensureUsernameAvailable(username: string, excludeUserId?: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        username,
+        deletedAt: null,
+        ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+      },
+    })
+
+    if (existing) {
+      throw new ConflictException('用户名已存在')
+    }
+  }
+
+  private rethrowUsernameConflict(error: unknown): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      const target = error.meta?.target
+      const fields = Array.isArray(target) ? target.map(String) : []
+      if (fields.some((field) => field.includes('username'))) {
+        throw new ConflictException('用户名已存在')
+      }
+    }
+    throw error
   }
 
   private toEmployeeSummary(user: {

@@ -4,6 +4,7 @@ import type { AuthUser, LoginResult, MeResult } from '@xiaotuanbao/shared'
 import { OrganizationStatus, UserStatus } from '@prisma/client'
 import { compare } from 'bcryptjs'
 import type { JwtPayload } from '../../common/types/api-response.type'
+import { normalizeUsername } from '../../common/username'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { LoginDto } from './dto/login.dto'
 
@@ -37,7 +38,7 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto): Promise<CreatedSession> {
-    const username = dto.username.trim()
+    const username = normalizeUsername(dto.username)
 
     const user = await this.prisma.user.findFirst({
       where: {

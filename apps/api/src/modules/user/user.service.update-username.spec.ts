@@ -66,8 +66,34 @@ describe('UserService.update login username', () => {
     expect(result.username).toBe('lihua')
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
       where: {
-        organizationId,
         username: 'lihua',
+        deletedAt: null,
+        id: { not: userId },
+      },
+    })
+  })
+
+  it('normalizes login username to lowercase before conflict check', async () => {
+    const { service, prisma } = createService({
+      findFirstResults: [existingUser, null],
+      updatedUser: {
+        ...existingUser,
+        username: 'lihua',
+        roles: [{ role: { name: '计调' } }],
+      },
+    })
+
+    await service.update(organizationId, userId, {
+      username: ' LiHua ',
+      name: '小李',
+      roleId,
+      status: UserStatus.enabled,
+    })
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        username: 'lihua',
+        deletedAt: null,
         id: { not: userId },
       },
     })
