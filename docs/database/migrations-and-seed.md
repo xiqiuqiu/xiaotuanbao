@@ -65,6 +65,7 @@ pnpm docker:seed
 | -- | -- |
 | Platform Organization | 平台运营组织 |
 | businessPrefix | PLAT |
+| Organization Status | enabled（默认） |
 | 用户名 | platform |
 | 密码 | admin123 |
 | 显示名 | 平台管理员 |

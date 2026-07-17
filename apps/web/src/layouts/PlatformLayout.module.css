@@ -12,11 +12,27 @@
   background: var(--shell-surface);
 }
 
+.headerStart {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+}
+
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--shell-text);
+  text-decoration: none;
+}
+
+.nav {
+  flex: 1;
+  min-width: 0;
+  border-bottom: none !important;
+  background: transparent;
+  line-height: 64px;
 }
 
 .brandLogo {

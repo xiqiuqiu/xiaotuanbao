@@ -1,5 +1,7 @@
 import {
   MENU_KEY_LABELS,
+  PLATFORM_ORGANIZATION_NAME,
+  PLATFORM_ORGANIZATION_PREFIX,
   PRESET_ROLE_MENU_KEYS,
   PRESET_ROLE_NAMES,
   UserStatus,
@@ -94,10 +96,6 @@ async function assignRole(username: string, organizationId: string, roleName: st
     data: { userId: user.id, roleId: role.id },
   })
 }
-
-/** Stable identity for Platform Organization — exclude from customer catalog later. */
-const PLATFORM_ORGANIZATION_NAME = '平台运营组织'
-const PLATFORM_ORGANIZATION_PREFIX = 'PLAT'
 
 async function seedPlatformOrganization() {
   const orgName = process.env.SEED_PLATFORM_ORG_NAME ?? PLATFORM_ORGANIZATION_NAME

@@ -14,6 +14,13 @@ enum UserStatus {
   @@map("user_status")
 }
 
+enum OrganizationStatus {
+  enabled
+  disabled
+
+  @@map("organization_status")
+}
+
 enum DirectoryProfileStatus {
   active
   disabled
@@ -222,12 +229,13 @@ enum DocumentSequenceType {
 }
 
 model Organization {
-  id             String    @id @default(cuid())
+  id             String             @id @default(cuid())
   name           String
-  businessPrefix String    @unique @map("business_prefix")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
+  businessPrefix String             @unique @map("business_prefix")
+  status         OrganizationStatus @default(enabled)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
   users     User[]
   suppliers Supplier[]
   partners  Partner[]

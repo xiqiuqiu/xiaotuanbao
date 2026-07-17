@@ -8,6 +8,8 @@ export type {
   HealthStatus,
   RoleSummary,
   OrganizationSummary,
+  PlatformOrganizationProfile,
+  PlatformOrganizationListResult,
   EmployeeSummary,
   EmployeeListStats,
   EmployeeListResult,

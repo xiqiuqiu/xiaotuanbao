@@ -58,6 +58,24 @@ const platformIndexRoute = createRoute({
   ),
 })
 
+const platformOrganizationsRoute = createRoute({
+  getParentRoute: () => platformLayoutRoute,
+  path: '/organizations',
+  component: lazyRouteComponent(
+    () => import('@/pages/platform/PlatformOrganizationsPage'),
+    'PlatformOrganizationsPage',
+  ),
+})
+
+const platformOrganizationDetailRoute = createRoute({
+  getParentRoute: () => platformLayoutRoute,
+  path: '/organizations/$organizationId',
+  component: lazyRouteComponent(
+    () => import('@/pages/platform/PlatformOrganizationDetailPage'),
+    'PlatformOrganizationDetailPage',
+  ),
+})
+
 const indexRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/',
@@ -241,7 +259,11 @@ const systemUsersRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  platformLayoutRoute.addChildren([platformIndexRoute]),
+  platformLayoutRoute.addChildren([
+    platformIndexRoute,
+    platformOrganizationsRoute,
+    platformOrganizationDetailRoute,
+  ]),
   appLayoutRoute.addChildren([
     indexRoute,
     departureRoute,

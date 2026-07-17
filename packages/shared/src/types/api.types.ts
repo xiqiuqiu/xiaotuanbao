@@ -54,6 +54,23 @@ export interface OrganizationSummary {
   }
 }
 
+/** Platform Admin 客户 Organization 名录 / 档案（只读元数据） */
+export interface PlatformOrganizationProfile {
+  id: string
+  name: string
+  businessPrefix: string
+  status: 'enabled' | 'disabled'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PlatformOrganizationListResult {
+  items: PlatformOrganizationProfile[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface EmployeeSummary {
   id: string
   username: string

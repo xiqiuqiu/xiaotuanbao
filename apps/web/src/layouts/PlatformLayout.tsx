@@ -1,6 +1,6 @@
-import { Button, Dropdown, Layout, message, theme } from 'antd'
-import { LogoutOutlined, UserOutlined } from '@ant-design/icons'
-import { Outlet, useNavigate } from '@tanstack/react-router'
+import { Button, Dropdown, Layout, Menu, message, theme } from 'antd'
+import { LogoutOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties } from 'react'
 import { useRef } from 'react'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -14,9 +14,13 @@ const { Header } = Layout
 export function PlatformLayout() {
   const { token } = theme.useToken()
   const navigate = useNavigate()
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
   const user = useAuthStore((state) => state.user)
   const clearSession = useAuthStore((state) => state.clearSession)
   const logoutPendingRef = useRef(false)
+  const selectedKeys = pathname.startsWith('/platform/organizations')
+    ? ['organizations']
+    : ['home']
 
   return (
     <Layout
@@ -31,15 +35,30 @@ export function PlatformLayout() {
       }
     >
       <Header className={styles.header}>
-        <div className={styles.brand} aria-label={`${env.appName} 平台区`}>
-          <img
-            className={styles.brandLogo}
-            src="/xiaotuanbao-brand-mark-v2.png"
-            alt=""
-            aria-hidden="true"
+        <div className={styles.headerStart}>
+          <Link to="/platform" className={styles.brand} aria-label={`${env.appName} 平台区`}>
+            <img
+              className={styles.brandLogo}
+              src="/xiaotuanbao-brand-mark-v2.png"
+              alt=""
+              aria-hidden="true"
+            />
+            <span className={styles.brandName}>{env.appName}</span>
+            <span className={styles.brandMeta}>平台运营</span>
+          </Link>
+          <Menu
+            mode="horizontal"
+            selectedKeys={selectedKeys}
+            className={styles.nav}
+            items={[
+              { key: 'home', label: <Link to="/platform">工作台</Link> },
+              {
+                key: 'organizations',
+                icon: <TeamOutlined />,
+                label: <Link to="/platform/organizations">客户 Organization</Link>,
+              },
+            ]}
           />
-          <span className={styles.brandName}>{env.appName}</span>
-          <span className={styles.brandMeta}>平台运营</span>
         </div>
 
         <Dropdown
