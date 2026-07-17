@@ -35,3 +35,15 @@ export async function updatePlatformOrganization(
 ): Promise<PlatformOrganizationProfile> {
   return request.patch<PlatformOrganizationProfile>(`/platform/organizations/${id}`, payload)
 }
+
+export async function disablePlatformOrganization(
+  id: string,
+): Promise<PlatformOrganizationProfile> {
+  return request.post<PlatformOrganizationProfile>(`/platform/organizations/${id}/disable`)
+}
+
+export async function enablePlatformOrganization(
+  id: string,
+): Promise<PlatformOrganizationProfile> {
+  return request.post<PlatformOrganizationProfile>(`/platform/organizations/${id}/enable`)
+}

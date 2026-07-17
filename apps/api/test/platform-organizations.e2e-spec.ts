@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common'
+import request from 'supertest'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { PrismaService } from '../src/database/prisma/prisma.service'
 
@@ -32,6 +33,7 @@ describe('Platform organizations catalog (e2e)', () => {
   it('lists customer organizations and excludes Platform Organization', async () => {
     const response = await authRequest(app, platformCookie)
       .get('/api/platform/organizations')
+      .query({ pageSize: 100 })
       .expect(200)
 
     const { items, total } = response.body.data as {
@@ -233,10 +235,9 @@ describe('Platform organizations catalog (e2e)', () => {
       .expect(201)
 
     const organizationId = created.body.data.id as string
-    await prisma.organization.update({
-      where: { id: organizationId },
-      data: { status: 'disabled' },
-    })
+    await authRequest(app, platformCookie)
+      .post(`/api/platform/organizations/${organizationId}/disable`)
+      .expect(201)
 
     const renamedName = `E2E停用改名后${stamp}`
     const response = await authRequest(app, platformCookie)
@@ -260,6 +261,99 @@ describe('Platform organizations catalog (e2e)', () => {
     await authRequest(app, tenantCookie)
       .patch(`/api/platform/organizations/${demo.id}`)
       .send({ name: `E2E租户改名拒绝${Date.now()}` })
+      .expect(403)
+  })
+
+  it('disables and re-enables a customer organization; blocks tenant login and sessions while disabled', async () => {
+    const { hash } = await import('bcryptjs')
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+    const password = 'admin123'
+    const username = `e2e-org-status-${stamp}`
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: `E2E停用组织${stamp}`, businessPrefix })
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    await prisma.user.create({
+      data: {
+        organizationId,
+        username,
+        passwordHash: await hash(password, 10),
+        name: '停用组织测试用户',
+      },
+    })
+
+    const tenantSession = await loginAs(app, username, password)
+    await authRequest(app, tenantSession).get('/api/auth/me').expect(200)
+
+    const disabled = await authRequest(app, platformCookie)
+      .post(`/api/platform/organizations/${organizationId}/disable`)
+      .expect(201)
+    expect(disabled.body.data).toMatchObject({
+      id: organizationId,
+      status: 'disabled',
+      businessPrefix,
+    })
+
+    const listedWhileDisabled = await authRequest(app, platformCookie)
+      .get('/api/platform/organizations')
+      .query({ pageSize: 100 })
+      .expect(200)
+    expect(
+      (listedWhileDisabled.body.data.items as Array<{ id: string; status: string }>).some(
+        (item) => item.id === organizationId && item.status === 'disabled',
+      ),
+    ).toBe(true)
+
+    const profileWhileDisabled = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organizationId}`)
+      .expect(200)
+    expect(profileWhileDisabled.body.data).toMatchObject({
+      id: organizationId,
+      status: 'disabled',
+    })
+
+    const loginBlocked = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .set('Origin', 'http://localhost:5173')
+      .send({ username, password })
+      .expect(401)
+    expect(loginBlocked.body.message).toBe('组织已停用')
+
+    await authRequest(app, tenantSession).get('/api/auth/me').expect(401)
+
+    const enabled = await authRequest(app, platformCookie)
+      .post(`/api/platform/organizations/${organizationId}/enable`)
+      .expect(201)
+    expect(enabled.body.data).toMatchObject({
+      id: organizationId,
+      status: 'enabled',
+    })
+
+    const restoredSession = await loginAs(app, username, password)
+    await authRequest(app, restoredSession).get('/api/auth/me').expect(200)
+  })
+
+  it('rejects disabling Platform Organization and tenant calls to status APIs', async () => {
+    const platformOrg = await prisma.organization.findFirstOrThrow({
+      where: { name: '平台运营组织', deletedAt: null },
+    })
+    const demo = await prisma.organization.findFirstOrThrow({
+      where: { name: '演示旅行社', deletedAt: null },
+    })
+
+    await authRequest(app, platformCookie)
+      .post(`/api/platform/organizations/${platformOrg.id}/disable`)
+      .expect(404)
+
+    await authRequest(app, tenantCookie)
+      .post(`/api/platform/organizations/${demo.id}/disable`)
+      .expect(403)
+    await authRequest(app, tenantCookie)
+      .post(`/api/platform/organizations/${demo.id}/enable`)
       .expect(403)
   })
 })

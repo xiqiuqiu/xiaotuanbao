@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import type { AuthUser, LoginResult, MeResult } from '@xiaotuanbao/shared'
-import { UserStatus } from '@prisma/client'
+import { OrganizationStatus, UserStatus } from '@prisma/client'
 import { compare } from 'bcryptjs'
 import type { JwtPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -54,6 +54,10 @@ export class AuthService {
       throw new UnauthorizedException('用户名或密码错误')
     }
 
+    if (user.organization.status === OrganizationStatus.disabled) {
+      throw new UnauthorizedException('组织已停用')
+    }
+
     if (user.status === UserStatus.disabled) {
       throw new UnauthorizedException('账号已停用')
     }
@@ -94,6 +98,10 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('用户不存在或已失效')
+    }
+
+    if (user.organization.status === OrganizationStatus.disabled) {
+      throw new UnauthorizedException('组织已停用')
     }
 
     if (user.status === UserStatus.disabled) {

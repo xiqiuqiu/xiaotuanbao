@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import {
   PLATFORM_ORGANIZATION_NAME,
   PLATFORM_ORGANIZATION_PREFIX,
@@ -102,16 +107,7 @@ export class PlatformOrganizationsService {
     id: string,
     dto: UpdatePlatformOrganizationDto,
   ): Promise<PlatformOrganizationProfile> {
-    const existing = await this.prisma.organization.findFirst({
-      where: {
-        id,
-        ...this.customerOrganizationWhere(),
-      },
-    })
-
-    if (!existing) {
-      throw new NotFoundException('Organization 不存在')
-    }
+    await this.findCustomerOrganizationOrThrow(id)
 
     const name = dto.name.trim()
     await this.ensureNameAvailable(name, id)
@@ -122,6 +118,51 @@ export class PlatformOrganizationsService {
     })
 
     return this.toProfile(organization)
+  }
+
+  async disable(id: string): Promise<PlatformOrganizationProfile> {
+    const existing = await this.findCustomerOrganizationOrThrow(id)
+
+    if (existing.status === OrganizationStatus.disabled) {
+      throw new BadRequestException('组织已处于停用状态')
+    }
+
+    const organization = await this.prisma.organization.update({
+      where: { id },
+      data: { status: OrganizationStatus.disabled },
+    })
+
+    return this.toProfile(organization)
+  }
+
+  async enable(id: string): Promise<PlatformOrganizationProfile> {
+    const existing = await this.findCustomerOrganizationOrThrow(id)
+
+    if (existing.status === OrganizationStatus.enabled) {
+      throw new BadRequestException('组织已处于启用状态')
+    }
+
+    const organization = await this.prisma.organization.update({
+      where: { id },
+      data: { status: OrganizationStatus.enabled },
+    })
+
+    return this.toProfile(organization)
+  }
+
+  private async findCustomerOrganizationOrThrow(id: string) {
+    const organization = await this.prisma.organization.findFirst({
+      where: {
+        id,
+        ...this.customerOrganizationWhere(),
+      },
+    })
+
+    if (!organization) {
+      throw new NotFoundException('Organization 不存在')
+    }
+
+    return organization
   }
 
   private async ensureNameAvailable(name: string, excludeId?: string) {

@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
-import { UserStatus } from '@prisma/client'
+import { OrganizationStatus, UserStatus } from '@prisma/client'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 import type { JwtPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -31,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         organizationId: payload.organizationId,
         status: UserStatus.enabled,
         deletedAt: null,
-        organization: { deletedAt: null },
+        organization: { deletedAt: null, status: OrganizationStatus.enabled },
       },
       select: {
         id: true,

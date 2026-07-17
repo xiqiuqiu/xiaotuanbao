@@ -49,4 +49,14 @@ export class PlatformController {
   ): Promise<PlatformOrganizationProfile> {
     return this.platformOrganizationsService.updateName(id, dto)
   }
+
+  @Post('organizations/:id/disable')
+  disableOrganization(@Param('id') id: string): Promise<PlatformOrganizationProfile> {
+    return this.platformOrganizationsService.disable(id)
+  }
+
+  @Post('organizations/:id/enable')
+  enableOrganization(@Param('id') id: string): Promise<PlatformOrganizationProfile> {
+    return this.platformOrganizationsService.enable(id)
+  }
 }

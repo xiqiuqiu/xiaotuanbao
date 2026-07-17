@@ -6,6 +6,8 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { OrganizationStatus } from '@xiaotuanbao/shared'
 import { formatBusinessDateTime } from '@/utils/formatBusinessDateTime'
 import {
+  disablePlatformOrganization,
+  enablePlatformOrganization,
   getPlatformOrganization,
   updatePlatformOrganization,
 } from '@/services/platform-organization.service'
@@ -15,7 +17,7 @@ import {
 } from './RenamePlatformOrganizationDrawer'
 
 export function PlatformOrganizationDetailPage() {
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const { organizationId } = useParams({ strict: false })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -34,14 +36,18 @@ export function PlatformOrganizationDetailPage() {
     form.resetFields()
   }
 
+  const invalidateOrganizationQueries = () => {
+    void queryClient.invalidateQueries({ queryKey: ['platform-organization', organizationId] })
+    void queryClient.invalidateQueries({ queryKey: ['platform-organizations'] })
+  }
+
   const renameMutation = useMutation({
     mutationFn: (values: RenamePlatformOrganizationFormValues) =>
       updatePlatformOrganization(organizationId!, { name: values.name.trim() }),
     onSuccess: () => {
       message.success('组织名称已更新')
       closeDrawer()
-      void queryClient.invalidateQueries({ queryKey: ['platform-organization', organizationId] })
-      void queryClient.invalidateQueries({ queryKey: ['platform-organizations'] })
+      invalidateOrganizationQueries()
     },
     onError: (error) => {
       const errorMessage = error instanceof Error ? error.message : '更新失败'
@@ -52,6 +58,51 @@ export function PlatformOrganizationDetailPage() {
       message.error(errorMessage)
     },
   })
+
+  const disableMutation = useMutation({
+    mutationFn: () => disablePlatformOrganization(organizationId!),
+    onSuccess: () => {
+      message.success('组织已停用')
+      invalidateOrganizationQueries()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '停用失败')
+    },
+  })
+
+  const enableMutation = useMutation({
+    mutationFn: () => enablePlatformOrganization(organizationId!),
+    onSuccess: () => {
+      message.success('组织已启用')
+      invalidateOrganizationQueries()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '启用失败')
+    },
+  })
+
+  const statusActionPending = disableMutation.isPending || enableMutation.isPending
+
+  const confirmDisable = () => {
+    modal.confirm({
+      title: '确认停用组织？',
+      content: `停用后「${organization?.name ?? ''}」下的用户将无法登录，已有会话会失效。可随时再启用。`,
+      okText: '停用',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: () => disableMutation.mutateAsync(),
+    })
+  }
+
+  const confirmEnable = () => {
+    modal.confirm({
+      title: '确认启用组织？',
+      content: `启用后「${organization?.name ?? ''}」下的用户可重新登录。`,
+      okText: '启用',
+      cancelText: '取消',
+      onOk: () => enableMutation.mutateAsync(),
+    })
+  }
 
   if (!organizationId) {
     return (
@@ -111,19 +162,43 @@ export function PlatformOrganizationDetailPage() {
         <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
           {organization.name}
         </Typography.Title>
-        <Button
-          type="primary"
-          icon={<EditOutlined />}
-          onClick={() => {
-            form.setFieldsValue({ name: organization.name })
-            setDrawerOpen(true)
-          }}
-        >
-          修改名称
-        </Button>
+        <Space>
+          {organization.status === OrganizationStatus.ENABLED ? (
+            <>
+              <Button danger loading={statusActionPending} onClick={confirmDisable}>
+                停用组织
+              </Button>
+              <Button
+                type="primary"
+                icon={<EditOutlined />}
+                onClick={() => {
+                  form.setFieldsValue({ name: organization.name })
+                  setDrawerOpen(true)
+                }}
+              >
+                修改名称
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => {
+                  form.setFieldsValue({ name: organization.name })
+                  setDrawerOpen(true)
+                }}
+              >
+                修改名称
+              </Button>
+              <Button type="primary" loading={statusActionPending} onClick={confirmEnable}>
+                启用组织
+              </Button>
+            </>
+          )}
+        </Space>
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-        组织档案元数据；不含发团、财务、员工等业务数据。可修改组织名称，业务前缀不可改。
+        组织档案元数据；不含发团、财务、员工等业务数据。可修改名称、启用或停用；业务前缀不可改。停用后该组织用户无法登录。
       </Typography.Paragraph>
       <Descriptions bordered column={1} size="middle">
         <Descriptions.Item label="组织名称">{organization.name}</Descriptions.Item>
