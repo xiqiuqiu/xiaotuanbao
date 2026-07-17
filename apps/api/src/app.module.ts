@@ -13,6 +13,7 @@ import { SupplierModule } from './modules/supplier/supplier.module'
 import { PartnerModule } from './modules/partner/partner.module'
 import { DepartureModule } from './modules/departure/departure.module'
 import { FinanceModule } from './modules/finance/finance.module'
+import { PlatformModule } from './modules/platform/platform.module'
 import { PrismaModule } from './database/prisma/prisma.module'
 
 @Module({
@@ -33,6 +34,7 @@ import { PrismaModule } from './database/prisma/prisma.module'
     PartnerModule,
     DepartureModule,
     FinanceModule,
+    PlatformModule,
   ],
   providers: [
     {

@@ -26,6 +26,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { login } from '@/services/auth.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { env } from '@/config/env'
+import { resolvePostLoginPath } from '@/lib/auth/session'
 import { queryClient } from '@/lib/query/client'
 import styles from './LoginPage.module.css'
 
@@ -76,7 +77,7 @@ export function LoginPage() {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
-      navigate({ to: '/departure' })
+      navigate({ to: resolvePostLoginPath(result.user) })
     },
   })
 

@@ -36,17 +36,29 @@ _Avoid_: 备注作公开信息, 对外描述
 Employee 最近一次成功登录的时间，在员工列表中展示为「最近活跃」；从未登录则为空。
 _Avoid_: 最近活跃作在线状态, 实时在线
 
+**Platform Organization（平台运营组织）**:
+专供 Platform Admin 挂靠的 Organization，不是客户租户。其上 User 均应为 Platform Admin；登录后只进入平台区，不使用该组织的租户后台。客户 Organization 名录维护不把 Platform Organization 当作普通租户展示或停用。
+_Avoid_: 把 Platform Admin 挂在客户 Organization 下, organizationId 为空的平台账号, 平台组织当客户开户
+
 **Platform Admin**:
-平台运营方的超级管理员，可跨 Organization 管理租户（开户、停用、查看等）。与 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，共用同一套登录体系。第一版不实现 Platform Admin 功能与平台管理台；Organization 后台的 Menu Permission 体系与之分离，Platform Admin 账号第一版不使用 Organization 后台。
-_Avoid_: 超管, 系统管理员, super admin
+平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization。邀请激活见 Organization Onboarding，与名录维护分开交付。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
+_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号
 
 **Organization Onboarding**:
-新 Organization 由 Platform Admin 创建，并生成邀请链接发给客户；客户通过邀请链接设置密码后激活 Organization，并绑定企业管理员 Role。
-_Avoid_: 自助注册, 开放注册
+新 Organization 由 Platform Admin 创建，并生成邀请链接发给客户；客户通过邀请链接设置密码后激活 Organization，并绑定企业管理员 Role。与 Organization 名录维护分开；邀请激活链路后置，不阻塞名录维护交付。名录阶段创建 Organization 只建组织壳（名称、业务前缀、组织状态），不创建任何 User。
+_Avoid_: 自助注册, 开放注册, 创建组织时强制建企业管理员
 
 **Organization Business Prefix（组织业务前缀）**:
 Organization 创建时必填、仅可设置一次的 2–4 位大写英文字母标识，用于生成发团编号及财务类业务编号。未设置前缀的 Organization 不得创建发团、收付款节点、流水或核销。前缀建议全系统唯一。
 _Avoid_: 租户代码, 组织编码, 创建后补设前缀
+
+**Organization Status（组织状态）**:
+Organization 处于启用或停用状态。停用后该组织下 User 不可登录、不可新建业务单据；Platform Admin 仍可在平台区看到该组织档案并改名称或再启用。与彻底删除（`deletedAt`）不同，也不复用 Directory Profile Status。
+_Avoid_: 用 deletedAt 表示停用, 目录三态套用到 Organization, 停用后对 Platform Admin 不可见, 停用后仍允许租户用户登录
+
+**Organization Name Uniqueness（组织名称唯一）**:
+客户 Organization 的名称在全平台唯一；保存重名时拒绝。Platform Organization 使用固定区分名，不参与客户开户的可选重名空间。
+_Avoid_: 允许客户组织重名靠前缀区分, 仅软提示不拦截
 
 ## Roles
 

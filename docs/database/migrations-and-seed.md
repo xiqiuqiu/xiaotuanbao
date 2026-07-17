@@ -59,7 +59,18 @@ pnpm docker:seed
 | 密码 | admin123 |
 | 显示名 | 演示管理员 |
 
-可通过 `.env` 中 `SEED_*` 变量自定义。
+### Platform Organization / Platform Admin
+
+| 项 | 值 |
+| -- | -- |
+| Platform Organization | 平台运营组织 |
+| businessPrefix | PLAT |
+| 用户名 | platform |
+| 密码 | admin123 |
+| 显示名 | 平台管理员 |
+| isPlatformAdmin | true |
+
+可通过 `.env` 中 `SEED_PLATFORM_*` 变量自定义。
 
 ### 重新 Seed
 

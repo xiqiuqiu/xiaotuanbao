@@ -95,6 +95,67 @@ async function assignRole(username: string, organizationId: string, roleName: st
   })
 }
 
+/** Stable identity for Platform Organization — exclude from customer catalog later. */
+const PLATFORM_ORGANIZATION_NAME = '平台运营组织'
+const PLATFORM_ORGANIZATION_PREFIX = 'PLAT'
+
+async function seedPlatformOrganization() {
+  const orgName = process.env.SEED_PLATFORM_ORG_NAME ?? PLATFORM_ORGANIZATION_NAME
+  const adminUsername = process.env.SEED_PLATFORM_ADMIN_USERNAME ?? 'platform'
+  const adminPassword = process.env.SEED_PLATFORM_ADMIN_PASSWORD ?? 'admin123'
+  const adminName = process.env.SEED_PLATFORM_ADMIN_NAME ?? '平台管理员'
+  const businessPrefix = process.env.SEED_PLATFORM_ORG_BUSINESS_PREFIX ?? PLATFORM_ORGANIZATION_PREFIX
+
+  let organization = await prisma.organization.findFirst({
+    where: { name: orgName, deletedAt: null },
+  })
+
+  if (!organization) {
+    organization = await prisma.organization.create({
+      data: {
+        name: orgName,
+        businessPrefix,
+      },
+    })
+    console.log(`Seeded Platform Organization "${organization.name}".`)
+  } else if (!organization.businessPrefix) {
+    organization = await prisma.organization.update({
+      where: { id: organization.id },
+      data: { businessPrefix },
+    })
+  }
+
+  const existingAdmin = await prisma.user.findFirst({
+    where: {
+      organizationId: organization.id,
+      username: adminUsername,
+      deletedAt: null,
+    },
+  })
+
+  if (!existingAdmin) {
+    const passwordHash = await hash(adminPassword, 10)
+    await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username: adminUsername,
+        passwordHash,
+        name: adminName,
+        isPlatformAdmin: true,
+        status: UserStatus.ENABLED,
+      },
+    })
+    console.log(`Seeded Platform Admin "${adminUsername}".`)
+  } else if (!existingAdmin.isPlatformAdmin) {
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: { isPlatformAdmin: true },
+    })
+  }
+
+  return organization
+}
+
 async function seedDemoOrganization() {
   const orgName = process.env.SEED_ORG_NAME ?? '演示旅行社'
   const adminUsername = process.env.SEED_ADMIN_USERNAME ?? 'admin'
@@ -524,6 +585,7 @@ async function seedDemoPartners(organizationId: string) {
 
 async function main() {
   await seedRoleCatalog()
+  await seedPlatformOrganization()
   await seedDemoOrganization()
   console.log('Seed completed.')
 }

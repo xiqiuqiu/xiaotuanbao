@@ -18,6 +18,7 @@ export interface AuthUser {
   organizationId: string
   organizationName: string
   roles: string[]
+  isPlatformAdmin: boolean
 }
 
 export interface SessionPayload {

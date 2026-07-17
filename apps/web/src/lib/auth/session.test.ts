@@ -4,6 +4,8 @@ import { getMe } from '@/services/auth.service'
 import {
   ensureAnonymousSession,
   ensureAuthenticatedSession,
+  ensurePlatformSession,
+  resolvePostLoginPath,
 } from './session'
 
 vi.mock('@/services/auth.service', () => ({
@@ -17,6 +19,17 @@ const user = {
   organizationId: 'org-1',
   organizationName: '测试旅行社',
   roles: ['employee'],
+  isPlatformAdmin: false,
+}
+
+const platformAdmin = {
+  ...user,
+  id: 'platform-1',
+  username: 'platform',
+  name: '平台管理员',
+  organizationName: '平台运营组织',
+  roles: [] as string[],
+  isPlatformAdmin: true,
 }
 
 async function captureRedirect(action: () => Promise<void>) {
@@ -94,5 +107,42 @@ describe('cookie-backed route session', () => {
 
     expect(redirect.options).toMatchObject({ to: '/departure' })
     expect(useAuthStore.getState().isAuthenticated()).toBe(true)
+  })
+
+  it('sends Platform Admin from login page to the platform area', async () => {
+    vi.mocked(getMe).mockResolvedValue({ user: platformAdmin, menuKeys: [] })
+
+    const redirect = await captureRedirect(ensureAnonymousSession)
+
+    expect(redirect.options).toMatchObject({ to: '/platform' })
+  })
+
+  it('keeps Platform Admin out of tenant business routes', async () => {
+    useAuthStore.getState().setSession(platformAdmin, [])
+
+    const redirect = await captureRedirect(() => ensureAuthenticatedSession('/departure'))
+
+    expect(redirect.options).toMatchObject({ to: '/platform' })
+  })
+
+  it('allows Platform Admin into the platform shell', async () => {
+    useAuthStore.getState().setSession(platformAdmin, [])
+
+    await ensurePlatformSession('/platform')
+
+    expect(getMe).not.toHaveBeenCalled()
+  })
+
+  it('keeps tenant users out of the platform shell', async () => {
+    useAuthStore.getState().setSession(user, ['/departure'])
+
+    const redirect = await captureRedirect(() => ensurePlatformSession('/platform'))
+
+    expect(redirect.options).toMatchObject({ to: '/departure' })
+  })
+
+  it('resolves post-login destination by platform identity', () => {
+    expect(resolvePostLoginPath(platformAdmin)).toBe('/platform')
+    expect(resolvePostLoginPath(user)).toBe('/departure')
   })
 })

@@ -109,7 +109,7 @@ export class AuthService {
       include: userWithRolesInclude,
     })
 
-    if (!user) {
+    if (!user || user.isPlatformAdmin) {
       return []
     }
 
@@ -121,6 +121,7 @@ export class AuthService {
     username: string
     name: string
     organizationId: string
+    isPlatformAdmin: boolean
     organization: { name: string }
     roles: Array<{
       role: {
@@ -129,8 +130,8 @@ export class AuthService {
       }
     }>
   }): { user: AuthUser; menuKeys: string[] } {
-    const roles = user.roles.map((item) => item.role.name)
-    const menuKeys = this.resolveMenuKeys(user)
+    const roles = user.isPlatformAdmin ? [] : user.roles.map((item) => item.role.name)
+    const menuKeys = user.isPlatformAdmin ? [] : this.resolveMenuKeys(user)
 
     return {
       user: {
@@ -140,6 +141,7 @@ export class AuthService {
         organizationId: user.organizationId,
         organizationName: user.organization.name,
         roles,
+        isPlatformAdmin: user.isPlatformAdmin,
       },
       menuKeys,
     }

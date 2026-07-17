@@ -5,10 +5,15 @@ import {
   lazyRouteComponent,
   Outlet,
 } from '@tanstack/react-router'
-import { ensureAnonymousSession, ensureAuthenticatedSession } from '@/lib/auth/session'
+import {
+  ensureAnonymousSession,
+  ensureAuthenticatedSession,
+  ensurePlatformSession,
+} from '@/lib/auth/session'
 import { RouteErrorState } from '@/components/RouteErrorState'
 import { RoutePendingState } from '@/components/RoutePendingState'
 import { AppLayout } from '@/layouts/AppLayout'
+import { PlatformLayout } from '@/layouts/PlatformLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
@@ -33,6 +38,24 @@ const appLayoutRoute = createRoute({
   beforeLoad: async ({ location }) => {
     await ensureAuthenticatedSession(location.pathname)
   },
+})
+
+const platformLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/platform',
+  component: PlatformLayout,
+  beforeLoad: async ({ location }) => {
+    await ensurePlatformSession(location.pathname)
+  },
+})
+
+const platformIndexRoute = createRoute({
+  getParentRoute: () => platformLayoutRoute,
+  path: '/',
+  component: lazyRouteComponent(
+    () => import('@/pages/platform/PlatformHomePage'),
+    'PlatformHomePage',
+  ),
 })
 
 const indexRoute = createRoute({
@@ -218,6 +241,7 @@ const systemUsersRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  platformLayoutRoute.addChildren([platformIndexRoute]),
   appLayoutRoute.addChildren([
     indexRoute,
     departureRoute,

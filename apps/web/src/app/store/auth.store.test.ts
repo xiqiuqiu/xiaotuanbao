@@ -8,6 +8,7 @@ const user = {
   organizationId: 'org-1',
   organizationName: '测试旅行社',
   roles: ['employee'],
+  isPlatformAdmin: false,
 }
 
 describe('auth store', () => {

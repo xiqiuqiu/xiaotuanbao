@@ -20,6 +20,7 @@ const mockUser = {
   organizationId: 'org-1',
   organizationName: '测试企业',
   roles: ['coordinator'],
+  isPlatformAdmin: false,
 }
 
 vi.mock('@tanstack/react-router', () => ({
