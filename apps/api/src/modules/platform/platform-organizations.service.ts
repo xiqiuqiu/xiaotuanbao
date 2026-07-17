@@ -8,6 +8,7 @@ import {
 import { OrganizationStatus, Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
+import type { UpdatePlatformOrganizationDto } from './dto/update-platform-organization.dto'
 
 function platformOrganizationIdentity() {
   return {
@@ -97,9 +98,39 @@ export class PlatformOrganizationsService {
     }
   }
 
-  private async ensureNameAvailable(name: string) {
+  async updateName(
+    id: string,
+    dto: UpdatePlatformOrganizationDto,
+  ): Promise<PlatformOrganizationProfile> {
     const existing = await this.prisma.organization.findFirst({
-      where: { name, deletedAt: null },
+      where: {
+        id,
+        ...this.customerOrganizationWhere(),
+      },
+    })
+
+    if (!existing) {
+      throw new NotFoundException('Organization 不存在')
+    }
+
+    const name = dto.name.trim()
+    await this.ensureNameAvailable(name, id)
+
+    const organization = await this.prisma.organization.update({
+      where: { id },
+      data: { name },
+    })
+
+    return this.toProfile(organization)
+  }
+
+  private async ensureNameAvailable(name: string, excludeId?: string) {
+    const existing = await this.prisma.organization.findFirst({
+      where: {
+        name,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
     })
     if (existing) {
       throw new ConflictException('组织名称已存在')

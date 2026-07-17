@@ -162,4 +162,104 @@ describe('Platform organizations catalog (e2e)', () => {
       })
       .expect(403)
   })
+
+  it('renames a customer organization without changing business prefix', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: `E2E改名前${stamp}`, businessPrefix })
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    const renamedName = `E2E改名后${stamp}`
+
+    const response = await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}`)
+      .send({ name: renamedName })
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      id: organizationId,
+      name: renamedName,
+      businessPrefix,
+      status: 'enabled',
+    })
+
+    await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}`)
+      .send({ name: `${renamedName}-前缀拒`, businessPrefix: 'XXXX' })
+      .expect(400)
+
+    const profile = await authRequest(app, platformCookie)
+      .get(`/api/platform/organizations/${organizationId}`)
+      .expect(200)
+    expect(profile.body.data).toMatchObject({
+      name: renamedName,
+      businessPrefix,
+    })
+  })
+
+  it('rejects rename when organization name already exists', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const firstName = `E2E改名冲突甲${stamp}`
+    const secondName = `E2E改名冲突乙${stamp}`
+
+    await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: firstName, businessPrefix: freshBusinessPrefix() })
+      .expect(201)
+
+    const second = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: secondName, businessPrefix: freshBusinessPrefix() })
+      .expect(201)
+
+    const conflict = await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${second.body.data.id}`)
+      .send({ name: firstName })
+      .expect(409)
+    expect(conflict.body.message).toBe('组织名称已存在')
+  })
+
+  it('renames a disabled customer organization', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send({ name: `E2E停用改名前${stamp}`, businessPrefix })
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { status: 'disabled' },
+    })
+
+    const renamedName = `E2E停用改名后${stamp}`
+    const response = await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}`)
+      .send({ name: renamedName })
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      id: organizationId,
+      name: renamedName,
+      businessPrefix,
+      status: 'disabled',
+    })
+  })
+
+  it('rejects tenant users from rename organization API', async () => {
+    const demo = await prisma.organization.findFirstOrThrow({
+      where: { name: '演示旅行社', deletedAt: null },
+    })
+
+    await authRequest(app, tenantCookie)
+      .patch(`/api/platform/organizations/${demo.id}`)
+      .send({ name: `E2E租户改名拒绝${Date.now()}` })
+      .expect(403)
+  })
 })

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
   PlatformOrganizationListResult,
   PlatformOrganizationProfile,
@@ -7,6 +7,7 @@ import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 import { ListPlatformOrganizationsQueryDto } from './dto/list-platform-organizations.dto'
+import { UpdatePlatformOrganizationDto } from './dto/update-platform-organization.dto'
 import { PlatformOrganizationsService } from './platform-organizations.service'
 
 @Controller('platform')
@@ -39,5 +40,13 @@ export class PlatformController {
   @Get('organizations/:id')
   getOrganization(@Param('id') id: string): Promise<PlatformOrganizationProfile> {
     return this.platformOrganizationsService.getById(id)
+  }
+
+  @Patch('organizations/:id')
+  updateOrganization(
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformOrganizationDto,
+  ): Promise<PlatformOrganizationProfile> {
+    return this.platformOrganizationsService.updateName(id, dto)
   }
 }

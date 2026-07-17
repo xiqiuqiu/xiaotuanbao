@@ -76,6 +76,11 @@ export interface CreatePlatformOrganizationDto {
   businessPrefix: string
 }
 
+/** Platform Admin 修改客户 Organization 名称（不含业务前缀） */
+export interface UpdatePlatformOrganizationDto {
+  name: string
+}
+
 export interface EmployeeSummary {
   id: string
   username: string

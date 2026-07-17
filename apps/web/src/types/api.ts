@@ -11,6 +11,7 @@ export type {
   PlatformOrganizationProfile,
   PlatformOrganizationListResult,
   CreatePlatformOrganizationDto,
+  UpdatePlatformOrganizationDto,
   EmployeeSummary,
   EmployeeListStats,
   EmployeeListResult,
