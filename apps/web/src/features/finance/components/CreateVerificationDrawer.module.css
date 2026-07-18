@@ -36,11 +36,12 @@
 .matchedSelectionGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
+  align-items: stretch;
   gap: 12px;
 }
 
 .matchArrow {
+  align-self: center;
   font-size: 16px;
 }
 
