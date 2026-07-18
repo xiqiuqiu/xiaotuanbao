@@ -218,6 +218,57 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
   })
 })
 
+/**
+ * Repro（plan 017）：定位目标行落在第 2 页时，flash 结束后 pendingPage 应清空为 null，
+ * 视图停留在第 2 页且翻页不被锁死；旧实现把 pendingPage 置为 1，会静默弹回并锁死翻页。
+ */
+describe('PaymentScheduleWorkspace locate on a later page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+
+  afterEach(() => {
+    cleanup()
+    listDepartureReceivables.mockReset()
+    vi.useRealTimers()
+  })
+
+  it('stays on the target page and keeps paging free after the flash clears', async () => {
+    const items = Array.from({ length: 25 }, (_, index) =>
+      schedule({
+        id: `schedule-${index + 1}`,
+        scheduleNo: `AR20260700${String(index + 1).padStart(2, '0')}`,
+        sourceId: index === 10 ? 'order-target' : `order-${index + 1}`,
+      }),
+    )
+    listDepartureReceivables.mockResolvedValue({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 100,
+    })
+
+    renderReceivableWorkspace('order-target')
+
+    // Target row is at index 10 → floor(10 / 10) + 1 = page 2.
+    expect(await screen.findByText('AR2026070011')).toBeInTheDocument()
+    expect(screen.queryByText('AR2026070001')).not.toBeInTheDocument()
+
+    // After the flash clears, the view must stay on page 2 (not bounce to page 1).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(screen.getByText('AR2026070011')).toBeInTheDocument()
+    expect(screen.queryByText('AR2026070001')).not.toBeInTheDocument()
+
+    // Paging must not be locked to page 1: jumping to page 3 sticks.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    await user.click(screen.getByTitle('3'))
+    expect(await screen.findByText('AR2026070021')).toBeInTheDocument()
+    expect(screen.queryByText('AR2026070011')).not.toBeInTheDocument()
+  })
+})
+
 describe('PaymentScheduleWorkspace query error', () => {
   afterEach(() => {
     cleanup()

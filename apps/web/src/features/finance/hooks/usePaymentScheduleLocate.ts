@@ -110,7 +110,7 @@ export function usePaymentScheduleLocate({
 
     const clearFlashTimer = window.setTimeout(() => {
       setLocateFlashActive(false)
-      setPendingPage(1)
+      setPendingPage(null)
       onHighlightConsumed?.()
     }, LOCATE_FLASH_MS)
 
