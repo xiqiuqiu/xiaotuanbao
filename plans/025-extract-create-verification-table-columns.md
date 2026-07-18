@@ -1,6 +1,6 @@
 # 025 — 提取核销候选表格列配置到 *-columns.tsx
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: a712d4a
 - **Severity**: MEDIUM
 - **Category**: Maintainability & architecture
