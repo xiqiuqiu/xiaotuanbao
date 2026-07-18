@@ -197,28 +197,41 @@ describe('Departure finance tabs (e2e)', () => {
     await prisma.supplier.delete({ where: { id: supplier.id } })
   })
 
-  it('allows coordinator finance mutations (ADR-0016 early-launch menus)', async () => {
+  it('rejects coordinator finance mutations but allows finance role (ADR-0023)', async () => {
     const departure = await createDeparture('-mut')
     const sourceOrder = await createSourceOrder(departure.id)
     const schedules = await generateReceivables(sourceOrder.id)
     const scheduleId = schedules[0].id
 
-    const confirmed = await authRequest(app, coordinatorToken)
+    const collection = {
+      amountCents: 1000000,
+      transactionDate: '2026-07-01',
+      paymentChannel: PaymentChannel.OTHER,
+      counterpartyType: CounterpartyType.guest,
+      counterpartyName: sourceOrder.displayName,
+    }
+
+    // 计调收回 /finance/* 菜单：登记收款 403
+    await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
-      .send({
-        amountCents: 1000000,
-        transactionDate: '2026-07-01',
-        paymentChannel: PaymentChannel.OTHER,
-        counterpartyType: CounterpartyType.guest,
-        counterpartyName: sourceOrder.displayName,
-      })
+      .send(collection)
+      .expect(403)
+
+    // 财务角色仍可登记收款
+    const confirmed = await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send(collection)
       .expect(201)
 
     expect(confirmed.body.data).toBeTruthy()
   })
 
-  it('allows coordinator global finance list APIs (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, coordinatorToken)
+  it('rejects coordinator from global finance list APIs (ADR-0023)', async () => {
+    await authRequest(app, coordinatorToken)
+      .get('/api/finance/receivables')
+      .expect(403)
+
+    const response = await authRequest(app, financeToken)
       .get('/api/finance/receivables')
       .expect(200)
 

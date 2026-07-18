@@ -19,20 +19,23 @@ describe('auth store', () => {
   })
 
   it('keeps only in-memory session metadata and never persists credentials', () => {
-    useAuthStore.getState().setSession(user, ['departure'])
+    useAuthStore.getState().setSession(user, ['/departure'], ['departure:write'])
 
     expect(useAuthStore.getState().isAuthenticated()).toBe(true)
+    expect(useAuthStore.getState().menuKeys).toEqual(['/departure'])
+    expect(useAuthStore.getState().actionKeys).toEqual(['departure:write'])
     expect(useAuthStore.getState()).not.toHaveProperty('token')
     expect(localStorage).toHaveLength(0)
     expect(sessionStorage).toHaveLength(0)
   })
 
   it('clears the in-memory session', () => {
-    useAuthStore.getState().setSession(user, ['departure'])
+    useAuthStore.getState().setSession(user, ['/departure'], ['departure:write'])
     useAuthStore.getState().clearSession()
 
     expect(useAuthStore.getState().isAuthenticated()).toBe(false)
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().menuKeys).toEqual([])
+    expect(useAuthStore.getState().actionKeys).toEqual([])
   })
 })

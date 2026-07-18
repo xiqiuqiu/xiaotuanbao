@@ -4,6 +4,7 @@ import {
   DirectoryProfileStatus,
   PartnerKind,
   PartnerType,
+  PaymentScheduleCloseDisposition,
   PaymentScheduleDirection,
   ResourceKind,
   SourceOrderCollectionMode,
@@ -308,25 +309,21 @@ describe('Finance API (e2e)', () => {
     await app.close()
   })
 
-  it('allows coordinator to POST /finance/receivables (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, coordinatorToken)
+  it('rejects coordinator from POST /finance/receivables (ADR-0023)', async () => {
+    await authRequest(app, coordinatorToken)
       .post('/api/finance/receivables')
       .send(schedulePayload({ title: `${testPrefix}-计调应收` }))
-      .expect(201)
-
-    expect(response.body.data.direction).toBe(PaymentScheduleDirection.receivable)
+      .expect(403)
   })
 
-  it('allows coordinator to POST /finance/payables (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, coordinatorToken)
+  it('rejects coordinator from POST /finance/payables (ADR-0023)', async () => {
+    await authRequest(app, coordinatorToken)
       .post('/api/finance/payables')
       .send(schedulePayload({ title: `${testPrefix}-计调应付` }))
-      .expect(201)
-
-    expect(response.body.data.direction).toBe(PaymentScheduleDirection.payable)
+      .expect(403)
   })
 
-  it('lists organization-scoped finance reference options for finance and coordinator', async () => {
+  it('lists organization-scoped finance reference options for finance but rejects coordinator (ADR-0023)', async () => {
     const response = await authRequest(app, financeToken)
       .get('/api/finance/departure-options')
       .expect(200)
@@ -361,9 +358,10 @@ describe('Finance API (e2e)', () => {
       expect.arrayContaining([{ id: supplierId, name: `${testPrefix}-supplier` }]),
     )
 
+    // 计调收回 /finance/* 菜单：财务参考项接口 403
     await authRequest(app, coordinatorToken)
       .get('/api/finance/departure-options')
-      .expect(200)
+      .expect(403)
   })
 
   it('lists only source orders with guest-collection path in source-order-options', async () => {
@@ -3124,12 +3122,10 @@ describe('Finance API (e2e)', () => {
     })
   })
 
-  it('allows coordinator to GET /finance/receivables (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, coordinatorToken)
+  it('rejects coordinator from GET /finance/receivables (ADR-0023)', async () => {
+    await authRequest(app, coordinatorToken)
       .get('/api/finance/receivables')
-      .expect(200)
-
-    expect(response.body.data.items).toEqual(expect.any(Array))
+      .expect(403)
   })
 
   it('rejects an existing finance token after the employee is disabled', async () => {
@@ -3148,20 +3144,20 @@ describe('Finance API (e2e)', () => {
     expect(response.status).toBe(401)
   })
 
-  it('allows coordinator finance mutations (ADR-0016 early-launch menus)', async () => {
+  it('rejects coordinator finance mutations across /finance/* write APIs (ADR-0023)', async () => {
     const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
       .send(schedulePayload({ title: `${testPrefix}-权限测试` }))
       .expect(201)
 
-    const confirm = await authRequest(app, coordinatorToken)
+    // 登记收款：403
+    await authRequest(app, coordinatorToken)
       .post(`/api/finance/receivables/${created.body.data.id}/confirm-collection`)
       .send(confirmPayload({ amountCents: 10000 }))
-      .expect(201)
+      .expect(403)
 
-    expect(confirm.body.data).toBeTruthy()
-
-    const createTx = await authRequest(app, coordinatorToken)
+    // 新建流水：403
+    await authRequest(app, coordinatorToken)
       .post('/api/finance/transactions')
       .send({
         direction: 'inflow',
@@ -3173,22 +3169,22 @@ describe('Finance API (e2e)', () => {
         counterpartyName: '权限测试',
         departureId,
       })
-      .expect(201)
+      .expect(403)
 
-    expect(createTx.body.data.amountCents).toBe(10000)
+    // 关闭节点（cancel）：403
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/cancel`)
+      .send({
+        closeDisposition: PaymentScheduleCloseDisposition.external_or_special,
+        cancelReason: '计调关闭节点',
+      })
+      .expect(403)
 
-    const verifications = await authRequest(app, financeToken)
-      .get('/api/finance/verifications')
-      .query({ scheduleNo: created.body.data.scheduleNo, scheduleNoMatch: 'exact', pageSize: 10 })
-      .expect(200)
-
-    expect(verifications.body.data.items.length).toBeGreaterThan(0)
-    const cancel = await authRequest(app, coordinatorToken)
-      .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
-      .send({ cancelReason: '计调撤销核销' })
-      .expect(201)
-
-    expect(cancel.body.data).toBeTruthy()
+    // 调整约定金额（adjust-amount）：403
+    await authRequest(app, coordinatorToken)
+      .post(`/api/finance/payment-schedules/${created.body.data.id}/adjust-amount`)
+      .send({ amountCents: 20000, adjustReason: '计调调整金额' })
+      .expect(403)
   })
 
   it('never commits both amount adjustment and verification under concurrency', async () => {

@@ -122,7 +122,7 @@ export class AuthService {
       return []
     }
 
-    return this.resolveMenuKeys(user)
+    return this.resolvePermissionKeys(user).menuKeys
   }
 
   buildSession(user: {
@@ -138,9 +138,11 @@ export class AuthService {
         permissions: Array<{ permission: { key: string } }>
       }
     }>
-  }): { user: AuthUser; menuKeys: string[] } {
+  }): { user: AuthUser; menuKeys: string[]; actionKeys: string[] } {
     const roles = user.isPlatformAdmin ? [] : user.roles.map((item) => item.role.name)
-    const menuKeys = user.isPlatformAdmin ? [] : this.resolveMenuKeys(user)
+    const { menuKeys, actionKeys } = user.isPlatformAdmin
+      ? { menuKeys: [], actionKeys: [] }
+      : this.resolvePermissionKeys(user)
 
     return {
       user: {
@@ -153,16 +155,22 @@ export class AuthService {
         isPlatformAdmin: user.isPlatformAdmin,
       },
       menuKeys,
+      actionKeys,
     }
   }
 
-  private resolveMenuKeys(user: {
+  /**
+   * Splits a user's resolved permission keys into menu keys (menu/route filtering)
+   * and action keys (button-level gating, ADR-0023). Menu keys are path-shaped
+   * (`/...`); every other permission key is treated as an action key.
+   */
+  private resolvePermissionKeys(user: {
     roles: Array<{
       role: {
         permissions: Array<{ permission: { key: string } }>
       }
     }>
-  }): string[] {
+  }): { menuKeys: string[]; actionKeys: string[] } {
     const keys = new Set<string>()
 
     for (const userRole of user.roles) {
@@ -171,6 +179,16 @@ export class AuthService {
       }
     }
 
-    return [...keys].sort()
+    const menuKeys: string[] = []
+    const actionKeys: string[] = []
+    for (const key of keys) {
+      if (key.startsWith('/')) {
+        menuKeys.push(key)
+      } else {
+        actionKeys.push(key)
+      }
+    }
+
+    return { menuKeys: menuKeys.sort(), actionKeys: actionKeys.sort() }
   }
 }

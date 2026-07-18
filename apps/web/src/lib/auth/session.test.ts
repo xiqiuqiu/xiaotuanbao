@@ -48,7 +48,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('restores a protected route after refresh from the server Cookie session', async () => {
-    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'] })
+    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'], actionKeys: [] })
 
     await ensureAuthenticatedSession('/departure')
 
@@ -71,7 +71,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('redirects an authenticated but unauthorized route to home', async () => {
-    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'] })
+    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'], actionKeys: [] })
 
     const redirect = await captureRedirect(() =>
       ensureAuthenticatedSession('/finance/payable'),
@@ -81,7 +81,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('reuses an in-memory session without calling getMe again', async () => {
-    useAuthStore.getState().setSession(user, ['/departure', '/finance/payable'])
+    useAuthStore.getState().setSession(user, ['/departure', '/finance/payable'], [])
 
     await ensureAuthenticatedSession('/finance/payable')
 
@@ -90,7 +90,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('blocks unauthorized paths from the cached session without contacting /auth/me', async () => {
-    useAuthStore.getState().setSession(user, ['/departure'])
+    useAuthStore.getState().setSession(user, ['/departure'], [])
 
     const redirect = await captureRedirect(() =>
       ensureAuthenticatedSession('/finance/payable'),
@@ -101,7 +101,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('redirects a login-page visit when an HttpOnly Cookie session already exists', async () => {
-    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'] })
+    vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'], actionKeys: [] })
 
     const redirect = await captureRedirect(ensureAnonymousSession)
 
@@ -110,7 +110,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('sends Platform Admin from login page to the platform area', async () => {
-    vi.mocked(getMe).mockResolvedValue({ user: platformAdmin, menuKeys: [] })
+    vi.mocked(getMe).mockResolvedValue({ user: platformAdmin, menuKeys: [], actionKeys: [] })
 
     const redirect = await captureRedirect(ensureAnonymousSession)
 
@@ -118,7 +118,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('keeps Platform Admin out of tenant business routes', async () => {
-    useAuthStore.getState().setSession(platformAdmin, [])
+    useAuthStore.getState().setSession(platformAdmin, [], [])
 
     const redirect = await captureRedirect(() => ensureAuthenticatedSession('/departure'))
 
@@ -126,7 +126,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('allows Platform Admin into the platform shell', async () => {
-    useAuthStore.getState().setSession(platformAdmin, [])
+    useAuthStore.getState().setSession(platformAdmin, [], [])
 
     await ensurePlatformSession('/platform')
 
@@ -134,7 +134,7 @@ describe('cookie-backed route session', () => {
   })
 
   it('keeps tenant users out of the platform shell', async () => {
-    useAuthStore.getState().setSession(user, ['/departure'])
+    useAuthStore.getState().setSession(user, ['/departure'], [])
 
     const redirect = await captureRedirect(() => ensurePlatformSession('/platform'))
 

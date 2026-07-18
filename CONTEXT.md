@@ -79,12 +79,12 @@ Organization 的拥有者或最高管理者，拥有全部 Menu Permission。实
 _Avoid_: 老板, admin, 总经理, 系统管理员, 代码特判
 
 **财务**:
-负责应收、应付、收支流水、核销等财务相关菜单。重新打开已结清发团下的收付款节点时，财务可在明确确认联动影响后直接使发团回到待结算，无需 OP 预先审批；操作完整留痕并对 OP 可见，之后仍由 OP 重新确认已结清。
-_Avoid_: 会计, 出纳
+负责应收、应付、收支流水、核销等财务相关菜单。可进入发团、合作伙伴、供应商，但对这些业务对象**只读**：不新建/编辑发团、不改客源与执行/资源、不维护合作伙伴与供应商目录（`departure:write`、`partner:write`、`supplier:write` 均无）；可触发生成应收/应付（生成挂在 `/departure`，不受 write action 限制）。重新打开已结清发团下的收付款节点时，财务可在明确确认联动影响后直接使发团回到待结算，无需 OP 预先审批；操作完整留痕并对 OP 可见，之后仍由 OP 重新确认已结清。
+_Avoid_: 会计, 出纳, 财务编辑客源/执行/发团, 财务维护合作伙伴或供应商目录, 财务不能生成应收应付
 
 **计调**:
-负责发团、合作伙伴、供应商等运营相关菜单。行程管理、资源管理尚未上线，不在第一版 Menu Permission 中。
-_Avoid_: 操作, 调度, planner, 行程管理, 资源管理
+负责发团、合作伙伴、供应商等运营相关菜单，对其可写（持有 `departure:write`、`partner:write`、`supplier:write`）；可生成应收/应付。**不进入** `/finance/*`（应收/应付/收支流水/核销）四菜单，因此登记流水、核销/撤销核销、关闭节点、调整约定金额均不可；发团详情内的收支流水、核销记录 Tab 对计调隐藏。行程管理、资源管理尚未上线，不在第一版 Menu Permission 中。
+_Avoid_: 操作, 调度, planner, 行程管理, 资源管理, 计调登记流水或核销, 计调关闭或调整账款, 计调不能生成应收应付
 
 **Preset Role**:
 企业管理员、财务、计调三个 Role 由系统统一定义，每个 Organization 创建时自动 seed。第一版 Role 及其 Menu Permission 映射固定，Organization 内不可新增 Role、不可修改权限映射。
@@ -97,8 +97,12 @@ _Avoid_: 全员系统设置, HR 角色
 ## Permissions
 
 **Menu Permission**:
-权限控制到菜单级别，决定 User 能否看到并访问某个菜单模块。第一版不做操作级（增删改查）或数据级（只看自己的数据）权限。
-_Avoid_: 功能权限, 按钮权限, 数据权限
+权限的菜单级维度，决定 User 能否看到并访问某个菜单模块。菜单级之外，另有 **Action Permission**（按钮级）控制同一菜单内可写到什么程度；两者同存于 `Permission` 表，通过 `key` 区分（menuKey 如 `/finance/receivable`，action key 如 `departure:write`）。第一版仍不做数据级（只看自己的数据）权限。
+_Avoid_: 数据权限, 菜单级即全部权限
+
+**Action Permission（按钮级权限）**:
+控制「进入某菜单后可写到什么程度」的操作级权限，以 action key 存于 `Permission` 表并经 `RolePermission` 全局固定映射（ADR-0001、ADR-0023）。第一版仅三把：`departure:write`（发团概览/状态/客源/执行/资源 编辑，及资源应付作废）、`partner:write`（合作伙伴目录 CRUD）、`supplier:write`（供应商目录 CRUD），均为 企业管理员+计调=有、财务=无。生成应收/应付与 `/finance/*` 各操作**不**新增 action key：前者留在 `/departure`（计调与财务都可），后者靠是否持有对应 finance menuKey 天然区分。后端复用 `MenuPermissionGuard`，write 接口用 `@RequireMenu('departure:write')` 校验；`/auth/me` 以独立 `actionKeys` 字段下发，仅供前端按钮 gating，不参与菜单/路由过滤。
+_Avoid_: 按 role 名硬编码能力, 按 Organization 自定义按钮权限, 把 action key 混进 menuKeys 参与菜单过滤, 为生成应收应付或每个 finance 操作单独建 action key
 
 **Menu Key**:
 标识一条 Menu Permission 的稳定键，与前端路由路径一致（如 `/finance/receivable`）。Permission 只对应可访问的叶子路由；分组父菜单（如 `finance`、`system`）不单独存 Permission，当前 User 任一路由子项可见时父菜单自动显示。
@@ -113,8 +117,8 @@ Menu Permission 同时约束菜单可见性与后端访问，不能仅靠前端�
 _Avoid_: 仅前端校验
 
 **Supplier Management Access**:
-供应商管理（`/supplier` 及其详情子路由）仅企业管理员与计调 Role 可访问与编辑。财务 Role 不进入供应商名录；财务在应付、流水中引用 Supplier 档案，但不维护目录 CRUD。
-_Avoid_: 财务维护供应商名录, 详情页单独 Menu Key
+供应商管理（`/supplier` 及其详情子路由）企业管理员、计调、财务三 Role 均可访问；其中企业管理员与计调可编辑（持有 `supplier:write`），**财务只读**（无 `supplier:write`，可查看账期规则、结算说明、更多财务信息等结算信息，用于应付/付款实务，但不维护目录 CRUD）。合作伙伴（`/partner`）同理：财务可进入（含往来账款），但目录业务信息只读（无 `partner:write`）。
+_Avoid_: 财务维护供应商或合作伙伴目录, 财务不进供应商名录, 详情页单独 Menu Key
 
 ## Product Interface
 

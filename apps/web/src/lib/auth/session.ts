@@ -22,7 +22,7 @@ async function restoreSessionIfNeeded() {
 
   try {
     const me = await getMe({ skipAuthRedirect: true, silentError: true })
-    useAuthStore.getState().setSession(me.user, me.menuKeys)
+    useAuthStore.getState().setSession(me.user, me.menuKeys, me.actionKeys)
     return me.user
   } catch {
     useAuthStore.getState().clearSession()
@@ -63,7 +63,7 @@ export async function ensurePlatformSession(pathname: string) {
 export async function hasAuthenticatedSession(): Promise<boolean> {
   try {
     const me = await getMe({ skipAuthRedirect: true, silentError: true })
-    useAuthStore.getState().setSession(me.user, me.menuKeys)
+    useAuthStore.getState().setSession(me.user, me.menuKeys, me.actionKeys)
     return true
   } catch {
     useAuthStore.getState().clearSession()

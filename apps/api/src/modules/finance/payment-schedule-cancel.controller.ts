@@ -1,5 +1,7 @@
 import { Body, Controller, Headers, Param, Post, Req, UseGuards } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { RequireMenu } from '../../common/decorators/require-menu.decorator'
+import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   AdjustPaymentScheduleAmountDto,
@@ -11,14 +13,18 @@ import { PaymentScheduleService } from './payment-schedule.service'
 import { FinanceIdempotencyService } from './finance-idempotency.service'
 
 @Controller('finance/payment-schedules')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class PaymentScheduleCancelController {
   constructor(
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly financeIdempotencyService: FinanceIdempotencyService,
   ) {}
 
+  // ADR-0023: 关闭节点/调整约定金额/重新打开都是财务动作，收回 ADR-0016 后计调
+  // 不持有任何 /finance/* menuKey，故一律被拒（403）。财务持有全部四个 finance
+  // menuKey，用 /finance/receivable 与前端 canMutateFinance 口径保持一致。
   @Post(':id/cancel')
+  @RequireMenu('/finance/receivable')
   cancel(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
@@ -42,6 +48,7 @@ export class PaymentScheduleCancelController {
   }
 
   @Post(':id/reopen')
+  @RequireMenu('/finance/receivable')
   reopen(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
@@ -65,6 +72,7 @@ export class PaymentScheduleCancelController {
   }
 
   @Post(':id/adjust-amount')
+  @RequireMenu('/finance/receivable')
   adjustAmount(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
@@ -87,7 +95,11 @@ export class PaymentScheduleCancelController {
     })
   }
 
+  // ADR-0023: 资源应付作废是计调纠错动作（与「关闭节点」＝财务互补），长期归
+  // departure:write。本票不做操作级强制，先保持菜单级 /departure（计调与财务均可，
+  // 与收回 ADR-0016 前行为一致），操作级收敛留待后续按钮级权限票。
   @Post(':id/void-resource-payable')
+  @RequireMenu('/departure')
   voidResourcePayable(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,

@@ -23,6 +23,7 @@ import { ExecutionTab } from '../components/ExecutionTab'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
+  isDepartureDetailTabVisible,
   type DepartureDetailTabKey,
 } from '../catalog'
 import { invalidateDepartureDetailQueries } from '../utils/invalidate-departure-detail-queries'
@@ -53,7 +54,10 @@ export function DepartureDetailPage() {
   const menuKeys = useAuthStore((state) => state.menuKeys)
   const animatedOverviewDepartureIds = useRef(new Set<string>())
 
-  const activeTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
+  const requestedTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
+  const activeTab = isDepartureDetailTabVisible(requestedTab, menuKeys)
+    ? requestedTab
+    : DEFAULT_TAB
 
   const {
     data: departure,
@@ -169,7 +173,11 @@ export function DepartureDetailPage() {
   const counterpartyKeyword =
     typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword : undefined
 
-  const tabItems: NonNullable<TabsProps['items']> = DEPARTURE_DETAIL_TABS.map((tab) => {
+  const visibleTabs = DEPARTURE_DETAIL_TABS.filter((tab) =>
+    isDepartureDetailTabVisible(tab.key, menuKeys),
+  )
+
+  const tabItems: NonNullable<TabsProps['items']> = visibleTabs.map((tab) => {
     if (tab.key === 'overview') {
       return {
         key: tab.key,

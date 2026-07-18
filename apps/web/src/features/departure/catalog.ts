@@ -81,6 +81,25 @@ export function isDepartureDetailTabKey(value: string | undefined): value is Dep
   return DEPARTURE_DETAIL_TABS.some((tab) => tab.key === value)
 }
 
+/**
+ * ADR-0023: 收支流水/核销记录 Tab 显隐由 `/finance/*` menu key 驱动，沿用既有
+ * menuKeys 逻辑，不新增平行判断。计调无这两个 menu key 时自动隐藏；其余 Tab 恒显。
+ */
+export const DEPARTURE_DETAIL_TAB_REQUIRED_MENU_KEY: Partial<
+  Record<DepartureDetailTabKey, string>
+> = {
+  transactions: '/finance/transactions',
+  verifications: '/finance/verification',
+}
+
+export function isDepartureDetailTabVisible(
+  tabKey: DepartureDetailTabKey,
+  menuKeys: string[],
+): boolean {
+  const requiredMenuKey = DEPARTURE_DETAIL_TAB_REQUIRED_MENU_KEY[tabKey]
+  return requiredMenuKey === undefined || menuKeys.includes(requiredMenuKey)
+}
+
 export function formatCents(cents: number): string {
   return `¥${(cents / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }

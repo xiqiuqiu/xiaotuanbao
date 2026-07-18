@@ -366,7 +366,8 @@ describe('Partner source orders API (e2e)', () => {
       .expect(201)
     const scheduleId = generated.body.data.schedules[0].id as string
 
-    await authRequest(app, coordinatorToken)
+    // ADR-0023: 关闭节点是财务动作，用 financeToken（计调已无 /finance/* 菜单）
+    await authRequest(app, financeToken)
       .post(`/api/finance/payment-schedules/${scheduleId}/cancel`)
       .send({
         closeDisposition: PaymentScheduleCloseDisposition.external_or_special,

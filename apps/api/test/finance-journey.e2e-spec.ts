@@ -858,8 +858,8 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(detail.body.data.openUnsettledReceivableCents).toBe(0)
     expect(detail.body.data.completionTags.receivables).toBe('已收齐')
 
-    // ADR-0016: coordinator has finance menus; settled schedule still rejects further collection.
-    const rejected = await authRequest(app, coordinatorToken)
+    // ADR-0023: finance owns collection; a settled schedule still rejects further collection.
+    const rejected = await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${guestSchedule.id}/confirm-collection`)
       .send({
         amountCents: 1,

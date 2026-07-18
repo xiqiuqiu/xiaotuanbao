@@ -4,8 +4,9 @@ import type { AuthUser } from '@/types/api'
 interface AuthState {
   user: AuthUser | null
   menuKeys: string[]
+  actionKeys: string[]
   sessionStatus: 'unknown' | 'authenticated' | 'anonymous'
-  setSession: (user: AuthUser, menuKeys: string[]) => void
+  setSession: (user: AuthUser, menuKeys: string[], actionKeys: string[]) => void
   clearSession: () => void
   isAuthenticated: () => boolean
 }
@@ -13,10 +14,11 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   menuKeys: [],
+  actionKeys: [],
   sessionStatus: 'unknown',
-  setSession: (user, menuKeys) =>
-    set({ user, menuKeys, sessionStatus: 'authenticated' }),
+  setSession: (user, menuKeys, actionKeys) =>
+    set({ user, menuKeys, actionKeys, sessionStatus: 'authenticated' }),
   clearSession: () =>
-    set({ user: null, menuKeys: [], sessionStatus: 'anonymous' }),
+    set({ user: null, menuKeys: [], actionKeys: [], sessionStatus: 'anonymous' }),
   isAuthenticated: () => get().sessionStatus === 'authenticated',
 }))

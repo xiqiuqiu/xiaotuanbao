@@ -533,15 +533,30 @@ describe('Source order generate receivables (e2e)', () => {
     expect(schedule.amountCents).toBe(1000000)
   })
 
-  it('allows coordinator to generate receivables and create finance receivables (ADR-0016)', async () => {
+  it('allows coordinator to generate receivables but rejects manual finance receivables (ADR-0023)', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id)
 
+    // 生成应收留在 /departure：计调可触发
     await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
 
-    const created = await authRequest(app, coordinatorToken)
+    // 手工新建财务应收属 /finance/receivable：计调收回菜单后 403
+    await authRequest(app, coordinatorToken)
+      .post('/api/finance/receivables')
+      .send({
+        departureId: departure.id,
+        title: `${testPrefix}-manual`,
+        amountCents: 10000,
+        dueDate: '2026-12-31',
+        counterpartyType: CounterpartyType.partner,
+        counterpartyId: partnerId,
+      })
+      .expect(403)
+
+    // 财务角色仍可手工新建
+    const created = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
       .send({
         departureId: departure.id,

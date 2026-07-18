@@ -23,7 +23,13 @@ export interface AuthUser {
 
 export interface SessionPayload {
   user: AuthUser
+  /** 菜单/路由过滤用的 menu key 并集（语义不变）。 */
   menuKeys: string[]
+  /**
+   * 按钮/操作级 gating 用的 action key 并集（ADR-0023）。
+   * 与 menuKeys 分离，避免污染菜单过滤。Platform Admin 恒为空。
+   */
+  actionKeys: string[]
 }
 
 export interface LoginResult extends SessionPayload {}

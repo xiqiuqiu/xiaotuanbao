@@ -426,16 +426,31 @@ describe('Segment resource generate payables (e2e)', () => {
     expect(response.body.message).toBe('当前资源已生成应付，不能直接删除')
   })
 
-  it('allows coordinator to generate payables and create finance payables (ADR-0016)', async () => {
+  it('allows coordinator to generate payables but rejects manual finance payables (ADR-0023)', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id)
 
+    // 生成应付留在 /departure：计调可触发
     await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(201)
 
-    const created = await authRequest(app, coordinatorToken)
+    // 手工新建财务应付属 /finance/payable：计调收回菜单后 403
+    await authRequest(app, coordinatorToken)
+      .post('/api/finance/payables')
+      .send({
+        departureId: departure.id,
+        title: `${testPrefix}-manual`,
+        amountCents: 10000,
+        dueDate: '2026-12-31',
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+      })
+      .expect(403)
+
+    // 财务角色仍可手工新建
+    const created = await authRequest(app, financeToken)
       .post('/api/finance/payables')
       .send({
         departureId: departure.id,

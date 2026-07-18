@@ -31,6 +31,7 @@ describe('Platform Admin auth (e2e)', () => {
       isPlatformAdmin: true,
     })
     expect(loginResponse.body.data.menuKeys).toEqual([])
+    expect(loginResponse.body.data.actionKeys).toEqual([])
 
     const meResponse = await authRequest(app, platformCookie).get('/api/auth/me').expect(200)
 
@@ -39,6 +40,7 @@ describe('Platform Admin auth (e2e)', () => {
       isPlatformAdmin: true,
     })
     expect(meResponse.body.data.menuKeys).toEqual([])
+    expect(meResponse.body.data.actionKeys).toEqual([])
   })
 
   it('exposes isPlatformAdmin=false for tenant accounts', async () => {
