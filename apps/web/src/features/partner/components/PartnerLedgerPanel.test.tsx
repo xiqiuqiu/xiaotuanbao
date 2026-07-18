@@ -126,7 +126,7 @@ describe('PartnerLedgerPanel', () => {
     expect(sharedFrom).toBeTruthy()
     expect(sharedTo).toBeTruthy()
 
-    await user.click(screen.getByText('应付（我付他）'))
+    await user.click(screen.getByText('应付'))
 
     await waitFor(() => {
       expect(listPartnerPayables).toHaveBeenCalledWith(
