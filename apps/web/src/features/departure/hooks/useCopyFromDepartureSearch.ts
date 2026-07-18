@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { message } from 'antd'
 import type { NavigateOptions } from '@tanstack/react-router'
 import { getDeparture } from '@/services/departure.service'
@@ -25,10 +25,12 @@ export function useCopyFromDepartureSearch({
   const enterInfoStepRef = useRef(enterInfoStep)
   const onLoadErrorRef = useRef(onLoadError)
 
-  navigateRef.current = navigate
-  setRouteValuesRef.current = setRouteValues
-  enterInfoStepRef.current = enterInfoStep
-  onLoadErrorRef.current = onLoadError
+  useLayoutEffect(() => {
+    navigateRef.current = navigate
+    setRouteValuesRef.current = setRouteValues
+    enterInfoStepRef.current = enterInfoStep
+    onLoadErrorRef.current = onLoadError
+  }, [enterInfoStep, navigate, onLoadError, setRouteValues])
 
   useEffect(() => {
     const copyFromDepartureId = copyFrom?.trim()

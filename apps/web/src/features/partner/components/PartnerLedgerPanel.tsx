@@ -38,7 +38,7 @@ export function PartnerLedgerPanel({ partnerId }: { partnerId: string }) {
         onDepartureDateRangeChange={setDepartureDateRange}
         hideDepartureDateFilter
         collapsibleSecondaryFilters
-        filterToolbarPrimary={
+        filterToolbarPrimary={({ onDepartureDateRangeChange }) => (
           <DatePicker.RangePicker
             allowClear
             allowEmpty={[true, true]}
@@ -53,14 +53,14 @@ export function PartnerLedgerPanel({ partnerId }: { partnerId: string }) {
                 : null
             }
             onChange={(values) =>
-              setDepartureDateRange(
+              onDepartureDateRangeChange(
                 values
                   ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
                   : null,
               )
             }
           />
-        }
+        )}
         renderSummary={({ departureDateFrom, departureDateTo }) => (
           <PartnerLedgerSummaryCards
             partnerId={partnerId}

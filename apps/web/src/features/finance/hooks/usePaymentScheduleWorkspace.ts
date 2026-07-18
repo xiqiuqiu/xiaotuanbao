@@ -91,12 +91,20 @@ export function usePaymentScheduleWorkspace({
   const departureDateRange = departureDateControlled
     ? (controlledDepartureDateRange ?? null)
     : internalDepartureDateRange
-  const setDepartureDateRange = departureDateControlled
-    ? onDepartureDateRangeChange
-    : setInternalDepartureDateRange
   const [counterpartyKeyword, setCounterpartyKeyword] = useState(initialCounterpartyKeyword)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const setDepartureDateRange = useCallback(
+    (value: DepartureDateRange) => {
+      if (onDepartureDateRangeChange) {
+        onDepartureDateRangeChange(value)
+      } else {
+        setInternalDepartureDateRange(value)
+      }
+      setPage(1)
+    },
+    [onDepartureDateRangeChange],
+  )
 
   const dialogs = usePaymentScheduleDialogs(isReceivable)
 
@@ -121,14 +129,6 @@ export function usePaymentScheduleWorkspace({
       locateExpandedLatchRef.current = true
     }
   }, [locatingFinanceRow])
-
-  // 父级共用出团日期变化时回到第一页（筛选项内改区间时由 onChange 自行 setPage）
-  useEffect(() => {
-    if (!departureDateControlled) {
-      return
-    }
-    setPage(1)
-  }, [controlledDepartureDateRange, departureDateControlled])
 
   const useExpandedFetch =
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current

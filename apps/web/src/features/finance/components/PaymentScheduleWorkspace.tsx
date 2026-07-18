@@ -48,7 +48,9 @@ export type PaymentScheduleWorkspaceProps = {
    *（出团日期 + Segmented），样式对齐 antd advanced-search。
    */
   collapsibleSecondaryFilters?: boolean
-  filterToolbarPrimary?: React.ReactNode
+  filterToolbarPrimary?: (controls: {
+    onDepartureDateRangeChange: (value: DepartureDateRange) => void
+  }) => React.ReactNode
 }
 
 export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
@@ -136,7 +138,6 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
       }}
       onDepartureDateRangeChange={(value) => {
         setDepartureDateRange(value)
-        setPage(1)
       }}
       onReset={resetFilters}
     />
@@ -153,7 +154,9 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
       {props.collapsibleSecondaryFilters ? (
         <div style={{ marginBottom: 16 }}>
           <CollapsibleFilterBar
-            primary={props.filterToolbarPrimary}
+            primary={props.filterToolbarPrimary?.({
+              onDepartureDateRangeChange: setDepartureDateRange,
+            })}
             advanced={filters}
             advancedActive={secondaryFiltersActive}
           />

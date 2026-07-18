@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { PropsWithChildren } from 'react'
+import { useState, type PropsWithChildren } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { usePaymentScheduleWorkspace } from '../hooks/usePaymentScheduleWorkspace'
 
@@ -126,6 +126,35 @@ describe('PaymentScheduleWorkspace partner scope', () => {
       )
     })
     expect(result.current.departureDateRange).toEqual(['2026-07-01', '2026-07-31'])
+  })
+
+  it('resets pagination in the same action that changes a controlled departure date', () => {
+    const { result } = renderHook(
+      () => {
+        const [departureDateRange, setDepartureDateRange] =
+          useState<[string | undefined, string | undefined] | null>(null)
+        return usePaymentScheduleWorkspace({
+          scope: 'partner',
+          direction: 'receivable',
+          partnerId: 'partner-1',
+          departureDateRange,
+          onDepartureDateRangeChange: setDepartureDateRange,
+        })
+      },
+      { wrapper: createWrapper() },
+    )
+
+    act(() => {
+      result.current.setPage(3)
+    })
+    expect(result.current.page).toBe(3)
+
+    act(() => {
+      result.current.setDepartureDateRange(['2026-07-01', '2026-07-31'])
+    })
+
+    expect(result.current.departureDateRange).toEqual(['2026-07-01', '2026-07-31'])
+    expect(result.current.page).toBe(1)
   })
 
   it('does not fetch until partnerId is provided', async () => {
