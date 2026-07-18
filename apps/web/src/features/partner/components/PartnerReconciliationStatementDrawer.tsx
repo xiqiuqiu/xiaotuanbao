@@ -14,6 +14,7 @@ import {
   Table,
   Typography,
   message,
+  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
@@ -256,122 +257,144 @@ function StatementPreview({
   snapshot: PartnerReconciliationStatementSnapshot | undefined
   loading: boolean
 }) {
+  const { token } = theme.useToken()
+  // 单据页边框：与抽屉工作面区分，形成「一页确认单」的阅读边界（DESIGN：色面 + 细边框）
+  const pageStyle = {
+    width: '100%',
+    padding: token.paddingLG,
+    background: token.colorBgContainer,
+    border: `1px solid ${token.colorBorder}`,
+    borderRadius: token.borderRadiusLG,
+  } as const
+
   if (!snapshot) {
-    return <Table rowKey="sourceOrderId" loading={loading} columns={DETAIL_COLUMNS} dataSource={[]} pagination={false} />
+    return (
+      <div style={pageStyle}>
+        <Table
+          rowKey="sourceOrderId"
+          loading={loading}
+          columns={DETAIL_COLUMNS}
+          dataSource={[]}
+          pagination={false}
+        />
+      </div>
+    )
   }
 
   const { totals } = snapshot
 
   return (
-    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <div style={{ textAlign: 'center' }}>
-        <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
-          {snapshot.title}
-        </Typography.Title>
-        <Typography.Text type="secondary">
-          合作方：{snapshot.partnerName}　对账周期：{snapshot.periodStart} 至{' '}
-          {snapshot.periodEnd}（按出团日期）　导出时间：
-          {dayjs(snapshot.exportedAt).format('YYYY-MM-DD HH:mm')}
-        </Typography.Text>
-      </div>
-
-      <Row gutter={[16, 16]} role="group" aria-label="确认单汇总">
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="客源单数" value={totals.orderCount} />
-        </Col>
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="总人数" value={totals.totalGuestCount} />
-        </Col>
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="拼入合计" value={formatCents(totals.originalReceivableCents)} />
-        </Col>
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="优惠合计" value={formatCents(totals.discountCents)} />
-        </Col>
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="实际应收" value={formatCents(totals.actualReceivableCents)} />
-        </Col>
-        <Col xs={12} sm={8} xl={4}>
-          <Statistic title="游客代收" value={formatCents(totals.guestCollectCents)} />
-        </Col>
-      </Row>
-
-      <Table
-        rowKey="sourceOrderId"
-        size="small"
-        loading={loading}
-        columns={DETAIL_COLUMNS}
-        dataSource={snapshot.rows}
-        pagination={false}
-        scroll={{ x: 1900 }}
-        summary={() => (
-          <Table.Summary.Row>
-            <Table.Summary.Cell index={0} colSpan={6}>
-              <Typography.Text strong>合计</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={6} align="center">
-              <Typography.Text strong>{totals.adultGuestCount}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={7} align="center">
-              <Typography.Text strong>{totals.childGuestCount}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={8} align="center">
-              <Typography.Text strong>{totals.totalGuestCount}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={9} colSpan={2} />
-            <Table.Summary.Cell index={11} align="right">
-              <Typography.Text strong>
-                {formatCents(totals.originalReceivableCents)}
-              </Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={12} align="right">
-              <Typography.Text strong>{formatCents(totals.discountCents)}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={13} align="right">
-              <Typography.Text strong>
-                {formatCents(totals.actualReceivableCents)}
-              </Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={14} align="right">
-              <Typography.Text strong>
-                {formatCents(totals.customerDepositCents)}
-              </Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={15} align="right">
-              <Typography.Text strong>{formatCents(totals.guestCollectCents)}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={16} />
-          </Table.Summary.Row>
-        )}
-      />
-
-      <div>
-        <Typography.Text strong>确认说明</Typography.Text>
-        <div>
-          {PARTNER_RECONCILIATION_CONFIRMATION_NOTES.map((line) => (
-            <Typography.Paragraph key={line} type="secondary" style={{ marginBottom: 4 }}>
-              {line}
-            </Typography.Paragraph>
-          ))}
+    <div style={pageStyle}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <div style={{ textAlign: 'center' }}>
+          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 4 }}>
+            {snapshot.title}
+          </Typography.Title>
+          <Typography.Text type="secondary">
+            合作方：{snapshot.partnerName}　对账周期：{snapshot.periodStart} 至{' '}
+            {snapshot.periodEnd}（按出团日期）　导出时间：
+            {dayjs(snapshot.exportedAt).format('YYYY-MM-DD HH:mm')}
+          </Typography.Text>
         </div>
-      </div>
 
-      <Row gutter={[24, 16]}>
-        <Col xs={24} md={12}>
-          <Space orientation="vertical" size={4}>
-            <Typography.Text strong>我方确认（盖章）：{snapshot.organizationName}</Typography.Text>
-            <Typography.Text type="secondary">确认人：____________</Typography.Text>
-            <Typography.Text type="secondary">确认日期：____年__月__日</Typography.Text>
-          </Space>
-        </Col>
-        <Col xs={24} md={12}>
-          <Space orientation="vertical" size={4}>
-            <Typography.Text strong>客户确认（盖章）：{snapshot.partnerName}</Typography.Text>
-            <Typography.Text type="secondary">确认人：____________</Typography.Text>
-            <Typography.Text type="secondary">确认日期：____年__月__日</Typography.Text>
-          </Space>
-        </Col>
-      </Row>
-    </Space>
+        <Row gutter={[16, 16]} role="group" aria-label="确认单汇总">
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="客源单数" value={totals.orderCount} />
+          </Col>
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="总人数" value={totals.totalGuestCount} />
+          </Col>
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="拼入合计" value={formatCents(totals.originalReceivableCents)} />
+          </Col>
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="优惠合计" value={formatCents(totals.discountCents)} />
+          </Col>
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="实际应收" value={formatCents(totals.actualReceivableCents)} />
+          </Col>
+          <Col xs={12} sm={8} xl={4}>
+            <Statistic title="游客代收" value={formatCents(totals.guestCollectCents)} />
+          </Col>
+        </Row>
+
+        <Table
+          rowKey="sourceOrderId"
+          size="small"
+          loading={loading}
+          columns={DETAIL_COLUMNS}
+          dataSource={snapshot.rows}
+          pagination={false}
+          scroll={{ x: 1900 }}
+          summary={() => (
+            <Table.Summary.Row>
+              <Table.Summary.Cell index={0} colSpan={6}>
+                <Typography.Text strong>合计</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={6} align="center">
+                <Typography.Text strong>{totals.adultGuestCount}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={7} align="center">
+                <Typography.Text strong>{totals.childGuestCount}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={8} align="center">
+                <Typography.Text strong>{totals.totalGuestCount}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={9} colSpan={2} />
+              <Table.Summary.Cell index={11} align="right">
+                <Typography.Text strong>
+                  {formatCents(totals.originalReceivableCents)}
+                </Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={12} align="right">
+                <Typography.Text strong>{formatCents(totals.discountCents)}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={13} align="right">
+                <Typography.Text strong>
+                  {formatCents(totals.actualReceivableCents)}
+                </Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={14} align="right">
+                <Typography.Text strong>
+                  {formatCents(totals.customerDepositCents)}
+                </Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={15} align="right">
+                <Typography.Text strong>{formatCents(totals.guestCollectCents)}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={16} />
+            </Table.Summary.Row>
+          )}
+        />
+
+        <div>
+          <Typography.Text strong>确认说明</Typography.Text>
+          <div>
+            {PARTNER_RECONCILIATION_CONFIRMATION_NOTES.map((line) => (
+              <Typography.Paragraph key={line} type="secondary" style={{ marginBottom: 4 }}>
+                {line}
+              </Typography.Paragraph>
+            ))}
+          </div>
+        </div>
+
+        <Row gutter={[24, 16]}>
+          <Col xs={24} md={12}>
+            <Space orientation="vertical" size={4}>
+              <Typography.Text strong>我方确认（盖章）：{snapshot.organizationName}</Typography.Text>
+              <Typography.Text type="secondary">确认人：____________</Typography.Text>
+              <Typography.Text type="secondary">确认日期：____年__月__日</Typography.Text>
+            </Space>
+          </Col>
+          <Col xs={24} md={12}>
+            <Space orientation="vertical" size={4}>
+              <Typography.Text strong>客户确认（盖章）：{snapshot.partnerName}</Typography.Text>
+              <Typography.Text type="secondary">确认人：____________</Typography.Text>
+              <Typography.Text type="secondary">确认日期：____年__月__日</Typography.Text>
+            </Space>
+          </Col>
+        </Row>
+      </Space>
+    </div>
   )
 }
