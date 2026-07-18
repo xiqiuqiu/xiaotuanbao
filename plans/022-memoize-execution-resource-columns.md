@@ -1,6 +1,6 @@
 # 022 — 用 useMemo 缓存执行资源表格列配置
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: a712d4a
 - **Severity**: MEDIUM
 - **Category**: Performance

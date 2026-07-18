@@ -1,6 +1,6 @@
 # 019 — Partner 详情 Tabs 加 destroyOnHidden 避免隐藏页 eager 拉数
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: a712d4a
 - **Severity**: MEDIUM
 - **Category**: Performance

@@ -7,6 +7,7 @@ import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStat
 import { listDepartures } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { PageHeader } from '@/layouts/PageHeader'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
 import {
@@ -99,6 +100,7 @@ export function DeparturesPage() {
 
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
+  const debouncedRouteName = useDebouncedValue(state.routeName)
 
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'departure-filters'],
@@ -116,7 +118,7 @@ export function DeparturesPage() {
 
   const listFilterKey = [
     state.keyword,
-    state.routeName,
+    debouncedRouteName,
     state.departureType,
     state.departureProgress,
     state.statusFilter,
@@ -138,7 +140,7 @@ export function DeparturesPage() {
     queryKey: [
       'departures',
       state.keyword,
-      state.routeName,
+      debouncedRouteName,
       state.departureType,
       state.departureProgress,
       state.statusFilter,
@@ -152,7 +154,7 @@ export function DeparturesPage() {
     queryFn: () =>
       listDepartures({
         keyword: state.keyword || undefined,
-        routeName: state.routeName,
+        routeName: debouncedRouteName,
         departureType: state.departureType,
         departureProgress: state.departureProgress,
         status: state.statusFilter,

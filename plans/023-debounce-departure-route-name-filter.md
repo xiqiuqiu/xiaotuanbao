@@ -1,6 +1,6 @@
 # 023 — 发团列表「路线名称」筛选加防抖
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: a712d4a
 - **Severity**: MEDIUM
 - **Category**: Performance

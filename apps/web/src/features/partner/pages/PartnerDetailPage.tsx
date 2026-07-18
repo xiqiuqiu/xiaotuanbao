@@ -111,6 +111,7 @@ export function PartnerDetailPage() {
 
       <Card>
         <Tabs
+          destroyOnHidden
           items={[
             {
               key: 'profile',

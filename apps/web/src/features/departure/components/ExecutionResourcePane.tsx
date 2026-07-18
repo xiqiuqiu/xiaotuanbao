@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Alert,
   Button,
@@ -245,17 +245,32 @@ export function ExecutionResourcePane({
     [departure.id, navigate, segment.id],
   )
 
-  const columns = buildExecutionResourceColumns({
-    mutationLocked,
-    canEdit,
-    generatingId: generateMutation.isPending ? generateMutation.variables : undefined,
-    onEdit: openEdit,
-    onViewPayables,
-    onGenerate: (id) => generateMutation.mutate(id),
-    onDelete: (id) => deleteMutation.mutate(id),
-    onVoidPayable: (resource) => setVoidingResource(resource),
-    onClosePayable: (resource) => setClosingResource(resource),
-  })
+  const columns = useMemo(
+    () =>
+      buildExecutionResourceColumns({
+        mutationLocked,
+        canEdit,
+        generatingId: generateMutation.isPending ? generateMutation.variables : undefined,
+        onEdit: openEdit,
+        onViewPayables,
+        onGenerate: (id) => generateMutation.mutate(id),
+        onDelete: (id) => deleteMutation.mutate(id),
+        onVoidPayable: (resource) => setVoidingResource(resource),
+        onClosePayable: (resource) => setClosingResource(resource),
+      }),
+    [
+      mutationLocked,
+      canEdit,
+      generateMutation.isPending,
+      generateMutation.variables,
+      openEdit,
+      onViewPayables,
+      generateMutation,
+      deleteMutation,
+      setVoidingResource,
+      setClosingResource,
+    ],
+  )
 
   return (
     <div>

@@ -111,8 +111,9 @@ export function usePaymentScheduleWorkspace({
   const effectiveDepartureId = scope === 'departure' ? lockedDepartureId : departureFilter
   const voidedAudit = !isReceivable && statusFilter === 'voided'
   const trimmedCounterpartyKeyword = useDebouncedValue(counterpartyKeyword.trim())
+  const debouncedKeyword = useDebouncedValue(keyword.trim())
   const hasClientFilters = Boolean(
-    keyword.trim() ||
+    debouncedKeyword ||
     (statusFilter && statusFilter !== 'voided') ||
     dueDateRange,
   )
@@ -241,7 +242,7 @@ export function usePaymentScheduleWorkspace({
       isLoading,
       isFetching,
       schedulesResult,
-      keyword,
+      keyword: debouncedKeyword,
       statusFilter,
       dueDateRange,
       pageSize,
@@ -287,11 +288,11 @@ export function usePaymentScheduleWorkspace({
     () =>
       applyPaymentScheduleClientFilters(
         schedulesResult?.items ?? [],
-        keyword,
+        debouncedKeyword,
         statusFilter,
         dueDateRange,
       ),
-    [schedulesResult?.items, keyword, statusFilter, dueDateRange],
+    [schedulesResult?.items, debouncedKeyword, statusFilter, dueDateRange],
   )
 
   const tableItems = useExpandedFetch
