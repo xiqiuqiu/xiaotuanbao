@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useReducer,
   useState,
@@ -49,6 +48,7 @@ import {
   type VerificationListState,
 } from '../utils/verification-list-state'
 import { useVerificationWorkspaceMutations } from '../hooks/useVerificationWorkspaceMutations'
+import { useVerificationDeepLinkSync } from '../hooks/useVerificationDeepLinkSync'
 import { buildVerificationColumns } from './verification-table-columns'
 
 export type VerificationsWorkspaceProps = {
@@ -239,12 +239,12 @@ export function VerificationsWorkspace({
   const debouncedScheduleNo = useDebouncedValue(scheduleNo.trim())
   const debouncedDepartureKeyword = useDebouncedValue(departureKeyword.trim())
 
-  useEffect(() => {
-    if (!currentDeepLinkKey) {
-      return
-    }
-    dispatchList({ type: 'applyDeepLink', search: deepLinkSearch ?? {} })
-  }, [currentDeepLinkKey, deepLinkSearch])
+  useVerificationDeepLinkSync({
+    currentDeepLinkKey,
+    deepLinkSearch,
+    lock,
+    dispatchList,
+  })
 
   const syncDeepLinkSearch = useCallback(
     (nextSearch: VerificationDeepLinkSearch) => {

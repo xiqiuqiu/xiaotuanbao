@@ -43,7 +43,7 @@
 | 21 | [021 — 核销切换发团清选择](021-clear-verification-selection-on-departure-change.md) | MEDIUM | DONE | 与 016/018 同改核销抽屉 |
 | 22 | [022 — 执行资源列 useMemo](022-memoize-execution-resource-columns.md) | MEDIUM | DONE | 无 |
 | 23 | [023 — 发团路线名防抖](023-debounce-departure-route-name-filter.md) | MEDIUM | DONE | 无 |
-| 24 | [024 — 深链清空解除核销锁定](024-clear-verification-lock-on-deeplink-removal.md) | MEDIUM | TODO | 无；置信度中，需双向行为验证 |
+| 24 | [024 — 深链清空解除核销锁定](024-clear-verification-lock-on-deeplink-removal.md) | MEDIUM | DONE | 无；置信度中，需双向行为验证 |
 | 25 | [025 — 提取核销候选表格列](025-extract-create-verification-table-columns.md) | MEDIUM | TODO | 建议 016/018/021 稳定后再移动结构 |
 
 建议批次：

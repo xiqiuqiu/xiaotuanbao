@@ -1,6 +1,6 @@
 # 024 — 深链参数被清空（如浏览器后退）时解除核销列表锁定筛选
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: a712d4a
 - **Severity**: MEDIUM（置信度中：属边界一致性问题，落地前务必按 Behavior check 双向验证）
 - **Category**: Bugs & correctness
@@ -97,3 +97,9 @@
   2. 锁定态下在单号框改字 → 输入**保留**、正常按模糊匹配，未被清空。
   3. 未锁定态直接输入单号 → 行为不变。
 - **Done when**：后退能解锁复位，且手动编辑/普通输入两条路径无回归，测试/类型通过，分数不降。
+
+## Implementation notes（落地记录）
+
+- 逻辑落在新 hook `hooks/useVerificationDeepLinkSync.ts`，而非直接内联进组件：内联 ~15 行会把 `VerificationsWorkspace` 组件推过 React Doctor 的 300 行阈值（原 296 行）触发 Maintainability 警告；抽 hook 后组件回落、`--scope changed` 100/100。行为与 Target 一致，复用现有 `applyDeepLink`/`resetFilters`，未新增 reducer 分支或依赖。
+- 相比 Target 追加了 `if (prevKey === currentDeepLinkKey) return` 的**跳变判定**：因依赖数组新增 `lock`，手动编辑单号（`lock` 由 reducer 置 null）会触发 effect 重跑；此时 `navigate` 尚未把 URL 同步为空、`currentDeepLinkKey` 仍非空，若不判定 key 跳变会误重放深链、覆盖用户输入并重新锁定。跳变判定使「进入/切换深链」「后退清空」「手动编辑」三条路径互不干扰。
+- 新增聚焦测试 `components/VerificationsWorkspace.deep-link.test.tsx`（Parent 受控 search）：进入锁定→精确匹配；清空深链→复位且清 lock；锁定态手动编辑→输入保留、转模糊匹配、未被复位。
