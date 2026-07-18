@@ -29,6 +29,29 @@
 | 14 | [014 — 路由错误边界](014-route-error-boundary.md) | HIGH | DONE | 无；建议优先 |
 | 15 | [015 — 路由级代码分割](015-route-code-splitting.md) | MEDIUM | DONE | 无；与 014 同改 `createRouter`，合并时两选项都保留 |
 
+## 2026-07-18 追加（基线 commit `a712d4a`）
+
+来源：2026-07-18 `improve-react` 全库审查。React Doctor 静态扫描 100/100、0 诊断（296 文件）；以下为「扫描之外」的正确性 / 性能 / 结构缺口，均已在 `file:line` 处核实（含读 `@rc-component/form` 源码确认表单复用行为）。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 16 | [016 — 打开核销抽屉重置表单](016-reset-verification-form-on-open.md) | HIGH | DONE | 无；建议优先（财务正确性） |
+| 17 | [017 — 定位结束清空 pendingPage](017-fix-locate-pending-page-reset.md) | HIGH | TODO | 无；建议优先（翻页锁死） |
+| 18 | [018 — 精简核销 schedules queryKey](018-trim-verification-schedules-query-key.md) | MEDIUM | TODO | 与 016/021 同改核销抽屉，合并注意 |
+| 19 | [019 — Partner 详情 Tab destroyOnHidden](019-partner-detail-tabs-destroy-on-hidden.md) | MEDIUM | TODO | 无 |
+| 20 | [020 — 收付款 keyword 防抖](020-debounce-payment-schedule-keyword.md) | MEDIUM | TODO | 无；与 017 同改 workspace/locate 链 |
+| 21 | [021 — 核销切换发团清选择](021-clear-verification-selection-on-departure-change.md) | MEDIUM | TODO | 与 016/018 同改核销抽屉 |
+| 22 | [022 — 执行资源列 useMemo](022-memoize-execution-resource-columns.md) | MEDIUM | TODO | 无 |
+| 23 | [023 — 发团路线名防抖](023-debounce-departure-route-name-filter.md) | MEDIUM | TODO | 无 |
+| 24 | [024 — 深链清空解除核销锁定](024-clear-verification-lock-on-deeplink-removal.md) | MEDIUM | TODO | 无；置信度中，需双向行为验证 |
+| 25 | [025 — 提取核销候选表格列](025-extract-create-verification-table-columns.md) | MEDIUM | TODO | 建议 016/018/021 稳定后再移动结构 |
+
+建议批次：
+1. **正确性优先**：016、017（两个 HIGH，各自独立回归）。
+2. **核销抽屉一组**：018、021（+016）尽量同批改，减少同文件冲突。
+3. **性能**：019、020、022、023，用 Network/Profiler 验证请求数与重渲染。
+4. **边界一致性 / 结构**：024（双向验证后合入）、025（行为保持型平移，最后做）。
+
 ## 批次与验证门
 
 1. **安全与正确性**：001、002、004、005、006、007。每个计划先跑聚焦测试；批次结束跑 web/api typecheck 与认证/财务相关测试。

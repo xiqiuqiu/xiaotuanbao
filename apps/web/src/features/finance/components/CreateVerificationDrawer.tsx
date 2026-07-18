@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightOutlined } from '@ant-design/icons'
 import {
   Alert,
@@ -967,6 +967,14 @@ export function CreateVerificationDrawer({
     initialTransaction,
     initialSchedule,
   })
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    form.resetFields()
+    form.setFieldsValue(state.initialValues)
+  }, [open, form, state.initialValues])
 
   const transactionColumns = useMemo(
     () => buildTransactionColumns(state.departureMap),
