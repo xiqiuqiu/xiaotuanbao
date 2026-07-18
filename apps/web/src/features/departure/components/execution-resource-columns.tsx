@@ -30,6 +30,8 @@ function payableStatusTagColor(status: string): string | undefined {
 
 export type BuildExecutionResourceColumnsOptions = {
   mutationLocked: boolean
+  /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读，生成/关闭不受限。 */
+  canEdit: boolean
   generatingId?: string
   onEdit: (resource: SegmentResourceSummary, viewOnly: boolean) => void
   onViewPayables: (resource: SegmentResourceSummary) => void
@@ -41,6 +43,7 @@ export type BuildExecutionResourceColumnsOptions = {
 
 export function buildExecutionResourceColumns({
   mutationLocked,
+  canEdit,
   generatingId,
   onEdit,
   onViewPayables,
@@ -99,6 +102,7 @@ export function buildExecutionResourceColumns({
         const allowGenerate = canGeneratePayable(record)
         const allowVoid =
           !mutationLocked &&
+          canEdit &&
           Boolean(record.paymentScheduleId) &&
           !record.financeTouched &&
           record.payableStatus !== SegmentPayableStatus.CLOSED
@@ -114,9 +118,9 @@ export function buildExecutionResourceColumns({
             <Button
               type="link"
               size="small"
-              onClick={() => onEdit(record, record.amountFieldsLocked)}
+              onClick={() => onEdit(record, record.amountFieldsLocked || !canEdit)}
             >
-              {mutationLocked || record.amountFieldsLocked ? '查看' : '编辑'}
+              {mutationLocked || record.amountFieldsLocked || !canEdit ? '查看' : '编辑'}
             </Button>
             {!allowGenerate ? (
               <Button type="link" size="small" onClick={() => onViewPayables(record)}>
@@ -143,7 +147,7 @@ export function buildExecutionResourceColumns({
                 关闭节点
               </Button>
             ) : null}
-            {!mutationLocked && allowGenerate ? (
+            {!mutationLocked && canEdit && allowGenerate ? (
               <Popconfirm
                 title="确定删除该资源？"
                 onConfirm={() => onDelete(record.id)}

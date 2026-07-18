@@ -14,7 +14,11 @@ import type { DepartureTransitionAction } from '../utils/departure-transition'
 import type { CloseDepartureFormValues } from './DepartureTransitionModal'
 import type { UnarchiveDepartureFormValues } from './DepartureUnarchiveModal'
 
-export function useDepartureHeaderActions(departure: DepartureDetail, onUpdated: () => void) {
+export function useDepartureHeaderActions(
+  departure: DepartureDetail,
+  canWrite: boolean,
+  onUpdated: () => void,
+) {
   const queryClient = useQueryClient()
   const [overviewForm] = Form.useForm<DepartureOverviewFormValues>()
   const [closeForm] = Form.useForm<CloseDepartureFormValues>()
@@ -29,14 +33,14 @@ export function useDepartureHeaderActions(departure: DepartureDetail, onUpdated:
     departure.status === DepartureStatus.SETTLED ||
     departure.status === DepartureStatus.CLOSED
 
-  const canEdit = !overviewReadOnly
+  const canEdit = canWrite && !overviewReadOnly
   const canTransitionToPending = canEdit && departure.status === DepartureStatus.EDITING
   const canTransitionToSettled =
     canEdit &&
     departure.status === DepartureStatus.PENDING_SETTLEMENT &&
     departure.isFinanciallySettled
-  const canClose = departure.status !== DepartureStatus.CLOSED
-  const canUnarchive = departure.status === DepartureStatus.CLOSED
+  const canClose = canWrite && departure.status !== DepartureStatus.CLOSED
+  const canUnarchive = canWrite && departure.status === DepartureStatus.CLOSED
 
   const invalidateDeparture = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
@@ -129,11 +133,13 @@ export function useDepartureHeaderActions(departure: DepartureDetail, onUpdated:
       onClick: () => setOperationsSheetOpen(true),
     })
 
-    items.push({
-      key: 'save-template',
-      label: '保存为常用路线',
-      onClick: () => setSaveModalOpen(true),
-    })
+    if (canWrite) {
+      items.push({
+        key: 'save-template',
+        label: '保存为常用路线',
+        onClick: () => setSaveModalOpen(true),
+      })
+    }
 
     const statusItems: NonNullable<MenuProps['items']> = []
 
@@ -181,6 +187,7 @@ export function useDepartureHeaderActions(departure: DepartureDetail, onUpdated:
     canTransitionToPending,
     canTransitionToSettled,
     canUnarchive,
+    canWrite,
     openEditDrawer,
   ])
 

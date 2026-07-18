@@ -46,7 +46,7 @@ export class SegmentResourceController {
   }
 
   @Post('segments/:segmentId/resources')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Param('segmentId') segmentId: string,
@@ -65,7 +65,7 @@ export class SegmentResourceController {
   }
 
   @Patch('segment-resources/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -75,7 +75,7 @@ export class SegmentResourceController {
   }
 
   @Delete('segment-resources/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   async remove(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

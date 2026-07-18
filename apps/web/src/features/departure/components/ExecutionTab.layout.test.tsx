@@ -98,6 +98,7 @@ function renderExecutionTab() {
             departure={mockDeparture}
             segmentId="segment-1"
             readOnly={false}
+            canEdit
           />
         </div>
       </ConfigProvider>

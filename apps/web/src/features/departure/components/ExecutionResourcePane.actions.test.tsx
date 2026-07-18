@@ -89,7 +89,10 @@ function baseResource(
   }
 }
 
-function renderPane(segmentOverrides: Partial<ItinerarySegmentSummary> = {}) {
+function renderPane(
+  segmentOverrides: Partial<ItinerarySegmentSummary> = {},
+  { canEdit = true }: { canEdit?: boolean } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -100,6 +103,7 @@ function renderPane(segmentOverrides: Partial<ItinerarySegmentSummary> = {}) {
           departure={departure}
           segment={{ ...segment, ...segmentOverrides }}
           readOnly={false}
+          canEdit={canEdit}
         />
       </ConfigProvider>
     </QueryClientProvider>,

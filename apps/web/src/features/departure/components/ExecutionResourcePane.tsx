@@ -52,6 +52,8 @@ interface ExecutionResourcePaneProps {
   departure: DepartureDetail
   segment: ItinerarySegmentSummary
   readOnly: boolean
+  /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响生成应付。 */
+  canEdit: boolean
   amountReadOnly?: boolean
 }
 
@@ -59,11 +61,14 @@ export function ExecutionResourcePane({
   departure,
   segment,
   readOnly,
+  canEdit,
   amountReadOnly = false,
 }: ExecutionResourcePaneProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const mutationLocked = readOnly || amountReadOnly
+  // 资源增删改与作废应付属 departure:write：财务只读，但生成应付/关闭节点不受此限。
+  const resourceEditable = !mutationLocked && canEdit
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
@@ -242,6 +247,7 @@ export function ExecutionResourcePane({
 
   const columns = buildExecutionResourceColumns({
     mutationLocked,
+    canEdit,
     generatingId: generateMutation.isPending ? generateMutation.variables : undefined,
     onEdit: openEdit,
     onViewPayables,
@@ -272,7 +278,7 @@ export function ExecutionResourcePane({
               批量生成应付
             </Button>
           ) : null}
-          {!mutationLocked && !isLoading && !isError && resources.length > 0 ? (
+          {resourceEditable && !isLoading && !isError && resources.length > 0 ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               添加资源
             </Button>
@@ -298,7 +304,7 @@ export function ExecutionResourcePane({
         </div>
       ) : resources.length === 0 ? (
         <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
-          {!mutationLocked ? (
+          {resourceEditable ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
               添加资源
             </Button>
@@ -318,7 +324,7 @@ export function ExecutionResourcePane({
         open={drawerOpen}
         segment={segment}
         editing={editingResource}
-        readOnly={mutationLocked || viewOnly}
+        readOnly={mutationLocked || viewOnly || !canEdit}
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         onClose={closeDrawer}

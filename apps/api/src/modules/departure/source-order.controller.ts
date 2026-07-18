@@ -66,7 +66,7 @@ export class SourceOrderController {
   }
 
   @Post('departures/:departureId/source-orders')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Param('departureId') departureId: string,
@@ -85,7 +85,7 @@ export class SourceOrderController {
   }
 
   @Patch('source-orders/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -95,7 +95,7 @@ export class SourceOrderController {
   }
 
   @Delete('source-orders/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   async remove(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -114,7 +114,7 @@ export class SourceOrderController {
   }
 
   @Post('source-orders/:id/guests')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   createGuest(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -124,7 +124,7 @@ export class SourceOrderController {
   }
 
   @Patch('source-orders/:id/guests/:guestId')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   updateGuest(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -140,7 +140,7 @@ export class SourceOrderController {
   }
 
   @Delete('source-orders/:id/guests/:guestId')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   async removeGuest(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

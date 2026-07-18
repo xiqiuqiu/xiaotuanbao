@@ -19,6 +19,9 @@ const ADMIN_MENU_KEYS = [
   '/system/roles',
   '/system/users',
 ]
+const COORDINATOR_ACTION_KEYS = ['departure:write']
+const FINANCE_ACTION_KEYS: string[] = []
+const ADMIN_ACTION_KEYS = ['departure:write']
 
 describe('Auth cookie session (e2e)', () => {
   let app: INestApplication
@@ -77,7 +80,7 @@ describe('Auth menu/action keys per preset role (ADR-0023, e2e)', () => {
     await app.close()
   })
 
-  it('login returns menuKeys and an actionKeys channel (empty until action keys are seeded)', async () => {
+  it('login returns menuKeys and 计调 actionKeys with departure:write (ADR-0023)', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/auth/login')
       .set('Origin', 'http://localhost:5173')
@@ -85,33 +88,34 @@ describe('Auth menu/action keys per preset role (ADR-0023, e2e)', () => {
       .expect(201)
 
     expect(response.body.data.menuKeys).toEqual(COORDINATOR_MENU_KEYS)
-    expect(response.body.data.actionKeys).toEqual([])
+    expect(response.body.data.actionKeys).toEqual(COORDINATOR_ACTION_KEYS)
   })
 
-  it('GET /auth/me gives 计调 only 工作台/发团/合作伙伴/供应商 and empty actionKeys', async () => {
+  it('GET /auth/me gives 计调 only 工作台/发团/合作伙伴/供应商 plus departure:write', async () => {
     const cookie = await loginAs(app, 'wangjie')
     const response = await authRequest(app, cookie).get('/api/auth/me').expect(200)
 
     expect(response.body.data.menuKeys).toEqual(COORDINATOR_MENU_KEYS)
     expect(response.body.data.menuKeys).not.toContain('/finance/receivable')
     expect(response.body.data.menuKeys).not.toContain('/finance/transactions')
-    expect(response.body.data.actionKeys).toEqual([])
+    expect(response.body.data.actionKeys).toEqual(COORDINATOR_ACTION_KEYS)
   })
 
-  it('GET /auth/me gives 财务 the business + finance menus and empty actionKeys', async () => {
+  it('GET /auth/me gives 财务 the business + finance menus and no action keys', async () => {
     const cookie = await loginAs(app, 'acai')
     const response = await authRequest(app, cookie).get('/api/auth/me').expect(200)
 
     expect(response.body.data.menuKeys).toEqual(FINANCE_MENU_KEYS)
     expect(response.body.data.menuKeys).not.toContain('/system/users')
-    expect(response.body.data.actionKeys).toEqual([])
+    expect(response.body.data.actionKeys).toEqual(FINANCE_ACTION_KEYS)
+    expect(response.body.data.actionKeys).not.toContain('departure:write')
   })
 
-  it('GET /auth/me gives 企业管理员 all menus and empty actionKeys', async () => {
+  it('GET /auth/me gives 企业管理员 all menus and departure:write', async () => {
     const cookie = await loginAs(app, 'admin')
     const response = await authRequest(app, cookie).get('/api/auth/me').expect(200)
 
     expect(response.body.data.menuKeys).toEqual(ADMIN_MENU_KEYS)
-    expect(response.body.data.actionKeys).toEqual([])
+    expect(response.body.data.actionKeys).toEqual(ADMIN_ACTION_KEYS)
   })
 })

@@ -86,6 +86,7 @@ function renderExecutionTab(segmentId?: string) {
           departure={mockDeparture}
           segmentId={segmentId}
           readOnly={false}
+          canEdit
         />
       </ConfigProvider>
     </QueryClientProvider>,

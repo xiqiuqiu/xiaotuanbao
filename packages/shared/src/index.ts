@@ -116,7 +116,18 @@ export {
   PLATFORM_ORGANIZATION_PREFIX,
 } from './constants/platform-organization'
 export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-keys'
-export { PRESET_ROLE_NAMES, PRESET_ROLE_MENU_KEYS, type PresetRoleName } from './constants/roles'
+export {
+  DEPARTURE_WRITE_ACTION_KEY,
+  V1_ACTION_KEYS,
+  ACTION_KEY_LABELS,
+  type ActionKey,
+} from './constants/action-keys'
+export {
+  PRESET_ROLE_NAMES,
+  PRESET_ROLE_MENU_KEYS,
+  PRESET_ROLE_ACTION_KEYS,
+  type PresetRoleName,
+} from './constants/roles'
 export { planRolePermissionSync } from './constants/plan-role-permission-sync'
 export { UserStatus } from './enums/user-status.enum'
 export { OrganizationStatus } from './enums/organization-status.enum'

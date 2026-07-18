@@ -32,7 +32,10 @@ import {
 
 interface SourceOrdersTabProps {
   departure: DepartureDetail
+  /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
+  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应收。 */
+  canEdit: boolean
   amountReadOnly?: boolean
 }
 
@@ -135,7 +138,13 @@ function drawerReducer(state: DrawerState, action: DrawerAction): DrawerState {
   }
 }
 
-export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }: SourceOrdersTabProps) {
+export function SourceOrdersTab({
+  departure,
+  readOnly,
+  canEdit,
+  amountReadOnly = false,
+}: SourceOrdersTabProps) {
+  const editable = !readOnly && canEdit
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [filters, dispatchFilters] = useReducer(filterReducer, {
@@ -303,7 +312,8 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
   const columns = useMemo(
     () =>
       buildSourceOrdersColumns({
-        readOnly,
+        canEdit: editable,
+        canGenerate: !readOnly,
         deleteMutation,
         generateMutation,
         onView,
@@ -313,6 +323,7 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       }),
     [
       deleteMutation,
+      editable,
       generateMutation,
       onEdit,
       onOpenGuests,
@@ -337,20 +348,22 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
         onApply={() => dispatchFilters({ type: 'APPLY' })}
         onReset={() => dispatchFilters({ type: 'RESET' })}
         extra={
-          !readOnly ? (
+          showBatchGenerate || editable ? (
             <Space>
               {showBatchGenerate ? (
                 <Button onClick={confirmBatchGenerate} loading={batchGenerateMutation.isPending}>
                   批量生成应收
                 </Button>
               ) : null}
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
-              >
-                添加客源单
-              </Button>
+              {editable ? (
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
+                >
+                  添加客源单
+                </Button>
+              ) : null}
             </Space>
           ) : undefined
         }
@@ -368,7 +381,7 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       <SourceOrderDrawer
         open={drawer.drawerOpen}
         editing={drawer.editingOrder}
-        readOnly={readOnly || drawer.viewOnly}
+        readOnly={!editable || drawer.viewOnly}
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         onClose={() => dispatchDrawer({ type: 'CLOSE_DRAWER' })}
@@ -378,7 +391,7 @@ export function SourceOrdersTab({ departure, readOnly, amountReadOnly = false }:
       <SourceOrderGuestDrawer
         open={drawer.guestDrawerOpen}
         sourceOrder={drawer.guestOrder}
-        readOnly={readOnly}
+        readOnly={!editable}
         onClose={() => dispatchDrawer({ type: 'CLOSE_GUEST_DRAWER' })}
       />
     </div>

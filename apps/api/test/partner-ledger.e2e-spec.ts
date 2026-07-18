@@ -318,7 +318,8 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
     const voidedGenerated = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${voidedResource.body.data.id as string}/generate-payable`)
       .expect(201)
-    await authRequest(app, financeToken)
+    // ADR-0023: 资源应付作废归 departure:write（计调），财务无权。
+    await authRequest(app, coordinatorToken)
       .post(
         `/api/finance/payment-schedules/${voidedGenerated.body.data.schedule.id as string}/void-resource-payable`,
       )

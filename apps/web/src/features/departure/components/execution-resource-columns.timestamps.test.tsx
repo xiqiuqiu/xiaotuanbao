@@ -35,6 +35,7 @@ function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResou
 function columnTitles() {
   return buildExecutionResourceColumns({
     mutationLocked: false,
+    canEdit: true,
     onEdit: vi.fn(),
     onViewPayables: vi.fn(),
     onGenerate: vi.fn(),
@@ -63,6 +64,7 @@ describe('execution resource timestamp columns', () => {
   it('按中国标准时间格式化创建与更新时间', () => {
     const columns = buildExecutionResourceColumns({
       mutationLocked: false,
+      canEdit: true,
       onEdit: vi.fn(),
       onViewPayables: vi.fn(),
       onGenerate: vi.fn(),

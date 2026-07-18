@@ -32,7 +32,7 @@ export class RouteTemplateController {
   }
 
   @Post('from-departure/:departureId')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   createFromDeparture(
     @Req() request: { user: { organizationId: string } },
     @Param('departureId') departureId: string,
@@ -55,7 +55,7 @@ export class RouteTemplateController {
   }
 
   @Post()
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Body() dto: CreateRouteTemplateDto,
@@ -64,7 +64,7 @@ export class RouteTemplateController {
   }
 
   @Delete(':id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   async remove(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

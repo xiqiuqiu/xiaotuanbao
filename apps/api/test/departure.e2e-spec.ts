@@ -154,13 +154,11 @@ describe('Departure API (e2e)', () => {
     })
   })
 
-  it('allows finance role on POST /departures (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, financeToken)
+  it('forbids finance role on POST /departures (ADR-0023 departure:write)', async () => {
+    await authRequest(app, financeToken)
       .post('/api/departures')
       .send(createPayload({ name: `${testPrefix}-finance-create` }))
-      .expect(201)
-
-    expect(response.body.data.name).toBe(`${testPrefix}-finance-create`)
+      .expect(403)
   })
 
   it('returns preview departure number for current Shanghai month', async () => {
@@ -572,22 +570,24 @@ describe('Departure API (e2e)', () => {
       expect(response.body.data.archiveHistory[1].reason).toBe('企业管理员解除归档')
     })
 
-    it('allows finance role to close and unarchive (ADR-0016 early-launch menus)', async () => {
+    it('forbids finance role from close and unarchive (ADR-0023 departure:write)', async () => {
       const departure = await createTestDeparture({ name: `${testPrefix}-finance-archive` })
 
-      const closed = await authRequest(app, financeToken)
+      await authRequest(app, financeToken)
         .post(`/api/departures/${departure.id}/close`)
         .send({ reason: '财务归档' })
+        .expect(403)
+
+      // 由计调关闭后，财务同样无权解除归档。
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/close`)
+        .send({ reason: '计调归档' })
         .expect(201)
 
-      expect(closed.body.data.status).toBe(DepartureStatus.closed)
-
-      const unarchived = await authRequest(app, financeToken)
+      await authRequest(app, financeToken)
         .post(`/api/departures/${departure.id}/unarchive`)
         .send({ reason: '财务解除归档' })
-        .expect(201)
-
-      expect(unarchived.body.data.status).toBe(DepartureStatus.pending_settlement)
+        .expect(403)
     })
 
     it('rejects cross-organization close and unarchive', async () => {
@@ -1829,7 +1829,8 @@ describe('Departure API (e2e)', () => {
       const voidedPayable = await authRequest(app, coordinatorToken)
         .post(`/api/segment-resources/${seeded.resourceId}/generate-payable`)
         .expect(201)
-      await authRequest(app, financeToken)
+      // ADR-0023: 资源应付作废归 departure:write（计调），财务无权。
+      await authRequest(app, coordinatorToken)
         .post(
           `/api/finance/payment-schedules/${voidedPayable.body.data.schedule.id}/void-resource-payable`,
         )

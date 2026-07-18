@@ -16,12 +16,14 @@ export class MenuPermissionGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const menuKey = this.reflector.getAllAndOverride<string | undefined>(REQUIRE_MENU_KEY, [
+    // ADR-0023: carries either a path-shaped menu key (`/departure`) or an
+    // action key (`departure:write`); both resolve through one permission set.
+    const requiredKey = this.reflector.getAllAndOverride<string | undefined>(REQUIRE_MENU_KEY, [
       context.getHandler(),
       context.getClass(),
     ])
 
-    if (!menuKey) {
+    if (!requiredKey) {
       return true
     }
 
@@ -32,8 +34,8 @@ export class MenuPermissionGuard implements CanActivate {
       throw new ForbiddenException('无权访问')
     }
 
-    const menuKeys = await this.authService.getMenuKeysForUser(userId)
-    if (!menuKeys.includes(menuKey)) {
+    const permissionKeys = await this.authService.getPermissionKeysForUser(userId)
+    if (!permissionKeys.includes(requiredKey)) {
       throw new ForbiddenException('无权访问')
     }
 

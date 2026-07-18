@@ -59,7 +59,7 @@ export class DepartureController {
   }
 
   @Post()
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Body() dto: CreateDepartureDto,
@@ -68,7 +68,7 @@ export class DepartureController {
   }
 
   @Post(':id/copy')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   copy(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -117,7 +117,7 @@ export class DepartureController {
   }
 
   @Patch(':id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -127,7 +127,7 @@ export class DepartureController {
   }
 
   @Post(':id/transition')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   transition(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -137,7 +137,7 @@ export class DepartureController {
   }
 
   @Post(':id/close')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   close(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
@@ -147,7 +147,7 @@ export class DepartureController {
   }
 
   @Post(':id/unarchive')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   unarchive(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,

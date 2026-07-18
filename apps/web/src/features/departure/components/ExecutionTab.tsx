@@ -37,7 +37,10 @@ import styles from './ExecutionTab.module.css'
 interface ExecutionTabProps {
   departure: DepartureDetail
   segmentId?: string
+  /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
+  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应付。 */
+  canEdit: boolean
   amountReadOnly?: boolean
 }
 
@@ -51,6 +54,7 @@ export function ExecutionTab({
   departure,
   segmentId,
   readOnly,
+  canEdit,
   amountReadOnly = false,
 }: ExecutionTabProps) {
   const navigate = useNavigate()
@@ -59,7 +63,8 @@ export function ExecutionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  const mutationLocked = readOnly || amountReadOnly
+  // 行程段增删改属 departure:write：财务（无 canEdit）只读，但资源生成应付不受此限。
+  const mutationLocked = readOnly || amountReadOnly || !canEdit
 
   const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ['segments', departure.id],
@@ -284,6 +289,7 @@ export function ExecutionTab({
                   departure={departure}
                   segment={selectedSegment}
                   readOnly={readOnly}
+                  canEdit={canEdit}
                   amountReadOnly={amountReadOnly}
                 />
               </div>

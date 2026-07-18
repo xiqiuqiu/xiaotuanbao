@@ -129,6 +129,7 @@ function Harness() {
       departure={mockDeparture}
       segmentId={segmentId}
       readOnly={false}
+      canEdit
     />
   )
 }

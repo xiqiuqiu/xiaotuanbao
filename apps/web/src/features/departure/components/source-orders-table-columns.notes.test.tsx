@@ -18,7 +18,8 @@ const SOURCE_ORDERS_TABLE_SCROLL_X = 1760
 describe('source orders notes column', () => {
   it('备注列有明确宽度，且全部列宽之和不超过表格横向滚动宽度', () => {
     const columns = buildSourceOrdersColumns({
-      readOnly: false,
+      canEdit: true,
+      canGenerate: true,
       deleteMutation: stubMutation(),
       generateMutation: stubMutation(),
       onView: noop,

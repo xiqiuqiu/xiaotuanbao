@@ -32,9 +32,10 @@ function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResou
   }
 }
 
-function renderActions(row: SegmentResourceSummary) {
+function renderActions(row: SegmentResourceSummary, canEdit = true) {
   const columns = buildExecutionResourceColumns({
     mutationLocked: false,
+    canEdit,
     onEdit: vi.fn(),
     onViewPayables: vi.fn(),
     onGenerate: vi.fn(),
@@ -64,6 +65,25 @@ describe('resource payable actions', () => {
 
     expect(screen.getByRole('button', { name: '关闭节点' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '作废应付' })).toBeNull()
+  })
+
+  it('hides 作废应付 for 财务 (no departure:write) before finance is touched', () => {
+    renderActions(resource(), false)
+
+    expect(screen.queryByRole('button', { name: '作废应付' })).toBeNull()
+    // 只读态下编辑按钮降级为查看。
+    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+  })
+
+  it('keeps 生成应付 visible for 财务 when the payable is ungenerated', () => {
+    renderActions(
+      resource({ payableStatus: 'not_generated', paymentScheduleId: null }),
+      false,
+    )
+
+    expect(screen.getByRole('button', { name: '生成应付' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
   it('shows neither action after the payable is settled', () => {

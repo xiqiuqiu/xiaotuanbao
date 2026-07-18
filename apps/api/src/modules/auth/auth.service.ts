@@ -113,16 +113,34 @@ export class AuthService {
   }
 
   async getMenuKeysForUser(userId: string): Promise<string[]> {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, deletedAt: null },
-      include: userWithRolesInclude,
-    })
-
+    const user = await this.loadUserForPermissionKeys(userId)
     if (!user || user.isPlatformAdmin) {
       return []
     }
 
     return this.resolvePermissionKeys(user).menuKeys
+  }
+
+  /**
+   * Union of menu + action keys, used by `MenuPermissionGuard` so that
+   * `@RequireMenu('/departure')` and `@RequireMenu('departure:write')` (ADR-0023)
+   * share one enforcement path.
+   */
+  async getPermissionKeysForUser(userId: string): Promise<string[]> {
+    const user = await this.loadUserForPermissionKeys(userId)
+    if (!user || user.isPlatformAdmin) {
+      return []
+    }
+
+    const { menuKeys, actionKeys } = this.resolvePermissionKeys(user)
+    return [...menuKeys, ...actionKeys]
+  }
+
+  private loadUserForPermissionKeys(userId: string) {
+    return this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      include: userWithRolesInclude,
+    })
   }
 
   buildSession(user: {

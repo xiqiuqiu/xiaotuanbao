@@ -1,10 +1,13 @@
 import {
+  ACTION_KEY_LABELS,
   MENU_KEY_LABELS,
   PLATFORM_ORGANIZATION_NAME,
   PLATFORM_ORGANIZATION_PREFIX,
+  PRESET_ROLE_ACTION_KEYS,
   PRESET_ROLE_MENU_KEYS,
   PRESET_ROLE_NAMES,
   UserStatus,
+  V1_ACTION_KEYS,
   V1_MENU_KEYS,
   planRolePermissionSync,
 } from '@xiaotuanbao/shared'
@@ -34,6 +37,14 @@ async function seedRoleCatalog() {
     })
   }
 
+  for (const key of V1_ACTION_KEYS) {
+    await prisma.permission.upsert({
+      where: { key },
+      create: { key, name: ACTION_KEY_LABELS[key] },
+      update: { name: ACTION_KEY_LABELS[key] },
+    })
+  }
+
   const permissions = await prisma.permission.findMany()
   const permissionByKey = new Map(permissions.map((item) => [item.key, item]))
 
@@ -44,7 +55,10 @@ async function seedRoleCatalog() {
       update: {},
     })
 
-    const desiredKeys = PRESET_ROLE_MENU_KEYS[roleName]
+    const desiredKeys = [
+      ...PRESET_ROLE_MENU_KEYS[roleName],
+      ...PRESET_ROLE_ACTION_KEYS[roleName],
+    ]
     const existing = await prisma.rolePermission.findMany({
       where: { roleId: role.id },
       include: { permission: true },

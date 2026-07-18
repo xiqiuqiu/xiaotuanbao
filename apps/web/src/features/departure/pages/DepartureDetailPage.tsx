@@ -15,6 +15,7 @@ import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentS
 import { TransactionsWorkspace } from '@/features/finance/components/TransactionsWorkspace'
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
+import { canEditDeparture } from '../utils/departure-permission'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
@@ -52,6 +53,8 @@ export function DepartureDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const menuKeys = useAuthStore((state) => state.menuKeys)
+  const actionKeys = useAuthStore((state) => state.actionKeys)
+  const canEdit = canEditDeparture(actionKeys)
   const animatedOverviewDepartureIds = useRef(new Set<string>())
 
   const requestedTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
@@ -199,6 +202,7 @@ export function DepartureDetailPage() {
           <SourceOrdersTab
             departure={departure}
             readOnly={readOnly}
+            canEdit={canEdit}
             amountReadOnly={amountReadOnly}
           />,
         ),
@@ -214,6 +218,7 @@ export function DepartureDetailPage() {
             departure={departure}
             segmentId={search.segmentId}
             readOnly={readOnly}
+            canEdit={canEdit}
             amountReadOnly={amountReadOnly}
           />,
         ),
@@ -296,7 +301,7 @@ export function DepartureDetailPage() {
         hasData={Boolean(departure)}
         onRefresh={handleRefreshDetail}
       />
-      <DepartureHeader departure={departure} onUpdated={handleUpdated} />
+      <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
 
       <Tabs
         activeKey={activeTab}

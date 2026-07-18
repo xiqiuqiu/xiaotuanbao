@@ -13,7 +13,10 @@ import {
 } from '../catalog'
 
 interface BuildSourceOrdersColumnsOptions {
-  readOnly: boolean
+  /** 持有 `departure:write` 且发团未关闭：显示编辑/客人名单/删除。 */
+  canEdit: boolean
+  /** 发团未关闭（持有 `/departure`）：显示生成应收；财务只读仍可见。 */
+  canGenerate: boolean
   deleteMutation: UseMutationResult<unknown, Error, string, unknown>
   generateMutation: UseMutationResult<unknown, Error, string, unknown>
   onView: (record: SourceOrderSummary) => void
@@ -27,7 +30,8 @@ function canGenerateReceivable(record: SourceOrderSummary): boolean {
 }
 
 export function buildSourceOrdersColumns({
-  readOnly,
+  canEdit,
+  canGenerate,
   deleteMutation,
   generateMutation,
   onView,
@@ -108,7 +112,7 @@ export function buildSourceOrdersColumns({
                 查看应收
               </Button>
             ) : null}
-            {!readOnly ? (
+            {canEdit ? (
               <>
                 <Button type="link" size="small" onClick={() => onEdit(record)}>
                   编辑
@@ -116,29 +120,29 @@ export function buildSourceOrdersColumns({
                 <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
                   客人名单
                 </Button>
-                {allowGenerate ? (
-                  <>
-                    <Button
-                      type="link"
-                      size="small"
-                      loading={
-                        generateMutation.isPending && generateMutation.variables === record.id
-                      }
-                      onClick={() => generateMutation.mutate(record.id)}
-                    >
-                      生成应收
-                    </Button>
-                    <Popconfirm
-                      title="确认删除该客源单？"
-                      onConfirm={() => deleteMutation.mutate(record.id)}
-                    >
-                      <Button type="link" size="small" danger>
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  </>
-                ) : null}
               </>
+            ) : null}
+            {canGenerate && allowGenerate ? (
+              <Button
+                type="link"
+                size="small"
+                loading={
+                  generateMutation.isPending && generateMutation.variables === record.id
+                }
+                onClick={() => generateMutation.mutate(record.id)}
+              >
+                生成应收
+              </Button>
+            ) : null}
+            {canEdit && allowGenerate ? (
+              <Popconfirm
+                title="确认删除该客源单？"
+                onConfirm={() => deleteMutation.mutate(record.id)}
+              >
+                <Button type="link" size="small" danger>
+                  删除
+                </Button>
+              </Popconfirm>
             ) : null}
           </Space>
         )

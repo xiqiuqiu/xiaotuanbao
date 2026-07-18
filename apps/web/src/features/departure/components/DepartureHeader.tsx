@@ -10,10 +10,11 @@ import { useDepartureHeaderActions } from './useDepartureHeaderActions'
 
 interface DepartureHeaderProps {
   departure: DepartureDetail
+  canEdit: boolean
   onUpdated: () => void
 }
 
-export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) {
+export function DepartureHeader({ departure, canEdit, onUpdated }: DepartureHeaderProps) {
   const {
     overviewForm,
     closeForm,
@@ -36,7 +37,7 @@ export function DepartureHeader({ departure, onUpdated }: DepartureHeaderProps) 
     handleTransitionConfirm,
     handleCloseSubmit,
     handleUnarchiveSubmit,
-  } = useDepartureHeaderActions(departure, onUpdated)
+  } = useDepartureHeaderActions(departure, canEdit, onUpdated)
 
   return (
     <>

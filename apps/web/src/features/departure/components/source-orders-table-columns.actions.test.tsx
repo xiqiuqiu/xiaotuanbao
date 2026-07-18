@@ -49,13 +49,15 @@ function stubMutation(): UseMutationResult<unknown, Error, string, unknown> {
 function renderActions(
   order: SourceOrderSummary,
   options: {
-    readOnly?: boolean
+    canEdit?: boolean
+    canGenerate?: boolean
     onViewReceivables?: (record: SourceOrderSummary) => void
   } = {},
 ) {
   const onViewReceivables = options.onViewReceivables ?? vi.fn()
   const columns = buildSourceOrdersColumns({
-    readOnly: options.readOnly ?? false,
+    canEdit: options.canEdit ?? true,
+    canGenerate: options.canGenerate ?? true,
     deleteMutation: stubMutation(),
     generateMutation: stubMutation(),
     onView: vi.fn(),
@@ -115,6 +117,23 @@ describe('source orders action column', () => {
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+  })
+
+  it('keeps 生成应收 visible but hides 编辑/删除 for 财务 (no departure:write)', () => {
+    renderActions(baseOrder(), { canEdit: false, canGenerate: true })
+
+    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '客人名单' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+  })
+
+  it('hides 生成应收 when the departure is closed (no /departure generate path)', () => {
+    renderActions(baseOrder(), { canEdit: false, canGenerate: false })
+
+    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
   })
 
   it('calls onViewReceivables when 查看应收 is clicked', async () => {

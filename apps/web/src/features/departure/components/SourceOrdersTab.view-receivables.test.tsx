@@ -72,7 +72,7 @@ function renderTab() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrdersTab departure={departure} readOnly={false} />
+        <SourceOrdersTab departure={departure} readOnly={false} canEdit />
       </ConfigProvider>
     </QueryClientProvider>,
   )

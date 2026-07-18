@@ -31,7 +31,7 @@ export class SegmentController {
   }
 
   @Post('departures/:departureId/segments')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Param('departureId') departureId: string,
@@ -50,7 +50,7 @@ export class SegmentController {
   }
 
   @Patch('segments/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -60,7 +60,7 @@ export class SegmentController {
   }
 
   @Delete('segments/:id')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   async remove(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

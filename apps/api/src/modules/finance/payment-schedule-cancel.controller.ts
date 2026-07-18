@@ -95,11 +95,10 @@ export class PaymentScheduleCancelController {
     })
   }
 
-  // ADR-0023: 资源应付作废是计调纠错动作（与「关闭节点」＝财务互补），长期归
-  // departure:write。本票不做操作级强制，先保持菜单级 /departure（计调与财务均可，
-  // 与收回 ADR-0016 前行为一致），操作级收敛留待后续按钮级权限票。
+  // ADR-0023: 资源应付作废是计调纠错动作（与「关闭节点」＝财务互补），归 departure:write，
+  // 财务无此 action key 故被拒（403），计调与企业管理员可作废。
   @Post(':id/void-resource-payable')
-  @RequireMenu('/departure')
+  @RequireMenu('departure:write')
   voidResourcePayable(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('id') id: string,
