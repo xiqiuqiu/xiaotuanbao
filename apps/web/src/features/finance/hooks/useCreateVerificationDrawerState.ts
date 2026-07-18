@@ -108,7 +108,6 @@ export function useCreateVerificationDrawerState({
       isReceivable ? 'finance-receivables' : 'finance-payables',
       'create-verification',
       effectiveDepartureId,
-      selectedTransactionId,
     ],
     queryFn: () =>
       (isReceivable ? listReceivables : listPayables)({
@@ -200,6 +199,16 @@ export function useCreateVerificationDrawerState({
     setScheduleSearchKeyword('')
   }
 
+  const handleDepartureChange = () => {
+    form.setFieldsValue({
+      transactionId: '',
+      paymentScheduleId: '',
+      amountYuan: 0,
+    })
+    setTransactionSearchKeyword('')
+    setScheduleSearchKeyword('')
+  }
+
   const handleSelectTransaction = (transaction: FinanceTransactionSummary) => {
     if (initialSchedule) {
       form.setFieldsValue({
@@ -278,6 +287,7 @@ export function useCreateVerificationDrawerState({
     postTransactionBalanceCents,
     postUnsettledCents,
     handleDirectionChange,
+    handleDepartureChange,
     handleSelectTransaction,
     handleClearTransaction,
     handleClearSchedule,

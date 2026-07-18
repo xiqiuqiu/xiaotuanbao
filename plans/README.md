@@ -37,10 +37,10 @@
 | --- | --- | --- | --- | --- |
 | 16 | [016 — 打开核销抽屉重置表单](016-reset-verification-form-on-open.md) | HIGH | DONE | 无；建议优先（财务正确性） |
 | 17 | [017 — 定位结束清空 pendingPage](017-fix-locate-pending-page-reset.md) | HIGH | DONE | 无；建议优先（翻页锁死） |
-| 18 | [018 — 精简核销 schedules queryKey](018-trim-verification-schedules-query-key.md) | MEDIUM | TODO | 与 016/021 同改核销抽屉，合并注意 |
+| 18 | [018 — 精简核销 schedules queryKey](018-trim-verification-schedules-query-key.md) | MEDIUM | DONE | 与 016/021 同改核销抽屉，合并注意 |
 | 19 | [019 — Partner 详情 Tab destroyOnHidden](019-partner-detail-tabs-destroy-on-hidden.md) | MEDIUM | TODO | 无 |
 | 20 | [020 — 收付款 keyword 防抖](020-debounce-payment-schedule-keyword.md) | MEDIUM | TODO | 无；与 017 同改 workspace/locate 链 |
-| 21 | [021 — 核销切换发团清选择](021-clear-verification-selection-on-departure-change.md) | MEDIUM | TODO | 与 016/018 同改核销抽屉 |
+| 21 | [021 — 核销切换发团清选择](021-clear-verification-selection-on-departure-change.md) | MEDIUM | DONE | 与 016/018 同改核销抽屉 |
 | 22 | [022 — 执行资源列 useMemo](022-memoize-execution-resource-columns.md) | MEDIUM | TODO | 无 |
 | 23 | [023 — 发团路线名防抖](023-debounce-departure-route-name-filter.md) | MEDIUM | TODO | 无 |
 | 24 | [024 — 深链清空解除核销锁定](024-clear-verification-lock-on-deeplink-removal.md) | MEDIUM | TODO | 无；置信度中，需双向行为验证 |

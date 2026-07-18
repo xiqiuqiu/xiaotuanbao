@@ -218,6 +218,7 @@ interface VerificationBasicsSectionProps {
   departureOptions: Array<{ value: string; label: string }>
   lockedDepartureId?: string
   onDirectionChange: (direction: VerificationDirection) => void
+  onDepartureChange: () => void
 }
 
 function VerificationBasicsSection({
@@ -225,6 +226,7 @@ function VerificationBasicsSection({
   departureOptions,
   lockedDepartureId,
   onDirectionChange,
+  onDepartureChange,
 }: VerificationBasicsSectionProps) {
   return (
     <>
@@ -266,6 +268,7 @@ function VerificationBasicsSection({
               placeholder="可选，缩小候选范围"
               options={departureOptions}
               disabled={Boolean(lockedDepartureId)}
+              onChange={onDepartureChange}
             />
           </Form.Item>
         </Col>
@@ -1074,6 +1077,7 @@ export function CreateVerificationDrawer({
           departureOptions={state.departureOptions}
           lockedDepartureId={lockedDepartureId}
           onDirectionChange={state.handleDirectionChange}
+          onDepartureChange={state.handleDepartureChange}
         />
 
         <Divider />
