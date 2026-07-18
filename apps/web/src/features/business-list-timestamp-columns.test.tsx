@@ -31,7 +31,7 @@ function stubMutation(): UseMutationResult<unknown, Error, string, unknown> {
 describe('业务列表时间列', () => {
   it('员工、合作伙伴、供应商和发团在操作列前显示创建及更新时间', () => {
     expectTimestampsBeforeActions(titles(buildEmployeeColumns(noop, noop)))
-    expectTimestampsBeforeActions(titles(buildPartnerColumns(false, noop, noop, noop)))
+    expectTimestampsBeforeActions(titles(buildPartnerColumns(false, noop, noop, noop, true)))
     expectTimestampsBeforeActions(titles(buildSupplierColumns(false, noop, noop, noop)))
     expectTimestampsBeforeActions(titles(buildDepartureColumns(vi.fn())))
   })

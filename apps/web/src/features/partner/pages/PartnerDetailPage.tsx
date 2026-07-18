@@ -3,7 +3,9 @@ import { Button, Card, Form, Spin, Tabs, Typography, message } from 'antd'
 import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
+import { useAuthStore } from '@/app/store/auth.store'
 import { getPartner, updatePartner } from '@/services/partner.service'
+import { canEditPartner } from '../utils/partner-permission'
 import { PartnerFormDrawer } from '../components/PartnerFormDrawer'
 import { PartnerSourceOrdersTab } from '../components/PartnerSourceOrdersTab'
 import { PartnerLedgerPanel } from '../components/PartnerLedgerPanel'
@@ -17,6 +19,7 @@ export function PartnerDetailPage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<PartnerFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const canEdit = canEditPartner(useAuthStore((state) => state.actionKeys))
   const goBack = () => void navigate({ to: '/partner' })
 
   const { data: partner, isLoading, isError } = useQuery({
@@ -99,9 +102,11 @@ export function PartnerDetailPage() {
         <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
           {partner.name}
         </Typography.Title>
-        <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
-          编辑
-        </Button>
+        {canEdit ? (
+          <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
+            编辑
+          </Button>
+        ) : null}
       </div>
 
       <Card>

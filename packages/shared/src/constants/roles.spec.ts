@@ -53,6 +53,12 @@ describe('PRESET_ROLE_ACTION_KEYS (ADR-0023)', () => {
     expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]).not.toContain('departure:write')
   })
 
+  it('grants partner:write to 计调 and 企业管理员 but not 财务', () => {
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.COORDINATOR]).toContain('partner:write')
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.ORG_ADMIN]).toContain('partner:write')
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]).not.toContain('partner:write')
+  })
+
   it('gives 财务 no action keys at all', () => {
     expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]).toEqual([])
   })

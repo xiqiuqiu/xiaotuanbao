@@ -13,6 +13,7 @@ export function buildPartnerColumns(
   onEdit: (partner: PartnerSummary) => void,
   onArchive: (partner: PartnerSummary) => void,
   onRestore: (partnerId: string) => void,
+  canEdit: boolean,
 ): ColumnsType<PartnerSummary> {
   return [
     {
@@ -33,12 +34,17 @@ export function buildPartnerColumns(
       },
     },
     ...buildBusinessTimestampColumns<PartnerSummary>(),
-    {
-      title: '操作', key: 'actions', render: (_, record) => {
-        if (includeArchived && record.status === DirectoryProfileStatus.ARCHIVED) return <Button type="link" onClick={() => onRestore(record.id)}>恢复</Button>
-        if (record.status === DirectoryProfileStatus.ARCHIVED) return null
-        return <Space><Button type="link" onClick={() => onEdit(record)}>编辑</Button><Button type="link" danger onClick={() => onArchive(record)}>删除</Button></Space>
-      },
-    },
+    // ADR-0023: 目录维护入口按 partner:write 显隐；财务（无 canEdit）只读，隐藏整列。
+    ...(canEdit
+      ? [
+          {
+            title: '操作', key: 'actions', render: (_: unknown, record: PartnerSummary) => {
+              if (includeArchived && record.status === DirectoryProfileStatus.ARCHIVED) return <Button type="link" onClick={() => onRestore(record.id)}>恢复</Button>
+              if (record.status === DirectoryProfileStatus.ARCHIVED) return null
+              return <Space><Button type="link" onClick={() => onEdit(record)}>编辑</Button><Button type="link" danger onClick={() => onArchive(record)}>删除</Button></Space>
+            },
+          },
+        ]
+      : []),
   ]
 }

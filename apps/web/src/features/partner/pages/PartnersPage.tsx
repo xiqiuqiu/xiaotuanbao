@@ -20,6 +20,8 @@ import {
   buildUpdatePayload,
   partnerToFormValues,
 } from '../utils/partner-form'
+import { useAuthStore } from '@/app/store/auth.store'
+import { canEditPartner } from '../utils/partner-permission'
 import { PageHeader } from '@/layouts/PageHeader'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
 import {
@@ -96,6 +98,7 @@ export function PartnersPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingPartner, setEditingPartner] = useState<PartnerSummary | null>(null)
   const [state, dispatch] = useReducer(partnersPageReducer, initialPartnersPageState)
+  const canEdit = canEditPartner(useAuthStore((s) => s.actionKeys))
 
   const listFilterKey = [
     state.search,
@@ -230,8 +233,15 @@ export function PartnersPage() {
   )
 
   const columns = useMemo(
-    () => buildPartnerColumns(state.includeArchived, openEditDrawer, handleArchive, handleRestore),
-    [handleArchive, handleRestore, openEditDrawer, state.includeArchived],
+    () =>
+      buildPartnerColumns(
+        state.includeArchived,
+        openEditDrawer,
+        handleArchive,
+        handleRestore,
+        canEdit,
+      ),
+    [canEdit, handleArchive, handleRestore, openEditDrawer, state.includeArchived],
   )
 
   return (
@@ -239,9 +249,11 @@ export function PartnersPage() {
       <PageHeader
         title="合作伙伴管理"
         action={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-            创建合作伙伴
-          </Button>
+          canEdit ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+              创建合作伙伴
+            </Button>
+          ) : undefined
         }
       />
 

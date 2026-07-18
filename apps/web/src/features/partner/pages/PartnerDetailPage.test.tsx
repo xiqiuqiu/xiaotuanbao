@@ -8,6 +8,7 @@ import {
   PartnerType,
 } from '@xiaotuanbao/shared'
 import type { PartnerSummary } from '@/types/api'
+import { useAuthStore } from '@/app/store/auth.store'
 import { PartnerDetailPage } from './PartnerDetailPage'
 
 const mockPartner: PartnerSummary = {
@@ -90,9 +91,12 @@ function renderDetailPage() {
 describe('PartnerDetailPage', () => {
   afterEach(() => {
     cleanup()
+    useAuthStore.setState({ actionKeys: [] })
   })
 
   beforeEach(() => {
+    // 默认按可维护目录（计调/管理员）渲染；只读用例单独覆盖。
+    useAuthStore.setState({ actionKeys: ['partner:write'] })
     vi.mocked(getPartner).mockResolvedValue(mockPartner)
     vi.mocked(listPartnerSourceOrders).mockResolvedValue({
       items: [],
@@ -121,6 +125,19 @@ describe('PartnerDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑合作伙伴')).toBeInTheDocument()
     expect(screen.getByLabelText('合作伙伴名称')).toHaveValue('华东国旅')
+  })
+
+  it('hides the edit entry when 财务 lacks partner:write but keeps the ledger tab', async () => {
+    const user = userEvent.setup()
+    useAuthStore.setState({ actionKeys: [] })
+    renderDetailPage()
+
+    await screen.findByRole('heading', { level: 4, name: '华东国旅' })
+    expect(screen.queryByRole('button', { name: /编辑/ })).not.toBeInTheDocument()
+
+    // 往来账款 Tab 不受 partner:write 限制，照常可用。
+    await user.click(screen.getByRole('tab', { name: '往来账款' }))
+    expect(await screen.findByText('应收')).toBeInTheDocument()
   })
 
   it('defaults to receivable on the accounts tab and switches to payable via Segmented', async () => {

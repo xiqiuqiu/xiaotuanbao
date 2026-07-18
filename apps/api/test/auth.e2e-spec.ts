@@ -19,9 +19,9 @@ const ADMIN_MENU_KEYS = [
   '/system/roles',
   '/system/users',
 ]
-const COORDINATOR_ACTION_KEYS = ['departure:write']
+const COORDINATOR_ACTION_KEYS = ['departure:write', 'partner:write']
 const FINANCE_ACTION_KEYS: string[] = []
-const ADMIN_ACTION_KEYS = ['departure:write']
+const ADMIN_ACTION_KEYS = ['departure:write', 'partner:write']
 
 describe('Auth cookie session (e2e)', () => {
   let app: INestApplication

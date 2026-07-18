@@ -21,7 +21,7 @@ export class PartnerController {
   }
 
   @Post()
-  @RequireMenu('/partner')
+  @RequireMenu('partner:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Body() dto: CreatePartnerDto,
@@ -39,7 +39,7 @@ export class PartnerController {
   }
 
   @Patch(':id')
-  @RequireMenu('/partner')
+  @RequireMenu('partner:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -49,7 +49,7 @@ export class PartnerController {
   }
 
   @Post(':id/archive')
-  @RequireMenu('/partner')
+  @RequireMenu('partner:write')
   archive(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -58,7 +58,7 @@ export class PartnerController {
   }
 
   @Post(':id/restore')
-  @RequireMenu('/partner')
+  @RequireMenu('partner:write')
   restore(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
