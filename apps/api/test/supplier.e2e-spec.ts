@@ -67,13 +67,11 @@ describe('Supplier API (e2e)', () => {
     expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('allows finance role to create suppliers (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, financeToken)
+  it('rejects finance role creating suppliers (ADR-0023 / #135: 目录只读)', async () => {
+    await authRequest(app, financeToken)
       .post('/api/suppliers')
-      .send({ name: `${testSupplierPrefix}-finance-allowed`, categories: [ResourceKind.other] })
-      .expect(201)
-
-    expect(response.body.data.name).toBe(`${testSupplierPrefix}-finance-allowed`)
+      .send({ name: `${testSupplierPrefix}-finance-denied`, categories: [ResourceKind.other] })
+      .expect(403)
   })
 
   it('lists suppliers excluding archived by default', async () => {

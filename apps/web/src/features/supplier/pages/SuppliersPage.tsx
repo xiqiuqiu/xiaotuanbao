@@ -24,6 +24,8 @@ import {
   clearInvoiceFieldsWhenUnavailable,
   toFormValues,
 } from '../utils/supplier-form'
+import { useAuthStore } from '@/app/store/auth.store'
+import { canEditSupplier } from '../utils/supplier-permission'
 import { PageHeader } from '@/layouts/PageHeader'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
 import {
@@ -45,6 +47,7 @@ export function SuppliersPage() {
   const [includeArchived, setIncludeArchived] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const canEdit = canEditSupplier(useAuthStore((s) => s.actionKeys))
 
   const listFilterKey = [search, categoryFilter, statusFilter, includeArchived].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
@@ -180,8 +183,15 @@ export function SuppliersPage() {
   )
 
   const columns = useMemo(
-    () => buildSupplierColumns(includeArchived, openEditDrawer, handleArchive, handleRestore),
-    [includeArchived, openEditDrawer, handleArchive, handleRestore],
+    () =>
+      buildSupplierColumns(
+        includeArchived,
+        openEditDrawer,
+        handleArchive,
+        handleRestore,
+        canEdit,
+      ),
+    [includeArchived, openEditDrawer, handleArchive, handleRestore, canEdit],
   )
 
   return (
@@ -189,9 +199,11 @@ export function SuppliersPage() {
       <PageHeader
         title="供应商管理"
         action={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
-            创建供应商
-          </Button>
+          canEdit ? (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+              创建供应商
+            </Button>
+          ) : undefined
         }
       />
 

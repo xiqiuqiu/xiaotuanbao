@@ -13,6 +13,7 @@ export function buildSupplierColumns(
   onEdit: (supplier: SupplierSummary) => void,
   onArchive: (supplier: SupplierSummary) => void,
   onRestore: (supplierId: string) => void,
+  canEdit: boolean,
 ): ColumnsType<SupplierSummary> {
   return [
     {
@@ -32,12 +33,17 @@ export function buildSupplierColumns(
       },
     },
     ...buildBusinessTimestampColumns<SupplierSummary>(),
-    {
-      title: '操作', key: 'actions', render: (_, record) => {
-        if (includeArchived && record.status === DirectoryProfileStatus.ARCHIVED) return <Button type="link" onClick={() => onRestore(record.id)}>恢复</Button>
-        if (record.status === DirectoryProfileStatus.ARCHIVED) return null
-        return <Space><Button type="link" onClick={() => onEdit(record)}>编辑</Button><Button type="link" danger onClick={() => onArchive(record)}>删除</Button></Space>
-      },
-    },
+    // ADR-0023: 目录维护入口按 supplier:write 显隐；财务（无 canEdit）只读，隐藏整列。
+    ...(canEdit
+      ? [
+          {
+            title: '操作', key: 'actions', render: (_: unknown, record: SupplierSummary) => {
+              if (includeArchived && record.status === DirectoryProfileStatus.ARCHIVED) return <Button type="link" onClick={() => onRestore(record.id)}>恢复</Button>
+              if (record.status === DirectoryProfileStatus.ARCHIVED) return null
+              return <Space><Button type="link" onClick={() => onEdit(record)}>编辑</Button><Button type="link" danger onClick={() => onArchive(record)}>删除</Button></Space>
+            },
+          },
+        ]
+      : []),
   ]
 }

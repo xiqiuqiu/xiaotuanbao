@@ -35,7 +35,7 @@ export class SupplierController {
   }
 
   @Post()
-  @RequireMenu('/supplier')
+  @RequireMenu('supplier:write')
   create(
     @Req() request: { user: { organizationId: string } },
     @Body() dto: CreateSupplierDto,
@@ -53,7 +53,7 @@ export class SupplierController {
   }
 
   @Patch(':id')
-  @RequireMenu('/supplier')
+  @RequireMenu('supplier:write')
   update(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -63,7 +63,7 @@ export class SupplierController {
   }
 
   @Post(':id/archive')
-  @RequireMenu('/supplier')
+  @RequireMenu('supplier:write')
   archive(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
@@ -72,7 +72,7 @@ export class SupplierController {
   }
 
   @Post(':id/restore')
-  @RequireMenu('/supplier')
+  @RequireMenu('supplier:write')
   restore(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

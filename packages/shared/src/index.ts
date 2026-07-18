@@ -119,6 +119,7 @@ export { V1_MENU_KEYS, MENU_KEY_LABELS, type MenuKey } from './constants/menu-ke
 export {
   DEPARTURE_WRITE_ACTION_KEY,
   PARTNER_WRITE_ACTION_KEY,
+  SUPPLIER_WRITE_ACTION_KEY,
   V1_ACTION_KEYS,
   ACTION_KEY_LABELS,
   type ActionKey,

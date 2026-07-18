@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ResourceKind, DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { SupplierSummary } from '@/types/api'
+import { useAuthStore } from '@/app/store/auth.store'
 import { SupplierDetailPage } from './SupplierDetailPage'
 
 const mockSupplier: SupplierSummary = {
@@ -55,9 +56,12 @@ function renderDetailPage() {
 describe('SupplierDetailPage', () => {
   afterEach(() => {
     cleanup()
+    useAuthStore.setState({ actionKeys: [] })
   })
 
   beforeEach(() => {
+    // 默认按可维护目录（计调/管理员）渲染；只读用例单独覆盖。
+    useAuthStore.setState({ actionKeys: ['supplier:write'] })
     vi.mocked(getSupplier).mockResolvedValue(mockSupplier)
   })
 
@@ -71,6 +75,17 @@ describe('SupplierDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑供应商')).toBeInTheDocument()
     expect(screen.getByLabelText('供应商名称')).toHaveValue('西湖国宾馆')
+  })
+
+  it('hides the edit entry when 财务 lacks supplier:write but keeps读取结算信息', async () => {
+    useAuthStore.setState({ actionKeys: [] })
+    renderDetailPage()
+
+    expect(await screen.findByRole('heading', { level: 4, name: '西湖国宾馆' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /编辑/ })).not.toBeInTheDocument()
+
+    // 结算信息只读可见（基本信息 Tab 默认展示）。
+    expect(screen.getByRole('tab', { name: '基本信息' })).toBeInTheDocument()
   })
 
   it('shows coming soon panels on placeholder tabs', async () => {

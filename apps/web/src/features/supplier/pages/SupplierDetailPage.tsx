@@ -3,7 +3,9 @@ import { Button, Card, Form, Spin, Tabs, Typography, message } from 'antd'
 import { ArrowLeftOutlined, EditOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
+import { useAuthStore } from '@/app/store/auth.store'
 import { getSupplier, updateSupplier } from '@/services/supplier.service'
+import { canEditSupplier } from '../utils/supplier-permission'
 import { SupplierComingSoonPanel } from '../components/SupplierComingSoonPanel'
 import { SupplierFormDrawer } from '../components/SupplierFormDrawer'
 import type { SupplierFormValues } from '../components/SupplierProfileSections'
@@ -20,6 +22,7 @@ export function SupplierDetailPage() {
   const queryClient = useQueryClient()
   const [form] = Form.useForm<SupplierFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const canEdit = canEditSupplier(useAuthStore((state) => state.actionKeys))
   const goBack = () => void navigate({ to: '/supplier' })
 
   const { data: supplier, isLoading, isError } = useQuery({
@@ -114,9 +117,11 @@ export function SupplierDetailPage() {
             {supplier.name}
           </Typography.Title>
         </div>
-        <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
-          编辑
-        </Button>
+        {canEdit ? (
+          <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
+            编辑
+          </Button>
+        ) : null}
       </div>
 
       <Card>

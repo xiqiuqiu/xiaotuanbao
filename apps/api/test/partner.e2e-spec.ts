@@ -43,17 +43,15 @@ describe('Partner API (e2e)', () => {
     expect(response.body.data.items).toEqual(expect.any(Array))
   })
 
-  it('allows finance role to create partners (ADR-0016 early-launch menus)', async () => {
-    const response = await authRequest(app, financeToken)
+  it('rejects finance role creating partners (ADR-0023 / #134: 目录只读)', async () => {
+    await authRequest(app, financeToken)
       .post('/api/partners')
       .send({
-        name: `${testPartnerPrefix}-finance-allowed`,
+        name: `${testPartnerPrefix}-finance-denied`,
         partnerKind: PartnerKind.group_agent,
         partnerType: PartnerType.local_agency,
       })
-      .expect(201)
-
-    expect(response.body.data.name).toBe(`${testPartnerPrefix}-finance-allowed`)
+      .expect(403)
   })
 
   it('lists partners excluding archived by default', async () => {
