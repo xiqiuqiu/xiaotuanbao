@@ -133,6 +133,15 @@ export {
   PRESET_ROLE_ACTION_KEYS,
   type PresetRoleName,
 } from './constants/roles'
+export {
+  CAPABILITIES,
+  canPerformCapability,
+  hasPermissionKey,
+  presetRoleGrantedKeys,
+  type CapabilityId,
+  type CapabilityDefinition,
+  type PermissionKey,
+} from './constants/capabilities'
 export { planRolePermissionSync } from './constants/plan-role-permission-sync'
 export { UserStatus } from './enums/user-status.enum'
 export { OrganizationStatus } from './enums/organization-status.enum'

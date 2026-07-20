@@ -30,8 +30,14 @@ function payableStatusTagColor(status: string): string | undefined {
 
 export type BuildExecutionResourceColumnsOptions = {
   mutationLocked: boolean
-  /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读，生成/关闭不受限。 */
+  /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读。生成应付不受此限。 */
   canEdit: boolean
+  /**
+   * 可执行财务账款操作（持有 /finance/*，见 capability `financeMutate`）。关闭节点走
+   * `POST /finance/payment-schedules/:id/cancel`（要 /finance/receivable），计调无此权限，
+   * 故须据此 gating，否则计调点「关闭节点」会 403。
+   */
+  canMutateFinance: boolean
   generatingId?: string
   onEdit: (resource: SegmentResourceSummary, viewOnly: boolean) => void
   onViewPayables: (resource: SegmentResourceSummary) => void
@@ -44,6 +50,7 @@ export type BuildExecutionResourceColumnsOptions = {
 export function buildExecutionResourceColumns({
   mutationLocked,
   canEdit,
+  canMutateFinance,
   generatingId,
   onEdit,
   onViewPayables,
@@ -108,6 +115,7 @@ export function buildExecutionResourceColumns({
           record.payableStatus !== SegmentPayableStatus.CLOSED
         const allowClose =
           !mutationLocked &&
+          canMutateFinance &&
           Boolean(record.paymentScheduleId) &&
           record.financeTouched &&
           (record.unsettledAmountCents ?? 0) > 0 &&

@@ -33,7 +33,7 @@ describe('业务列表时间列', () => {
     expectTimestampsBeforeActions(titles(buildEmployeeColumns(noop, noop)))
     expectTimestampsBeforeActions(titles(buildPartnerColumns(false, noop, noop, noop, true)))
     expectTimestampsBeforeActions(titles(buildSupplierColumns(false, noop, noop, noop, true)))
-    expectTimestampsBeforeActions(titles(buildDepartureColumns(vi.fn())))
+    expectTimestampsBeforeActions(titles(buildDepartureColumns(vi.fn(), true)))
   })
 
   it('发团详情客源单列表在操作列前显示创建及更新时间', () => {

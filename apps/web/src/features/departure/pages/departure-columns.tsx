@@ -18,8 +18,9 @@ import {
 
 export function buildDepartureColumns(
   onCopy: (departureId: string) => void,
+  canEdit: boolean,
 ): ColumnsType<DepartureSummary> {
-  return [
+  const columns: ColumnsType<DepartureSummary> = [
     {
       title: '团号',
       dataIndex: 'departureNo',
@@ -90,7 +91,11 @@ export function buildDepartureColumns(
     { title: '预估毛利', dataIndex: 'estimatedMarginCents', width: 110, render: (value: number) => formatCents(value) },
     { title: '负责人', dataIndex: 'ownerName', width: 100, render: (value: string | undefined, record) => value ?? record.ownerUserId },
     ...buildBusinessTimestampColumns<DepartureSummary>(),
-    {
+  ]
+
+  // 复制会走 POST /departures/:id/copy（要 departure:write）；财务无此权限，隐藏整列操作。
+  if (canEdit) {
+    columns.push({
       title: '操作',
       key: 'actions',
       fixed: 'right',
@@ -102,6 +107,8 @@ export function buildDepartureColumns(
           </Button>
         </Space>
       ),
-    },
-  ]
+    })
+  }
+
+  return columns
 }

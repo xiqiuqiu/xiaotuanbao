@@ -32,10 +32,11 @@ function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResou
   }
 }
 
-function renderActions(row: SegmentResourceSummary, canEdit = true) {
+function renderActions(row: SegmentResourceSummary, canEdit = true, canMutateFinance = true) {
   const columns = buildExecutionResourceColumns({
     mutationLocked: false,
     canEdit,
+    canMutateFinance,
     onEdit: vi.fn(),
     onViewPayables: vi.fn(),
     onGenerate: vi.fn(),
@@ -65,6 +66,14 @@ describe('resource payable actions', () => {
 
     expect(screen.getByRole('button', { name: '关闭节点' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '作废应付' })).toBeNull()
+  })
+
+  it('hides 关闭节点 for 计调 (no /finance/*, cannot mutate finance)', () => {
+    // 计调持有 departure:write（canEdit=true）但无 /finance/*：关闭节点属财务动作，
+    // 若显示则点击后 POST …/cancel 会 403。此为回归守卫。
+    renderActions(resource({ financeTouched: true, amountFieldsLocked: true }), true, false)
+
+    expect(screen.queryByRole('button', { name: '关闭节点' })).toBeNull()
   })
 
   it('hides 作废应付 for 财务 (no departure:write) before finance is touched', () => {

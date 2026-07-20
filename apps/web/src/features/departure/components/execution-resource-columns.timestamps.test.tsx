@@ -36,6 +36,7 @@ function columnTitles() {
   return buildExecutionResourceColumns({
     mutationLocked: false,
     canEdit: true,
+    canMutateFinance: true,
     onEdit: vi.fn(),
     onViewPayables: vi.fn(),
     onGenerate: vi.fn(),
@@ -65,6 +66,7 @@ describe('execution resource timestamp columns', () => {
     const columns = buildExecutionResourceColumns({
       mutationLocked: false,
       canEdit: true,
+      canMutateFinance: true,
       onEdit: vi.fn(),
       onViewPayables: vi.fn(),
       onGenerate: vi.fn(),

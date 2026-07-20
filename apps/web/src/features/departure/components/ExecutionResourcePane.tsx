@@ -37,6 +37,8 @@ import { segmentPayableGenerationGap } from '../utils/segment-payable-generation
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
 import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
+import { canMutateFinance } from '@/features/finance/utils/finance-permission'
+import { useAuthStore } from '@/app/store/auth.store'
 import { cancelSchedule, voidResourcePayable } from '@/services/finance.service'
 import {
   CloseResourcePayableModal,
@@ -175,8 +177,11 @@ export function ExecutionResourcePane({
 }: ExecutionResourcePaneProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const menuKeys = useAuthStore((state) => state.menuKeys)
+  // 关闭节点属财务动作（POST …/cancel 要 /finance/receivable）：计调无此权限，须 gating。
+  const canCloseFinance = canMutateFinance(menuKeys)
   const mutationLocked = readOnly || amountReadOnly
-  // 资源增删改与作废应付属 departure:write：财务只读，但生成应付/关闭节点不受此限。
+  // 资源增删改与作废应付属 departure:write：财务只读，但生成应付不受此限。
   const resourceEditable = !mutationLocked && canEdit
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
@@ -368,6 +373,7 @@ export function ExecutionResourcePane({
       buildExecutionResourceColumns({
         mutationLocked,
         canEdit,
+        canMutateFinance: canCloseFinance,
         generatingId,
         onEdit: openEdit,
         onViewPayables,
@@ -379,6 +385,7 @@ export function ExecutionResourcePane({
     [
       mutationLocked,
       canEdit,
+      canCloseFinance,
       generatingId,
       openEdit,
       onViewPayables,

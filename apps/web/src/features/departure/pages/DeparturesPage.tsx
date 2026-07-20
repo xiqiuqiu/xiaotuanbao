@@ -7,6 +7,8 @@ import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStat
 import { listDepartures } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
+import { useAuthStore } from '@/app/store/auth.store'
+import { canEditDeparture } from '../utils/departure-permission'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { PageHeader } from '@/layouts/PageHeader'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
@@ -96,6 +98,7 @@ function departuresPageReducer(
 
 export function DeparturesPage() {
   const navigate = useNavigate()
+  const canEdit = canEditDeparture(useAuthStore((s) => s.actionKeys))
   const [state, dispatch] = useReducer(departuresPageReducer, initialDeparturesPageState)
 
   const startDateFrom = state.startDateRange?.[0]
@@ -186,7 +189,7 @@ export function DeparturesPage() {
     [navigate],
   )
 
-  const columns = useMemo(() => buildDepartureColumns(handleCopy), [handleCopy])
+  const columns = useMemo(() => buildDepartureColumns(handleCopy, canEdit), [handleCopy, canEdit])
 
   const ownerOptions =
     employeeOptionsResult?.map((employee) => ({
@@ -205,13 +208,15 @@ export function DeparturesPage() {
       <PageHeader
         title="发团管理"
         action={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => void navigate({ to: '/departure/new' })}
-          >
-            新建发团
-          </Button>
+          canEdit ? (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => void navigate({ to: '/departure/new' })}
+            >
+              新建发团
+            </Button>
+          ) : undefined
         }
       />
 
