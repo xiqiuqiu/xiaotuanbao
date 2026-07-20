@@ -12,6 +12,7 @@ import {
   message,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
+import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
@@ -55,6 +56,114 @@ interface ExecutionResourcePaneProps {
   /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响生成应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
+}
+
+interface ExecutionResourceHeaderProps {
+  showBatchGenerate: boolean
+  batchGenerating: boolean
+  showAddResource: boolean
+  onBatchGenerate: () => void
+  onAddResource: () => void
+}
+
+function ExecutionResourceHeader({
+  showBatchGenerate,
+  batchGenerating,
+  showAddResource,
+  onBatchGenerate,
+  onAddResource,
+}: ExecutionResourceHeaderProps) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        marginBottom: 16,
+      }}
+    >
+      <Typography.Text strong>资源安排</Typography.Text>
+      <Space>
+        {showBatchGenerate ? (
+          <Button onClick={onBatchGenerate} loading={batchGenerating}>
+            批量生成应付
+          </Button>
+        ) : null}
+        {showAddResource ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
+            添加资源
+          </Button>
+        ) : null}
+      </Space>
+    </div>
+  )
+}
+
+interface ExecutionResourceListProps {
+  isError: boolean
+  isLoading: boolean
+  resources: SegmentResourceSummary[]
+  resourceEditable: boolean
+  columns: ColumnsType<SegmentResourceSummary>
+  onRetry: () => void
+  onAddResource: () => void
+}
+
+function ExecutionResourceList({
+  isError,
+  isLoading,
+  resources,
+  resourceEditable,
+  columns,
+  onRetry,
+  onAddResource,
+}: ExecutionResourceListProps) {
+  if (isError) {
+    return (
+      <Alert
+        type="error"
+        showIcon
+        title="资源列表加载失败"
+        description="请稍后重试，或检查网络后再次加载。"
+        action={
+          <Button size="small" onClick={onRetry}>
+            重试
+          </Button>
+        }
+      />
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
+        <Spin />
+      </div>
+    )
+  }
+
+  if (resources.length === 0) {
+    return (
+      <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
+        {resourceEditable ? (
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
+            添加资源
+          </Button>
+        ) : null}
+      </Empty>
+    )
+  }
+
+  return (
+    <Table
+      rowKey="id"
+      columns={columns}
+      dataSource={resources}
+      pagination={false}
+      scroll={{ x: 1300 }}
+    />
+  )
 }
 
 export function ExecutionResourcePane({
@@ -107,11 +216,14 @@ export function ExecutionResourcePane({
     setDrawerOpen(true)
   }
 
-  const openEdit = (resource: SegmentResourceSummary, view = false) => {
-    setEditingResource(() => resource)
-    setViewOnly(view || resource.amountFieldsLocked)
-    setDrawerOpen(true)
-  }
+  const openEdit = useCallback(
+    (resource: SegmentResourceSummary, view = false) => {
+      setEditingResource(() => resource)
+      setViewOnly(view || resource.amountFieldsLocked)
+      setDrawerOpen(true)
+    },
+    [],
+  )
 
   const saveMutation = useMutation({
     mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
@@ -245,95 +357,57 @@ export function ExecutionResourcePane({
     [departure.id, navigate, segment.id],
   )
 
+  const generatingId = generateMutation.isPending
+    ? generateMutation.variables
+    : undefined
+  const generateResource = generateMutation.mutate
+  const deleteResource = deleteMutation.mutate
+
   const columns = useMemo(
     () =>
       buildExecutionResourceColumns({
         mutationLocked,
         canEdit,
-        generatingId: generateMutation.isPending ? generateMutation.variables : undefined,
+        generatingId,
         onEdit: openEdit,
         onViewPayables,
-        onGenerate: (id) => generateMutation.mutate(id),
-        onDelete: (id) => deleteMutation.mutate(id),
+        onGenerate: generateResource,
+        onDelete: deleteResource,
         onVoidPayable: (resource) => setVoidingResource(resource),
         onClosePayable: (resource) => setClosingResource(resource),
       }),
     [
       mutationLocked,
       canEdit,
-      generateMutation.isPending,
-      generateMutation.variables,
+      generatingId,
       openEdit,
       onViewPayables,
-      generateMutation,
-      deleteMutation,
-      setVoidingResource,
-      setClosingResource,
+      generateResource,
+      deleteResource,
     ],
   )
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <Typography.Text strong>资源安排</Typography.Text>
-        <Space>
-          {showBatchGenerate ? (
-            <Button
-              onClick={confirmBatchGenerate}
-              loading={batchGenerateMutation.isPending}
-            >
-              批量生成应付
-            </Button>
-          ) : null}
-          {resourceEditable && !isLoading && !isError && resources.length > 0 ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              添加资源
-            </Button>
-          ) : null}
-        </Space>
-      </div>
+      <ExecutionResourceHeader
+        showBatchGenerate={showBatchGenerate}
+        batchGenerating={batchGenerateMutation.isPending}
+        showAddResource={
+          resourceEditable && !isLoading && !isError && resources.length > 0
+        }
+        onBatchGenerate={confirmBatchGenerate}
+        onAddResource={openCreate}
+      />
 
-      {isError ? (
-        <Alert
-          type="error"
-          showIcon
-          title="资源列表加载失败"
-          description="请稍后重试，或检查网络后再次加载。"
-          action={
-            <Button size="small" onClick={() => void refetch()}>
-              重试
-            </Button>
-          }
-        />
-      ) : isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-          <Spin />
-        </div>
-      ) : resources.length === 0 ? (
-        <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
-          {resourceEditable ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              添加资源
-            </Button>
-          ) : null}
-        </Empty>
-      ) : (
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={resources}
-          pagination={false}
-          scroll={{ x: 1300 }}
-        />
-      )}
+      <ExecutionResourceList
+        isError={isError}
+        isLoading={isLoading}
+        resources={resources}
+        resourceEditable={resourceEditable}
+        columns={columns}
+        onRetry={() => void refetch()}
+        onAddResource={openCreate}
+      />
 
       <ResourceDrawer
         open={drawerOpen}
