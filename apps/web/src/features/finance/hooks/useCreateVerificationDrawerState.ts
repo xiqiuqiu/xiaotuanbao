@@ -210,7 +210,13 @@ export function useCreateVerificationDrawerState({
   }
 
   const handleSelectTransaction = (transaction: FinanceTransactionSummary) => {
-    if (initialSchedule) {
+    if (selectedSchedule && matchesCounterparty(transaction, selectedSchedule)) {
+      // 节点已选定（如从节点侧打开抽屉后再补选流水），且往来对象一致时，
+      // 直接带出默认核销金额（流水可核销余额与节点未结金额的较小值）。
+      form.setFieldsValue(
+        transactionAndScheduleToFormValues(transaction, selectedSchedule),
+      )
+    } else if (initialSchedule) {
       form.setFieldsValue({
         transactionId: transaction.id,
         amountYuan: 0,

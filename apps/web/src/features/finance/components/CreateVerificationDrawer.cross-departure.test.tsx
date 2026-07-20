@@ -212,3 +212,75 @@ describe('CreateVerificationDrawer cross-departure confirmation', () => {
     expect(screen.getByRole('button', { name: '预览核销' })).toBeDisabled()
   })
 })
+
+function ScheduleFirstHarness({
+  schedule,
+  onSubmit,
+}: {
+  schedule: PaymentScheduleSummary
+  onSubmit: (values: CreateVerificationFormValues) => void
+}) {
+  const [form] = Form.useForm<CreateVerificationFormValues>()
+
+  return (
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ConfigProvider>
+        <App>
+          <CreateVerificationDrawer
+            open
+            loading={false}
+            form={form}
+            initialSchedule={schedule}
+            onClose={vi.fn()}
+            onSubmit={onSubmit}
+          />
+        </App>
+      </ConfigProvider>
+    </QueryClientProvider>
+  )
+}
+
+describe('CreateVerificationDrawer schedule-first selection', () => {
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    listFinanceDepartureOptions.mockReset()
+    listTransactions.mockReset()
+    listReceivables.mockReset()
+  })
+
+  it('prefills the default amount when picking the transaction after opening from a schedule', async () => {
+    const onSubmit = vi.fn()
+
+    // 流水可核销 900，节点未结 1000，默认核销金额应带出较小值 900。
+    const transaction: FinanceTransactionSummary = {
+      ...makeTransaction(),
+      unallocatedAmountCents: 90000,
+    }
+
+    listFinanceDepartureOptions.mockResolvedValue([
+      { id: 'dep-1', departureNo: 'XTB2026070001', name: '乌镇一团' },
+    ])
+    listTransactions.mockResolvedValue({ items: [transaction] })
+    listReceivables.mockResolvedValue({ items: [makeSchedule('dep-1')] })
+
+    render(
+      <ScheduleFirstHarness schedule={makeSchedule('dep-1')} onSubmit={onSubmit} />,
+    )
+
+    await userEvent.click(await screen.findByText('TX202607000001'))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('spinbutton', { name: '本次核销金额（元）' }),
+      ).toHaveValue('900.00'),
+    )
+
+    const previewButton = screen.getByRole('button', { name: '预览核销' })
+    await waitFor(() => expect(previewButton).toBeEnabled())
+  })
+})
