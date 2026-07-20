@@ -21,6 +21,9 @@ const voidedSchedule: PaymentScheduleSummary = {
   counterpartyName: '测试酒店',
   sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
   sourceId: 'resource-1',
+  resourceKind: 'hotel',
+  resourceTitle: '西湖国宾馆',
+  sourceOrderName: null,
   status: 'pending',
   financeTouched: false,
   settledAmountCents: 0,
@@ -69,8 +72,10 @@ describe('voided payable audit columns', () => {
       </ConfigProvider>,
     )
 
-    expect(screen.getByText('行程段资源')).toBeTruthy()
-    expect(screen.getByText('resource-1')).toBeTruthy()
+    expect(screen.getByText('APXTB202607000001')).toBeTruthy()
+    expect(screen.getByText('酒店')).toBeTruthy()
+    expect(screen.getByText('西湖国宾馆')).toBeTruthy()
+    expect(screen.getByText('测试酒店')).toBeTruthy()
     expect(screen.getByText('¥1,600.00')).toBeTruthy()
     expect(screen.getByText('王杰')).toBeTruthy()
     expect(screen.getByText('供应商报价录入错误')).toBeTruthy()

@@ -404,6 +404,12 @@ export interface PaymentScheduleSummary {
   counterpartyName: string | null
   sourceType: string
   sourceId: string | null
+  /** 应付资源行的资源种类（枚举值）；非资源来源或非列表接口为 null/缺省。 */
+  resourceKind?: string | null
+  /** 应付资源行的实时资源项目名；非资源来源或非列表接口为 null/缺省。 */
+  resourceTitle?: string | null
+  /** 应收客源单的展示名（displayName）；非客源来源或非列表接口为 null/缺省。 */
+  sourceOrderName?: string | null
   status: string
   financeTouched: boolean
   settledAmountCents: number

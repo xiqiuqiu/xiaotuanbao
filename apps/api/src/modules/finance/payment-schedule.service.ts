@@ -57,6 +57,24 @@ const FINANCE_ADJUSTMENT_FIELDS = [
   'counterpartyName',
 ] as const
 
+/** 列表行的源实体派生标签：资源种类/资源项目（应付）与客源单展示名（应收）。 */
+interface ScheduleSourceMeta {
+  resourceKind: string | null
+  resourceTitle: string | null
+  sourceOrderName: string | null
+}
+
+const EMPTY_SCHEDULE_SOURCE_META: ScheduleSourceMeta = {
+  resourceKind: null,
+  resourceTitle: null,
+  sourceOrderName: null,
+}
+
+const SOURCE_ORDER_SCHEDULE_SOURCE_TYPES = new Set<string>([
+  PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+])
+
 @Injectable()
 export class PaymentScheduleService {
   constructor(
@@ -106,6 +124,7 @@ export class PaymentScheduleService {
     const historyMap = await this.verificationService.batchHasVerificationHistory(
       items.map((schedule) => schedule.id),
     )
+    const sourceMetaMap = await this.loadScheduleSourceMeta(organizationId, items)
 
     return {
       items: items.map((schedule) =>
@@ -115,12 +134,87 @@ export class PaymentScheduleService {
           historyMap.get(schedule.id) ?? false,
           schedule.departure.status,
           schedule.voidOperator?.name ?? null,
+          sourceMetaMap.get(schedule.id) ?? EMPTY_SCHEDULE_SOURCE_META,
         ),
       ),
       total,
       page,
       pageSize,
     }
+  }
+
+  /**
+   * 按 sourceId+sourceType 实时联查列表行的源实体标签：应付读资源种类/资源项目，
+   * 应收读客源单展示名。源实体被删或为手工来源时该行无标签（保持 null）。
+   */
+  private async loadScheduleSourceMeta(
+    organizationId: string,
+    schedules: Pick<PaymentSchedule, 'id' | 'sourceType' | 'sourceId'>[],
+  ): Promise<Map<string, ScheduleSourceMeta>> {
+    const resourceIds = new Set<string>()
+    const sourceOrderIds = new Set<string>()
+    for (const schedule of schedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      if (schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+        resourceIds.add(schedule.sourceId)
+      } else if (SOURCE_ORDER_SCHEDULE_SOURCE_TYPES.has(schedule.sourceType)) {
+        sourceOrderIds.add(schedule.sourceId)
+      }
+    }
+
+    const [resources, sourceOrders] = await Promise.all([
+      resourceIds.size > 0
+        ? this.prisma.segmentResource.findMany({
+            where: {
+              id: { in: [...resourceIds] },
+              segment: { departure: { organizationId } },
+            },
+            select: { id: true, resourceKind: true, title: true },
+          })
+        : Promise.resolve([]),
+      sourceOrderIds.size > 0
+        ? this.prisma.sourceOrder.findMany({
+            where: {
+              id: { in: [...sourceOrderIds] },
+              departure: { organizationId },
+            },
+            select: { id: true, displayName: true },
+          })
+        : Promise.resolve([]),
+    ])
+
+    const resourceMap = new Map(resources.map((resource) => [resource.id, resource]))
+    const sourceOrderMap = new Map(sourceOrders.map((order) => [order.id, order]))
+
+    const metaMap = new Map<string, ScheduleSourceMeta>()
+    for (const schedule of schedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      if (schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+        const resource = resourceMap.get(schedule.sourceId)
+        if (resource) {
+          metaMap.set(schedule.id, {
+            resourceKind: resource.resourceKind,
+            resourceTitle: resource.title.trim() || null,
+            sourceOrderName: null,
+          })
+        }
+      } else if (SOURCE_ORDER_SCHEDULE_SOURCE_TYPES.has(schedule.sourceType)) {
+        const order = sourceOrderMap.get(schedule.sourceId)
+        if (order) {
+          metaMap.set(schedule.id, {
+            resourceKind: null,
+            resourceTitle: null,
+            sourceOrderName: order.displayName,
+          })
+        }
+      }
+    }
+
+    return metaMap
   }
 
   /**
@@ -965,6 +1059,7 @@ export class PaymentScheduleService {
     hasVerificationHistory = settledAmountCents > 0,
     departureStatus: string,
     voidedByName: string | null = null,
+    sourceMeta: ScheduleSourceMeta = EMPTY_SCHEDULE_SOURCE_META,
   ): PaymentScheduleSummary {
     const businessDate = getShanghaiTodayString()
     const unsettledAmountCents = Math.max(schedule.amountCents - settledAmountCents, 0)
@@ -983,6 +1078,9 @@ export class PaymentScheduleService {
       counterpartyName: schedule.counterpartyName,
       sourceType: schedule.sourceType,
       sourceId: schedule.sourceId,
+      resourceKind: sourceMeta.resourceKind,
+      resourceTitle: sourceMeta.resourceTitle,
+      sourceOrderName: sourceMeta.sourceOrderName,
       status: deriveScheduleState({
         amountCents: schedule.amountCents,
         settledAmountCents,

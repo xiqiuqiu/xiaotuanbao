@@ -4,22 +4,61 @@ import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
+  CounterpartyType,
   DepartureStatus,
   PaymentScheduleDirection,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
+  RESOURCE_KIND_LABELS,
   deriveSettlementLabel,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
 import {
-  COUNTERPARTY_TYPE_LABELS,
-  PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS,
+  RECEIVABLE_COLLECTION_METHOD_LABELS,
   SETTLEMENT_LABEL_COLORS,
-  catalogLabel,
   formatCents,
 } from '../catalog'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+
+const DASH = '-'
+
+/** 应付「费用类别」：资源种类 label；非资源来源显示「-」。 */
+function feeCategoryText(schedule: PaymentScheduleSummary): string {
+  if (!schedule.resourceKind) {
+    return DASH
+  }
+  return RESOURCE_KIND_LABELS[schedule.resourceKind as never] ?? schedule.resourceKind
+}
+
+/** 应付「费用项目」：实时资源项目名，缺失回落资源种类；手工行回落节点标题。 */
+function feeItemText(schedule: PaymentScheduleSummary): string {
+  if (schedule.resourceTitle) {
+    return schedule.resourceTitle
+  }
+  if (schedule.resourceKind) {
+    return RESOURCE_KIND_LABELS[schedule.resourceKind as never] ?? schedule.resourceKind
+  }
+  return schedule.title || DASH
+}
+
+/** 应收「客源单」：客源单展示名；非客源来源显示「-」。 */
+function sourceOrderText(schedule: PaymentScheduleSummary): string {
+  return schedule.sourceOrderName || DASH
+}
+
+/** 应收「收款方式」：客户补款 / 游客代收；手工其他应收回落「其他」。 */
+function collectionMethodText(schedule: PaymentScheduleSummary): string {
+  return RECEIVABLE_COLLECTION_METHOD_LABELS[schedule.sourceType] ?? '其他'
+}
+
+/** 「往来对象」列展示值：游客代收统一显示「游客」，其余显示对手方名称。 */
+function counterpartyText(schedule: PaymentScheduleSummary): string {
+  if (schedule.counterpartyType === CounterpartyType.GUEST) {
+    return '游客'
+  }
+  return schedule.counterpartyName || DASH
+}
 
 function isScheduleActionable(schedule: PaymentScheduleSummary): boolean {
   return schedule.status !== PaymentScheduleStatus.CANCELLED
@@ -120,110 +159,89 @@ export function buildPaymentScheduleColumns({
   onViewDetail,
   onViewVerifications,
 }: BuildPaymentScheduleColumnsOptions): ColumnsType<PaymentScheduleSummary> {
+  const scheduleNoColumn: ColumnsType<PaymentScheduleSummary>[number] = {
+    title: isReceivable ? '应收单号' : '应付单号',
+    dataIndex: 'scheduleNo',
+    render: (value: string, record) => (
+      <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
+        {value}
+      </Button>
+    ),
+  }
+
+  const departureColumns: ColumnsType<PaymentScheduleSummary> = isDepartureScope
+    ? []
+    : [
+        {
+          title: '关联发团',
+          dataIndex: 'departureId',
+          render: (departureId: string) => {
+            const departure = departureMap.get(departureId)
+            return departure ? (
+              <Tooltip title={departure.departureNo}>
+                <FinanceDepartureLink departureId={departureId}>
+                  {departure.name}
+                </FinanceDepartureLink>
+              </Tooltip>
+            ) : (
+              DASH
+            )
+          },
+        },
+      ]
+
+  const sourceColumns: ColumnsType<PaymentScheduleSummary> = isReceivable
+    ? [
+        { title: '客源单', render: (_, record) => sourceOrderText(record) },
+        { title: '收款方式', render: (_, record) => collectionMethodText(record) },
+      ]
+    : [
+        { title: '费用类别', render: (_, record) => feeCategoryText(record) },
+        { title: '费用项目', render: (_, record) => feeItemText(record) },
+      ]
+
+  const counterpartyColumn: ColumnsType<PaymentScheduleSummary>[number] = {
+    title: '往来对象',
+    render: (_, record) => counterpartyText(record),
+  }
+
+  const identityColumns: ColumnsType<PaymentScheduleSummary> = [
+    scheduleNoColumn,
+    ...departureColumns,
+    ...sourceColumns,
+    counterpartyColumn,
+  ]
+
   if (voidedAudit) {
     return [
-      {
-        title: '节点编号',
-        dataIndex: 'scheduleNo',
-        render: (value: string, record) => (
-          <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
-            {value}
-          </Button>
-        ),
-      },
-      { title: '标题', dataIndex: 'title' },
-      ...(isDepartureScope
-        ? []
-        : [
-            {
-              title: '关联发团',
-              dataIndex: 'departureId',
-              render: (departureId: string) => {
-                const departure = departureMap.get(departureId)
-                return departure ? (
-                  <Tooltip title={departure.departureNo}>
-                    <FinanceDepartureLink departureId={departureId}>
-                      {departure.name}
-                    </FinanceDepartureLink>
-                  </Tooltip>
-                ) : '-'
-              },
-            },
-          ]),
-      {
-        title: '来源',
-        render: (_, record) => (
-          <Space size={4} orientation="vertical">
-            <span>{catalogLabel(PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS, record.sourceType)}</span>
-            <span>{record.sourceId ?? '-'}</span>
-          </Space>
-        ),
-      },
+      ...identityColumns,
       {
         title: '作废前金额',
         dataIndex: 'voidedAmountCents',
         align: 'right',
-        render: (value: number | null) => value == null ? '-' : formatCents(value),
+        render: (value: number | null) => (value == null ? DASH : formatCents(value)),
       },
       {
         title: '操作人',
         dataIndex: 'voidedByName',
-        render: (value: string | null) => value || '-',
+        render: (value: string | null) => value || DASH,
       },
       {
         title: '作废时间',
         dataIndex: 'voidedAt',
-        render: (value: string | null) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-',
+        render: (value: string | null) =>
+          value ? dayjs(value).format('YYYY-MM-DD HH:mm') : DASH,
       },
       {
         title: '作废原因',
         dataIndex: 'voidReason',
-        render: (value: string | null) => value || '-',
+        render: (value: string | null) => value || DASH,
       },
     ]
   }
 
   return [
-    {
-      title: '节点编号',
-      dataIndex: 'scheduleNo',
-      render: (value: string, record) => (
-        <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
-          {value}
-        </Button>
-      ),
-    },
-    { title: '标题', dataIndex: 'title' },
-    ...(isDepartureScope
-      ? []
-      : [
-          {
-            title: '关联发团',
-            dataIndex: 'departureId',
-            render: (departureId: string) => {
-              const departure = departureMap.get(departureId)
-              if (!departure) {
-                return '-'
-              }
-              return (
-                <Tooltip title={departure.departureNo}>
-                  <FinanceDepartureLink departureId={departureId}>
-                    {departure.name}
-                  </FinanceDepartureLink>
-                </Tooltip>
-              )
-            },
-          },
-        ]),
-    {
-      title: '往来对象',
-      render: (_, record) => (
-        <span>
-          {catalogLabel(COUNTERPARTY_TYPE_LABELS, record.counterpartyType)}
-          {record.counterpartyName ? ` · ${record.counterpartyName}` : ''}
-        </span>
-      ),
-    },
+    ...identityColumns,
     {
       title: '金额',
       dataIndex: 'amountCents',
