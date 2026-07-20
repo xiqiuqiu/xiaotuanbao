@@ -14,7 +14,11 @@ export type DueDateRange = [string | undefined, string | undefined] | null
 export type DepartureDateRange = [string | undefined, string | undefined] | null
 export type PaymentScheduleStatusFilter = PaymentScheduleStatus | 'voided'
 
-export type PaymentScheduleFiltersScope = 'global' | 'departure' | 'partner'
+export type PaymentScheduleFiltersScope =
+  | 'global'
+  | 'departure'
+  | 'partner'
+  | 'supplier'
 
 interface PaymentScheduleFiltersProps {
   departureId?: string
@@ -27,7 +31,7 @@ interface PaymentScheduleFiltersProps {
    * 场景决定筛选项组合：
    * - global：显示发团筛选与往来对象搜索；
    * - departure：发团已锚定，隐藏发团筛选；
-   * - partner：往来对象已锚定，隐藏往来对象搜索，
+   * - partner / supplier：往来对象已锚定，隐藏往来对象搜索，
    *   改为出团日期区间主时间轴（与确认单周期同口径）。
    */
   scope: PaymentScheduleFiltersScope
@@ -70,9 +74,10 @@ export function PaymentScheduleFilters({
   onDepartureDateRangeChange,
   onReset,
 }: PaymentScheduleFiltersProps) {
+  const isCounterpartyScope = scope === 'partner' || scope === 'supplier'
   const showDepartureFilter = scope === 'global'
-  const showCounterpartyFilter = scope !== 'partner'
-  const showDepartureDateFilter = scope === 'partner' && !hideDepartureDateFilter
+  const showCounterpartyFilter = !isCounterpartyScope
+  const showDepartureDateFilter = isCounterpartyScope && !hideDepartureDateFilter
 
   const { data: departuresResult } = useQuery({
     queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,

@@ -13,11 +13,13 @@ import { PaymentScheduleTable } from './PaymentScheduleTable'
 import { usePaymentScheduleWorkspace } from '../hooks/usePaymentScheduleWorkspace'
 
 export type PaymentScheduleWorkspaceProps = {
-  scope: 'global' | 'departure' | 'partner'
+  scope: 'global' | 'departure' | 'partner' | 'supplier'
   direction: 'receivable' | 'payable'
   departureId?: string
   /** Partner 维度精确过滤（scope='partner' 时必传），同名 Partner 不串。 */
   partnerId?: string
+  /** Supplier 维度精确过滤（scope='supplier' 时必传），同名 Supplier 不串。 */
+  supplierId?: string
   readOnly?: boolean
   /** One-shot locate: flash rows for this source order, then clear via onHighlightConsumed. */
   highlightSourceOrderId?: string

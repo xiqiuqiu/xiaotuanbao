@@ -33,7 +33,10 @@ import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
 } from '../utils/verification-form'
-import { PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY } from '../queries/finance-query-keys'
+import {
+  PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
+  SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
+} from '../queries/finance-query-keys'
 
 interface UsePaymentScheduleMutationsOptions {
   queryClient: QueryClient
@@ -41,6 +44,7 @@ interface UsePaymentScheduleMutationsOptions {
   listQueryKey: string
   departureListQueryKey: string
   partnerListQueryKey: string
+  supplierListQueryKey: string
   activeSchedule: PaymentScheduleSummary | null
   confirmForm: FormInstance<ConfirmCollectionFormValues | ConfirmPaymentFormValues>
   verifyForm: FormInstance<CreateVerificationFormValues>
@@ -62,6 +66,7 @@ export function usePaymentScheduleMutations({
   listQueryKey,
   departureListQueryKey,
   partnerListQueryKey,
+  supplierListQueryKey,
   activeSchedule,
   confirmForm,
   verifyForm,
@@ -93,7 +98,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -113,7 +120,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -140,7 +149,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -169,7 +180,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -197,7 +210,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
@@ -228,7 +243,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
+      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
       void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
+      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })

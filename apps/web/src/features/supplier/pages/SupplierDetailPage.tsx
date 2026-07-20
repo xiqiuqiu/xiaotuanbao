@@ -6,7 +6,7 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { useAuthStore } from '@/app/store/auth.store'
 import { getSupplier, updateSupplier } from '@/services/supplier.service'
 import { canEditSupplier } from '../utils/supplier-permission'
-import { SupplierComingSoonPanel } from '../components/SupplierComingSoonPanel'
+import { SupplierLedgerPanel } from '../components/SupplierLedgerPanel'
 import { SupplierServiceOrdersTab } from '../components/SupplierServiceOrdersTab'
 import { SupplierFormDrawer } from '../components/SupplierFormDrawer'
 import type { SupplierFormValues } from '../components/SupplierProfileSections'
@@ -137,7 +137,7 @@ export function SupplierDetailPage() {
             {
               key: 'accounts',
               label: '往来账款',
-              children: <SupplierComingSoonPanel />,
+              children: <SupplierLedgerPanel supplierId={supplier.id} />,
             },
             {
               key: 'groups',

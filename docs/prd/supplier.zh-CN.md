@@ -298,7 +298,9 @@ apps/web/src/features/supplier/
   components/
     SupplierProfileSections.tsx    # 五段表单（创建/编辑共用）
     SupplierReadonlySections.tsx   # 详情只读
-    SupplierComingSoonPanel.tsx    # Tab 占位
+    SupplierServiceOrdersTab.tsx   # 服务团单 Tab（业务事实层）
+    SupplierLedgerPanel.tsx        # 往来账款 Tab（财务账款层，仅应付）
+    SupplierLedgerSummaryCards.tsx # 往来账款三项汇总卡
   pages/
     SuppliersPage.tsx
     SupplierDetailPage.tsx

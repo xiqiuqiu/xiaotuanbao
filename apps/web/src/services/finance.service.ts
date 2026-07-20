@@ -300,6 +300,36 @@ export async function getPartnerPaymentScheduleSummary(
   )
 }
 
+/**
+ * 往来账款 Tab：Supplier 维度应付列表（counterpartyId 精确过滤在服务端强制）。
+ * 供应商结构上只有应付，故无对应应收端点。
+ */
+export async function listSupplierPayables(
+  supplierId: string,
+  params: Omit<ListPaymentSchedulesParams, 'counterpartyType' | 'counterpartyId'> = {},
+  signal?: AbortSignal,
+): Promise<PaymentScheduleListResult> {
+  return request.get<PaymentScheduleListResult>(`/suppliers/${supplierId}/payables`, {
+    params,
+    signal,
+  })
+}
+
+/**
+ * 往来账款 Tab 汇总卡（供应商）：应付约定/已核销/未结清合计。
+ * 已关闭、已作废节点不计入；出团日期区间与列表同口径。
+ */
+export async function getSupplierPaymentScheduleSummary(
+  supplierId: string,
+  params: PartnerPaymentScheduleSummaryParams = {},
+  signal?: AbortSignal,
+): Promise<PaymentScheduleAggregateResult> {
+  return request.get<PaymentScheduleAggregateResult>(
+    `/suppliers/${supplierId}/payment-schedule-summary`,
+    { params, signal },
+  )
+}
+
 export async function listDepartureVerifications(
   departureId: string,
   params: Omit<ListFinanceVerificationsParams, 'departureId'> = {},

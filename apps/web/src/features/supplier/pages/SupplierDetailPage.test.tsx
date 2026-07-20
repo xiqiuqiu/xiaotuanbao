@@ -40,6 +40,29 @@ vi.mock('@/services/supplier.service', () => ({
   listSupplierServiceOrders: vi.fn(),
 }))
 
+const listSupplierPayables = vi.fn(async () => ({
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 10,
+}))
+
+vi.mock('@/services/finance.service', () => ({
+  listSupplierPayables: (...args: unknown[]) => listSupplierPayables(...args),
+  getSupplierPaymentScheduleSummary: vi.fn(async () => ({ groups: [] })),
+  listReceivables: vi.fn(),
+  listPayables: vi.fn(),
+  listPartnerReceivables: vi.fn(),
+  listPartnerPayables: vi.fn(),
+  listDepartureReceivables: vi.fn(),
+  listDeparturePayables: vi.fn(),
+  listFinanceDepartureOptions: vi.fn(async () => []),
+}))
+
+vi.mock('@/services/departure.service', () => ({
+  getDeparture: vi.fn(),
+}))
+
 import { getSupplier, listSupplierServiceOrders } from '@/services/supplier.service'
 
 function renderDetailPage() {
@@ -96,16 +119,27 @@ describe('SupplierDetailPage', () => {
     expect(screen.getByRole('tab', { name: '基本信息' })).toBeInTheDocument()
   })
 
-  it('keeps the 往来账款 placeholder and mounts the 服务团单 fact tab', async () => {
+  it('mounts the 往来账款 ledger tab and the 服务团单 fact tab (no placeholder)', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
     await screen.findByRole('heading', { level: 4, name: '西湖国宾馆' })
 
+    // 三个 Tab label 齐备
+    expect(screen.getByRole('tab', { name: '基本信息' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '往来账款' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '服务团单' })).toBeInTheDocument()
+
+    // 往来账款：实装为财务账款层，走供应商应付端点，不再是占位
     await user.click(screen.getByRole('tab', { name: '往来账款' }))
     await waitFor(() => {
-      expect(screen.getByText('功能建设中，暂不可用')).toBeInTheDocument()
+      expect(listSupplierPayables).toHaveBeenCalledWith(
+        'sup-1',
+        expect.any(Object),
+        expect.any(AbortSignal),
+      )
     })
+    expect(screen.queryByText('功能建设中，暂不可用')).not.toBeInTheDocument()
 
     // 「合作团单」已改名为「服务团单」，并实装为业务事实层 Tab。
     expect(screen.queryByRole('tab', { name: '合作团单' })).not.toBeInTheDocument()

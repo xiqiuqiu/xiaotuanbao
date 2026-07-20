@@ -15,6 +15,7 @@ import {
   listDepartureReceivables,
   listPartnerPayables,
   listPartnerReceivables,
+  listSupplierPayables,
   listPayables,
   listReceivables,
   listFinanceDepartureOptions,
@@ -32,11 +33,13 @@ import { usePaymentScheduleMutations } from './usePaymentScheduleMutations'
 import { FINANCE_DEPARTURE_OPTIONS_QUERY_KEY } from '../queries/finance-query-keys'
 
 export type UsePaymentScheduleWorkspaceOptions = {
-  scope: 'global' | 'departure' | 'partner'
+  scope: 'global' | 'departure' | 'partner' | 'supplier'
   direction: 'receivable' | 'payable'
   departureId?: string
   /** Partner 维度精确过滤（scope='partner' 时必传），走 Partner 专属端点。 */
   partnerId?: string
+  /** Supplier 维度精确过滤（scope='supplier' 时必传），走 Supplier 专属端点（仅应付）。 */
+  supplierId?: string
   readOnly?: boolean
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
@@ -55,6 +58,7 @@ export function usePaymentScheduleWorkspace({
   direction,
   departureId: lockedDepartureId,
   partnerId,
+  supplierId,
   readOnly = false,
   highlightSourceOrderId,
   highlightSegmentResourceId,
@@ -69,16 +73,21 @@ export function usePaymentScheduleWorkspace({
   const isReceivable = direction === 'receivable'
   const isDepartureScope = scope === 'departure'
   const isPartnerScope = scope === 'partner'
+  const isSupplierScope = scope === 'supplier'
   const listQueryKey = isReceivable ? 'finance-receivables' : 'finance-payables'
   const departureListQueryKey = isReceivable
     ? 'departure-receivables'
     : 'departure-payables'
   const partnerListQueryKey = isReceivable ? 'partner-receivables' : 'partner-payables'
+  // Supplier 仅应付，无应收专属端点。
+  const supplierListQueryKey = 'supplier-payables'
   const activeListQueryKey = isDepartureScope
     ? departureListQueryKey
     : isPartnerScope
       ? partnerListQueryKey
-      : listQueryKey
+      : isSupplierScope
+        ? supplierListQueryKey
+        : listQueryKey
 
   const [departureFilter, setDepartureFilter] = useState<string | undefined>()
   const [statusFilter, setStatusFilter] = useState<PaymentScheduleStatusFilter | undefined>()
@@ -135,8 +144,9 @@ export function usePaymentScheduleWorkspace({
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
   const fetchPageSize = useExpandedFetch ? 100 : pageSize
 
-  const departureDateFrom = isPartnerScope ? departureDateRange?.[0] : undefined
-  const departureDateTo = isPartnerScope ? departureDateRange?.[1] : undefined
+  const isCounterpartyScope = isPartnerScope || isSupplierScope
+  const departureDateFrom = isCounterpartyScope ? departureDateRange?.[0] : undefined
+  const departureDateTo = isCounterpartyScope ? departureDateRange?.[1] : undefined
 
   // Only server-driven list inputs. Client-only filters (keyword/status/due date)
   // reshape rows locally and must not clear the cached cohort.
@@ -163,6 +173,7 @@ export function usePaymentScheduleWorkspace({
       activeListQueryKey,
       effectiveDepartureId,
       partnerId,
+      supplierId,
       page,
       fetchPageSize,
       useExpandedFetch,
@@ -209,6 +220,23 @@ export function usePaymentScheduleWorkspace({
           signal,
         )
       }
+      if (isSupplierScope) {
+        if (!supplierId) {
+          throw new Error('供应商 ID 缺失')
+        }
+        // 供应商仅应付方向，无应收端点。
+        return listSupplierPayables(
+          supplierId,
+          {
+            page: useExpandedFetch ? 1 : page,
+            pageSize: fetchPageSize,
+            ...(departureDateFrom ? { departureDateFrom } : {}),
+            ...(departureDateTo ? { departureDateTo } : {}),
+            ...statusQuery,
+          },
+          signal,
+        )
+      }
       return (isReceivable ? listReceivables : listPayables)(
         {
           departureId: effectiveDepartureId,
@@ -222,7 +250,8 @@ export function usePaymentScheduleWorkspace({
     },
     enabled:
       (!isDepartureScope || Boolean(lockedDepartureId)) &&
-      (!isPartnerScope || Boolean(partnerId)),
+      (!isPartnerScope || Boolean(partnerId)) &&
+      (!isSupplierScope || Boolean(supplierId)),
     placeholderData,
     ...operationalQueryOptions(),
   })
@@ -316,6 +345,7 @@ export function usePaymentScheduleWorkspace({
     listQueryKey,
     departureListQueryKey,
     partnerListQueryKey,
+    supplierListQueryKey,
     activeSchedule: dialogs.activeSchedule,
     confirmForm: dialogs.confirmForm,
     verifyForm: dialogs.verifyForm,
@@ -424,6 +454,7 @@ export function usePaymentScheduleWorkspace({
     isReceivable,
     isDepartureScope,
     isPartnerScope,
+    isSupplierScope,
     effectiveDepartureId,
     statusFilter,
     keyword,
