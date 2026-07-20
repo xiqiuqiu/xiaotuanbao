@@ -1,5 +1,9 @@
 import { request } from '@/lib/request'
-import type { SupplierListResult, SupplierSummary } from '@/types/api'
+import type {
+  SupplierListResult,
+  SupplierServiceOrderListResult,
+  SupplierSummary,
+} from '@/types/api'
 import type {
   DirectoryProfileStatus,
   InvoiceAvailable,
@@ -66,4 +70,22 @@ export async function archiveSupplier(id: string): Promise<SupplierSummary> {
 
 export async function restoreSupplier(id: string): Promise<SupplierSummary> {
   return request.post<SupplierSummary>(`/suppliers/${id}/restore`)
+}
+
+export interface ListSupplierServiceOrdersParams {
+  departureDateFrom?: string
+  departureDateTo?: string
+  page?: number
+  pageSize?: number
+}
+
+/** 服务团单 Tab：按 Supplier 跨发团查询非拼出资源行（业务事实层）。 */
+export async function listSupplierServiceOrders(
+  supplierId: string,
+  params: ListSupplierServiceOrdersParams = {},
+): Promise<SupplierServiceOrderListResult> {
+  return request.get<SupplierServiceOrderListResult>(
+    `/suppliers/${supplierId}/service-orders`,
+    { params },
+  )
 }

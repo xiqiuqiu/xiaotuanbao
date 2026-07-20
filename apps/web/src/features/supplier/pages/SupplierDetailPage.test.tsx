@@ -37,9 +37,10 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/services/supplier.service', () => ({
   getSupplier: vi.fn(),
   updateSupplier: vi.fn(),
+  listSupplierServiceOrders: vi.fn(),
 }))
 
-import { getSupplier } from '@/services/supplier.service'
+import { getSupplier, listSupplierServiceOrders } from '@/services/supplier.service'
 
 function renderDetailPage() {
   const queryClient = new QueryClient({
@@ -63,6 +64,13 @@ describe('SupplierDetailPage', () => {
     // 默认按可维护目录（计调/管理员）渲染；只读用例单独覆盖。
     useAuthStore.setState({ actionKeys: ['supplier:write'] })
     vi.mocked(getSupplier).mockResolvedValue(mockSupplier)
+    vi.mocked(listSupplierServiceOrders).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+      summary: { resourceRowCount: 0, departureCount: 0, totalAmountCents: 0 },
+    })
   })
 
   it('shows supplier name and opens shared edit drawer from header', async () => {
@@ -88,7 +96,7 @@ describe('SupplierDetailPage', () => {
     expect(screen.getByRole('tab', { name: '基本信息' })).toBeInTheDocument()
   })
 
-  it('shows coming soon panels on placeholder tabs', async () => {
+  it('keeps the 往来账款 placeholder and mounts the 服务团单 fact tab', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
@@ -99,9 +107,14 @@ describe('SupplierDetailPage', () => {
       expect(screen.getByText('功能建设中，暂不可用')).toBeInTheDocument()
     })
 
-    await user.click(screen.getAllByRole('tab', { name: '合作团单' })[0]!)
+    // 「合作团单」已改名为「服务团单」，并实装为业务事实层 Tab。
+    expect(screen.queryByRole('tab', { name: '合作团单' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: '服务团单' }))
     await waitFor(() => {
-      expect(screen.getAllByText('功能建设中，暂不可用').length).toBeGreaterThanOrEqual(1)
+      expect(listSupplierServiceOrders).toHaveBeenCalledWith('sup-1', expect.any(Object))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('该供应商暂无服务团单资源')).toBeInTheDocument()
     })
   })
 })

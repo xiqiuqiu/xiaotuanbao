@@ -13,6 +13,7 @@ import {
   type ResourceKind as SharedResourceKind,
   type SegmentResourceListResult,
   type SegmentResourceSummary,
+  type SupplierServiceOrderListResult,
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -21,14 +22,17 @@ import {
   type Departure,
   type ItinerarySegment,
   type Partner,
+  type Prisma,
   type SegmentResource,
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
+import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import type {
   CreateSegmentResourceDto,
   ListSegmentResourcesQueryDto,
+  ListSupplierServiceOrdersQueryDto,
   UpdateSegmentResourceDto,
 } from './dto/segment-resource.dto'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
@@ -102,6 +106,130 @@ export class SegmentResourceService {
     return {
       items,
       total: items.length,
+    }
+  }
+
+  /**
+   * 供应商服务团单 Tab：跨发团查询引用该供应商的非拼出资源行（业务事实层）。
+   * 出团日期区间过滤＋默认倒序＋分页；三项汇总覆盖整个筛选集，不随分页变化。
+   */
+  async listBySupplier(
+    organizationId: string,
+    supplierId: string,
+    query: ListSupplierServiceOrdersQueryDto,
+  ): Promise<SupplierServiceOrderListResult> {
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: supplierId, organizationId },
+    })
+    if (!supplier) {
+      throw new NotFoundException('供应商不存在')
+    }
+
+    if (
+      query.departureDateFrom &&
+      query.departureDateTo &&
+      query.departureDateFrom > query.departureDateTo
+    ) {
+      throw new BadRequestException('出团日期区间非法')
+    }
+
+    const page = Math.max(Number(query.page) || 1, 1)
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
+
+    const departureWhere: Prisma.DepartureWhereInput = {
+      organizationId,
+      ...(query.departureDateFrom || query.departureDateTo
+        ? {
+            startDate: {
+              ...(query.departureDateFrom
+                ? { gte: parseDateOnly(query.departureDateFrom) }
+                : {}),
+              ...(query.departureDateTo
+                ? { lte: parseDateOnly(query.departureDateTo) }
+                : {}),
+            },
+          }
+        : {}),
+    }
+
+    const where: Prisma.SegmentResourceWhereInput = {
+      supplierId: supplier.id,
+      resourceKind: { not: ResourceKind.outsource },
+      segment: { departure: departureWhere },
+    }
+
+    const [resources, total, aggregate, distinctDepartures] = await Promise.all([
+      this.prisma.segmentResource.findMany({
+        where,
+        include: {
+          segment: {
+            select: {
+              name: true,
+              departureId: true,
+              departure: {
+                select: {
+                  departureNo: true,
+                  name: true,
+                  routeName: true,
+                  startDate: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: [
+          { segment: { departure: { startDate: 'desc' } } },
+          { createdAt: 'desc' },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.segmentResource.count({ where }),
+      this.prisma.segmentResource.aggregate({
+        where,
+        _sum: { amountCents: true },
+      }),
+      // 关联发团数：按 departureId DB 级去重，结果集上限为发团数而非资源行数。
+      this.prisma.itinerarySegment.findMany({
+        where: {
+          departure: departureWhere,
+          resources: {
+            some: {
+              supplierId: supplier.id,
+              resourceKind: { not: ResourceKind.outsource },
+            },
+          },
+        },
+        select: { departureId: true },
+        distinct: ['departureId'],
+      }),
+    ])
+
+    const departureCount = distinctDepartures.length
+
+    return {
+      items: resources.map((resource) => ({
+        id: resource.id,
+        departureId: resource.segment.departureId,
+        departureNo: resource.segment.departure.departureNo,
+        departureName: resource.segment.departure.name,
+        routeName: resource.segment.departure.routeName,
+        departureStartDate: formatDateOnly(resource.segment.departure.startDate),
+        segmentId: resource.segmentId,
+        segmentName: resource.segment.name,
+        resourceKind: resource.resourceKind,
+        title: resource.title,
+        amountCents: resource.amountCents,
+        notes: resource.notes,
+      })),
+      total,
+      page,
+      pageSize,
+      summary: {
+        resourceRowCount: total,
+        departureCount,
+        totalAmountCents: aggregate._sum.amountCents ?? 0,
+      },
     }
   }
 

@@ -15,6 +15,7 @@ import type {
   GeneratePayableResult,
   SegmentResourceListResult,
   SegmentResourceSummary,
+  SupplierServiceOrderListResult,
 } from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
   CreateSegmentResourceDto,
   ListSegmentResourcesQueryDto,
+  ListSupplierServiceOrdersQueryDto,
   UpdateSegmentResourceDto,
 } from './dto/segment-resource.dto'
 import { SegmentResourceService } from './segment-resource.service'
@@ -41,6 +43,21 @@ export class SegmentResourceController {
     return this.segmentResourceService.listBySegment(
       request.user.organizationId,
       segmentId,
+      query,
+    )
+  }
+
+  /** 供应商服务团单 Tab：按 Supplier 跨发团查询非拼出资源行（业务事实层）。 */
+  @Get('suppliers/:supplierId/service-orders')
+  @RequireMenu('/supplier')
+  listBySupplier(
+    @Req() request: { user: { organizationId: string } },
+    @Param('supplierId') supplierId: string,
+    @Query() query: ListSupplierServiceOrdersQueryDto,
+  ): Promise<SupplierServiceOrderListResult> {
+    return this.segmentResourceService.listBySupplier(
+      request.user.organizationId,
+      supplierId,
       query,
     )
   }

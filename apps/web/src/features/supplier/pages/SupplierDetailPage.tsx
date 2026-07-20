@@ -7,6 +7,7 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { getSupplier, updateSupplier } from '@/services/supplier.service'
 import { canEditSupplier } from '../utils/supplier-permission'
 import { SupplierComingSoonPanel } from '../components/SupplierComingSoonPanel'
+import { SupplierServiceOrdersTab } from '../components/SupplierServiceOrdersTab'
 import { SupplierFormDrawer } from '../components/SupplierFormDrawer'
 import type { SupplierFormValues } from '../components/SupplierProfileSections'
 import { SupplierReadonlySections } from '../components/SupplierReadonlySections'
@@ -126,6 +127,7 @@ export function SupplierDetailPage() {
 
       <Card>
         <Tabs
+          destroyOnHidden
           items={[
             {
               key: 'profile',
@@ -139,8 +141,8 @@ export function SupplierDetailPage() {
             },
             {
               key: 'groups',
-              label: '合作团单',
-              children: <SupplierComingSoonPanel />,
+              label: '服务团单',
+              children: <SupplierServiceOrdersTab supplierId={supplier.id} />,
             },
           ]}
         />

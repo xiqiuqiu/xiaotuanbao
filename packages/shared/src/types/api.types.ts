@@ -760,6 +760,49 @@ export interface PartnerSourceOrderListResult {
   summary: SourceOrderListSummary
 }
 
+/** 供应商服务团单 Tab 三项汇总（跟随筛选、所见即所算）。 */
+export interface SupplierServiceOrderListSummary {
+  /** 资源行数（当前筛选集内引用该供应商的非拼出资源行数） */
+  resourceRowCount: number
+  /** 关联发团数（去重后的发团数量） */
+  departureCount: number
+  /** 约定金额合计（分） */
+  totalAmountCents: number
+}
+
+/**
+ * 供应商服务团单 Tab 行（业务事实层）：跨发团引用该供应商的行程段资源快照。
+ * 有意不含应付状态/已付/未付字段（归往来账款 Tab）。
+ */
+export interface SupplierServiceOrderItem {
+  id: string
+  departureId: string
+  departureNo: string
+  departureName: string
+  routeName: string
+  /** 所属发团出团日期（YYYY-MM-DD） */
+  departureStartDate: string
+  segmentId: string
+  /** 行程段名称 */
+  segmentName: string
+  /** 资源种类（ResourceKind 存储值） */
+  resourceKind: string
+  /** 资源名称 */
+  title: string
+  /** 约定金额（分） */
+  amountCents: number
+  notes: string | null
+}
+
+export interface SupplierServiceOrderListResult {
+  items: SupplierServiceOrderItem[]
+  total: number
+  page: number
+  pageSize: number
+  /** 三项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
+  summary: SupplierServiceOrderListSummary
+}
+
 /**
  * 《往来账确认单》明细行（对外单据，客户习惯名映射见 CONTEXT.md
  * 「Partner Reconciliation Statement」词条）。字段仍用系统规范语义命名，

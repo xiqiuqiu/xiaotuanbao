@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer'
 import {
+  IsDateString,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -22,6 +23,29 @@ export class ListSegmentResourcesQueryDto {
   @IsOptional()
   @IsString()
   keyword?: string
+}
+
+/** 供应商服务团单 Tab：按出团日期区间过滤＋分页跨发团查询该供应商的非拼出资源行。 */
+export class ListSupplierServiceOrdersQueryDto {
+  @IsOptional()
+  @IsDateString()
+  departureDateFrom?: string
+
+  @IsOptional()
+  @IsDateString()
+  departureDateTo?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number
 }
 
 export class CreateSegmentResourceDto {
