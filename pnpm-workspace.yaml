@@ -2,6 +2,11 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
+# pnpm 11.3+ 的供应链校验 pass 在 QEMU arm64 模拟下会崩溃（SIGILL / exit 132），
+# 导致 Docker arm64 构建在 deploy 阶段失败。仓库为闭源、lockfile 受控，
+# 跳过该校验安全。See: pnpm#11860.
+trustLockfile: true
+
 onlyBuiltDependencies:
   - esbuild
   - prisma

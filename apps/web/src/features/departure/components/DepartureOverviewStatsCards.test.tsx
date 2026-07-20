@@ -432,19 +432,19 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText(/核销自他团流水/)).not.toBeInTheDocument()
   })
 
-  it('计算公式仅通过文字提示展示', async () => {
+  it('说明提示仅展示算法文案，不再展示含金额的计算方式', async () => {
     const user = userEvent.setup()
     renderCards()
 
     const equation = '有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00'
     expect(screen.queryByText(equation)).not.toBeInTheDocument()
 
-    await user.hover(screen.getByRole('button', { name: '查看资金情况计算方式' }))
+    await user.hover(screen.getByRole('button', { name: '查看资金情况说明' }))
     const tooltip = await screen.findByRole('tooltip')
     expect(tooltip).toHaveTextContent(
       '本团当前实际发生的资金收支情况。 计算：现金净流入 = 有效收入 − 有效支出。 根据已关联本团的未作废收支流水实时统计。',
     )
-    expect(tooltip).toHaveTextContent(equation)
+    expect(tooltip).not.toHaveTextContent(equation)
   })
 
   it('守恒异常不阻止读取，并在对应卡片展示原始差额', () => {

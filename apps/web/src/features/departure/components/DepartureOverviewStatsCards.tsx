@@ -160,29 +160,19 @@ function ProgressBreakdown({
 function CalculationTitle({
   label,
   description,
-  equation,
 }: {
   label: string
   description: string
-  equation: string
 }) {
   return (
     <Flex component="span" align="center" gap={2}>
       <span>{label}</span>
-      <Tooltip
-        title={
-          <Space orientation="vertical" size={4}>
-            <span>{description}</span>
-            <span>计算：{equation}</span>
-          </Space>
-        }
-        styles={{ root: { maxWidth: 420 } }}
-      >
+      <Tooltip title={description} styles={{ root: { maxWidth: 420 } }}>
         <Button
           type="text"
           size="small"
           icon={<InfoCircleOutlined />}
-          aria-label={`查看${label}计算方式`}
+          aria-label={`查看${label}说明`}
           style={{ width: 24, minWidth: 24, height: 24, padding: 0 }}
         />
       </Tooltip>
@@ -195,7 +185,6 @@ function SummaryCard({
   value,
   suffix,
   equationDescription,
-  equation,
   entry,
   animateEnter = false,
 }: {
@@ -203,17 +192,15 @@ function SummaryCard({
   value: string | number
   suffix?: string
   equationDescription?: string
-  equation?: string
   /** 卡片右上角的明细入口图标按钮 */
   entry?: React.ReactNode
   animateEnter?: boolean
 }) {
-  const titleNode =
-    equation && equationDescription ? (
-      <CalculationTitle label={title} description={equationDescription} equation={equation} />
-    ) : (
-      <span>{title}</span>
-    )
+  const titleNode = equationDescription ? (
+    <CalculationTitle label={title} description={equationDescription} />
+  ) : (
+    <span>{title}</span>
+  )
 
   return (
     <Card
@@ -284,14 +271,6 @@ export function DepartureOverviewStatsCards({
   const marginRateLabel = formatPercent(departure.estimatedMarginCents, departure.netReceivableCents)
   const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
 
-  const settlementEquation = `原始团款 ${formatCents(departure.grossReceivableCents)} − 优惠合计 ${formatCents(departure.discountCents)} = 结算应收 ${formatCents(departure.netReceivableCents)}`
-  const costEquation = `确认应付 ${formatCents(stats.confirmedPayableCents)} − 成本合计 ${formatCents(departure.payableCents)} = 其他应付 ${formatCents(stats.otherPayableCents)} + 资源账款差异 ${formatCents(stats.resourcePayableDifferenceCents)} − 尚未生成应付 ${formatCents(stats.ungeneratedPayableCents)}`
-  const marginEquation = `结算应收 ${formatCents(departure.netReceivableCents)} − 成本合计 ${formatCents(departure.payableCents)} = 当前毛利 ${formatCents(departure.estimatedMarginCents)}`
-  const marginRateEquation = `当前毛利 ${formatCents(departure.estimatedMarginCents)} ÷ 结算应收 ${formatCents(departure.netReceivableCents)}`
-  const receivableEquation = `已收 ${formatCents(stats.receivedCents)} + 未收 ${formatCents(unreceivedCents)} = 结算应收 ${formatCents(departure.netReceivableCents)}`
-  const payableEquation = `资源应付已核销 ${formatCents(stats.resourcePaidCents)} ÷ 成本合计 ${formatCents(departure.payableCents)}`
-  const cashEquation = `有效收入 ${formatCents(stats.incomeTransactionCents)} − 有效支出 ${formatCents(stats.expenseTransactionCents)} = 现金净流入 ${formatCents(stats.cashNetInflowCents)}`
-
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Row gutter={[16, 16]} className={styles.firstRow}>
@@ -308,7 +287,6 @@ export function DepartureOverviewStatsCards({
             title="结算应收"
             value={formatCents(departure.netReceivableCents)}
             equationDescription="结算应收是全部客源单优惠后的团款合计，不含手工创建的其他应收。"
-            equation={settlementEquation}
             animateEnter={animateEnter}
           />
         </Col>
@@ -317,7 +295,6 @@ export function DepartureOverviewStatsCards({
             title="成本合计"
             value={formatCents(departure.payableCents)}
             equationDescription="本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需生成应付。"
-            equation={costEquation}
             animateEnter={animateEnter}
             entry={
               hasCostDetails ? (
@@ -339,7 +316,6 @@ export function DepartureOverviewStatsCards({
             title="当前毛利"
             value={formatCents(departure.estimatedMarginCents)}
             equationDescription="本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。"
-            equation={marginEquation}
             animateEnter={animateEnter}
             entry={
               stats.confirmedPayableCents !== 0 ? (
@@ -377,7 +353,6 @@ export function DepartureOverviewStatsCards({
             equationDescription="本团当前毛利占结算应收的比例。
 计算：当前毛利 ÷ 结算应收 × 100%。
 根据当前毛利和结算应收实时统计；"
-            equation={marginRateEquation}
             animateEnter={animateEnter}
           />
         </Col>
@@ -393,7 +368,6 @@ export function DepartureOverviewStatsCards({
                 description="本团结算应收的实际收回进度。
 计算：已收金额 ÷ 结算应收 × 100%。
 已收仅统计已核销金额实时统计；"
-                equation={receivableEquation}
               />
             }
             extra={
@@ -440,7 +414,6 @@ export function DepartureOverviewStatsCards({
                 description="本团资源成本的实际支付进度。
 计算：已付金额 ÷ 成本合计 × 100%。
 已付仅统计资源应付的有效核销；手工应付等不计入本进度。"
-                equation={payableEquation}
               />
             }
             extra={
@@ -488,7 +461,6 @@ export function DepartureOverviewStatsCards({
                 description="本团当前实际发生的资金收支情况。
 计算：现金净流入 = 有效收入 − 有效支出。
 根据已关联本团的未作废收支流水实时统计。"
-                equation={cashEquation}
               />
             }
             extra={
