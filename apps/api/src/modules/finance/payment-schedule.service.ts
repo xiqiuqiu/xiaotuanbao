@@ -789,10 +789,9 @@ export class PaymentScheduleService {
         throw new BadRequestException('仅资源应付节点可作废')
       }
 
-      const menuKeys = await this.authService.getMenuKeysForUser(userId)
-      if (!menuKeys.includes('/departure')) {
-        throw new ForbiddenException('无权访问')
-      }
+      // 鉴权由唯一入口 PaymentScheduleCancelController.voidResourcePayable 的
+      // @RequireMenu('departure:write') 执行（严格强于 /departure 菜单，且财务无此
+      // action key 天然被拒）。此处不再重复命令式校验 /departure，避免制造矩阵盲区。
       if (schedule.voidedAt) {
         throw new BadRequestException('节点已作废')
       }

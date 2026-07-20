@@ -323,7 +323,7 @@ describe('Finance API (e2e)', () => {
       .expect(403)
   })
 
-  it('lists organization-scoped finance reference options for finance but rejects coordinator (ADR-0023)', async () => {
+  it('lists organization-scoped finance reference options for finance and coordinator (ADR-0024)', async () => {
     const response = await authRequest(app, financeToken)
       .get('/api/finance/departure-options')
       .expect(200)
@@ -358,10 +358,18 @@ describe('Finance API (e2e)', () => {
       expect.arrayContaining([{ id: supplierId, name: `${testPrefix}-supplier` }]),
     )
 
-    // 计调收回 /finance/* 菜单：财务参考项接口 403
+    // ADR-0024：参考/查找接口按所返回实体的业务菜单单键守卫。计调持有 /departure、
+    // /partner、/supplier，故在「合作伙伴/供应商 → 往来账款」Tab 也能取这些查找项
+    // （用于显示发团名等），不再 403。此为原「计调 departure-options 403」bug 的回归锁。
     await authRequest(app, coordinatorToken)
       .get('/api/finance/departure-options')
-      .expect(403)
+      .expect(200)
+    await authRequest(app, coordinatorToken)
+      .get('/api/finance/partner-options')
+      .expect(200)
+    await authRequest(app, coordinatorToken)
+      .get('/api/finance/supplier-options')
+      .expect(200)
   })
 
   it('lists only source orders with guest-collection path in source-order-options', async () => {

@@ -512,6 +512,28 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
     })
   })
 
+  // 回归：计调在「合作伙伴 → 往来账款」列表可见节点行（走 /partner 放行），点击节点编号
+  // 打开详情抽屉时前端调 GET /finance/receivables/:id 或 /payables/:id（/finance/* 守卫），
+  // 计调无 /finance/* → 403「无权访问」，抽屉报「节点详情加载失败」。列表可见而详情不可见
+  // 属权限漂移，应与列表口径一致放行（能看见该往来账款行，即可看其详情）。
+  it('coordinator can open payment schedule detail for ledger rows it can list', async () => {
+    const receivablesResponse = await authRequest(app, coordinatorToken)
+      .get(`/api/partners/${partnerId}/receivables`)
+      .expect(200)
+    const receivableId = receivablesResponse.body.data.items[0].id as string
+    await authRequest(app, coordinatorToken)
+      .get(`/api/finance/receivables/${receivableId}`)
+      .expect(200)
+
+    const payablesResponse = await authRequest(app, coordinatorToken)
+      .get(`/api/partners/${partnerId}/payables`)
+      .expect(200)
+    const payableId = payablesResponse.body.data.items[0].id as string
+    await authRequest(app, coordinatorToken)
+      .get(`/api/finance/payables/${payableId}`)
+      .expect(200)
+  })
+
   it('ignores counterparty overrides from the query string', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get(`/api/partners/${partnerId}/receivables`)

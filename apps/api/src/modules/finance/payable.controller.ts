@@ -58,8 +58,10 @@ export class PayableController {
     })
   }
 
+  // ADR-0024：见 ReceivableController.getById——收付款节点详情读按 /departure 放行，
+  // 写/操作端点仍守 /finance/payable。
   @Get(':id')
-  @RequireMenu('/finance/payable')
+  @RequireMenu('/departure')
   getById(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,

@@ -128,6 +128,10 @@ _Avoid_: 仅前端校验
 供应商管理（`/supplier` 及其详情子路由）企业管理员、计调、财务三 Role 均可访问；其中企业管理员与计调可编辑（持有 `supplier:write`），**财务只读**（无 `supplier:write`，可查看账期规则、结算说明、更多财务信息等结算信息，用于应付/付款实务，但不维护目录 CRUD）。合作伙伴（`/partner`）同理：财务可进入（含往来账款），但目录业务信息只读（无 `partner:write`）。
 _Avoid_: 财务维护供应商或合作伙伴目录, 财务不进供应商名录, 详情页单独 Menu Key
 
+**Reference Options（参考选项）**:
+仅返回 id→名称、用于渲染筛选器/下拉/标签的查找数据（如 `finance/departure-options`、`partner-options`、`supplier-options`、`source-order-options`），不是一等业务对象。访问口径为**按其所返回实体类型的业务菜单单键声明式守卫**（departure/客源单选项→`/departure`、partner→`/partner`、supplier→`/supplier`），语义为「能看见该类实体即可取其查找项」，不用 OR、不用认证裸放（ADR-0024）。当前不变量：合作伙伴/供应商「往来账款」Tab 里的发团选项按所返回实体挂 `/departure`（非当前屏幕 `/partner`），预设角色皆持 `/departure` 故不受影响。
+_Avoid_: 下拉选项作业务主列表, 参考接口按当前屏幕菜单守卫, 参考接口用 /finance/* 或 OR 放行, 仅认证放行参考接口
+
 ## Product Interface
 
 **业务主列表**:

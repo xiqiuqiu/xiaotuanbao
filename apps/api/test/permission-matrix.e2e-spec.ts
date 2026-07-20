@@ -78,6 +78,31 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
   ],
 }
 
+/**
+ * 参考/查找类接口（仅返回 id→名称，用于筛选器/标签）的口径硬断言：按其所返回实体
+ * 类型的菜单单键守卫（见 CONTEXT「Reference Options」与 ADR-0024）。这 4 条曾因命令式
+ * 鉴权只放行 /finance/* 而对计调 403（往来账款 Tab 显示发团名依赖 departure-options），
+ * 现改为声明式并在此钉死其 key，防止再退回错误口径或漂移。
+ */
+const REFERENCE_ENDPOINTS: Array<{ method: string; path: string; requiredKey: string }> = [
+  { method: 'GET', path: '/api/finance/departure-options', requiredKey: '/departure' },
+  { method: 'GET', path: '/api/finance/partner-options', requiredKey: '/partner' },
+  { method: 'GET', path: '/api/finance/supplier-options', requiredKey: '/supplier' },
+  { method: 'GET', path: '/api/finance/source-order-options', requiredKey: '/departure' },
+]
+
+/**
+ * 发团作用域的财务**读**端点：收付款节点详情。节点必挂发团，计调在发团/合作伙伴/供应商
+ * 往来账款列表（业务菜单放行）可见节点行，点节点编号看详情须一致可读，故按 /departure 放行；
+ * 写/操作端点仍守 /finance/*（见 receivable/payable.controller）。此处钉死读端点的 key，
+ * 防止回退到 /finance/* 再现「列表可见、详情 403」漂移（ADR-0024）。
+ */
+const DEPARTURE_SCOPED_FINANCE_READS: Array<{ method: string; path: string; requiredKey: string }> =
+  [
+    { method: 'GET', path: '/api/finance/receivables/:id', requiredKey: '/departure' },
+    { method: 'GET', path: '/api/finance/payables/:id', requiredKey: '/departure' },
+  ]
+
 describe('权限矩阵 — 后端权威事实源 (e2e)', () => {
   let app: INestApplication
   let routes: RoutePermission[]
@@ -150,6 +175,62 @@ describe('权限矩阵 — 后端权威事实源 (e2e)', () => {
         })
       }
     }
+  })
+
+  describe('参考/查找接口 ↔ 所返回实体菜单 契约 (ADR-0024)', () => {
+    for (const endpoint of REFERENCE_ENDPOINTS) {
+      it(`${endpoint.method} ${endpoint.path} → ${endpoint.requiredKey}`, () => {
+        const route = findRoute(endpoint.method, endpoint.path)
+        expect(route).toBeDefined()
+        if (!route) {
+          return
+        }
+        // 声明式（矩阵可见）而非命令式，且挂对所返回实体的业务菜单单键。
+        expect(route.requiredKey).toBe(endpoint.requiredKey)
+        expect(route.guards).toContain('MenuPermissionGuard')
+      })
+    }
+
+    it('计调与财务对参考接口均可达（都持有对应业务菜单）', () => {
+      const financeKeys = presetRoleGrantedKeys(PRESET_ROLE_NAMES.FINANCE)
+      const coordinatorKeys = presetRoleGrantedKeys(PRESET_ROLE_NAMES.COORDINATOR)
+      for (const endpoint of REFERENCE_ENDPOINTS) {
+        const route = findRoute(endpoint.method, endpoint.path)
+        expect(route).toBeDefined()
+        if (!route) {
+          continue
+        }
+        expect(canRoleCallRoute(route, financeKeys)).toBe(true)
+        expect(canRoleCallRoute(route, coordinatorKeys)).toBe(true)
+      }
+    })
+  })
+
+  describe('发团作用域财务读接口 ↔ /departure 契约 (ADR-0024)', () => {
+    for (const endpoint of DEPARTURE_SCOPED_FINANCE_READS) {
+      it(`${endpoint.method} ${endpoint.path} → ${endpoint.requiredKey}`, () => {
+        const route = findRoute(endpoint.method, endpoint.path)
+        expect(route).toBeDefined()
+        if (!route) {
+          return
+        }
+        expect(route.requiredKey).toBe(endpoint.requiredKey)
+        expect(route.guards).toContain('MenuPermissionGuard')
+      })
+    }
+
+    it('计调可读节点详情（往来账款点节点编号），但仍不可调用任何 /finance/* 写/操作接口', () => {
+      const coordinatorKeys = presetRoleGrantedKeys(PRESET_ROLE_NAMES.COORDINATOR)
+      for (const endpoint of DEPARTURE_SCOPED_FINANCE_READS) {
+        const route = findRoute(endpoint.method, endpoint.path)
+        expect(route).toBeDefined()
+        if (!route) {
+          continue
+        }
+        expect(canRoleCallRoute(route, coordinatorKeys)).toBe(true)
+      }
+      // 写侧不变：计调对 /finance/* 全部不可达（下方「计调不可调用任何 /finance/* 接口」不变量守）。
+    })
   })
 
   describe('角色 × 端点 可达性不变量', () => {

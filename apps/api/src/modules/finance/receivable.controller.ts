@@ -58,8 +58,11 @@ export class ReceivableController {
     })
   }
 
+  // ADR-0024：收付款节点必挂发团，其**详情读**按 /departure 放行——计调在发团详情/
+  // 合作伙伴/供应商往来账款列表（业务菜单放行）可见节点行，点节点编号看详情应一致可读；
+  // 财务预设亦持 /departure。写/操作端点仍守 /finance/receivable，计调不能改账款。
   @Get(':id')
-  @RequireMenu('/finance/receivable')
+  @RequireMenu('/departure')
   getById(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
