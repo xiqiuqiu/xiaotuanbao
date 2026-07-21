@@ -301,6 +301,17 @@ export class DepartureFinanceFacade {
     }
   }
 
+  /**
+   * New AR/AP obligations must not open under a settled Departure — that would
+   * leave "settled with open debt". Archive is already blocked by assertMutable.
+   */
+  assertAllowsNewObligation(departure: { status: string }, action = '创建收付款节点'): void {
+    this.assertMutable(departure, action)
+    if (departure.status === DepartureStatus.settled) {
+      throw new ConflictException(`发团已结清，不可${action}`)
+    }
+  }
+
   async assertMutableById(
     organizationId: string,
     departureId: string,
@@ -316,6 +327,23 @@ export class DepartureFinanceFacade {
     }
 
     this.assertMutable(departure, action)
+  }
+
+  async assertAllowsNewObligationById(
+    organizationId: string,
+    departureId: string,
+    action = '创建收付款节点',
+  ): Promise<void> {
+    const departure = await this.prisma.departure.findFirst({
+      where: { id: departureId, organizationId },
+      select: { status: true },
+    })
+
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+
+    this.assertAllowsNewObligation(departure, action)
   }
 
   /**
@@ -345,6 +373,31 @@ export class DepartureFinanceFacade {
     }
 
     this.assertMutable(departure, action)
+  }
+
+  async lockAllowsNewObligationById(
+    tx: TxClient,
+    organizationId: string,
+    departureId: string,
+    action = '创建收付款节点',
+  ): Promise<void> {
+    await tx.$queryRaw`
+      SELECT id
+      FROM departures
+      WHERE id = ${departureId}
+        AND organization_id = ${organizationId}
+      FOR UPDATE
+    `
+
+    const departure = await tx.departure.findFirst({
+      where: { id: departureId, organizationId },
+      select: { status: true },
+    })
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
+
+    this.assertAllowsNewObligation(departure, action)
   }
 
   async getStatusById(

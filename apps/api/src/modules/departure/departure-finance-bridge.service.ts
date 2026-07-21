@@ -109,7 +109,7 @@ export class DepartureFinanceBridgeService {
         sourceOrderId,
         tx,
       )
-      this.ensureDepartureOpen(lockedOrder.departure)
+      this.ensureDepartureAllowsNewObligation(lockedOrder.departure)
 
       const existingSchedules = await this.loadReceivableSchedules(
         organizationId,
@@ -387,7 +387,7 @@ export class DepartureFinanceBridgeService {
         resourceId,
         tx,
       )
-      this.ensureDepartureOpen(lockedResource.segment.departure, '生成应付')
+      this.ensureDepartureAllowsNewObligation(lockedResource.segment.departure, '生成应付')
 
       if (lockedResource.amountCents <= 0) {
         throw new BadRequestException('资源金额须大于 0 才能生成应付')
@@ -692,7 +692,10 @@ export class DepartureFinanceBridgeService {
     return order
   }
 
-  private ensureDepartureOpen(departure: { status: string }, action = '生成应收') {
-    this.departureFinanceFacade.assertMutable(departure, action)
+  private ensureDepartureAllowsNewObligation(
+    departure: { status: string },
+    action = '生成应收',
+  ) {
+    this.departureFinanceFacade.assertAllowsNewObligation(departure, action)
   }
 }

@@ -299,7 +299,7 @@ export class SourceOrderService {
     organizationId: string,
     departureId: string,
   ): Promise<BatchFinanceGenerationResult> {
-    await this.departureFinanceFacade.assertMutableById(
+    await this.departureFinanceFacade.assertAllowsNewObligationById(
       organizationId,
       departureId,
       '生成应收',

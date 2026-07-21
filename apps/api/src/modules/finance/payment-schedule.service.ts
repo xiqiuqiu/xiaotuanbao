@@ -318,7 +318,7 @@ export class PaymentScheduleService {
       throw new BadRequestException('节点标题不能为空')
     }
 
-    await this.departureFinanceFacade.lockMutableById(
+    await this.departureFinanceFacade.lockAllowsNewObligationById(
       client,
       organizationId,
       dto.departureId,

@@ -408,7 +408,7 @@ export class SegmentResourceService {
     segmentId: string,
   ): Promise<BatchFinanceGenerationResult> {
     const segment = await this.findSegmentOrThrow(organizationId, segmentId)
-    await this.departureFinanceFacade.assertMutableById(
+    await this.departureFinanceFacade.assertAllowsNewObligationById(
       organizationId,
       segment.departureId,
       '生成应付',
