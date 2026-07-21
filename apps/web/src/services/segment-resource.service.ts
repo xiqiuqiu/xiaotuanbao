@@ -18,9 +18,11 @@ export interface ListSegmentResourcesParams {
 export async function listSegmentResources(
   segmentId: string,
   params: ListSegmentResourcesParams = {},
+  signal?: AbortSignal,
 ): Promise<SegmentResourceListResult> {
   return request.get<SegmentResourceListResult>(`/segments/${segmentId}/resources`, {
     params,
+    signal,
   })
 }
 

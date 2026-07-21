@@ -131,6 +131,8 @@ const MUTATION_HOOKS: Record<string, string> = {
     '/src/features/finance/hooks/useVerificationWorkspaceMutations.ts',
   useDepartureHeaderActions:
     '/src/features/departure/components/useDepartureHeaderActions.ts',
+  useSourceOrdersTabMutations:
+    '/src/features/departure/hooks/useSourceOrdersTabMutations.tsx',
 }
 
 /** gating 意识 token：出现其一即认为该模块「知道要 gating」。刻意不含泛化的 disabled/loading。 */

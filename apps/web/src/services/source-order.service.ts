@@ -34,9 +34,11 @@ export async function listPendingReceivableSourceOrders(params: {
 export async function listSourceOrders(
   departureId: string,
   params: ListSourceOrdersParams = {},
+  signal?: AbortSignal,
 ): Promise<SourceOrderListResult> {
   return request.get<SourceOrderListResult>(`/departures/${departureId}/source-orders`, {
     params,
+    signal,
   })
 }
 
@@ -92,8 +94,11 @@ export async function createSourceOrder(
   return request.post<SourceOrderSummary>(`/departures/${departureId}/source-orders`, payload)
 }
 
-export async function getSourceOrder(id: string): Promise<SourceOrderSummary> {
-  return request.get<SourceOrderSummary>(`/source-orders/${id}`)
+export async function getSourceOrder(
+  id: string,
+  signal?: AbortSignal,
+): Promise<SourceOrderSummary> {
+  return request.get<SourceOrderSummary>(`/source-orders/${id}`, { signal })
 }
 
 export async function updateSourceOrder(

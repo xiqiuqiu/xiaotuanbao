@@ -89,11 +89,14 @@ export function useCreateVerificationDrawerState({
     isError: transactionsError,
   } = useQuery({
     queryKey: ['finance-transactions', 'create-verification', effectiveDepartureId],
-    queryFn: () =>
-      listTransactions({
-        departureId: effectiveDepartureId,
-        pageSize: 100,
-      }),
+    queryFn: ({ signal }) =>
+      listTransactions(
+        {
+          departureId: effectiveDepartureId,
+          pageSize: 100,
+        },
+        signal,
+      ),
     enabled: open && Boolean(direction),
   })
 
@@ -109,11 +112,14 @@ export function useCreateVerificationDrawerState({
       'create-verification',
       effectiveDepartureId,
     ],
-    queryFn: () =>
-      (isReceivable ? listReceivables : listPayables)({
-        departureId: effectiveDepartureId,
-        pageSize: 100,
-      }),
+    queryFn: ({ signal }) =>
+      (isReceivable ? listReceivables : listPayables)(
+        {
+          departureId: effectiveDepartureId,
+          pageSize: 100,
+        },
+        signal,
+      ),
     enabled: open && Boolean(direction),
   })
 

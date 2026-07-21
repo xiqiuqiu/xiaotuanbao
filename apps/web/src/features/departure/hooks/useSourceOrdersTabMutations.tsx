@@ -49,16 +49,20 @@ export function useSourceOrdersTabMutations({
   }
 
   const saveMutation = useMutation({
-    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
-      if (drawer.editingOrder) {
-        return updateSourceOrder(drawer.editingOrder.id, payload)
-      }
-      return createSourceOrder(departure.id, payload)
+    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+      const editingId = drawer.editingOrder?.id ?? null
+      const saved = editingId
+        ? await updateSourceOrder(editingId, payload)
+        : await createSourceOrder(departure.id, payload)
+      return { saved, editingId }
     },
-    onSuccess: () => {
-      message.success(drawer.editingOrder ? '客源单已更新' : '客源单已添加')
-      onCloseDrawer()
+    onSuccess: ({ editingId }) => {
+      message.success(editingId ? '客源单已更新' : '客源单已添加')
       invalidateSourceOrders()
+      if ((drawer.editingOrder?.id ?? null) !== editingId) {
+        return
+      }
+      onCloseDrawer()
     },
   })
 

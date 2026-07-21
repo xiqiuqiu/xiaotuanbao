@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import { Button, Space, Table } from 'antd'
+import { Alert, Button, Card, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
@@ -71,28 +71,42 @@ export function SourceOrdersTab({
       }),
   })
 
-  const { data: listResult, isLoading } = useQuery({
+  const {
+    data: listResult,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['source-orders', departure.id, filters.applied],
-    queryFn: () =>
-      listSourceOrders(departure.id, {
-        partnerId: filters.applied.partnerId,
-        collectionMode: filters.applied.collectionMode,
-        hasDiscount: filters.applied.hasDiscount,
-        keyword: filters.applied.keyword || undefined,
-      }),
+    queryFn: ({ signal }) =>
+      listSourceOrders(
+        departure.id,
+        {
+          partnerId: filters.applied.partnerId,
+          collectionMode: filters.applied.collectionMode,
+          hasDiscount: filters.applied.hasDiscount,
+          keyword: filters.applied.keyword || undefined,
+        },
+        signal,
+      ),
     ...operationalQueryOptions(),
   })
 
   /** 批量生成按全团未生成客源单的有效应收路径计数；与筛选列表解耦。 */
   const { data: allOrdersForBatchCount } = useQuery({
     queryKey: ['source-orders', departure.id, EMPTY_SOURCE_ORDER_FILTERS],
-    queryFn: () =>
-      listSourceOrders(departure.id, {
-        partnerId: EMPTY_SOURCE_ORDER_FILTERS.partnerId,
-        collectionMode: EMPTY_SOURCE_ORDER_FILTERS.collectionMode,
-        hasDiscount: EMPTY_SOURCE_ORDER_FILTERS.hasDiscount,
-        keyword: EMPTY_SOURCE_ORDER_FILTERS.keyword || undefined,
-      }),
+    queryFn: ({ signal }) =>
+      listSourceOrders(
+        departure.id,
+        {
+          partnerId: EMPTY_SOURCE_ORDER_FILTERS.partnerId,
+          collectionMode: EMPTY_SOURCE_ORDER_FILTERS.collectionMode,
+          hasDiscount: EMPTY_SOURCE_ORDER_FILTERS.hasDiscount,
+          keyword: EMPTY_SOURCE_ORDER_FILTERS.keyword || undefined,
+        },
+        signal,
+      ),
     ...operationalQueryOptions(),
   })
 
@@ -213,14 +227,32 @@ export function SourceOrdersTab({
         }
       />
 
-      <Table
-        rowKey="id"
-        loading={isLoading}
-        columns={columns}
-        dataSource={listResult?.items ?? []}
-        scroll={{ x: 1760 }}
-        pagination={false}
-      />
+      {isError && !listResult ? (
+        <Card>
+          <Alert
+            type="error"
+            showIcon
+            title="客源单加载失败"
+            description={
+              error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
+            }
+            action={
+              <Button size="small" onClick={() => void refetch()}>
+                重试
+              </Button>
+            }
+          />
+        </Card>
+      ) : (
+        <Table
+          rowKey="id"
+          loading={isLoading}
+          columns={columns}
+          dataSource={listResult?.items ?? []}
+          scroll={{ x: 1760 }}
+          pagination={false}
+        />
+      )}
 
       <SourceOrderDrawer
         open={drawer.drawerOpen}

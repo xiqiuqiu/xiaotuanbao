@@ -193,7 +193,7 @@ export function ExecutionResourcePane({
 
   const { data: listResult, isLoading, isError, refetch } = useQuery({
     queryKey: ['segment-resources', segment.id],
-    queryFn: () => listSegmentResources(segment.id),
+    queryFn: ({ signal }) => listSegmentResources(segment.id, {}, signal),
   })
 
   const resources = listResult?.items ?? []
@@ -231,16 +231,20 @@ export function ExecutionResourcePane({
   )
 
   const saveMutation = useMutation({
-    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
-      if (editingResource) {
-        return updateSegmentResource(editingResource.id, payload)
-      }
-      return createSegmentResource(segment.id, payload)
+    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+      const editingId = editingResource?.id ?? null
+      const saved = editingId
+        ? await updateSegmentResource(editingId, payload)
+        : await createSegmentResource(segment.id, payload)
+      return { saved, editingId }
     },
-    onSuccess: () => {
-      message.success(editingResource ? '资源已更新' : '资源已添加')
-      closeDrawer()
+    onSuccess: ({ editingId }) => {
+      message.success(editingId ? '资源已更新' : '资源已添加')
       invalidateResourceQueries()
+      if ((editingResource?.id ?? null) !== editingId) {
+        return
+      }
+      closeDrawer()
     },
     onError: (error) => {
       message.error(mutationErrorMessage(error, '保存资源失败'))

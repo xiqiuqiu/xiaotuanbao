@@ -900,12 +900,12 @@ describe('HomePage workbench lifecycle', () => {
     renderPage()
 
     expect(await screen.findByText('企业管理员工作台')).toBeInTheDocument()
-    expect(screen.getByText('本月发团数')).toBeInTheDocument()
+    expect(await screen.findByText('本月发团数')).toBeInTheDocument()
     expect(screen.getByText('本月客源人次')).toBeInTheDocument()
     expect(screen.getByLabelText('本月发团数')).toHaveTextContent('2')
     expect(screen.getByLabelText('本月客源人次')).toHaveTextContent('12')
     expect(screen.queryByText(/预测|环比|毛利/)).not.toBeInTheDocument()
-    expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
+    expect(await screen.findByTestId('workbench-trend-chart')).toBeInTheDocument()
     expect(screen.getByText('本月进行中')).toBeInTheDocument()
 
     const currentMonth = screen.getByRole('button', {
@@ -997,8 +997,8 @@ describe('HomePage workbench lifecycle', () => {
     vi.mocked(getWorkbench).mockResolvedValue(organizationAdminNoRiskSnapshot)
     renderPage()
     expect(await screen.findByText('当前没有需要关注的经营风险')).toBeInTheDocument()
-    expect(screen.getByText('本月发团数')).toBeInTheDocument()
-    expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
+    expect(await screen.findByText('本月发团数')).toBeInTheDocument()
+    expect(await screen.findByTestId('workbench-trend-chart')).toBeInTheDocument()
     expect(screen.getByText(/共 0 项/)).toBeInTheDocument()
   })
 
@@ -1007,16 +1007,16 @@ describe('HomePage workbench lifecycle', () => {
     renderPage()
 
     expect(await screen.findByText('财务工作台')).toBeInTheDocument()
-    expect(screen.getByText('逾期应收')).toBeInTheDocument()
+    expect(await screen.findByText('逾期应收')).toBeInTheDocument()
     expect(screen.getByText('未来 7 天到期应收')).toBeInTheDocument()
     expect(screen.getByText('¥1,250.00')).toBeInTheDocument()
     expect(screen.getByText('¥800.00')).toBeInTheDocument()
     expect(screen.getAllByText(/3 个节点|2 个节点/).length).toBeGreaterThan(0)
-    expect(screen.getByText('逾期大额应收')).toBeInTheDocument()
+    expect(await screen.findByText('逾期大额应收')).toBeInTheDocument()
     expect(screen.getByText('近期到期应收')).toBeInTheDocument()
     expect(screen.getAllByText(/^跟进项 /)).toHaveLength(6)
     expect(screen.getByRole('button', { name: /查看全部 9 项/ })).toBeInTheDocument()
-    expect(screen.getByTestId('workbench-aging-chart')).toBeInTheDocument()
+    expect(await screen.findByTestId('workbench-aging-chart')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('逾期应收'))
     expect(navigate).toHaveBeenCalledWith({

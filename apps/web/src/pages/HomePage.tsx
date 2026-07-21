@@ -6,7 +6,7 @@ import {
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import {
   Alert,
@@ -42,12 +42,41 @@ import {
   DEPARTURE_STATUS_LABELS,
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
-import { CoordinatorTrendModule } from './CoordinatorTrendModule'
-import { FinanceMetricStrip, FinanceReceivablesModule } from './FinanceReceivablesModule'
 import { FinanceFundsModule } from './FinanceFundsModule'
-import { OrganizationScaleModule } from './OrganizationScaleModule'
 import { OrganizationRiskModule } from './OrganizationRiskModule'
 import { workbenchQueryOptions } from './workbench-query'
+
+const CoordinatorTrendModule = lazy(() =>
+  import('./CoordinatorTrendModule').then((module) => ({
+    default: module.CoordinatorTrendModule,
+  })),
+)
+
+const FinanceReceivablesModule = lazy(() =>
+  import('./FinanceReceivablesModule').then((module) => ({
+    default: module.FinanceReceivablesModule,
+  })),
+)
+
+const FinanceMetricStrip = lazy(() =>
+  import('./FinanceReceivablesModule').then((module) => ({
+    default: module.FinanceMetricStrip,
+  })),
+)
+
+const OrganizationScaleModule = lazy(() =>
+  import('./OrganizationScaleModule').then((module) => ({
+    default: module.OrganizationScaleModule,
+  })),
+)
+
+function ChartModuleFallback() {
+  return <Skeleton active paragraph={{ rows: 4 }} />
+}
+
+function LazyChartModule({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<ChartModuleFallback />}>{children}</Suspense>
+}
 
 const TEMPLATE_LABELS: Record<WorkbenchTemplate, string> = {
   organization_admin: '企业管理员工作台',
@@ -367,15 +396,19 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     return (
       <div className={styles.scaleContent}>
         {topMetrics.length > 0 ? (
-          <FinanceMetricStrip
-            metrics={topMetrics}
-            columns={topMetrics.length >= 4 ? 4 : 2}
-          />
+          <LazyChartModule>
+            <FinanceMetricStrip
+              metrics={topMetrics}
+              columns={topMetrics.length >= 4 ? 4 : 2}
+            />
+          </LazyChartModule>
         ) : null}
         {scaleModule || riskModule ? (
           <div className={styles.adminMainGrid}>
             {scaleModule ? (
-              <OrganizationScaleModule module={scaleModule} showMetrics={false} />
+              <LazyChartModule>
+                <OrganizationScaleModule module={scaleModule} showMetrics={false} />
+              </LazyChartModule>
             ) : null}
             {riskModule ? <OrganizationRiskModule module={riskModule} /> : null}
           </div>
@@ -406,27 +439,33 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     return (
       <div className={styles.financeReceivablesContent}>
         {topMetrics.length > 0 ? (
-          <FinanceMetricStrip
-            metrics={topMetrics}
-            columns={topMetrics.length >= 4 ? 4 : 2}
-          />
+          <LazyChartModule>
+            <FinanceMetricStrip
+              metrics={topMetrics}
+              columns={topMetrics.length >= 4 ? 4 : 2}
+            />
+          </LazyChartModule>
         ) : null}
         {receivablesModule || fundsModule ? (
           <div className={styles.financeMainGrid}>
             {receivablesModule ? (
-              <FinanceReceivablesModule
-                module={receivablesModule}
-                sections={['follow-up']}
-              />
+              <LazyChartModule>
+                <FinanceReceivablesModule
+                  module={receivablesModule}
+                  sections={['follow-up']}
+                />
+              </LazyChartModule>
             ) : null}
             {fundsModule ? <FinanceFundsModule module={fundsModule} /> : null}
           </div>
         ) : null}
         {receivablesModule ? (
-          <FinanceReceivablesModule
-            module={receivablesModule}
-            sections={['aging']}
-          />
+          <LazyChartModule>
+            <FinanceReceivablesModule
+              module={receivablesModule}
+              sections={['aging']}
+            />
+          </LazyChartModule>
         ) : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
@@ -459,7 +498,11 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
             readyMetric={readyMetric}
           />
         ) : null}
-        {trendModule ? <CoordinatorTrendModule module={trendModule} /> : null}
+        {trendModule ? (
+          <LazyChartModule>
+            <CoordinatorTrendModule module={trendModule} />
+          </LazyChartModule>
+        ) : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

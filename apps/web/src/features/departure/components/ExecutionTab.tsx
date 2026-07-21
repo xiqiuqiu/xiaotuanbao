@@ -24,6 +24,7 @@ import {
   listSegments,
   updateSegment,
 } from '@/services/segment.service'
+import { listSegmentResources } from '@/services/segment-resource.service'
 import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
@@ -76,6 +77,16 @@ export function ExecutionTab({
   const selectedSegmentId = resolveSelectedSegmentId(segments, segmentId)
   const selectedSegment =
     segments.find((segment) => segment.id === selectedSegmentId) ?? null
+
+  useEffect(() => {
+    if (!selectedSegmentId) {
+      return
+    }
+    void queryClient.prefetchQuery({
+      queryKey: ['segment-resources', selectedSegmentId],
+      queryFn: ({ signal }) => listSegmentResources(selectedSegmentId, {}, signal),
+    })
+  }, [queryClient, selectedSegmentId])
 
   const navigateExecution = (nextSegmentId?: string, replace = false) => {
     void navigate({
@@ -170,14 +181,15 @@ export function ExecutionTab({
   }
 
   const saveMutation = useMutation({
-    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
-      if (editingSegment) {
-        return updateSegment(editingSegment.id, payload)
-      }
-      return createSegment(departure.id, payload)
+    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+      const editingId = editingSegment?.id ?? null
+      const saved = editingId
+        ? await updateSegment(editingId, payload)
+        : await createSegment(departure.id, payload)
+      return { saved, editingId }
     },
-    onSuccess: (saved) => {
-      if (editingSegment) {
+    onSuccess: ({ saved, editingId }) => {
+      if (editingId) {
         message.success('行程段已更新')
       } else {
         message.success('行程段已添加')
@@ -207,8 +219,12 @@ export function ExecutionTab({
           },
         )
       }
-      closeDrawer()
       invalidateSegments()
+      // Drawer context may have changed while save was in flight — don't close/navigate away.
+      if ((editingSegment?.id ?? null) !== editingId) {
+        return
+      }
+      closeDrawer()
       navigateExecution(saved.id)
     },
     onError: (error) => {

@@ -32,6 +32,7 @@ export function PartnerFilters({
       <Space wrap>
         <Select
           allowClear
+          aria-label="合作方向"
           placeholder="合作方向"
           style={{ width: 140 }}
           value={partnerKindFilter}
@@ -40,6 +41,7 @@ export function PartnerFilters({
         />
         <Select
           allowClear
+          aria-label="合作伙伴类型"
           placeholder="合作伙伴类型"
           style={{ width: 160 }}
           value={partnerTypeFilter}
@@ -48,6 +50,7 @@ export function PartnerFilters({
         />
         <Select
           allowClear
+          aria-label="状态"
           placeholder="状态"
           style={{ width: 120 }}
           value={statusFilter}
@@ -56,6 +59,7 @@ export function PartnerFilters({
         />
         <Input.Search
           allowClear
+          aria-label="搜索名称 / 联系人 / 联系方式"
           placeholder="搜索名称 / 联系人 / 联系方式"
           style={{ width: 280 }}
           onSearch={(value) => onSearch(value.trim())}

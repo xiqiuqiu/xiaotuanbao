@@ -77,19 +77,26 @@ export function useTransactionFormDrawerQueries({
       counterpartyId,
       editingTransaction?.id,
     ],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const [receivables, sourceOrder, transactions] = await Promise.all([
-        listDepartureReceivables(departureId!, {
-          counterpartyType: CounterpartyType.GUEST,
-          counterpartyId: counterpartyId!,
-          pageSize: 20,
-        }),
-        getSourceOrder(counterpartyId!),
-        listTransactions({
-          departureId: departureId!,
-          status: 'normal',
-          pageSize: 100,
-        }),
+        listDepartureReceivables(
+          departureId!,
+          {
+            counterpartyType: CounterpartyType.GUEST,
+            counterpartyId: counterpartyId!,
+            pageSize: 20,
+          },
+          signal,
+        ),
+        getSourceOrder(counterpartyId!, signal),
+        listTransactions(
+          {
+            departureId: departureId!,
+            status: 'normal',
+            pageSize: 100,
+          },
+          signal,
+        ),
       ])
       const existingUnallocatedGuestCents = sumExistingUnallocatedGuestCents({
         transactions: transactions.items,

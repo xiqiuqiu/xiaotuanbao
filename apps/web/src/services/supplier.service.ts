@@ -45,8 +45,11 @@ export interface UpdateSupplierPayload extends CreateSupplierPayload {
   status: DirectoryProfileStatus
 }
 
-export async function listSuppliers(params: ListSuppliersParams): Promise<SupplierListResult> {
-  return request.get<SupplierListResult>('/suppliers', { params })
+export async function listSuppliers(
+  params: ListSuppliersParams,
+  signal?: AbortSignal,
+): Promise<SupplierListResult> {
+  return request.get<SupplierListResult>('/suppliers', { params, signal })
 }
 
 export async function getSupplier(id: string): Promise<SupplierSummary> {

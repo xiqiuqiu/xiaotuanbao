@@ -70,15 +70,18 @@ export function SuppliersPage() {
       page,
       pageSize,
     ],
-    queryFn: () =>
-      listSuppliers({
-        search: search || undefined,
-        category: categoryFilter as SupplierAllowedResourceKind | undefined,
-        status: statusFilter,
-        includeArchived,
-        page,
-        pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listSuppliers(
+        {
+          search: search || undefined,
+          category: categoryFilter as SupplierAllowedResourceKind | undefined,
+          status: statusFilter,
+          includeArchived,
+          page,
+          pageSize,
+        },
+        signal,
+      ),
     placeholderData,
     ...operationalQueryOptions(),
   })

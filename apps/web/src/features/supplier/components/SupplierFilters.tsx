@@ -24,6 +24,7 @@ export function SupplierFilters({
       <Space wrap>
         <Select
           allowClear
+          aria-label="类别"
           placeholder="类别"
           style={{ width: 140 }}
           value={categoryFilter}
@@ -32,6 +33,7 @@ export function SupplierFilters({
         />
         <Select
           allowClear
+          aria-label="状态"
           placeholder="状态"
           style={{ width: 120 }}
           value={statusFilter}
@@ -40,6 +42,7 @@ export function SupplierFilters({
         />
         <Input.Search
           allowClear
+          aria-label="搜索名称 / 联系人 / 联系方式"
           placeholder="搜索名称 / 联系人 / 联系方式"
           style={{ width: 280 }}
           onSearch={(value) => onSearch(value.trim())}

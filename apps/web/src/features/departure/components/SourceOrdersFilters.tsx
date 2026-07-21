@@ -34,6 +34,7 @@ export function SourceOrdersFilters({
         <Space wrap>
           <Select
             allowClear
+            aria-label="客户"
             placeholder="客户"
             style={{ width: 180 }}
             showSearch
@@ -44,6 +45,7 @@ export function SourceOrdersFilters({
           />
           <Select
             allowClear
+            aria-label="收款方式"
             placeholder="收款方式"
             style={{ width: 180 }}
             value={draft.collectionMode}
@@ -51,6 +53,7 @@ export function SourceOrdersFilters({
             options={[...SOURCE_ORDER_COLLECTION_OPTIONS]}
           />
           <Select
+            aria-label="优惠筛选"
             style={{ width: 120 }}
             value={draft.hasDiscount}
             onChange={(value) => onDraftChange({ ...draft, hasDiscount: value })}
@@ -62,6 +65,7 @@ export function SourceOrdersFilters({
           />
           <Input
             allowClear
+            aria-label="搜索客户名称、备注"
             placeholder="搜索客户名称、备注"
             style={{ width: 220 }}
             value={draft.keyword}

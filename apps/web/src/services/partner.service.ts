@@ -35,8 +35,11 @@ export interface UpdatePartnerPayload extends CreatePartnerPayload {
   status: DirectoryProfileStatus
 }
 
-export async function listPartners(params: ListPartnersParams): Promise<PartnerListResult> {
-  return request.get<PartnerListResult>('/partners', { params })
+export async function listPartners(
+  params: ListPartnersParams,
+  signal?: AbortSignal,
+): Promise<PartnerListResult> {
+  return request.get<PartnerListResult>('/partners', { params, signal })
 }
 
 export async function getPartner(id: string): Promise<PartnerSummary> {

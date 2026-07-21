@@ -80,6 +80,30 @@
 
 执行记录（分支 `improve-react/2026-07-21`）：026–038 已按推荐顺序落地；scoped React Doctor **89/100**（基线 67）。026 的 `commitListFilterKey` 落在 `useEffect`（保留「仅非 placeholder 成功才 commit」语义，避免 `no-prop-callback-in-render`）。剩余 1 条 warning：`VerificationsWorkspace` `no-giant-component`（07-21 计划范围外）。
 
+## 2026-07-21 追加二（基线 commit `2f24597`）
+
+来源：同日 `improve-react` 再审。全量 React Doctor **73/100**、7 条诊断；其中 DualAxes `no-children-prop`×3 与图表 hook `no-ref-current-in-render`/`effect-needs-cleanup` 仍作噪声/by-design。下表为核实后的高杠杆项（含扫描之外）。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 39 | [039 — 发团抽屉保存世代守卫](039-guard-stale-departure-drawer-save.md) | HIGH | DONE | 无；建议最先 |
+| 40 | [040 — 客源单列表错误态](040-source-orders-tab-error-state.md) | HIGH | DONE | 无 |
+| 41 | [041 — 工作台 DualAxes 懒加载](041-lazy-workbench-chart-modules.md) | HIGH | DONE | 无 |
+| 42 | [042 — 客源单列表 AbortSignal](042-abort-source-orders-list.md) | MEDIUM | DONE | 可与 040 同批注意 SourceOrdersTab |
+| 43 | [043 — 合作伙伴/供应商列表 AbortSignal](043-abort-partners-suppliers-list.md) | MEDIUM | DONE | 无 |
+| 44 | [044 — 核销/流水建议 query AbortSignal](044-abort-verification-transaction-suggestion-queries.md) | MEDIUM | DONE | 无 |
+| 45 | [045 — 目录筛选 aria-label](045-directory-filter-aria-labels.md) | MEDIUM | DONE | 无 |
+| 46 | [046 — 拆分 VerificationsWorkspace](046-extract-verifications-workspace-sections.md) | MEDIUM | DONE | 无；清除 no-giant-component |
+| 47 | [047 — 客人名单列 useMemo](047-memoize-source-order-guest-columns.md) | MEDIUM | DONE | 无 |
+| 48 | [048 — 执行资源 Abort + 预取](048-abort-execution-resource-queries.md) | LOW | DONE | 无 |
+
+执行记录：039–048 已落地；scoped React Doctor **100/100**；`pnpm --filter web typecheck` 与 vitest 全绿（410）。
+
+建议批次：
+1. **正确性**：039、040。
+2. **性能**：041、042、043、044、047、048。
+3. **无障碍 / 结构**：045、046。
+
 ## 批次与验证门
 
 1. **安全与正确性**：001、002、004、005、006、007；以及 026–029。每个计划先跑聚焦测试；批次结束跑 web typecheck 与相关 vitest。

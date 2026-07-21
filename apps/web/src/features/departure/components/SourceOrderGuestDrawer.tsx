@@ -1,4 +1,11 @@
-import { useState, type HTMLAttributes, type PropsWithChildren, type ReactNode } from 'react'
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type PropsWithChildren,
+  type ReactNode,
+} from 'react'
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons'
 import {
   Alert,
@@ -174,7 +181,6 @@ function SourceOrderGuestDrawerPanel({
   })
 
   const dataSource: GuestRow[] = draftGuest ? [...guests, draftGuest] : guests
-  const isEditing = (record: GuestRow) => record.id === editingKey
   const isBusy = editingKey !== ''
 
   const saveMutation = useMutation({
@@ -222,128 +228,147 @@ function SourceOrderGuestDrawerPanel({
     setEditingKey(DRAFT_ID)
   }
 
-  const startEdit = (record: GuestRow) => {
-    form.setFieldsValue({
-      name: record.name,
-      phone: record.phone ?? undefined,
-      gender: record.gender || undefined,
-      notes: record.notes ?? undefined,
-    })
-    setEditingKey(record.id)
-  }
+  const startEdit = useCallback(
+    (record: GuestRow) => {
+      form.setFieldsValue({
+        name: record.name,
+        phone: record.phone ?? undefined,
+        gender: record.gender || undefined,
+        notes: record.notes ?? undefined,
+      })
+      setEditingKey(record.id)
+    },
+    [form],
+  )
 
-  const cancelEdit = () => {
+  const cancelEdit = useCallback(() => {
     if (editingKey === DRAFT_ID) {
       setDraftGuest(null)
     }
     setEditingKey('')
     form.resetFields()
-  }
+  }, [editingKey, form])
 
-  const saveRow = async (key: string) => {
-    try {
-      const values = await form.validateFields()
-      saveMutation.mutate({ key, values })
-    } catch {
-      // validation errors are shown inline by Form.Item
-    }
-  }
+  const saveMutate = saveMutation.mutate
+  const deleteMutate = deleteMutation.mutate
 
-  const baseColumns: GuestColumn[] = [
-    {
-      title: '姓名',
-      dataIndex: 'name',
-      editable: true,
-      inputType: 'text',
-      width: '18%',
+  const saveRow = useCallback(
+    async (key: string) => {
+      try {
+        const values = await form.validateFields()
+        saveMutate({ key, values })
+      } catch {
+        // validation errors are shown inline by Form.Item
+      }
     },
-    {
-      title: '手机号',
-      dataIndex: 'phone',
-      editable: true,
-      inputType: 'text',
-      width: '20%',
-      render: (value: string | null) => value ?? '-',
-    },
-    {
-      title: '性别',
-      dataIndex: 'gender',
-      editable: true,
-      inputType: 'select',
-      width: '16%',
-      render: (value: string) => catalogLabel(GUEST_GENDER_LABELS, value),
-    },
-    {
-      title: '备注',
-      dataIndex: 'notes',
-      editable: true,
-      inputType: 'text',
-      ellipsis: { showTitle: false },
-      render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
-    },
-  ]
+    [form, saveMutate],
+  )
 
-  if (!readOnly) {
-    baseColumns.push({
-      title: '操作',
-      key: 'actions',
-      width: 140,
-      render: (_value: unknown, record: GuestRow) => {
-        const editing = isEditing(record)
-        if (editing) {
+  const deleteGuest = useCallback(
+    (guestId: string) => {
+      deleteMutate(guestId)
+    },
+    [deleteMutate],
+  )
+
+  const savePending = saveMutation.isPending
+  const columns = useMemo(() => {
+    const baseColumns: GuestColumn[] = [
+      {
+        title: '姓名',
+        dataIndex: 'name',
+        editable: true,
+        inputType: 'text',
+        width: '18%',
+      },
+      {
+        title: '手机号',
+        dataIndex: 'phone',
+        editable: true,
+        inputType: 'text',
+        width: '20%',
+        render: (value: string | null) => value ?? '-',
+      },
+      {
+        title: '性别',
+        dataIndex: 'gender',
+        editable: true,
+        inputType: 'select',
+        width: '16%',
+        render: (value: string) => catalogLabel(GUEST_GENDER_LABELS, value),
+      },
+      {
+        title: '备注',
+        dataIndex: 'notes',
+        editable: true,
+        inputType: 'text',
+        ellipsis: { showTitle: false },
+        render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
+      },
+    ]
+
+    if (!readOnly) {
+      baseColumns.push({
+        title: '操作',
+        key: 'actions',
+        width: 140,
+        render: (_value: unknown, record: GuestRow) => {
+          const editing = record.id === editingKey
+          if (editing) {
+            return (
+              <Space>
+                <Typography.Link
+                  onClick={() => void saveRow(record.id)}
+                  disabled={savePending}
+                >
+                  保存
+                </Typography.Link>
+                <Typography.Link onClick={cancelEdit} disabled={savePending}>
+                  取消
+                </Typography.Link>
+              </Space>
+            )
+          }
+
           return (
             <Space>
-              <Typography.Link
-                onClick={() => void saveRow(record.id)}
-                disabled={saveMutation.isPending}
-              >
-                保存
+              <Typography.Link disabled={isBusy} onClick={() => startEdit(record)}>
+                编辑
               </Typography.Link>
-              <Typography.Link onClick={cancelEdit} disabled={saveMutation.isPending}>
-                取消
-              </Typography.Link>
+              {record.id !== DRAFT_ID ? (
+                <Popconfirm
+                  title="确认删除该客人？"
+                  onConfirm={() => deleteGuest(record.id)}
+                  disabled={isBusy}
+                >
+                  <Typography.Link type="danger" disabled={isBusy}>
+                    删除
+                  </Typography.Link>
+                </Popconfirm>
+              ) : null}
             </Space>
           )
-        }
+        },
+      })
+    }
 
-        return (
-          <Space>
-            <Typography.Link disabled={isBusy} onClick={() => startEdit(record)}>
-              编辑
-            </Typography.Link>
-            {record.id !== DRAFT_ID ? (
-              <Popconfirm
-                title="确认删除该客人？"
-                onConfirm={() => deleteMutation.mutate(record.id)}
-                disabled={isBusy}
-              >
-                <Typography.Link type="danger" disabled={isBusy}>
-                  删除
-                </Typography.Link>
-              </Popconfirm>
-            ) : null}
-          </Space>
-        )
-      },
+    return baseColumns.map((col) => {
+      if (!col.editable || !col.dataIndex) {
+        return col
+      }
+      return {
+        ...col,
+        onCell: (record: GuestRow) =>
+          ({
+            record,
+            inputType: col.inputType ?? 'text',
+            dataIndex: col.dataIndex,
+            title: col.title,
+            editing: record.id === editingKey,
+          }) as HTMLAttributes<HTMLElement>,
+      }
     })
-  }
-
-  const columns = baseColumns.map((col) => {
-    if (!col.editable || !col.dataIndex) {
-      return col
-    }
-    return {
-      ...col,
-      onCell: (record: GuestRow) =>
-        ({
-          record,
-          inputType: col.inputType ?? 'text',
-          dataIndex: col.dataIndex,
-          title: col.title,
-          editing: isEditing(record),
-        }) as HTMLAttributes<HTMLElement>,
-    }
-  })
+  }, [cancelEdit, deleteGuest, editingKey, isBusy, readOnly, savePending, saveRow, startEdit])
 
   return (
     <Drawer

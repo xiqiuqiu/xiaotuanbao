@@ -128,16 +128,19 @@ export function PartnersPage() {
       state.page,
       state.pageSize,
     ],
-    queryFn: () =>
-      listPartners({
-        search: state.search || undefined,
-        partnerKind: state.partnerKindFilter,
-        partnerType: state.partnerTypeFilter,
-        status: state.statusFilter,
-        includeArchived: state.includeArchived,
-        page: state.page,
-        pageSize: state.pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listPartners(
+        {
+          search: state.search || undefined,
+          partnerKind: state.partnerKindFilter,
+          partnerType: state.partnerTypeFilter,
+          status: state.statusFilter,
+          includeArchived: state.includeArchived,
+          page: state.page,
+          pageSize: state.pageSize,
+        },
+        signal,
+      ),
     placeholderData,
     ...operationalQueryOptions(),
   })
