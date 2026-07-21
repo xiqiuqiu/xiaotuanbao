@@ -108,6 +108,24 @@ const departureNewRoute = createRoute({
   ),
 })
 
+const pendingReceivableSourceOrdersRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/source-orders',
+  validateSearch: (search: Record<string, unknown>): {
+    receivableGeneration: 'not_generated'
+    page?: number
+    pageSize?: number
+  } => ({
+    receivableGeneration: 'not_generated',
+    page: typeof search.page === 'number' ? search.page : undefined,
+    pageSize: typeof search.pageSize === 'number' ? search.pageSize : undefined,
+  }),
+  component: lazyRouteComponent(
+    () => import('@/features/departure/pages/PendingReceivableSourceOrdersPage'),
+    'PendingReceivableSourceOrdersPage',
+  ),
+})
+
 const departureDetailRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/$departureId',
@@ -273,6 +291,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     departureRoute,
     departureNewRoute,
+    pendingReceivableSourceOrdersRoute,
     departureDetailRoute,
     financeReceivableRoute,
     financePayableRoute,

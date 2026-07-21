@@ -21,6 +21,8 @@ import { DepartureOperationsSheetService } from './departure-operations-sheet.se
 import { DepartureOperationsSheetExcelRenderer } from './departure-operations-sheet-excel.types'
 import { ExcelJsDepartureOperationsSheetRenderer } from './departure-operations-sheet-exceljs.renderer'
 import { DepartureDataGapService } from './departure-data-gap.service'
+import { DepartureSettlementReadinessService } from './departure-settlement-readiness.service'
+import { SourceOrderReceivableGapService } from './source-order-receivable-gap.service'
 
 @Module({
   imports: [AuthModule, FinanceModule, NumberAllocationModule],
@@ -35,6 +37,8 @@ import { DepartureDataGapService } from './departure-data-gap.service'
   providers: [
     DepartureService,
     DepartureDataGapService,
+    DepartureSettlementReadinessService,
+    SourceOrderReceivableGapService,
     DepartureReadModelService,
     RouteTemplateService,
     RouteTemplateCopyService,
@@ -49,6 +53,10 @@ import { DepartureDataGapService } from './departure-data-gap.service'
     },
     DepartureOperationsSheetService,
   ],
-  exports: [DepartureDataGapService],
+  exports: [
+    DepartureDataGapService,
+    DepartureSettlementReadinessService,
+    SourceOrderReceivableGapService,
+  ],
 })
 export class DepartureModule {}

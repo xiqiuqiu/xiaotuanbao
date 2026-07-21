@@ -43,8 +43,65 @@
 
 .coordinatorMetricGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.settlementGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.settlementGrid :global(.ant-card-head-title) :global(.ant-typography) {
+  margin: 0;
+}
+
+.queueList {
+  width: 100%;
+}
+
+.queueItem {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.queueItem:last-child {
+  border-bottom: 0;
+}
+
+.queueItem:focus-visible {
+  outline: 2px solid var(--ant-color-primary-border);
+  outline-offset: 2px;
+}
+
+.queueItem:hover {
+  background: var(--ant-color-fill-tertiary);
+}
+
+.queueItem:active {
+  background: var(--ant-color-fill-secondary);
+}
+
+.queueItem:disabled {
+  color: var(--ant-color-text-disabled);
+  cursor: not-allowed;
+}
+
+.queueMeta {
+  display: block;
+  margin-top: 2px;
 }
 
 .metricButton {
@@ -102,7 +159,8 @@
 @media (max-width: 767px) {
   .moduleGrid,
   .metricGrid,
-  .coordinatorMetricGrid {
+  .coordinatorMetricGrid,
+  .settlementGrid {
     grid-template-columns: 1fr;
   }
 }

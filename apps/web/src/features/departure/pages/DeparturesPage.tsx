@@ -36,6 +36,7 @@ type DeparturesPageState = {
   pageSize: number
   operationalWindow?: DepartureListSearch['operationalWindow']
   departureDataGap?: DepartureListSearch['departureDataGap']
+  settlementReadiness?: DepartureListSearch['settlementReadiness']
 }
 
 const initialDeparturesPageState: DeparturesPageState = {
@@ -52,6 +53,7 @@ const initialDeparturesPageState: DeparturesPageState = {
   pageSize: 10,
   operationalWindow: undefined,
   departureDataGap: undefined,
+  settlementReadiness: undefined,
 }
 
 function createInitialState(search: DepartureListSearch): DeparturesPageState {
@@ -60,6 +62,7 @@ function createInitialState(search: DepartureListSearch): DeparturesPageState {
     departureProgress: search.departureProgress,
     operationalWindow: search.operationalWindow,
     departureDataGap: search.departureDataGap,
+    settlementReadiness: search.settlementReadiness,
   }
 }
 
@@ -146,6 +149,7 @@ export function DeparturesPage() {
     startDateTo,
     state.operationalWindow,
     state.departureDataGap,
+    state.settlementReadiness,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -170,6 +174,7 @@ export function DeparturesPage() {
       startDateTo,
       state.operationalWindow,
       state.departureDataGap,
+      state.settlementReadiness,
       state.page,
       state.pageSize,
     ],
@@ -186,6 +191,7 @@ export function DeparturesPage() {
         startDateTo,
         operationalWindow: state.operationalWindow,
         departureDataGap: state.departureDataGap,
+        settlementReadiness: state.settlementReadiness,
         page: state.page,
         pageSize: state.pageSize,
       }),
@@ -241,12 +247,18 @@ export function DeparturesPage() {
         }
       />
 
-      {state.operationalWindow || state.departureDataGap ? (
+      {state.operationalWindow || state.departureDataGap || state.settlementReadiness ? (
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title={state.departureDataGap ? '已筛选：近期资料待补充发团' : '已按工作台范围筛选发团'}
+          title={
+            state.settlementReadiness
+              ? '已筛选：可确认结清发团'
+              : state.departureDataGap
+                ? '已筛选：近期资料待补充发团'
+                : '已按工作台范围筛选发团'
+          }
           action={
             <Button
               size="small"

@@ -51,6 +51,7 @@ import {
   buildDepartureOperationalWindowWhere,
   getDepartureOperationalDates,
 } from './departure-operational-window'
+import { DepartureSettlementReadinessService } from './departure-settlement-readiness.service'
 
 const UPDATE_DEPARTURE_FIELDS = [
   'name',
@@ -78,6 +79,7 @@ export class DepartureService {
     private readonly numberAllocationService: NumberAllocationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly departureDataGapService: DepartureDataGapService,
+    private readonly departureSettlementReadinessService: DepartureSettlementReadinessService,
   ) {}
 
   async list(
@@ -145,6 +147,12 @@ export class DepartureService {
       const departureIds = [...dataGapsByDepartureId.entries()]
         .filter(([, dataGaps]) => dataGaps.length > 0)
         .map(([departureId]) => departureId)
+      andFilters.push({ id: { in: departureIds } })
+    }
+
+    if (query.settlementReadiness === 'ready') {
+      const departureIds =
+        await this.departureSettlementReadinessService.findReadyDepartureIds(organizationId)
       andFilters.push({ id: { in: departureIds } })
     }
 

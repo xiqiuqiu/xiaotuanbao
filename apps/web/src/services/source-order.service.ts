@@ -7,6 +7,7 @@ import type {
   GuestCollectionChangeImpact,
   PartnerReconciliationStatementSnapshot,
   PartnerSourceOrderListResult,
+  PendingReceivableSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -20,6 +21,14 @@ export interface ListSourceOrdersParams {
   collectionMode?: SourceOrderCollectionMode
   hasDiscount?: 'all' | 'yes' | 'no'
   keyword?: string
+}
+
+export async function listPendingReceivableSourceOrders(params: {
+  receivableGeneration: 'not_generated'
+  page?: number
+  pageSize?: number
+}): Promise<PendingReceivableSourceOrderListResult> {
+  return request.get<PendingReceivableSourceOrderListResult>('/source-orders', { params })
 }
 
 export async function listSourceOrders(

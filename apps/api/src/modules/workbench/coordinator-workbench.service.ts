@@ -66,6 +66,7 @@ function toItem(
   row: CoordinatorDepartureRow,
   today: string,
   dataGaps: DepartureDataGap[],
+  pendingReceivableCount: number,
 ): WorkbenchCoordinatorDepartureItem {
   return {
     kind: 'coordinator-departure',
@@ -78,6 +79,7 @@ function toItem(
     timeHint: timeHint(row, today),
     status: row.status,
     dataGaps,
+    pendingReceivableCount,
   }
 }
 
@@ -88,7 +90,12 @@ export class CoordinatorWorkbenchService {
     private readonly departureDataGapService: DepartureDataGapService,
   ) {}
 
-  async buildModule(organizationId: string, asOf: Date): Promise<WorkbenchModule> {
+  async buildModule(
+    organizationId: string,
+    asOf: Date,
+    settlementReadyCount: number,
+    pendingReceivableCountByDepartureId: ReadonlyMap<string, number>,
+  ): Promise<WorkbenchModule> {
     const dates = getDepartureOperationalDates(asOf)
     const [rows, dataGapsByDepartureId] = await Promise.all([
       this.prisma.departure.findMany({
@@ -143,9 +150,21 @@ export class CoordinatorWorkbenchService {
           suffix: '个发团',
           href: '/departure?operationalWindow=current_and_next_7_days&departureDataGap=any',
         },
+        {
+          key: 'settlement-ready',
+          label: '可确认结清',
+          value: settlementReadyCount,
+          suffix: '个发团',
+          href: '/departure?settlementReadiness=ready',
+        },
       ],
       items: sortedRows.slice(0, 8).map((row) =>
-        toItem(row, dates.today, dataGapsByDepartureId.get(row.id) ?? []),
+        toItem(
+          row,
+          dates.today,
+          dataGapsByDepartureId.get(row.id) ?? [],
+          pendingReceivableCountByDepartureId.get(row.id) ?? 0,
+        ),
       ),
     }
   }

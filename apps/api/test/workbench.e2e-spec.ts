@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common'
-import { PRESET_ROLE_NAMES } from '@xiaotuanbao/shared'
+import { PaymentScheduleSourceType, PRESET_ROLE_NAMES } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
   DepartureStatus,
@@ -7,6 +7,7 @@ import {
   PartnerKind,
   PartnerType,
   ResourceKind,
+  PaymentScheduleDirection,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@prisma/client'
@@ -102,10 +103,9 @@ describe('Workbench contract (e2e)', () => {
       ],
     })
     expect(new Date(response.body.data.asOf).toISOString()).toBe(response.body.data.asOf)
-    expect(response.body.data.modules[0].metrics).toHaveLength(3)
-    expect(response.body.data.modules.slice(1).every(
-      (module: { metrics: unknown[] }) => module.metrics.length === 0,
-    )).toBe(true)
+    expect(response.body.data.modules[0].metrics).toHaveLength(4)
+    expect(response.body.data.modules[1].metrics).toHaveLength(1)
+    expect(response.body.data.modules[2].metrics).toHaveLength(0)
   })
 
   it('selects finance over coordinator without composing templates or exposing create action', async () => {
@@ -356,6 +356,7 @@ describe('Workbench contract (e2e)', () => {
           { key: 'in-progress', label: '进行中发团', value: 2, suffix: '个发团' },
           { key: 'next-7-days', label: '未来 7 天发团', value: 3, suffix: '个发团' },
           { key: 'data-gaps', label: '资料待补充', value: 3, suffix: '个发团' },
+          { key: 'settlement-ready', label: '可确认结清', value: 0, suffix: '个发团' },
         ],
       })
       expect(coordinatorModule.items).toHaveLength(5)
@@ -378,10 +379,12 @@ describe('Workbench contract (e2e)', () => {
           { code: 'no_source_orders', label: '无客源单' },
           { code: 'no_itinerary_segments', label: '无行程段' },
         ],
+        pendingReceivableCount: 0,
       })
       expect(coordinatorModule.items[1]).toMatchObject({
         timeHint: '进行中',
         dataGaps: [],
+        pendingReceivableCount: 1,
       })
       expect(coordinatorModule.items[2]).toMatchObject({
         timeHint: '1 天后出发',
@@ -430,6 +433,218 @@ describe('Workbench contract (e2e)', () => {
       await prisma.sourceOrderGuest.deleteMany({
         where: { sourceOrder: { departure: { organizationId: organization.id } } },
       })
+      await prisma.sourceOrder.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.segmentResource.deleteMany({
+        where: { segment: { departure: { organizationId: organization.id } } },
+      })
+      await prisma.itinerarySegment.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.supplier.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
+
+  it('returns settlement-ready departures and only ungenerated receivable source orders with matching drill-down totals', async () => {
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-settlement-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台结算测试旅行社-${Date.now()}`,
+        businessPrefix: `S${suffix}`,
+      },
+    })
+    const coordinatorRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.COORDINATOR },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '结算计调测试员',
+        roles: { create: { roleId: coordinatorRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '结算测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId: organization.id,
+        name: '结算测试供应商',
+        categories: [ResourceKind.transport],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    let sequence = 0
+    const createDepartureWithOrder = async (name: string, status: DepartureStatus) => {
+      sequence += 1
+      return prisma.departure.create({
+        data: {
+          organizationId: organization.id,
+          departureNo: `WBS${String(sequence).padStart(10, '0')}`,
+          name,
+          routeName: '结算测试路线',
+          startDate: new Date('2026-06-01T00:00:00.000Z'),
+          endDate: new Date('2026-06-03T00:00:00.000Z'),
+          dayCount: 3,
+          ownerUserId: user.id,
+          status,
+          sourceOrders: {
+            create: {
+              partnerId: partner.id,
+              displayName: `${name}客源单`,
+              guestCount: 1,
+              adultGuestCount: 1,
+              childGuestCount: 0,
+              adultUnitPriceCents: 10000,
+              childUnitPriceCents: 0,
+              grossReceivableCents: 10000,
+              discountType: SourceOrderDiscountType.none,
+              discountCents: 0,
+              netReceivableCents: 10000,
+              collectionMode: SourceOrderCollectionMode.partner_settled,
+              partnerCollectedCents: 10000,
+              guestCollectCents: 0,
+            },
+          },
+        },
+        include: { sourceOrders: true },
+      })
+    }
+
+    try {
+      const ready = await createDepartureWithOrder(
+        '账款均关闭可确认结清',
+        DepartureStatus.pending_settlement,
+      )
+      const open = await createDepartureWithOrder(
+        '仍有开放账款不可结清',
+        DepartureStatus.pending_settlement,
+      )
+      await createDepartureWithOrder('没有账款不可结清', DepartureStatus.pending_settlement)
+      for (let index = 1; index <= 6; index += 1) {
+        await createDepartureWithOrder(`待生成应收 ${index}`, DepartureStatus.editing)
+      }
+
+      await prisma.itinerarySegment.create({
+        data: {
+          departureId: open.id,
+          name: '存在待生成应付的行程段',
+          sortOrder: 1,
+          resources: {
+            create: {
+              resourceKind: ResourceKind.transport,
+              counterpartyType: CounterpartyType.supplier,
+              supplierId: supplier.id,
+              title: '待生成应付资源',
+              amountCents: 5000,
+            },
+          },
+        },
+      })
+
+      await prisma.paymentSchedule.createMany({
+        data: [
+          {
+            organizationId: organization.id,
+            departureId: ready.id,
+            direction: PaymentScheduleDirection.receivable,
+            scheduleNo: 'WBS-AR-0001',
+            title: '已关闭应收',
+            amountCents: 10000,
+            dueDate: new Date('2026-06-01T00:00:00.000Z'),
+            counterpartyType: CounterpartyType.partner,
+            counterpartyId: partner.id,
+            counterpartyName: partner.name,
+            sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+            sourceId: ready.sourceOrders[0].id,
+            cancelledAt: new Date('2026-06-02T00:00:00.000Z'),
+          },
+          {
+            organizationId: organization.id,
+            departureId: open.id,
+            direction: PaymentScheduleDirection.receivable,
+            scheduleNo: 'WBS-AR-0002',
+            title: '开放应收',
+            amountCents: 10000,
+            dueDate: new Date('2026-06-01T00:00:00.000Z'),
+            counterpartyType: CounterpartyType.partner,
+            counterpartyId: partner.id,
+            counterpartyName: partner.name,
+            sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+            sourceId: open.sourceOrders[0].id,
+          },
+        ],
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      const departureModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'coordinator-departures',
+      )
+      const settlementModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'coordinator-settlement',
+      )
+
+      expect(departureModule.metrics[3]).toMatchObject({
+        key: 'settlement-ready',
+        label: '可确认结清',
+        value: 1,
+        suffix: '个发团',
+        href: '/departure?settlementReadiness=ready',
+      })
+      expect(settlementModule.metrics).toEqual([
+        expect.objectContaining({
+          key: 'pending-receivables',
+          label: '待生成应收',
+          value: 7,
+          suffix: '个客源单',
+          href: '/source-orders?receivableGeneration=not_generated',
+        }),
+      ])
+      expect(settlementModule.items.filter(
+        (item: { kind: string }) => item.kind === 'coordinator-settlement-ready',
+      )).toHaveLength(1)
+      expect(settlementModule.items.filter(
+        (item: { kind: string }) => item.kind === 'coordinator-receivable-pending',
+      )).toHaveLength(5)
+      expect(JSON.stringify(settlementModule)).not.toContain('payable')
+      expect(JSON.stringify(response.body.data)).not.toContain('待提交结算')
+
+      const financeCookie = await loginAs(app, createdUsernames[0])
+      const financeWorkbench = await authRequest(app, financeCookie)
+        .get('/api/workbench')
+        .expect(200)
+      expect(financeWorkbench.body.data.template).toBe('finance')
+      expect(JSON.stringify(financeWorkbench.body.data)).not.toContain('settlement-ready')
+
+      const readyList = await authRequest(app, cookie)
+        .get('/api/departures?settlementReadiness=ready')
+        .expect(200)
+      expect(readyList.body.data.total).toBe(departureModule.metrics[3].value)
+
+      const pendingReceivables = await authRequest(app, cookie)
+        .get('/api/source-orders?receivableGeneration=not_generated&pageSize=100')
+        .expect(200)
+      expect(pendingReceivables.body.data.total).toBe(settlementModule.metrics[0].value)
+      expect(pendingReceivables.body.data.items).toHaveLength(7)
+    } finally {
+      await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
       await prisma.sourceOrder.deleteMany({
         where: { departure: { organizationId: organization.id } },
       })

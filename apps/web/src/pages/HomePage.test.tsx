@@ -75,6 +75,13 @@ const coordinatorDeliverySnapshot = {
           suffix: '个发团',
           href: '/departure?operationalWindow=current_and_next_7_days&departureDataGap=any',
         },
+        {
+          key: 'settlement-ready',
+          label: '可确认结清',
+          value: 6,
+          suffix: '个发团',
+          href: '/departure?settlementReadiness=ready',
+        },
       ],
       items: [
         {
@@ -87,6 +94,7 @@ const coordinatorDeliverySnapshot = {
           endDate: '2026-07-26',
           timeHint: '今日出发',
           status: 'editing',
+          pendingReceivableCount: 2,
           dataGaps: [
             { code: 'no_source_orders' as const, label: '无客源单' },
             { code: 'no_itinerary_segments' as const, label: '无行程段' },
@@ -123,8 +131,31 @@ const coordinatorDeliverySnapshot = {
       key: 'coordinator-settlement' as const,
       title: '结算衔接',
       description: '查看可确认结清与待生成应收。',
-      metrics: [],
-      items: [],
+      metrics: [
+        {
+          key: 'pending-receivables',
+          label: '待生成应收',
+          value: 7,
+          suffix: '个客源单',
+          href: '/source-orders?receivableGeneration=not_generated',
+        },
+      ],
+      items: [
+        ...Array.from({ length: 6 }, (_, index) => ({
+          kind: 'coordinator-settlement-ready' as const,
+          id: `settlement-${index + 1}`,
+          title: `可结清发团 ${index + 1}`,
+          href: `/departure/settlement-${index + 1}`,
+          endDate: `2026-07-${String(index + 10).padStart(2, '0')}`,
+        })),
+        ...Array.from({ length: 7 }, (_, index) => ({
+          kind: 'coordinator-receivable-pending' as const,
+          id: `source-order-${index + 1}`,
+          title: `待生成客源单 ${index + 1}`,
+          href: `/departure/departure-${index + 1}?tab=sourceOrders`,
+          departureName: `关联发团 ${index + 1}`,
+        })),
+      ],
     },
     {
       key: 'coordinator-trend' as const,
@@ -218,10 +249,12 @@ describe('HomePage workbench lifecycle', () => {
 
   it('renders coordinator metrics and three-layer departure facts with folded data gaps', async () => {
     vi.mocked(getWorkbench).mockResolvedValue(coordinatorDeliverySnapshot)
+    const user = userEvent.setup()
     renderPage()
 
     expect(await screen.findByText('进行中发团')).toBeInTheDocument()
     expect(screen.getByText('未来 7 天发团')).toBeInTheDocument()
+    expect(screen.getAllByText('可确认结清')).toHaveLength(2)
     const dataGapMetric = screen.getByLabelText('资料待补充')
     expect(dataGapMetric).toBeInTheDocument()
     expect(screen.getByText(/查看全部 9 项/)).toBeInTheDocument()
@@ -232,9 +265,21 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('无客源单')).toBeInTheDocument()
     expect(screen.getByText('无行程段')).toBeInTheDocument()
     expect(screen.getByText('另有 1 项')).toBeInTheDocument()
+    expect(screen.getByText('待生成应收 2 个')).toBeInTheDocument()
     expect(screen.queryByText('无行程资源')).not.toBeInTheDocument()
     expect(screen.queryByText('存在执行风险')).not.toBeInTheDocument()
-    expect(screen.getByText('结算衔接')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '待生成应收' })).toBeInTheDocument()
+    const receivableTooltip = screen.getByLabelText('待生成应收统计口径')
+    expect(receivableTooltip).toBeInTheDocument()
+    await user.hover(receivableTooltip)
+    expect(await screen.findByText(
+      '按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。',
+    )).toBeInTheDocument()
+    expect(screen.getByText('待生成客源单 5')).toBeInTheDocument()
+    expect(screen.queryByText('待生成客源单 6')).not.toBeInTheDocument()
+    expect(screen.getByText('可结清发团 5')).toBeInTheDocument()
+    expect(screen.queryByText('可结清发团 6')).not.toBeInTheDocument()
+    expect(screen.queryByText('待生成应付')).not.toBeInTheDocument()
     expect(screen.getByText('未来团量与客流')).toBeInTheDocument()
 
     const todayDeparture = screen.getByText('云南昆明 6 日游').closest('button')!
@@ -256,6 +301,16 @@ describe('HomePage workbench lifecycle', () => {
 
     fireEvent.click(todayDeparture)
     expect(navigate).toHaveBeenCalledWith({ to: '/departure/departure-1' })
+
+    fireEvent.click(screen.getByRole('button', { name: '查看全部待生成应收 7 项' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/source-orders?receivableGeneration=not_generated',
+    })
+
+    fireEvent.click(screen.getByText('待生成客源单 1').closest('button')!)
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure/departure-1?tab=sourceOrders',
+    })
   })
 
   it('does not render an action when the current session lacks its permission', async () => {
