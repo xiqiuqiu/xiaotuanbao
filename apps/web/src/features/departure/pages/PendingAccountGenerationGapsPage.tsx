@@ -106,7 +106,7 @@ export function PendingAccountGenerationGapsPage() {
             showTotal: (total) => `共 ${total} 项`,
             onChange: (nextPage, nextPageSize) => {
               void navigate({
-                to: '/account-generation-gaps',
+                to: '/departure/account-generation-gaps',
                 search: { page: nextPage, pageSize: nextPageSize },
               })
             },

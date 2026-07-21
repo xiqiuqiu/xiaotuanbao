@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import {
+  DepartureStatus,
   PaymentScheduleDirection,
   type Prisma,
 } from '@prisma/client'
@@ -37,7 +38,13 @@ export class SourceOrderReceivableGapService {
 
   async findPendingRows(organizationId: string): Promise<PendingReceivableSourceOrderRow[]> {
     const rows = await this.prisma.sourceOrder.findMany({
-      where: { departure: { organizationId } },
+      where: {
+        departure: {
+          organizationId,
+          // 已结清发团不可再生成应收（CONTEXT Departure Status）。
+          status: { not: DepartureStatus.settled },
+        },
+      },
       include: {
         partner: { select: { name: true } },
         departure: {

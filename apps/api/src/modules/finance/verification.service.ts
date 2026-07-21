@@ -92,7 +92,7 @@ export class VerificationService {
               counterpartyId: true,
               counterpartyName: true,
               departureId: true,
-              departure: { select: { departureNo: true, name: true } },
+              departure: { select: { departureNo: true, name: true, status: true } },
             },
           },
           transaction: { select: { transactionNo: true } },
@@ -128,7 +128,7 @@ export class VerificationService {
             counterpartyId: true,
             counterpartyName: true,
             departureId: true,
-            departure: { select: { departureNo: true, name: true } },
+            departure: { select: { departureNo: true, name: true, status: true } },
           },
         },
         transaction: { select: { transactionNo: true } },
@@ -685,7 +685,7 @@ export class VerificationService {
   ): Promise<FinanceTransactionSummary> {
     const transaction = await this.prisma.financeTransaction.findFirst({
       where: { id: transactionId, organizationId },
-      include: { departure: { select: { departureNo: true, name: true } } },
+      include: { departure: { select: { departureNo: true, name: true, status: true } } },
     })
 
     if (!transaction) {
@@ -793,7 +793,7 @@ export class VerificationService {
 
   private toTransactionSummary(
     transaction: FinanceTransaction & {
-      departure?: { departureNo: string; name: string } | null
+      departure?: { departureNo: string; name: string; status?: string } | null
     },
     allocatedAmountCents: number,
   ): FinanceTransactionSummary {
@@ -815,6 +815,7 @@ export class VerificationService {
       departureId: transaction.departureId,
       departureNo: transaction.departure?.departureNo ?? null,
       departureName: transaction.departure?.name ?? null,
+      departureStatus: transaction.departure?.status ?? null,
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,

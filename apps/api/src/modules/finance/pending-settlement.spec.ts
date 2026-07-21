@@ -28,6 +28,6 @@ describe('pending-settlement', () => {
     expect(pendingSettlementTransactionHref('TX/测 1')).toBe(
       '/finance/transactions?status=normal&transactionNo=TX%2F%E6%B5%8B%201',
     )
-    expect(accountGenerationGapsHref()).toBe('/account-generation-gaps')
+    expect(accountGenerationGapsHref()).toBe('/departure/account-generation-gaps')
   })
 })

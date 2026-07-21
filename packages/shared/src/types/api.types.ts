@@ -760,6 +760,8 @@ export interface FinanceTransactionSummary {
   departureId: string | null
   departureNo: string | null
   departureName: string | null
+  /** 关联发团流程状态；无发团时为 null。 */
+  departureStatus: string | null
   voidedAt: string | null
   voidReason: string | null
   notes: string | null

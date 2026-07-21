@@ -25,6 +25,7 @@ function makeTransaction(
     departureId: 'dep-1',
     departureNo: 'DT202601',
     departureName: '云南六日游',
+    departureStatus: null,
     voidedAt: null,
     voidReason: null,
     notes: null,

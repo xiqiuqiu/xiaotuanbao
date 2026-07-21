@@ -192,7 +192,7 @@ const financePayableRoute = createRoute({
 
 const accountGenerationGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
-  path: '/account-generation-gaps',
+  path: '/departure/account-generation-gaps',
   validateSearch: (search: Record<string, unknown>): {
     page?: number
     pageSize?: number

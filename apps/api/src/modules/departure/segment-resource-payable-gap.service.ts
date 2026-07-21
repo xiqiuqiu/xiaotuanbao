@@ -44,7 +44,13 @@ export class SegmentResourcePayableGapService {
     const rows = await this.prisma.segmentResource.findMany({
       where: {
         amountCents: { gt: 0 },
-        segment: { departure: { organizationId } },
+        segment: {
+          departure: {
+            organizationId,
+            // 已结清发团不可再生成应付（CONTEXT Departure Status）。
+            status: { not: DepartureStatus.settled },
+          },
+        },
       },
       include: {
         partner: { select: { name: true } },

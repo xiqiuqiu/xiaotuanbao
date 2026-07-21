@@ -40,5 +40,5 @@ export function pendingSettlementTransactionHref(transactionNo: string): string 
 }
 
 export function accountGenerationGapsHref(): string {
-  return '/account-generation-gaps'
+  return '/departure/account-generation-gaps'
 }

@@ -705,12 +705,12 @@ export class TransactionService {
   }
 
   private readonly departureInclude = {
-    departure: { select: { departureNo: true, name: true } },
+    departure: { select: { departureNo: true, name: true, status: true } },
   } as const
 
   private toSummary(
     transaction: FinanceTransaction & {
-      departure?: { departureNo: string; name: string } | null
+      departure?: { departureNo: string; name: string; status: string } | null
     },
     allocatedAmountCents: number,
   ): FinanceTransactionSummary {
@@ -732,6 +732,7 @@ export class TransactionService {
       departureId: transaction.departureId,
       departureNo: transaction.departure?.departureNo ?? null,
       departureName: transaction.departure?.name ?? null,
+      departureStatus: transaction.departure?.status ?? null,
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,

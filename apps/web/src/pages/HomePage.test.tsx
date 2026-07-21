@@ -409,7 +409,7 @@ const financeReceivablesSnapshot = {
       total: 3,
       href: '/finance/transactions?status=normal&pendingSettlement=1',
       secondaryTotal: 2,
-      secondaryHref: '/account-generation-gaps',
+      secondaryHref: '/departure/account-generation-gaps',
       metrics: [
         {
           key: 'pending-payment',
@@ -854,7 +854,7 @@ describe('HomePage workbench lifecycle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /查看全部 2 项/ }))
     expect(navigate).toHaveBeenCalledWith({
-      to: '/account-generation-gaps',
+      to: '/departure/account-generation-gaps',
     })
 
     fireEvent.click(screen.getByRole('button', { name: '阳光学校' }))

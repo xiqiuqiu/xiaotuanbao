@@ -273,11 +273,13 @@ export function buildPaymentScheduleColumns({
           record.status,
         )
         const isClosed = record.status === PaymentScheduleStatus.CANCELLED
+        const departureClosed = record.departureStatus === DepartureStatus.CLOSED
 
         return (
           <Space size={4} wrap>
             <Tag color={SETTLEMENT_LABEL_COLORS[label] ?? 'default'}>{label}</Tag>
             {isClosed ? <Tag>已关闭</Tag> : null}
+            {departureClosed ? <Tag>发团已关闭</Tag> : null}
             {isOverdue ? <Tag color="error">已逾期</Tag> : null}
           </Space>
         )

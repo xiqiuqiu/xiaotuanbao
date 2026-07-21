@@ -1724,7 +1724,7 @@ describe('Workbench contract (e2e)', () => {
       expect(fundsModule.total).toBe(2)
       expect(fundsModule.href).toBe('/finance/transactions?status=normal&pendingSettlement=1')
       expect(fundsModule.secondaryTotal).toBe(3)
-      expect(fundsModule.secondaryHref).toBe('/account-generation-gaps')
+      expect(fundsModule.secondaryHref).toBe('/departure/account-generation-gaps')
 
       const settlementItems = fundsModule.items.filter(
         (item: { kind: string }) => item.kind === 'finance-pending-settlement',
@@ -1786,7 +1786,7 @@ describe('Workbench contract (e2e)', () => {
         const path = target.href
           .replace('/finance/payable', '/api/finance/payables')
           .replace('/finance/transactions', '/api/finance/transactions')
-          .replace('/account-generation-gaps', '/api/account-generation-gaps')
+          .replace('/departure/account-generation-gaps', '/api/account-generation-gaps')
         const drillDown = await authRequest(app, cookie).get(path).expect(200)
         expect(drillDown.body.data.total).toBe(target.total)
       }

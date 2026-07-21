@@ -1,7 +1,7 @@
 import { Button, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
-import { deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
+import { DepartureStatus, deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import {
   COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
@@ -126,6 +126,9 @@ export function buildTransactionColumns({
           <Tag color={record.voidedAt ? 'default' : 'success'}>
             {record.voidedAt ? TRANSACTION_STATUS_LABELS.voided : TRANSACTION_STATUS_LABELS.normal}
           </Tag>
+          {record.departureStatus === DepartureStatus.CLOSED ? (
+            <Tag>发团已关闭</Tag>
+          ) : null}
           {record.sourceAmountChanged ? <Tag color="warning">客源金额已变更</Tag> : null}
         </>
       ),

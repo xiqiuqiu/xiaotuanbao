@@ -48,6 +48,7 @@ describe('TransactionDetailDrawer source amount change', () => {
       departureId: 'dep-1',
       departureNo: 'XTB2026070001',
       departureName: '乌镇一团',
+      departureStatus: null,
       voidedAt: null,
       voidReason: null,
       notes: null,
