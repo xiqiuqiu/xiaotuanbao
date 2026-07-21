@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 type ChartLike = {
   on: (event: string, handler: (event: unknown) => void) => void
@@ -10,23 +10,35 @@ export function useWorkbenchChartElementClick(
   extractKey: (event: unknown) => string | undefined,
   onSelectKey: (key: string | undefined) => void,
 ) {
-  const onElementClick = useEffectEvent((event: unknown) => {
-    onSelectKey(extractKey(event))
-  })
-
-  const [chart, setChart] = useState<ChartLike | null>(null)
+  const extractKeyRef = useRef(extractKey)
+  const onSelectKeyRef = useRef(onSelectKey)
 
   useEffect(() => {
-    if (!chart) return
-    chart.on('element:click', onElementClick)
-    return () => {
-      chart.off('element:click', onElementClick)
-    }
-  }, [chart])
+    extractKeyRef.current = extractKey
+    onSelectKeyRef.current = onSelectKey
+  })
 
-  const onReady = useCallback(({ chart: next }: { chart: ChartLike }) => {
-    setChart(next)
+  const chartRef = useRef<ChartLike | null>(null)
+
+  const handler = useCallback((event: unknown) => {
+    onSelectKeyRef.current(extractKeyRef.current(event))
   }, [])
+
+  useEffect(() => {
+    return () => {
+      chartRef.current?.off('element:click', handler)
+      chartRef.current = null
+    }
+  }, [handler])
+
+  // 订阅挂在 DualAxes onReady（plots 交付的 chart 实例），不能放进 setState：
+  // 父级再渲染会使 @ant-design/plots useChart 因 config 引用变化再次 chart.render()。
+  // 换 chart 时先 off；卸载 cleanup 在上面的 effect。
+  const onReady = useCallback(({ chart: next }: { chart: ChartLike }) => {
+    chartRef.current?.off('element:click', handler)
+    chartRef.current = next
+    next.on('element:click', handler)
+  }, [handler])
 
   return { onReady }
 }

@@ -31,4 +31,25 @@ describe('useWorkbenchChartElementClick', () => {
 
     expect(chart.off).toHaveBeenCalledWith('element:click', expect.any(Function))
   })
+
+  it('onReady does not re-render the consumer via state', () => {
+    const chart = {
+      on: vi.fn(),
+      off: vi.fn(),
+    }
+    let renders = 0
+
+    const { result } = renderHook(() => {
+      renders += 1
+      return useWorkbenchChartElementClick(() => 'month', vi.fn())
+    })
+
+    const rendersBeforeReady = renders
+
+    act(() => {
+      result.current.onReady({ chart })
+    })
+
+    expect(renders).toBe(rendersBeforeReady)
+  })
 })
