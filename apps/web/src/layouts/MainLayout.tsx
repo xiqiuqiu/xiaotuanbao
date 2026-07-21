@@ -153,7 +153,13 @@ export function MainLayout({ children }: PropsWithChildren) {
               ],
             }}
           >
-            <Button className={styles.userButton} type="text" icon={<UserOutlined />}>
+            {/* 用原生 title 展示截断全名：antd Tooltip 会在点击打开下拉时盖住「退出登录」。 */}
+            <Button
+              className={styles.userButton}
+              type="text"
+              icon={<UserOutlined />}
+              title={user?.name ?? '用户'}
+            >
               <span className={styles.userName}>{user?.name ?? '用户'}</span>
             </Button>
           </Dropdown>

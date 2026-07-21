@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { act, cleanup, render, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
 
@@ -21,12 +21,15 @@ describe('useWorkbenchChartElementClick', () => {
       ),
     )
 
+    const { unmount: unmountSubscription } = render(result.current.subscription)
+
     act(() => {
       result.current.onReady({ chart })
     })
 
     expect(chart.on).toHaveBeenCalledWith('element:click', expect.any(Function))
 
+    unmountSubscription()
     unmount()
 
     expect(chart.off).toHaveBeenCalledWith('element:click', expect.any(Function))
@@ -44,6 +47,7 @@ describe('useWorkbenchChartElementClick', () => {
       return useWorkbenchChartElementClick(() => 'month', vi.fn())
     })
 
+    const { unmount: unmountSubscription } = render(result.current.subscription)
     const rendersBeforeReady = renders
 
     act(() => {
@@ -51,5 +55,37 @@ describe('useWorkbenchChartElementClick', () => {
     })
 
     expect(renders).toBe(rendersBeforeReady)
+    unmountSubscription()
+  })
+
+  it('offs the previous chart when onReady receives a new instance', () => {
+    const first = {
+      on: vi.fn(),
+      off: vi.fn(),
+    }
+    const second = {
+      on: vi.fn(),
+      off: vi.fn(),
+    }
+
+    const { result } = renderHook(() =>
+      useWorkbenchChartElementClick(() => 'month', vi.fn()),
+    )
+
+    const { rerender, unmount: unmountSubscription } = render(result.current.subscription)
+
+    act(() => {
+      result.current.onReady({ chart: first })
+    })
+    rerender(result.current.subscription)
+
+    act(() => {
+      result.current.onReady({ chart: second })
+    })
+    rerender(result.current.subscription)
+
+    expect(first.off).toHaveBeenCalledWith('element:click', expect.any(Function))
+    expect(second.on).toHaveBeenCalledWith('element:click', expect.any(Function))
+    unmountSubscription()
   })
 })

@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { PartnerSummary } from '@/types/api'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import { DIRECTORY_PROFILE_STATUS_LABELS, SETTLEMENT_CYCLE_LABELS, SETTLEMENT_METHOD_LABELS } from '@/features/directory/catalog'
 import { PARTNER_KIND_LABELS, PARTNER_TYPE_LABELS, catalogLabel } from '../catalog'
@@ -17,8 +18,18 @@ export function buildPartnerColumns(
 ): ColumnsType<PartnerSummary> {
   return [
     {
-      title: '合作伙伴名称', dataIndex: 'name', render: (name: string, record) => (
-        <Link className={nameLinkStyles.nameLink} to="/partner/$partnerId" params={{ partnerId: record.id }}>{name}</Link>
+      title: '合作伙伴名称',
+      dataIndex: 'name',
+      width: 240,
+      ellipsis: { showTitle: false },
+      render: (name: string, record) => (
+        <Link
+          className={nameLinkStyles.nameLink}
+          to="/partner/$partnerId"
+          params={{ partnerId: record.id }}
+        >
+          <EllipsisTooltipText empty="">{name}</EllipsisTooltipText>
+        </Link>
       ),
     },
     { title: '合作伙伴类型', dataIndex: 'partnerType', render: (value: string) => catalogLabel(PARTNER_TYPE_LABELS, value) },

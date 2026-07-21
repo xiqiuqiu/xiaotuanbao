@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { DepartureDetailPrefetchLink } from '../components/DepartureDetailPrefetchLink'
 import {
   DEPARTURE_PROGRESS_COLORS,
@@ -25,22 +26,31 @@ export function buildDepartureColumns(
       title: '团号',
       dataIndex: 'departureNo',
       fixed: 'left',
-      width: 140,
+      width: 150,
       render: (_value: string, record) => (
         <DepartureDetailPrefetchLink record={record} strong>
-          {record.departureNo}
+          <span style={{ whiteSpace: 'nowrap' }}>{record.departureNo}</span>
         </DepartureDetailPrefetchLink>
       ),
     },
     {
       title: '团名',
       dataIndex: 'name',
-      width: 180,
+      width: 200,
+      ellipsis: { showTitle: false },
       render: (name: string, record) => (
-        <DepartureDetailPrefetchLink record={record}>{name}</DepartureDetailPrefetchLink>
+        <DepartureDetailPrefetchLink record={record}>
+          <EllipsisTooltipText empty="">{name}</EllipsisTooltipText>
+        </DepartureDetailPrefetchLink>
       ),
     },
-    { title: '路线名称', dataIndex: 'routeName', width: 160 },
+    {
+      title: '路线名称',
+      dataIndex: 'routeName',
+      width: 160,
+      ellipsis: { showTitle: false },
+      render: (value: string) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
+    },
     {
       title: '发团类型',
       dataIndex: 'departureType',
@@ -89,7 +99,15 @@ export function buildDepartureColumns(
     { title: '实际应收', dataIndex: 'netReceivableCents', width: 110, render: (value: number) => formatCents(value) },
     { title: '应付合计', dataIndex: 'payableCents', width: 110, render: (value: number) => formatCents(value) },
     { title: '预估毛利', dataIndex: 'estimatedMarginCents', width: 110, render: (value: number) => formatCents(value) },
-    { title: '负责人', dataIndex: 'ownerName', width: 100, render: (value: string | undefined, record) => value ?? record.ownerUserId },
+    {
+      title: '负责人',
+      dataIndex: 'ownerName',
+      width: 120,
+      ellipsis: { showTitle: false },
+      render: (value: string | undefined, record) => (
+        <EllipsisTooltipText>{value ?? record.ownerUserId}</EllipsisTooltipText>
+      ),
+    },
     ...buildBusinessTimestampColumns<DepartureSummary>(),
   ]
 

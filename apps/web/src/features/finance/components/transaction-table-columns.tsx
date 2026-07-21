@@ -13,6 +13,7 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
@@ -70,11 +71,13 @@ export function buildTransactionColumns({
     { title: '交易日期', dataIndex: 'transactionDate' },
     {
       title: '往来对象',
+      width: 200,
+      ellipsis: { showTitle: false },
       render: (_, record) => (
-        <span>
+        <EllipsisTooltipText>
           {catalogLabel(COUNTERPARTY_TYPE_LABELS, record.counterpartyType)}
           {record.counterpartyName ? ` · ${record.counterpartyName}` : ''}
-        </span>
+        </EllipsisTooltipText>
       ),
     },
   ]
@@ -83,6 +86,8 @@ export function buildTransactionColumns({
     columns.push({
       title: '关联发团',
       dataIndex: 'departureName',
+      width: 160,
+      ellipsis: { showTitle: false },
       render: (_value: string | null, record) => {
         if (!record.departureId) {
           return '-'
@@ -91,7 +96,7 @@ export function buildTransactionColumns({
         return (
           <Tooltip title={record.departureNo ?? undefined}>
             <FinanceDepartureLink departureId={record.departureId}>
-              {label}
+              <EllipsisTooltipText empty="">{label}</EllipsisTooltipText>
             </FinanceDepartureLink>
           </Tooltip>
         )

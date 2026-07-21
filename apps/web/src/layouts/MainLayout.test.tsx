@@ -60,6 +60,35 @@ describe('MainLayout 侧栏开关', () => {
     expect(await screen.findByRole('tooltip', { name: '展开侧边栏' })).toBeInTheDocument()
   })
 
+  it('打开用户菜单后，用户名浮层不得遮挡退出登录', async () => {
+    vi.mocked(logout).mockResolvedValue(undefined)
+    const fullName = '诸葛明远·企业管理员（边界显示）'
+    useAuthStore.setState({
+      user: { id: 'user-1', name: fullName },
+      menuKeys: ['/departure'],
+      sessionStatus: 'authenticated',
+    })
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    const userButton = screen.getByRole('button', { name: /诸葛明远/ })
+    // 截断全名仍可观测（原生 title），且不得再挂 antd Tooltip 浮层。
+    expect(userButton).toHaveAttribute('title', fullName)
+
+    await user.click(userButton)
+    expect(await screen.findByText('退出登录')).toBeInTheDocument()
+    expect(screen.queryByRole('tooltip', { name: fullName })).not.toBeInTheDocument()
+
+    await user.click(screen.getByText('退出登录'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
+  })
+
   it('快速重复退出只请求一次并清空本地会话', async () => {
     let resolveLogout!: () => void
     vi.mocked(logout).mockReturnValue(new Promise<void>((resolve) => {

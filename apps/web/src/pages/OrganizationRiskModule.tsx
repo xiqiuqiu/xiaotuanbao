@@ -89,14 +89,20 @@ export function OrganizationRiskModule({ module }: { module: WorkbenchModule }) 
               disabled={!metric.href}
               onClick={() => metric.href && void navigate({ to: metric.href })}
             >
-              <span>
-                <Typography.Text strong>{metric.label}</Typography.Text>
-                <Typography.Text type="secondary" className={styles.queueMeta}>
+              <span className={styles.queueBody}>
+                <span className={styles.queueTitleRow}>
+                  <span className={styles.queueTitle}>{metric.label}</span>
+                </span>
+                <span className={styles.queueMeta}>
                   {metric.value ?? 0}
                   {metric.suffix ? ` ${metric.suffix}` : ''}
-                </Typography.Text>
+                </span>
               </span>
-              {metric.href ? <RightOutlined /> : null}
+              {metric.href ? (
+                <span className={styles.queueTrailing}>
+                  <RightOutlined />
+                </span>
+              ) : null}
             </button>
           ))}
         </Space>
@@ -117,16 +123,17 @@ export function OrganizationRiskModule({ module }: { module: WorkbenchModule }) 
                 key={item.id}
                 className={styles.queueItem}
                 aria-label={`${severityLabel(item.severity)} ${item.title}`}
+                title={item.title}
                 onClick={() => void navigate({ to: item.href })}
               >
-                <span>
-                  <Typography.Text strong>
+                <span className={styles.queueBody}>
+                  <span className={styles.queueTitleRow}>
                     <Tag color={severityColor(item.severity)}>
                       {severityLabel(item.severity)}
                     </Tag>
-                    {item.title}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" className={styles.queueMeta}>
+                    <span className={styles.queueTitle}>{item.title}</span>
+                  </span>
+                  <span className={styles.queueMeta}>
                     {item.reason}
                     {item.overdueDays != null ? ` · 逾期 ${item.overdueDays} 天` : ''}
                     {item.daysUntilStart != null
@@ -138,9 +145,11 @@ export function OrganizationRiskModule({ module }: { module: WorkbenchModule }) 
                       : ''}
                     {item.unsettledDays != null ? ` · 未核销 ${item.unsettledDays} 天` : ''}
                     {amountLabel ? ` · ${amountLabel}` : ''}
-                  </Typography.Text>
+                  </span>
                 </span>
-                <RightOutlined />
+                <span className={styles.queueTrailing}>
+                  <RightOutlined />
+                </span>
               </button>
             )
           })}

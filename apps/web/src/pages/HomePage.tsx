@@ -158,10 +158,12 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
               title: '发团',
               dataIndex: 'title',
               width: 180,
+              ellipsis: { showTitle: false },
               render: (title, item) => (
                 <Button
                   type="link"
                   className={styles.departureLink}
+                  title={title}
                   onClick={() => void navigate({ to: item.href })}
                 >
                   {title}
@@ -211,7 +213,12 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
               width: 210,
               render: (_, item) => `${item.startDate} 至 ${item.endDate}`,
             },
-            { title: '负责人', dataIndex: 'ownerName', width: 110 },
+            {
+              title: '负责人',
+              dataIndex: 'ownerName',
+              width: 110,
+              ellipsis: { showTitle: true },
+            },
           ]}
         />
       </Card>
@@ -255,15 +262,20 @@ function CoordinatorSettlementModule({
           type="button"
           key={item.id}
           className={styles.queueItem}
+          title={item.title}
           onClick={() => void navigate({ to: item.href })}
         >
-          <span>
-            <Typography.Text strong>{item.title}</Typography.Text>
-            <Typography.Text type="secondary" className={styles.queueMeta}>
+          <span className={styles.queueBody}>
+            <span className={styles.queueTitleRow}>
+              <span className={styles.queueTitle}>{item.title}</span>
+            </span>
+            <span className={styles.queueMeta}>
               {'departureName' in item ? item.departureName : `结束日期 ${item.endDate}`}
-            </Typography.Text>
+            </span>
           </span>
-          <RightOutlined />
+          <span className={styles.queueTrailing}>
+            <RightOutlined />
+          </span>
         </button>
       ))}
     </Space>

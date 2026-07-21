@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { ConfigProvider, Table } from 'antd'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   PaymentScheduleSourceType,
   type PaymentScheduleSummary,
@@ -76,6 +76,10 @@ function rowOf(scheduleNo: string): HTMLElement {
   return row
 }
 
+afterEach(() => {
+  cleanup()
+})
+
 describe('payable list columns', () => {
   it('shows fee category / fee item from the live resource and payee name', () => {
     renderTable(false, [
@@ -118,11 +122,12 @@ describe('payable list columns', () => {
 })
 
 describe('receivable list columns', () => {
-  it('shows source order, customer-settlement method and partner payer', () => {
+  it('shows title, source order, customer-settlement method and partner payer', () => {
     renderTable(true, [
       schedule({
         direction: 'receivable',
         scheduleNo: 'AR-CUST',
+        title: '喀纳斯环线团尾款',
         sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
         sourceId: 'so-1',
         counterpartyType: 'partner',
@@ -131,10 +136,17 @@ describe('receivable list columns', () => {
       }),
     ])
     expect(screen.getByText('应收单号')).toBeTruthy()
+    expect(screen.getAllByRole('columnheader', { name: '标题' }).length).toBeGreaterThan(0)
     const row = rowOf('AR-CUST')
+    expect(within(row).getByText('喀纳斯环线团尾款')).toBeTruthy()
     expect(within(row).getByText('福建土楼专线地接 7月15日发客')).toBeTruthy()
     expect(within(row).getByText('客户补款')).toBeTruthy()
     expect(within(row).getByText('福建土楼专线地接')).toBeTruthy()
+  })
+
+  it('does not expose a dedicated title column on payable lists', () => {
+    renderTable(false, [schedule({ scheduleNo: 'AP-NO-TITLE-COL' })])
+    expect(screen.queryByRole('columnheader', { name: '标题' })).toBeNull()
   })
 
   it('shows generic 游客 counterparty for guest-collection rows', () => {

@@ -1,6 +1,6 @@
 import { RightOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
-import { Button, Card, Empty, Space, Tag, Typography } from 'antd'
+import { Button, Card, Empty, Space, Tag } from 'antd'
 import type {
   WorkbenchFinanceAccountGenerationItem,
   WorkbenchFinancePendingSettlementItem,
@@ -60,22 +60,23 @@ export function FinanceFundsModule({ module }: { module: WorkbenchModule }) {
                 key={item.id}
                 className={styles.queueItem}
                 aria-label={item.title}
+                title={item.title}
                 onClick={() => void navigate({ to: item.href })}
               >
-                <span>
-                  <Typography.Text strong>
+                <span className={styles.queueBody}>
+                  <span className={styles.queueTitleRow}>
                     <Tag color={item.direction === 'inflow' ? 'blue' : 'orange'}>
                       {directionLabel(item.direction)}
                     </Tag>
-                    {item.title}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" className={styles.queueMeta}>
+                    <span className={styles.queueTitle}>{item.title}</span>
+                  </span>
+                  <span className={styles.queueMeta}>
                     {item.transactionDate}
                     {' · '}
                     {formatCents(item.unallocatedAmountCents)}
-                  </Typography.Text>
+                  </span>
                 </span>
-                <span>
+                <span className={styles.queueTrailing}>
                   {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
                   <RightOutlined />
                 </span>
@@ -107,21 +108,22 @@ export function FinanceFundsModule({ module }: { module: WorkbenchModule }) {
                 key={item.id}
                 className={styles.queueItem}
                 aria-label={item.title}
+                title={item.title}
                 onClick={() => void navigate({ to: item.href })}
               >
-                <span>
-                  <Typography.Text strong>
+                <span className={styles.queueBody}>
+                  <span className={styles.queueTitleRow}>
                     <Tag color={item.generationKind === 'receivable' ? 'blue' : 'orange'}>
                       {generationLabel(item.generationKind)}
                     </Tag>
-                    {item.title}
-                  </Typography.Text>
-                  <Typography.Text type="secondary" className={styles.queueMeta}>
+                    <span className={styles.queueTitle}>{item.title}</span>
+                  </span>
+                  <span className={styles.queueMeta}>
                     {formatCents(item.estimatedAmountCents)}
                     {item.description ? ` · ${item.description}` : ''}
-                  </Typography.Text>
+                  </span>
                 </span>
-                <span>
+                <span className={styles.queueTrailing}>
                   {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
                   <RightOutlined />
                 </span>

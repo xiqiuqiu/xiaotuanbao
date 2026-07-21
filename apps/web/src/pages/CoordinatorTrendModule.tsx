@@ -60,7 +60,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
     }
   }
 
-  const { onReady } = useWorkbenchChartElementClick(
+  const { onReady, subscription } = useWorkbenchChartElementClick(
     (event) => (event as { data?: { data?: { date?: string } } })?.data?.data?.date,
     navigateBucket,
   )
@@ -75,6 +75,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
         {module.description}
       </Typography.Paragraph>
 
+      {subscription}
       {!hasDepartures ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -91,6 +92,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
             xField="date"
             legend={{ color: { position: 'top' } }}
             tooltip={{
+              title: (datum: { date?: string }) => datum.date,
               items: [
                 (datum: {
                   departureCount?: number
@@ -128,6 +130,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 colorField: () => '发团数',
                 style: { maxWidth: 28, fill: token.colorPrimary, cursor: 'pointer' },
                 axis: { y: { title: '发团数', position: 'left' } },
+                tooltip: false,
                 label: {
                   text: (datum: { dataGapDepartureCount: number }) =>
                     datum.dataGapDepartureCount > 0 ? String(datum.dataGapDepartureCount) : '',
@@ -147,6 +150,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 shapeField: 'smooth',
                 style: { lineWidth: 2, stroke: token.colorSuccess, cursor: 'pointer' },
                 axis: { y: { title: '客人人数', position: 'right' } },
+                tooltip: false,
               },
             ]}
           </DualAxes>
@@ -168,7 +172,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                     className={styles.trendDayGap}
                     data-has-gap={bucket.dataGapDepartureCount > 0 ? 'true' : 'false'}
                   >
-                    资料待补充 {bucket.dataGapDepartureCount}
+                    待补 {bucket.dataGapDepartureCount}
                   </span>
                 </button>
               </Tooltip>

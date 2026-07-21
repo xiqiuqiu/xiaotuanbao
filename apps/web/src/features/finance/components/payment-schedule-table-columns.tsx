@@ -18,6 +18,7 @@ import {
   SETTLEMENT_LABEL_COLORS,
   formatCents,
 } from '../catalog'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
@@ -162,11 +163,20 @@ export function buildPaymentScheduleColumns({
   const scheduleNoColumn: ColumnsType<PaymentScheduleSummary>[number] = {
     title: isReceivable ? '应收单号' : '应付单号',
     dataIndex: 'scheduleNo',
+    width: 150,
     render: (value: string, record) => (
       <Button type="link" style={{ paddingInline: 0 }} onClick={() => onViewDetail(record)}>
         {value}
       </Button>
     ),
+  }
+
+  const titleColumn: ColumnsType<PaymentScheduleSummary>[number] = {
+    title: '标题',
+    dataIndex: 'title',
+    width: 200,
+    ellipsis: { showTitle: false },
+    render: (value: string) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
   }
 
   const departureColumns: ColumnsType<PaymentScheduleSummary> = isDepartureScope
@@ -175,12 +185,14 @@ export function buildPaymentScheduleColumns({
         {
           title: '关联发团',
           dataIndex: 'departureId',
+          width: 160,
+          ellipsis: { showTitle: false },
           render: (departureId: string) => {
             const departure = departureMap.get(departureId)
             return departure ? (
               <Tooltip title={departure.departureNo}>
                 <FinanceDepartureLink departureId={departureId}>
-                  {departure.name}
+                  <EllipsisTooltipText empty="">{departure.name}</EllipsisTooltipText>
                 </FinanceDepartureLink>
               </Tooltip>
             ) : (
@@ -192,21 +204,41 @@ export function buildPaymentScheduleColumns({
 
   const sourceColumns: ColumnsType<PaymentScheduleSummary> = isReceivable
     ? [
-        { title: '客源单', render: (_, record) => sourceOrderText(record) },
-        { title: '收款方式', render: (_, record) => collectionMethodText(record) },
+        {
+          title: '客源单',
+          width: 140,
+          ellipsis: { showTitle: false },
+          render: (_, record) => (
+            <EllipsisTooltipText>{sourceOrderText(record)}</EllipsisTooltipText>
+          ),
+        },
+        { title: '收款方式', width: 100, render: (_, record) => collectionMethodText(record) },
       ]
     : [
-        { title: '费用类别', render: (_, record) => feeCategoryText(record) },
-        { title: '费用项目', render: (_, record) => feeItemText(record) },
+        { title: '费用类别', width: 90, render: (_, record) => feeCategoryText(record) },
+        {
+          title: '费用项目',
+          width: 160,
+          ellipsis: { showTitle: false },
+          render: (_, record) => (
+            <EllipsisTooltipText>{feeItemText(record)}</EllipsisTooltipText>
+          ),
+        },
       ]
 
   const counterpartyColumn: ColumnsType<PaymentScheduleSummary>[number] = {
     title: '往来对象',
-    render: (_, record) => counterpartyText(record),
+    width: 160,
+    ellipsis: { showTitle: false },
+    render: (_, record) => (
+      <EllipsisTooltipText>{counterpartyText(record)}</EllipsisTooltipText>
+    ),
   }
 
+  // 应收列表靠标题检索/对账，必须露出节点标题；应付费用项目已覆盖资源名或标题回落。
   const identityColumns: ColumnsType<PaymentScheduleSummary> = [
     scheduleNoColumn,
+    ...(isReceivable ? [titleColumn] : []),
     ...departureColumns,
     ...sourceColumns,
     counterpartyColumn,

@@ -1,13 +1,32 @@
+import { useState } from 'react'
 import { RightOutlined } from '@ant-design/icons'
-import { DualAxes } from '@ant-design/plots'
+import { Column } from '@ant-design/plots'
 import { useNavigate } from '@tanstack/react-router'
-import { Button, Card, Empty, Flex, Space, Statistic, Tag, Tooltip, Typography, theme } from 'antd'
+import {
+  Button,
+  Card,
+  Empty,
+  Flex,
+  Progress,
+  Segmented,
+  Space,
+  Statistic,
+  Tag,
+  Typography,
+  theme,
+} from 'antd'
 import type {
   WorkbenchFinanceReceivableAgingBucket,
   WorkbenchFinanceReceivableItem,
   WorkbenchModule,
 } from '@/types/api'
 import { formatCents } from '@/features/finance/catalog'
+import {
+  buildFinanceAgingChartSpec,
+  FINANCE_AGING_VIEW_MODE_OPTIONS,
+  type FinanceAgingChartSpec,
+  type FinanceAgingViewMode,
+} from './finance-aging-chart'
 import styles from './HomePage.module.css'
 import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
 
@@ -36,16 +55,6 @@ function bucketAriaLabel(bucket: WorkbenchFinanceReceivableAgingBucket): string 
     `节点数 ${bucket.scheduleCount}`,
     `未收金额 ${formatCents(bucket.unsettledAmountCents)}`,
   ].join('，')
-}
-
-function bucketTooltipTitle(bucket: WorkbenchFinanceReceivableAgingBucket) {
-  return (
-    <div>
-      <div>账龄：{bucket.label}</div>
-      <div>节点数：{bucket.scheduleCount}</div>
-      <div>未收金额：{formatCents(bucket.unsettledAmountCents)}</div>
-    </div>
-  )
 }
 
 export type FinanceReceivablesSection = 'metrics' | 'follow-up' | 'aging'
@@ -102,27 +111,21 @@ export function FinanceMetricStrip({
   )
 }
 
-export function FinanceReceivablesModule({
-  module,
-  sections = ['metrics', 'follow-up', 'aging'],
+function FinanceReceivablesAgingCard({
+  buckets,
+  agingChart,
+  initialViewMode,
 }: {
-  module: WorkbenchModule
-  sections?: FinanceReceivablesSection[]
+  buckets: WorkbenchFinanceReceivableAgingBucket[]
+  agingChart: FinanceAgingChartSpec
+  initialViewMode: FinanceAgingViewMode
 }) {
   const navigate = useNavigate()
   const { token } = theme.useToken()
-  const showMetrics = sections.includes('metrics')
-  const showFollowUp = sections.includes('follow-up')
-  const showAging = sections.includes('aging')
-  const items = module.items.filter(isReceivableItem)
-  const buckets = (module.buckets ?? []).filter(isAgingBucket)
-  const hasAging = buckets.some((bucket) => bucket.scheduleCount > 0)
-  const chartRows = buckets.map((bucket) => ({
-    label: bucket.label,
-    unsettledAmountYuan: bucket.unsettledAmountCents / 100,
-    scheduleCount: bucket.scheduleCount,
-  }))
+  // 由父级 key={suggestedMode} 在推荐模式变化时整卡 remount，避免 useEffect 手写重置。
+  const [agingViewMode, setAgingViewMode] = useState(initialViewMode)
   const bucketsByLabel = new Map(buckets.map((bucket) => [bucket.label, bucket]))
+  const hasAging = buckets.some((bucket) => bucket.scheduleCount > 0)
 
   const navigateBucket = (label: string | undefined) => {
     if (!label) {
@@ -134,10 +137,157 @@ export function FinanceReceivablesModule({
     }
   }
 
-  const { onReady } = useWorkbenchChartElementClick(
+  const { onReady, subscription } = useWorkbenchChartElementClick(
     (event) => (event as { data?: { data?: { label?: string } } })?.data?.data?.label,
     navigateBucket,
   )
+
+  return (
+    <Card
+      className={styles.trendCard}
+      title="逾期应收账龄"
+      aria-label="逾期应收账龄"
+      extra={hasAging ? (
+        <Segmented<FinanceAgingViewMode>
+          size="small"
+          value={agingViewMode}
+          options={FINANCE_AGING_VIEW_MODE_OPTIONS}
+          onChange={setAgingViewMode}
+          aria-label="账龄图表显示模式"
+        />
+      ) : null}
+    >
+      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
+        {agingViewMode === 'share'
+          ? '固定分为 1–7 天、8–30 天与 30 天以上。条长表示占逾期总额比重，精确金额见各行。'
+          : '固定分为 1–7 天、8–30 天与 30 天以上。柱高表示未收金额；柱顶为金额与节点数。'}
+      </Typography.Paragraph>
+      {subscription}
+      {!hasAging ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="当前没有逾期应收，因此不绘制账龄分布"
+        />
+      ) : (
+        <div className={styles.trendBody}>
+          <div data-testid="workbench-aging-chart">
+            {agingViewMode === 'share' ? (
+              <div
+                className={styles.agingShareList}
+                data-testid="workbench-aging-share-list"
+              >
+                {agingChart.data.map((row) => {
+                  const bucket = bucketsByLabel.get(row.label)
+                  return (
+                    <button
+                      key={row.label}
+                      type="button"
+                      className={styles.agingShareRow}
+                      aria-label={
+                        bucket
+                          ? bucketAriaLabel(bucket)
+                          : `账龄 ${row.label}，${row.countLabel}，未收金额 ${row.amountLabel}`
+                      }
+                      disabled={!bucket}
+                      onClick={() => navigateBucket(row.label)}
+                    >
+                      <span className={styles.agingShareHeader}>
+                        <Typography.Text strong>{row.label}</Typography.Text>
+                        <Typography.Text>{row.amountLabel}</Typography.Text>
+                      </span>
+                      <Progress
+                        percent={row.sharePercent}
+                        showInfo={false}
+                        size="small"
+                        strokeColor={token.colorPrimary}
+                        railColor={token.colorFillSecondary}
+                      />
+                      <Typography.Text type="secondary" className={styles.agingShareMeta}>
+                        {row.countLabel}
+                        {' · '}
+                        占逾期
+                        {' '}
+                        {row.shareLabel}
+                      </Typography.Text>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <Column
+                height={220}
+                autoFit
+                data={agingChart.data}
+                xField={agingChart.xField}
+                yField={agingChart.yField}
+                legend={false}
+                tooltip={false}
+                scale={{ y: { type: agingChart.scaleYType, nice: true } }}
+                axis={{ y: { title: '未收金额（元）' } }}
+                style={{ maxWidth: 48, fill: token.colorPrimary, cursor: 'pointer' }}
+                labels={[
+                  {
+                    text: 'amountLabel',
+                    position: 'top',
+                    style: {
+                      fill: token.colorText,
+                      fontSize: 11,
+                      dy: -14,
+                    },
+                  },
+                  {
+                    text: 'countLabel',
+                    position: 'top',
+                    style: {
+                      fill: token.colorTextSecondary,
+                      fontSize: 11,
+                      dy: -2,
+                    },
+                  },
+                ]}
+                onReady={onReady}
+              />
+            )}
+          </div>
+          {agingViewMode === 'column' ? (
+            <Flex gap={8} wrap className={styles.trendDayStrip}>
+              {buckets.map((bucket) => (
+                <button
+                  key={bucket.key}
+                  type="button"
+                  className={styles.trendDayButton}
+                  aria-label={bucketAriaLabel(bucket)}
+                  onClick={() => void navigate({ to: bucket.href })}
+                >
+                  <Typography.Text strong>{bucket.label}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {bucket.scheduleCount} 个节点
+                  </Typography.Text>
+                  <Typography.Text>{formatCents(bucket.unsettledAmountCents)}</Typography.Text>
+                </button>
+              ))}
+            </Flex>
+          ) : null}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+export function FinanceReceivablesModule({
+  module,
+  sections = ['metrics', 'follow-up', 'aging'],
+}: {
+  module: WorkbenchModule
+  sections?: FinanceReceivablesSection[]
+}) {
+  const navigate = useNavigate()
+  const showMetrics = sections.includes('metrics')
+  const showFollowUp = sections.includes('follow-up')
+  const showAging = sections.includes('aging')
+  const items = module.items.filter(isReceivableItem)
+  const buckets = (module.buckets ?? []).filter(isAgingBucket)
+  const agingChart = buildFinanceAgingChartSpec(buckets)
 
   const followUpCard = showFollowUp ? (
     <Card
@@ -165,19 +315,22 @@ export function FinanceReceivablesModule({
               key={item.id}
               className={styles.queueItem}
               aria-label={item.title}
+              title={item.title}
               onClick={() => void navigate({ to: item.href })}
             >
-              <span>
-                <Typography.Text strong>{item.title}</Typography.Text>
-                <Typography.Text type="secondary" className={styles.queueMeta}>
+              <span className={styles.queueBody}>
+                <span className={styles.queueTitleRow}>
+                  <span className={styles.queueTitle}>{item.title}</span>
+                </span>
+                <span className={styles.queueMeta}>
                   {item.dueDate}
                   {' · '}
                   {formatCents(item.unsettledAmountCents)}
                   {item.overdueDays != null ? ` · 逾期 ${item.overdueDays} 天` : ' · 近期到期'}
                   {item.counterpartyName ? ` · ${item.counterpartyName}` : ''}
-                </Typography.Text>
+                </span>
               </span>
-              <span>
+              <span className={styles.queueTrailing}>
                 {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
                 <RightOutlined />
               </span>
@@ -188,70 +341,14 @@ export function FinanceReceivablesModule({
     </Card>
   ) : null
 
+  // suggestedMode 变化时 remount，状态随推荐默认重置；同推荐下用户手动切换得以保留。
   const agingCard = showAging ? (
-    <Card
-      className={styles.trendCard}
-      title="逾期应收账龄"
-      aria-label="逾期应收账龄"
-    >
-      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-        固定分为 1–7 天、8–30 天与 30 天以上，展示未结节点数与未收金额。
-      </Typography.Paragraph>
-      {!hasAging ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="当前没有逾期应收，因此不绘制账龄分布"
-        />
-      ) : (
-        <div className={styles.trendBody}>
-          <div data-testid="workbench-aging-chart">
-            <DualAxes
-              height={220}
-              autoFit
-              xField="label"
-              legend={false}
-              tooltip={false}
-              onReady={onReady}
-            >
-              {[
-                {
-                  data: chartRows,
-                  type: 'interval',
-                  yField: 'unsettledAmountYuan',
-                  style: { maxWidth: 36, fill: token.colorPrimary, cursor: 'pointer' },
-                  axis: { y: { title: '未收金额（元）', position: 'left' } },
-                },
-                {
-                  data: chartRows,
-                  type: 'line',
-                  yField: 'scheduleCount',
-                  style: { lineWidth: 2, stroke: token.colorError, cursor: 'pointer' },
-                  axis: { y: { title: '节点数', position: 'right' } },
-                },
-              ]}
-            </DualAxes>
-          </div>
-          <Flex gap={8} wrap className={styles.trendDayStrip}>
-            {buckets.map((bucket) => (
-              <Tooltip key={bucket.key} title={bucketTooltipTitle(bucket)}>
-                <button
-                  type="button"
-                  className={styles.trendDayButton}
-                  aria-label={bucketAriaLabel(bucket)}
-                  onClick={() => void navigate({ to: bucket.href })}
-                >
-                  <Typography.Text strong>{bucket.label}</Typography.Text>
-                  <Typography.Text type="secondary">
-                    {bucket.scheduleCount} 个节点
-                  </Typography.Text>
-                  <Typography.Text>{formatCents(bucket.unsettledAmountCents)}</Typography.Text>
-                </button>
-              </Tooltip>
-            ))}
-          </Flex>
-        </div>
-      )}
-    </Card>
+    <FinanceReceivablesAgingCard
+      key={agingChart.suggestedMode}
+      buckets={buckets}
+      agingChart={agingChart}
+      initialViewMode={agingChart.suggestedMode}
+    />
   ) : null
 
   return (

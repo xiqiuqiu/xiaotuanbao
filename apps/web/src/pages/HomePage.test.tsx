@@ -19,6 +19,7 @@ vi.mock('@/services/workbench.service', () => ({
 
 vi.mock('@ant-design/plots', () => ({
   DualAxes: () => <div data-testid="workbench-trend-chart" />,
+  Column: () => <div data-testid="workbench-aging-column" />,
 }))
 
 const coordinatorSnapshot = {
@@ -906,7 +907,7 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByLabelText('本月客源人次')).toHaveTextContent('12')
     expect(screen.queryByText(/预测|环比|毛利/)).not.toBeInTheDocument()
     expect(await screen.findByTestId('workbench-trend-chart')).toBeInTheDocument()
-    expect(screen.getByText('本月进行中')).toBeInTheDocument()
+    expect(screen.getByText('进行中')).toBeInTheDocument()
 
     const currentMonth = screen.getByRole('button', {
       name: '月份 2026-07，发团数 2，客源人次 12，本月进行中，按当前数据统计',
@@ -915,7 +916,7 @@ describe('HomePage workbench lifecycle', () => {
     expect(await screen.findByText('月份：2026-07')).toBeInTheDocument()
     expect(screen.getByText('发团数：2')).toBeInTheDocument()
     expect(screen.getByText('客源人次：12')).toBeInTheDocument()
-    expect(screen.getAllByText('按当前数据统计').length).toBeGreaterThan(0)
+    expect(screen.getByText('按当前数据统计')).toBeInTheDocument()
 
     await user.click(currentMonth)
     expect(navigate).toHaveBeenCalledWith({
@@ -939,7 +940,7 @@ describe('HomePage workbench lifecycle', () => {
       '近 6 个月暂无发团，因此不绘制业务规模趋势',
     )).toBeInTheDocument()
     expect(screen.queryByTestId('workbench-trend-chart')).not.toBeInTheDocument()
-    expect(screen.getByText('本月进行中')).toBeInTheDocument()
+    expect(screen.getByText('进行中')).toBeInTheDocument()
     const emptyMonth = screen.getByRole('button', {
       name: '月份 2026-07，发团数 0，客源人次 0，本月进行中，按当前数据统计',
     })

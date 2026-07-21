@@ -69,7 +69,7 @@ export function OrganizationScaleModule({
     }
   }
 
-  const { onReady } = useWorkbenchChartElementClick(
+  const { onReady, subscription } = useWorkbenchChartElementClick(
     (event) => (event as { data?: { data?: { month?: string } } })?.data?.data?.month,
     navigateBucket,
   )
@@ -107,9 +107,10 @@ export function OrganizationScaleModule({
           {module.description}
         </Typography.Paragraph>
 
+        {subscription}
         <div className={styles.trendBody}>
           <Typography.Text type="secondary" className={styles.trendLegendNote}>
-            近 6 个自然月发团数与客源人次；本月标注「本月进行中」，数值按当前数据统计。
+            近 6 个自然月发团数与客源人次；本月标注「进行中」，悬停可查看完整说明。
           </Typography.Text>
           {!hasDepartures ? (
             <Empty
@@ -173,18 +174,19 @@ export function OrganizationScaleModule({
                 >
                   <span className={styles.trendDayDate}>
                     {formatMonthLabel(bucket.month)}
-                    {bucket.inProgress ? (
-                      <Tag color="processing" className={styles.scaleInProgressTag}>
-                        本月进行中
-                      </Tag>
-                    ) : null}
                   </span>
                   <span className={styles.trendDayMeta}>
                     团 {bucket.departureCount} · 人次 {bucket.guestCount}
                   </span>
-                  <span className={styles.trendDayGap} data-has-gap="false">
-                    按当前数据统计
-                  </span>
+                  {bucket.inProgress ? (
+                    <Tag color="processing" className={styles.scaleInProgressTag}>
+                      进行中
+                    </Tag>
+                  ) : (
+                    <span className={styles.trendDayGap} data-has-gap="false">
+                      —
+                    </span>
+                  )}
                 </button>
               </Tooltip>
             ))}

@@ -17,6 +17,7 @@ export function FinanceDepartureLink({
       params={{ departureId }}
       target="_blank"
       rel="noopener noreferrer"
+      style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}
     >
       {children}
     </Link>
