@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
   PNPM_VERSION: "11.15.1"
   POSTGRES_USER: xiaotuanbao
   POSTGRES_PASSWORD: ci-please-change-this-password

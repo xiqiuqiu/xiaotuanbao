@@ -34,6 +34,8 @@ Jobs / checks (names must match branch protection):
 1. **`typecheck`** — `pnpm typecheck` (after install + shared build)
 2. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
+CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
+
 ### E2 e2e scope
 
 `pnpm test:e2e:ci` runs the API Jest e2e suite **excluding** seed / demo loops:

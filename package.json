@@ -27,6 +27,6 @@
     "docker:seed": "docker compose exec api pnpm exec prisma db seed"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   }
 }
