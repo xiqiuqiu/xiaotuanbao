@@ -257,9 +257,112 @@ const organizationAdminSnapshot = {
     {
       key: 'organization-risk' as const,
       title: '经营风险摘要',
-      description: '查看应收与资金相关的可解释风险。',
-      metrics: [],
-      items: [],
+      description: '按可解释规则列出高风险与需关注事项；不计算综合风险分。',
+      total: 6,
+      metrics: [
+        {
+          key: 'overdue-receivables',
+          label: '逾期应收',
+          value: 125000,
+          secondaryValue: 3,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=overdue',
+        },
+        {
+          key: 'pending-settlement',
+          label: '待核销资金',
+          value: 46800,
+          secondaryValue: 11,
+          secondarySuffix: '笔（收入 8 · 支出 3）',
+          href: '/finance/transactions?status=normal&pendingSettlement=1',
+        },
+        {
+          key: 'high-risk',
+          label: '高风险',
+          value: 2,
+          suffix: '项',
+        },
+        {
+          key: 'attention',
+          label: '需关注',
+          value: 4,
+          suffix: '项',
+        },
+        {
+          key: 'risk-receivable-over-30',
+          label: '逾期应收超过 30 天',
+          value: 1,
+          suffix: '项',
+          href: '/finance/receivable?receivableFollowUp=aging_over_30',
+        },
+        {
+          key: 'risk-settlement-stale',
+          label: '流水超过 7 天未核销',
+          value: 1,
+          suffix: '项',
+          href: '/finance/transactions?status=normal&pendingSettlement=1&dateEnd=2026-07-13',
+        },
+      ],
+      items: [
+        {
+          kind: 'organization-risk' as const,
+          id: 'receivable_overdue_over_30:1',
+          title: '逾期大额应收',
+          description: 'AR-0001',
+          href: '/finance/receivable?scheduleNo=AR-0001',
+          code: 'receivable_overdue_over_30' as const,
+          severity: 'high' as const,
+          reason: '应收逾期超过 30 天',
+          amountCents: 90000,
+          overdueDays: 46,
+        },
+        {
+          kind: 'organization-risk' as const,
+          id: 'departure_data_gap_imminent:1',
+          title: '西藏林芝小团',
+          description: '无行程资源',
+          href: '/departure/dep-risk-1',
+          code: 'departure_data_gap_imminent' as const,
+          severity: 'high' as const,
+          reason: '明天出发且资料待补充',
+          daysUntilStart: 1,
+        },
+        {
+          kind: 'organization-risk' as const,
+          id: 'receivable_overdue_8_30:1',
+          title: '中度逾期应收',
+          description: 'AR-0002',
+          href: '/finance/receivable?scheduleNo=AR-0002',
+          code: 'receivable_overdue_8_30' as const,
+          severity: 'attention' as const,
+          reason: '应收逾期 8–30 天',
+          amountCents: 24000,
+          overdueDays: 12,
+        },
+        {
+          kind: 'organization-risk' as const,
+          id: 'settlement_stale_over_7:1',
+          title: '阳光学校',
+          description: 'TX-0001',
+          href: '/finance/transactions?status=normal&transactionNo=TX-0001',
+          code: 'settlement_stale_over_7' as const,
+          severity: 'attention' as const,
+          reason: '流水超过 7 天仍未完全核销',
+          amountCents: 12600,
+          unsettledDays: 63,
+        },
+        {
+          kind: 'organization-risk' as const,
+          id: 'ended_departure_account_gap:1',
+          title: '海南三亚五日游',
+          description: 'FT-0001',
+          href: '/departure/dep-risk-2',
+          code: 'ended_departure_account_gap' as const,
+          severity: 'attention' as const,
+          reason: '已结束发团仍有应收或应付尚未生成',
+          amountCents: 18000,
+        },
+      ],
     },
   ],
   actions: [
@@ -275,37 +378,118 @@ const organizationAdminSnapshot = {
 
 const organizationAdminEmptySnapshot = {
   ...organizationAdminSnapshot,
+  modules: organizationAdminSnapshot.modules.map((module) => {
+    if (module.key === 'organization-scale') {
+      return {
+        ...module,
+        metrics: [
+          {
+            key: 'month-departures',
+            label: '本月发团数',
+            value: 0,
+            suffix: '个发团',
+            href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+          },
+          {
+            key: 'month-guests',
+            label: '本月客源人次',
+            value: 0,
+            suffix: '人次',
+            href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+          },
+        ],
+        buckets: [
+          {
+            month: '2026-07',
+            monthStart: '2026-07-01',
+            monthEnd: '2026-07-31',
+            departureCount: 0,
+            guestCount: 0,
+            inProgress: true,
+            href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+          },
+        ],
+      }
+    }
+    if (module.key === 'organization-risk') {
+      return {
+        ...module,
+        total: 0,
+        metrics: [
+          {
+            key: 'overdue-receivables',
+            label: '逾期应收',
+            value: 0,
+            secondaryValue: 0,
+            secondarySuffix: '个节点',
+            href: '/finance/receivable?receivableFollowUp=overdue',
+          },
+          {
+            key: 'pending-settlement',
+            label: '待核销资金',
+            value: 0,
+            secondaryValue: 0,
+            secondarySuffix: '笔（收入 0 · 支出 0）',
+            href: '/finance/transactions?status=normal&pendingSettlement=1',
+          },
+          {
+            key: 'high-risk',
+            label: '高风险',
+            value: 0,
+            suffix: '项',
+          },
+          {
+            key: 'attention',
+            label: '需关注',
+            value: 0,
+            suffix: '项',
+          },
+        ],
+        items: [],
+      }
+    }
+    return module
+  }),
+}
+
+const organizationAdminNoRiskSnapshot = {
+  ...organizationAdminSnapshot,
   modules: organizationAdminSnapshot.modules.map((module) =>
-    module.key === 'organization-scale'
+    module.key === 'organization-risk'
       ? {
           ...module,
+          total: 0,
           metrics: [
             {
-              key: 'month-departures',
-              label: '本月发团数',
+              key: 'overdue-receivables',
+              label: '逾期应收',
               value: 0,
-              suffix: '个发团',
-              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+              secondaryValue: 0,
+              secondarySuffix: '个节点',
+              href: '/finance/receivable?receivableFollowUp=overdue',
             },
             {
-              key: 'month-guests',
-              label: '本月客源人次',
+              key: 'pending-settlement',
+              label: '待核销资金',
               value: 0,
-              suffix: '人次',
-              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+              secondaryValue: 0,
+              secondarySuffix: '笔（收入 0 · 支出 0）',
+              href: '/finance/transactions?status=normal&pendingSettlement=1',
             },
-          ],
-          buckets: [
             {
-              month: '2026-07',
-              monthStart: '2026-07-01',
-              monthEnd: '2026-07-31',
-              departureCount: 0,
-              guestCount: 0,
-              inProgress: true,
-              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+              key: 'high-risk',
+              label: '高风险',
+              value: 0,
+              suffix: '项',
+            },
+            {
+              key: 'attention',
+              label: '需关注',
+              value: 0,
+              suffix: '项',
             },
           ],
+          items: [],
         }
       : module,
   ),
@@ -718,9 +902,9 @@ describe('HomePage workbench lifecycle', () => {
     expect(await screen.findByText('企业管理员工作台')).toBeInTheDocument()
     expect(screen.getByText('本月发团数')).toBeInTheDocument()
     expect(screen.getByText('本月客源人次')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.queryByText(/预测|环比|收入|支出|毛利/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('本月发团数')).toHaveTextContent('2')
+    expect(screen.getByLabelText('本月客源人次')).toHaveTextContent('12')
+    expect(screen.queryByText(/预测|环比|毛利/)).not.toBeInTheDocument()
     expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
     expect(screen.getByText('本月进行中')).toBeInTheDocument()
 
@@ -763,6 +947,59 @@ describe('HomePage workbench lifecycle', () => {
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
     })
+  })
+
+  it('renders organization-admin risk reasons, calm empty state and navigation', async () => {
+    vi.mocked(getWorkbench).mockResolvedValue(organizationAdminSnapshot)
+    renderPage()
+
+    expect(await screen.findByText('经营风险摘要')).toBeInTheDocument()
+    expect(screen.getByText('逾期应收')).toBeInTheDocument()
+    expect(screen.getByText('待核销资金')).toBeInTheDocument()
+    expect(screen.getByText('¥1,250.00')).toBeInTheDocument()
+    expect(screen.getByText('¥468.00')).toBeInTheDocument()
+    expect(screen.getByText(/3 个节点/)).toBeInTheDocument()
+    expect(screen.getByText(/11 笔（收入 8 · 支出 3）/)).toBeInTheDocument()
+    expect(screen.getByLabelText('高风险')).toBeInTheDocument()
+    expect(screen.getByLabelText('需关注')).toBeInTheDocument()
+    expect(screen.getByText(/应收逾期超过 30 天/)).toBeInTheDocument()
+    expect(screen.getByText(/明天出发且资料待补充/)).toBeInTheDocument()
+    expect(screen.getByText(/流水超过 7 天仍未完全核销/)).toBeInTheDocument()
+    expect(screen.queryByText(/风险评分|综合评分|risk score/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/共 6 项/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('逾期应收'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=overdue',
+    })
+
+    fireEvent.click(screen.getByLabelText('待核销资金'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/transactions?status=normal&pendingSettlement=1',
+    })
+
+    fireEvent.click(screen.getByLabelText('逾期应收超过 30 天'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=aging_over_30',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '高风险 逾期大额应收' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?scheduleNo=AR-0001',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '高风险 西藏林芝小团' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure/dep-risk-1',
+    })
+
+    cleanup()
+    vi.mocked(getWorkbench).mockResolvedValue(organizationAdminNoRiskSnapshot)
+    renderPage()
+    expect(await screen.findByText('当前没有需要关注的经营风险')).toBeInTheDocument()
+    expect(screen.getByText('本月发团数')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
+    expect(screen.getByText(/共 0 项/)).toBeInTheDocument()
   })
 
   it('renders finance receivable metrics, top follow-up, aging chart and navigation', async () => {

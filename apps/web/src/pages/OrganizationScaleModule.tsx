@@ -38,7 +38,13 @@ function bucketTooltipTitle(bucket: WorkbenchOrganizationScaleBucket) {
   )
 }
 
-export function OrganizationScaleModule({ module }: { module: WorkbenchModule }) {
+export function OrganizationScaleModule({
+  module,
+  showMetrics = true,
+}: {
+  module: WorkbenchModule
+  showMetrics?: boolean
+}) {
   const navigate = useNavigate()
   const { token } = theme.useToken()
   const buckets = (module.buckets ?? []).filter(isOrganizationScaleBucket)
@@ -64,25 +70,27 @@ export function OrganizationScaleModule({ module }: { module: WorkbenchModule })
 
   return (
     <div className={styles.scaleContent}>
-      <div className={styles.scaleMetricGrid}>
-        {module.metrics.map((metric) => (
-          <button
-            key={metric.key}
-            type="button"
-            className={styles.metricButton}
-            aria-label={metric.label}
-            disabled={!metric.href}
-            onClick={() => metric.href && void navigate({ to: metric.href })}
-          >
-            <Statistic
-              title={metric.label}
-              value={metric.value ?? '—'}
-              suffix={metric.suffix}
-            />
-            {metric.href ? <RightOutlined className={styles.metricArrow} /> : null}
-          </button>
-        ))}
-      </div>
+      {showMetrics ? (
+        <div className={styles.scaleMetricGrid}>
+          {module.metrics.map((metric) => (
+            <button
+              key={metric.key}
+              type="button"
+              className={styles.metricButton}
+              aria-label={metric.label}
+              disabled={!metric.href}
+              onClick={() => metric.href && void navigate({ to: metric.href })}
+            >
+              <Statistic
+                title={metric.label}
+                value={metric.value ?? '—'}
+                suffix={metric.suffix}
+              />
+              {metric.href ? <RightOutlined className={styles.metricArrow} /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <Card
         className={styles.trendCard}

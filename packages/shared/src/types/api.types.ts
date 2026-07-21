@@ -162,6 +162,32 @@ export interface WorkbenchFinanceAccountGenerationItem extends WorkbenchItem {
   departureClosed: boolean
 }
 
+/** 企业管理员可解释风险的稳定语义代码。 */
+export type WorkbenchOrganizationRiskCode =
+  | 'closed_departure_open_finance'
+  | 'receivable_overdue_over_30'
+  | 'departure_data_gap_imminent'
+  | 'receivable_overdue_8_30'
+  | 'departure_data_gap_upcoming'
+  | 'settlement_stale_over_7'
+  | 'ended_departure_account_gap'
+
+export type WorkbenchOrganizationRiskSeverity = 'high' | 'attention'
+
+/** 企业管理员「经营风险摘要」项。 */
+export interface WorkbenchOrganizationRiskItem extends WorkbenchItem {
+  kind: 'organization-risk'
+  href: string
+  code: WorkbenchOrganizationRiskCode
+  severity: WorkbenchOrganizationRiskSeverity
+  /** 可读触发原因；不返回黑盒综合风险分。 */
+  reason: string
+  amountCents?: number | null
+  overdueDays?: number | null
+  daysUntilStart?: number | null
+  unsettledDays?: number | null
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
@@ -175,6 +201,7 @@ export interface WorkbenchModule {
     | WorkbenchFinanceReceivableItem
     | WorkbenchFinancePendingSettlementItem
     | WorkbenchFinanceAccountGenerationItem
+    | WorkbenchOrganizationRiskItem
   >
   /** 图表分桶；由趋势/规模/账龄模块使用，其它模块可省略。 */
   buckets?: Array<

@@ -49,6 +49,15 @@ function bucketTooltipTitle(bucket: WorkbenchFinanceReceivableAgingBucket) {
 
 export type FinanceReceivablesSection = 'metrics' | 'follow-up' | 'aging'
 
+function isMoneyMetric(metric: WorkbenchModule['metrics'][number]): boolean {
+  return (
+    metric.key === 'overdue-receivables'
+    || metric.key === 'due-within-7-days'
+    || metric.key === 'pending-payment'
+    || metric.key === 'pending-settlement'
+  )
+}
+
 export function FinanceMetricStrip({
   metrics,
   columns = 2,
@@ -72,7 +81,12 @@ export function FinanceMetricStrip({
         >
           <Statistic
             title={metric.label}
-            value={formatMetricValue(metric.value)}
+            value={
+              isMoneyMetric(metric)
+                ? formatMetricValue(metric.value)
+                : (metric.value ?? '—')
+            }
+            suffix={isMoneyMetric(metric) ? undefined : metric.suffix}
           />
           {metric.secondaryValue != null ? (
             <Typography.Text type="secondary" className={styles.metricSecondary}>

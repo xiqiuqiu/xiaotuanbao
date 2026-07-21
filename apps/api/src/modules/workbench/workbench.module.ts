@@ -10,6 +10,7 @@ import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.
 import { OrganizationScaleWorkbenchService } from './organization-scale-workbench.service'
 import { FinanceReceivablesWorkbenchService } from './finance-receivables-workbench.service'
 import { FinanceFundsWorkbenchService } from './finance-funds-workbench.service'
+import { OrganizationRiskWorkbenchService } from './organization-risk-workbench.service'
 
 @Module({
   imports: [AuthModule, DepartureModule, FinanceModule],
@@ -20,6 +21,7 @@ import { FinanceFundsWorkbenchService } from './finance-funds-workbench.service'
     CoordinatorSettlementWorkbenchService,
     CoordinatorTrendWorkbenchService,
     OrganizationScaleWorkbenchService,
+    OrganizationRiskWorkbenchService,
     FinanceReceivablesWorkbenchService,
     FinanceFundsWorkbenchService,
   ],

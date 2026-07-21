@@ -81,6 +81,21 @@
   gap: 16px;
 }
 
+.adminMainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.riskCard {
+  min-width: 0;
+}
+
+.riskSummaryStrip {
+  margin-bottom: 16px;
+}
+
 .financeFundsQueues {
   display: grid;
   gap: 16px;
@@ -97,6 +112,10 @@
 }
 
 @media (max-width: 960px) {
+  .adminMainGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .financeMainGrid {
     grid-template-columns: minmax(0, 1fr);
   }

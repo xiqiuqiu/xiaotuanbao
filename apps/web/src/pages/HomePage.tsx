@@ -46,6 +46,7 @@ import { CoordinatorTrendModule } from './CoordinatorTrendModule'
 import { FinanceMetricStrip, FinanceReceivablesModule } from './FinanceReceivablesModule'
 import { FinanceFundsModule } from './FinanceFundsModule'
 import { OrganizationScaleModule } from './OrganizationScaleModule'
+import { OrganizationRiskModule } from './OrganizationRiskModule'
 import { workbenchQueryOptions } from './workbench-query'
 
 const TEMPLATE_LABELS: Record<WorkbenchTemplate, string> = {
@@ -349,12 +350,36 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
 
   if (snapshot.template === 'organization_admin') {
     const scaleModule = snapshot.modules.find((module) => module.key === 'organization-scale')
+    const riskModule = snapshot.modules.find((module) => module.key === 'organization-risk')
     const remainingModules = snapshot.modules.filter(
-      (module) => module.key !== scaleModule?.key,
+      (module) =>
+        module.key !== scaleModule?.key
+        && module.key !== riskModule?.key,
     )
+    const topMetrics = [
+      ...(scaleModule?.metrics ?? []),
+      ...(riskModule?.metrics ?? []).filter(
+        (metric) =>
+          metric.key === 'overdue-receivables'
+          || metric.key === 'pending-settlement',
+      ),
+    ]
     return (
       <div className={styles.scaleContent}>
-        {scaleModule ? <OrganizationScaleModule module={scaleModule} /> : null}
+        {topMetrics.length > 0 ? (
+          <FinanceMetricStrip
+            metrics={topMetrics}
+            columns={topMetrics.length >= 4 ? 4 : 2}
+          />
+        ) : null}
+        {scaleModule || riskModule ? (
+          <div className={styles.adminMainGrid}>
+            {scaleModule ? (
+              <OrganizationScaleModule module={scaleModule} showMetrics={false} />
+            ) : null}
+            {riskModule ? <OrganizationRiskModule module={riskModule} /> : null}
+          </div>
+        ) : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

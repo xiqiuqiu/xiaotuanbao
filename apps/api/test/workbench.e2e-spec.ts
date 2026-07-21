@@ -1819,4 +1819,367 @@ describe('Workbench contract (e2e)', () => {
       await prisma.organization.delete({ where: { id: organization.id } })
     }
   })
+
+  it('returns organization-admin explainable risks with severity order, top 5 and matching drill-downs', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+    const addDays = (value: string, days: number) => {
+      const date = new Date(`${value}T00:00:00.000Z`)
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+    const daysBetween = (from: string, to: string) =>
+      Math.round((asDate(to).getTime() - asDate(from).getTime()) / 86_400_000)
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-risk-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台风险测试旅行社-${Date.now()}`,
+        businessPrefix: `K${suffix}`,
+      },
+    })
+    const adminRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '风险管理员测试员',
+        roles: { create: { roleId: adminRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '风险测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    let departureSequence = 0
+    const createDeparture = async (input: {
+      name: string
+      startOffset: number
+      endOffset: number
+      status?: DepartureStatus
+    }) => {
+      departureSequence += 1
+      return prisma.departure.create({
+        data: {
+          organizationId: organization.id,
+          departureNo: `WKR${String(departureSequence).padStart(10, '0')}`,
+          name: input.name,
+          routeName: '风险测试路线',
+          startDate: asDate(addDays(today, input.startOffset)),
+          endDate: asDate(addDays(today, input.endOffset)),
+          dayCount: daysBetween(addDays(today, input.startOffset), addDays(today, input.endOffset)) + 1,
+          ownerUserId: user.id,
+          status: input.status ?? DepartureStatus.editing,
+        },
+      })
+    }
+
+    let scheduleSequence = 0
+    const createReceivable = async (input: {
+      title: string
+      dueDate: string
+      amountCents: number
+      departureId: string
+    }) => {
+      scheduleSequence += 1
+      return prisma.paymentSchedule.create({
+        data: {
+          organizationId: organization.id,
+          departureId: input.departureId,
+          direction: PaymentScheduleDirection.receivable,
+          scheduleNo: `WKR-AR-${String(scheduleSequence).padStart(4, '0')}`,
+          title: input.title,
+          amountCents: input.amountCents,
+          dueDate: asDate(input.dueDate),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: partner.id,
+          counterpartyName: partner.name,
+          sourceType: PaymentScheduleSourceType.MANUAL,
+        },
+      })
+    }
+
+    let txSequence = 0
+    const createTransaction = async (input: {
+      direction: TransactionDirection
+      amountCents: number
+      departureId: string
+      counterpartyName: string
+      transactionDate: string
+    }) => {
+      txSequence += 1
+      return prisma.financeTransaction.create({
+        data: {
+          organizationId: organization.id,
+          transactionNo: `WKR-TX-${String(txSequence).padStart(4, '0')}`,
+          direction: input.direction,
+          paymentChannel: PaymentChannel.other,
+          amountCents: input.amountCents,
+          transactionDate: asDate(input.transactionDate),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyName: input.counterpartyName,
+          departureId: input.departureId,
+        },
+      })
+    }
+
+    try {
+      const openDeparture = await createDeparture({
+        name: '开放风险发团',
+        startOffset: -20,
+        endOffset: 10,
+      })
+      const closedDeparture = await createDeparture({
+        name: '已关闭仍有账款发团',
+        startOffset: -30,
+        endOffset: -10,
+        status: DepartureStatus.closed,
+      })
+      const todayGapDeparture = await createDeparture({
+        name: '今日资料缺口发团',
+        startOffset: 0,
+        endOffset: 2,
+      })
+      const tomorrowGapDeparture = await createDeparture({
+        name: '明日资料缺口发团',
+        startOffset: 1,
+        endOffset: 3,
+      })
+      const upcomingGapDeparture = await createDeparture({
+        name: '三日后资料缺口发团',
+        startOffset: 3,
+        endOffset: 5,
+      })
+      const endedGapDeparture = await createDeparture({
+        name: '已结束待生成账款发团',
+        startOffset: -10,
+        endOffset: -1,
+      })
+
+      const overdue46 = await createReceivable({
+        title: '逾期46天应收',
+        dueDate: addDays(today, -46),
+        amountCents: 460000,
+        departureId: openDeparture.id,
+      })
+      const overdue31 = await createReceivable({
+        title: '逾期31天应收',
+        dueDate: addDays(today, -31),
+        amountCents: 310000,
+        departureId: openDeparture.id,
+      })
+      const overdue12 = await createReceivable({
+        title: '逾期12天应收',
+        dueDate: addDays(today, -12),
+        amountCents: 120000,
+        departureId: openDeparture.id,
+      })
+      await createReceivable({
+        title: '关闭发团开放应收',
+        dueDate: addDays(today, -5),
+        amountCents: 50000,
+        departureId: closedDeparture.id,
+      })
+      await createReceivable({
+        title: '账龄7天不入风险分级',
+        dueDate: addDays(today, -7),
+        amountCents: 70000,
+        departureId: openDeparture.id,
+      })
+
+      const staleIncome = await createTransaction({
+        direction: TransactionDirection.inflow,
+        amountCents: 18000,
+        departureId: openDeparture.id,
+        counterpartyName: '超7天未核销收入',
+        transactionDate: addDays(today, -10),
+      })
+      await createTransaction({
+        direction: TransactionDirection.outflow,
+        amountCents: 9000,
+        departureId: openDeparture.id,
+        counterpartyName: '近期待核销支出',
+        transactionDate: today,
+      })
+
+      await prisma.sourceOrder.create({
+        data: {
+          departureId: endedGapDeparture.id,
+          partnerId: partner.id,
+          displayName: '已结束待生成应收客源单',
+          guestCount: 2,
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 10000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 20000,
+          discountType: SourceOrderDiscountType.none,
+          discountCents: 0,
+          netReceivableCents: 20000,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          partnerCollectedCents: 20000,
+          guestCollectCents: 0,
+        },
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      expect(response.body.data.template).toBe('organization_admin')
+      const riskModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'organization-risk',
+      )
+
+      expect(riskModule.metrics.slice(0, 2)).toEqual([
+        {
+          key: 'overdue-receivables',
+          label: '逾期应收',
+          value: 460000 + 310000 + 120000 + 50000 + 70000,
+          secondaryValue: 5,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=overdue',
+        },
+        {
+          key: 'pending-settlement',
+          label: '待核销资金',
+          value: 18000 + 9000,
+          secondaryValue: 2,
+          secondarySuffix: '笔（收入 1 · 支出 1）',
+          href: '/finance/transactions?status=normal&pendingSettlement=1',
+        },
+      ])
+      expect(riskModule.metrics).toEqual(expect.arrayContaining([
+        { key: 'high-risk', label: '高风险', value: 5, suffix: '项' },
+        { key: 'attention', label: '需关注', value: 4, suffix: '项' },
+      ]))
+      expect(riskModule.total).toBe(9)
+      expect(riskModule.items).toHaveLength(5)
+      expect(riskModule.items.every(
+        (item: { severity: string }) => item.severity === 'high',
+      )).toBe(true)
+      expect(riskModule.items.map((item: { code: string; title: string }) => [item.code, item.title])).toEqual([
+        ['receivable_overdue_over_30', '逾期46天应收'],
+        ['receivable_overdue_over_30', '逾期31天应收'],
+        ['departure_data_gap_imminent', '今日资料缺口发团'],
+        ['departure_data_gap_imminent', '明日资料缺口发团'],
+        ['closed_departure_open_finance', '已关闭仍有账款发团'],
+      ])
+      expect(riskModule.items[0]).toMatchObject({
+        kind: 'organization-risk',
+        reason: '应收逾期超过 30 天',
+        overdueDays: 46,
+        href: `/finance/receivable?scheduleNo=${encodeURIComponent(overdue46.scheduleNo)}`,
+      })
+      expect(riskModule.items[1]).toMatchObject({
+        overdueDays: 31,
+        href: `/finance/receivable?scheduleNo=${encodeURIComponent(overdue31.scheduleNo)}`,
+      })
+      expect(riskModule.items[2]).toMatchObject({
+        reason: '今天出发且资料待补充',
+        daysUntilStart: 0,
+      })
+      expect(riskModule.items[3]).toMatchObject({
+        reason: '明天出发且资料待补充',
+        daysUntilStart: 1,
+      })
+      expect(riskModule.items[4]).toMatchObject({
+        reason: '发团已关闭，仍有开放账款或未核销流水',
+        amountCents: 50000,
+      })
+      expect(JSON.stringify(riskModule.items)).not.toContain('逾期12天应收')
+      expect(JSON.stringify(riskModule.items)).not.toContain('三日后资料缺口发团')
+      expect(JSON.stringify(riskModule.items)).not.toContain('超7天未核销收入')
+      expect(JSON.stringify(riskModule.items)).not.toContain('已结束待生成账款发团')
+      expect(JSON.stringify(riskModule.items)).not.toContain('账龄7天不入风险分级')
+      expect(JSON.stringify(riskModule.items)).not.toMatch(/风险评分|综合评分|"score"\s*:/i)
+      expect(riskModule.description).toContain('不计算综合风险分')
+
+      const drillTargets = [
+        {
+          href: riskModule.metrics[0].href,
+          api: '/api/finance/receivables',
+          total: 5,
+        },
+        {
+          href: riskModule.metrics[1].href,
+          api: '/api/finance/transactions',
+          total: 2,
+        },
+        {
+          href: '/finance/receivable?receivableFollowUp=aging_over_30',
+          api: '/api/finance/receivables',
+          total: 2,
+        },
+        {
+          href: '/finance/receivable?receivableFollowUp=aging_8_30',
+          api: '/api/finance/receivables',
+          total: 1,
+        },
+        {
+          href: `/departure?startDateFrom=${today}&startDateTo=${addDays(today, 1)}&departureDataGap=any&excludeClosed=1`,
+          api: '/api/departures',
+          total: 2,
+        },
+        {
+          href: `/departure?startDateFrom=${addDays(today, 2)}&startDateTo=${addDays(today, 7)}&departureDataGap=any&excludeClosed=1`,
+          api: '/api/departures',
+          total: 1,
+        },
+        {
+          href: `/finance/transactions?status=normal&pendingSettlement=1&dateEnd=${addDays(today, -8)}`,
+          api: '/api/finance/transactions',
+          total: 1,
+        },
+        {
+          href: riskModule.items[0].href,
+          api: '/api/finance/receivables',
+          total: 1,
+        },
+        {
+          href: `/finance/transactions?status=normal&transactionNo=${encodeURIComponent(staleIncome.transactionNo)}`,
+          api: '/api/finance/transactions',
+          total: 1,
+        },
+      ]
+      for (const target of drillTargets) {
+        const path = target.href
+          .replace('/finance/receivable', '/api/finance/receivables')
+          .replace('/finance/transactions', '/api/finance/transactions')
+          .replace('/departure?', '/api/departures?')
+        const drillDown = await authRequest(app, cookie).get(path).expect(200)
+        expect(drillDown.body.data.total).toBe(target.total)
+      }
+
+      expect([
+        overdue46.id,
+        overdue31.id,
+        overdue12.id,
+        todayGapDeparture.id,
+        tomorrowGapDeparture.id,
+        upcomingGapDeparture.id,
+        endedGapDeparture.id,
+        staleIncome.id,
+      ]).toHaveLength(8)
+    } finally {
+      await prisma.financeTransaction.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.sourceOrder.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
 })

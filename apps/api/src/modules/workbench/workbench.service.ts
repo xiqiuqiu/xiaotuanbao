@@ -16,6 +16,7 @@ import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.
 import { OrganizationScaleWorkbenchService } from './organization-scale-workbench.service'
 import { FinanceReceivablesWorkbenchService } from './finance-receivables-workbench.service'
 import { FinanceFundsWorkbenchService } from './finance-funds-workbench.service'
+import { OrganizationRiskWorkbenchService } from './organization-risk-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -38,8 +39,13 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     {
       key: 'organization-risk',
       title: '经营风险摘要',
-      description: '查看应收与资金相关的可解释风险。',
-      requiredPermissions: ['/finance/receivable', '/finance/transactions'],
+      description: '查看应收、资金与发团资料相关的可解释风险。',
+      requiredPermissions: [
+        '/finance/receivable',
+        '/finance/payable',
+        '/finance/transactions',
+        '/departure',
+      ],
     },
   ],
   finance: [
@@ -127,6 +133,7 @@ export class WorkbenchService {
     private readonly coordinatorSettlementWorkbenchService: CoordinatorSettlementWorkbenchService,
     private readonly coordinatorTrendWorkbenchService: CoordinatorTrendWorkbenchService,
     private readonly organizationScaleWorkbenchService: OrganizationScaleWorkbenchService,
+    private readonly organizationRiskWorkbenchService: OrganizationRiskWorkbenchService,
     private readonly financeReceivablesWorkbenchService: FinanceReceivablesWorkbenchService,
     private readonly financeFundsWorkbenchService: FinanceFundsWorkbenchService,
   ) {}
@@ -180,6 +187,15 @@ export class WorkbenchService {
       )
       if (organizationScaleIndex >= 0) {
         modules[organizationScaleIndex] = await this.organizationScaleWorkbenchService.buildModule(
+          organizationId,
+          asOf,
+        )
+      }
+      const organizationRiskIndex = modules.findIndex(
+        (module) => module.key === 'organization-risk',
+      )
+      if (organizationRiskIndex >= 0) {
+        modules[organizationRiskIndex] = await this.organizationRiskWorkbenchService.buildModule(
           organizationId,
           asOf,
         )
