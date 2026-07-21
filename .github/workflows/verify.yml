@@ -42,6 +42,13 @@ jobs:
       - name: Build shared
         run: pnpm --filter @xiaotuanbao/shared build
 
+      # prisma generate needs a .env for dotenv-cli; DB need not be reachable.
+      - name: Write CI .env
+        run: cp .env.example .env
+
+      - name: Prisma generate
+        run: pnpm --filter api prisma:generate
+
       - name: Typecheck
         run: pnpm typecheck
 

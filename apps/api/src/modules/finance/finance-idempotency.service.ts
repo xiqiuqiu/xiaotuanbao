@@ -47,48 +47,52 @@ export class FinanceIdempotencyService {
     }
 
     const hash = requestHash(params.request)
-    return this.prisma.$transaction(async (tx) => {
-      const lockScope = `${params.organizationId}|${params.operation}|${key}`
-      await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
-      `
+    // Concurrent callers wait on pg_advisory_xact_lock; default 2s/5s is too tight on CI.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const lockScope = `${params.organizationId}|${params.operation}|${key}`
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
+        `
 
-      const record = await tx.financeIdempotencyRecord.upsert({
-        where: {
-          organizationId_operation_idempotencyKey: {
+        const record = await tx.financeIdempotencyRecord.upsert({
+          where: {
+            organizationId_operation_idempotencyKey: {
+              organizationId: params.organizationId,
+              operation: params.operation,
+              idempotencyKey: key,
+            },
+          },
+          create: {
             organizationId: params.organizationId,
             operation: params.operation,
             idempotencyKey: key,
+            requestHash: hash,
           },
-        },
-        create: {
-          organizationId: params.organizationId,
-          operation: params.operation,
-          idempotencyKey: key,
-          requestHash: hash,
-        },
-        update: {},
-      })
+          update: {},
+        })
 
-      if (record.requestHash !== hash) {
-        throw new ConflictException('幂等键已被其他请求载荷使用')
-      }
-      if (record.completedAt) {
-        if (!record.resultJson || Array.isArray(record.resultJson)) {
-          throw new ConflictException('幂等请求结果不可用，请联系管理员')
+        if (record.requestHash !== hash) {
+          throw new ConflictException('幂等键已被其他请求载荷使用')
         }
-        return record.resultJson as T
-      }
+        if (record.completedAt) {
+          if (!record.resultJson || Array.isArray(record.resultJson)) {
+            throw new ConflictException('幂等请求结果不可用，请联系管理员')
+          }
+          return record.resultJson as T
+        }
 
-      const result = await params.handler(tx)
-      await tx.financeIdempotencyRecord.update({
-        where: { id: record.id },
-        data: {
-          resultJson: canonicalize(result) as Prisma.InputJsonValue,
-          completedAt: new Date(),
-        },
-      })
-      return result
-    })
+        const result = await params.handler(tx)
+        await tx.financeIdempotencyRecord.update({
+          where: { id: record.id },
+          data: {
+            resultJson: canonicalize(result) as Prisma.InputJsonValue,
+            completedAt: new Date(),
+          },
+        })
+        return result
+      },
+      { maxWait: 20_000, timeout: 20_000 },
+    )
   }
 }

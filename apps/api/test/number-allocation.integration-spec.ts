@@ -4,12 +4,14 @@ import { PrismaModule } from '../src/database/prisma/prisma.module'
 import { getShanghaiTodayString, getShanghaiYearMonthString } from '../src/modules/departure/departure-date.utils'
 import { NumberAllocationModule } from '../src/modules/number-allocation/number-allocation.module'
 import { NumberAllocationService } from '../src/modules/number-allocation/number-allocation.service'
+import { uniqueBusinessPrefix } from './helpers'
 
 describe('NumberAllocationService (integration)', () => {
   let service: NumberAllocationService
   let prisma: PrismaClient
   let organizationId: string
-  const testPrefix = `XT${String.fromCharCode(65 + (Date.now() % 23))}`
+  // Avoid colliding with seeded demo org prefix `XTB` (old XT+A–W space included XTB).
+  const testPrefix = uniqueBusinessPrefix(`na-${Date.now()}`)
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({

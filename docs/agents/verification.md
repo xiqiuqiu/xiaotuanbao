@@ -31,10 +31,12 @@ Workflow: [`.github/workflows/verify.yml`](../../.github/workflows/verify.yml)
 
 Jobs / checks (names must match branch protection):
 
-1. **`typecheck`** — `pnpm typecheck` (after install + shared build)
+1. **`typecheck`** — shared build → `prisma generate` → `pnpm typecheck`
 2. **`api-e2e`** — empty Postgres (Actions service) → migrate → seed → `pnpm test:e2e:ci`
 
 CI uses **Node ≥ 22.13** (required by pnpm 11.x / `node:sqlite`). Keep local Node in the same range.
+
+`typecheck` must run `prisma generate` on a fresh checkout; committed tree does not include generated `@prisma/client` types.
 
 ### E2 e2e scope
 
