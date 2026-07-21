@@ -13,6 +13,7 @@ import {
   listFinancePartnerOptions,
   listFinanceSourceOrderOptions,
   listFinanceSupplierOptions,
+  listTransactions,
 } from '@/services/finance.service'
 import { getSourceOrder } from '@/services/source-order.service'
 import {
@@ -26,6 +27,7 @@ import {
   formatGuestCollectionSuggestionText,
   resolveGuestCollectionAmountSuggestion,
   shouldReplaceSuggestedAmount,
+  sumExistingUnallocatedGuestCents,
 } from '../utils/transaction-amount-suggestion'
 import {
   createEmptyTransactionFormValues,
@@ -124,17 +126,31 @@ export function TransactionFormDrawer({
       'guest-amount-suggestion',
       departureId,
       counterpartyId,
+      editingTransaction?.id,
     ],
     queryFn: async () => {
-      const receivables = await listDepartureReceivables(departureId!, {
-        counterpartyType: CounterpartyType.GUEST,
-        counterpartyId: counterpartyId!,
-        pageSize: 20,
+      const [receivables, sourceOrder, transactions] = await Promise.all([
+        listDepartureReceivables(departureId!, {
+          counterpartyType: CounterpartyType.GUEST,
+          counterpartyId: counterpartyId!,
+          pageSize: 20,
+        }),
+        getSourceOrder(counterpartyId!),
+        listTransactions({
+          departureId: departureId!,
+          status: 'normal',
+          pageSize: 100,
+        }),
+      ])
+      const existingUnallocatedGuestCents = sumExistingUnallocatedGuestCents({
+        transactions: transactions.items,
+        sourceOrderId: counterpartyId!,
+        excludeTransactionId: editingTransaction?.id,
       })
-      const sourceOrder = await getSourceOrder(counterpartyId!)
       return resolveGuestCollectionAmountSuggestion({
         schedules: receivables.items,
         guestCollectCents: sourceOrder.guestCollectCents,
+        existingUnallocatedGuestCents,
       })
     },
     enabled: guestSuggestionEnabled,
@@ -154,9 +170,10 @@ export function TransactionFormDrawer({
       return
     }
 
-    // 已结清 / 建议额非正：只更新对照，不覆盖金额（避免写入 0）。
+    // 已结清 / 已覆盖 / 建议额非正：只更新对照，不覆盖金额（避免写入 0）。
     if (
       amountSuggestion.settledHint === 'settled' ||
+      amountSuggestion.settledHint === 'covered' ||
       amountSuggestion.suggestedAmountCents <= 0
     ) {
       setLastSuggestedYuan(undefined)
@@ -251,13 +268,24 @@ export function TransactionFormDrawer({
   }
 
   const applySuggestedAmount = () => {
-    if (!amountSuggestion || amountSuggestion.settledHint === 'settled') {
+    if (
+      !amountSuggestion ||
+      amountSuggestion.settledHint === 'settled' ||
+      amountSuggestion.settledHint === 'covered' ||
+      amountSuggestion.suggestedAmountCents <= 0
+    ) {
       return
     }
     const nextYuan = centsToYuan(amountSuggestion.suggestedAmountCents)
     form.setFieldsValue({ amountYuan: nextYuan })
     setLastSuggestedYuan(nextYuan)
   }
+
+  const canFillSuggestedAmount =
+    amountSuggestion != null &&
+    amountSuggestion.settledHint !== 'settled' &&
+    amountSuggestion.settledHint !== 'covered' &&
+    amountSuggestion.suggestedAmountCents > 0
 
   const partnerExtra = !departureId
     ? '请先选择关联发团'
@@ -277,7 +305,7 @@ export function TransactionFormDrawer({
         <Typography.Text type="secondary">
           {formatGuestCollectionSuggestionText(amountSuggestion, formatCents)}
         </Typography.Text>
-        {amountSuggestion.settledHint !== 'settled' ? (
+        {canFillSuggestedAmount ? (
           <Button type="link" size="small" onClick={applySuggestedAmount} style={{ padding: 0 }}>
             填入
           </Button>

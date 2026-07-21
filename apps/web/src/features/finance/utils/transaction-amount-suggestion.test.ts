@@ -1,9 +1,15 @@
 import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  formatGuestCollectionSuggestionText,
   resolveGuestCollectionAmountSuggestion,
   shouldReplaceSuggestedAmount,
+  sumExistingUnallocatedGuestCents,
 } from './transaction-amount-suggestion'
+
+function formatCents(cents: number) {
+  return `¥${(cents / 100).toFixed(2)}`
+}
 
 describe('resolveGuestCollectionAmountSuggestion', () => {
   it('uses unsettled amount from open guest-collection schedule', () => {
@@ -24,6 +30,7 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
       hasSchedule: true,
       pathAmountCents: 500_00,
       agreedAmountCents: 500_00,
+      existingUnallocatedCents: 0,
       settledHint: 'open',
     })
   })
@@ -70,6 +77,7 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
       hasSchedule: true,
       pathAmountCents: 500_00,
       agreedAmountCents: 500_00,
+      existingUnallocatedCents: 0,
       settledHint: 'settled',
     })
   })
@@ -91,8 +99,131 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
       suggestedAmountCents: 350_00,
       hasSchedule: false,
       agreedAmountCents: 350_00,
+      existingUnallocatedCents: 0,
       settledHint: 'no_schedule',
     })
+  })
+
+  it('subtracts existing unallocated guest transactions from path fallback', () => {
+    const result = resolveGuestCollectionAmountSuggestion({
+      schedules: [],
+      guestCollectCents: 500_00,
+      existingUnallocatedGuestCents: 200_00,
+    })
+
+    expect(result).toEqual({
+      suggestedAmountCents: 300_00,
+      hasSchedule: false,
+      agreedAmountCents: 500_00,
+      existingUnallocatedCents: 200_00,
+      settledHint: 'no_schedule',
+    })
+  })
+
+  it('subtracts existing unallocated guest transactions from schedule unsettled', () => {
+    const result = resolveGuestCollectionAmountSuggestion({
+      schedules: [
+        {
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          amountCents: 500_00,
+          unsettledAmountCents: 300_00,
+          cancelledAt: null,
+        },
+      ],
+      guestCollectCents: 500_00,
+      existingUnallocatedGuestCents: 200_00,
+    })
+
+    expect(result).toEqual({
+      suggestedAmountCents: 100_00,
+      hasSchedule: true,
+      pathAmountCents: 500_00,
+      agreedAmountCents: 500_00,
+      existingUnallocatedCents: 200_00,
+      settledHint: 'open',
+    })
+  })
+
+  it('marks covered when existing unallocated already meets the reference amount', () => {
+    const result = resolveGuestCollectionAmountSuggestion({
+      schedules: [],
+      guestCollectCents: 500_00,
+      existingUnallocatedGuestCents: 500_00,
+    })
+
+    expect(result).toEqual({
+      suggestedAmountCents: 0,
+      hasSchedule: false,
+      agreedAmountCents: 500_00,
+      existingUnallocatedCents: 500_00,
+      settledHint: 'covered',
+    })
+  })
+})
+
+describe('sumExistingUnallocatedGuestCents', () => {
+  it('sums matching inflow guest txs and excludes the editing row', () => {
+    const sum = sumExistingUnallocatedGuestCents({
+      sourceOrderId: 'so-1',
+      excludeTransactionId: 'tx-edit',
+      transactions: [
+        {
+          id: 'tx-edit',
+          direction: 'inflow',
+          counterpartyType: 'guest',
+          counterpartyId: 'so-1',
+          voidedAt: null,
+          unallocatedAmountCents: 100_00,
+        },
+        {
+          id: 'tx-2',
+          direction: 'inflow',
+          counterpartyType: 'guest',
+          counterpartyId: 'so-1',
+          voidedAt: null,
+          unallocatedAmountCents: 200_00,
+        },
+        {
+          id: 'tx-partner',
+          direction: 'inflow',
+          counterpartyType: 'partner',
+          counterpartyId: 'p-1',
+          voidedAt: null,
+          unallocatedAmountCents: 300_00,
+        },
+      ],
+    })
+    expect(sum).toBe(200_00)
+  })
+})
+
+describe('formatGuestCollectionSuggestionText', () => {
+  it('mentions remaining when existing unallocated reduces path fallback', () => {
+    const text = formatGuestCollectionSuggestionText(
+      {
+        suggestedAmountCents: 300_00,
+        hasSchedule: false,
+        agreedAmountCents: 500_00,
+        existingUnallocatedCents: 200_00,
+        settledHint: 'no_schedule',
+      },
+      formatCents,
+    )
+    expect(text).toBe('尚未生成应收，参考剩余 ¥300.00')
+  })
+
+  it('explains covered by existing unallocated transactions', () => {
+    const text = formatGuestCollectionSuggestionText(
+      {
+        suggestedAmountCents: 0,
+        hasSchedule: false,
+        agreedAmountCents: 500_00,
+        existingUnallocatedCents: 500_00,
+        settledHint: 'covered',
+      },
+      formatCents,
+    )
+    expect(text).toBe('已有未核销游客代收流水已覆盖参考金额')
   })
 })
 

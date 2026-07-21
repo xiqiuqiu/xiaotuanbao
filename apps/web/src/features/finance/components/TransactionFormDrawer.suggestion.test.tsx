@@ -18,6 +18,7 @@ import {
   listFinancePartnerOptions,
   listFinanceSourceOrderOptions,
   listFinanceSupplierOptions,
+  listTransactions,
 } from '@/services/finance.service'
 import { getSourceOrder } from '@/services/source-order.service'
 
@@ -27,6 +28,7 @@ vi.mock('@/services/finance.service', () => ({
   listFinanceSupplierOptions: vi.fn(),
   listFinanceSourceOrderOptions: vi.fn(),
   listDepartureReceivables: vi.fn(),
+  listTransactions: vi.fn(),
 }))
 
 vi.mock('@/services/source-order.service', () => ({
@@ -106,6 +108,12 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
     vi.mocked(getSourceOrder).mockResolvedValue({
       id: 'so-1',
       guestCollectCents: 500_00,
+    } as never)
+    vi.mocked(listTransactions).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 100,
     } as never)
   })
 
@@ -202,6 +210,98 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
       expect(screen.getByText(/未结清 ¥800.00/)).toBeTruthy()
     })
     expect(getForm().getFieldValue('amountYuan')).toBe(120)
+  })
+
+  it('suggests remaining after existing unallocated guest transactions', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listDepartureReceivables).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    vi.mocked(getSourceOrder).mockResolvedValue({
+      id: 'so-1',
+      guestCollectCents: 500_00,
+    } as never)
+    vi.mocked(listTransactions).mockResolvedValue({
+      items: [
+        {
+          id: 'tx-existing',
+          direction: TransactionDirection.INFLOW,
+          counterpartyType: CounterpartyType.GUEST,
+          counterpartyId: 'so-1',
+          voidedAt: null,
+          unallocatedAmountCents: 200_00,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 100,
+    } as never)
+
+    const { getForm } = renderDrawer()
+
+    await act(async () => {
+      getForm().setFieldsValue({
+        departureId: 'dep-1',
+        direction: TransactionDirection.INFLOW,
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: 'so-1',
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/尚未生成应收，参考剩余 ¥300\.00/)).toBeTruthy()
+      expect(screen.getByRole('button', { name: '填入' })).toBeTruthy()
+    })
+
+    await user.click(screen.getByRole('button', { name: '填入' }))
+    expect(getForm().getFieldValue('amountYuan')).toBe(300)
+  })
+
+  it('hides fill when existing unallocated already covers the path', async () => {
+    vi.mocked(listDepartureReceivables).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    vi.mocked(getSourceOrder).mockResolvedValue({
+      id: 'so-1',
+      guestCollectCents: 500_00,
+    } as never)
+    vi.mocked(listTransactions).mockResolvedValue({
+      items: [
+        {
+          id: 'tx-existing',
+          direction: TransactionDirection.INFLOW,
+          counterpartyType: CounterpartyType.GUEST,
+          counterpartyId: 'so-1',
+          voidedAt: null,
+          unallocatedAmountCents: 500_00,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 100,
+    } as never)
+
+    const { getForm } = renderDrawer()
+
+    await act(async () => {
+      getForm().setFieldsValue({
+        departureId: 'dep-1',
+        direction: TransactionDirection.INFLOW,
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: 'so-1',
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('已有未核销游客代收流水已覆盖参考金额')).toBeTruthy()
+    })
+    expect(screen.queryByRole('button', { name: '填入' })).toBeNull()
   })
 
   it('replaces amount when switching source order if still at suggested value', async () => {
