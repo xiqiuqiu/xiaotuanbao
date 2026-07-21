@@ -97,6 +97,15 @@ export interface WorkbenchCoordinatorReceivablePendingItem extends WorkbenchItem
   departureName: string
 }
 
+/** 计调「未来 14 天团量与客流」按日出团日分桶。 */
+export interface WorkbenchCoordinatorTrendBucket {
+  date: string
+  departureCount: number
+  guestCount: number
+  dataGapDepartureCount: number
+  href: string
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
@@ -108,6 +117,8 @@ export interface WorkbenchModule {
     | WorkbenchCoordinatorSettlementReadyItem
     | WorkbenchCoordinatorReceivablePendingItem
   >
+  /** 图表分桶；当前由 `coordinator-trend` 使用，其它模块可省略。 */
+  buckets?: WorkbenchCoordinatorTrendBucket[]
   total?: number
   href?: string
 }

@@ -8,11 +8,17 @@ describe('parseDepartureListSearch', () => {
       departureDataGap: 'any',
       departureProgress: 'in_progress',
       settlementReadiness: 'ready',
+      startDateFrom: '2026-07-22',
+      startDateTo: '2026-07-22',
+      excludeClosed: '1',
     })).toEqual({
       operationalWindow: 'current_and_next_7_days',
       departureDataGap: 'any',
       departureProgress: 'in_progress',
       settlementReadiness: 'ready',
+      startDateFrom: '2026-07-22',
+      startDateTo: '2026-07-22',
+      excludeClosed: '1',
     })
 
     expect(parseDepartureListSearch({
@@ -20,6 +26,8 @@ describe('parseDepartureListSearch', () => {
       departureDataGap: 'risk',
       departureProgress: 'preparing',
       settlementReadiness: 'pending',
+      startDateFrom: '22/07/2026',
+      excludeClosed: 'true',
     })).toEqual({})
   })
 })

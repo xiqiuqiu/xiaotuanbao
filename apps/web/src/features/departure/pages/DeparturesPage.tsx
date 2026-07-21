@@ -37,6 +37,7 @@ type DeparturesPageState = {
   operationalWindow?: DepartureListSearch['operationalWindow']
   departureDataGap?: DepartureListSearch['departureDataGap']
   settlementReadiness?: DepartureListSearch['settlementReadiness']
+  excludeClosed?: DepartureListSearch['excludeClosed']
 }
 
 const initialDeparturesPageState: DeparturesPageState = {
@@ -54,15 +55,21 @@ const initialDeparturesPageState: DeparturesPageState = {
   operationalWindow: undefined,
   departureDataGap: undefined,
   settlementReadiness: undefined,
+  excludeClosed: undefined,
 }
 
 function createInitialState(search: DepartureListSearch): DeparturesPageState {
+  const startDateRange = search.startDateFrom || search.startDateTo
+    ? [search.startDateFrom, search.startDateTo] as [string | undefined, string | undefined]
+    : null
   return {
     ...initialDeparturesPageState,
     departureProgress: search.departureProgress,
     operationalWindow: search.operationalWindow,
     departureDataGap: search.departureDataGap,
     settlementReadiness: search.settlementReadiness,
+    excludeClosed: search.excludeClosed,
+    startDateRange,
   }
 }
 
@@ -150,6 +157,7 @@ export function DeparturesPage() {
     state.operationalWindow,
     state.departureDataGap,
     state.settlementReadiness,
+    state.excludeClosed,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -175,6 +183,7 @@ export function DeparturesPage() {
       state.operationalWindow,
       state.departureDataGap,
       state.settlementReadiness,
+      state.excludeClosed,
       state.page,
       state.pageSize,
     ],
@@ -192,6 +201,7 @@ export function DeparturesPage() {
         operationalWindow: state.operationalWindow,
         departureDataGap: state.departureDataGap,
         settlementReadiness: state.settlementReadiness,
+        excludeClosed: state.excludeClosed,
         page: state.page,
         pageSize: state.pageSize,
       }),
@@ -247,7 +257,12 @@ export function DeparturesPage() {
         }
       />
 
-      {state.operationalWindow || state.departureDataGap || state.settlementReadiness ? (
+      {state.operationalWindow
+        || state.departureDataGap
+        || state.settlementReadiness
+        || state.excludeClosed
+        || startDateFrom
+        || startDateTo ? (
         <Alert
           type="info"
           showIcon
@@ -257,7 +272,9 @@ export function DeparturesPage() {
               ? '已筛选：可确认结清发团'
               : state.departureDataGap
                 ? '已筛选：近期资料待补充发团'
-                : '已按工作台范围筛选发团'
+                : startDateFrom || startDateTo
+                  ? `已筛选：出团日 ${startDateFrom ?? '…'} 至 ${startDateTo ?? '…'}`
+                  : '已按工作台范围筛选发团'
           }
           action={
             <Button
@@ -281,6 +298,7 @@ export function DeparturesPage() {
         departureProgressFilter={state.departureProgress}
         ownerUserIdFilter={state.ownerUserId}
         partnerIdFilter={state.partnerId}
+        startDateRange={state.startDateRange}
         ownerOptions={ownerOptions}
         partnerOptions={partnerOptions}
         onSearch={(value) => dispatch({ type: 'SET_KEYWORD', value })}

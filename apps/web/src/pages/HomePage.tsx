@@ -42,6 +42,7 @@ import {
   DEPARTURE_STATUS_LABELS,
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
+import { CoordinatorTrendModule } from './CoordinatorTrendModule'
 import { workbenchQueryOptions } from './workbench-query'
 
 const TEMPLATE_LABELS: Record<WorkbenchTemplate, string> = {
@@ -348,13 +349,15 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     const settlementModule = snapshot.modules.find(
       (module) => module.key === 'coordinator-settlement',
     )
+    const trendModule = snapshot.modules.find((module) => module.key === 'coordinator-trend')
     const readyMetric = coordinatorModule.metrics.find(
       (metric) => metric.key === 'settlement-ready',
     )
     const remainingModules = snapshot.modules.filter(
       (module) =>
         module.key !== coordinatorModule.key
-        && module.key !== settlementModule?.key,
+        && module.key !== settlementModule?.key
+        && module.key !== trendModule?.key,
     )
     return (
       <div className={styles.coordinatorContent}>
@@ -365,6 +368,7 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
             readyMetric={readyMetric}
           />
         ) : null}
+        {trendModule ? <CoordinatorTrendModule module={trendModule} /> : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
 import { CoordinatorSettlementWorkbenchService } from './coordinator-settlement-workbench.service'
+import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -121,6 +122,7 @@ export class WorkbenchService {
     private readonly prisma: PrismaService,
     private readonly coordinatorWorkbenchService: CoordinatorWorkbenchService,
     private readonly coordinatorSettlementWorkbenchService: CoordinatorSettlementWorkbenchService,
+    private readonly coordinatorTrendWorkbenchService: CoordinatorTrendWorkbenchService,
   ) {}
 
   async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
@@ -186,6 +188,15 @@ export class WorkbenchService {
       if (coordinatorSettlementIndex >= 0) {
         modules[coordinatorSettlementIndex] =
           this.coordinatorSettlementWorkbenchService.buildModule(settlementSnapshot)
+      }
+      const coordinatorTrendIndex = modules.findIndex(
+        (module) => module.key === 'coordinator-trend',
+      )
+      if (coordinatorTrendIndex >= 0) {
+        modules[coordinatorTrendIndex] = await this.coordinatorTrendWorkbenchService.buildModule(
+          organizationId,
+          asOf,
+        )
       }
     }
 

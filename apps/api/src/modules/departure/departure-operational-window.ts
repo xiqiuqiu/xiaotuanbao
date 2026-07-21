@@ -10,20 +10,33 @@ export interface DepartureOperationalDates {
   today: string
   tomorrow: string
   nextSevenDaysEnd: string
+  /** 今天加 14 天（含），与「明天」组成未来 14 个自然日。 */
+  nextFourteenDaysEnd: string
 }
 
-function addDays(value: string, days: number): string {
+export function addCalendarDays(value: string, days: number): string {
   const date = parseDateOnly(value)
   date.setUTCDate(date.getUTCDate() + days)
   return formatDateOnly(date)
+}
+
+export function listInclusiveDateRange(from: string, to: string): string[] {
+  const dates: string[] = []
+  let current = from
+  while (current <= to) {
+    dates.push(current)
+    current = addCalendarDays(current, 1)
+  }
+  return dates
 }
 
 export function getDepartureOperationalDates(asOf: Date): DepartureOperationalDates {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(asOf)
   return {
     today,
-    tomorrow: addDays(today, 1),
-    nextSevenDaysEnd: addDays(today, 7),
+    tomorrow: addCalendarDays(today, 1),
+    nextSevenDaysEnd: addCalendarDays(today, 7),
+    nextFourteenDaysEnd: addCalendarDays(today, 14),
   }
 }
 

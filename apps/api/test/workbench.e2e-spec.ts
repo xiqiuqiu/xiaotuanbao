@@ -106,6 +106,7 @@ describe('Workbench contract (e2e)', () => {
     expect(response.body.data.modules[0].metrics).toHaveLength(4)
     expect(response.body.data.modules[1].metrics).toHaveLength(1)
     expect(response.body.data.modules[2].metrics).toHaveLength(0)
+    expect(response.body.data.modules[2].buckets).toHaveLength(14)
   })
 
   it('selects finance over coordinator without composing templates or exposing create action', async () => {
@@ -645,6 +646,228 @@ describe('Workbench contract (e2e)', () => {
       expect(pendingReceivables.body.data.items).toHaveLength(7)
     } finally {
       await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.sourceOrder.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.segmentResource.deleteMany({
+        where: { segment: { departure: { organizationId: organization.id } } },
+      })
+      await prisma.itinerarySegment.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.supplier.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
+
+  it('returns coordinator 14-day trend buckets with guest totals, zero days and matching drill-downs', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+    const addDays = (value: string, days: number) => {
+      const date = new Date(`${value}T00:00:00.000Z`)
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-trend-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台趋势测试旅行社-${Date.now()}`,
+        businessPrefix: `T${suffix}`,
+      },
+    })
+    const coordinatorRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.COORDINATOR },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '趋势计调测试员',
+        roles: { create: { roleId: coordinatorRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '趋势测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId: organization.id,
+        name: '趋势测试供应商',
+        categories: [ResourceKind.transport],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    let departureSequence = 0
+    const createDeparture = async (input: {
+      name: string
+      startOffset: number
+      endOffset: number
+      status?: DepartureStatus
+      guestCounts?: number[]
+      completeMaterials?: boolean
+    }) => {
+      departureSequence += 1
+      const guestCounts = input.guestCounts ?? (input.completeMaterials ? [1] : undefined)
+      return prisma.departure.create({
+        data: {
+          organizationId: organization.id,
+          departureNo: `WTT${String(departureSequence).padStart(10, '0')}`,
+          name: input.name,
+          routeName: '趋势测试路线',
+          startDate: asDate(addDays(today, input.startOffset)),
+          endDate: asDate(addDays(today, input.endOffset)),
+          dayCount: input.endOffset - input.startOffset + 1,
+          ownerUserId: user.id,
+          status: input.status ?? DepartureStatus.editing,
+          ...(guestCounts
+            ? {
+                sourceOrders: {
+                  create: guestCounts.map((guestCount, index) => ({
+                    partnerId: partner.id,
+                    displayName: `${input.name}客源${index + 1}`,
+                    guestCount,
+                    adultGuestCount: guestCount,
+                    childGuestCount: 0,
+                    adultUnitPriceCents: 10000,
+                    childUnitPriceCents: 0,
+                    grossReceivableCents: guestCount * 10000,
+                    discountType: SourceOrderDiscountType.none,
+                    discountCents: 0,
+                    netReceivableCents: guestCount * 10000,
+                    collectionMode: SourceOrderCollectionMode.partner_settled,
+                    partnerCollectedCents: guestCount * 10000,
+                    guestCollectCents: 0,
+                    ...(input.completeMaterials
+                      ? {
+                          guests: {
+                            create: Array.from({ length: guestCount }, (_, guestIndex) => ({
+                              name: `${input.name}客人${guestIndex + 1}`,
+                            })),
+                          },
+                        }
+                      : {}),
+                  })),
+                },
+              }
+            : {}),
+          ...(input.completeMaterials
+            ? {
+                itinerarySegments: {
+                  create: {
+                    name: `${input.name}行程段`,
+                    sortOrder: 1,
+                    resources: {
+                      create: {
+                        resourceKind: ResourceKind.transport,
+                        counterpartyType: CounterpartyType.supplier,
+                        supplierId: supplier.id,
+                        title: `${input.name}用车`,
+                        amountCents: 10000,
+                      },
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+      })
+    }
+
+    try {
+      await createDeparture({ name: '今日不入桶', startOffset: 0, endOffset: 1, guestCounts: [9] })
+      await createDeparture({
+        name: '明日团 A',
+        startOffset: 1,
+        endOffset: 2,
+        guestCounts: [3, 2],
+      })
+      await createDeparture({
+        name: '明日团 B 完整',
+        startOffset: 1,
+        endOffset: 2,
+        completeMaterials: true,
+      })
+      await createDeparture({
+        name: '明日已关闭',
+        startOffset: 1,
+        endOffset: 2,
+        status: DepartureStatus.closed,
+        guestCounts: [20],
+      })
+      await createDeparture({
+        name: '十四日后入桶',
+        startOffset: 14,
+        endOffset: 15,
+        guestCounts: [4],
+      })
+      await createDeparture({
+        name: '十五日后不入桶',
+        startOffset: 15,
+        endOffset: 16,
+        guestCounts: [8],
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      const trendModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'coordinator-trend',
+      )
+
+      expect(trendModule.buckets).toHaveLength(14)
+      expect(trendModule.buckets[0].date).toBe(addDays(today, 1))
+      expect(trendModule.buckets[13].date).toBe(addDays(today, 14))
+      expect(trendModule.buckets.every((bucket: { date: string }, index: number) =>
+        bucket.date === addDays(today, index + 1),
+      )).toBe(true)
+
+      const tomorrow = trendModule.buckets[0]
+      expect(tomorrow).toMatchObject({
+        date: addDays(today, 1),
+        departureCount: 2,
+        guestCount: 6,
+        dataGapDepartureCount: 1,
+        href: `/departure?startDateFrom=${addDays(today, 1)}&startDateTo=${addDays(today, 1)}&excludeClosed=1`,
+      })
+
+      const dayFourteen = trendModule.buckets[13]
+      expect(dayFourteen).toMatchObject({
+        date: addDays(today, 14),
+        departureCount: 1,
+        guestCount: 4,
+        dataGapDepartureCount: 1,
+      })
+
+      const emptyDay = trendModule.buckets[1]
+      expect(emptyDay).toMatchObject({
+        date: addDays(today, 2),
+        departureCount: 0,
+        guestCount: 0,
+        dataGapDepartureCount: 0,
+      })
+
+      for (const bucket of [tomorrow, dayFourteen, emptyDay]) {
+        const drillDown = await authRequest(app, cookie)
+          .get(bucket.href.replace('/departure', '/api/departures'))
+          .expect(200)
+        expect(drillDown.body.data.total).toBe(bucket.departureCount)
+      }
+    } finally {
+      await prisma.sourceOrderGuest.deleteMany({
+        where: { sourceOrder: { departure: { organizationId: organization.id } } },
+      })
       await prisma.sourceOrder.deleteMany({
         where: { departure: { organizationId: organization.id } },
       })
