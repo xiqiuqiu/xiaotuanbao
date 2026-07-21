@@ -98,7 +98,7 @@ jobs:
             -e "s|^POSTGRES_USER=.*|POSTGRES_USER=${POSTGRES_USER}|" \
             -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" \
             -e "s|^POSTGRES_DB=.*|POSTGRES_DB=${POSTGRES_DB}|" \
-            -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public|" \
+            -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public\&connection_limit=20\&pool_timeout=60|" \
             .env
 
       - name: Prisma generate

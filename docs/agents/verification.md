@@ -51,6 +51,7 @@ Do **not** add path filters that skip e2e for “docs-only” or “web-only” 
 
 - `postgres:16` service container
 - Job writes a throwaway `.env` from `.env.example` defaults + CI `DATABASE_URL`
+- CI `DATABASE_URL` sets `connection_limit=20&pool_timeout=60` so concurrent e2e (8-way) does not starve Prisma's default tiny pool on Actions runners
 - `prisma migrate deploy` + `prisma:db:seed` on a fresh DB each run
 
 ## Branch protection (P1)
