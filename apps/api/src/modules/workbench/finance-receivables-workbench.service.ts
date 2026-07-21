@@ -174,7 +174,6 @@ export class FinanceReceivablesWorkbenchService {
     return {
       key: 'finance-receivables',
       title: '应收跟进',
-      description: '优先跟进逾期应收，并关注未来 7 天到期节点；账龄按未结节点分布。',
       total: overdueRows.length + dueWithin7Rows.length,
       href: receivableFollowUpHref('follow_up'),
       metrics: [

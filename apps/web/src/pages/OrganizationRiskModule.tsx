@@ -72,10 +72,6 @@ export function OrganizationRiskModule({ module }: { module: WorkbenchModule }) 
         <Typography.Text type="secondary">共 {module.total ?? 0} 项</Typography.Text>
       }
     >
-      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-        {module.description}
-      </Typography.Paragraph>
-
       {summaryMetrics.length > 0 ? <RiskSummaryStrip metrics={summaryMetrics} /> : null}
 
       {categoryMetrics.length > 0 ? (

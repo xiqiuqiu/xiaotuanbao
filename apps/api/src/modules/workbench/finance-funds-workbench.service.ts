@@ -151,7 +151,6 @@ export class FinanceFundsWorkbenchService {
     return {
       key: 'finance-funds',
       title: '资金与账款',
-      description: '关注待付款与待核销流水，并跟进尚未生成的应收 / 应付。',
       total: pendingSettlementRows.length,
       href: pendingSettlementHref(),
       secondaryTotal: generationItems.length,

@@ -144,7 +144,9 @@ function FinanceReceivablesAgingCard({
 
   return (
     <Card
-      className={styles.trendCard}
+      className={[styles.trendCard, !hasAging ? styles.cardBodyCenteredEmpty : '']
+        .filter(Boolean)
+        .join(' ')}
       title="逾期应收账龄"
       aria-label="逾期应收账龄"
       extra={hasAging ? (
@@ -157,11 +159,6 @@ function FinanceReceivablesAgingCard({
         />
       ) : null}
     >
-      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-        {agingViewMode === 'share'
-          ? '固定分为 1–7 天、8–30 天与 30 天以上。条长表示占逾期总额比重，精确金额见各行。'
-          : '固定分为 1–7 天、8–30 天与 30 天以上。柱高表示未收金额；柱顶为金额与节点数。'}
-      </Typography.Paragraph>
       {subscription}
       {!hasAging ? (
         <Empty
@@ -291,7 +288,10 @@ export function FinanceReceivablesModule({
 
   const followUpCard = showFollowUp ? (
     <Card
-      className={styles.recentDeparturesCard}
+      className={[
+        styles.recentDeparturesCard,
+        items.length === 0 ? styles.cardBodyCenteredEmpty : '',
+      ].filter(Boolean).join(' ')}
       title={module.title}
       extra={module.href ? (
         <Button type="link" onClick={() => void navigate({ to: module.href! })}>
@@ -299,9 +299,6 @@ export function FinanceReceivablesModule({
         </Button>
       ) : null}
     >
-      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-        {module.description}
-      </Typography.Paragraph>
       {items.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}

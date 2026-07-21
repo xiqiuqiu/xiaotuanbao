@@ -33,13 +33,11 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     {
       key: 'organization-scale',
       title: '业务规模与趋势',
-      description: '查看 Organization 的业务规模与发展趋势。',
       requiredPermissions: ['/departure'],
     },
     {
       key: 'organization-risk',
       title: '经营风险摘要',
-      description: '查看应收、资金与发团资料相关的可解释风险。',
       requiredPermissions: [
         '/finance/receivable',
         '/finance/payable',
@@ -52,13 +50,11 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     {
       key: 'finance-receivables',
       title: '应收跟进',
-      description: '查看应收节点与账龄分布。',
       requiredPermissions: ['/finance/receivable'],
     },
     {
       key: 'finance-funds',
       title: '资金与账款',
-      description: '查看应付、流水与账款生成事项。',
       requiredPermissions: ['/finance/payable', '/finance/transactions', '/departure'],
     },
   ],
@@ -66,19 +62,16 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     {
       key: 'coordinator-departures',
       title: '近期发团',
-      description: '查看近期发团与资料状态。',
       requiredPermissions: ['/departure'],
     },
     {
       key: 'coordinator-settlement',
       title: '结算衔接',
-      description: '查看可确认结清与待生成应收。',
       requiredPermissions: ['/departure'],
     },
     {
       key: 'coordinator-trend',
       title: '未来团量与客流',
-      description: '查看未来 14 天团量与客流。',
       requiredPermissions: ['/departure'],
     },
   ],

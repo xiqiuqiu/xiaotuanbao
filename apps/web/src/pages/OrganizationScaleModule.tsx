@@ -1,7 +1,7 @@
 import { RightOutlined } from '@ant-design/icons'
 import { DualAxes } from '@ant-design/plots'
 import { useNavigate } from '@tanstack/react-router'
-import { Card, Empty, Flex, Statistic, Tag, Tooltip, Typography, theme } from 'antd'
+import { Card, Empty, Flex, Statistic, Tag, Tooltip, theme } from 'antd'
 import type { WorkbenchModule, WorkbenchOrganizationScaleBucket } from '@/types/api'
 import styles from './HomePage.module.css'
 import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
@@ -23,7 +23,6 @@ function bucketAriaLabel(bucket: WorkbenchOrganizationScaleBucket): string {
     `发团数 ${bucket.departureCount}`,
     `客源人次 ${bucket.guestCount}`,
     bucket.inProgress ? '本月进行中' : '',
-    '按当前数据统计',
   ].filter(Boolean).join('，')
 }
 
@@ -34,7 +33,6 @@ function bucketTooltipTitle(bucket: WorkbenchOrganizationScaleBucket) {
       <div>发团数：{bucket.departureCount}</div>
       <div>客源人次：{bucket.guestCount}</div>
       {bucket.inProgress ? <div>本月进行中</div> : null}
-      <div>按当前数据统计</div>
     </div>
   )
 }
@@ -103,15 +101,8 @@ export function OrganizationScaleModule({
         title={module.title}
         aria-label={module.title}
       >
-        <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-          {module.description}
-        </Typography.Paragraph>
-
         {subscription}
         <div className={styles.trendBody}>
-          <Typography.Text type="secondary" className={styles.trendLegendNote}>
-            近 6 个自然月发团数与客源人次；本月标注「进行中」，悬停可查看完整说明。
-          </Typography.Text>
           {!hasDepartures ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -132,10 +123,6 @@ export function OrganizationScaleModule({
                   (datum: { guestCount?: number }) => ({
                     name: '客源人次',
                     value: datum.guestCount ?? 0,
-                  }),
-                  () => ({
-                    name: '说明',
-                    value: '按当前数据统计',
                   }),
                 ],
               }}

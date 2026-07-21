@@ -125,7 +125,6 @@ export class CoordinatorWorkbenchService {
     return {
       key: 'coordinator-departures',
       title: '近期发团',
-      description: '优先查看进行中、近期出发及资料待补充的发团。',
       total: rows.length,
       href: '/departure?operationalWindow=current_and_next_7_days',
       metrics: [

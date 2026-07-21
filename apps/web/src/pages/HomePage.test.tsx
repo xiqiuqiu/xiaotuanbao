@@ -30,7 +30,6 @@ const coordinatorSnapshot = {
     {
       key: 'coordinator-departures' as const,
       title: '近期发团',
-      description: '掌握近期发团与资料状态。',
       metrics: [
         { key: 'zero', label: '真实零值', value: 0 },
         { key: 'missing', label: '缺失值', value: null },
@@ -55,7 +54,6 @@ const coordinatorDeliverySnapshot = {
     {
       key: 'coordinator-departures' as const,
       title: '近期发团',
-      description: '优先查看进行中、近期出发及资料待补充的发团。',
       total: 9,
       href: '/departure?operationalWindow=current_and_next_7_days',
       metrics: [
@@ -135,7 +133,6 @@ const coordinatorDeliverySnapshot = {
     {
       key: 'coordinator-settlement' as const,
       title: '结算衔接',
-      description: '查看可确认结清与待生成应收。',
       metrics: [
         {
           key: 'pending-receivables',
@@ -165,7 +162,6 @@ const coordinatorDeliverySnapshot = {
     {
       key: 'coordinator-trend' as const,
       title: '未来团量与客流',
-      description: '查看未来 14 天每日出发团数、客人人数与资料待补充发团数。',
       metrics: [],
       items: [],
       buckets: [
@@ -216,7 +212,6 @@ const organizationAdminSnapshot = {
     {
       key: 'organization-scale' as const,
       title: '业务规模与趋势',
-      description: '查看 Organization 近 6 个月发团数与客源人次；本月按当前业务事实实时回算。',
       metrics: [
         {
           key: 'month-departures',
@@ -258,7 +253,6 @@ const organizationAdminSnapshot = {
     {
       key: 'organization-risk' as const,
       title: '经营风险摘要',
-      description: '按可解释规则列出高风险与需关注事项；不计算综合风险分。',
       total: 6,
       metrics: [
         {
@@ -504,7 +498,6 @@ const financeReceivablesSnapshot = {
     {
       key: 'finance-receivables' as const,
       title: '应收跟进',
-      description: '优先跟进逾期应收，并关注未来 7 天到期节点；账龄按未结节点分布。',
       total: 9,
       href: '/finance/receivable?receivableFollowUp=follow_up',
       metrics: [
@@ -590,7 +583,6 @@ const financeReceivablesSnapshot = {
     {
       key: 'finance-funds' as const,
       title: '资金与账款',
-      description: '关注待付款与待核销流水，并跟进尚未生成的应收 / 应付。',
       total: 3,
       href: '/finance/transactions?status=normal&pendingSettlement=1',
       secondaryTotal: 2,
@@ -871,7 +863,6 @@ describe('HomePage workbench lifecycle', () => {
 
     expect(await screen.findByLabelText('未来团量与客流')).toBeInTheDocument()
     expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
-    expect(screen.getByText(/柱顶红色数字表示「资料待补充」发团数/)).toBeInTheDocument()
     const tomorrow = screen.getByRole('button', {
       name: '出团日 2026-07-22，发团数 2，客人人数 15，资料待补充 1',
     })
@@ -910,13 +901,12 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('进行中')).toBeInTheDocument()
 
     const currentMonth = screen.getByRole('button', {
-      name: '月份 2026-07，发团数 2，客源人次 12，本月进行中，按当前数据统计',
+      name: '月份 2026-07，发团数 2，客源人次 12，本月进行中',
     })
     await user.hover(currentMonth)
     expect(await screen.findByText('月份：2026-07')).toBeInTheDocument()
     expect(screen.getByText('发团数：2')).toBeInTheDocument()
     expect(screen.getByText('客源人次：12')).toBeInTheDocument()
-    expect(screen.getByText('按当前数据统计')).toBeInTheDocument()
 
     await user.click(currentMonth)
     expect(navigate).toHaveBeenCalledWith({
@@ -942,7 +932,7 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.queryByTestId('workbench-trend-chart')).not.toBeInTheDocument()
     expect(screen.getByText('进行中')).toBeInTheDocument()
     const emptyMonth = screen.getByRole('button', {
-      name: '月份 2026-07，发团数 0，客源人次 0，本月进行中，按当前数据统计',
+      name: '月份 2026-07，发团数 0，客源人次 0，本月进行中',
     })
     await user.click(emptyMonth)
     expect(navigate).toHaveBeenCalledWith({

@@ -143,9 +143,6 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
           </Button>
         ) : null}
       >
-        <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-          {module.description}
-        </Typography.Paragraph>
         <Table<WorkbenchCoordinatorDepartureItem>
           rowKey="id"
           dataSource={items}
@@ -338,10 +335,6 @@ function GenericModuleGrid({
     <div className={styles.moduleGrid} data-template={template}>
       {modules.map((module) => (
         <Card key={module.key} title={module.title} className={styles.moduleCard}>
-          <Typography.Paragraph type="secondary">
-            {module.description}
-          </Typography.Paragraph>
-
           {module.metrics.length > 0 ? (
             <div className={styles.metricGrid}>
               {module.metrics.map((metric) => (

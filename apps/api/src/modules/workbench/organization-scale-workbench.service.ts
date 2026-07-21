@@ -69,7 +69,6 @@ export class OrganizationScaleWorkbenchService {
     return {
       key: 'organization-scale',
       title: '业务规模与趋势',
-      description: '查看 Organization 近 6 个月发团数与客源人次；本月按当前业务事实实时回算。',
       metrics: [
         {
           key: 'month-departures',

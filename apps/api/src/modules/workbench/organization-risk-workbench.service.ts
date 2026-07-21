@@ -445,7 +445,6 @@ export class OrganizationRiskWorkbenchService {
     return {
       key: 'organization-risk',
       title: '经营风险摘要',
-      description: '按可解释规则列出高风险与需关注事项；不计算综合风险分。',
       total: sorted.length,
       metrics: [
         {

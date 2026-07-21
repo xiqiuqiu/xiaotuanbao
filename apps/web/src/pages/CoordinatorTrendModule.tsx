@@ -1,6 +1,6 @@
 import { DualAxes } from '@ant-design/plots'
 import { useNavigate } from '@tanstack/react-router'
-import { Card, Empty, Flex, Tooltip, Typography, theme } from 'antd'
+import { Card, Empty, Flex, Tooltip, theme } from 'antd'
 import type { WorkbenchCoordinatorTrendBucket, WorkbenchModule } from '@/types/api'
 import styles from './HomePage.module.css'
 import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
@@ -71,10 +71,6 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
       title={module.title}
       aria-label={module.title}
     >
-      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-        {module.description}
-      </Typography.Paragraph>
-
       {subscription}
       {!hasDepartures ? (
         <Empty
@@ -83,9 +79,6 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
         />
       ) : (
         <div className={styles.trendBody}>
-          <Typography.Text type="secondary" className={styles.trendLegendNote}>
-            柱顶红色数字表示「资料待补充」发团数；也可在下方按日查看完整数值并进入列表。
-          </Typography.Text>
           <DualAxes
             height={280}
             autoFit

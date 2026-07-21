@@ -79,6 +79,20 @@
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   gap: 16px;
+  align-items: stretch;
+}
+
+.cardBodyCenteredEmpty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cardBodyCenteredEmpty :global(.ant-card-body) {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .adminMainGrid {
@@ -282,10 +296,6 @@
   min-width: 0;
 }
 
-.moduleDescription {
-  margin-bottom: 12px !important;
-}
-
 .trendCard {
   min-width: 0;
 }
@@ -293,10 +303,6 @@
 .trendBody {
   display: grid;
   gap: 12px;
-}
-
-.trendLegendNote {
-  display: block;
 }
 
 .trendDayStrip {

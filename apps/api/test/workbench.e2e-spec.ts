@@ -2101,7 +2101,7 @@ describe('Workbench contract (e2e)', () => {
       expect(JSON.stringify(riskModule.items)).not.toContain('已结束待生成账款发团')
       expect(JSON.stringify(riskModule.items)).not.toContain('账龄7天不入风险分级')
       expect(JSON.stringify(riskModule.items)).not.toMatch(/风险评分|综合评分|"score"\s*:/i)
-      expect(riskModule.description).toContain('不计算综合风险分')
+      expect(riskModule.description).toBeUndefined()
 
       const drillTargets = [
         {

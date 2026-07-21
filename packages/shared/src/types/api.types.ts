@@ -191,7 +191,7 @@ export interface WorkbenchOrganizationRiskItem extends WorkbenchItem {
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
-  description: string
+  description?: string
   metrics: WorkbenchMetric[]
   items: Array<
     | WorkbenchItem

@@ -77,7 +77,6 @@ export class CoordinatorTrendWorkbenchService {
     return {
       key: 'coordinator-trend',
       title: '未来团量与客流',
-      description: '查看未来 14 天每日出发团数、客人人数与资料待补充发团数。',
       metrics: [],
       items: [],
       buckets,

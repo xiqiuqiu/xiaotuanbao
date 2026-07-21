@@ -75,7 +75,6 @@ export class CoordinatorSettlementWorkbenchService {
     return {
       key: 'coordinator-settlement',
       title: '结算衔接',
-      description: '查看可确认结清与待生成应收。',
       metrics: [
         {
           key: 'pending-receivables',
