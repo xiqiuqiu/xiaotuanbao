@@ -22,11 +22,11 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { login } from '@/services/auth.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { env } from '@/config/env'
-import { resolvePostLoginPath } from '@/lib/auth/session'
+import { resolvePostLoginDestination } from '@/lib/auth/session'
 import { queryClient } from '@/lib/query/client'
 import styles from './LoginPage.module.css'
 
@@ -57,6 +57,7 @@ export function LoginPage() {
   const { message } = App.useApp()
   const { token } = theme.useToken()
   const navigate = useNavigate()
+  const search = useSearch({ from: '/login' })
   const setSession = useAuthStore((state) => state.setSession)
   const [form] = Form.useForm<{ username: string; password: string }>()
   const [rememberUsername, setRememberUsername] = useState(false)
@@ -77,7 +78,13 @@ export function LoginPage() {
       queryClient.invalidateQueries({ queryKey: ['employees'] })
       queryClient.invalidateQueries({ queryKey: ['organization'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
-      navigate({ to: resolvePostLoginPath(result.user) })
+      const destination = resolvePostLoginDestination(
+        result.user,
+        result.menuKeys,
+        result.actionKeys,
+        search.redirect,
+      )
+      navigate({ to: destination as '/' })
     },
   })
 

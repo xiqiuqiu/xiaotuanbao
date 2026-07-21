@@ -36,6 +36,59 @@ export interface LoginResult extends SessionPayload {}
 
 export interface MeResult extends SessionPayload {}
 
+export type WorkbenchTemplate = 'organization_admin' | 'finance' | 'coordinator'
+
+export type WorkbenchModuleKey =
+  | 'organization-scale'
+  | 'organization-risk'
+  | 'finance-receivables'
+  | 'finance-funds'
+  | 'coordinator-departures'
+  | 'coordinator-settlement'
+  | 'coordinator-trend'
+
+export interface WorkbenchMetric {
+  key: string
+  label: string
+  /** `0` 是真实零值；`null` 表示该值当前不可用。 */
+  value: number | null
+  suffix?: string
+}
+
+export interface WorkbenchItem {
+  id: string
+  title: string
+  description?: string
+}
+
+export interface WorkbenchModule {
+  key: WorkbenchModuleKey
+  title: string
+  description: string
+  metrics: WorkbenchMetric[]
+  items: WorkbenchItem[]
+}
+
+export interface WorkbenchAction {
+  key: 'create-departure'
+  label: '新建发团'
+  href: '/departure/new'
+  requiredPermission: 'departure:write'
+  emphasis: 'primary' | 'secondary'
+}
+
+export interface WorkbenchSnapshot {
+  template: WorkbenchTemplate
+  organization: {
+    id: string
+    name: string
+  }
+  /** 本次响应内所有模块共享的数据时间点。 */
+  asOf: string
+  modules: WorkbenchModule[]
+  actions: WorkbenchAction[]
+}
+
 export interface HealthStatus {
   status: string
   timestamp?: string

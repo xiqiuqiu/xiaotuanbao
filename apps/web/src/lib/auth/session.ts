@@ -1,15 +1,50 @@
 import { redirect } from '@tanstack/react-router'
+import { DEPARTURE_WRITE_ACTION_KEY } from '@xiaotuanbao/shared'
 import type { AuthUser } from '@/types/api'
 import { useAuthStore } from '@/app/store/auth.store'
 import { getMe } from '@/services/auth.service'
 import { isMenuPathAllowed } from '@/utils/menu-permission'
 
-export function resolvePostLoginPath(user: Pick<AuthUser, 'isPlatformAdmin'>): '/platform' | '/departure' {
-  return user.isPlatformAdmin ? '/platform' : '/departure'
+export function resolvePostLoginPath(user: Pick<AuthUser, 'isPlatformAdmin'>): '/platform' | '/' {
+  return user.isPlatformAdmin ? '/platform' : '/'
 }
 
-function assertMenuAccess(pathname: string, menuKeys: string[]) {
+export function resolvePostLoginDestination(
+  user: Pick<AuthUser, 'isPlatformAdmin'>,
+  menuKeys: string[],
+  actionKeys: string[],
+  requestedPath?: string,
+): string {
+  const defaultPath = resolvePostLoginPath(user)
+  if (
+    user.isPlatformAdmin ||
+    !requestedPath ||
+    !requestedPath.startsWith('/') ||
+    requestedPath.startsWith('//') ||
+    requestedPath.startsWith('/login')
+  ) {
+    return defaultPath
+  }
+
+  return isRouteAllowed(pathnameFromLocalUrl(requestedPath), menuKeys, actionKeys)
+    ? requestedPath
+    : defaultPath
+}
+
+function pathnameFromLocalUrl(url: string): string {
+  return url.split(/[?#]/, 1)[0] || '/'
+}
+
+function isRouteAllowed(pathname: string, menuKeys: string[], actionKeys: string[]): boolean {
   if (!isMenuPathAllowed(pathname, menuKeys)) {
+    return false
+  }
+
+  return pathname !== '/departure/new' || actionKeys.includes(DEPARTURE_WRITE_ACTION_KEY)
+}
+
+function assertRouteAccess(pathname: string, menuKeys: string[], actionKeys: string[]) {
+  if (!isRouteAllowed(pathname, menuKeys, actionKeys)) {
     throw redirect({ to: '/' })
   }
 }
@@ -35,17 +70,18 @@ async function restoreSessionIfNeeded() {
  * Reuses the in-memory session when present so route intent-preload / in-app
  * navigations do not spam `/auth/me` on every hover.
  */
-export async function ensureAuthenticatedSession(pathname: string) {
+export async function ensureAuthenticatedSession(requestedUrl: string) {
   const user = await restoreSessionIfNeeded()
   if (!user) {
-    throw redirect({ to: '/login', search: { redirect: pathname } })
+    throw redirect({ to: '/login', search: { redirect: requestedUrl } })
   }
 
   if (user.isPlatformAdmin) {
     throw redirect({ to: '/platform' })
   }
 
-  assertMenuAccess(pathname, useAuthStore.getState().menuKeys)
+  const { menuKeys, actionKeys } = useAuthStore.getState()
+  assertRouteAccess(pathnameFromLocalUrl(requestedUrl), menuKeys, actionKeys)
 }
 
 /** Ensure the SPA has an authenticated Platform Admin session for `/platform/*`. */
@@ -56,7 +92,7 @@ export async function ensurePlatformSession(pathname: string) {
   }
 
   if (!user.isPlatformAdmin) {
-    throw redirect({ to: '/departure' })
+    throw redirect({ to: '/' })
   }
 }
 
