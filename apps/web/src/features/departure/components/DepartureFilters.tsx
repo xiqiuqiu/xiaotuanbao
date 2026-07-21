@@ -1,4 +1,5 @@
 import { Button, Card, DatePicker, Input, Select, Space } from 'antd'
+import dayjs from 'dayjs'
 import { DepartureProgress, DepartureStatus, DepartureType } from '@xiaotuanbao/shared'
 import {
   DEPARTURE_PROGRESS_OPTIONS,
@@ -27,6 +28,7 @@ interface DepartureFiltersProps {
   departureProgressFilter?: DepartureProgress
   ownerUserIdFilter?: string
   partnerIdFilter?: string
+  startDateRange?: DateRangeStrings
   ownerOptions: Array<{ value: string; label: string }>
   partnerOptions: Array<{ value: string; label: string }>
   onSearch: (value: string) => void
@@ -47,6 +49,7 @@ export function DepartureFilters({
   departureProgressFilter,
   ownerUserIdFilter,
   partnerIdFilter,
+  startDateRange,
   ownerOptions,
   partnerOptions,
   onSearch,
@@ -122,6 +125,14 @@ export function DepartureFilters({
         <DatePicker.RangePicker
           allowClear
           placeholder={['出团日期起', '出团日期止']}
+          value={
+            startDateRange?.[0] || startDateRange?.[1]
+              ? [
+                  startDateRange[0] ? dayjs(startDateRange[0]) : null,
+                  startDateRange[1] ? dayjs(startDateRange[1]) : null,
+                ]
+              : null
+          }
           onChange={(values) =>
             onStartDateRangeChange(
               values

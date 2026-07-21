@@ -24,6 +24,7 @@ export interface ListDeparturesParams {
   operationalWindow?: 'in_progress' | 'next_7_days' | 'current_and_next_7_days'
   departureDataGap?: 'any'
   settlementReadiness?: 'ready'
+  excludeClosed?: '1'
   startDateFrom?: string
   startDateTo?: string
   page?: number

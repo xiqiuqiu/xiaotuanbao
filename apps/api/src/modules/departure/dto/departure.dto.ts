@@ -96,6 +96,11 @@ export class ListDeparturesQueryDto {
   @IsIn(['ready'])
   settlementReadiness?: 'ready'
 
+  /** 与工作台运营指标对齐：排除已关闭发团。值为 `1`。 */
+  @IsOptional()
+  @IsIn(['1'])
+  excludeClosed?: '1'
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

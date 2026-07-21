@@ -17,6 +17,10 @@ vi.mock('@/services/workbench.service', () => ({
   getWorkbench: vi.fn(),
 }))
 
+vi.mock('@ant-design/plots', () => ({
+  DualAxes: () => <div data-testid="coordinator-trend-chart" />,
+}))
+
 const coordinatorSnapshot = {
   template: 'coordinator' as const,
   organization: { id: 'org-1', name: '测试旅行社' },
@@ -160,11 +164,47 @@ const coordinatorDeliverySnapshot = {
     {
       key: 'coordinator-trend' as const,
       title: '未来团量与客流',
-      description: '查看未来 14 天团量与客流。',
+      description: '查看未来 14 天每日出发团数、客人人数与资料待补充发团数。',
       metrics: [],
       items: [],
+      buckets: [
+        {
+          date: '2026-07-22',
+          departureCount: 2,
+          guestCount: 15,
+          dataGapDepartureCount: 1,
+          href: '/departure?startDateFrom=2026-07-22&startDateTo=2026-07-22&excludeClosed=1',
+        },
+        {
+          date: '2026-07-23',
+          departureCount: 0,
+          guestCount: 0,
+          dataGapDepartureCount: 0,
+          href: '/departure?startDateFrom=2026-07-23&startDateTo=2026-07-23&excludeClosed=1',
+        },
+      ],
     },
   ],
+}
+
+const coordinatorTrendEmptySnapshot = {
+  ...coordinatorDeliverySnapshot,
+  modules: coordinatorDeliverySnapshot.modules.map((module) =>
+    module.key === 'coordinator-trend'
+      ? {
+          ...module,
+          buckets: [
+            {
+              date: '2026-07-22',
+              departureCount: 0,
+              guestCount: 0,
+              dataGapDepartureCount: 0,
+              href: '/departure?startDateFrom=2026-07-22&startDateTo=2026-07-22&excludeClosed=1',
+            },
+          ],
+        }
+      : module,
+  ),
 }
 
 function renderPage() {
@@ -311,6 +351,37 @@ describe('HomePage workbench lifecycle', () => {
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure/departure-1?tab=sourceOrders',
     })
+  })
+
+  it('renders coordinator trend tooltip semantics, date navigation and empty chart state', async () => {
+    vi.mocked(getWorkbench).mockResolvedValue(coordinatorDeliverySnapshot)
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByLabelText('未来团量与客流')).toBeInTheDocument()
+    expect(screen.getByTestId('coordinator-trend-chart')).toBeInTheDocument()
+    expect(screen.getByText(/柱顶红色数字表示「资料待补充」发团数/)).toBeInTheDocument()
+    const tomorrow = screen.getByRole('button', {
+      name: '出团日 2026-07-22，发团数 2，客人人数 15，资料待补充 1',
+    })
+    await user.hover(tomorrow)
+    expect(await screen.findByText('日期：2026-07-22')).toBeInTheDocument()
+    expect(screen.getByText('发团数：2')).toBeInTheDocument()
+    expect(screen.getByText('客人人数：15')).toBeInTheDocument()
+    expect(screen.getByText('资料待补充发团数：1')).toBeInTheDocument()
+
+    await user.click(tomorrow)
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure?startDateFrom=2026-07-22&startDateTo=2026-07-22&excludeClosed=1',
+    })
+
+    cleanup()
+    vi.mocked(getWorkbench).mockResolvedValue(coordinatorTrendEmptySnapshot)
+    renderPage()
+    expect(await screen.findByText(
+      '未来 14 天暂无发团，因此不绘制团量与客流趋势',
+    )).toBeInTheDocument()
+    expect(screen.queryByTestId('coordinator-trend-chart')).not.toBeInTheDocument()
   })
 
   it('does not render an action when the current session lacks its permission', async () => {

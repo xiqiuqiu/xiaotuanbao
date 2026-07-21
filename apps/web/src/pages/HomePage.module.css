@@ -148,6 +148,64 @@
   margin-bottom: 12px !important;
 }
 
+.trendCard {
+  min-width: 0;
+}
+
+.trendBody {
+  display: grid;
+  gap: 12px;
+}
+
+.trendLegendNote {
+  display: block;
+}
+
+.trendDayStrip {
+  width: 100%;
+}
+
+.trendDayButton {
+  display: flex;
+  min-width: 72px;
+  flex: 1 1 72px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  color: inherit;
+  text-align: left;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius);
+  background: var(--ant-color-bg-container);
+  cursor: pointer;
+}
+
+.trendDayButton:hover,
+.trendDayButton:focus-visible {
+  border-color: var(--ant-color-primary-border);
+  outline: 2px solid var(--ant-color-primary-border);
+  outline-offset: 2px;
+}
+
+.trendDayDate {
+  font-weight: 600;
+}
+
+.trendDayMeta {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.trendDayGap {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.trendDayGap[data-has-gap='true'] {
+  color: var(--ant-color-error);
+  font-weight: 600;
+}
+
 .departureLink {
   height: auto;
   padding: 0;

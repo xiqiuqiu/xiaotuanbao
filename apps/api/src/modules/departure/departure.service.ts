@@ -140,6 +140,10 @@ export class DepartureService {
       )
     }
 
+    if (query.excludeClosed === '1' && !query.status) {
+      andFilters.push({ status: { not: DepartureStatus.closed } })
+    }
+
     if (query.departureDataGap === 'any') {
       const dataGapsByDepartureId = await this.departureDataGapService.findByOrganization(
         organizationId,
