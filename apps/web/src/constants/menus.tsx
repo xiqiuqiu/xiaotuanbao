@@ -4,6 +4,7 @@ import {
   BankOutlined,
   DashboardOutlined,
   DollarOutlined,
+  ProductOutlined,
   SettingOutlined,
   TeamOutlined,
   UnorderedListOutlined,
@@ -18,6 +19,7 @@ function item(label: string, key: string, icon?: ReactNode, children?: MenuItem[
 export const mainMenuItems: MenuItem[] = [
   item('工作台', '/', <DashboardOutlined />),
   item('发团管理', '/departure', <UnorderedListOutlined />),
+  item('产品中心', '/product', <ProductOutlined />),
   item('合作伙伴', '/partner', <TeamOutlined />),
   item('供应商管理', '/supplier', <BankOutlined />),
   item('财务管理', 'finance', <DollarOutlined />, [
@@ -35,6 +37,7 @@ export const mainMenuItems: MenuItem[] = [
 export const routeTitles: Record<string, string> = {
   '/': '工作台',
   '/departure': '发团管理',
+  '/product': '产品中心',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',
   '/finance/transactions': '收支流水',

@@ -1,6 +1,7 @@
 import {
   DEPARTURE_WRITE_ACTION_KEY,
   PARTNER_WRITE_ACTION_KEY,
+  PRODUCT_WRITE_ACTION_KEY,
   SUPPLIER_WRITE_ACTION_KEY,
   type ActionKey,
 } from './action-keys'
@@ -47,6 +48,13 @@ export const CAPABILITIES = {
     label: '供应商目录维护',
     requiredKey: SUPPLIER_WRITE_ACTION_KEY,
     description: '供应商目录 create/update/archive/restore。往来账款操作走 financeMutate。',
+  },
+  productWrite: {
+    label: '产品目录维护',
+    requiredKey: PRODUCT_WRITE_ACTION_KEY,
+    description:
+      '产品 create/update/delete/下架/上架；规格默认价；班期 create/update（含价格快照）。' +
+      '财务无此键，产品中心只读。',
   },
   financeMutate: {
     label: '财务账款操作',

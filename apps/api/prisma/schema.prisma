@@ -29,6 +29,28 @@ enum DirectoryProfileStatus {
   @@map("directory_profile_status")
 }
 
+enum ProductType {
+  group_tour
+
+  @@map("product_type")
+}
+
+enum ProductStatus {
+  draft
+  on_sale
+  off_shelf
+
+  @@map("product_status")
+}
+
+enum ProductScheduleStatus {
+  on_sale
+  closed
+  cancelled
+
+  @@map("product_schedule_status")
+}
+
 enum SettlementMethod {
   cash
   prepay
@@ -239,6 +261,7 @@ model Organization {
   users     User[]
   suppliers Supplier[]
   partners  Partner[]
+  products  Product[]
   departures Departure[]
   departureArchiveHistories DepartureArchiveHistory[]
   departureSettlementHistories DepartureSettlementHistory[]
@@ -403,6 +426,70 @@ model Partner {
 
   @@unique([organizationId, name])
   @@map("partners")
+}
+
+/// 散拼产品（Product Center）。第一期类型固定 group_tour；状态草稿/销售中/已下架。
+model Product {
+  id              String       @id @default(cuid())
+  organizationId  String       @map("organization_id")
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  name            String
+  productType     ProductType  @default(group_tour) @map("product_type")
+  status          ProductStatus @default(draft)
+  tags            String[]     @default([])
+  departureCity   String?      @map("departure_city")
+  arrivalCity     String?      @map("arrival_city")
+  dayCount        Int?         @map("day_count")
+  shortItinerary  String?      @map("short_itinerary")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  specs           ProductSpec[]
+  schedules       ProductSchedule[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, updatedAt])
+  @@map("products")
+}
+
+/// 价格规格：默认销售价档；新建班期时复制为快照（ADR-0025）。
+model ProductSpec {
+  id                     String   @id @default(cuid())
+  productId              String   @map("product_id")
+  product                Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name                   String   @default("标准")
+  adultPriceCents        Int?     @map("adult_price_cents")
+  childPriceCents        Int?     @map("child_price_cents")
+  singleSupplementCents  Int?     @map("single_supplement_cents")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  schedules              ProductSchedule[]
+
+  @@unique([productId, name])
+  @@map("product_specs")
+}
+
+/// 班期：日期规则 + 创建时价格快照；改规格默认价不回写（ADR-0025）。
+model ProductSchedule {
+  id                     String                @id @default(cuid())
+  productId              String                @map("product_id")
+  product                Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sourceSpecId           String?               @map("source_spec_id")
+  sourceSpec             ProductSpec?          @relation(fields: [sourceSpecId], references: [id], onDelete: SetNull)
+  description            String                @default("")
+  dateRuleText           String?               @map("date_rule_text")
+  dateRangeStart         DateTime?             @map("date_range_start") @db.Date
+  dateRangeEnd           DateTime?             @map("date_range_end") @db.Date
+  adultPriceCents        Int?                  @map("adult_price_cents")
+  childPriceCents        Int?                  @map("child_price_cents")
+  singleSupplementCents  Int?                  @map("single_supplement_cents")
+  inquireOnly            Boolean               @default(false) @map("inquire_only")
+  notes                  String?
+  status                 ProductScheduleStatus @default(on_sale)
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  @@index([productId, status])
+  @@map("product_schedules")
 }
 
 model RouteTemplate {

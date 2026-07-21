@@ -8,6 +8,7 @@ import {
 import { canEditDeparture } from '@/features/departure/utils/departure-permission'
 import { canEditPartner } from '@/features/partner/utils/partner-permission'
 import { canEditSupplier } from '@/features/supplier/utils/supplier-permission'
+import { canEditProduct } from '@/features/product/utils/product-permission'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 
 /**
@@ -16,21 +17,40 @@ import { canMutateFinance } from '@/features/finance/utils/finance-permission'
  * capability/key，这里会立即变红——这类 drift 正是"UI 能点、API 403"的根因之一。
  *
  * 期望真值表（true=显示入口且后端放行；false=隐藏且后端 403）：
- *              departure  partner  supplier  finance
- *  企业管理员      ✓         ✓        ✓         ✓
- *  财务            ✗         ✗        ✗         ✓
- *  计调            ✓         ✓        ✓         ✗
+ *              departure  partner  supplier  product  finance
+ *  企业管理员      ✓         ✓        ✓         ✓        ✓
+ *  财务            ✗         ✗        ✗         ✗        ✓
+ *  计调            ✓         ✓        ✓         ✓        ✗
  */
 const EXPECTED: Record<
   string,
-  { departure: boolean; partner: boolean; supplier: boolean; finance: boolean }
+  {
+    departure: boolean
+    partner: boolean
+    supplier: boolean
+    product: boolean
+    finance: boolean
+  }
 > = {
-  [PRESET_ROLE_NAMES.ORG_ADMIN]: { departure: true, partner: true, supplier: true, finance: true },
-  [PRESET_ROLE_NAMES.FINANCE]: { departure: false, partner: false, supplier: false, finance: true },
+  [PRESET_ROLE_NAMES.ORG_ADMIN]: {
+    departure: true,
+    partner: true,
+    supplier: true,
+    product: true,
+    finance: true,
+  },
+  [PRESET_ROLE_NAMES.FINANCE]: {
+    departure: false,
+    partner: false,
+    supplier: false,
+    product: false,
+    finance: true,
+  },
   [PRESET_ROLE_NAMES.COORDINATOR]: {
     departure: true,
     partner: true,
     supplier: true,
+    product: true,
     finance: false,
   },
 }
@@ -49,6 +69,9 @@ describe('前端权限 gating 契约（ADR-0023）', () => {
     })
     it(`${role}: 供应商维护 gating = ${expected.supplier}`, () => {
       expect(canEditSupplier(actionKeys)).toBe(expected.supplier)
+    })
+    it(`${role}: 产品目录维护 gating = ${expected.product}`, () => {
+      expect(canEditProduct(actionKeys)).toBe(expected.product)
     })
     it(`${role}: 财务账款操作 gating = ${expected.finance}`, () => {
       expect(canMutateFinance(menuKeys)).toBe(expected.finance)

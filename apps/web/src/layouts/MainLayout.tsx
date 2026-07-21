@@ -53,6 +53,11 @@ export function MainLayout({ children }: PropsWithChildren) {
           { title: <Link to="/supplier">供应商管理</Link> },
           { title: '详情' },
         ]
+      : pathname.startsWith('/product/')
+        ? [
+            { title: <Link to="/product">产品中心</Link> },
+            { title: '详情' },
+          ]
       : pathname !== '/'
         ? [{ title: routeTitles[pathname] ?? '页面' }]
         : []),

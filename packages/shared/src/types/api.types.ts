@@ -1349,3 +1349,63 @@ export interface DepartureOperationsSheetSnapshot {
   financeSummary: DepartureOperationsSheetFinanceSummary
   anomalies: DepartureOperationsSheetAnomaly[]
 }
+
+/** Product Spec（价格规格）默认销售价；第一期通常仅一个「标准」规格。 */
+export interface ProductSpecSummary {
+  id: string
+  name: string
+  adultPriceCents: number | null
+  childPriceCents: number | null
+  singleSupplementCents: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** Product Schedule（班期）含创建时价格快照（ADR-0025）。 */
+export interface ProductScheduleSummary {
+  id: string
+  productId: string
+  /** 快照来源规格；规格删除后可为 null。 */
+  sourceSpecId: string | null
+  description: string
+  dateRuleText: string | null
+  dateRangeStart: string | null
+  dateRangeEnd: string | null
+  adultPriceCents: number | null
+  childPriceCents: number | null
+  singleSupplementCents: number | null
+  inquireOnly: boolean
+  notes: string | null
+  /** ProductScheduleStatus */
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** 产品列表行。 */
+export interface ProductSummary {
+  id: string
+  name: string
+  /** ProductType — 第一期固定 group_tour */
+  productType: string
+  /** ProductStatus */
+  status: string
+  tags: string[]
+  departureCity: string | null
+  arrivalCity: string | null
+  dayCount: number | null
+  shortItinerary: string | null
+  /** 非已取消班期数（有效班期统计）。 */
+  effectiveScheduleCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** 产品详情：基础信息 + 规格 + 班期。 */
+export interface ProductDetail extends ProductSummary {
+  spec: ProductSpecSummary | null
+  schedules: ProductScheduleSummary[]
+}
+
+export type ProductListResult = PaginatedResult<ProductSummary>
+

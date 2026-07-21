@@ -1,6 +1,7 @@
 export const V1_MENU_KEYS = [
   '/',
   '/departure',
+  '/product',
   '/finance/receivable',
   '/finance/payable',
   '/finance/transactions',
@@ -17,6 +18,7 @@ export type MenuKey = (typeof V1_MENU_KEYS)[number]
 export const MENU_KEY_LABELS: Record<MenuKey, string> = {
   '/': '工作台',
   '/departure': '发团管理',
+  '/product': '产品中心',
   '/finance/receivable': '应收管理',
   '/finance/payable': '应付管理',
   '/finance/transactions': '收支流水',

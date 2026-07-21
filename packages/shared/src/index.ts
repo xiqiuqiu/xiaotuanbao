@@ -36,6 +36,11 @@ export type {
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
+  ProductSpecSummary,
+  ProductScheduleSummary,
+  ProductSummary,
+  ProductDetail,
+  ProductListResult,
   DepartureCompletionTags,
   DepartureSummary,
   DepartureListResult,
@@ -140,6 +145,7 @@ export {
   DEPARTURE_WRITE_ACTION_KEY,
   PARTNER_WRITE_ACTION_KEY,
   SUPPLIER_WRITE_ACTION_KEY,
+  PRODUCT_WRITE_ACTION_KEY,
   V1_ACTION_KEYS,
   ACTION_KEY_LABELS,
   type ActionKey,
@@ -163,6 +169,26 @@ export { planRolePermissionSync } from './constants/plan-role-permission-sync'
 export { UserStatus } from './enums/user-status.enum'
 export { OrganizationStatus } from './enums/organization-status.enum'
 export { DirectoryProfileStatus } from './enums/directory-profile-status.enum'
+export {
+  ProductStatus,
+  PRODUCT_STATUS_LABELS,
+} from './enums/product-status.enum'
+export {
+  ProductScheduleStatus,
+  PRODUCT_SCHEDULE_STATUS_LABELS,
+} from './enums/product-schedule-status.enum'
+export {
+  ProductType,
+  PRODUCT_TYPE_LABELS,
+} from './enums/product-type.enum'
+export {
+  snapshotSchedulePricesFromSpec,
+  isDisplayableProductSchedule,
+  isEffectiveProductSchedule,
+  canPublishProduct,
+  type ProductSpecDefaultPrices,
+  type ProductSchedulePriceSnapshot,
+} from './domain/product-schedule-price-snapshot'
 export { SettlementMethod } from './enums/settlement-method.enum'
 export { SettlementCycle } from './enums/settlement-cycle.enum'
 export { InvoiceAvailable } from './enums/invoice-available.enum'

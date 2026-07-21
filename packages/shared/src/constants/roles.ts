@@ -10,9 +10,15 @@ export const PRESET_ROLE_NAMES = {
 export type PresetRoleName = (typeof PRESET_ROLE_NAMES)[keyof typeof PRESET_ROLE_NAMES]
 
 /**
- * ADR-0023: 计调 sees 工作台/发团/合作伙伴/供应商 only; hides `/finance/*` and `/system/*`.
+ * ADR-0023: 计调 sees 工作台/发团/产品中心/合作伙伴/供应商 only; hides `/finance/*` and `/system/*`.
  */
-const COORDINATOR_MENU_KEYS: readonly MenuKey[] = ['/', '/departure', '/partner', '/supplier']
+const COORDINATOR_MENU_KEYS: readonly MenuKey[] = [
+  '/',
+  '/departure',
+  '/product',
+  '/partner',
+  '/supplier',
+]
 
 /**
  * ADR-0023: 财务 sees the same business menus plus the four `/finance/*` menus; hides `/system/*`.
@@ -39,6 +45,7 @@ const COORDINATOR_ACTION_KEYS: readonly ActionKey[] = [
   'departure:write',
   'partner:write',
   'supplier:write',
+  'product:write',
 ]
 
 const FINANCE_ACTION_KEYS: readonly ActionKey[] = []
