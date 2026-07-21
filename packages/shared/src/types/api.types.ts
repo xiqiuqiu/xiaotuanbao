@@ -53,6 +53,7 @@ export interface WorkbenchMetric {
   /** `0` 是真实零值；`null` 表示该值当前不可用。 */
   value: number | null
   suffix?: string
+  href?: string
 }
 
 export interface WorkbenchItem {
@@ -61,12 +62,36 @@ export interface WorkbenchItem {
   description?: string
 }
 
+export type DepartureDataGapCode =
+  | 'no_source_orders'
+  | 'no_itinerary_segments'
+  | 'no_segment_resources'
+  | 'incomplete_guest_roster'
+
+export interface DepartureDataGap {
+  code: DepartureDataGapCode
+  label: string
+}
+
+export interface WorkbenchCoordinatorDepartureItem extends WorkbenchItem {
+  kind: 'coordinator-departure'
+  href: string
+  ownerName: string
+  startDate: string
+  endDate: string
+  timeHint: string
+  status: string
+  dataGaps: DepartureDataGap[]
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
   description: string
   metrics: WorkbenchMetric[]
-  items: WorkbenchItem[]
+  items: Array<WorkbenchItem | WorkbenchCoordinatorDepartureItem>
+  total?: number
+  href?: string
 }
 
 export interface WorkbenchAction {

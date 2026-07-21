@@ -16,6 +16,7 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { PlatformLayout } from '@/layouts/PlatformLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { parseDepartureListSearch } from '@/features/departure/utils/departure-list-search'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -88,6 +89,7 @@ const indexRoute = createRoute({
 const departureRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure',
+  validateSearch: parseDepartureListSearch,
   component: lazyRouteComponent(
     () => import('@/features/departure/pages/DeparturesPage'),
     'DeparturesPage',

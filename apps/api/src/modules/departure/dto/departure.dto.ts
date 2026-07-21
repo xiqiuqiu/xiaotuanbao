@@ -13,6 +13,7 @@ import {
   DepartureProgress,
 } from '@xiaotuanbao/shared'
 import { DepartureStatus as PrismaDepartureStatus, DepartureType as PrismaDepartureType } from '@prisma/client'
+import type { DepartureOperationalWindow } from '../departure-operational-window'
 
 export class CreateDepartureDto {
   @IsString()
@@ -82,6 +83,14 @@ export class ListDeparturesQueryDto {
   @IsOptional()
   @IsString()
   partnerId?: string
+
+  @IsOptional()
+  @IsIn(['in_progress', 'next_7_days', 'current_and_next_7_days'])
+  operationalWindow?: DepartureOperationalWindow
+
+  @IsOptional()
+  @IsIn(['any'])
+  departureDataGap?: 'any'
 
   @IsOptional()
   @Type(() => Number)

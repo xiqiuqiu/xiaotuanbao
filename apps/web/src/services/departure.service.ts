@@ -21,6 +21,8 @@ export interface ListDeparturesParams {
   status?: DepartureStatus
   ownerUserId?: string
   partnerId?: string
+  operationalWindow?: 'in_progress' | 'next_7_days' | 'current_and_next_7_days'
+  departureDataGap?: 'any'
   startDateFrom?: string
   startDateTo?: string
   page?: number
