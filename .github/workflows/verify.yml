@@ -1,0 +1,107 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "11.15.1"
+  POSTGRES_USER: xiaotuanbao
+  POSTGRES_PASSWORD: ci-please-change-this-password
+  POSTGRES_DB: xiaotuanbao
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @xiaotuanbao/shared build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  api-e2e:
+    name: api-e2e
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U xiaotuanbao -d xiaotuanbao"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared
+        run: pnpm --filter @xiaotuanbao/shared build
+
+      - name: Write CI .env
+        run: |
+          cp .env.example .env
+          sed -i \
+            -e 's|^JWT_SECRET=.*|JWT_SECRET=ci-jwt-secret-not-for-production|' \
+            -e "s|^POSTGRES_USER=.*|POSTGRES_USER=${POSTGRES_USER}|" \
+            -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${POSTGRES_PASSWORD}|" \
+            -e "s|^POSTGRES_DB=.*|POSTGRES_DB=${POSTGRES_DB}|" \
+            -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public|" \
+            .env
+
+      - name: Prisma generate
+        run: pnpm --filter api prisma:generate
+
+      - name: Migrate
+        run: pnpm --filter api prisma:migrate:deploy
+
+      - name: Seed
+        run: pnpm --filter api prisma:db:seed
+
+      - name: API e2e (CI scope)
+        run: pnpm test:e2e:ci

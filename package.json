@@ -12,6 +12,8 @@
     "typecheck:api": "pnpm --filter api typecheck",
     "lint:web": "pnpm typecheck:web",
     "lint:api": "pnpm typecheck:api",
+    "test:e2e:ci": "pnpm --filter api test:e2e:ci",
+    "verify:ci": "pnpm typecheck && pnpm test:e2e:ci",
     "db:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres",
     "db:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres",
     "db:migrate": "pnpm --filter api prisma:migrate:dev",

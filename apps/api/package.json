@@ -11,6 +11,7 @@
     "lint": "pnpm typecheck",
     "test": "jest --config jest.config.js",
     "test:e2e": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand",
+    "test:e2e:ci": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand --testPathIgnorePatterns=seed-demo-business-loop",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:migrate:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
