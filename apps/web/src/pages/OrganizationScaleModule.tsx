@@ -139,7 +139,8 @@ export function OrganizationScaleModule({
                 ],
               }}
               onReady={onReady}
-              children={[
+            >
+              {[
                 {
                   data: chartRows,
                   type: 'interval',
@@ -158,7 +159,7 @@ export function OrganizationScaleModule({
                   axis: { y: { title: '客源人次', position: 'right' } },
                 },
               ]}
-            />
+            </DualAxes>
           )}
 
           <Flex className={styles.trendDayStrip} wrap gap={4}>

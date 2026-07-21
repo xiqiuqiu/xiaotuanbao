@@ -212,7 +212,8 @@ export function FinanceReceivablesModule({
               legend={false}
               tooltip={false}
               onReady={onReady}
-              children={[
+            >
+              {[
                 {
                   data: chartRows,
                   type: 'interval',
@@ -228,7 +229,7 @@ export function FinanceReceivablesModule({
                   axis: { y: { title: '节点数', position: 'right' } },
                 },
               ]}
-            />
+            </DualAxes>
           </div>
           <Flex gap={8} wrap className={styles.trendDayStrip}>
             {buckets.map((bucket) => (

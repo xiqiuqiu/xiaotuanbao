@@ -119,7 +119,8 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
               ],
             }}
             onReady={onReady}
-            children={[
+          >
+            {[
               {
                 data: chartRows,
                 type: 'interval',
@@ -148,7 +149,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 axis: { y: { title: '客人人数', position: 'right' } },
               },
             ]}
-          />
+          </DualAxes>
 
           <Flex className={styles.trendDayStrip} wrap gap={4}>
             {buckets.map((bucket) => (

@@ -10,7 +10,10 @@ import {
 } from './CancelVerificationModal'
 import { VerificationDetailDrawer } from './VerificationDetailDrawer'
 import { type CreateVerificationFormValues } from '../utils/verification-form'
-import { type VerificationDeepLinkSearch } from '../utils/verification-list-deep-link'
+import {
+  deepLinkKey,
+  type VerificationDeepLinkSearch,
+} from '../utils/verification-list-deep-link'
 import {
   createInitialVerificationListState,
   createVerificationListReducer,
@@ -21,7 +24,6 @@ import { useVerificationsWorkspaceQuery } from '../hooks/useVerificationsWorkspa
 import { buildVerificationColumns } from './verification-table-columns'
 import {
   CreateVerificationButton,
-  deepLinkKey,
   VerificationListContent,
   VerificationWorkspaceFilters,
 } from './verification-workspace-sections'

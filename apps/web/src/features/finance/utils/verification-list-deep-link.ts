@@ -37,6 +37,18 @@ export function resolveVerificationDeepLinkSearch(
   return {}
 }
 
+/** Stable key for the current verification deep-link search (empty when none). */
+export function deepLinkKey(search?: VerificationDeepLinkSearch): string {
+  const resolved = resolveVerificationDeepLinkSearch(search ?? {})
+  if (resolved.transactionNo) {
+    return `tx:${resolved.transactionNo}`
+  }
+  if (resolved.scheduleNo) {
+    return `sch:${resolved.scheduleNo}`
+  }
+  return ''
+}
+
 /** Apply deep-link search into top filters: fill number, clear date and other filters. */
 export function applyVerificationDeepLink(
   search: VerificationDeepLinkSearch,

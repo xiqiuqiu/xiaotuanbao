@@ -7,23 +7,9 @@ import { listSoftFetchingClassName } from '@/lib/query/list-query-ux'
 import { PageHeader } from '@/layouts/PageHeader'
 import { VerificationFilters } from './VerificationFilters'
 import {
-  resolveVerificationDeepLinkSearch,
-  type VerificationDeepLinkSearch,
-} from '../utils/verification-list-deep-link'
-import {
   type VerificationListAction,
   type VerificationListState,
 } from '../utils/verification-list-state'
-export function deepLinkKey(search?: VerificationDeepLinkSearch): string {
-  const resolved = resolveVerificationDeepLinkSearch(search ?? {})
-  if (resolved.transactionNo) {
-    return `tx:${resolved.transactionNo}`
-  }
-  if (resolved.scheduleNo) {
-    return `sch:${resolved.scheduleNo}`
-  }
-  return ''
-}
 
 function VerificationTable({
   loading,
