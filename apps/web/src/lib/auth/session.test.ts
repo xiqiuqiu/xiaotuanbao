@@ -5,6 +5,7 @@ import {
   ensureAnonymousSession,
   ensureAuthenticatedSession,
   ensurePlatformSession,
+  resolvePostLoginDestination,
   resolvePostLoginPath,
 } from './session'
 
@@ -100,12 +101,23 @@ describe('cookie-backed route session', () => {
     expect(redirect.options).toMatchObject({ to: '/' })
   })
 
+  it('blocks departure creation without departure:write', async () => {
+    useAuthStore.getState().setSession(user, ['/departure'], [])
+
+    const redirect = await captureRedirect(() =>
+      ensureAuthenticatedSession('/departure/new'),
+    )
+
+    expect(getMe).not.toHaveBeenCalled()
+    expect(redirect.options).toMatchObject({ to: '/' })
+  })
+
   it('redirects a login-page visit when an HttpOnly Cookie session already exists', async () => {
     vi.mocked(getMe).mockResolvedValue({ user, menuKeys: ['/departure'], actionKeys: [] })
 
     const redirect = await captureRedirect(ensureAnonymousSession)
 
-    expect(redirect.options).toMatchObject({ to: '/departure' })
+    expect(redirect.options).toMatchObject({ to: '/' })
     expect(useAuthStore.getState().isAuthenticated()).toBe(true)
   })
 
@@ -138,11 +150,42 @@ describe('cookie-backed route session', () => {
 
     const redirect = await captureRedirect(() => ensurePlatformSession('/platform'))
 
-    expect(redirect.options).toMatchObject({ to: '/departure' })
+    expect(redirect.options).toMatchObject({ to: '/' })
   })
 
   it('resolves post-login destination by platform identity', () => {
     expect(resolvePostLoginPath(platformAdmin)).toBe('/platform')
-    expect(resolvePostLoginPath(user)).toBe('/departure')
+    expect(resolvePostLoginPath(user)).toBe('/')
+  })
+
+  it('keeps an authorized local deep link after tenant login', () => {
+    expect(
+      resolvePostLoginDestination(user, ['/departure'], [], '/departure/departure-1'),
+    ).toBe('/departure/departure-1')
+    expect(
+      resolvePostLoginDestination(
+        user,
+        ['/departure'],
+        [],
+        '/departure/departure-1?tab=execution',
+      ),
+    ).toBe('/departure/departure-1?tab=execution')
+    expect(resolvePostLoginDestination(user, ['/departure'], [], '/finance/payable')).toBe('/')
+    expect(resolvePostLoginDestination(user, ['/departure'], [], '//evil.example')).toBe('/')
+    expect(
+      resolvePostLoginDestination(platformAdmin, [], [], '/departure/departure-1'),
+    ).toBe('/platform')
+  })
+
+  it('does not preserve the departure creation deep link without departure:write', () => {
+    expect(resolvePostLoginDestination(user, ['/departure'], [], '/departure/new')).toBe('/')
+    expect(
+      resolvePostLoginDestination(
+        user,
+        ['/departure'],
+        ['departure:write'],
+        '/departure/new?copyFrom=departure-1',
+      ),
+    ).toBe('/departure/new?copyFrom=departure-1')
   })
 })

@@ -25,6 +25,9 @@ const rootRoute = createRootRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: typeof search.redirect === 'string' ? search.redirect : undefined,
+  }),
   component: LoginPage,
   beforeLoad: async () => {
     await ensureAnonymousSession()
@@ -36,7 +39,7 @@ const appLayoutRoute = createRoute({
   id: 'app',
   component: AppLayout,
   beforeLoad: async ({ location }) => {
-    await ensureAuthenticatedSession(location.pathname)
+    await ensureAuthenticatedSession(location.href)
   },
 })
 

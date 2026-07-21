@@ -1,0 +1,169 @@
+import { ForbiddenException, Injectable } from '@nestjs/common'
+import {
+  DEPARTURE_WRITE_ACTION_KEY,
+  PRESET_ROLE_NAMES,
+  type MenuKey,
+  type PresetRoleName,
+  type WorkbenchAction,
+  type WorkbenchModule,
+  type WorkbenchSnapshot,
+  type WorkbenchTemplate,
+} from '@xiaotuanbao/shared'
+import { PrismaService } from '../../database/prisma/prisma.service'
+
+interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
+  requiredPermissions: readonly MenuKey[]
+}
+
+const TEMPLATE_PRIORITY: readonly [roleName: PresetRoleName, template: WorkbenchTemplate][] = [
+  [PRESET_ROLE_NAMES.ORG_ADMIN, 'organization_admin'],
+  [PRESET_ROLE_NAMES.FINANCE, 'finance'],
+  [PRESET_ROLE_NAMES.COORDINATOR, 'coordinator'],
+]
+
+const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]> = {
+  organization_admin: [
+    {
+      key: 'organization-scale',
+      title: '业务规模与趋势',
+      description: '查看 Organization 的业务规模与发展趋势。',
+      requiredPermissions: ['/departure'],
+    },
+    {
+      key: 'organization-risk',
+      title: '经营风险摘要',
+      description: '查看应收与资金相关的可解释风险。',
+      requiredPermissions: ['/finance/receivable', '/finance/transactions'],
+    },
+  ],
+  finance: [
+    {
+      key: 'finance-receivables',
+      title: '应收跟进',
+      description: '查看应收节点与账龄分布。',
+      requiredPermissions: ['/finance/receivable'],
+    },
+    {
+      key: 'finance-funds',
+      title: '资金与账款',
+      description: '查看应付、流水与账款生成事项。',
+      requiredPermissions: ['/finance/payable', '/finance/transactions', '/departure'],
+    },
+  ],
+  coordinator: [
+    {
+      key: 'coordinator-departures',
+      title: '近期发团',
+      description: '查看近期发团与资料状态。',
+      requiredPermissions: ['/departure'],
+    },
+    {
+      key: 'coordinator-settlement',
+      title: '结算衔接',
+      description: '查看可确认结清与待生成应收。',
+      requiredPermissions: ['/departure'],
+    },
+    {
+      key: 'coordinator-trend',
+      title: '未来团量与客流',
+      description: '查看未来 14 天团量与客流。',
+      requiredPermissions: ['/departure'],
+    },
+  ],
+}
+
+function selectTemplate(roleNames: ReadonlySet<string>): WorkbenchTemplate | null {
+  return TEMPLATE_PRIORITY.find(([roleName]) => roleNames.has(roleName))?.[1] ?? null
+}
+
+function buildModules(
+  template: WorkbenchTemplate,
+  permissionKeys: ReadonlySet<string>,
+): WorkbenchModule[] {
+  return MODULES_BY_TEMPLATE[template]
+    .filter((module) =>
+      module.requiredPermissions.every((permission) => permissionKeys.has(permission)),
+    )
+    .map(({ requiredPermissions: _requiredPermissions, ...module }) => ({
+      ...module,
+      metrics: [],
+      items: [],
+    }))
+}
+
+function buildActions(
+  template: WorkbenchTemplate,
+  permissionKeys: ReadonlySet<string>,
+): WorkbenchAction[] {
+  if (
+    template === 'finance' ||
+    !permissionKeys.has(DEPARTURE_WRITE_ACTION_KEY)
+  ) {
+    return []
+  }
+
+  return [
+    {
+      key: 'create-departure',
+      label: '新建发团',
+      href: '/departure/new',
+      requiredPermission: DEPARTURE_WRITE_ACTION_KEY,
+      emphasis: template === 'coordinator' ? 'primary' : 'secondary',
+    },
+  ]
+}
+
+@Injectable()
+export class WorkbenchService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        organizationId,
+        deletedAt: null,
+      },
+      select: {
+        isPlatformAdmin: true,
+        organization: { select: { id: true, name: true } },
+        roles: {
+          select: {
+            role: {
+              select: {
+                name: true,
+                permissions: {
+                  select: { permission: { select: { key: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!user || user.isPlatformAdmin) {
+      throw new ForbiddenException('无权访问 Organization 工作台')
+    }
+
+    const roleNames = new Set(user.roles.map(({ role }) => role.name))
+    const template = selectTemplate(roleNames)
+    if (!template) {
+      throw new ForbiddenException('当前 User 没有可用的工作台模板')
+    }
+
+    const permissionKeys = new Set(
+      user.roles.flatMap(({ role }) =>
+        role.permissions.map(({ permission }) => permission.key),
+      ),
+    )
+
+    return {
+      template,
+      organization: user.organization,
+      asOf: new Date().toISOString(),
+      modules: buildModules(template, permissionKeys),
+      actions: buildActions(template, permissionKeys),
+    }
+  }
+}

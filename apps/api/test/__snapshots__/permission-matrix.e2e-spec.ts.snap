@@ -562,6 +562,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
     "requiredKey": "/departure",
     "route": "GET /api/users/options",
   },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/",
+    "route": "GET /api/workbench",
+  },
 ]
 `;
 
@@ -673,6 +678,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "PATCH /api/users/:id [/system/users]",
     "POST /api/users/:id/disable [/system/users]",
     "GET /api/users/options [/departure]",
+    "GET /api/workbench [/]",
   ],
   "计调": [
     "POST /api/auth/login [—]",
@@ -751,6 +757,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/suppliers/:supplierId/payment-schedule-summary [/supplier]",
     "GET /api/suppliers/:supplierId/service-orders [/supplier]",
     "GET /api/users/options [/departure]",
+    "GET /api/workbench [/]",
   ],
   "财务": [
     "POST /api/auth/login [—]",
@@ -822,6 +829,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/suppliers/:supplierId/payment-schedule-summary [/supplier]",
     "GET /api/suppliers/:supplierId/service-orders [/supplier]",
     "GET /api/users/options [/departure]",
+    "GET /api/workbench [/]",
   ],
 }
 `;
