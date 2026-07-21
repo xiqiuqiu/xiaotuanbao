@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Card, Form, Modal, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -41,13 +41,14 @@ export function EmployeesPage() {
   })
 
   const listFilterKey = [search, statusFilter, roleFilter].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: employeesResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     refetch,
   } = useQuery({
@@ -63,6 +64,10 @@ export function EmployeesPage() {
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

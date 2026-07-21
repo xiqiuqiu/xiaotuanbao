@@ -1,7 +1,10 @@
+import { act, renderHook } from '@testing-library/react'
+import { keepPreviousData } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 import {
   resolveListTableLoading,
   shouldKeepPreviousListData,
+  useListPlaceholderData,
 } from './list-query-ux'
 
 describe('shouldKeepPreviousListData', () => {
@@ -15,6 +18,73 @@ describe('shouldKeepPreviousListData', () => {
 
   it('clears rows when filters change', () => {
     expect(shouldKeepPreviousListData('status=open', 'status=closed')).toBe(false)
+  })
+})
+
+describe('useListPlaceholderData', () => {
+  it('clears placeholder when filter changes before new data settles', () => {
+    const { result, rerender } = renderHook(
+      ({ filterKey }) => useListPlaceholderData(filterKey),
+      { initialProps: { filterKey: 'status=open' } },
+    )
+
+    expect(result.current.placeholderData).toBeUndefined()
+
+    act(() => {
+      result.current.commitListFilterKey(true, false)
+    })
+
+    rerender({ filterKey: 'status=open' })
+    expect(result.current.placeholderData).toBe(keepPreviousData)
+
+    rerender({ filterKey: 'status=closed' })
+    expect(result.current.placeholderData).toBeUndefined()
+
+    act(() => {
+      result.current.commitListFilterKey(false, false)
+    })
+    rerender({ filterKey: 'status=closed' })
+    expect(result.current.placeholderData).toBeUndefined()
+
+    act(() => {
+      result.current.commitListFilterKey(true, false)
+    })
+    rerender({ filterKey: 'status=closed' })
+    expect(result.current.placeholderData).toBe(keepPreviousData)
+  })
+
+  it('keeps placeholder for pagination after filter data has settled', () => {
+    const { result, rerender } = renderHook(
+      ({ filterKey }) => useListPlaceholderData(filterKey),
+      { initialProps: { filterKey: 'keyword=foo' } },
+    )
+
+    act(() => {
+      result.current.commitListFilterKey(true, false)
+    })
+
+    rerender({ filterKey: 'keyword=foo' })
+    expect(result.current.placeholderData).toBe(keepPreviousData)
+
+    act(() => {
+      result.current.commitListFilterKey(true, true)
+    })
+    rerender({ filterKey: 'keyword=foo' })
+    expect(result.current.placeholderData).toBe(keepPreviousData)
+  })
+
+  it('does not commit settled filter key while data is still placeholder', () => {
+    const { result, rerender } = renderHook(
+      ({ filterKey }) => useListPlaceholderData(filterKey),
+      { initialProps: { filterKey: 'status=open' } },
+    )
+
+    act(() => {
+      result.current.commitListFilterKey(true, true)
+    })
+
+    rerender({ filterKey: 'status=closed' })
+    expect(result.current.placeholderData).toBeUndefined()
   })
 })
 

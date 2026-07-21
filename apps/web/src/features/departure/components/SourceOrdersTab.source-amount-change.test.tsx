@@ -38,33 +38,40 @@ vi.mock('./SourceOrderDrawer', () => ({
     open,
     editing,
     onSubmit,
+    onClose,
   }: {
     open: boolean
     editing: SourceOrderSummary | null
     onSubmit: (payload: Record<string, unknown>) => void
+    onClose: () => void
   }) =>
     open && editing ? (
-      <button
-        type="button"
-        onClick={() =>
-          onSubmit({
-            partnerId: editing.partnerId,
-            adultGuestCount: editing.adultGuestCount,
-            childGuestCount: editing.childGuestCount,
-            adultUnitPriceCents: 30000,
-            childUnitPriceCents: editing.childUnitPriceCents,
-            discountType: editing.discountType,
-            discountCents: editing.discountCents,
-            discountNotes: editing.discountNotes,
-            collectionMode: editing.collectionMode,
-            partnerCollectedCents: editing.partnerCollectedCents,
-            settlementNotes: editing.settlementNotes,
-            notes: editing.notes,
-          })
-        }
-      >
-        模拟保存改价
-      </button>
+      <div>
+        <button
+          type="button"
+          onClick={() =>
+            onSubmit({
+              partnerId: editing.partnerId,
+              adultGuestCount: editing.adultGuestCount,
+              childGuestCount: editing.childGuestCount,
+              adultUnitPriceCents: 30000,
+              childUnitPriceCents: editing.childUnitPriceCents,
+              discountType: editing.discountType,
+              discountCents: editing.discountCents,
+              discountNotes: editing.discountNotes,
+              collectionMode: editing.collectionMode,
+              partnerCollectedCents: editing.partnerCollectedCents,
+              settlementNotes: editing.settlementNotes,
+              notes: editing.notes,
+            })
+          }
+        >
+          模拟保存改价
+        </button>
+        <button type="button" onClick={onClose}>
+          关闭抽屉
+        </button>
+      </div>
     ) : null,
 }))
 
@@ -165,7 +172,12 @@ describe('SourceOrdersTab 金额路径变更软警示', () => {
       await user.click(await screen.findByRole('button', { name: '编辑' }))
       await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
 
-      await waitFor(() => expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith('order-1'))
+      await waitFor(() =>
+        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+          'order-1',
+          expect.any(AbortSignal),
+        ),
+      )
       expect(updateSourceOrder).not.toHaveBeenCalled()
       expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
 
@@ -217,6 +229,50 @@ describe('SourceOrdersTab 金额路径变更软警示', () => {
       await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
 
       await waitFor(() => expect(confirmConfig).toBeDefined())
+      expect(updateSourceOrder).not.toHaveBeenCalled()
+    } finally {
+      confirmSpy.mockRestore()
+    }
+  })
+
+  it('discards stale impact when drawer closes before response', async () => {
+    const user = userEvent.setup()
+    listSourceOrders.mockResolvedValue({
+      items: [baseOrder()],
+      summary: {
+        orderCount: 1,
+        totalGuests: 1,
+        partnerCount: 1,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 50000,
+        totalGuestCollectCents: 50000,
+      },
+      total: 1,
+    })
+
+    let resolveImpact: (value: { affectedTransactionCount: number }) => void
+    const impactPromise = new Promise<{ affectedTransactionCount: number }>((resolve) => {
+      resolveImpact = resolve
+    })
+    getGuestCollectionChangeImpact.mockReturnValue(impactPromise)
+
+    const confirmSpy = vi.spyOn(Modal, 'confirm')
+
+    try {
+      renderTab()
+      await user.click(await screen.findByRole('button', { name: '编辑' }))
+      await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
+      await user.click(await screen.findByRole('button', { name: '关闭抽屉' }))
+
+      resolveImpact!({ affectedTransactionCount: 2 })
+
+      await waitFor(() =>
+        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+          'order-1',
+          expect.any(AbortSignal),
+        ),
+      )
+      expect(confirmSpy).not.toHaveBeenCalled()
       expect(updateSourceOrder).not.toHaveBeenCalled()
     } finally {
       confirmSpy.mockRestore()

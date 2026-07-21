@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { App, Button, Form, Table, Tag } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -32,13 +32,14 @@ export function PlatformOrganizationsPage() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  const placeholderData = useListPlaceholderData('')
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData('')
 
   const {
     data: result,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     refetch,
   } = useQuery({
@@ -47,6 +48,10 @@ export function PlatformOrganizationsPage() {
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

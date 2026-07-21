@@ -41,3 +41,5 @@ caddy/config/
 coverage/
 
 tmp/
+
+.worktrees/

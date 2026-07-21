@@ -52,9 +52,38 @@
 3. **性能**：019、020、022、023，用 Network/Profiler 验证请求数与重渲染。
 4. **边界一致性 / 结构**：024（双向验证后合入）、025（行为保持型平移，最后做）。
 
+## 2026-07-21 追加（基线 commit `9477cf7`）
+
+来源：2026-07-21 `improve-react` 全库审查。React Doctor **67/100**、14 条诊断（3 error / 11 warning）；热路径含工作台图表、列表 placeholder、流水表单。`no-children-prop`（DualAxes series API）已剔除为噪声。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 26 | [026 — 列表 filter placeholder 提交时机](026-fix-list-placeholder-filter-commit.md) | HIGH | DONE | 无；建议最先（多列表正确性） |
+| 27 | [027 — 工作台图表点击清理](027-cleanup-workbench-chart-click.md) | HIGH | DONE | 无；清除 3 条 error 诊断 |
+| 28 | [028 — key/事件重置流水表单](028-reset-transaction-form-via-key.md) | MEDIUM | DONE | 无；先于 032/035 |
+| 29 | [029 — 取消过期客源单影响查询](029-cancel-stale-source-order-impact.md) | MEDIUM | DONE | 无；先于 036 |
+| 30 | [030 — 核销节点与流水并行预取](030-prefetch-verification-schedules.md) | MEDIUM | DONE | 无 |
+| 31 | [031 — 发团列表 AbortSignal](031-abort-departure-list-requests.md) | MEDIUM | DONE | 无；可与 026 同批注意 DeparturesPage |
+| 32 | [032 — lastSuggestedYuan 改 ref](032-transaction-form-suggested-amount-ref.md) | MEDIUM | DONE | 建议 028 后或同 PR |
+| 33 | [033 — 建团路线模板键盘选择](033-keyboard-select-route-template.md) | MEDIUM | DONE | 无 |
+| 34 | [034 — 筛选控件 aria-label](034-filter-controls-aria-labels.md) | MEDIUM | DONE | 无 |
+| 35 | [035 — 拆分 TransactionFormDrawer](035-extract-transaction-form-drawer-sections.md) | MEDIUM | DONE | 028、032 |
+| 36 | [036 — 拆分 SourceOrdersTab](036-extract-source-orders-tab-sections.md) | MEDIUM | DONE | 029 |
+| 37 | [037 — 拆分 TransactionsWorkspace](037-extract-transactions-workspace-sections.md) | MEDIUM | DONE | 026 |
+| 38 | [038 — 删除未使用 source type labels](038-remove-unused-payment-schedule-source-labels.md) | LOW | DONE | 无；可随时做 |
+
+建议批次：
+1. **正确性**：026、027、028、029（两个 HIGH + 表单/竞态）。
+2. **性能**：030、031、032（Network / Profiler）。
+3. **无障碍**：033、034。
+4. **结构 / 清理**：035–037（行为稳定后拆）、038。
+
+执行记录（分支 `improve-react/2026-07-21`）：026–038 已按推荐顺序落地；scoped React Doctor **89/100**（基线 67）。026 的 `commitListFilterKey` 落在 `useEffect`（保留「仅非 placeholder 成功才 commit」语义，避免 `no-prop-callback-in-render`）。剩余 1 条 warning：`VerificationsWorkspace` `no-giant-component`（07-21 计划范围外）。
+
 ## 批次与验证门
 
-1. **安全与正确性**：001、002、004、005、006、007。每个计划先跑聚焦测试；批次结束跑 web/api typecheck 与认证/财务相关测试。
-2. **性能与语义**：003、008、009、012。用浏览器 Network 核对搜索请求数量，并完成键盘验证。
-3. **结构与清理**：010、011、013。只做行为保持型移动，React Doctor 目标诊断必须清除。
-4. **最终门**：全量 `pnpm -r run typecheck`、web/API 测试、web build、全量 React Doctor；再按 `code-review` 同时检查仓库标准与本计划符合性。
+1. **安全与正确性**：001、002、004、005、006、007；以及 026–029。每个计划先跑聚焦测试；批次结束跑 web typecheck 与相关 vitest。
+2. **性能与语义**：003、008、009、012；以及 030–032。用浏览器 Network / Profiler 核对请求与重渲染。
+3. **无障碍**：033、034。键盘与 Accessibility 树抽查。
+4. **结构与清理**：010、011、013；以及 035–038。只做行为保持型移动，React Doctor 目标诊断必须清除。
+5. **最终门**：全量 `pnpm -r run typecheck`、web 测试、web build、全量 React Doctor；再按 `code-review` 同时检查仓库标准与本计划符合性。

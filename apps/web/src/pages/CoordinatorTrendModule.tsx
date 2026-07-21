@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Card, Empty, Flex, Tooltip, Typography, theme } from 'antd'
 import type { WorkbenchCoordinatorTrendBucket, WorkbenchModule } from '@/types/api'
 import styles from './HomePage.module.css'
+import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
 
 function isCoordinatorTrendBucket(
   bucket: NonNullable<WorkbenchModule['buckets']>[number],
@@ -59,6 +60,11 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
     }
   }
 
+  const { onReady } = useWorkbenchChartElementClick(
+    (event) => (event as { data?: { data?: { date?: string } } })?.data?.data?.date,
+    navigateBucket,
+  )
+
   return (
     <Card
       className={styles.trendCard}
@@ -112,11 +118,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 }),
               ],
             }}
-            onReady={({ chart }) => {
-              chart.on('element:click', (event: { data?: { data?: { date?: string } } }) => {
-                navigateBucket(event.data?.data?.date)
-              })
-            }}
+            onReady={onReady}
             children={[
               {
                 data: chartRows,

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, Card, Form, Modal, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -50,13 +50,14 @@ export function SuppliersPage() {
   const canEdit = canEditSupplier(useAuthStore((s) => s.actionKeys))
 
   const listFilterKey = [search, categoryFilter, statusFilter, includeArchived].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: suppliersResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     refetch,
   } = useQuery({
@@ -81,6 +82,10 @@ export function SuppliersPage() {
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

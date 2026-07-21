@@ -186,6 +186,16 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                       className={styles.templateCard}
                       styles={{ body: { padding: 16 } }}
                       onClick={() => handleSelectTemplate(template)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          handleSelectTemplate(template)
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={selected}
+                      aria-label={`选择路线 ${template.name}`}
                       style={{
                         borderColor: selected ? token.colorPrimary : undefined,
                         background: selected ? token.colorPrimaryBg : undefined,
@@ -193,7 +203,12 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                     >
                       <div className={styles.templateCardHeader}>
                         <div className={styles.templateTitle}>
-                          <Checkbox checked={selected} aria-label={`选择路线 ${template.name}`} />
+                          <Checkbox
+                            checked={selected}
+                            aria-label={`选择路线 ${template.name}`}
+                            onChange={() => handleSelectTemplate(template)}
+                            onClick={(event) => event.stopPropagation()}
+                          />
                           <Typography.Text strong>{template.name}</Typography.Text>
                         </div>
                         <Button

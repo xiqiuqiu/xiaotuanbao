@@ -5,7 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CounterpartyType } from '@xiaotuanbao/shared'
 import { TransactionFormDrawer } from './TransactionFormDrawer'
-import type { TransactionFormValues } from '../utils/transaction-form'
+import {
+  createEmptyTransactionFormValues,
+  type TransactionFormValues,
+} from '../utils/transaction-form'
 
 vi.mock('@/services/finance.service', () => ({
   listFinanceDepartureOptions: vi.fn(async () => []),
@@ -49,6 +52,11 @@ describe('TransactionFormDrawer counterparty type select', () => {
         </ConfigProvider>
       </QueryClientProvider>,
     )
+
+    await act(async () => {
+      formRef!.resetFields()
+      formRef!.setFieldsValue(createEmptyTransactionFormValues())
+    })
 
     await waitFor(() => {
       expect(formRef).not.toBeNull()

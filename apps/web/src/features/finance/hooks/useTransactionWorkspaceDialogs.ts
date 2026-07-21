@@ -2,10 +2,14 @@ import { useCallback, useState } from 'react'
 import { Form } from 'antd'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import type { VoidTransactionFormValues } from '../components/VoidTransactionModal'
-import type { TransactionFormValues } from '../utils/transaction-form'
+import {
+  createEmptyTransactionFormValues,
+  transactionToFormValues,
+  type TransactionFormValues,
+} from '../utils/transaction-form'
 import type { CreateVerificationFormValues } from '../utils/verification-form'
 
-export function useTransactionWorkspaceDialogs() {
+export function useTransactionWorkspaceDialogs(lockedDepartureId?: string) {
   const [form] = Form.useForm<TransactionFormValues>()
   const [voidForm] = Form.useForm<VoidTransactionFormValues>()
   const [verifyForm] = Form.useForm<CreateVerificationFormValues>()
@@ -49,17 +53,28 @@ export function useTransactionWorkspaceDialogs() {
     voidForm.resetFields()
   }, [voidForm])
 
-  const openEdit = useCallback((transaction: FinanceTransactionSummary) => {
-    setDrawerMode('edit')
-    setEditingTransaction(() => transaction)
-    setDrawerOpen(true)
-  }, [])
+  const openEdit = useCallback(
+    (transaction: FinanceTransactionSummary) => {
+      setDrawerMode('edit')
+      setEditingTransaction(() => transaction)
+      form.resetFields()
+      form.setFieldsValue(transactionToFormValues(transaction))
+      setDrawerOpen(true)
+    },
+    [form],
+  )
 
   const openCreate = useCallback(() => {
     setDrawerMode('create')
     setEditingTransaction(null)
+    form.resetFields()
+    form.setFieldsValue(
+      lockedDepartureId
+        ? { ...createEmptyTransactionFormValues(), departureId: lockedDepartureId }
+        : createEmptyTransactionFormValues(),
+    )
     setDrawerOpen(true)
-  }, [])
+  }, [form, lockedDepartureId])
 
   const closeTransactionDrawer = useCallback(() => {
     setDrawerOpen(false)

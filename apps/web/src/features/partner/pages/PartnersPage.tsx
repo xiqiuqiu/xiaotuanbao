@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Button, Card, Form, Modal, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -107,13 +107,14 @@ export function PartnersPage() {
     state.statusFilter,
     state.includeArchived,
   ].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: partnersResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     refetch,
   } = useQuery({
@@ -140,6 +141,10 @@ export function PartnersPage() {
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

@@ -31,8 +31,11 @@ export interface ListDeparturesParams {
   pageSize?: number
 }
 
-export async function listDepartures(params: ListDeparturesParams): Promise<DepartureListResult> {
-  return request.get<DepartureListResult>('/departures', { params })
+export async function listDepartures(
+  params: ListDeparturesParams,
+  signal?: AbortSignal,
+): Promise<DepartureListResult> {
+  return request.get<DepartureListResult>('/departures', { params, signal })
 }
 
 export async function createDeparture(payload: CreateDepartureDto): Promise<DepartureSummary> {

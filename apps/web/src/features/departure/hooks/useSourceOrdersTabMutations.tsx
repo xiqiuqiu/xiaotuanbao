@@ -1,0 +1,234 @@
+import { Modal, Space, Typography, message } from 'antd'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, type MutableRefObject } from 'react'
+import {
+  didSourceAmountPathChange,
+  SourceOrderReceivableStatus,
+} from '@xiaotuanbao/shared'
+import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
+import { formatCents } from '../catalog'
+import {
+  createSourceOrder,
+  deleteSourceOrder,
+  generateReceivables,
+  generateReceivablesForDeparture,
+  getGuestCollectionChangeImpact,
+  updateSourceOrder,
+} from '@/services/source-order.service'
+import {
+  formatBatchFinanceGenerationConfirmContent,
+  formatBatchFinanceGenerationMessage,
+} from '../utils/batch-finance-generation-message'
+import {
+  formValuesToPayload,
+  resolvePathAmountsFromPayload,
+} from '../utils/source-order-form'
+import type { DrawerState } from '../components/source-orders-tab-state'
+
+interface UseSourceOrdersTabMutationsParams {
+  departure: DepartureDetail
+  drawer: DrawerState
+  onCloseDrawer: () => void
+}
+
+export function useSourceOrdersTabMutations({
+  departure,
+  drawer,
+  onCloseDrawer,
+}: UseSourceOrdersTabMutationsParams) {
+  const queryClient = useQueryClient()
+
+  const invalidateSourceOrders = () => {
+    void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+    void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
+  }
+
+  const invalidateFinance = () => {
+    void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
+    void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: ReturnType<typeof formValuesToPayload>) => {
+      if (drawer.editingOrder) {
+        return updateSourceOrder(drawer.editingOrder.id, payload)
+      }
+      return createSourceOrder(departure.id, payload)
+    },
+    onSuccess: () => {
+      message.success(drawer.editingOrder ? '客源单已更新' : '客源单已添加')
+      onCloseDrawer()
+      invalidateSourceOrders()
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteSourceOrder(id),
+    onSuccess: () => {
+      message.success('客源单已删除')
+      invalidateSourceOrders()
+    },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: (id: string) => generateReceivables(id),
+    onSuccess: (result) => {
+      message.success(
+        result.sourceAmountMismatch
+          ? '应收已生成，存在来源金额差异，请核对'
+          : '应收已生成',
+      )
+      invalidateSourceOrders()
+      invalidateFinance()
+    },
+  })
+
+  const batchGenerateMutation = useMutation({
+    mutationFn: () => generateReceivablesForDeparture(departure.id),
+    onSuccess: (result) => {
+      const text = formatBatchFinanceGenerationMessage(result, '应收')
+      if (result.failed > 0) {
+        message.warning(text)
+      } else if (result.succeeded > 0) {
+        message.success(text)
+      } else {
+        message.info(text)
+      }
+      invalidateSourceOrders()
+      invalidateFinance()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '批量生成应收失败')
+    },
+  })
+
+  return {
+    saveMutation,
+    deleteMutation,
+    generateMutation,
+    batchGenerateMutation,
+  }
+}
+
+interface UseSourceOrderSubmitParams {
+  editingOrder: SourceOrderSummary | null
+  saveMutation: ReturnType<typeof useSourceOrdersTabMutations>['saveMutation']
+  impactAbortRef: MutableRefObject<AbortController | null>
+  latestEditingOrderIdRef: MutableRefObject<string | undefined>
+}
+
+export function useSourceOrderSubmit({
+  editingOrder,
+  saveMutation,
+  impactAbortRef,
+  latestEditingOrderIdRef,
+}: UseSourceOrderSubmitParams) {
+  return useCallback(async (payload: ReturnType<typeof formValuesToPayload>) => {
+    if (!editingOrder) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    const nextPath = resolvePathAmountsFromPayload(payload)
+    const pathChanged = didSourceAmountPathChange(
+      {
+        guestCollectCents: editingOrder.guestCollectCents,
+        partnerCollectedCents: editingOrder.partnerCollectedCents,
+      },
+      nextPath,
+    )
+    if (!pathChanged) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    impactAbortRef.current?.abort()
+    const controller = new AbortController()
+    impactAbortRef.current = controller
+    const requestOrderId = editingOrder.id
+
+    let impact
+    try {
+      impact = await getGuestCollectionChangeImpact(requestOrderId, controller.signal)
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
+      throw error
+    }
+
+    if (latestEditingOrderIdRef.current !== requestOrderId) {
+      return
+    }
+
+    if (impact.affectedTransactionCount <= 0) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    Modal.confirm({
+      title: '关联流水金额可能受影响',
+      content: (
+        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+          <span>
+            我方代收 {formatCents(editingOrder.guestCollectCents)} →{' '}
+            {formatCents(nextPath.guestCollectCents)}
+            {editingOrder.partnerCollectedCents !== nextPath.partnerCollectedCents
+              ? `；客户已收 ${formatCents(editingOrder.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
+              : ''}
+          </span>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            本单有 {impact.affectedTransactionCount}{' '}
+            笔未核销游客代收流水创建于变更前，保存后将标记「客源金额已变更」。确认继续？
+          </Typography.Text>
+        </Space>
+      ),
+      okText: '仍要保存',
+      cancelText: '取消',
+      onOk: () => {
+        if (latestEditingOrderIdRef.current !== requestOrderId) {
+          return
+        }
+        return saveMutation.mutateAsync(payload)
+      },
+    })
+  }, [editingOrder, impactAbortRef, latestEditingOrderIdRef, saveMutation])
+}
+
+export function confirmBatchGenerateReceivables(
+  pendingReceivableCount: number,
+  batchGenerateMutation: ReturnType<typeof useSourceOrdersTabMutations>['batchGenerateMutation'],
+) {
+  if (pendingReceivableCount <= 0) {
+    return
+  }
+  Modal.confirm({
+    title: '批量生成应收',
+    content: (
+      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+        <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          收款方式为「客户已收 + 我方代收」的客源单会拆分为两条应收记录。
+        </Typography.Text>
+      </Space>
+    ),
+    okText: '生成',
+    cancelText: '取消',
+    onOk: () => batchGenerateMutation.mutateAsync(),
+  })
+}
+
+export function countPendingReceivables(
+  orders: SourceOrderSummary[] | undefined,
+): number {
+  return (orders ?? []).reduce((count, order) => {
+    if (order.receivableStatus !== SourceOrderReceivableStatus.NOT_GENERATED) {
+      return count
+    }
+    return (
+      count +
+      Number(order.partnerCollectedCents > 0) +
+      Number(order.guestCollectCents > 0)
+    )
+  }, 0)
+}

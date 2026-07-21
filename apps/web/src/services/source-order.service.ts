@@ -105,9 +105,11 @@ export async function updateSourceOrder(
 
 export async function getGuestCollectionChangeImpact(
   sourceOrderId: string,
+  signal?: AbortSignal,
 ): Promise<GuestCollectionChangeImpact> {
   return request.get<GuestCollectionChangeImpact>(
     `/source-orders/${sourceOrderId}/guest-collection-change-impact`,
+    { signal },
   )
 }
 

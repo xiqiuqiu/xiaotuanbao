@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { keepPreviousData } from '@tanstack/react-query'
 import styles from './list-query-ux.module.css'
 
@@ -44,12 +44,18 @@ export function resolveListTableLoading(args: {
  * Put every non-pagination list input into `filterKey` (keyword, status, dates, …).
  */
 export function useListPlaceholderData(filterKey: string) {
-  const previousFilterKeyRef = useRef<string | undefined>(undefined)
-  const keep = shouldKeepPreviousListData(previousFilterKeyRef.current, filterKey)
+  const settledFilterKeyRef = useRef<string | undefined>(undefined)
+  const keep = shouldKeepPreviousListData(settledFilterKeyRef.current, filterKey)
+  const placeholderData = keep ? keepPreviousData : undefined
 
-  useEffect(() => {
-    previousFilterKeyRef.current = filterKey
-  }, [filterKey])
+  const commitListFilterKey = useCallback(
+    (isSuccess: boolean, isPlaceholderData: boolean) => {
+      if (isSuccess && !isPlaceholderData) {
+        settledFilterKeyRef.current = filterKey
+      }
+    },
+    [filterKey],
+  )
 
-  return keep ? keepPreviousData : undefined
+  return { placeholderData, commitListFilterKey }
 }

@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useReducer,
   useState,
@@ -304,13 +305,14 @@ export function VerificationsWorkspace({
     const { page: _page, pageSize: _pageSize, ...filters } = listParams
     return JSON.stringify({ lockedDepartureId, ...filters })
   }, [listParams, lockedDepartureId])
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: verificationsResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     error,
     refetch,
@@ -333,6 +335,10 @@ export function VerificationsWorkspace({
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Card, Empty, Flex, Statistic, Tag, Tooltip, Typography, theme } from 'antd'
 import type { WorkbenchModule, WorkbenchOrganizationScaleBucket } from '@/types/api'
 import styles from './HomePage.module.css'
+import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
 
 function isOrganizationScaleBucket(
   bucket: NonNullable<WorkbenchModule['buckets']>[number],
@@ -67,6 +68,11 @@ export function OrganizationScaleModule({
       void navigate({ to: bucket.href })
     }
   }
+
+  const { onReady } = useWorkbenchChartElementClick(
+    (event) => (event as { data?: { data?: { month?: string } } })?.data?.data?.month,
+    navigateBucket,
+  )
 
   return (
     <div className={styles.scaleContent}>
@@ -132,11 +138,7 @@ export function OrganizationScaleModule({
                   }),
                 ],
               }}
-              onReady={({ chart }) => {
-                chart.on('element:click', (event: { data?: { data?: { month?: string } } }) => {
-                  navigateBucket(event.data?.data?.month)
-                })
-              }}
+              onReady={onReady}
               children={[
                 {
                   data: chartRows,

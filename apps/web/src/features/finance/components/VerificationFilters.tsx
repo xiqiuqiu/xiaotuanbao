@@ -56,6 +56,7 @@ export function VerificationFilters({
         <Space wrap>
           <DatePicker.RangePicker
             allowClear
+            aria-label="核销日期"
             placeholder={['核销日期起', '核销日期止']}
             value={
               dateRange
@@ -75,6 +76,7 @@ export function VerificationFilters({
           />
           <Select
             allowClear
+            aria-label="核销方向"
             placeholder="核销方向"
             style={{ width: 120 }}
             value={direction}
@@ -83,6 +85,7 @@ export function VerificationFilters({
           />
           <Select
             allowClear
+            aria-label="核销状态"
             placeholder="核销状态"
             style={{ width: 120 }}
             value={status}
@@ -91,6 +94,7 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
+            aria-label="流水号"
             placeholder="流水号"
             style={{ width: 180 }}
             value={transactionNo}
@@ -99,6 +103,7 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
+            aria-label="节点编号"
             placeholder="节点编号"
             style={{ width: 180 }}
             value={scheduleNo}
@@ -108,6 +113,7 @@ export function VerificationFilters({
           {scope === 'global' ? (
             <Input.Search
               allowClear
+              aria-label="发团号/名称关键字"
               placeholder="发团号/名称关键字"
               style={{ width: 200 }}
               value={departureKeyword}

@@ -176,13 +176,14 @@ export function usePaymentScheduleWorkspace({
     payableBalance,
     scheduleNo,
   ].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: schedulesResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     error,
     refetch,
@@ -286,6 +287,10 @@ export function usePaymentScheduleWorkspace({
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

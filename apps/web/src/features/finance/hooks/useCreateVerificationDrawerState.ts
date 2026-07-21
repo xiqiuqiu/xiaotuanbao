@@ -114,7 +114,7 @@ export function useCreateVerificationDrawerState({
         departureId: effectiveDepartureId,
         pageSize: 100,
       }),
-    enabled: open && Boolean(direction) && Boolean(selectedTransactionId),
+    enabled: open && Boolean(direction),
   })
 
   const candidateTransactions = useMemo(() => {

@@ -67,12 +67,14 @@ export function DepartureFilters({
       <Space wrap>
         <Input.Search
           allowClear
+          aria-label="搜索团号 / 团名"
           placeholder="搜索团号 / 团名"
           style={{ width: 240 }}
           onSearch={(value) => onSearch(value.trim())}
         />
         <Input
           allowClear
+          aria-label="路线名称"
           placeholder="路线名称"
           style={{ width: 160 }}
           value={routeNameFilter}
@@ -80,6 +82,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
+          aria-label="发团类型"
           placeholder="发团类型"
           style={{ width: 120 }}
           value={departureTypeFilter}
@@ -88,6 +91,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
+          aria-label="出团进度"
           placeholder="出团进度"
           style={{ width: 120 }}
           value={departureProgressFilter}
@@ -96,6 +100,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
+          aria-label="发团状态"
           placeholder="发团状态"
           style={{ width: 120 }}
           value={statusFilter}
@@ -104,6 +109,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
+          aria-label="负责人"
           placeholder="负责人"
           style={{ width: 140 }}
           value={ownerUserIdFilter}
@@ -114,6 +120,7 @@ export function DepartureFilters({
         />
         <Select
           allowClear
+          aria-label="发团客源"
           placeholder="发团客源"
           style={{ width: 160 }}
           value={partnerIdFilter}
@@ -124,6 +131,7 @@ export function DepartureFilters({
         />
         <DatePicker.RangePicker
           allowClear
+          aria-label="出团日期"
           placeholder={['出团日期起', '出团日期止']}
           value={
             startDateRange?.[0] || startDateRange?.[1]

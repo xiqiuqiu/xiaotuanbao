@@ -1,24 +1,20 @@
 import { useCallback, useMemo } from 'react'
-import { Alert, Button, Card, Table } from 'antd'
+import { Button } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
 import type { FinanceTransactionSummary, TransactionDirection } from '@xiaotuanbao/shared'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
-import { useDebouncedValue } from '@/hooks/useDebouncedValue'
-import {
-  listSoftFetchingClassName,
-  resolveListTableLoading,
-  useListPlaceholderData,
-} from '@/lib/query/list-query-ux'
-import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { PageHeader } from '@/layouts/PageHeader'
-import { listTransactions } from '@/services/finance.service'
 import { useTransactionListState } from '../hooks/useTransactionListState'
 import { useTransactionWorkspaceDialogs } from '../hooks/useTransactionWorkspaceDialogs'
 import { useTransactionWorkspaceMutations } from '../hooks/useTransactionWorkspaceMutations'
+import {
+  useTransactionsWorkspaceDebouncedFilters,
+  useTransactionsWorkspaceQuery,
+} from '../hooks/useTransactionsWorkspaceQuery'
 import { TransactionActionDialogs } from './TransactionActionDialogs'
 import { TransactionFilters } from './TransactionFilters'
+import { TransactionsWorkspaceTable } from './TransactionsWorkspaceTable'
 import { buildTransactionColumns } from './transaction-table-columns'
 
 export type TransactionsWorkspaceProps = {
@@ -57,7 +53,7 @@ export function TransactionsWorkspace({
     initialDirection,
     deepLinkSearch,
   })
-  const dialogs = useTransactionWorkspaceDialogs()
+  const dialogs = useTransactionWorkspaceDialogs(lockedDepartureId)
   const {
     dateRange,
     direction,
@@ -72,13 +68,24 @@ export function TransactionsWorkspace({
   } = listState
 
   const effectiveDepartureId = isDepartureScope ? lockedDepartureId : departureFilter
-  const debouncedPartnerKeyword = useDebouncedValue(partnerKeyword.trim())
-  const debouncedTransactionNo = useDebouncedValue(transactionNo.trim())
+  const { debouncedPartnerKeyword, debouncedTransactionNo } = useTransactionsWorkspaceDebouncedFilters(
+    partnerKeyword,
+    transactionNo,
+  )
 
-  const listFilterKey = [
+  const {
+    transactionsResult,
+    hardLoading,
+    softFetching,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useTransactionsWorkspaceQuery({
+    scope,
     lockedDepartureId,
-    dateRange?.[0],
-    dateRange?.[1],
+    listQueryKey,
+    dateRange,
     direction,
     debouncedPartnerKeyword,
     writeoffStatus,
@@ -86,58 +93,8 @@ export function TransactionsWorkspace({
     debouncedTransactionNo,
     effectiveDepartureId,
     statusFilter,
-  ].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
-
-  const {
-    data: transactionsResult,
-    isLoading,
-    isFetching,
-    isError,
-    isPlaceholderData,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: [
-      listQueryKey,
-      lockedDepartureId,
-      dateRange,
-      direction,
-      debouncedPartnerKeyword,
-      writeoffStatus,
-      pendingSettlement,
-      debouncedTransactionNo,
-      effectiveDepartureId,
-      statusFilter,
-      page,
-      pageSize,
-    ],
-    queryFn: ({ signal }) =>
-      listTransactions(
-        {
-          dateStart: dateRange?.[0],
-          dateEnd: dateRange?.[1],
-          direction,
-          partnerKeyword: debouncedPartnerKeyword || undefined,
-          writeoffStatus: pendingSettlement ? undefined : writeoffStatus,
-          pendingSettlement,
-          transactionNo: debouncedTransactionNo || undefined,
-          departureId: effectiveDepartureId,
-          status: statusFilter,
-          page,
-          pageSize,
-        },
-        signal,
-      ),
-    enabled: !isDepartureScope || Boolean(lockedDepartureId),
-    placeholderData,
-    ...operationalQueryOptions(),
-  })
-
-  const { hardLoading, softFetching } = resolveListTableLoading({
-    isLoading,
-    isFetching,
-    isPlaceholderData,
+    page,
+    pageSize,
   })
 
   const { createMutation, updateMutation, voidMutation, verifyMutation } =
@@ -266,43 +223,23 @@ export function TransactionsWorkspace({
         }}
       />
 
-      <Card>
-        {isError && !transactionsResult ? (
-          <Alert
-            type="error"
-            showIcon
-            title="流水列表加载失败"
-            description={
-              error instanceof Error ? error.message : '请稍后重试，或检查网络后再次加载。'
-            }
-            action={
-              <Button size="small" onClick={() => void refetch()}>
-                重试
-              </Button>
-            }
-          />
-        ) : (
-          <Table
-            rowKey="id"
-            loading={hardLoading}
-            columns={columns}
-            dataSource={transactionsResult?.items ?? []}
-            scroll={{ x: 'max-content' }}
-            className={listSoftFetchingClassName(softFetching)}
-            pagination={{
-              current: page,
-              pageSize,
-              total: transactionsResult?.total ?? 0,
-              showSizeChanger: true,
-              showTotal: (count) => `共 ${count} 条`,
-              onChange: (nextPage, nextPageSize) => {
-                dispatchList({ type: 'setPage', value: nextPage })
-                dispatchList({ type: 'setPageSize', value: nextPageSize })
-              },
-            }}
-          />
-        )}
-      </Card>
+      <TransactionsWorkspaceTable
+        hardLoading={hardLoading}
+        softFetching={softFetching}
+        isError={isError}
+        error={error}
+        transactionsResult={transactionsResult}
+        columns={columns}
+        page={page}
+        pageSize={pageSize}
+        onRefetch={() => {
+          void refetch()
+        }}
+        onPageChange={(nextPage, nextPageSize) => {
+          dispatchList({ type: 'setPage', value: nextPage })
+          dispatchList({ type: 'setPageSize', value: nextPageSize })
+        }}
+      />
 
       <TransactionActionDialogs
         voidModalOpen={dialogs.voidModalOpen}

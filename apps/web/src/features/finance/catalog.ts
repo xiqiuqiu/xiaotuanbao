@@ -51,13 +51,6 @@ export const PAYABLE_SCHEDULE_FILTER_OPTIONS = [
   { value: 'voided', label: '已作废' },
 ] as const
 
-export const PAYMENT_SCHEDULE_SOURCE_TYPE_LABELS: Record<string, string> = {
-  [PaymentScheduleSourceType.MANUAL]: '手工录入',
-  [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客源单客户结算',
-  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '客源单游客代收',
-  [PaymentScheduleSourceType.SEGMENT_RESOURCE]: '行程段资源',
-}
-
 /** 应收「收款方式」列：由客源单来源类型派生；手工其他应收回落「其他」。 */
 export const RECEIVABLE_COLLECTION_METHOD_LABELS: Record<string, string> = {
   [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户补款',

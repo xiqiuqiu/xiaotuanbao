@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer } from 'react'
 import { Alert, Button, Card, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -159,13 +159,14 @@ export function DeparturesPage() {
     state.settlementReadiness,
     state.excludeClosed,
   ].join('\0')
-  const placeholderData = useListPlaceholderData(listFilterKey)
+  const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
     data: departuresResult,
     isLoading,
     isFetching,
     isError,
+    isSuccess,
     isPlaceholderData,
     refetch,
   } = useQuery({
@@ -187,27 +188,34 @@ export function DeparturesPage() {
       state.page,
       state.pageSize,
     ],
-    queryFn: () =>
-      listDepartures({
-        keyword: state.keyword || undefined,
-        routeName: debouncedRouteName,
-        departureType: state.departureType,
-        departureProgress: state.departureProgress,
-        status: state.statusFilter,
-        ownerUserId: state.ownerUserId,
-        partnerId: state.partnerId,
-        startDateFrom,
-        startDateTo,
-        operationalWindow: state.operationalWindow,
-        departureDataGap: state.departureDataGap,
-        settlementReadiness: state.settlementReadiness,
-        excludeClosed: state.excludeClosed,
-        page: state.page,
-        pageSize: state.pageSize,
-      }),
+    queryFn: ({ signal }) =>
+      listDepartures(
+        {
+          keyword: state.keyword || undefined,
+          routeName: debouncedRouteName,
+          departureType: state.departureType,
+          departureProgress: state.departureProgress,
+          status: state.statusFilter,
+          ownerUserId: state.ownerUserId,
+          partnerId: state.partnerId,
+          startDateFrom,
+          startDateTo,
+          operationalWindow: state.operationalWindow,
+          departureDataGap: state.departureDataGap,
+          settlementReadiness: state.settlementReadiness,
+          excludeClosed: state.excludeClosed,
+          page: state.page,
+          pageSize: state.pageSize,
+        },
+        signal,
+      ),
     placeholderData,
     ...operationalQueryOptions(),
   })
+
+  useEffect(() => {
+    commitListFilterKey(isSuccess, isPlaceholderData)
+  }, [commitListFilterKey, isSuccess, isPlaceholderData])
 
   const { hardLoading, softFetching } = resolveListTableLoading({
     isLoading,

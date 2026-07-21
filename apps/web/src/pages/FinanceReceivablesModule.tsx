@@ -9,6 +9,7 @@ import type {
 } from '@/types/api'
 import { formatCents } from '@/features/finance/catalog'
 import styles from './HomePage.module.css'
+import { useWorkbenchChartElementClick } from './use-workbench-chart-element-click'
 
 function isAgingBucket(
   bucket: NonNullable<WorkbenchModule['buckets']>[number],
@@ -133,6 +134,11 @@ export function FinanceReceivablesModule({
     }
   }
 
+  const { onReady } = useWorkbenchChartElementClick(
+    (event) => (event as { data?: { data?: { label?: string } } })?.data?.data?.label,
+    navigateBucket,
+  )
+
   const followUpCard = showFollowUp ? (
     <Card
       className={styles.recentDeparturesCard}
@@ -205,11 +211,7 @@ export function FinanceReceivablesModule({
               xField="label"
               legend={false}
               tooltip={false}
-              onReady={({ chart }) => {
-                chart.on('element:click', (event: { data?: { data?: { label?: string } } }) => {
-                  navigateBucket(event.data?.data?.label)
-                })
-              }}
+              onReady={onReady}
               children={[
                 {
                   data: chartRows,

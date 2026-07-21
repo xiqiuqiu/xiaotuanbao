@@ -69,6 +69,11 @@ export function TransactionActionDialogs({
       />
 
       <TransactionFormDrawer
+        key={
+          drawerMode === 'edit' && editingTransaction
+            ? `edit-${editingTransaction.id}`
+            : `create-${lockedDepartureId ?? 'global'}`
+        }
         open={drawerOpen}
         mode={drawerMode}
         editingTransaction={editingTransaction}

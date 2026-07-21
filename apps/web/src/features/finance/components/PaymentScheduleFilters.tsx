@@ -101,6 +101,7 @@ export function PaymentScheduleFilters({
         <Select
           allowClear
           showSearch
+          aria-label="筛选发团"
           placeholder="筛选发团"
           style={{ width: 280, maxWidth: '100%' }}
           value={departureId}
@@ -111,6 +112,7 @@ export function PaymentScheduleFilters({
       ) : null}
       <Input.Search
         allowClear
+        aria-label="搜索节点编号 / 标题"
         placeholder="搜索节点编号 / 标题"
         style={{ width: 220, maxWidth: '100%' }}
         value={keyword}
@@ -120,6 +122,7 @@ export function PaymentScheduleFilters({
       {showCounterpartyFilter ? (
         <Input.Search
           allowClear
+          aria-label="往来对象"
           placeholder="往来对象"
           style={{ width: 200, maxWidth: '100%' }}
           value={counterpartyKeyword}
@@ -129,6 +132,7 @@ export function PaymentScheduleFilters({
       ) : null}
       <Select
         allowClear
+        aria-label="节点状态"
         placeholder="节点状态"
         style={{ width: 140, maxWidth: '100%' }}
         value={statusFilter}
@@ -139,6 +143,7 @@ export function PaymentScheduleFilters({
         <DatePicker.RangePicker
           allowClear
           allowEmpty={[true, true]}
+          aria-label="出团日期"
           placeholder={['出团日期起', '出团日期止']}
           presets={buildDepartureDateRangePresets()}
           value={
@@ -162,6 +167,7 @@ export function PaymentScheduleFilters({
       {isReceivable ? (
         <DatePicker.RangePicker
           allowClear
+          aria-label="到期日"
           placeholder={['到期日起', '到期日止']}
           value={
             dueDateRange

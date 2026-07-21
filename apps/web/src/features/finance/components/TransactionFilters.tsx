@@ -78,6 +78,7 @@ export function TransactionFilters({
         <Space wrap>
           <DatePicker.RangePicker
             allowClear
+            aria-label="交易日期"
             placeholder={['交易日期起', '交易日期止']}
             value={
               dateRange
@@ -97,6 +98,7 @@ export function TransactionFilters({
           />
           <Select
             allowClear
+            aria-label="收支方向"
             placeholder="收支方向"
             style={{ width: 120 }}
             value={direction}
@@ -105,6 +107,7 @@ export function TransactionFilters({
           />
           <Input.Search
             allowClear
+            aria-label="往来对象"
             placeholder="往来对象"
             style={{ width: 160 }}
             value={partnerKeyword}
@@ -113,6 +116,7 @@ export function TransactionFilters({
           />
           <Select
             allowClear
+            aria-label="核销状态"
             placeholder="核销状态"
             style={{ width: 120 }}
             value={writeoffStatus}
@@ -121,6 +125,7 @@ export function TransactionFilters({
           />
           <Input.Search
             allowClear
+            aria-label="流水号"
             placeholder="流水号"
             style={{ width: 180 }}
             value={transactionNo}
@@ -131,6 +136,7 @@ export function TransactionFilters({
             <Select
               allowClear
               showSearch
+              aria-label="关联发团"
               placeholder="关联发团"
               style={{ width: 280 }}
               value={departureId}
@@ -141,6 +147,7 @@ export function TransactionFilters({
           ) : null}
           <Select
             allowClear
+            aria-label="流水状态"
             placeholder="流水状态"
             style={{ width: 120 }}
             value={status}

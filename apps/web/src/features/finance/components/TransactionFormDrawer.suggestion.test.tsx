@@ -11,7 +11,10 @@ import {
   TransactionDirection,
 } from '@xiaotuanbao/shared'
 import { TransactionFormDrawer } from './TransactionFormDrawer'
-import type { TransactionFormValues } from '../utils/transaction-form'
+import {
+  createEmptyTransactionFormValues,
+  type TransactionFormValues,
+} from '../utils/transaction-form'
 import {
   listDepartureReceivables,
   listFinanceDepartureOptions,
@@ -69,6 +72,11 @@ function renderDrawer() {
       </ConfigProvider>
     </QueryClientProvider>,
   )
+
+  act(() => {
+    formRef!.resetFields()
+    formRef!.setFieldsValue(createEmptyTransactionFormValues())
+  })
 
   return {
     getForm: () => formRef!,
