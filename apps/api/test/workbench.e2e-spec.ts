@@ -158,6 +158,15 @@ describe('Workbench contract (e2e)', () => {
       'organization-scale',
       'organization-risk',
     ])
+    expect(response.body.data.modules[0]).toMatchObject({
+      key: 'organization-scale',
+      metrics: [
+        { key: 'month-departures', label: '本月发团数' },
+        { key: 'month-guests', label: '本月客源人次' },
+      ],
+    })
+    expect(response.body.data.modules[0].buckets).toHaveLength(6)
+    expect(response.body.data.modules[0].buckets[5].inProgress).toBe(true)
     expect(response.body.data.actions).toEqual([
       {
         key: 'create-departure',
@@ -880,6 +889,229 @@ describe('Workbench contract (e2e)', () => {
       await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
       await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
       await prisma.supplier.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
+
+  it('returns organization-admin month scale metrics with closed departures, guest totals and matching drill-downs', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+    const addDays = (value: string, days: number) => {
+      const date = new Date(`${value}T00:00:00.000Z`)
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+    const monthKey = (value: string) => value.slice(0, 7)
+    const monthStart = (value: string) => `${monthKey(value)}-01`
+    const monthEnd = (value: string) => {
+      const [year, month] = value.split('-').map(Number)
+      return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)
+    }
+    const shiftMonth = (value: string, offset: number) => {
+      const [year, month] = value.split('-').map(Number)
+      const cursor = new Date(Date.UTC(year, month - 1 + offset, 1))
+      return `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`
+    }
+    const daysBetween = (from: string, to: string) =>
+      Math.round((asDate(to).getTime() - asDate(from).getTime()) / 86_400_000)
+
+    const currentMonth = monthKey(today)
+    const previousMonth = shiftMonth(currentMonth, -1)
+    const sixMonthsAgo = shiftMonth(currentMonth, -5)
+    const sevenMonthsAgo = shiftMonth(currentMonth, -6)
+    const previousMonthLastDay = monthEnd(`${previousMonth}-01`)
+    const currentMonthFirstDay = monthStart(today)
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-scale-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台规模测试旅行社-${Date.now()}`,
+        businessPrefix: `S${suffix}`,
+      },
+    })
+    const adminRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.ORG_ADMIN },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '规模管理员测试员',
+        roles: { create: { roleId: adminRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '规模测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    let departureSequence = 0
+    const createDeparture = async (input: {
+      name: string
+      startDate: string
+      endDate: string
+      status?: DepartureStatus
+      guestCounts?: number[]
+    }) => {
+      departureSequence += 1
+      return prisma.departure.create({
+        data: {
+          organizationId: organization.id,
+          departureNo: `WTS${String(departureSequence).padStart(10, '0')}`,
+          name: input.name,
+          routeName: '规模测试路线',
+          startDate: asDate(input.startDate),
+          endDate: asDate(input.endDate),
+          dayCount: daysBetween(input.startDate, input.endDate) + 1,
+          ownerUserId: user.id,
+          status: input.status ?? DepartureStatus.editing,
+          ...(input.guestCounts
+            ? {
+                sourceOrders: {
+                  create: input.guestCounts.map((guestCount, index) => ({
+                    partnerId: partner.id,
+                    displayName: `${input.name}客源${index + 1}`,
+                    guestCount,
+                    adultGuestCount: guestCount,
+                    childGuestCount: 0,
+                    adultUnitPriceCents: 10000,
+                    childUnitPriceCents: 0,
+                    grossReceivableCents: guestCount * 10000,
+                    discountType: SourceOrderDiscountType.none,
+                    discountCents: 0,
+                    netReceivableCents: guestCount * 10000,
+                    collectionMode: SourceOrderCollectionMode.partner_settled,
+                    partnerCollectedCents: guestCount * 10000,
+                    guestCollectCents: 0,
+                  })),
+                },
+              }
+            : {}),
+        },
+      })
+    }
+
+    try {
+      await createDeparture({
+        name: '上月末边界',
+        startDate: previousMonthLastDay,
+        endDate: addDays(previousMonthLastDay, 1),
+        guestCounts: [4],
+      })
+      await createDeparture({
+        name: '本月初边界',
+        startDate: currentMonthFirstDay,
+        endDate: addDays(currentMonthFirstDay, 2),
+        guestCounts: [3, 2],
+      })
+      await createDeparture({
+        name: '本月已关闭',
+        startDate: today,
+        endDate: addDays(today, 1),
+        status: DepartureStatus.closed,
+        guestCounts: [7],
+      })
+      await createDeparture({
+        name: '六个月前入桶',
+        startDate: `${sixMonthsAgo}-15`,
+        endDate: addDays(`${sixMonthsAgo}-15`, 1),
+        guestCounts: [1],
+      })
+      await createDeparture({
+        name: '七个月前不入桶',
+        startDate: `${sevenMonthsAgo}-15`,
+        endDate: addDays(`${sevenMonthsAgo}-15`, 1),
+        guestCounts: [9],
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      const scaleModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'organization-scale',
+      )
+
+      expect(scaleModule.buckets).toHaveLength(6)
+      expect(scaleModule.buckets[0].month).toBe(sixMonthsAgo)
+      expect(scaleModule.buckets[5].month).toBe(currentMonth)
+      expect(scaleModule.buckets[5].inProgress).toBe(true)
+      expect(scaleModule.buckets.slice(0, 5).every(
+        (bucket: { inProgress: boolean }) => bucket.inProgress === false,
+      )).toBe(true)
+
+      const previousBucket = scaleModule.buckets.find(
+        (bucket: { month: string }) => bucket.month === previousMonth,
+      )
+      expect(previousBucket).toMatchObject({
+        month: previousMonth,
+        monthStart: monthStart(`${previousMonth}-01`),
+        monthEnd: previousMonthLastDay,
+        departureCount: 1,
+        guestCount: 4,
+        inProgress: false,
+        href: `/departure?startDateFrom=${monthStart(`${previousMonth}-01`)}&startDateTo=${previousMonthLastDay}`,
+      })
+
+      const currentBucket = scaleModule.buckets[5]
+      expect(currentBucket).toMatchObject({
+        month: currentMonth,
+        monthStart: currentMonthFirstDay,
+        monthEnd: monthEnd(today),
+        departureCount: 2,
+        guestCount: 12,
+        inProgress: true,
+        href: `/departure?startDateFrom=${currentMonthFirstDay}&startDateTo=${monthEnd(today)}`,
+      })
+
+      expect(scaleModule.metrics).toEqual([
+        {
+          key: 'month-departures',
+          label: '本月发团数',
+          value: 2,
+          suffix: '个发团',
+          href: currentBucket.href,
+        },
+        {
+          key: 'month-guests',
+          label: '本月客源人次',
+          value: 12,
+          suffix: '人次',
+          href: currentBucket.href,
+        },
+      ])
+      expect(JSON.stringify(scaleModule)).not.toMatch(/预测|环比|收入|支出|毛利/)
+
+      const oldestBucket = scaleModule.buckets[0]
+      expect(oldestBucket).toMatchObject({
+        month: sixMonthsAgo,
+        departureCount: 1,
+        guestCount: 1,
+      })
+
+      for (const bucket of [previousBucket, currentBucket, oldestBucket]) {
+        const drillDown = await authRequest(app, cookie)
+          .get(bucket.href.replace('/departure', '/api/departures'))
+          .expect(200)
+        expect(drillDown.body.data.total).toBe(bucket.departureCount)
+        const guestTotal = drillDown.body.data.items.reduce(
+          (sum: number, item: { totalGuests: number }) => sum + item.totalGuests,
+          0,
+        )
+        expect(guestTotal).toBe(bucket.guestCount)
+      }
+    } finally {
+      await prisma.sourceOrder.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
       await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
       await prisma.user.deleteMany({ where: { organizationId: organization.id } })
       await prisma.organization.delete({ where: { id: organization.id } })

@@ -47,6 +47,21 @@
   gap: 16px;
 }
 
+.scaleContent {
+  display: grid;
+  gap: 16px;
+}
+
+.scaleMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.scaleInProgressTag {
+  margin-inline-start: 6px;
+}
+
 .settlementGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -218,6 +233,7 @@
   .moduleGrid,
   .metricGrid,
   .coordinatorMetricGrid,
+  .scaleMetricGrid,
   .settlementGrid {
     grid-template-columns: 1fr;
   }

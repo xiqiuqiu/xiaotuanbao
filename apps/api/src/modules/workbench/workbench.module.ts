@@ -6,6 +6,7 @@ import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
 import { DepartureModule } from '../departure/departure.module'
 import { CoordinatorSettlementWorkbenchService } from './coordinator-settlement-workbench.service'
 import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.service'
+import { OrganizationScaleWorkbenchService } from './organization-scale-workbench.service'
 
 @Module({
   imports: [AuthModule, DepartureModule],
@@ -15,6 +16,7 @@ import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.
     CoordinatorWorkbenchService,
     CoordinatorSettlementWorkbenchService,
     CoordinatorTrendWorkbenchService,
+    OrganizationScaleWorkbenchService,
   ],
 })
 export class WorkbenchModule {}

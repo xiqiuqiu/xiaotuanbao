@@ -106,6 +106,19 @@ export interface WorkbenchCoordinatorTrendBucket {
   href: string
 }
 
+/** 企业管理员「业务规模与趋势」按自然月出团日分桶。 */
+export interface WorkbenchOrganizationScaleBucket {
+  /** `YYYY-MM` */
+  month: string
+  monthStart: string
+  monthEnd: string
+  departureCount: number
+  guestCount: number
+  /** 当前 Asia/Shanghai 自然月为 true，用于标注「本月进行中」。 */
+  inProgress: boolean
+  href: string
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
@@ -117,8 +130,8 @@ export interface WorkbenchModule {
     | WorkbenchCoordinatorSettlementReadyItem
     | WorkbenchCoordinatorReceivablePendingItem
   >
-  /** 图表分桶；当前由 `coordinator-trend` 使用，其它模块可省略。 */
-  buckets?: WorkbenchCoordinatorTrendBucket[]
+  /** 图表分桶；由 `coordinator-trend` / `organization-scale` 使用，其它模块可省略。 */
+  buckets?: Array<WorkbenchCoordinatorTrendBucket | WorkbenchOrganizationScaleBucket>
   total?: number
   href?: string
 }

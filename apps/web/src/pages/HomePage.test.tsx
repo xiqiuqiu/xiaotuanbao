@@ -18,7 +18,7 @@ vi.mock('@/services/workbench.service', () => ({
 }))
 
 vi.mock('@ant-design/plots', () => ({
-  DualAxes: () => <div data-testid="coordinator-trend-chart" />,
+  DualAxes: () => <div data-testid="workbench-trend-chart" />,
 }))
 
 const coordinatorSnapshot = {
@@ -207,6 +207,110 @@ const coordinatorTrendEmptySnapshot = {
   ),
 }
 
+const organizationAdminSnapshot = {
+  template: 'organization_admin' as const,
+  organization: { id: 'org-admin-1', name: '管理旅行社' },
+  asOf: '2026-07-21T02:03:04.000Z',
+  modules: [
+    {
+      key: 'organization-scale' as const,
+      title: '业务规模与趋势',
+      description: '查看 Organization 近 6 个月发团数与客源人次；本月按当前业务事实实时回算。',
+      metrics: [
+        {
+          key: 'month-departures',
+          label: '本月发团数',
+          value: 2,
+          suffix: '个发团',
+          href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+        },
+        {
+          key: 'month-guests',
+          label: '本月客源人次',
+          value: 12,
+          suffix: '人次',
+          href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+        },
+      ],
+      items: [],
+      buckets: [
+        {
+          month: '2026-06',
+          monthStart: '2026-06-01',
+          monthEnd: '2026-06-30',
+          departureCount: 1,
+          guestCount: 4,
+          inProgress: false,
+          href: '/departure?startDateFrom=2026-06-01&startDateTo=2026-06-30',
+        },
+        {
+          month: '2026-07',
+          monthStart: '2026-07-01',
+          monthEnd: '2026-07-31',
+          departureCount: 2,
+          guestCount: 12,
+          inProgress: true,
+          href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+        },
+      ],
+    },
+    {
+      key: 'organization-risk' as const,
+      title: '经营风险摘要',
+      description: '查看应收与资金相关的可解释风险。',
+      metrics: [],
+      items: [],
+    },
+  ],
+  actions: [
+    {
+      key: 'create-departure' as const,
+      label: '新建发团',
+      href: '/departure/new' as const,
+      requiredPermission: 'departure:write' as const,
+      emphasis: 'secondary' as const,
+    },
+  ],
+}
+
+const organizationAdminEmptySnapshot = {
+  ...organizationAdminSnapshot,
+  modules: organizationAdminSnapshot.modules.map((module) =>
+    module.key === 'organization-scale'
+      ? {
+          ...module,
+          metrics: [
+            {
+              key: 'month-departures',
+              label: '本月发团数',
+              value: 0,
+              suffix: '个发团',
+              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+            },
+            {
+              key: 'month-guests',
+              label: '本月客源人次',
+              value: 0,
+              suffix: '人次',
+              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+            },
+          ],
+          buckets: [
+            {
+              month: '2026-07',
+              monthStart: '2026-07-01',
+              monthEnd: '2026-07-31',
+              departureCount: 0,
+              guestCount: 0,
+              inProgress: true,
+              href: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+            },
+          ],
+        }
+      : module,
+  ),
+}
+
 function renderPage() {
   return renderPageWithClient(new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -359,7 +463,7 @@ describe('HomePage workbench lifecycle', () => {
     renderPage()
 
     expect(await screen.findByLabelText('未来团量与客流')).toBeInTheDocument()
-    expect(screen.getByTestId('coordinator-trend-chart')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
     expect(screen.getByText(/柱顶红色数字表示「资料待补充」发团数/)).toBeInTheDocument()
     const tomorrow = screen.getByRole('button', {
       name: '出团日 2026-07-22，发团数 2，客人人数 15，资料待补充 1',
@@ -381,7 +485,49 @@ describe('HomePage workbench lifecycle', () => {
     expect(await screen.findByText(
       '未来 14 天暂无发团，因此不绘制团量与客流趋势',
     )).toBeInTheDocument()
-    expect(screen.queryByTestId('coordinator-trend-chart')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-trend-chart')).not.toBeInTheDocument()
+  })
+
+  it('renders organization-admin scale metrics, in-progress marker, tooltip and month drill-down', async () => {
+    vi.mocked(getWorkbench).mockResolvedValue(organizationAdminSnapshot)
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('企业管理员工作台')).toBeInTheDocument()
+    expect(screen.getByText('本月发团数')).toBeInTheDocument()
+    expect(screen.getByText('本月客源人次')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.queryByText(/预测|环比|收入|支出|毛利/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('workbench-trend-chart')).toBeInTheDocument()
+    expect(screen.getByText('本月进行中')).toBeInTheDocument()
+
+    const currentMonth = screen.getByRole('button', {
+      name: '月份 2026-07，发团数 2，客源人次 12，本月进行中，按当前数据统计',
+    })
+    await user.hover(currentMonth)
+    expect(await screen.findByText('月份：2026-07')).toBeInTheDocument()
+    expect(screen.getByText('发团数：2')).toBeInTheDocument()
+    expect(screen.getByText('客源人次：12')).toBeInTheDocument()
+    expect(screen.getAllByText('按当前数据统计').length).toBeGreaterThan(0)
+
+    await user.click(currentMonth)
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+    })
+
+    fireEvent.click(screen.getByLabelText('本月发团数'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+    })
+
+    cleanup()
+    vi.mocked(getWorkbench).mockResolvedValue(organizationAdminEmptySnapshot)
+    renderPage()
+    expect(await screen.findByText(
+      '近 6 个月暂无发团，因此不绘制业务规模趋势',
+    )).toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-trend-chart')).not.toBeInTheDocument()
   })
 
   it('does not render an action when the current session lacks its permission', async () => {

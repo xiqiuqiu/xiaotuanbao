@@ -15,6 +15,7 @@ export type {
   WorkbenchCoordinatorSettlementReadyItem,
   WorkbenchCoordinatorReceivablePendingItem,
   WorkbenchCoordinatorTrendBucket,
+  WorkbenchOrganizationScaleBucket,
   WorkbenchModule,
   WorkbenchAction,
   WorkbenchSnapshot,

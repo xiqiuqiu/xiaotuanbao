@@ -13,6 +13,7 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
 import { CoordinatorSettlementWorkbenchService } from './coordinator-settlement-workbench.service'
 import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.service'
+import { OrganizationScaleWorkbenchService } from './organization-scale-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -123,6 +124,7 @@ export class WorkbenchService {
     private readonly coordinatorWorkbenchService: CoordinatorWorkbenchService,
     private readonly coordinatorSettlementWorkbenchService: CoordinatorSettlementWorkbenchService,
     private readonly coordinatorTrendWorkbenchService: CoordinatorTrendWorkbenchService,
+    private readonly organizationScaleWorkbenchService: OrganizationScaleWorkbenchService,
   ) {}
 
   async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
@@ -168,6 +170,17 @@ export class WorkbenchService {
 
     const asOf = new Date()
     const modules = buildModules(template, permissionKeys)
+    if (template === 'organization_admin') {
+      const organizationScaleIndex = modules.findIndex(
+        (module) => module.key === 'organization-scale',
+      )
+      if (organizationScaleIndex >= 0) {
+        modules[organizationScaleIndex] = await this.organizationScaleWorkbenchService.buildModule(
+          organizationId,
+          asOf,
+        )
+      }
+    }
     if (template === 'coordinator') {
       const settlementSnapshot =
         await this.coordinatorSettlementWorkbenchService.loadSnapshot(organizationId)

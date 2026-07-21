@@ -43,6 +43,7 @@ import {
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
 import { CoordinatorTrendModule } from './CoordinatorTrendModule'
+import { OrganizationScaleModule } from './OrganizationScaleModule'
 import { workbenchQueryOptions } from './workbench-query'
 
 const TEMPLATE_LABELS: Record<WorkbenchTemplate, string> = {
@@ -341,6 +342,21 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
       <Card>
         <Empty description="当前角色暂无可用模块，请联系企业管理员配置权限" />
       </Card>
+    )
+  }
+
+  if (snapshot.template === 'organization_admin') {
+    const scaleModule = snapshot.modules.find((module) => module.key === 'organization-scale')
+    const remainingModules = snapshot.modules.filter(
+      (module) => module.key !== scaleModule?.key,
+    )
+    return (
+      <div className={styles.scaleContent}>
+        {scaleModule ? <OrganizationScaleModule module={scaleModule} /> : null}
+        {remainingModules.length > 0 ? (
+          <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
+        ) : null}
+      </div>
     )
   }
 

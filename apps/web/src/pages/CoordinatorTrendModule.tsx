@@ -4,6 +4,12 @@ import { Card, Empty, Flex, Tooltip, Typography, theme } from 'antd'
 import type { WorkbenchCoordinatorTrendBucket, WorkbenchModule } from '@/types/api'
 import styles from './HomePage.module.css'
 
+function isCoordinatorTrendBucket(
+  bucket: NonNullable<WorkbenchModule['buckets']>[number],
+): bucket is WorkbenchCoordinatorTrendBucket {
+  return 'date' in bucket
+}
+
 function formatShortDate(date: string): string {
   return date.slice(5)
 }
@@ -31,7 +37,7 @@ function bucketTooltipTitle(bucket: WorkbenchCoordinatorTrendBucket) {
 export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) {
   const navigate = useNavigate()
   const { token } = theme.useToken()
-  const buckets = module.buckets ?? []
+  const buckets = (module.buckets ?? []).filter(isCoordinatorTrendBucket)
   const hasDepartures = buckets.some((bucket) => bucket.departureCount > 0)
   const bucketsByShortDate = new Map(
     buckets.map((bucket) => [formatShortDate(bucket.date), bucket]),

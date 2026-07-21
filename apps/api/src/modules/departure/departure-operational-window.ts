@@ -40,6 +40,28 @@ export function getDepartureOperationalDates(asOf: Date): DepartureOperationalDa
   }
 }
 
+export interface CalendarMonthBucket {
+  /** `YYYY-MM` */
+  month: string
+  start: string
+  end: string
+}
+
+/** 返回含 `asOf` 所在自然月在内的近 `count` 个 Asia/Shanghai 自然月（升序）。 */
+export function listRecentCalendarMonths(asOf: Date, count: number): CalendarMonthBucket[] {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(asOf)
+  const [year, month] = today.split('-').map(Number)
+  const months: CalendarMonthBucket[] = []
+  for (let offset = count - 1; offset >= 0; offset -= 1) {
+    const cursor = new Date(Date.UTC(year, month - 1 - offset, 1))
+    const monthKey = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`
+    const start = `${monthKey}-01`
+    const end = formatDateOnly(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0)))
+    months.push({ month: monthKey, start, end })
+  }
+  return months
+}
+
 export function buildDepartureOperationalWindowWhere(
   operationalWindow: DepartureOperationalWindow,
   dates: DepartureOperationalDates,
