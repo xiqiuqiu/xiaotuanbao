@@ -25,6 +25,7 @@ export type PendingReceivableSourceOrderRow = Prisma.SourceOrderGetPayload<{
         departureNo: true
         name: true
         startDate: true
+        status: true
       }
     }
   }
@@ -45,6 +46,7 @@ export class SourceOrderReceivableGapService {
             departureNo: true,
             name: true,
             startDate: true,
+            status: true,
           },
         },
       },

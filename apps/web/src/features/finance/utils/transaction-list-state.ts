@@ -12,6 +12,8 @@ export type TransactionListState = {
   direction?: TransactionDirection
   partnerKeyword: string
   writeoffStatus?: TransactionWriteoffStatus
+  /** 工作台待核销流水下钻：服务端 none∪partial。 */
+  pendingSettlement?: '1'
   transactionNo: string
   departureFilter?: string
   statusFilter?: 'normal' | 'voided'
@@ -44,6 +46,7 @@ export function createInitialTransactionListState(options: {
     direction: options.direction,
     partnerKeyword: '',
     writeoffStatus: undefined,
+    pendingSettlement: undefined,
     transactionNo: '',
     departureFilter: undefined,
     statusFilter: undefined,

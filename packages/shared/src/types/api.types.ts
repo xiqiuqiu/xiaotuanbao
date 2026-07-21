@@ -142,6 +142,26 @@ export interface WorkbenchFinanceReceivableAgingBucket {
   href: string
 }
 
+/** 财务「待核销流水」队列项。 */
+export interface WorkbenchFinancePendingSettlementItem extends WorkbenchItem {
+  kind: 'finance-pending-settlement'
+  href: string
+  direction: 'inflow' | 'outflow'
+  transactionDate: string
+  unallocatedAmountCents: number
+  counterpartyName: string | null
+  departureClosed: boolean
+}
+
+/** 财务「待生成账款」队列项。 */
+export interface WorkbenchFinanceAccountGenerationItem extends WorkbenchItem {
+  kind: 'finance-account-generation'
+  href: string
+  generationKind: 'receivable' | 'payable'
+  estimatedAmountCents: number
+  departureClosed: boolean
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
@@ -153,6 +173,8 @@ export interface WorkbenchModule {
     | WorkbenchCoordinatorSettlementReadyItem
     | WorkbenchCoordinatorReceivablePendingItem
     | WorkbenchFinanceReceivableItem
+    | WorkbenchFinancePendingSettlementItem
+    | WorkbenchFinanceAccountGenerationItem
   >
   /** 图表分桶；由趋势/规模/账龄模块使用，其它模块可省略。 */
   buckets?: Array<
@@ -162,6 +184,48 @@ export interface WorkbenchModule {
   >
   total?: number
   href?: string
+  /** 第二队列汇总（如待生成账款）；与 href/total 并列。 */
+  secondaryTotal?: number
+  secondaryHref?: string
+}
+
+export interface PendingPayableSegmentResourceItem {
+  id: string
+  title: string
+  counterpartyName: string | null
+  amountCents: number
+  departureId: string
+  departureNo: string
+  departureName: string
+  departureStartDate: string
+  departureClosed: boolean
+  href: string
+}
+
+export interface PendingPayableSegmentResourceListResult {
+  items: PendingPayableSegmentResourceItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AccountGenerationGapItem {
+  id: string
+  generationKind: 'receivable' | 'payable'
+  title: string
+  estimatedAmountCents: number
+  departureId: string
+  departureNo: string
+  departureName: string
+  departureClosed: boolean
+  href: string
+}
+
+export interface AccountGenerationGapListResult {
+  items: AccountGenerationGapItem[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface PendingReceivableSourceOrderItem {

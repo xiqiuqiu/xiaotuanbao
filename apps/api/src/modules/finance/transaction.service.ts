@@ -34,6 +34,10 @@ import type {
   VoidFinanceTransactionDto,
 } from './dto/transaction.dto'
 import { VerificationService } from './verification.service'
+import {
+  buildPendingSettlementBaseWhere,
+  isPendingSettlementWriteoff,
+} from './pending-settlement'
 
 @Injectable()
 export class TransactionService {
@@ -44,6 +48,27 @@ export class TransactionService {
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
+  /**
+   * 工作台与列表共用：正常流水且未核销 / 部分核销（剩余金额 > 0）。
+   */
+  async findPendingSettlementIds(organizationId: string): Promise<string[]> {
+    const candidates = await this.prisma.financeTransaction.findMany({
+      where: buildPendingSettlementBaseWhere(organizationId),
+      select: { id: true, amountCents: true },
+    })
+    if (candidates.length === 0) {
+      return []
+    }
+    const allocatedMap = await this.verificationService.batchGetAllocatedAmounts(
+      candidates.map((item) => item.id),
+    )
+    return candidates
+      .filter((item) =>
+        isPendingSettlementWriteoff(item.amountCents, allocatedMap.get(item.id) ?? 0),
+      )
+      .map((item) => item.id)
+  }
+
   async list(
     organizationId: string,
     query: ListFinanceTransactionsQueryDto,
@@ -53,7 +78,11 @@ export class TransactionService {
 
     const where = this.buildListWhere(organizationId, query)
 
-    if (query.writeoffStatus) {
+    if (query.pendingSettlement === '1') {
+      const pendingIds = await this.findPendingSettlementIds(organizationId)
+      where.voidedAt = null
+      where.id = { in: pendingIds }
+    } else if (query.writeoffStatus) {
       const candidates = await this.prisma.financeTransaction.findMany({
         where,
         select: { id: true, amountCents: true },

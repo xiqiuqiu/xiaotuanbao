@@ -43,7 +43,8 @@ import {
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
 import { CoordinatorTrendModule } from './CoordinatorTrendModule'
-import { FinanceReceivablesModule } from './FinanceReceivablesModule'
+import { FinanceMetricStrip, FinanceReceivablesModule } from './FinanceReceivablesModule'
+import { FinanceFundsModule } from './FinanceFundsModule'
 import { OrganizationScaleModule } from './OrganizationScaleModule'
 import { workbenchQueryOptions } from './workbench-query'
 
@@ -365,12 +366,43 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     const receivablesModule = snapshot.modules.find(
       (module) => module.key === 'finance-receivables',
     )
-    const remainingModules = snapshot.modules.filter(
-      (module) => module.key !== receivablesModule?.key,
+    const fundsModule = snapshot.modules.find(
+      (module) => module.key === 'finance-funds',
     )
+    const remainingModules = snapshot.modules.filter(
+      (module) =>
+        module.key !== receivablesModule?.key
+        && module.key !== fundsModule?.key,
+    )
+    const topMetrics = [
+      ...(receivablesModule?.metrics ?? []),
+      ...(fundsModule?.metrics ?? []),
+    ]
     return (
       <div className={styles.financeReceivablesContent}>
-        {receivablesModule ? <FinanceReceivablesModule module={receivablesModule} /> : null}
+        {topMetrics.length > 0 ? (
+          <FinanceMetricStrip
+            metrics={topMetrics}
+            columns={topMetrics.length >= 4 ? 4 : 2}
+          />
+        ) : null}
+        {receivablesModule || fundsModule ? (
+          <div className={styles.financeMainGrid}>
+            {receivablesModule ? (
+              <FinanceReceivablesModule
+                module={receivablesModule}
+                sections={['follow-up']}
+              />
+            ) : null}
+            {fundsModule ? <FinanceFundsModule module={fundsModule} /> : null}
+          </div>
+        ) : null}
+        {receivablesModule ? (
+          <FinanceReceivablesModule
+            module={receivablesModule}
+            sections={['aging']}
+          />
+        ) : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

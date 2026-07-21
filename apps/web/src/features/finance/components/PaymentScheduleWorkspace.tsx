@@ -37,6 +37,8 @@ export type PaymentScheduleWorkspaceProps = {
     | 'aging_8_30'
     | 'aging_over_30'
     | 'follow_up'
+  /** 工作台待付款下钻（开放未付）。 */
+  payableBalance?: 'open_unpaid'
   onHighlightConsumed?: () => void
   /** When set, renders the standard list page header. */
   pageHeader?: {

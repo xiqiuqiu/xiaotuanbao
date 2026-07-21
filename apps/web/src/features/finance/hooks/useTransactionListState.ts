@@ -12,6 +12,9 @@ type UseTransactionListStateOptions = {
   deepLinkSearch?: {
     departureId?: string
     direction?: string
+    status?: string
+    pendingSettlement?: string
+    transactionNo?: string
   }
 }
 
@@ -40,7 +43,13 @@ export function useTransactionListState({
       appliedDeepLinkKey.current = null
       return
     }
-    const key = [deepLink.departureFilter, deepLink.direction ?? ''].join('|')
+    const key = [
+      deepLink.departureFilter ?? '',
+      deepLink.direction ?? '',
+      deepLink.pendingSettlement ?? '',
+      deepLink.transactionNo,
+      deepLink.statusFilter ?? '',
+    ].join('|')
     if (appliedDeepLinkKey.current === key) {
       return
     }

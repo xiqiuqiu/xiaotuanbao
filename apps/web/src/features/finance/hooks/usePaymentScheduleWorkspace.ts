@@ -54,6 +54,8 @@ export type UsePaymentScheduleWorkspaceOptions = {
     | 'aging_8_30'
     | 'aging_over_30'
     | 'follow_up'
+  /** 工作台待付款窗口；服务端筛选，计入列表 total。 */
+  payableBalance?: 'open_unpaid'
   onHighlightConsumed?: () => void
   /**
    * 受控出团日期区间（Partner 往来账款 Tab 跨应收/应付共用）。
@@ -75,6 +77,7 @@ export function usePaymentScheduleWorkspace({
   initialCounterpartyKeyword = '',
   scheduleNo,
   receivableFollowUp,
+  payableBalance,
   onHighlightConsumed,
   departureDateRange: controlledDepartureDateRange,
   onDepartureDateRangeChange,
@@ -170,6 +173,7 @@ export function usePaymentScheduleWorkspace({
     departureDateFrom,
     departureDateTo,
     receivableFollowUp,
+    payableBalance,
     scheduleNo,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
@@ -196,6 +200,7 @@ export function usePaymentScheduleWorkspace({
       departureDateFrom,
       departureDateTo,
       receivableFollowUp,
+      payableBalance,
       scheduleNo,
     ],
     queryFn: ({ signal }) => {
@@ -205,6 +210,8 @@ export function usePaymentScheduleWorkspace({
       const statusQuery = voidedAudit ? { status: 'voided' as const } : {}
       const followUpQuery =
         isReceivable && receivableFollowUp ? { receivableFollowUp } : {}
+      const payableBalanceQuery =
+        !isReceivable && payableBalance ? { payableBalance } : {}
       const scheduleNoQuery = scheduleNo?.trim()
         ? { scheduleNo: scheduleNo.trim() }
         : {}
@@ -266,6 +273,7 @@ export function usePaymentScheduleWorkspace({
           ...counterpartyQuery,
           ...statusQuery,
           ...followUpQuery,
+          ...payableBalanceQuery,
           ...scheduleNoQuery,
         },
         signal,

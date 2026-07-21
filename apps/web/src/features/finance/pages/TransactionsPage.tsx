@@ -5,6 +5,9 @@ export function TransactionsPage() {
   const deepLinkSearch = useSearch({ strict: false }) as {
     departureId?: string
     direction?: string
+    status?: string
+    pendingSettlement?: string
+    transactionNo?: string
   }
 
   return (

@@ -27,10 +27,13 @@ export type TransactionsWorkspaceProps = {
   readOnly?: boolean
   /** Departure-tab deep link: optional direction filter from overview「查看流水». */
   initialDirection?: TransactionDirection
-  /** Global-page URL deep link (departureId + direction). */
+  /** Global-page URL deep link (departure / workbench filters). */
   deepLinkSearch?: {
     departureId?: string
     direction?: string
+    status?: string
+    pendingSettlement?: string
+    transactionNo?: string
   }
   pageHeader?: {
     title: string
@@ -60,6 +63,7 @@ export function TransactionsWorkspace({
     direction,
     partnerKeyword,
     writeoffStatus,
+    pendingSettlement,
     transactionNo,
     departureFilter,
     statusFilter,
@@ -78,6 +82,7 @@ export function TransactionsWorkspace({
     direction,
     debouncedPartnerKeyword,
     writeoffStatus,
+    pendingSettlement,
     debouncedTransactionNo,
     effectiveDepartureId,
     statusFilter,
@@ -100,6 +105,7 @@ export function TransactionsWorkspace({
       direction,
       debouncedPartnerKeyword,
       writeoffStatus,
+      pendingSettlement,
       debouncedTransactionNo,
       effectiveDepartureId,
       statusFilter,
@@ -113,7 +119,8 @@ export function TransactionsWorkspace({
           dateEnd: dateRange?.[1],
           direction,
           partnerKeyword: debouncedPartnerKeyword || undefined,
-          writeoffStatus,
+          writeoffStatus: pendingSettlement ? undefined : writeoffStatus,
+          pendingSettlement,
           transactionNo: debouncedTransactionNo || undefined,
           departureId: effectiveDepartureId,
           status: statusFilter,

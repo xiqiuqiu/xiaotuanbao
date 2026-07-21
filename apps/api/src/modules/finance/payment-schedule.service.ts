@@ -54,6 +54,10 @@ import {
   getReceivableFollowUpDates,
   type ReceivableFollowUpWindow,
 } from './receivable-follow-up'
+import {
+  buildOpenPayableBaseWhere,
+  PAYABLE_BALANCE_OPEN_UNPAID,
+} from './payable-open-balance'
 
 const FINANCE_ADJUSTMENT_FIELDS = [
   'amountCents',
@@ -118,6 +122,25 @@ export class PaymentScheduleService {
       .map((schedule) => schedule.id)
   }
 
+  /**
+   * 工作台与列表共用：开放应付（未作废/未关闭）且未付金额 > 0。
+   */
+  async findOpenPayableUnpaidIds(organizationId: string): Promise<string[]> {
+    const candidates = await this.prisma.paymentSchedule.findMany({
+      where: buildOpenPayableBaseWhere(organizationId),
+      select: { id: true, amountCents: true },
+    })
+    if (candidates.length === 0) {
+      return []
+    }
+    const settledMap = await this.verificationService.batchGetSettledAmounts(
+      candidates.map((schedule) => schedule.id),
+    )
+    return candidates
+      .filter((schedule) => schedule.amountCents - (settledMap.get(schedule.id) ?? 0) > 0)
+      .map((schedule) => schedule.id)
+  }
+
   async list(
     organizationId: string,
     direction: PaymentScheduleDirection,
@@ -139,6 +162,15 @@ export class PaymentScheduleService {
         query.receivableFollowUp,
       )
       andFilters.push({ id: { in: followUpIds } })
+    }
+
+    if (
+      query.payableBalance === PAYABLE_BALANCE_OPEN_UNPAID
+      && direction === PaymentScheduleDirection.payable
+      && query.status !== 'voided'
+    ) {
+      const unpaidIds = await this.findOpenPayableUnpaidIds(organizationId)
+      andFilters.push({ id: { in: unpaidIds } })
     }
 
     const scheduleNo = query.scheduleNo?.trim()

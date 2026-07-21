@@ -10,6 +10,8 @@ import {
   PaymentScheduleDirection,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
+  TransactionDirection,
+  PaymentChannel,
 } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { PrismaService } from '../src/database/prisma/prisma.service'
@@ -1386,6 +1388,432 @@ describe('Workbench contract (e2e)', () => {
       await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
       await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
       await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
+
+  it('returns finance funds metrics, pending settlement / account-generation queues and matching drill-downs', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+    const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-funds-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台资金测试旅行社-${Date.now()}`,
+        businessPrefix: `F${suffix}`,
+      },
+    })
+    const financeRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.FINANCE },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '资金财务测试员',
+        roles: { create: { roleId: financeRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '资金测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    const supplier = await prisma.supplier.create({
+      data: {
+        organizationId: organization.id,
+        name: '资金测试车队',
+        categories: [ResourceKind.transport, ResourceKind.hotel, ResourceKind.meal],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const openDeparture = await prisma.departure.create({
+      data: {
+        organizationId: organization.id,
+        departureNo: 'WTF0000000001',
+        name: '开放资金发团',
+        routeName: '资金测试路线',
+        startDate: asDate(today),
+        endDate: asDate(today),
+        dayCount: 1,
+        ownerUserId: user.id,
+        status: DepartureStatus.editing,
+      },
+    })
+    const closedDeparture = await prisma.departure.create({
+      data: {
+        organizationId: organization.id,
+        departureNo: 'WTF0000000002',
+        name: '已关闭资金发团',
+        routeName: '资金测试路线',
+        startDate: asDate(today),
+        endDate: asDate(today),
+        dayCount: 1,
+        ownerUserId: user.id,
+        status: DepartureStatus.closed,
+      },
+    })
+
+    let scheduleSequence = 0
+    const createPayable = async (input: {
+      title: string
+      amountCents: number
+      departureId: string
+      cancelledAt?: Date | null
+      voidedAt?: Date | null
+      sourceType?: string
+      sourceId?: string | null
+    }) => {
+      scheduleSequence += 1
+      return prisma.paymentSchedule.create({
+        data: {
+          organizationId: organization.id,
+          departureId: input.departureId,
+          direction: PaymentScheduleDirection.payable,
+          scheduleNo: `WTF-AP-${String(scheduleSequence).padStart(4, '0')}`,
+          title: input.title,
+          amountCents: input.amountCents,
+          dueDate: asDate(today),
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: supplier.id,
+          counterpartyName: supplier.name,
+          sourceType: input.sourceType ?? PaymentScheduleSourceType.MANUAL,
+          sourceId: input.sourceId ?? null,
+          cancelledAt: input.cancelledAt ?? null,
+          voidedAt: input.voidedAt ?? null,
+        },
+      })
+    }
+
+    let txSequence = 0
+    const createTransaction = async (input: {
+      direction: TransactionDirection
+      amountCents: number
+      departureId: string
+      counterpartyName: string
+      voidedAt?: Date | null
+    }) => {
+      txSequence += 1
+      return prisma.financeTransaction.create({
+        data: {
+          organizationId: organization.id,
+          transactionNo: `WTF-TX-${String(txSequence).padStart(4, '0')}`,
+          direction: input.direction,
+          paymentChannel: PaymentChannel.other,
+          amountCents: input.amountCents,
+          transactionDate: asDate(today),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyName: input.counterpartyName,
+          departureId: input.departureId,
+          voidedAt: input.voidedAt ?? null,
+          voidReason: input.voidedAt ? '作废测试' : null,
+        },
+      })
+    }
+
+    try {
+      await createPayable({
+        title: '开放待付A',
+        amountCents: 50000,
+        departureId: openDeparture.id,
+      })
+      await createPayable({
+        title: '关闭发团待付',
+        amountCents: 30000,
+        departureId: closedDeparture.id,
+      })
+      await createPayable({
+        title: '已关闭节点',
+        amountCents: 90000,
+        departureId: openDeparture.id,
+        cancelledAt: asDate(today),
+      })
+      await createPayable({
+        title: '已作废节点',
+        amountCents: 80000,
+        departureId: openDeparture.id,
+        voidedAt: asDate(today),
+      })
+      const settledPayable = await createPayable({
+        title: '已付清节点',
+        amountCents: 20000,
+        departureId: openDeparture.id,
+      })
+      const settledTx = await createTransaction({
+        direction: TransactionDirection.outflow,
+        amountCents: 20000,
+        departureId: openDeparture.id,
+        counterpartyName: '已核销支出',
+      })
+      await prisma.financeVerification.create({
+        data: {
+          organizationId: organization.id,
+          verificationNo: 'WTF-VR-0001',
+          paymentScheduleId: settledPayable.id,
+          transactionId: settledTx.id,
+          amountCents: 20000,
+          verificationDate: asDate(today),
+          createdBy: user.id,
+          billUnsettledAfterCents: 0,
+        },
+      })
+
+      const noneIncome = await createTransaction({
+        direction: TransactionDirection.inflow,
+        amountCents: 12000,
+        departureId: openDeparture.id,
+        counterpartyName: '未核销收入',
+      })
+      const partialExpense = await createTransaction({
+        direction: TransactionDirection.outflow,
+        amountCents: 10000,
+        departureId: closedDeparture.id,
+        counterpartyName: '部分核销支出',
+      })
+      await createTransaction({
+        direction: TransactionDirection.inflow,
+        amountCents: 7000,
+        departureId: openDeparture.id,
+        counterpartyName: '已作废流水',
+        voidedAt: asDate(today),
+      })
+      const openPayableForPartial = await createPayable({
+        title: '部分核销用应付',
+        amountCents: 10000,
+        departureId: closedDeparture.id,
+      })
+      await prisma.financeVerification.create({
+        data: {
+          organizationId: organization.id,
+          verificationNo: 'WTF-VR-0002',
+          paymentScheduleId: openPayableForPartial.id,
+          transactionId: partialExpense.id,
+          amountCents: 4000,
+          verificationDate: asDate(today),
+          createdBy: user.id,
+          billUnsettledAfterCents: 6000,
+        },
+      })
+
+      const pendingSourceOrder = await prisma.sourceOrder.create({
+        data: {
+          departureId: openDeparture.id,
+          partnerId: partner.id,
+          displayName: '待生成应收客源单',
+          guestCount: 1,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 18000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 18000,
+          discountType: SourceOrderDiscountType.none,
+          discountCents: 0,
+          netReceivableCents: 18000,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          partnerCollectedCents: 18000,
+          guestCollectCents: 0,
+        },
+      })
+      const closedSourceOrder = await prisma.sourceOrder.create({
+        data: {
+          departureId: closedDeparture.id,
+          partnerId: partner.id,
+          displayName: '关闭发团待生成应收',
+          guestCount: 1,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 9000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 9000,
+          discountType: SourceOrderDiscountType.none,
+          discountCents: 0,
+          netReceivableCents: 9000,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          partnerCollectedCents: 9000,
+          guestCollectCents: 0,
+        },
+      })
+
+      const openSegment = await prisma.itinerarySegment.create({
+        data: {
+          departureId: openDeparture.id,
+          name: '开放行程段',
+          sortOrder: 1,
+        },
+      })
+      const closedSegment = await prisma.itinerarySegment.create({
+        data: {
+          departureId: closedDeparture.id,
+          name: '关闭行程段',
+          sortOrder: 1,
+        },
+      })
+      const pendingResource = await prisma.segmentResource.create({
+        data: {
+          segmentId: openSegment.id,
+          resourceKind: ResourceKind.hotel,
+          counterpartyType: CounterpartyType.supplier,
+          supplierId: supplier.id,
+          title: '待生成应付酒店',
+          amountCents: 15000,
+        },
+      })
+      await prisma.segmentResource.create({
+        data: {
+          segmentId: openSegment.id,
+          resourceKind: ResourceKind.transport,
+          counterpartyType: CounterpartyType.supplier,
+          supplierId: supplier.id,
+          title: '零元不入缺口',
+          amountCents: 0,
+        },
+      })
+      const generatedResource = await prisma.segmentResource.create({
+        data: {
+          segmentId: closedSegment.id,
+          resourceKind: ResourceKind.meal,
+          counterpartyType: CounterpartyType.supplier,
+          supplierId: supplier.id,
+          title: '已生成应付餐食',
+          amountCents: 4000,
+        },
+      })
+      await createPayable({
+        title: '资源已生成应付',
+        amountCents: 4000,
+        departureId: closedDeparture.id,
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        sourceId: generatedResource.id,
+        cancelledAt: asDate(today),
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      expect(response.body.data.template).toBe('finance')
+      const fundsModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'finance-funds',
+      )
+
+      expect(fundsModule.metrics).toEqual([
+        {
+          key: 'pending-payment',
+          label: '待付款',
+          value: 86000,
+          secondaryValue: 3,
+          secondarySuffix: '个节点',
+          href: '/finance/payable?payableBalance=open_unpaid',
+        },
+        {
+          key: 'pending-settlement',
+          label: '待核销流水',
+          value: 12000 + 6000,
+          secondaryValue: 2,
+          secondarySuffix: '笔（收入 1 · 支出 1）',
+          href: '/finance/transactions?status=normal&pendingSettlement=1',
+        },
+      ])
+      expect(fundsModule.total).toBe(2)
+      expect(fundsModule.href).toBe('/finance/transactions?status=normal&pendingSettlement=1')
+      expect(fundsModule.secondaryTotal).toBe(3)
+      expect(fundsModule.secondaryHref).toBe('/account-generation-gaps')
+
+      const settlementItems = fundsModule.items.filter(
+        (item: { kind: string }) => item.kind === 'finance-pending-settlement',
+      )
+      const generationItems = fundsModule.items.filter(
+        (item: { kind: string }) => item.kind === 'finance-account-generation',
+      )
+      expect(settlementItems).toHaveLength(2)
+      expect(settlementItems[0]).toMatchObject({
+        title: '未核销收入',
+        direction: 'inflow',
+        unallocatedAmountCents: 12000,
+        departureClosed: false,
+      })
+      expect(settlementItems[1]).toMatchObject({
+        title: '部分核销支出',
+        direction: 'outflow',
+        unallocatedAmountCents: 6000,
+        departureClosed: true,
+      })
+      expect(generationItems).toHaveLength(3)
+      expect(generationItems.map((item: { title: string }) => item.title)).toEqual([
+        '待生成应收客源单',
+        '待生成应付酒店',
+        '关闭发团待生成应收',
+      ])
+      expect(generationItems.find(
+        (item: { title: string }) => item.title === '关闭发团待生成应收',
+      )).toMatchObject({ generationKind: 'receivable', departureClosed: true })
+      expect(generationItems.find(
+        (item: { title: string }) => item.title === '待生成应付酒店',
+      )).toMatchObject({ generationKind: 'payable', estimatedAmountCents: 15000 })
+
+      expect(JSON.stringify(fundsModule)).not.toContain('已关闭节点')
+      expect(JSON.stringify(fundsModule)).not.toContain('已作废节点')
+      expect(JSON.stringify(fundsModule)).not.toContain('已作废流水')
+      expect(JSON.stringify(fundsModule)).not.toContain('零元不入缺口')
+      expect(JSON.stringify(fundsModule)).not.toContain('已生成应付餐食')
+      expect(JSON.stringify(fundsModule)).not.toContain('催付')
+      expect(JSON.stringify(fundsModule.metrics)).not.toContain('overdue')
+      expect(JSON.stringify(fundsModule.metrics)).not.toContain('dueDate')
+
+      const drillTargets = [
+        { href: fundsModule.metrics[0].href, api: '/api/finance/payables', total: 3 },
+        { href: fundsModule.metrics[1].href, api: '/api/finance/transactions', total: 2 },
+        { href: fundsModule.href, api: '/api/finance/transactions', total: 2 },
+        {
+          href: fundsModule.secondaryHref,
+          api: '/api/account-generation-gaps',
+          total: 3,
+        },
+        {
+          href: settlementItems[0].href,
+          api: '/api/finance/transactions',
+          total: 1,
+        },
+      ]
+      for (const target of drillTargets) {
+        const path = target.href
+          .replace('/finance/payable', '/api/finance/payables')
+          .replace('/finance/transactions', '/api/finance/transactions')
+          .replace('/account-generation-gaps', '/api/account-generation-gaps')
+        const drillDown = await authRequest(app, cookie).get(path).expect(200)
+        expect(drillDown.body.data.total).toBe(target.total)
+      }
+
+      expect([
+        noneIncome.id,
+        partialExpense.id,
+        pendingSourceOrder.id,
+        closedSourceOrder.id,
+        pendingResource.id,
+      ]).toHaveLength(5)
+    } finally {
+      await prisma.financeVerification.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.financeTransaction.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.segmentResource.deleteMany({
+        where: { segment: { departure: { organizationId: organization.id } } },
+      })
+      await prisma.itinerarySegment.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.sourceOrder.deleteMany({
+        where: { departure: { organizationId: organization.id } },
+      })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.supplier.deleteMany({ where: { organizationId: organization.id } })
       await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
       await prisma.user.deleteMany({ where: { organizationId: organization.id } })
       await prisma.organization.delete({ where: { id: organization.id } })

@@ -37,6 +37,7 @@ describe('transaction-list-deep-link', () => {
       dateRange: null,
       direction: TransactionDirection.OUTFLOW,
       writeoffStatus: undefined,
+      pendingSettlement: undefined,
       departureFilter: 'dep-88',
       partnerKeyword: '',
       transactionNo: '',
@@ -46,7 +47,41 @@ describe('transaction-list-deep-link', () => {
     })
   })
 
-  it('returns null when departureId is missing', () => {
+  it('applies workbench pending-settlement deep link without departureId', () => {
+    expect(
+      applyTransactionListDeepLink({
+        status: 'normal',
+        pendingSettlement: '1',
+      }),
+    ).toEqual({
+      dateRange: null,
+      direction: undefined,
+      writeoffStatus: undefined,
+      pendingSettlement: '1',
+      departureFilter: undefined,
+      partnerKeyword: '',
+      transactionNo: '',
+      statusFilter: 'normal',
+      page: 1,
+      pageSize: 10,
+    })
+  })
+
+  it('applies workbench transactionNo deep link', () => {
+    expect(
+      applyTransactionListDeepLink({
+        status: 'normal',
+        transactionNo: 'TX-001',
+      }),
+    ).toMatchObject({
+      transactionNo: 'TX-001',
+      statusFilter: 'normal',
+      pendingSettlement: undefined,
+      dateRange: null,
+    })
+  })
+
+  it('returns null when neither departureId nor workbench filters are present', () => {
     expect(applyTransactionListDeepLink({ direction: 'outflow' })).toBeNull()
   })
 })

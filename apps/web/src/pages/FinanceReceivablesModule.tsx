@@ -47,9 +47,58 @@ function bucketTooltipTitle(bucket: WorkbenchFinanceReceivableAgingBucket) {
   )
 }
 
-export function FinanceReceivablesModule({ module }: { module: WorkbenchModule }) {
+export type FinanceReceivablesSection = 'metrics' | 'follow-up' | 'aging'
+
+export function FinanceMetricStrip({
+  metrics,
+  columns = 2,
+}: {
+  metrics: WorkbenchModule['metrics']
+  columns?: 2 | 4
+}) {
+  const navigate = useNavigate()
+  return (
+    <div
+      className={columns === 4 ? styles.financeMetricGridFour : styles.financeMetricGrid}
+    >
+      {metrics.map((metric) => (
+        <button
+          key={metric.key}
+          type="button"
+          className={styles.metricButton}
+          aria-label={metric.label}
+          disabled={!metric.href}
+          onClick={() => metric.href && void navigate({ to: metric.href })}
+        >
+          <Statistic
+            title={metric.label}
+            value={formatMetricValue(metric.value)}
+          />
+          {metric.secondaryValue != null ? (
+            <Typography.Text type="secondary" className={styles.metricSecondary}>
+              {metric.secondaryValue}
+              {metric.secondarySuffix ? ` ${metric.secondarySuffix}` : ''}
+            </Typography.Text>
+          ) : null}
+          {metric.href ? <RightOutlined className={styles.metricArrow} /> : null}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function FinanceReceivablesModule({
+  module,
+  sections = ['metrics', 'follow-up', 'aging'],
+}: {
+  module: WorkbenchModule
+  sections?: FinanceReceivablesSection[]
+}) {
   const navigate = useNavigate()
   const { token } = theme.useToken()
+  const showMetrics = sections.includes('metrics')
+  const showFollowUp = sections.includes('follow-up')
+  const showAging = sections.includes('aging')
   const items = module.items.filter(isReceivableItem)
   const buckets = (module.buckets ?? []).filter(isAgingBucket)
   const hasAging = buckets.some((bucket) => bucket.scheduleCount > 0)
@@ -70,148 +119,139 @@ export function FinanceReceivablesModule({ module }: { module: WorkbenchModule }
     }
   }
 
-  return (
-    <div className={styles.financeReceivablesContent}>
-      <div className={styles.financeMetricGrid}>
-        {module.metrics.map((metric) => (
-          <button
-            key={metric.key}
-            type="button"
-            className={styles.metricButton}
-            aria-label={metric.label}
-            disabled={!metric.href}
-            onClick={() => metric.href && void navigate({ to: metric.href })}
-          >
-            <Statistic
-              title={metric.label}
-              value={formatMetricValue(metric.value)}
-            />
-            {metric.secondaryValue != null ? (
-              <Typography.Text type="secondary" className={styles.metricSecondary}>
-                {metric.secondaryValue}
-                {metric.secondarySuffix ? ` ${metric.secondarySuffix}` : ''}
-              </Typography.Text>
-            ) : null}
-            {metric.href ? <RightOutlined className={styles.metricArrow} /> : null}
-          </button>
-        ))}
-      </div>
+  const followUpCard = showFollowUp ? (
+    <Card
+      className={styles.recentDeparturesCard}
+      title={module.title}
+      extra={module.href ? (
+        <Button type="link" onClick={() => void navigate({ to: module.href! })}>
+          查看全部 {module.total ?? 0} 项 <RightOutlined />
+        </Button>
+      ) : null}
+    >
+      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
+        {module.description}
+      </Typography.Paragraph>
+      {items.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="当前没有需要跟进的逾期或近期到期应收"
+        />
+      ) : (
+        <Space orientation="vertical" size={0} className={styles.queueList}>
+          {items.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={styles.queueItem}
+              aria-label={item.title}
+              onClick={() => void navigate({ to: item.href })}
+            >
+              <span>
+                <Typography.Text strong>{item.title}</Typography.Text>
+                <Typography.Text type="secondary" className={styles.queueMeta}>
+                  {item.dueDate}
+                  {' · '}
+                  {formatCents(item.unsettledAmountCents)}
+                  {item.overdueDays != null ? ` · 逾期 ${item.overdueDays} 天` : ' · 近期到期'}
+                  {item.counterpartyName ? ` · ${item.counterpartyName}` : ''}
+                </Typography.Text>
+              </span>
+              <span>
+                {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
+                <RightOutlined />
+              </span>
+            </button>
+          ))}
+        </Space>
+      )}
+    </Card>
+  ) : null
 
-      <div className={styles.financeMainGrid}>
-        <Card
-          className={styles.recentDeparturesCard}
-          title={module.title}
-          extra={module.href ? (
-            <Button type="link" onClick={() => void navigate({ to: module.href! })}>
-              查看全部 {module.total ?? 0} 项 <RightOutlined />
-            </Button>
-          ) : null}
-        >
-          <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-            {module.description}
-          </Typography.Paragraph>
-          {items.length === 0 ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="当前没有需要跟进的逾期或近期到期应收"
+  const agingCard = showAging ? (
+    <Card
+      className={styles.trendCard}
+      title="逾期应收账龄"
+      aria-label="逾期应收账龄"
+    >
+      <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
+        固定分为 1–7 天、8–30 天与 30 天以上，展示未结节点数与未收金额。
+      </Typography.Paragraph>
+      {!hasAging ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="当前没有逾期应收，因此不绘制账龄分布"
+        />
+      ) : (
+        <div className={styles.trendBody}>
+          <div data-testid="workbench-aging-chart">
+            <DualAxes
+              height={220}
+              autoFit
+              xField="label"
+              legend={false}
+              tooltip={false}
+              onReady={({ chart }) => {
+                chart.on('element:click', (event: { data?: { data?: { label?: string } } }) => {
+                  navigateBucket(event.data?.data?.label)
+                })
+              }}
+              children={[
+                {
+                  data: chartRows,
+                  type: 'interval',
+                  yField: 'unsettledAmountYuan',
+                  style: { maxWidth: 36, fill: token.colorPrimary, cursor: 'pointer' },
+                  axis: { y: { title: '未收金额（元）', position: 'left' } },
+                },
+                {
+                  data: chartRows,
+                  type: 'line',
+                  yField: 'scheduleCount',
+                  style: { lineWidth: 2, stroke: token.colorError, cursor: 'pointer' },
+                  axis: { y: { title: '节点数', position: 'right' } },
+                },
+              ]}
             />
-          ) : (
-            <Space orientation="vertical" size={0} className={styles.queueList}>
-              {items.map((item) => (
+          </div>
+          <Flex gap={8} wrap className={styles.trendDayStrip}>
+            {buckets.map((bucket) => (
+              <Tooltip key={bucket.key} title={bucketTooltipTitle(bucket)}>
                 <button
                   type="button"
-                  key={item.id}
-                  className={styles.queueItem}
-                  aria-label={item.title}
-                  onClick={() => void navigate({ to: item.href })}
+                  className={styles.trendDayButton}
+                  aria-label={bucketAriaLabel(bucket)}
+                  onClick={() => void navigate({ to: bucket.href })}
                 >
-                  <span>
-                    <Typography.Text strong>{item.title}</Typography.Text>
-                    <Typography.Text type="secondary" className={styles.queueMeta}>
-                      {item.dueDate}
-                      {' · '}
-                      {formatCents(item.unsettledAmountCents)}
-                      {item.overdueDays != null ? ` · 逾期 ${item.overdueDays} 天` : ' · 近期到期'}
-                      {item.counterpartyName ? ` · ${item.counterpartyName}` : ''}
-                    </Typography.Text>
-                  </span>
-                  <span>
-                    {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
-                    <RightOutlined />
-                  </span>
+                  <Typography.Text strong>{bucket.label}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {bucket.scheduleCount} 个节点
+                  </Typography.Text>
+                  <Typography.Text>{formatCents(bucket.unsettledAmountCents)}</Typography.Text>
                 </button>
-              ))}
-            </Space>
-          )}
-        </Card>
+              </Tooltip>
+            ))}
+          </Flex>
+        </div>
+      )}
+    </Card>
+  ) : null
 
-        <Card
-          className={styles.trendCard}
-          title="逾期应收账龄"
-          aria-label="逾期应收账龄"
-        >
-          <Typography.Paragraph type="secondary" className={styles.moduleDescription}>
-            固定分为 1–7 天、8–30 天与 30 天以上，展示未结节点数与未收金额。
-          </Typography.Paragraph>
-          {!hasAging ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="当前没有逾期应收，因此不绘制账龄分布"
-            />
-          ) : (
-            <div className={styles.trendBody}>
-              <div data-testid="workbench-aging-chart">
-                <DualAxes
-                  height={220}
-                  autoFit
-                  xField="label"
-                  legend={false}
-                  tooltip={false}
-                  onReady={({ chart }) => {
-                    chart.on('element:click', (event: { data?: { data?: { label?: string } } }) => {
-                      navigateBucket(event.data?.data?.label)
-                    })
-                  }}
-                  children={[
-                    {
-                      data: chartRows,
-                      type: 'interval',
-                      yField: 'unsettledAmountYuan',
-                      style: { maxWidth: 36, fill: token.colorPrimary, cursor: 'pointer' },
-                      axis: { y: { title: '未收金额（元）', position: 'left' } },
-                    },
-                    {
-                      data: chartRows,
-                      type: 'line',
-                      yField: 'scheduleCount',
-                      style: { lineWidth: 2, stroke: token.colorError, cursor: 'pointer' },
-                      axis: { y: { title: '节点数', position: 'right' } },
-                    },
-                  ]}
-                />
-              </div>
-              <Flex gap={8} wrap className={styles.trendDayStrip}>
-                {buckets.map((bucket) => (
-                  <Tooltip key={bucket.key} title={bucketTooltipTitle(bucket)}>
-                    <button
-                      type="button"
-                      className={styles.trendDayButton}
-                      aria-label={bucketAriaLabel(bucket)}
-                      onClick={() => void navigate({ to: bucket.href })}
-                    >
-                      <Typography.Text strong>{bucket.label}</Typography.Text>
-                      <Typography.Text type="secondary">
-                        {bucket.scheduleCount} 个节点
-                      </Typography.Text>
-                      <Typography.Text>{formatCents(bucket.unsettledAmountCents)}</Typography.Text>
-                    </button>
-                  </Tooltip>
-                ))}
-              </Flex>
-            </div>
-          )}
-        </Card>
-      </div>
+  return (
+    <div className={styles.financeReceivablesContent}>
+      {showMetrics ? <FinanceMetricStrip metrics={module.metrics} /> : null}
+
+      {showFollowUp && showAging ? (
+        <div className={styles.financeMainGrid}>
+          {followUpCard}
+          {agingCard}
+        </div>
+      ) : (
+        <>
+          {followUpCard}
+          {agingCard}
+        </>
+      )}
     </div>
   )
 }

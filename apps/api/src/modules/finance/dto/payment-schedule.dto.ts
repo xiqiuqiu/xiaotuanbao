@@ -17,6 +17,7 @@ import {
   PaymentScheduleDirection as PrismaPaymentScheduleDirection,
 } from '@prisma/client'
 import { RECEIVABLE_FOLLOW_UP_WINDOWS } from '../receivable-follow-up'
+import { PAYABLE_BALANCE_FILTERS } from '../payable-open-balance'
 
 export class CreatePaymentScheduleDto {
   @IsString()
@@ -130,6 +131,14 @@ export class ListPaymentSchedulesQueryDto {
   @IsOptional()
   @IsIn(RECEIVABLE_FOLLOW_UP_WINDOWS)
   receivableFollowUp?: (typeof RECEIVABLE_FOLLOW_UP_WINDOWS)[number]
+
+  /**
+   * 工作台待付款下钻。
+   * 仅应付列表生效：未作废、未关闭、未付金额 > 0（无到期/逾期窗口）。
+   */
+  @IsOptional()
+  @IsIn(PAYABLE_BALANCE_FILTERS)
+  payableBalance?: (typeof PAYABLE_BALANCE_FILTERS)[number]
 
   @IsOptional()
   @Type(() => Number)

@@ -84,6 +84,14 @@ export class ListFinanceTransactionsQueryDto {
   @IsIn(TRANSACTION_WRITEOFF_STATUSES)
   writeoffStatus?: (typeof TRANSACTION_WRITEOFF_STATUSES)[number]
 
+  /**
+   * 工作台待核销流水下钻：正常流水中未核销或部分核销（剩余金额 > 0）。
+   * 与 writeoffStatus 互斥；传入时强制排除已作废。
+   */
+  @IsOptional()
+  @IsIn(['1'])
+  pendingSettlement?: '1'
+
   @IsOptional()
   @IsIn(TRANSACTION_LIST_STATUSES)
   status?: (typeof TRANSACTION_LIST_STATUSES)[number]

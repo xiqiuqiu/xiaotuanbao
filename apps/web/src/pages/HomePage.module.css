@@ -69,10 +69,26 @@
   gap: 16px;
 }
 
+.financeMetricGridFour {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .financeMainGrid {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
   gap: 16px;
+}
+
+.financeFundsQueues {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.fundsQueueCard {
+  min-width: 0;
 }
 
 .metricSecondary {
@@ -83,6 +99,10 @@
 @media (max-width: 960px) {
   .financeMainGrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .financeMetricGridFour {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

@@ -18,6 +18,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseDepartureListSearch } from '@/features/departure/utils/departure-list-search'
 import { parseReceivableListSearch } from '@/features/finance/utils/receivable-list-search'
+import { parsePayableListSearch } from '@/features/finance/utils/payable-list-search'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -182,9 +183,26 @@ const financeReceivableRoute = createRoute({
 const financePayableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/payable',
+  validateSearch: parsePayableListSearch,
   component: lazyRouteComponent(
     () => import('@/features/finance/pages/PayablesPage'),
     'PayablesPage',
+  ),
+})
+
+const accountGenerationGapsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/account-generation-gaps',
+  validateSearch: (search: Record<string, unknown>): {
+    page?: number
+    pageSize?: number
+  } => ({
+    page: typeof search.page === 'number' ? search.page : undefined,
+    pageSize: typeof search.pageSize === 'number' ? search.pageSize : undefined,
+  }),
+  component: lazyRouteComponent(
+    () => import('@/features/departure/pages/PendingAccountGenerationGapsPage'),
+    'PendingAccountGenerationGapsPage',
   ),
 })
 
@@ -194,12 +212,23 @@ const financeTransactionsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): {
     departureId?: string
     direction?: string
+    status?: string
+    pendingSettlement?: string
+    transactionNo?: string
   } => {
     const departureId = typeof search.departureId === 'string' ? search.departureId.trim() : ''
     const direction = typeof search.direction === 'string' ? search.direction.trim() : ''
+    const status = typeof search.status === 'string' ? search.status.trim() : ''
+    const pendingSettlement =
+      typeof search.pendingSettlement === 'string' ? search.pendingSettlement.trim() : ''
+    const transactionNo =
+      typeof search.transactionNo === 'string' ? search.transactionNo.trim() : ''
     return {
       ...(departureId ? { departureId } : {}),
       ...(direction ? { direction } : {}),
+      ...(status ? { status } : {}),
+      ...(pendingSettlement ? { pendingSettlement } : {}),
+      ...(transactionNo ? { transactionNo } : {}),
     }
   },
   component: lazyRouteComponent(
@@ -294,6 +323,7 @@ const routeTree = rootRoute.addChildren([
     departureRoute,
     departureNewRoute,
     pendingReceivableSourceOrdersRoute,
+    accountGenerationGapsRoute,
     departureDetailRoute,
     financeReceivableRoute,
     financePayableRoute,

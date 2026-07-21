@@ -61,6 +61,8 @@ export interface ListPaymentSchedulesParams {
     | 'aging_8_30'
     | 'aging_over_30'
     | 'follow_up'
+  /** 工作台待付款下钻（服务端筛选）。 */
+  payableBalance?: 'open_unpaid'
   page?: number
   pageSize?: number
 }
@@ -78,6 +80,7 @@ export interface ListFinanceTransactionsParams {
   partnerKeyword?: string
   transactionNo?: string
   writeoffStatus?: string
+  pendingSettlement?: '1'
   status?: string
   page?: number
   pageSize?: number

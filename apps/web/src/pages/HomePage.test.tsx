@@ -405,9 +405,75 @@ const financeReceivablesSnapshot = {
     {
       key: 'finance-funds' as const,
       title: '资金与账款',
-      description: '查看应付、流水与账款生成事项。',
-      metrics: [],
-      items: [],
+      description: '关注待付款与待核销流水，并跟进尚未生成的应收 / 应付。',
+      total: 3,
+      href: '/finance/transactions?status=normal&pendingSettlement=1',
+      secondaryTotal: 2,
+      secondaryHref: '/account-generation-gaps',
+      metrics: [
+        {
+          key: 'pending-payment',
+          label: '待付款',
+          value: 21540000,
+          secondaryValue: 18,
+          secondarySuffix: '个节点',
+          href: '/finance/payable?payableBalance=open_unpaid',
+        },
+        {
+          key: 'pending-settlement',
+          label: '待核销流水',
+          value: 4680000,
+          secondaryValue: 11,
+          secondarySuffix: '笔（收入 8 · 支出 3）',
+          href: '/finance/transactions?status=normal&pendingSettlement=1',
+        },
+      ],
+      items: [
+        {
+          kind: 'finance-pending-settlement' as const,
+          id: 'tx-1',
+          title: '阳光学校',
+          description: 'TX-0001',
+          href: '/finance/transactions?status=normal&transactionNo=TX-0001',
+          direction: 'inflow' as const,
+          transactionDate: '2025-07-19',
+          unallocatedAmountCents: 1260000,
+          counterpartyName: '阳光学校',
+          departureClosed: true,
+        },
+        {
+          kind: 'finance-pending-settlement' as const,
+          id: 'tx-2',
+          title: '云端车队',
+          description: 'TX-0002',
+          href: '/finance/transactions?status=normal&transactionNo=TX-0002',
+          direction: 'outflow' as const,
+          transactionDate: '2025-07-18',
+          unallocatedAmountCents: 800000,
+          counterpartyName: '云端车队',
+          departureClosed: false,
+        },
+        {
+          kind: 'finance-account-generation' as const,
+          id: 'receivable:so-1',
+          title: '云南昆明六日游客源单',
+          description: '滇西线发团',
+          href: '/departure/dep-1?tab=sourceOrders',
+          generationKind: 'receivable' as const,
+          estimatedAmountCents: 1890000,
+          departureClosed: false,
+        },
+        {
+          kind: 'finance-account-generation' as const,
+          id: 'payable:res-1',
+          title: '酒店资源',
+          description: '滇西线发团',
+          href: '/departure/dep-1?tab=execution&highlightSegmentResourceId=res-1',
+          generationKind: 'payable' as const,
+          estimatedAmountCents: 560000,
+          departureClosed: true,
+        },
+      ],
     },
   ],
   actions: [],
@@ -710,7 +776,6 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('¥800.00')).toBeInTheDocument()
     expect(screen.getAllByText(/3 个节点|2 个节点/).length).toBeGreaterThan(0)
     expect(screen.getByText('逾期大额应收')).toBeInTheDocument()
-    expect(screen.getByText('发团已关闭')).toBeInTheDocument()
     expect(screen.getByText('近期到期应收')).toBeInTheDocument()
     expect(screen.getAllByText(/^跟进项 /)).toHaveLength(6)
     expect(screen.getByRole('button', { name: /查看全部 9 项/ })).toBeInTheDocument()
@@ -751,6 +816,56 @@ describe('HomePage workbench lifecycle', () => {
     )).toBeInTheDocument()
     expect(screen.queryByTestId('workbench-aging-chart')).not.toBeInTheDocument()
     expect(screen.getByText('当前没有需要跟进的逾期或近期到期应收')).toBeInTheDocument()
+  })
+
+  it('renders finance funds metrics, top queues, type tags and navigation', async () => {
+    vi.mocked(getWorkbench).mockResolvedValue(financeReceivablesSnapshot)
+    renderPage()
+
+    expect(await screen.findByText('待付款')).toBeInTheDocument()
+    expect(screen.getAllByText('待核销流水').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('待生成账款')).toBeInTheDocument()
+    expect(screen.getByText('¥215,400.00')).toBeInTheDocument()
+    expect(screen.getByText('¥46,800.00')).toBeInTheDocument()
+    expect(screen.getByText(/18 个节点/)).toBeInTheDocument()
+    expect(screen.getByText(/11 笔（收入 8 · 支出 3）/)).toBeInTheDocument()
+    expect(screen.getByText('收入')).toBeInTheDocument()
+    expect(screen.getByText('支出')).toBeInTheDocument()
+    expect(screen.getByText('待应收')).toBeInTheDocument()
+    expect(screen.getByText('待应付')).toBeInTheDocument()
+    expect(screen.getAllByText('发团已关闭').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText('催付')).toBeNull()
+    expect(screen.queryByText('到期催付')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('待付款'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/payable?payableBalance=open_unpaid',
+    })
+
+    fireEvent.click(screen.getByLabelText('待核销流水'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/transactions?status=normal&pendingSettlement=1',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /查看全部 3 项/ }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/transactions?status=normal&pendingSettlement=1',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /查看全部 2 项/ }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/account-generation-gaps',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '阳光学校' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/transactions?status=normal&transactionNo=TX-0001',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '云南昆明六日游客源单' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure/dep-1?tab=sourceOrders',
+    })
   })
 
   it('does not render an action when the current session lacks its permission', async () => {
