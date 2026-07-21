@@ -93,16 +93,16 @@ export function OrganizationScaleModule({ module }: { module: WorkbenchModule })
           {module.description}
         </Typography.Paragraph>
 
-        {!hasDepartures ? (
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="近 6 个月暂无发团，因此不绘制业务规模趋势"
-          />
-        ) : (
-          <div className={styles.trendBody}>
-            <Typography.Text type="secondary" className={styles.trendLegendNote}>
-              近 6 个自然月发团数与客源人次；本月标注「本月进行中」，数值按当前数据统计。
-            </Typography.Text>
+        <div className={styles.trendBody}>
+          <Typography.Text type="secondary" className={styles.trendLegendNote}>
+            近 6 个自然月发团数与客源人次；本月标注「本月进行中」，数值按当前数据统计。
+          </Typography.Text>
+          {!hasDepartures ? (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="近 6 个月暂无发团，因此不绘制业务规模趋势"
+            />
+          ) : (
             <DualAxes
               height={280}
               autoFit
@@ -149,36 +149,36 @@ export function OrganizationScaleModule({ module }: { module: WorkbenchModule })
                 },
               ]}
             />
+          )}
 
-            <Flex className={styles.trendDayStrip} wrap gap={4}>
-              {buckets.map((bucket) => (
-                <Tooltip key={bucket.month} title={bucketTooltipTitle(bucket)}>
-                  <button
-                    type="button"
-                    className={styles.trendDayButton}
-                    aria-label={bucketAriaLabel(bucket)}
-                    onClick={() => void navigate({ to: bucket.href })}
-                  >
-                    <span className={styles.trendDayDate}>
-                      {formatMonthLabel(bucket.month)}
-                      {bucket.inProgress ? (
-                        <Tag color="processing" className={styles.scaleInProgressTag}>
-                          本月进行中
-                        </Tag>
-                      ) : null}
-                    </span>
-                    <span className={styles.trendDayMeta}>
-                      团 {bucket.departureCount} · 人次 {bucket.guestCount}
-                    </span>
-                    <span className={styles.trendDayGap} data-has-gap="false">
-                      按当前数据统计
-                    </span>
-                  </button>
-                </Tooltip>
-              ))}
-            </Flex>
-          </div>
-        )}
+          <Flex className={styles.trendDayStrip} wrap gap={4}>
+            {buckets.map((bucket) => (
+              <Tooltip key={bucket.month} title={bucketTooltipTitle(bucket)}>
+                <button
+                  type="button"
+                  className={styles.trendDayButton}
+                  aria-label={bucketAriaLabel(bucket)}
+                  onClick={() => void navigate({ to: bucket.href })}
+                >
+                  <span className={styles.trendDayDate}>
+                    {formatMonthLabel(bucket.month)}
+                    {bucket.inProgress ? (
+                      <Tag color="processing" className={styles.scaleInProgressTag}>
+                        本月进行中
+                      </Tag>
+                    ) : null}
+                  </span>
+                  <span className={styles.trendDayMeta}>
+                    团 {bucket.departureCount} · 人次 {bucket.guestCount}
+                  </span>
+                  <span className={styles.trendDayGap} data-has-gap="false">
+                    按当前数据统计
+                  </span>
+                </button>
+              </Tooltip>
+            ))}
+          </Flex>
+        </div>
       </Card>
     </div>
   )

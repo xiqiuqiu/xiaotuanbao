@@ -521,6 +521,11 @@ describe('HomePage workbench lifecycle', () => {
       to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
     })
 
+    fireEvent.click(screen.getByLabelText('本月客源人次'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+    })
+
     cleanup()
     vi.mocked(getWorkbench).mockResolvedValue(organizationAdminEmptySnapshot)
     renderPage()
@@ -528,6 +533,14 @@ describe('HomePage workbench lifecycle', () => {
       '近 6 个月暂无发团，因此不绘制业务规模趋势',
     )).toBeInTheDocument()
     expect(screen.queryByTestId('workbench-trend-chart')).not.toBeInTheDocument()
+    expect(screen.getByText('本月进行中')).toBeInTheDocument()
+    const emptyMonth = screen.getByRole('button', {
+      name: '月份 2026-07，发团数 0，客源人次 0，本月进行中，按当前数据统计',
+    })
+    await user.click(emptyMonth)
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
+    })
   })
 
   it('does not render an action when the current session lacks its permission', async () => {
