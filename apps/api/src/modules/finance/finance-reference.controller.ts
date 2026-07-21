@@ -29,16 +29,24 @@ export class FinanceReferenceController {
   @RequireMenu('/partner')
   async listPartnerOptions(
     @Req() request: { user: { organizationId: string } },
+    @Query('departureId') departureId?: string,
   ) {
-    return this.departureFinanceFacade.listPartnerOptions(request.user.organizationId)
+    return this.departureFinanceFacade.listPartnerOptions(
+      request.user.organizationId,
+      departureId?.trim() || undefined,
+    )
   }
 
   @Get('supplier-options')
   @RequireMenu('/supplier')
   async listSupplierOptions(
     @Req() request: { user: { organizationId: string } },
+    @Query('departureId') departureId?: string,
   ) {
-    return this.departureFinanceFacade.listSupplierOptions(request.user.organizationId)
+    return this.departureFinanceFacade.listSupplierOptions(
+      request.user.organizationId,
+      departureId?.trim() || undefined,
+    )
   }
 
   @Get('source-order-options')

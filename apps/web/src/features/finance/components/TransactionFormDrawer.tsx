@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react'
-import { DatePicker, Drawer, Form, Input, InputNumber, Radio, Select, Space, Button } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { DatePicker, Drawer, Form, Input, InputNumber, Radio, Select, Space, Button, Typography } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -8,16 +8,25 @@ import {
   type FinanceTransactionSummary,
 } from '@xiaotuanbao/shared'
 import {
+  listDepartureReceivables,
   listFinanceDepartureOptions,
   listFinancePartnerOptions,
   listFinanceSourceOrderOptions,
   listFinanceSupplierOptions,
 } from '@/services/finance.service'
+import { getSourceOrder } from '@/services/source-order.service'
 import {
   COUNTERPARTY_TYPE_OPTIONS,
   PAYMENT_CHANNEL_OPTIONS,
   TRANSACTION_DIRECTION_OPTIONS,
+  formatCents,
 } from '../catalog'
+import { centsToYuan } from '../utils/finance-form'
+import {
+  formatGuestCollectionSuggestionText,
+  resolveGuestCollectionAmountSuggestion,
+  shouldReplaceSuggestedAmount,
+} from '../utils/transaction-amount-suggestion'
 import {
   createEmptyTransactionFormValues,
   transactionToFormValues,
@@ -48,7 +57,11 @@ export function TransactionFormDrawer({
 }: TransactionFormDrawerProps) {
   const counterpartyType = Form.useWatch('counterpartyType', form)
   const departureId = Form.useWatch('departureId', form)
+  const direction = Form.useWatch('direction', form)
+  const counterpartyId = Form.useWatch('counterpartyId', form)
   const departureLocked = Boolean(lockedDepartureId)
+  const [lastSuggestedYuan, setLastSuggestedYuan] = useState<number | undefined>()
+  const lastSuggestedSourceOrderIdRef = useRef<string | undefined>(undefined)
 
   // Memoize so the open-seed effect does not re-run on every render (e.g. when
   // useWatch(counterpartyType) updates) and wipe the user's Select choice.
@@ -70,6 +83,8 @@ export function TransactionFormDrawer({
 
     form.resetFields()
     form.setFieldsValue(initialValues)
+    setLastSuggestedYuan(undefined)
+    lastSuggestedSourceOrderIdRef.current = undefined
   }, [form, initialValues, open])
 
   const { data: departuresResult } = useQuery({
@@ -79,15 +94,15 @@ export function TransactionFormDrawer({
   })
 
   const { data: partnersResult } = useQuery({
-    queryKey: ['partners', 'transaction-form-select'],
-    queryFn: listFinancePartnerOptions,
-    enabled: open && counterpartyType === CounterpartyType.PARTNER,
+    queryKey: ['partners', 'transaction-form-select', departureId],
+    queryFn: () => listFinancePartnerOptions(departureId!),
+    enabled: open && counterpartyType === CounterpartyType.PARTNER && Boolean(departureId),
   })
 
   const { data: suppliersResult } = useQuery({
-    queryKey: ['suppliers', 'transaction-form-select'],
-    queryFn: listFinanceSupplierOptions,
-    enabled: open && counterpartyType === CounterpartyType.SUPPLIER,
+    queryKey: ['suppliers', 'transaction-form-select', departureId],
+    queryFn: () => listFinanceSupplierOptions(departureId!),
+    enabled: open && counterpartyType === CounterpartyType.SUPPLIER && Boolean(departureId),
   })
 
   const { data: sourceOrdersResult } = useQuery({
@@ -96,23 +111,122 @@ export function TransactionFormDrawer({
     enabled: open && counterpartyType === CounterpartyType.GUEST && Boolean(departureId),
   })
 
+  const guestSuggestionEnabled =
+    open &&
+    direction === TransactionDirection.INFLOW &&
+    counterpartyType === CounterpartyType.GUEST &&
+    Boolean(departureId) &&
+    Boolean(counterpartyId)
+
+  const { data: amountSuggestion } = useQuery({
+    queryKey: [
+      'transaction-form',
+      'guest-amount-suggestion',
+      departureId,
+      counterpartyId,
+    ],
+    queryFn: async () => {
+      const receivables = await listDepartureReceivables(departureId!, {
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: counterpartyId!,
+        pageSize: 20,
+      })
+      const sourceOrder = await getSourceOrder(counterpartyId!)
+      return resolveGuestCollectionAmountSuggestion({
+        schedules: receivables.items,
+        guestCollectCents: sourceOrder.guestCollectCents,
+      })
+    },
+    enabled: guestSuggestionEnabled,
+  })
+
+  useEffect(() => {
+    if (!amountSuggestion || !counterpartyId) {
+      return
+    }
+    if (lastSuggestedSourceOrderIdRef.current === counterpartyId) {
+      return
+    }
+    const previousSourceOrderId = lastSuggestedSourceOrderIdRef.current
+    lastSuggestedSourceOrderIdRef.current = counterpartyId
+
+    if (!previousSourceOrderId) {
+      return
+    }
+
+    // 已结清 / 建议额非正：只更新对照，不覆盖金额（避免写入 0）。
+    if (
+      amountSuggestion.settledHint === 'settled' ||
+      amountSuggestion.suggestedAmountCents <= 0
+    ) {
+      setLastSuggestedYuan(undefined)
+      return
+    }
+
+    const currentYuan = form.getFieldValue('amountYuan') as number | undefined
+    if (
+      shouldReplaceSuggestedAmount({
+        currentYuan,
+        previousSuggestedYuan: lastSuggestedYuan,
+      })
+    ) {
+      const nextYuan = centsToYuan(amountSuggestion.suggestedAmountCents)
+      form.setFieldsValue({ amountYuan: nextYuan })
+      setLastSuggestedYuan(nextYuan)
+    }
+  }, [amountSuggestion, counterpartyId, form, lastSuggestedYuan])
+
   const departureOptions =
     departuresResult?.map((departure) => ({
       value: departure.id,
       label: `${departure.departureNo} · ${departure.name}`,
     })) ?? []
 
-  const partnerOptions =
-    partnersResult?.map((partner) => ({
-      value: partner.id,
-      label: partner.name,
-    })) ?? []
+  const partnerOptions = useMemo(() => {
+    const options =
+      partnersResult?.map((partner) => ({
+        value: partner.id,
+        label: partner.name,
+      })) ?? []
+    if (
+      mode === 'edit' &&
+      editingTransaction?.counterpartyType === CounterpartyType.PARTNER &&
+      editingTransaction.counterpartyId &&
+      !options.some((option) => option.value === editingTransaction.counterpartyId)
+    ) {
+      return [
+        {
+          value: editingTransaction.counterpartyId,
+          label: editingTransaction.counterpartyName ?? editingTransaction.counterpartyId,
+        },
+        ...options,
+      ]
+    }
+    return options
+  }, [partnersResult, mode, editingTransaction])
 
-  const supplierOptions =
-    suppliersResult?.map((supplier) => ({
-      value: supplier.id,
-      label: supplier.name,
-    })) ?? []
+  const supplierOptions = useMemo(() => {
+    const options =
+      suppliersResult?.map((supplier) => ({
+        value: supplier.id,
+        label: supplier.name,
+      })) ?? []
+    if (
+      mode === 'edit' &&
+      editingTransaction?.counterpartyType === CounterpartyType.SUPPLIER &&
+      editingTransaction.counterpartyId &&
+      !options.some((option) => option.value === editingTransaction.counterpartyId)
+    ) {
+      return [
+        {
+          value: editingTransaction.counterpartyId,
+          label: editingTransaction.counterpartyName ?? editingTransaction.counterpartyId,
+        },
+        ...options,
+      ]
+    }
+    return options
+  }, [suppliersResult, mode, editingTransaction])
 
   const sourceOrderOptions =
     sourceOrdersResult?.map((sourceOrder) => ({
@@ -122,8 +236,54 @@ export function TransactionFormDrawer({
 
   const handleClose = () => {
     form.resetFields()
+    setLastSuggestedYuan(undefined)
+    lastSuggestedSourceOrderIdRef.current = undefined
     onClose()
   }
+
+  const clearCounterparty = () => {
+    form.setFieldsValue({
+      counterpartyId: undefined,
+      counterpartyName: undefined,
+    })
+    setLastSuggestedYuan(undefined)
+    lastSuggestedSourceOrderIdRef.current = undefined
+  }
+
+  const applySuggestedAmount = () => {
+    if (!amountSuggestion || amountSuggestion.settledHint === 'settled') {
+      return
+    }
+    const nextYuan = centsToYuan(amountSuggestion.suggestedAmountCents)
+    form.setFieldsValue({ amountYuan: nextYuan })
+    setLastSuggestedYuan(nextYuan)
+  }
+
+  const partnerExtra = !departureId
+    ? '请先选择关联发团'
+    : partnersResult && partnersResult.length === 0
+      ? '本团暂无关联的合作伙伴'
+      : undefined
+
+  const supplierExtra = !departureId
+    ? '请先选择关联发团'
+    : suppliersResult && suppliersResult.length === 0
+      ? '本团暂无关联的供应商'
+      : undefined
+
+  const amountExtra =
+    amountSuggestion && guestSuggestionEnabled ? (
+      <Space size={8} wrap>
+        <Typography.Text type="secondary">
+          {formatGuestCollectionSuggestionText(amountSuggestion, formatCents)}
+        </Typography.Text>
+        {amountSuggestion.settledHint !== 'settled' ? (
+          <Button type="link" size="small" onClick={applySuggestedAmount} style={{ padding: 0 }}>
+            填入
+          </Button>
+        ) : null}
+      </Space>
+    ) : undefined
 
   return (
     <Drawer
@@ -155,12 +315,7 @@ export function TransactionFormDrawer({
             options={departureOptions}
             optionFilterProp="label"
             onChange={() => {
-              if (form.getFieldValue('counterpartyType') === CounterpartyType.GUEST) {
-                form.setFieldsValue({
-                  counterpartyId: undefined,
-                  counterpartyName: undefined,
-                })
-              }
+              clearCounterparty()
             }}
           />
         </Form.Item>
@@ -184,6 +339,8 @@ export function TransactionFormDrawer({
                 counterpartyId: undefined,
                 counterpartyName: undefined,
               })
+              setLastSuggestedYuan(undefined)
+              lastSuggestedSourceOrderIdRef.current = undefined
             }}
           />
         </Form.Item>
@@ -198,6 +355,7 @@ export function TransactionFormDrawer({
           name="amountYuan"
           label="金额（元）"
           rules={[{ required: true, message: '请输入金额' }]}
+          extra={amountExtra}
         >
           <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />
         </Form.Item>
@@ -216,10 +374,7 @@ export function TransactionFormDrawer({
           <Select
             options={[...COUNTERPARTY_TYPE_OPTIONS]}
             onChange={() => {
-              form.setFieldsValue({
-                counterpartyId: undefined,
-                counterpartyName: undefined,
-              })
+              clearCounterparty()
             }}
           />
         </Form.Item>
@@ -228,10 +383,12 @@ export function TransactionFormDrawer({
             name="counterpartyId"
             label="合作伙伴"
             rules={[{ required: true, message: '请选择合作伙伴' }]}
+            extra={partnerExtra}
           >
             <Select
               showSearch
-              placeholder="选择合作伙伴"
+              disabled={!departureId}
+              placeholder={departureId ? '选择合作伙伴' : '请先选择关联发团'}
               optionFilterProp="label"
               options={partnerOptions}
             />
@@ -242,10 +399,12 @@ export function TransactionFormDrawer({
             name="counterpartyId"
             label="供应商"
             rules={[{ required: true, message: '请选择供应商' }]}
+            extra={supplierExtra}
           >
             <Select
               showSearch
-              placeholder="选择供应商"
+              disabled={!departureId}
+              placeholder={departureId ? '选择供应商' : '请先选择关联发团'}
               optionFilterProp="label"
               options={supplierOptions}
             />

@@ -97,12 +97,20 @@ export async function listFinanceDepartureOptions(): Promise<FinanceDepartureOpt
   return request.get<FinanceDepartureOption[]>('/finance/departure-options')
 }
 
-export async function listFinancePartnerOptions(): Promise<FinanceDirectoryOption[]> {
-  return request.get<FinanceDirectoryOption[]>('/finance/partner-options')
+export async function listFinancePartnerOptions(
+  departureId?: string,
+): Promise<FinanceDirectoryOption[]> {
+  return request.get<FinanceDirectoryOption[]>('/finance/partner-options', {
+    params: departureId ? { departureId } : undefined,
+  })
 }
 
-export async function listFinanceSupplierOptions(): Promise<FinanceDirectoryOption[]> {
-  return request.get<FinanceDirectoryOption[]>('/finance/supplier-options')
+export async function listFinanceSupplierOptions(
+  departureId?: string,
+): Promise<FinanceDirectoryOption[]> {
+  return request.get<FinanceDirectoryOption[]>('/finance/supplier-options', {
+    params: departureId ? { departureId } : undefined,
+  })
 }
 
 export async function listFinanceSourceOrderOptions(

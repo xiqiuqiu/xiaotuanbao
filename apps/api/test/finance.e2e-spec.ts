@@ -160,6 +160,48 @@ describe('Finance API (e2e)', () => {
       },
     })
     supplierId = supplier.id
+
+    // 主发团与其它发团均挂上伙伴/供应商源事实，保证后续流水创建夹具可通过发团硬筛校验。
+    for (const depId of [departureId, otherDepartureId]) {
+      await prisma.sourceOrder.create({
+        data: {
+          departureId: depId,
+          partnerId,
+          displayName: `${testPrefix}-fixture-so`,
+          guestCount: 1,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 10000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 10000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          partnerCollectedCents: 10000,
+          guestCollectCents: 0,
+          netReceivableCents: 10000,
+        },
+      })
+      const segment = await prisma.itinerarySegment.create({
+        data: {
+          departureId: depId,
+          name: `${testPrefix}-fixture-seg`,
+          sortOrder: 1,
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          endDate: new Date('2026-08-02T00:00:00.000Z'),
+          destination: 'fixture',
+        },
+      })
+      await prisma.segmentResource.create({
+        data: {
+          segmentId: segment.id,
+          resourceKind: ResourceKind.transport,
+          counterpartyType: CounterpartyType.supplier,
+          supplierId,
+          title: `${testPrefix}-fixture-resource`,
+          amountCents: 10000,
+        },
+      })
+    }
   })
 
   afterAll(async () => {
@@ -370,6 +412,283 @@ describe('Finance API (e2e)', () => {
     await authRequest(app, coordinatorToken)
       .get('/api/finance/supplier-options')
       .expect(200)
+  })
+
+  it('filters partner/supplier options by departure source facts when departureId is set', async () => {
+    const scopedDeparture = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `${testPrefix}-dep-options-scope`,
+        name: `${testPrefix}-options作用域发团`,
+        routeName: 'options scope',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        endDate: new Date('2026-10-03T00:00:00.000Z'),
+        dayCount: 3,
+        ownerUserId,
+      },
+    })
+
+    const unrelatedPartner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-unrelated-partner`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    const unrelatedSupplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-unrelated-supplier`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const emptyPartners = await authRequest(app, financeToken)
+      .get('/api/finance/partner-options')
+      .query({ departureId: scopedDeparture.id })
+      .expect(200)
+    expect(emptyPartners.body.data).toEqual([])
+
+    const emptySuppliers = await authRequest(app, financeToken)
+      .get('/api/finance/supplier-options')
+      .query({ departureId: scopedDeparture.id })
+      .expect(200)
+    expect(emptySuppliers.body.data).toEqual([])
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${scopedDeparture.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 10000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
+      })
+      .expect(201)
+
+    const segment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${scopedDeparture.id}/segments`)
+      .send({
+        name: 'options-scope-segment',
+        startDate: '2026-10-01',
+        endDate: '2026-10-02',
+        destination: '测试目的地',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.transport,
+        supplierId,
+        title: '用车',
+        amountCents: 10000,
+      })
+      .expect(201)
+
+    const scopedPartners = await authRequest(app, financeToken)
+      .get('/api/finance/partner-options')
+      .query({ departureId: scopedDeparture.id })
+      .expect(200)
+    expect(scopedPartners.body.data).toEqual([{ id: partnerId, name: `${testPrefix}-partner` }])
+    expect(
+      (scopedPartners.body.data as Array<{ id: string }>).map((item) => item.id),
+    ).not.toContain(unrelatedPartner.id)
+
+    const scopedSuppliers = await authRequest(app, financeToken)
+      .get('/api/finance/supplier-options')
+      .query({ departureId: scopedDeparture.id })
+      .expect(200)
+    expect(scopedSuppliers.body.data).toEqual([
+      { id: supplierId, name: `${testPrefix}-supplier` },
+    ])
+    expect(
+      (scopedSuppliers.body.data as Array<{ id: string }>).map((item) => item.id),
+    ).not.toContain(unrelatedSupplier.id)
+
+    const orgPartners = await authRequest(app, financeToken)
+      .get('/api/finance/partner-options')
+      .expect(200)
+    expect(orgPartners.body.data).toEqual(
+      expect.arrayContaining([
+        { id: partnerId, name: `${testPrefix}-partner` },
+        { id: unrelatedPartner.id, name: `${testPrefix}-unrelated-partner` },
+      ]),
+    )
+  })
+
+  it('allows creating transaction when partner is only linked via departure schedule', async () => {
+    const scopedDeparture = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `${testPrefix}-dep-tx-schedule-only`,
+        name: `${testPrefix}-仅节点关联发团`,
+        routeName: 'schedule only',
+        startDate: new Date('2026-11-10T00:00:00.000Z'),
+        endDate: new Date('2026-11-12T00:00:00.000Z'),
+        dayCount: 3,
+        ownerUserId,
+      },
+    })
+    const scheduleOnlyPartner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-schedule-only-partner`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/receivables')
+      .send(
+        schedulePayload({
+          departureId: scopedDeparture.id,
+          title: `${testPrefix}-仅节点应收`,
+          counterpartyId: scheduleOnlyPartner.id,
+          counterpartyName: scheduleOnlyPartner.name,
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          departureId: scopedDeparture.id,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: scheduleOnlyPartner.id,
+          counterpartyName: scheduleOnlyPartner.name,
+          amountCents: 1500,
+        }),
+      )
+      .expect(201)
+  })
+
+  it('rejects creating transaction when partner/supplier is not on departure source facts', async () => {
+    const scopedDeparture = await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `${testPrefix}-dep-tx-scope`,
+        name: `${testPrefix}-流水作用域发团`,
+        routeName: 'tx scope',
+        startDate: new Date('2026-11-01T00:00:00.000Z'),
+        endDate: new Date('2026-11-03T00:00:00.000Z'),
+        dayCount: 3,
+        ownerUserId,
+      },
+    })
+
+    const foreignPartner = await prisma.partner.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-foreign-partner`,
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    const foreignSupplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-foreign-supplier`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    const rejectedPartner = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          departureId: scopedDeparture.id,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: foreignPartner.id,
+          counterpartyName: foreignPartner.name,
+        }),
+      )
+      .expect(400)
+    expect(rejectedPartner.body.message).toContain('未关联到所选发团')
+
+    const rejectedSupplier = await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'outflow',
+          departureId: scopedDeparture.id,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: foreignSupplier.id,
+          counterpartyName: foreignSupplier.name,
+        }),
+      )
+      .expect(400)
+    expect(rejectedSupplier.body.message).toContain('未关联到所选发团')
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${scopedDeparture.id}/source-orders`)
+      .send({
+        partnerId: foreignPartner.id,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 10000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
+      })
+      .expect(201)
+
+    const segment = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${scopedDeparture.id}/segments`)
+      .send({
+        name: 'tx-scope-segment',
+        startDate: '2026-11-01',
+        endDate: '2026-11-02',
+        destination: '测试',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/segments/${segment.body.data.id}/resources`)
+      .send({
+        resourceKind: ResourceKind.hotel,
+        supplierId: foreignSupplier.id,
+        title: '酒店',
+        amountCents: 10000,
+      })
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          departureId: scopedDeparture.id,
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: foreignPartner.id,
+          counterpartyName: foreignPartner.name,
+          amountCents: 1000,
+        }),
+      )
+      .expect(201)
+
+    await authRequest(app, financeToken)
+      .post('/api/finance/transactions')
+      .send(
+        transactionPayload({
+          direction: 'outflow',
+          departureId: scopedDeparture.id,
+          counterpartyType: CounterpartyType.supplier,
+          counterpartyId: foreignSupplier.id,
+          counterpartyName: foreignSupplier.name,
+          amountCents: 1000,
+        }),
+      )
+      .expect(201)
   })
 
   it('lists only source orders with guest-collection path in source-order-options', async () => {
@@ -948,6 +1267,25 @@ describe('Finance API (e2e)', () => {
         },
       })
       prefixlessDepartureId = departure.id
+
+      await prisma.sourceOrder.create({
+        data: {
+          departureId: prefixlessDepartureId,
+          partnerId: prefixlessPartnerId,
+          displayName: `${testPrefix}-noprefix-so`,
+          guestCount: 1,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 10000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 10000,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          partnerCollectedCents: 10000,
+          guestCollectCents: 0,
+          netReceivableCents: 10000,
+        },
+      })
     })
 
     afterAll(async () => {

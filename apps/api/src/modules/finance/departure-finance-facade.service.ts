@@ -376,30 +376,48 @@ export class DepartureFinanceFacade {
     })
   }
 
-  async listPartnerOptions(organizationId: string) {
+  async listPartnerOptions(organizationId: string, departureId?: string) {
+    if (departureId) {
+      await this.requireDepartureId(organizationId, departureId)
+    }
+
     return this.prisma.partner.findMany({
-      where: { organizationId, status: DirectoryProfileStatus.active },
+      where: {
+        organizationId,
+        status: DirectoryProfileStatus.active,
+        ...(departureId
+          ? { sourceOrders: { some: { departureId } } }
+          : {}),
+      },
       select: { id: true, name: true },
       orderBy: { updatedAt: 'desc' },
     })
   }
 
-  async listSupplierOptions(organizationId: string) {
+  async listSupplierOptions(organizationId: string, departureId?: string) {
+    if (departureId) {
+      await this.requireDepartureId(organizationId, departureId)
+    }
+
     return this.prisma.supplier.findMany({
-      where: { organizationId, status: DirectoryProfileStatus.active },
+      where: {
+        organizationId,
+        status: DirectoryProfileStatus.active,
+        ...(departureId
+          ? {
+              segmentResources: {
+                some: { segment: { departureId } },
+              },
+            }
+          : {}),
+      },
       select: { id: true, name: true },
       orderBy: { updatedAt: 'desc' },
     })
   }
 
   async listSourceOrderOptions(organizationId: string, departureId: string) {
-    const departure = await this.prisma.departure.findFirst({
-      where: { id: departureId, organizationId },
-      select: { id: true },
-    })
-    if (!departure) {
-      throw new NotFoundException('发团不存在')
-    }
+    await this.requireDepartureId(organizationId, departureId)
 
     return this.prisma.sourceOrder.findMany({
       where: {
@@ -410,6 +428,16 @@ export class DepartureFinanceFacade {
       select: { id: true, displayName: true },
       orderBy: { createdAt: 'asc' },
     })
+  }
+
+  private async requireDepartureId(organizationId: string, departureId: string) {
+    const departure = await this.prisma.departure.findFirst({
+      where: { id: departureId, organizationId },
+      select: { id: true },
+    })
+    if (!departure) {
+      throw new NotFoundException('发团不存在')
+    }
   }
 
   /**

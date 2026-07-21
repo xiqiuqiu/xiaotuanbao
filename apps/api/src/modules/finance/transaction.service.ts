@@ -395,6 +395,63 @@ export class TransactionService {
     }
   }
 
+  /** 本团客源单上的伙伴，或本团已有应收/应付节点上的伙伴（覆盖登记收款等路径）。 */
+  private async assertPartnerLinkedToDeparture(
+    client: Prisma.TransactionClient | PrismaService,
+    departureId: string,
+    partnerId: string,
+  ) {
+    const onSourceOrder = await client.sourceOrder.findFirst({
+      where: { departureId, partnerId },
+      select: { id: true },
+    })
+    if (onSourceOrder) {
+      return
+    }
+    const onSchedule = await client.paymentSchedule.findFirst({
+      where: {
+        departureId,
+        counterpartyType: PrismaCounterpartyType.partner,
+        counterpartyId: partnerId,
+        voidedAt: null,
+      },
+      select: { id: true },
+    })
+    if (!onSchedule) {
+      throw new BadRequestException('该合作伙伴未关联到所选发团')
+    }
+  }
+
+  /** 本团资源上的供应商，或本团已有应付/应收节点上的供应商。 */
+  private async assertSupplierLinkedToDeparture(
+    client: Prisma.TransactionClient | PrismaService,
+    departureId: string,
+    supplierId: string,
+  ) {
+    const onResource = await client.segmentResource.findFirst({
+      where: {
+        supplierId,
+        segment: { departureId },
+      },
+      select: { id: true },
+    })
+    if (onResource) {
+      return
+    }
+    const onSchedule = await client.paymentSchedule.findFirst({
+      where: {
+        departureId,
+        counterpartyType: PrismaCounterpartyType.supplier,
+        counterpartyId: supplierId,
+        voidedAt: null,
+      },
+      select: { id: true },
+    })
+    if (!onSchedule) {
+      throw new BadRequestException('该供应商未关联到所选发团')
+    }
+  }
+
   private async resolveCounterparty(
     organizationId: string,
     dto: CreateFinanceTransactionDto | UpdateFinanceTransactionDto,
@@ -420,6 +477,13 @@ export class TransactionService {
         if (!partner) {
           throw new NotFoundException('合作伙伴不存在')
         }
+        if (dto.departureId) {
+          await this.assertPartnerLinkedToDeparture(
+            client,
+            dto.departureId,
+            partner.id,
+          )
+        }
         return {
           counterpartyType: dto.counterpartyType,
           counterpartyId: partner.id,
@@ -432,6 +496,13 @@ export class TransactionService {
       })
       if (!supplier) {
         throw new NotFoundException('供应商不存在')
+      }
+      if (dto.departureId) {
+        await this.assertSupplierLinkedToDeparture(
+          client,
+          dto.departureId,
+          supplier.id,
+        )
       }
       return {
         counterpartyType: dto.counterpartyType,
