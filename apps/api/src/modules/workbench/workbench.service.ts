@@ -14,6 +14,7 @@ import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
 import { CoordinatorSettlementWorkbenchService } from './coordinator-settlement-workbench.service'
 import { CoordinatorTrendWorkbenchService } from './coordinator-trend-workbench.service'
 import { OrganizationScaleWorkbenchService } from './organization-scale-workbench.service'
+import { FinanceReceivablesWorkbenchService } from './finance-receivables-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -125,6 +126,7 @@ export class WorkbenchService {
     private readonly coordinatorSettlementWorkbenchService: CoordinatorSettlementWorkbenchService,
     private readonly coordinatorTrendWorkbenchService: CoordinatorTrendWorkbenchService,
     private readonly organizationScaleWorkbenchService: OrganizationScaleWorkbenchService,
+    private readonly financeReceivablesWorkbenchService: FinanceReceivablesWorkbenchService,
   ) {}
 
   async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
@@ -179,6 +181,15 @@ export class WorkbenchService {
           organizationId,
           asOf,
         )
+      }
+    }
+    if (template === 'finance') {
+      const financeReceivablesIndex = modules.findIndex(
+        (module) => module.key === 'finance-receivables',
+      )
+      if (financeReceivablesIndex >= 0) {
+        modules[financeReceivablesIndex] =
+          await this.financeReceivablesWorkbenchService.buildModule(organizationId, asOf)
       }
     }
     if (template === 'coordinator') {

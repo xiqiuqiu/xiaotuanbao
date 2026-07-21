@@ -44,6 +44,16 @@ export type UsePaymentScheduleWorkspaceOptions = {
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
   initialCounterpartyKeyword?: string
+  /** 精确节点编号；服务端筛选，计入列表 total。 */
+  scheduleNo?: string
+  /** 工作台应收跟进窗口；服务端筛选，计入列表 total。 */
+  receivableFollowUp?:
+    | 'overdue'
+    | 'due_within_7_days'
+    | 'aging_1_7'
+    | 'aging_8_30'
+    | 'aging_over_30'
+    | 'follow_up'
   onHighlightConsumed?: () => void
   /**
    * 受控出团日期区间（Partner 往来账款 Tab 跨应收/应付共用）。
@@ -63,6 +73,8 @@ export function usePaymentScheduleWorkspace({
   highlightSourceOrderId,
   highlightSegmentResourceId,
   initialCounterpartyKeyword = '',
+  scheduleNo,
+  receivableFollowUp,
   onHighlightConsumed,
   departureDateRange: controlledDepartureDateRange,
   onDepartureDateRangeChange,
@@ -157,6 +169,8 @@ export function usePaymentScheduleWorkspace({
     voidedAudit,
     departureDateFrom,
     departureDateTo,
+    receivableFollowUp,
+    scheduleNo,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -181,12 +195,19 @@ export function usePaymentScheduleWorkspace({
       voidedAudit,
       departureDateFrom,
       departureDateTo,
+      receivableFollowUp,
+      scheduleNo,
     ],
     queryFn: ({ signal }) => {
       const counterpartyQuery = trimmedCounterpartyKeyword
         ? { counterpartyKeyword: trimmedCounterpartyKeyword }
         : {}
       const statusQuery = voidedAudit ? { status: 'voided' as const } : {}
+      const followUpQuery =
+        isReceivable && receivableFollowUp ? { receivableFollowUp } : {}
+      const scheduleNoQuery = scheduleNo?.trim()
+        ? { scheduleNo: scheduleNo.trim() }
+        : {}
       if (isDepartureScope) {
         if (!lockedDepartureId) {
           throw new Error('发团 ID 缺失')
@@ -244,6 +265,8 @@ export function usePaymentScheduleWorkspace({
           pageSize: fetchPageSize,
           ...counterpartyQuery,
           ...statusQuery,
+          ...followUpQuery,
+          ...scheduleNoQuery,
         },
         signal,
       )

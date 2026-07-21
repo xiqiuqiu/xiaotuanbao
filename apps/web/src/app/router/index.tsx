@@ -17,6 +17,7 @@ import { PlatformLayout } from '@/layouts/PlatformLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseDepartureListSearch } from '@/features/departure/utils/departure-list-search'
+import { parseReceivableListSearch } from '@/features/finance/utils/receivable-list-search'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -171,6 +172,7 @@ const departureDetailRoute = createRoute({
 const financeReceivableRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/finance/receivable',
+  validateSearch: parseReceivableListSearch,
   component: lazyRouteComponent(
     () => import('@/features/finance/pages/ReceivablesPage'),
     'ReceivablesPage',

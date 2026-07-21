@@ -27,6 +27,16 @@ export type PaymentScheduleWorkspaceProps = {
   highlightSegmentResourceId?: string
   /** Prefill 往来对象关键字（如从「查看应收 / 查看应付」带入）。 */
   initialCounterpartyKeyword?: string
+  /** 精确节点编号（工作台队列单项下钻，服务端筛选）。 */
+  scheduleNo?: string
+  /** 工作台应收跟进 / 账龄下钻窗口。 */
+  receivableFollowUp?:
+    | 'overdue'
+    | 'due_within_7_days'
+    | 'aging_1_7'
+    | 'aging_8_30'
+    | 'aging_over_30'
+    | 'follow_up'
   onHighlightConsumed?: () => void
   /** When set, renders the standard list page header. */
   pageHeader?: {

@@ -43,6 +43,7 @@ import {
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
 import { CoordinatorTrendModule } from './CoordinatorTrendModule'
+import { FinanceReceivablesModule } from './FinanceReceivablesModule'
 import { OrganizationScaleModule } from './OrganizationScaleModule'
 import { workbenchQueryOptions } from './workbench-query'
 
@@ -353,6 +354,23 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
     return (
       <div className={styles.scaleContent}>
         {scaleModule ? <OrganizationScaleModule module={scaleModule} /> : null}
+        {remainingModules.length > 0 ? (
+          <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
+        ) : null}
+      </div>
+    )
+  }
+
+  if (snapshot.template === 'finance') {
+    const receivablesModule = snapshot.modules.find(
+      (module) => module.key === 'finance-receivables',
+    )
+    const remainingModules = snapshot.modules.filter(
+      (module) => module.key !== receivablesModule?.key,
+    )
+    return (
+      <div className={styles.financeReceivablesContent}>
+        {receivablesModule ? <FinanceReceivablesModule module={receivablesModule} /> : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

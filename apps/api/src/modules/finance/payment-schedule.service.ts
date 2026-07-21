@@ -48,6 +48,12 @@ import {
   buildPaymentScheduleCounterpartyWhere,
   buildPaymentScheduleDepartureDateWhere,
 } from './payment-schedule-list-filters'
+import {
+  buildOpenReceivableBaseWhere,
+  buildReceivableFollowUpDueDateWhere,
+  getReceivableFollowUpDates,
+  type ReceivableFollowUpWindow,
+} from './receivable-follow-up'
 
 const FINANCE_ADJUSTMENT_FIELDS = [
   'amountCents',
@@ -85,6 +91,33 @@ export class PaymentScheduleService {
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
+  /**
+   * 工作台与列表共用：开放应收（未作废/未关闭）且未结金额 > 0，并落入跟进窗口。
+   */
+  async findOpenReceivableFollowUpIds(
+    organizationId: string,
+    window: ReceivableFollowUpWindow,
+    asOf: Date = new Date(),
+  ): Promise<string[]> {
+    const dates = getReceivableFollowUpDates(asOf)
+    const candidates = await this.prisma.paymentSchedule.findMany({
+      where: {
+        ...buildOpenReceivableBaseWhere(organizationId),
+        ...buildReceivableFollowUpDueDateWhere(window, dates),
+      },
+      select: { id: true, amountCents: true },
+    })
+    if (candidates.length === 0) {
+      return []
+    }
+    const settledMap = await this.verificationService.batchGetSettledAmounts(
+      candidates.map((schedule) => schedule.id),
+    )
+    return candidates
+      .filter((schedule) => schedule.amountCents - (settledMap.get(schedule.id) ?? 0) > 0)
+      .map((schedule) => schedule.id)
+  }
+
   async list(
     organizationId: string,
     direction: PaymentScheduleDirection,
@@ -94,14 +127,30 @@ export class PaymentScheduleService {
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
     const counterpartyWhere = buildPaymentScheduleCounterpartyWhere(query)
     const departureDateWhere = buildPaymentScheduleDepartureDateWhere(query)
+    const andFilters: Prisma.PaymentScheduleWhereInput[] = []
 
+    if (
+      query.receivableFollowUp
+      && direction === PaymentScheduleDirection.receivable
+      && query.status !== 'voided'
+    ) {
+      const followUpIds = await this.findOpenReceivableFollowUpIds(
+        organizationId,
+        query.receivableFollowUp,
+      )
+      andFilters.push({ id: { in: followUpIds } })
+    }
+
+    const scheduleNo = query.scheduleNo?.trim()
     const where: Prisma.PaymentScheduleWhereInput = {
       organizationId,
       direction,
       voidedAt: query.status === 'voided' ? { not: null } : null,
       ...(query.departureId ? { departureId: query.departureId } : {}),
+      ...(scheduleNo ? { scheduleNo } : {}),
       ...counterpartyWhere,
       ...departureDateWhere,
+      ...(andFilters.length > 0 ? { AND: andFilters } : {}),
     }
 
     const [items, total] = await Promise.all([

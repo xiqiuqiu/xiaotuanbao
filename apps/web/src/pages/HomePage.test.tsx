@@ -311,6 +311,162 @@ const organizationAdminEmptySnapshot = {
   ),
 }
 
+const financeReceivablesSnapshot = {
+  template: 'finance' as const,
+  organization: { id: 'org-finance-1', name: '财务旅行社' },
+  asOf: '2026-07-21T02:03:04.000Z',
+  modules: [
+    {
+      key: 'finance-receivables' as const,
+      title: '应收跟进',
+      description: '优先跟进逾期应收，并关注未来 7 天到期节点；账龄按未结节点分布。',
+      total: 9,
+      href: '/finance/receivable?receivableFollowUp=follow_up',
+      metrics: [
+        {
+          key: 'overdue-receivables',
+          label: '逾期应收',
+          value: 125000,
+          secondaryValue: 3,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=overdue',
+        },
+        {
+          key: 'due-within-7-days',
+          label: '未来 7 天到期应收',
+          value: 80000,
+          secondaryValue: 2,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=due_within_7_days',
+        },
+      ],
+      items: [
+        {
+          kind: 'finance-receivable' as const,
+          id: 'ar-1',
+          title: '逾期大额应收',
+          description: 'AR-0001',
+          href: '/finance/receivable?scheduleNo=AR-0001',
+          dueDate: '2026-06-20',
+          unsettledAmountCents: 90000,
+          overdueDays: 31,
+          departureClosed: true,
+          counterpartyName: '丝路旅行社',
+        },
+        ...Array.from({ length: 6 }, (_, index) => ({
+          kind: 'finance-receivable' as const,
+          id: `ar-extra-${index + 1}`,
+          title: `跟进项 ${index + 1}`,
+          description: `AR-EXTRA-${index + 1}`,
+          href: `/finance/receivable?scheduleNo=AR-EXTRA-${index + 1}`,
+          dueDate: '2026-07-10',
+          unsettledAmountCents: 1000 * (index + 1),
+          overdueDays: 11 - index,
+          departureClosed: false,
+          counterpartyName: '测试同行',
+        })),
+        {
+          kind: 'finance-receivable' as const,
+          id: 'ar-2',
+          title: '近期到期应收',
+          description: 'AR-0002',
+          href: '/finance/receivable?scheduleNo=AR-0002',
+          dueDate: '2026-07-22',
+          unsettledAmountCents: 40000,
+          overdueDays: null,
+          departureClosed: false,
+          counterpartyName: '云端同行',
+        },
+      ],
+      buckets: [
+        {
+          key: 'aging_1_7' as const,
+          label: '1–7 天',
+          scheduleCount: 1,
+          unsettledAmountCents: 10000,
+          href: '/finance/receivable?receivableFollowUp=aging_1_7',
+        },
+        {
+          key: 'aging_8_30' as const,
+          label: '8–30 天',
+          scheduleCount: 1,
+          unsettledAmountCents: 25000,
+          href: '/finance/receivable?receivableFollowUp=aging_8_30',
+        },
+        {
+          key: 'aging_over_30' as const,
+          label: '30 天以上',
+          scheduleCount: 1,
+          unsettledAmountCents: 90000,
+          href: '/finance/receivable?receivableFollowUp=aging_over_30',
+        },
+      ],
+    },
+    {
+      key: 'finance-funds' as const,
+      title: '资金与账款',
+      description: '查看应付、流水与账款生成事项。',
+      metrics: [],
+      items: [],
+    },
+  ],
+  actions: [],
+}
+
+const financeReceivablesEmptySnapshot = {
+  ...financeReceivablesSnapshot,
+  modules: financeReceivablesSnapshot.modules.map((module) =>
+    module.key === 'finance-receivables'
+      ? {
+          ...module,
+          total: 0,
+          metrics: [
+            {
+              key: 'overdue-receivables',
+              label: '逾期应收',
+              value: 0,
+              secondaryValue: 0,
+              secondarySuffix: '个节点',
+              href: '/finance/receivable?receivableFollowUp=overdue',
+            },
+            {
+              key: 'due-within-7-days',
+              label: '未来 7 天到期应收',
+              value: 0,
+              secondaryValue: 0,
+              secondarySuffix: '个节点',
+              href: '/finance/receivable?receivableFollowUp=due_within_7_days',
+            },
+          ],
+          items: [],
+          buckets: [
+            {
+              key: 'aging_1_7' as const,
+              label: '1–7 天',
+              scheduleCount: 0,
+              unsettledAmountCents: 0,
+              href: '/finance/receivable?receivableFollowUp=aging_1_7',
+            },
+            {
+              key: 'aging_8_30' as const,
+              label: '8–30 天',
+              scheduleCount: 0,
+              unsettledAmountCents: 0,
+              href: '/finance/receivable?receivableFollowUp=aging_8_30',
+            },
+            {
+              key: 'aging_over_30' as const,
+              label: '30 天以上',
+              scheduleCount: 0,
+              unsettledAmountCents: 0,
+              href: '/finance/receivable?receivableFollowUp=aging_over_30',
+            },
+          ],
+        }
+      : module,
+  ),
+}
+
 function renderPage() {
   return renderPageWithClient(new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -541,6 +697,60 @@ describe('HomePage workbench lifecycle', () => {
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure?startDateFrom=2026-07-01&startDateTo=2026-07-31',
     })
+  })
+
+  it('renders finance receivable metrics, top follow-up, aging chart and navigation', async () => {
+    vi.mocked(getWorkbench).mockResolvedValue(financeReceivablesSnapshot)
+    renderPage()
+
+    expect(await screen.findByText('财务工作台')).toBeInTheDocument()
+    expect(screen.getByText('逾期应收')).toBeInTheDocument()
+    expect(screen.getByText('未来 7 天到期应收')).toBeInTheDocument()
+    expect(screen.getByText('¥1,250.00')).toBeInTheDocument()
+    expect(screen.getByText('¥800.00')).toBeInTheDocument()
+    expect(screen.getAllByText(/3 个节点|2 个节点/).length).toBeGreaterThan(0)
+    expect(screen.getByText('逾期大额应收')).toBeInTheDocument()
+    expect(screen.getByText('发团已关闭')).toBeInTheDocument()
+    expect(screen.getByText('近期到期应收')).toBeInTheDocument()
+    expect(screen.getAllByText(/^跟进项 /)).toHaveLength(6)
+    expect(screen.getByRole('button', { name: /查看全部 9 项/ })).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-aging-chart')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('逾期应收'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=overdue',
+    })
+
+    fireEvent.click(screen.getByLabelText('未来 7 天到期应收'))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=due_within_7_days',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /查看全部 9 项/ }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=follow_up',
+    })
+
+    fireEvent.click(screen.getByRole('button', {
+      name: '账龄 30 天以上，节点数 1，未收金额 ¥900.00',
+    }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?receivableFollowUp=aging_over_30',
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '逾期大额应收' }))
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/finance/receivable?scheduleNo=AR-0001',
+    })
+
+    cleanup()
+    vi.mocked(getWorkbench).mockResolvedValue(financeReceivablesEmptySnapshot)
+    renderPage()
+    expect(await screen.findByText(
+      '当前没有逾期应收，因此不绘制账龄分布',
+    )).toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-aging-chart')).not.toBeInTheDocument()
+    expect(screen.getByText('当前没有需要跟进的逾期或近期到期应收')).toBeInTheDocument()
   })
 
   it('does not render an action when the current session lacks its permission', async () => {

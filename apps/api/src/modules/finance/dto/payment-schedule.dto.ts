@@ -16,6 +16,7 @@ import {
   PaymentScheduleCloseDisposition as PrismaPaymentScheduleCloseDisposition,
   PaymentScheduleDirection as PrismaPaymentScheduleDirection,
 } from '@prisma/client'
+import { RECEIVABLE_FOLLOW_UP_WINDOWS } from '../receivable-follow-up'
 
 export class CreatePaymentScheduleDto {
   @IsString()
@@ -113,9 +114,22 @@ export class ListPaymentSchedulesQueryDto {
   @IsString()
   counterpartyKeyword?: string
 
+  /** 精确匹配节点编号（工作台队列单项下钻）。 */
+  @IsOptional()
+  @IsString()
+  scheduleNo?: string
+
   @IsOptional()
   @IsIn(['voided'])
   status?: 'voided'
+
+  /**
+   * 工作台应收跟进 / 账龄下钻窗口。
+   * 仅应收列表生效：未作废、未关闭、未结金额 > 0，并按窗口约束到期日。
+   */
+  @IsOptional()
+  @IsIn(RECEIVABLE_FOLLOW_UP_WINDOWS)
+  receivableFollowUp?: (typeof RECEIVABLE_FOLLOW_UP_WINDOWS)[number]
 
   @IsOptional()
   @Type(() => Number)

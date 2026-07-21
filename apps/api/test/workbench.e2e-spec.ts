@@ -1117,4 +1117,278 @@ describe('Workbench contract (e2e)', () => {
       await prisma.organization.delete({ where: { id: organization.id } })
     }
   })
+
+  it('returns finance receivable follow-up metrics, aging buckets, closed-departure markers and matching drill-downs', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date())
+    const addDays = (value: string, days: number) => {
+      const date = new Date(`${value}T00:00:00.000Z`)
+      date.setUTCDate(date.getUTCDate() + days)
+      return date.toISOString().slice(0, 10)
+    }
+    const asDate = (value: string) => new Date(`${value}T00:00:00.000Z`)
+    const daysBetween = (from: string, to: string) =>
+      Math.round((asDate(to).getTime() - asDate(from).getTime()) / 86_400_000)
+    const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
+    const username = `e2e-workbench-ar-${Date.now()}`
+    const organization = await prisma.organization.create({
+      data: {
+        name: `工作台应收测试旅行社-${Date.now()}`,
+        businessPrefix: `R${suffix}`,
+      },
+    })
+    const financeRole = await prisma.role.findUniqueOrThrow({
+      where: { name: PRESET_ROLE_NAMES.FINANCE },
+      select: { id: true },
+    })
+    const user = await prisma.user.create({
+      data: {
+        organizationId: organization.id,
+        username,
+        passwordHash: await hash('admin123', 10),
+        name: '应收财务测试员',
+        roles: { create: { roleId: financeRole.id } },
+      },
+    })
+    const partner = await prisma.partner.create({
+      data: {
+        organizationId: organization.id,
+        name: '应收测试客源',
+        partnerKind: PartnerKind.group_agent,
+        partnerType: PartnerType.group_agency,
+        status: DirectoryProfileStatus.active,
+      },
+    })
+
+    let departureSequence = 0
+    const createDeparture = async (input: {
+      name: string
+      status?: DepartureStatus
+    }) => {
+      departureSequence += 1
+      return prisma.departure.create({
+        data: {
+          organizationId: organization.id,
+          departureNo: `WTR${String(departureSequence).padStart(10, '0')}`,
+          name: input.name,
+          routeName: '应收测试路线',
+          startDate: asDate(addDays(today, -10)),
+          endDate: asDate(addDays(today, -3)),
+          dayCount: daysBetween(addDays(today, -10), addDays(today, -3)) + 1,
+          ownerUserId: user.id,
+          status: input.status ?? DepartureStatus.editing,
+        },
+      })
+    }
+
+    const openDeparture = await createDeparture({ name: '开放发团' })
+    const closedDeparture = await createDeparture({
+      name: '已关闭发团',
+      status: DepartureStatus.closed,
+    })
+
+    let scheduleSequence = 0
+    const createReceivable = async (input: {
+      title: string
+      dueDate: string
+      amountCents: number
+      departureId: string
+      cancelledAt?: Date | null
+      voidedAt?: Date | null
+    }) => {
+      scheduleSequence += 1
+      return prisma.paymentSchedule.create({
+        data: {
+          organizationId: organization.id,
+          departureId: input.departureId,
+          direction: PaymentScheduleDirection.receivable,
+          scheduleNo: `WTR-AR-${String(scheduleSequence).padStart(4, '0')}`,
+          title: input.title,
+          amountCents: input.amountCents,
+          dueDate: asDate(input.dueDate),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyId: partner.id,
+          counterpartyName: partner.name,
+          sourceType: PaymentScheduleSourceType.MANUAL,
+          cancelledAt: input.cancelledAt ?? null,
+          voidedAt: input.voidedAt ?? null,
+        },
+      })
+    }
+
+    try {
+      const aging7 = await createReceivable({
+        title: '账龄7天',
+        dueDate: addDays(today, -7),
+        amountCents: 70000,
+        departureId: openDeparture.id,
+      })
+      const aging8 = await createReceivable({
+        title: '账龄8天',
+        dueDate: addDays(today, -8),
+        amountCents: 80000,
+        departureId: openDeparture.id,
+      })
+      const aging30 = await createReceivable({
+        title: '账龄30天',
+        dueDate: addDays(today, -30),
+        amountCents: 300000,
+        departureId: openDeparture.id,
+      })
+      const aging31 = await createReceivable({
+        title: '账龄31天',
+        dueDate: addDays(today, -31),
+        amountCents: 310000,
+        departureId: closedDeparture.id,
+      })
+      const dueToday = await createReceivable({
+        title: '今天到期',
+        dueDate: today,
+        amountCents: 10000,
+        departureId: openDeparture.id,
+      })
+      const dueDay7 = await createReceivable({
+        title: '第7天到期',
+        dueDate: addDays(today, 7),
+        amountCents: 17000,
+        departureId: openDeparture.id,
+      })
+      await createReceivable({
+        title: '第8天不入近期',
+        dueDate: addDays(today, 8),
+        amountCents: 18000,
+        departureId: openDeparture.id,
+      })
+      await createReceivable({
+        title: '已关闭节点',
+        dueDate: addDays(today, -3),
+        amountCents: 50000,
+        departureId: openDeparture.id,
+        cancelledAt: asDate(today),
+      })
+      await createReceivable({
+        title: '已作废节点',
+        dueDate: addDays(today, -4),
+        amountCents: 60000,
+        departureId: openDeparture.id,
+        voidedAt: asDate(today),
+      })
+      await createReceivable({
+        title: '超额队列A',
+        dueDate: addDays(today, -2),
+        amountCents: 2000,
+        departureId: openDeparture.id,
+      })
+      await createReceivable({
+        title: '超额队列B',
+        dueDate: addDays(today, -1),
+        amountCents: 1000,
+        departureId: openDeparture.id,
+      })
+      await createReceivable({
+        title: '超额队列C',
+        dueDate: addDays(today, 1),
+        amountCents: 3000,
+        departureId: openDeparture.id,
+      })
+
+      const cookie = await loginAs(app, username)
+      const response = await authRequest(app, cookie).get('/api/workbench').expect(200)
+      expect(response.body.data.template).toBe('finance')
+      const receivablesModule = response.body.data.modules.find(
+        (module: { key: string }) => module.key === 'finance-receivables',
+      )
+
+      expect(receivablesModule.metrics).toEqual([
+        {
+          key: 'overdue-receivables',
+          label: '逾期应收',
+          value: 70000 + 80000 + 300000 + 310000 + 2000 + 1000,
+          secondaryValue: 6,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=overdue',
+        },
+        {
+          key: 'due-within-7-days',
+          label: '未来 7 天到期应收',
+          value: 10000 + 17000 + 3000,
+          secondaryValue: 3,
+          secondarySuffix: '个节点',
+          href: '/finance/receivable?receivableFollowUp=due_within_7_days',
+        },
+      ])
+      expect(receivablesModule.total).toBe(9)
+      expect(receivablesModule.href).toBe('/finance/receivable?receivableFollowUp=follow_up')
+      expect(receivablesModule.items).toHaveLength(8)
+      expect(receivablesModule.items[0]).toMatchObject({
+        kind: 'finance-receivable',
+        title: '账龄31天',
+        overdueDays: 31,
+        unsettledAmountCents: 310000,
+        departureClosed: true,
+      })
+      expect(receivablesModule.items.map((item: { title: string }) => item.title)).toEqual([
+        '账龄31天',
+        '账龄30天',
+        '账龄8天',
+        '账龄7天',
+        '超额队列A',
+        '超额队列B',
+        '今天到期',
+        '超额队列C',
+      ])
+      expect(JSON.stringify(receivablesModule)).not.toContain('已关闭节点')
+      expect(JSON.stringify(receivablesModule)).not.toContain('已作废节点')
+      expect(JSON.stringify(receivablesModule)).not.toContain('第8天不入近期')
+      expect(JSON.stringify(receivablesModule.items)).not.toContain('第7天到期')
+
+      expect(receivablesModule.buckets).toEqual([
+        {
+          key: 'aging_1_7',
+          label: '1–7 天',
+          scheduleCount: 3,
+          unsettledAmountCents: 70000 + 2000 + 1000,
+          href: '/finance/receivable?receivableFollowUp=aging_1_7',
+        },
+        {
+          key: 'aging_8_30',
+          label: '8–30 天',
+          scheduleCount: 2,
+          unsettledAmountCents: 80000 + 300000,
+          href: '/finance/receivable?receivableFollowUp=aging_8_30',
+        },
+        {
+          key: 'aging_over_30',
+          label: '30 天以上',
+          scheduleCount: 1,
+          unsettledAmountCents: 310000,
+          href: '/finance/receivable?receivableFollowUp=aging_over_30',
+        },
+      ])
+
+      const drillTargets = [
+        { href: receivablesModule.metrics[0].href, total: 6 },
+        { href: receivablesModule.metrics[1].href, total: 3 },
+        { href: receivablesModule.href, total: 9 },
+        { href: receivablesModule.buckets[0].href, total: 3 },
+        { href: receivablesModule.buckets[1].href, total: 2 },
+        { href: receivablesModule.buckets[2].href, total: 1 },
+        { href: receivablesModule.items[0].href, total: 1 },
+      ]
+      for (const target of drillTargets) {
+        const drillDown = await authRequest(app, cookie)
+          .get(target.href.replace('/finance/receivable', '/api/finance/receivables'))
+          .expect(200)
+        expect(drillDown.body.data.total).toBe(target.total)
+      }
+
+      expect([aging7.id, aging8.id, aging30.id, aging31.id, dueToday.id, dueDay7.id]).toHaveLength(6)
+    } finally {
+      await prisma.paymentSchedule.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.departure.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.partner.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.userRole.deleteMany({ where: { user: { organizationId: organization.id } } })
+      await prisma.user.deleteMany({ where: { organizationId: organization.id } })
+      await prisma.organization.delete({ where: { id: organization.id } })
+    }
+  })
 })

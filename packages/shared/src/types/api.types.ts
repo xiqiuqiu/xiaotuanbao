@@ -50,10 +50,13 @@ export type WorkbenchModuleKey =
 export interface WorkbenchMetric {
   key: string
   label: string
-  /** `0` 是真实零值；`null` 表示该值当前不可用。 */
+  /** `0` 是真实零值；`null` 表示该值当前不可用。财务金额类指标使用分为单位。 */
   value: number | null
   suffix?: string
   href?: string
+  /** 次要计数（如未结应收节点数）；`0` 为真实零值。 */
+  secondaryValue?: number | null
+  secondarySuffix?: string
 }
 
 export interface WorkbenchItem {
@@ -119,6 +122,26 @@ export interface WorkbenchOrganizationScaleBucket {
   href: string
 }
 
+export interface WorkbenchFinanceReceivableItem extends WorkbenchItem {
+  kind: 'finance-receivable'
+  href: string
+  dueDate: string
+  unsettledAmountCents: number
+  /** 逾期天数；未来 7 天到期项为 null。 */
+  overdueDays: number | null
+  departureClosed: boolean
+  counterpartyName: string | null
+}
+
+/** 财务「逾期应收账龄」固定三档。 */
+export interface WorkbenchFinanceReceivableAgingBucket {
+  key: 'aging_1_7' | 'aging_8_30' | 'aging_over_30'
+  label: string
+  scheduleCount: number
+  unsettledAmountCents: number
+  href: string
+}
+
 export interface WorkbenchModule {
   key: WorkbenchModuleKey
   title: string
@@ -129,9 +152,14 @@ export interface WorkbenchModule {
     | WorkbenchCoordinatorDepartureItem
     | WorkbenchCoordinatorSettlementReadyItem
     | WorkbenchCoordinatorReceivablePendingItem
+    | WorkbenchFinanceReceivableItem
   >
-  /** 图表分桶；由 `coordinator-trend` / `organization-scale` 使用，其它模块可省略。 */
-  buckets?: Array<WorkbenchCoordinatorTrendBucket | WorkbenchOrganizationScaleBucket>
+  /** 图表分桶；由趋势/规模/账龄模块使用，其它模块可省略。 */
+  buckets?: Array<
+    | WorkbenchCoordinatorTrendBucket
+    | WorkbenchOrganizationScaleBucket
+    | WorkbenchFinanceReceivableAgingBucket
+  >
   total?: number
   href?: string
 }
