@@ -151,4 +151,41 @@ describe('MainLayout 侧栏开关', () => {
     expect(menuItem).toHaveAttribute('data-menu-id', expect.stringContaining(menuKey))
     expect(menuItem).toHaveClass('ant-menu-item-selected')
   })
+
+  it.each([
+    ['/finance/receivable', '应收管理'],
+    ['/finance/payable', '应付管理'],
+    ['/system/users', '员工管理'],
+  ])('从工作台跳到二级菜单 %s 时自动展开父级', async (targetPathname, childLabel) => {
+    pathname = '/'
+    useAuthStore.setState({
+      menuKeys: [
+        '/',
+        '/finance/receivable',
+        '/finance/payable',
+        '/finance/transactions',
+        '/finance/verification',
+        '/system/organization',
+        '/system/users',
+      ],
+    })
+
+    const { rerender } = render(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(screen.queryByRole('menuitem', { name: childLabel })).not.toBeInTheDocument()
+
+    pathname = targetPathname
+    rerender(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    const childItem = await screen.findByRole('menuitem', { name: childLabel })
+    expect(childItem).toHaveClass('ant-menu-item-selected')
+  })
 })

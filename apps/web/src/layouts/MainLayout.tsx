@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties, PropsWithChildren } from 'react'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { env } from '@/config/env'
 import { mainMenuItems, routeTitles } from '@/constants/menus'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -40,11 +40,29 @@ export function MainLayout({ children }: PropsWithChildren) {
   const menuSelectedKey = findMenuKeyForPathname(pathname, menuKeys) ?? pathname
   const selectedKeys = [menuSelectedKey]
   const sidebarToggleLabel = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'
-  const openKeys = pathname.startsWith('/finance')
-    ? ['finance']
-    : pathname.startsWith('/system')
-      ? ['system']
-      : []
+  const [openKeys, setOpenKeys] = useState<string[]>(() => {
+    if (pathname.startsWith('/finance')) return ['finance']
+    if (pathname.startsWith('/system')) return ['system']
+    return []
+  })
+
+  // defaultOpenKeys 仅在首次挂载生效；从工作台跳入二级菜单时需受控同步展开父级。
+  useEffect(() => {
+    const routeOpenKeys = pathname.startsWith('/finance')
+      ? ['finance']
+      : pathname.startsWith('/system')
+        ? ['system']
+        : []
+    if (routeOpenKeys.length === 0) {
+      return
+    }
+    setOpenKeys((prev) => {
+      if (routeOpenKeys.every((key) => prev.includes(key))) {
+        return prev
+      }
+      return Array.from(new Set([...prev, ...routeOpenKeys]))
+    })
+  }, [pathname])
 
   const breadcrumbItems = [
     { title: <Link to="/">{routeTitles['/']}</Link> },
@@ -99,7 +117,8 @@ export function MainLayout({ children }: PropsWithChildren) {
         <Menu
           mode="inline"
           selectedKeys={selectedKeys}
-          defaultOpenKeys={openKeys}
+          openKeys={openKeys}
+          onOpenChange={setOpenKeys}
           items={visibleMenuItems}
           onClick={({ key }) => {
             if (key.startsWith('/')) {
