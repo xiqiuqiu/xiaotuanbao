@@ -3,6 +3,11 @@
 exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 key 清单快照（后端权威事实源） 1`] = `
 [
   {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/departure",
+    "route": "GET /api/account-generation-gaps",
+  },
+  {
     "guards": "",
     "requiredKey": null,
     "route": "POST /api/auth/login",
@@ -578,6 +583,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
 exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩阵快照（权限面变化需评审确认） 1`] = `
 {
   "企业管理员": [
+    "GET /api/account-generation-gaps [/departure]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",
     "GET /api/auth/me [—]",
@@ -687,6 +693,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/workbench [/]",
   ],
   "计调": [
+    "GET /api/account-generation-gaps [/departure]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",
     "GET /api/auth/me [—]",
@@ -767,6 +774,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/workbench [/]",
   ],
   "财务": [
+    "GET /api/account-generation-gaps [/departure]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",
     "GET /api/auth/me [—]",

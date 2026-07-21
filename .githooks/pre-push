@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#
+# pre-push 钩子（需一次性启用：pnpm hooks:install）
+# 聚焦权限矩阵守卫，防止路由/权限面快照漂移把 main 弄红。
+# 详见 docs/agents/verification.md（Local L2 / pre-push）。
+#
+# 需临时跳过：git push --no-verify（仅限网络/环境异常等特殊情况）。
+#
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+exec bash "$root/scripts/check-permission-matrix.sh"

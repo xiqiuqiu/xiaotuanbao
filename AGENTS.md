@@ -24,6 +24,6 @@ Page compliance audit + catalog fix: `.agents/skills/ui-audit` (`/ui-audit`).
 
 Layered gates — details: `docs/agents/verification.md`.
 
-- **Before commit / push / open PR:** run `pnpm typecheck`. If the diff vs `origin/main` touches `apps/web/**` or `packages/shared/**`, also run `npx react-doctor@latest --verbose --scope changed` and ensure the score does not regress.
+- **Before commit / push / open PR:** run `pnpm typecheck`. If the diff vs `origin/main` touches `apps/web/**` or `packages/shared/**`, also run `npx react-doctor@latest --verbose --scope changed` and ensure the score does not regress. If it touches API routes/permissions (`apps/api/src/**` controllers/modules/guards or `packages/shared` capabilities), run `pnpm check:permission-matrix`; when the permission surface changed on purpose, run `pnpm gen:permission-matrix` and commit the updated snapshot.
 - **Do not** run full API e2e locally by default; CI owns it (`typecheck` + `api-e2e` required on `main`).
 - **Merge to `main`:** PR only (no direct push); required checks must be green. Local `--no-verify` does not bypass GitHub.

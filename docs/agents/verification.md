@@ -6,7 +6,7 @@ How this repo keeps `main` stable. Summary for agents also lives in root `AGENTS
 
 | Layer | When | What | Blocks |
 | ----- | ---- | ---- | ------ |
-| Local L2 | Before push (hook in phase 2); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related | Dirty push / Agent handoff |
+| Local L2 | Before push (hook `pnpm hooks:install`); Agent before commit / push / open PR | `pnpm typecheck`; React Doctor if web-related; permission-matrix guard if API routes changed | Dirty push / Agent handoff |
 | CI C1 | Every PR and every push to `main` | `pnpm typecheck` + API e2e (E2) | Merge into `main` (required checks) |
 
 There is **no** hard pre-commit gate. Full API e2e is **not** required on every local commit.
@@ -24,6 +24,24 @@ npx react-doctor@latest --verbose --scope changed
 ```
 
 **Pass (R1):** score must not regress vs the base branch (`origin/main`).
+
+### Permission-matrix guard (R2)
+
+`apps/api` 的路由/权限面固化在 `test/permission-matrix.e2e-spec.ts` 的 golden 快照里。新增或改动端点后必须同步快照，否则 `api-e2e` 会红；坏快照一旦进 `main`，后续每次提交都会持续飘红（历史上 `GET /api/source-orders`、`GET /api/account-generation-gaps` 均踩过）。
+
+若 diff vs `origin/main` 触及 `apps/api/src/**` 的 `*.controller.ts` / `*.module.ts` / guard / permission / decorator，或 `packages/shared/src` 的能力/权限/菜单清单：
+
+```bash
+pnpm check:permission-matrix   # 聚焦跑 permission-matrix 单 spec（约数秒，需本地 DB）
+```
+
+**权限面确有变化时**（新增端点/改 key），确认无误后重生成并提交快照：
+
+```bash
+pnpm gen:permission-matrix     # = api test:permission-matrix:update（jest -u 单 spec）
+```
+
+DB 不可达时守卫只告警不拦截，e2e 最终由 CI 兜底。
 
 ## CI C1
 
@@ -109,14 +127,21 @@ Before the user asks to **commit**, **push**, or **open a PR**:
 
 1. Run `pnpm typecheck` and fix failures.
 2. If the change set vs `origin/main` includes `apps/web/**` or `packages/shared/**`, run React Doctor (`--scope changed`) and fix score regressions.
-3. Do **not** run full API e2e locally by default (slow, needs DB). Rely on CI unless the user asks, or the change is clearly high-risk for finance / settlement / auth paths — then prefer a focused e2e file over the full suite.
+3. If the change set touches API routes/permissions (see R2), run `pnpm check:permission-matrix`; if the permission surface changed on purpose, `pnpm gen:permission-matrix` and commit the updated snapshot.
+4. Do **not** run full API e2e locally by default (slow, needs DB). Rely on CI unless the user asks, or the change is clearly high-risk for finance / settlement / auth paths — then prefer a focused e2e file over the full suite.
 
-## Phase 2 (not in the first landing)
+## Pre-push hook
 
-Local **pre-push** hook enforcing L2 (typecheck + conditional Doctor). Document the install command here when added.
+Tracked at [`.githooks/pre-push`](../../.githooks/pre-push); enable once per clone:
+
+```bash
+pnpm hooks:install   # git config core.hooksPath .githooks
+```
+
+Currently runs the **permission-matrix guard (R2)** — the recurring `main`-reddening foot-gun. Bypass with `git push --no-verify` only for network/env issues. typecheck + Doctor remain agent/manual L2 for now (Doctor via `npx` is slow/network-bound; add to the hook if desired).
 
 ## Upgrade checklist (second developer)
 
 - [ ] Branch protection: require ≥1 approving review (V1)
-- [ ] Optional: install pre-push hook (phase 2)
+- [ ] Extend pre-push hook with typecheck (+ Doctor) if the team wants full L2 enforced locally
 - [ ] Optional: add web unit tests as a third required check (was deferred from C1)
