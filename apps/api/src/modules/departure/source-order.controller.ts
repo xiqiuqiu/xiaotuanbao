@@ -15,6 +15,7 @@ import type {
   GenerateReceivablesResult,
   GuestCollectionChangeImpact,
   PartnerSourceOrderListResult,
+  PendingReceivableSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -26,16 +27,34 @@ import {
   CreateSourceOrderDto,
   CreateSourceOrderGuestDto,
   ListPartnerSourceOrdersQueryDto,
+  ListPendingReceivableSourceOrdersQueryDto,
   ListSourceOrdersQueryDto,
   UpdateSourceOrderDto,
   UpdateSourceOrderGuestDto,
 } from './dto/source-order.dto'
 import { SourceOrderService } from './source-order.service'
+import { SourceOrderReceivableGapService } from './source-order-receivable-gap.service'
 
 @Controller()
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class SourceOrderController {
-  constructor(private readonly sourceOrderService: SourceOrderService) {}
+  constructor(
+    private readonly sourceOrderService: SourceOrderService,
+    private readonly sourceOrderReceivableGapService: SourceOrderReceivableGapService,
+  ) {}
+
+  @Get('source-orders')
+  @RequireMenu('/departure')
+  listPendingReceivables(
+    @Req() request: { user: { organizationId: string } },
+    @Query() query: ListPendingReceivableSourceOrdersQueryDto,
+  ): Promise<PendingReceivableSourceOrderListResult> {
+    return this.sourceOrderReceivableGapService.listPending(
+      request.user.organizationId,
+      query.page,
+      query.pageSize,
+    )
+  }
 
   @Get('departures/:departureId/source-orders')
   @RequireMenu('/departure')

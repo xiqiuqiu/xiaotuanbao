@@ -3,6 +3,7 @@ import { DepartureProgress } from '@xiaotuanbao/shared'
 export interface DepartureListSearch {
   operationalWindow?: 'in_progress' | 'next_7_days' | 'current_and_next_7_days'
   departureDataGap?: 'any'
+  settlementReadiness?: 'ready'
   departureProgress?: DepartureProgress
 }
 
@@ -19,6 +20,7 @@ export function parseDepartureListSearch(search: Record<string, unknown>): Depar
     ? search.operationalWindow as DepartureListSearch['operationalWindow']
     : undefined
   const departureDataGap = search.departureDataGap === 'any' ? 'any' : undefined
+  const settlementReadiness = search.settlementReadiness === 'ready' ? 'ready' : undefined
   const departureProgress = typeof search.departureProgress === 'string'
     && DEPARTURE_PROGRESS_VALUES.has(search.departureProgress as DepartureProgress)
     ? search.departureProgress as DepartureProgress
@@ -27,6 +29,7 @@ export function parseDepartureListSearch(search: Record<string, unknown>): Depar
   return {
     ...(operationalWindow ? { operationalWindow } : {}),
     ...(departureDataGap ? { departureDataGap } : {}),
+    ...(settlementReadiness ? { settlementReadiness } : {}),
     ...(departureProgress ? { departureProgress } : {}),
   }
 }

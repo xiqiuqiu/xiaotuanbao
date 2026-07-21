@@ -23,6 +23,7 @@ export interface ListDeparturesParams {
   partnerId?: string
   operationalWindow?: 'in_progress' | 'next_7_days' | 'current_and_next_7_days'
   departureDataGap?: 'any'
+  settlementReadiness?: 'ready'
   startDateFrom?: string
   startDateTo?: string
   page?: number

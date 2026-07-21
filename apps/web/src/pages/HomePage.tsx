@@ -1,4 +1,9 @@
-import { PlusOutlined, ReloadOutlined, RightOutlined } from '@ant-design/icons'
+import {
+  InfoCircleOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RightOutlined,
+} from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useMemo } from 'react'
@@ -15,6 +20,7 @@ import {
   Statistic,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -23,6 +29,8 @@ import { getWorkbench } from '@/services/workbench.service'
 import type {
   WorkbenchAction,
   WorkbenchCoordinatorDepartureItem,
+  WorkbenchCoordinatorReceivablePendingItem,
+  WorkbenchCoordinatorSettlementReadyItem,
   WorkbenchModule,
   WorkbenchSnapshot,
   WorkbenchTemplate,
@@ -156,6 +164,14 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
               ) : <Typography.Text type="secondary">-</Typography.Text>,
             },
             {
+              title: '应收衔接',
+              dataIndex: 'pendingReceivableCount',
+              width: 140,
+              render: (value: number) => value > 0
+                ? <Tag color="blue">待生成应收 {value} 个</Tag>
+                : <Typography.Text type="secondary">-</Typography.Text>,
+            },
+            {
               title: '日期',
               key: 'dates',
               width: 210,
@@ -164,6 +180,102 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
             { title: '负责人', dataIndex: 'ownerName', width: 110 },
           ]}
         />
+      </Card>
+    </div>
+  )
+}
+
+function isSettlementReadyItem(
+  item: WorkbenchModule['items'][number],
+): item is WorkbenchCoordinatorSettlementReadyItem {
+  return 'kind' in item && item.kind === 'coordinator-settlement-ready'
+}
+
+function isReceivablePendingItem(
+  item: WorkbenchModule['items'][number],
+): item is WorkbenchCoordinatorReceivablePendingItem {
+  return 'kind' in item && item.kind === 'coordinator-receivable-pending'
+}
+
+function CoordinatorSettlementModule({
+  module,
+  readyMetric,
+}: {
+  module: WorkbenchModule
+  readyMetric?: WorkbenchModule['metrics'][number]
+}) {
+  const navigate = useNavigate()
+  const pendingMetric = module.metrics.find((metric) => metric.key === 'pending-receivables')
+  const readyItems = module.items.filter(isSettlementReadyItem)
+  const pendingItems = module.items.filter(isReceivablePendingItem)
+
+  const queue = (
+    items: Array<WorkbenchCoordinatorSettlementReadyItem | WorkbenchCoordinatorReceivablePendingItem>,
+    emptyText: string,
+  ) => items.length === 0 ? (
+    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
+  ) : (
+    <Space orientation="vertical" size={0} className={styles.queueList}>
+      {items.slice(0, 5).map((item) => (
+        <button
+          type="button"
+          key={item.id}
+          className={styles.queueItem}
+          onClick={() => void navigate({ to: item.href })}
+        >
+          <span>
+            <Typography.Text strong>{item.title}</Typography.Text>
+            <Typography.Text type="secondary" className={styles.queueMeta}>
+              {'departureName' in item ? item.departureName : `结束日期 ${item.endDate}`}
+            </Typography.Text>
+          </span>
+          <RightOutlined />
+        </button>
+      ))}
+    </Space>
+  )
+
+  return (
+    <div className={styles.settlementGrid}>
+      <Card
+        title={<Typography.Title level={5}>可确认结清</Typography.Title>}
+        extra={readyMetric?.href ? (
+          <Button
+            type="link"
+            aria-label={`查看全部可确认结清 ${readyMetric.value ?? 0} 项`}
+            onClick={() => void navigate({ to: readyMetric.href! })}
+          >
+            查看全部 {readyMetric.value ?? 0} 项 <RightOutlined />
+          </Button>
+        ) : null}
+      >
+        {queue(readyItems, '当前没有可确认结清发团')}
+      </Card>
+      <Card
+        title={<Typography.Title level={5}>待生成应收</Typography.Title>}
+        extra={(
+          <Space size={4}>
+            <Tooltip title="按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。">
+              <Button
+                type="text"
+                size="small"
+                icon={<InfoCircleOutlined />}
+                aria-label="待生成应收统计口径"
+              />
+            </Tooltip>
+            {pendingMetric?.href ? (
+              <Button
+                type="link"
+                aria-label={`查看全部待生成应收 ${pendingMetric.value ?? 0} 项`}
+                onClick={() => void navigate({ to: pendingMetric.href! })}
+              >
+                查看全部 {pendingMetric.value ?? 0} 项 <RightOutlined />
+              </Button>
+            ) : null}
+          </Space>
+        )}
+      >
+        {queue(pendingItems, '当前没有待生成应收的客源单')}
       </Card>
     </div>
   )
@@ -233,12 +345,26 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
 
   const coordinatorModule = snapshot.modules.find(isCoordinatorDeliveryModule)
   if (snapshot.template === 'coordinator' && coordinatorModule) {
+    const settlementModule = snapshot.modules.find(
+      (module) => module.key === 'coordinator-settlement',
+    )
+    const readyMetric = coordinatorModule.metrics.find(
+      (metric) => metric.key === 'settlement-ready',
+    )
     const remainingModules = snapshot.modules.filter(
-      (module) => module.key !== coordinatorModule.key,
+      (module) =>
+        module.key !== coordinatorModule.key
+        && module.key !== settlementModule?.key,
     )
     return (
       <div className={styles.coordinatorContent}>
         <CoordinatorDepartureModule module={coordinatorModule} />
+        {settlementModule ? (
+          <CoordinatorSettlementModule
+            module={settlementModule}
+            readyMetric={readyMetric}
+          />
+        ) : null}
         {remainingModules.length > 0 ? (
           <GenericModuleGrid modules={remainingModules} template={snapshot.template} />
         ) : null}

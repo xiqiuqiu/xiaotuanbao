@@ -55,6 +55,23 @@ export class ListSourceOrdersQueryDto {
   keyword?: string
 }
 
+export class ListPendingReceivableSourceOrdersQueryDto {
+  @IsIn(['not_generated'])
+  receivableGeneration!: 'not_generated'
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageSize?: number
+}
+
 export class CreateSourceOrderDto {
   @IsString()
   @IsNotEmpty()

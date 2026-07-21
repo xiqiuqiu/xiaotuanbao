@@ -11,6 +11,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
+import { CoordinatorSettlementWorkbenchService } from './coordinator-settlement-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -119,6 +120,7 @@ export class WorkbenchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly coordinatorWorkbenchService: CoordinatorWorkbenchService,
+    private readonly coordinatorSettlementWorkbenchService: CoordinatorSettlementWorkbenchService,
   ) {}
 
   async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
@@ -165,6 +167,8 @@ export class WorkbenchService {
     const asOf = new Date()
     const modules = buildModules(template, permissionKeys)
     if (template === 'coordinator') {
+      const settlementSnapshot =
+        await this.coordinatorSettlementWorkbenchService.loadSnapshot(organizationId)
       const coordinatorDeparturesIndex = modules.findIndex(
         (module) => module.key === 'coordinator-departures',
       )
@@ -172,7 +176,16 @@ export class WorkbenchService {
         modules[coordinatorDeparturesIndex] = await this.coordinatorWorkbenchService.buildModule(
           organizationId,
           asOf,
+          settlementSnapshot.readyRows.length,
+          settlementSnapshot.pendingCountByDepartureId,
         )
+      }
+      const coordinatorSettlementIndex = modules.findIndex(
+        (module) => module.key === 'coordinator-settlement',
+      )
+      if (coordinatorSettlementIndex >= 0) {
+        modules[coordinatorSettlementIndex] =
+          this.coordinatorSettlementWorkbenchService.buildModule(settlementSnapshot)
       }
     }
 

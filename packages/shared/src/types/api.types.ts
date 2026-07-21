@@ -82,6 +82,19 @@ export interface WorkbenchCoordinatorDepartureItem extends WorkbenchItem {
   timeHint: string
   status: string
   dataGaps: DepartureDataGap[]
+  pendingReceivableCount: number
+}
+
+export interface WorkbenchCoordinatorSettlementReadyItem extends WorkbenchItem {
+  kind: 'coordinator-settlement-ready'
+  href: string
+  endDate: string
+}
+
+export interface WorkbenchCoordinatorReceivablePendingItem extends WorkbenchItem {
+  kind: 'coordinator-receivable-pending'
+  href: string
+  departureName: string
 }
 
 export interface WorkbenchModule {
@@ -89,9 +102,33 @@ export interface WorkbenchModule {
   title: string
   description: string
   metrics: WorkbenchMetric[]
-  items: Array<WorkbenchItem | WorkbenchCoordinatorDepartureItem>
+  items: Array<
+    | WorkbenchItem
+    | WorkbenchCoordinatorDepartureItem
+    | WorkbenchCoordinatorSettlementReadyItem
+    | WorkbenchCoordinatorReceivablePendingItem
+  >
   total?: number
   href?: string
+}
+
+export interface PendingReceivableSourceOrderItem {
+  id: string
+  displayName: string
+  partnerName: string
+  departureId: string
+  departureNo: string
+  departureName: string
+  departureStartDate: string
+  netReceivableCents: number
+  href: string
+}
+
+export interface PendingReceivableSourceOrderListResult {
+  items: PendingReceivableSourceOrderItem[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface WorkbenchAction {

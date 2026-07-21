@@ -93,6 +93,10 @@ export class ListDeparturesQueryDto {
   departureDataGap?: 'any'
 
   @IsOptional()
+  @IsIn(['ready'])
+  settlementReadiness?: 'ready'
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
