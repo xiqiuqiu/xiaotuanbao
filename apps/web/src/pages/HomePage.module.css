@@ -157,6 +157,9 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
   background: transparent;
   cursor: pointer;
+  transition:
+    background-color 100ms ease,
+    transform 100ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
 .queueItem:last-child {
@@ -172,8 +175,9 @@
   background: var(--ant-color-fill-tertiary);
 }
 
-.queueItem:active {
+.queueItem:not(:disabled):active {
   background: var(--ant-color-fill-secondary);
+  transform: scale(0.97);
 }
 
 .queueItem:disabled {
@@ -196,7 +200,10 @@
   border-radius: var(--ant-border-radius-lg);
   background: var(--ant-color-bg-container);
   cursor: pointer;
-  transition: border-color var(--ant-motion-duration-mid), background-color var(--ant-motion-duration-mid);
+  transition:
+    border-color 100ms ease,
+    background-color 100ms ease,
+    transform 100ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
 .metricButton:not(:disabled):hover,
@@ -208,6 +215,7 @@
 
 .metricButton:not(:disabled):active {
   background: var(--ant-color-primary-bg);
+  transform: scale(0.97);
 }
 
 .metricButton:disabled {
@@ -260,6 +268,9 @@
   border-radius: var(--ant-border-radius);
   background: var(--ant-color-bg-container);
   cursor: pointer;
+  transition:
+    border-color 100ms ease,
+    transform 100ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
 .trendDayButton:hover,
@@ -267,6 +278,10 @@
   border-color: var(--ant-color-primary-border);
   outline: 2px solid var(--ant-color-primary-border);
   outline-offset: 2px;
+}
+
+.trendDayButton:active {
+  transform: scale(0.97);
 }
 
 .trendDayDate {
@@ -307,7 +322,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .metricButton {
-    transition: none;
+  .metricButton,
+  .queueItem,
+  .trendDayButton {
+    transition: border-color 100ms ease, background-color 100ms ease;
+  }
+
+  .metricButton:not(:disabled):active,
+  .queueItem:not(:disabled):active,
+  .trendDayButton:active {
+    transform: none;
   }
 }

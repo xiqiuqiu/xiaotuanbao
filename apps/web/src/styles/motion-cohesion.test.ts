@@ -8,6 +8,7 @@ const EASE_OUT =
 const motionCssFiles = [
   '../styles/global.css',
   '../pages/LoginPage.module.css',
+  '../pages/HomePage.module.css',
   '../features/departure/components/DepartureOverviewStatsCards.module.css',
   '../features/finance/components/PaymentScheduleWorkspace.module.css',
   '../features/departure/components/ExecutionTab.module.css',
