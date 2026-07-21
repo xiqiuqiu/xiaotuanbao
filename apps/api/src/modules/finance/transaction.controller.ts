@@ -93,4 +93,25 @@ export class TransactionController {
         this.transactionService.void(request.user.organizationId, id, dto, tx),
     })
   }
+
+  @Post(':id/acknowledge-source-amount-change')
+  @RequireMenu('/finance/transactions')
+  acknowledgeSourceAmountChange(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<FinanceTransactionSummary> {
+    return this.financeIdempotencyService.execute({
+      organizationId: request.user.organizationId,
+      operation: 'acknowledge-source-amount-change',
+      idempotencyKey,
+      request: { transactionId: id, userId: request.user.userId },
+      handler: (tx) =>
+        this.transactionService.acknowledgeSourceAmountChange(
+          request.user.organizationId,
+          id,
+          tx,
+        ),
+    })
+  }
 }

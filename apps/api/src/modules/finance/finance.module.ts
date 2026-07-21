@@ -32,6 +32,11 @@ import { VerificationService } from './verification.service'
     FinanceOperationsService,
     FinanceIdempotencyService,
   ],
-  exports: [DepartureFinanceFacade, PaymentScheduleService, VerificationService],
+  exports: [
+    DepartureFinanceFacade,
+    PaymentScheduleService,
+    VerificationService,
+    TransactionService,
+  ],
 })
 export class FinanceModule {}

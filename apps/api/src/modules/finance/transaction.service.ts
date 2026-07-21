@@ -7,6 +7,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import {
   deriveTransactionWriteoffStatus,
+  isEligibleForSourceAmountChangeMark,
   TransactionDirection,
   PaymentChannel,
   VerificationStatus,
@@ -234,6 +235,7 @@ export class TransactionService {
           counterpartyName: counterparty.counterpartyName,
           departureId: dto.departureId ?? null,
           notes: dto.notes?.trim() || null,
+          sourceAmountChangedAt: null,
         },
         include: this.departureInclude,
       })
@@ -294,6 +296,7 @@ export class TransactionService {
         data: {
           voidedAt: new Date(),
           voidReason,
+          sourceAmountChangedAt: null,
         },
         include: this.departureInclude,
       })
@@ -301,6 +304,109 @@ export class TransactionService {
     const updated = client ? await run(client) : await this.prisma.$transaction(run)
 
     return this.toSummary(updated, 0)
+  }
+
+  async acknowledgeSourceAmountChange(
+    organizationId: string,
+    transactionId: string,
+    client?: Prisma.TransactionClient,
+  ): Promise<FinanceTransactionSummary> {
+    const db = client ?? this.prisma
+    const transaction = await db.financeTransaction.findFirst({
+      where: { id: transactionId, organizationId },
+      include: this.departureInclude,
+    })
+    if (!transaction) {
+      throw new NotFoundException('流水不存在')
+    }
+
+    const cleared =
+      transaction.sourceAmountChangedAt == null
+        ? transaction
+        : await db.financeTransaction.update({
+            where: { id: transaction.id },
+            data: { sourceAmountChangedAt: null },
+            include: this.departureInclude,
+          })
+
+    const allocated = await this.verificationService.getAllocatedAmountCents(
+      cleared.id,
+      client,
+    )
+    return this.toSummary(cleared, allocated)
+  }
+
+  async countGuestCollectionChangeImpact(
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<number> {
+    const changeAt = new Date()
+    const candidates = await this.listGuestCollectionMarkCandidates(
+      organizationId,
+      sourceOrderId,
+      changeAt,
+    )
+    return candidates.length
+  }
+
+  async markGuestCollectionSourceAmountChanged(
+    organizationId: string,
+    sourceOrderId: string,
+    changeAt: Date = new Date(),
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<number> {
+    const eligibleIds = await this.listGuestCollectionMarkCandidates(
+      organizationId,
+      sourceOrderId,
+      changeAt,
+      client,
+    )
+    if (eligibleIds.length === 0) {
+      return 0
+    }
+
+    await client.financeTransaction.updateMany({
+      where: { id: { in: eligibleIds } },
+      data: { sourceAmountChangedAt: changeAt },
+    })
+    return eligibleIds.length
+  }
+
+  private async listGuestCollectionMarkCandidates(
+    organizationId: string,
+    sourceOrderId: string,
+    changeAt: Date,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<string[]> {
+    const candidates = await client.financeTransaction.findMany({
+      where: {
+        organizationId,
+        counterpartyType: PrismaCounterpartyType.guest,
+        counterpartyId: sourceOrderId,
+        voidedAt: null,
+        createdAt: { lt: changeAt },
+      },
+      select: { id: true, amountCents: true, voidedAt: true, createdAt: true },
+    })
+    if (candidates.length === 0) {
+      return []
+    }
+
+    const allocatedMap = await this.verificationService.batchGetAllocatedAmounts(
+      candidates.map((item) => item.id),
+      client instanceof PrismaService ? undefined : client,
+    )
+
+    return candidates
+      .filter((item) =>
+        isEligibleForSourceAmountChangeMark({
+          voidedAt: item.voidedAt,
+          unallocatedAmountCents: item.amountCents - (allocatedMap.get(item.id) ?? 0),
+          createdAt: item.createdAt,
+          changeAt,
+        }),
+      )
+      .map((item) => item.id)
   }
 
   private async assertRelatedDeparturesMutable(
@@ -600,6 +706,7 @@ export class TransactionService {
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,
+      sourceAmountChanged: transaction.sourceAmountChangedAt != null,
       createdAt: transaction.createdAt.toISOString(),
       updatedAt: transaction.updatedAt.toISOString(),
     }

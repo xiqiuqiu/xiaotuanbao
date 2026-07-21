@@ -4260,4 +4260,205 @@ describe('Finance API (e2e)', () => {
       completionOrder: expect.arrayContaining(['verification', 'close']),
     })
   })
+
+  describe('source amount change awareness', () => {
+    async function createGuestSourceOrder(adultUnitPriceCents = 50000) {
+      const sourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departureId}/source-orders`)
+        .send({
+          partnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+      return sourceOrder.body.data as {
+        id: string
+        displayName: string
+        guestCollectCents: number
+        partnerCollectedCents: number
+      }
+    }
+
+    async function createGuestTransaction(
+      sourceOrder: { id: string; displayName: string },
+      amountCents = 50000,
+    ) {
+      const created = await authRequest(app, financeToken)
+        .post('/api/finance/transactions')
+        .send(
+          transactionPayload({
+            amountCents,
+            counterpartyType: CounterpartyType.guest,
+            counterpartyId: sourceOrder.id,
+            counterpartyName: sourceOrder.displayName,
+          }),
+        )
+        .expect(201)
+      return created.body.data as { id: string; sourceAmountChanged: boolean }
+    }
+
+    it('marks pre-change unallocated guest transactions when path amounts change', async () => {
+      const sourceOrder = await createGuestSourceOrder(50000)
+      const beforeTx = await createGuestTransaction(sourceOrder, 50000)
+      expect(beforeTx.sourceAmountChanged).toBe(false)
+
+      await authRequest(app, coordinatorToken)
+        .patch(`/api/source-orders/${sourceOrder.id}`)
+        .send({ adultUnitPriceCents: 30000 })
+        .expect(200)
+
+      const afterChange = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${beforeTx.id}`)
+        .expect(200)
+      expect(afterChange.body.data.sourceAmountChanged).toBe(true)
+
+      const afterTx = await createGuestTransaction(sourceOrder, 10000)
+      expect(afterTx.sourceAmountChanged).toBe(false)
+    })
+
+    it('does not mark when only notes change', async () => {
+      const sourceOrder = await createGuestSourceOrder(50000)
+      const tx = await createGuestTransaction(sourceOrder, 50000)
+
+      await authRequest(app, coordinatorToken)
+        .patch(`/api/source-orders/${sourceOrder.id}`)
+        .send({ notes: `${testPrefix}-notes-only` })
+        .expect(200)
+
+      const detail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${tx.id}`)
+        .expect(200)
+      expect(detail.body.data.sourceAmountChanged).toBe(false)
+    })
+
+    it('does not mark fully allocated guest transactions', async () => {
+      const sourceOrder = await createGuestSourceOrder(80000)
+      const allocatedTx = await createGuestTransaction(sourceOrder, 30000)
+      const openTx = await createGuestTransaction(sourceOrder, 40000)
+
+      // Manual receivable not sourced from the source order — verification must not lock path amounts.
+      const manualSchedule = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(
+          schedulePayload({
+            amountCents: 30000,
+            counterpartyType: CounterpartyType.guest,
+            counterpartyId: sourceOrder.id,
+            counterpartyName: sourceOrder.displayName,
+          }),
+        )
+        .expect(201)
+
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: manualSchedule.body.data.id,
+            transactionId: allocatedTx.id,
+            amountCents: 30000,
+          }),
+        )
+        .expect(201)
+
+      await authRequest(app, coordinatorToken)
+        .patch(`/api/source-orders/${sourceOrder.id}`)
+        .send({ adultUnitPriceCents: 60000 })
+        .expect(200)
+
+      const allocatedDetail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${allocatedTx.id}`)
+        .expect(200)
+      const openDetail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${openTx.id}`)
+        .expect(200)
+
+      expect(allocatedDetail.body.data.sourceAmountChanged).toBe(false)
+      expect(openDetail.body.data.sourceAmountChanged).toBe(true)
+    })
+
+    it('clears mark on acknowledge, edit, void, and verification', async () => {
+      const sourceOrder = await createGuestSourceOrder(50000)
+      const ackTx = await createGuestTransaction(sourceOrder, 10000)
+      const editTx = await createGuestTransaction(sourceOrder, 10000)
+      const voidTx = await createGuestTransaction(sourceOrder, 10000)
+      const verifyTx = await createGuestTransaction(sourceOrder, 10000)
+
+      await authRequest(app, coordinatorToken)
+        .patch(`/api/source-orders/${sourceOrder.id}`)
+        .send({ adultUnitPriceCents: 40000 })
+        .expect(200)
+
+      const acknowledged = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${ackTx.id}/acknowledge-source-amount-change`)
+        .set('Idempotency-Key', `${testPrefix}-ack-source-amount-${ackTx.id}`)
+        .expect(201)
+      expect(acknowledged.body.data.sourceAmountChanged).toBe(false)
+
+      const edited = await authRequest(app, financeToken)
+        .put(`/api/finance/transactions/${editTx.id}`)
+        .send(
+          transactionPayload({
+            amountCents: 12000,
+            counterpartyType: CounterpartyType.guest,
+            counterpartyId: sourceOrder.id,
+            counterpartyName: sourceOrder.displayName,
+          }),
+        )
+        .expect(200)
+      expect(edited.body.data.sourceAmountChanged).toBe(false)
+
+      const voided = await authRequest(app, financeToken)
+        .post(`/api/finance/transactions/${voidTx.id}/void`)
+        .send({ voidReason: '清除变更标' })
+        .expect(201)
+      expect(voided.body.data.sourceAmountChanged).toBe(false)
+
+      const verifySchedule = await authRequest(app, financeToken)
+        .post('/api/finance/receivables')
+        .send(
+          schedulePayload({
+            amountCents: 10000,
+            counterpartyType: CounterpartyType.guest,
+            counterpartyId: sourceOrder.id,
+            counterpartyName: sourceOrder.displayName,
+          }),
+        )
+        .expect(201)
+      await authRequest(app, financeToken)
+        .post('/api/finance/verifications')
+        .send(
+          verificationPayload({
+            paymentScheduleId: verifySchedule.body.data.id,
+            transactionId: verifyTx.id,
+            amountCents: 10000,
+          }),
+        )
+        .expect(201)
+      const verifiedDetail = await authRequest(app, financeToken)
+        .get(`/api/finance/transactions/${verifyTx.id}`)
+        .expect(200)
+      expect(verifiedDetail.body.data.sourceAmountChanged).toBe(false)
+    })
+
+    it('returns guest-collection-change-impact count for markable transactions', async () => {
+      const sourceOrder = await createGuestSourceOrder(50000)
+      await createGuestTransaction(sourceOrder, 20000)
+      await createGuestTransaction(sourceOrder, 15000)
+
+      const impact = await authRequest(app, coordinatorToken)
+        .get(`/api/source-orders/${sourceOrder.id}/guest-collection-change-impact`)
+        .expect(200)
+      expect(impact.body.data.affectedTransactionCount).toBe(2)
+
+      const emptyOrder = await createGuestSourceOrder(20000)
+      const emptyImpact = await authRequest(app, coordinatorToken)
+        .get(`/api/source-orders/${emptyOrder.id}/guest-collection-change-impact`)
+        .expect(200)
+      expect(emptyImpact.body.data.affectedTransactionCount).toBe(0)
+    })
+  })
 })

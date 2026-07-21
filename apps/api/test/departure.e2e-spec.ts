@@ -1950,6 +1950,19 @@ describe('Departure API (e2e)', () => {
       const generated = await authRequest(app, coordinatorToken)
         .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
         .expect(201)
+      // 发团硬筛：现金侧发团也需挂上同伙伴源事实，流水才能关联该发团。
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${cashDeparture.id}/source-orders`)
+        .send({
+          partnerId: rmPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 1000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+        })
+        .expect(201)
       const transaction = await authRequest(app, financeToken)
         .post('/api/finance/transactions')
         .send({

@@ -122,9 +122,12 @@ export function buildTransactionColumns({
     {
       title: '流水状态',
       render: (_, record) => (
-        <Tag color={record.voidedAt ? 'default' : 'success'}>
-          {record.voidedAt ? TRANSACTION_STATUS_LABELS.voided : TRANSACTION_STATUS_LABELS.normal}
-        </Tag>
+        <>
+          <Tag color={record.voidedAt ? 'default' : 'success'}>
+            {record.voidedAt ? TRANSACTION_STATUS_LABELS.voided : TRANSACTION_STATUS_LABELS.normal}
+          </Tag>
+          {record.sourceAmountChanged ? <Tag color="warning">客源金额已变更</Tag> : null}
+        </>
       ),
     },
     ...buildBusinessTimestampColumns<FinanceTransactionSummary>(),

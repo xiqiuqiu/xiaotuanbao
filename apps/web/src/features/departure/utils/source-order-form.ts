@@ -181,3 +181,30 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
     notes: values.notes,
   }
 }
+
+/** Path amounts implied by an update payload (mirrors server computeSourceOrderAmounts). */
+export function resolvePathAmountsFromPayload(
+  payload: ReturnType<typeof formValuesToPayload>,
+): { guestCollectCents: number; partnerCollectedCents: number } {
+  const grossReceivableCents =
+    payload.adultUnitPriceCents * payload.adultGuestCount +
+    payload.childUnitPriceCents * payload.childGuestCount
+  const netReceivableCents = grossReceivableCents - payload.discountCents
+
+  if (payload.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    return {
+      partnerCollectedCents: netReceivableCents,
+      guestCollectCents: 0,
+    }
+  }
+  if (payload.collectionMode === SourceOrderCollectionMode.SPLIT) {
+    return {
+      partnerCollectedCents: payload.partnerCollectedCents,
+      guestCollectCents: netReceivableCents - payload.partnerCollectedCents,
+    }
+  }
+  return {
+    partnerCollectedCents: 0,
+    guestCollectCents: netReceivableCents,
+  }
+}

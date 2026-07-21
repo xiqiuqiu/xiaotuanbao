@@ -9,6 +9,12 @@ export {
   type TransactionWriteoffStatusResult,
 } from './derive-transaction-writeoff-status'
 export { isFinanceTouched, type FinanceTouchedScheduleInput } from './is-finance-touched'
+export {
+  didSourceAmountPathChange,
+  isEligibleForSourceAmountChangeMark,
+  type SourceAmountPath,
+  type SourceAmountChangeMarkEligibilityInput,
+} from './source-amount-change'
 export { formatDepartureNo } from './format-departure-no'
 export { formatScheduleNo } from './format-schedule-no'
 export { formatTransactionNo } from './format-transaction-no'

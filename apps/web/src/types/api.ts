@@ -70,6 +70,7 @@ export type {
   PaymentScheduleSummary,
   PaymentScheduleListResult,
   FinanceTransactionSummary,
+  GuestCollectionChangeImpact,
   FinanceTransactionListResult,
   FinanceVerificationSummary,
   FinanceVerificationListResult,

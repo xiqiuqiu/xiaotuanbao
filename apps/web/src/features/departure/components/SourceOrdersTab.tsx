@@ -4,7 +4,11 @@ import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
-import { DirectoryProfileStatus, SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
+import {
+  didSourceAmountPathChange,
+  DirectoryProfileStatus,
+  SourceOrderReceivableStatus,
+} from '@xiaotuanbao/shared'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartners } from '@/services/partner.service'
 import {
@@ -12,14 +16,19 @@ import {
   deleteSourceOrder,
   generateReceivables,
   generateReceivablesForDeparture,
+  getGuestCollectionChangeImpact,
   listSourceOrders,
   updateSourceOrder,
 } from '@/services/source-order.service'
+import { formatCents } from '../catalog'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrderGuestDrawer } from './SourceOrderGuestDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
 import { buildSourceOrdersColumns } from './source-orders-table-columns'
-import { formValuesToPayload } from '../utils/source-order-form'
+import {
+  formValuesToPayload,
+  resolvePathAmountsFromPayload,
+} from '../utils/source-order-form'
 import {
   EMPTY_SOURCE_ORDER_FILTERS,
   type SourceOrderFilterDraft,
@@ -201,6 +210,55 @@ export function SourceOrdersTab({
       void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
     },
   })
+
+  const submitSourceOrder = async (payload: ReturnType<typeof formValuesToPayload>) => {
+    const editingOrder = drawer.editingOrder
+    if (!editingOrder) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    const nextPath = resolvePathAmountsFromPayload(payload)
+    const pathChanged = didSourceAmountPathChange(
+      {
+        guestCollectCents: editingOrder.guestCollectCents,
+        partnerCollectedCents: editingOrder.partnerCollectedCents,
+      },
+      nextPath,
+    )
+    if (!pathChanged) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    const impact = await getGuestCollectionChangeImpact(editingOrder.id)
+    if (impact.affectedTransactionCount <= 0) {
+      saveMutation.mutate(payload)
+      return
+    }
+
+    Modal.confirm({
+      title: '关联流水金额可能受影响',
+      content: (
+        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+          <span>
+            我方代收 {formatCents(editingOrder.guestCollectCents)} →{' '}
+            {formatCents(nextPath.guestCollectCents)}
+            {editingOrder.partnerCollectedCents !== nextPath.partnerCollectedCents
+              ? `；客户已收 ${formatCents(editingOrder.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
+              : ''}
+          </span>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            本单有 {impact.affectedTransactionCount}{' '}
+            笔未核销游客代收流水创建于变更前，保存后将标记「客源金额已变更」。确认继续？
+          </Typography.Text>
+        </Space>
+      ),
+      okText: '仍要保存',
+      cancelText: '取消',
+      onOk: () => saveMutation.mutateAsync(payload),
+    })
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSourceOrder(id),
@@ -385,7 +443,9 @@ export function SourceOrdersTab({
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         onClose={() => dispatchDrawer({ type: 'CLOSE_DRAWER' })}
-        onSubmit={(payload) => saveMutation.mutate(payload)}
+        onSubmit={(payload) => {
+          void submitSourceOrder(payload)
+        }}
       />
 
       <SourceOrderGuestDrawer

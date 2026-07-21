@@ -532,8 +532,14 @@ export interface FinanceTransactionSummary {
   voidedAt: string | null
   voidReason: string | null
   notes: string | null
+  /** 关联客源金额路径在流水创建后发生变更，且仍有未核销余额时为 true */
+  sourceAmountChanged: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface GuestCollectionChangeImpact {
+  affectedTransactionCount: number
 }
 
 export interface FinanceTransactionVerificationSummary {

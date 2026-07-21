@@ -226,6 +226,14 @@ export async function voidTransaction(
   return request.post<FinanceTransactionSummary>(`/finance/transactions/${id}/void`, payload)
 }
 
+export async function acknowledgeTransactionSourceAmountChange(
+  id: string,
+): Promise<FinanceTransactionSummary> {
+  return request.post<FinanceTransactionSummary>(
+    `/finance/transactions/${id}/acknowledge-source-amount-change`,
+  )
+}
+
 export async function listVerifications(
   params: ListFinanceVerificationsParams,
   signal?: AbortSignal,

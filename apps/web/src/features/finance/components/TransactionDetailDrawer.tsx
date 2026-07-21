@@ -12,13 +12,19 @@ import {
   Table,
   Tag,
   Typography,
+  message,
   theme,
 } from 'antd'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionVerificationSummary } from '@xiaotuanbao/shared'
 import { deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
-import { getTransaction } from '@/services/finance.service'
+import { useAuthStore } from '@/app/store/auth.store'
+import {
+  acknowledgeTransactionSourceAmountChange,
+  getTransaction,
+} from '@/services/finance.service'
+import { canMutateFinance } from '../utils/finance-permission'
 import {
   COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
@@ -133,6 +139,9 @@ export function TransactionDetailDrawer({
   onClose,
 }: TransactionDetailDrawerProps) {
   const { token } = theme.useToken()
+  const queryClient = useQueryClient()
+  const menuKeys = useAuthStore((state) => state.menuKeys)
+  const canAcknowledgeSourceAmountChange = canMutateFinance(menuKeys)
   const {
     data: transaction,
     isLoading,
@@ -148,6 +157,22 @@ export function TransactionDetailDrawer({
       return getTransaction(transactionId)
     },
     enabled: open && Boolean(transactionId),
+  })
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: (id: string) => acknowledgeTransactionSourceAmountChange(id),
+    onSuccess: async () => {
+      message.success('已标记为已知悉')
+      if (transactionId) {
+        await queryClient.invalidateQueries({ queryKey: ['finance-transaction', transactionId] })
+      }
+      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+    },
+    onError: (acknowledgeError) => {
+      message.error(
+        acknowledgeError instanceof Error ? acknowledgeError.message : '知悉失败，请稍后重试',
+      )
+    },
   })
 
   const writeoff = transaction
@@ -238,6 +263,25 @@ export function TransactionDetailDrawer({
                 showIcon
                 title="该流水已作废"
                 description={`作废时间：${formatDateTime(transaction.voidedAt)} · 原因：${transaction.voidReason?.trim() || '-'}`}
+              />
+            ) : null}
+            {transaction.sourceAmountChanged ? (
+              <Alert
+                type="warning"
+                showIcon
+                title="关联客源金额已变更"
+                description="计调已调整本单游客代收/客户已收路径金额。请核对流水与后续核销是否仍匹配。"
+                action={
+                  canAcknowledgeSourceAmountChange ? (
+                    <Button
+                      size="small"
+                      loading={acknowledgeMutation.isPending}
+                      onClick={() => acknowledgeMutation.mutate(transaction.id)}
+                    >
+                      已知悉
+                    </Button>
+                  ) : undefined
+                }
               />
             ) : null}
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">

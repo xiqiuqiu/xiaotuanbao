@@ -14,7 +14,9 @@ import type {
   SourceOrderSummary,
 } from '@xiaotuanbao/shared'
 import {
+  didSourceAmountPathChange,
   SourceOrderReceivableStatus,
+  type GuestCollectionChangeImpact,
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -50,6 +52,7 @@ import {
   DepartureFinanceBridgeService,
   type SourceOrderFinanceMeta,
 } from './departure-finance-bridge.service'
+import { TransactionService } from '../finance/transaction.service'
 
 type SourceOrderWithPartner = SourceOrder & { partner: Partner }
 
@@ -59,6 +62,7 @@ export class SourceOrderService {
     private readonly prisma: PrismaService,
     private readonly financeBridge: DepartureFinanceBridgeService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
+    private readonly transactionService: TransactionService,
   ) {}
 
   async listByDeparture(
@@ -420,6 +424,16 @@ export class SourceOrderService {
 
     const amounts = computeSourceOrderAmounts(normalized)
     const guestCount = normalized.adultGuestCount + normalized.childGuestCount
+    const pathAmountChanged = didSourceAmountPathChange(
+      {
+        guestCollectCents: order.guestCollectCents,
+        partnerCollectedCents: order.partnerCollectedCents,
+      },
+      {
+        guestCollectCents: amounts.guestCollectCents,
+        partnerCollectedCents: amounts.partnerCollectedCents,
+      },
+    )
 
     await this.financeBridge.assertAmountFieldsEditable(
       organizationId,
@@ -442,30 +456,44 @@ export class SourceOrderService {
         ? await this.generateDisplayName(order.departure, partner.name, partner.id, order.id)
         : order.displayName
 
-    const updated = await this.prisma.sourceOrder.update({
-      where: { id: order.id },
-      data: {
-        partnerId: partner.id,
-        displayName,
-        guestCount,
-        adultGuestCount: normalized.adultGuestCount,
-        childGuestCount: normalized.childGuestCount,
-        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
-        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
-        grossReceivableCents: amounts.grossReceivableCents,
-        discountType: normalized.discountType,
-        discountCents: amounts.discountCents,
-        discountNotes:
-          dto.discountNotes !== undefined ? dto.discountNotes?.trim() || null : undefined,
-        netReceivableCents: amounts.netReceivableCents,
-        collectionMode: normalized.collectionMode,
-        partnerCollectedCents: amounts.partnerCollectedCents,
-        guestCollectCents: amounts.guestCollectCents,
-        settlementNotes:
-          dto.settlementNotes !== undefined ? dto.settlementNotes?.trim() || null : undefined,
-        notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
-      },
-      include: { partner: true, departure: true },
+    const changeAt = new Date()
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.sourceOrder.update({
+        where: { id: order.id },
+        data: {
+          partnerId: partner.id,
+          displayName,
+          guestCount,
+          adultGuestCount: normalized.adultGuestCount,
+          childGuestCount: normalized.childGuestCount,
+          adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+          childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
+          grossReceivableCents: amounts.grossReceivableCents,
+          discountType: normalized.discountType,
+          discountCents: amounts.discountCents,
+          discountNotes:
+            dto.discountNotes !== undefined ? dto.discountNotes?.trim() || null : undefined,
+          netReceivableCents: amounts.netReceivableCents,
+          collectionMode: normalized.collectionMode,
+          partnerCollectedCents: amounts.partnerCollectedCents,
+          guestCollectCents: amounts.guestCollectCents,
+          settlementNotes:
+            dto.settlementNotes !== undefined ? dto.settlementNotes?.trim() || null : undefined,
+          notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
+        },
+        include: { partner: true, departure: true },
+      })
+
+      if (pathAmountChanged) {
+        await this.transactionService.markGuestCollectionSourceAmountChanged(
+          organizationId,
+          order.id,
+          changeAt,
+          tx,
+        )
+      }
+
+      return next
     })
 
     const financeMeta = await this.financeBridge.syncSourceOrderSchedules(
@@ -473,6 +501,19 @@ export class SourceOrderService {
       updated,
     )
     return this.toSourceOrderSummary(updated, financeMeta)
+  }
+
+  async getGuestCollectionChangeImpact(
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<GuestCollectionChangeImpact> {
+    await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
+    const affectedTransactionCount =
+      await this.transactionService.countGuestCollectionChangeImpact(
+        organizationId,
+        sourceOrderId,
+      )
+    return { affectedTransactionCount }
   }
 
   async remove(organizationId: string, sourceOrderId: string): Promise<void> {

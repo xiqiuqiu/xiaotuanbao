@@ -4,6 +4,7 @@ import type {
   CreateSourceOrderGuestDto,
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  GuestCollectionChangeImpact,
   PartnerReconciliationStatementSnapshot,
   PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
@@ -91,6 +92,14 @@ export async function updateSourceOrder(
   payload: UpdateSourceOrderDto,
 ): Promise<SourceOrderSummary> {
   return request.patch<SourceOrderSummary>(`/source-orders/${id}`, payload)
+}
+
+export async function getGuestCollectionChangeImpact(
+  sourceOrderId: string,
+): Promise<GuestCollectionChangeImpact> {
+  return request.get<GuestCollectionChangeImpact>(
+    `/source-orders/${sourceOrderId}/guest-collection-change-impact`,
+  )
 }
 
 export async function deleteSourceOrder(id: string): Promise<void> {

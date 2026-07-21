@@ -72,6 +72,10 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   createTransaction: { gating: 'financeMutate', endpointKey: '/finance/transactions' },
   updateTransaction: { gating: 'financeMutate', endpointKey: '/finance/transactions' },
   voidTransaction: { gating: 'financeMutate', endpointKey: '/finance/transactions' },
+  acknowledgeTransactionSourceAmountChange: {
+    gating: 'financeMutate',
+    endpointKey: '/finance/transactions',
+  },
   createVerification: { gating: 'financeMutate', endpointKey: '/finance/verification' },
   cancelVerification: { gating: 'financeMutate', endpointKey: '/finance/verification' },
 

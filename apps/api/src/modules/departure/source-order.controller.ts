@@ -13,6 +13,7 @@ import {
 import type {
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  GuestCollectionChangeImpact,
   PartnerSourceOrderListResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
@@ -82,6 +83,18 @@ export class SourceOrderController {
     @Param('id') id: string,
   ): Promise<SourceOrderSummary> {
     return this.sourceOrderService.getById(request.user.organizationId, id)
+  }
+
+  @Get('source-orders/:id/guest-collection-change-impact')
+  @RequireMenu('/departure')
+  guestCollectionChangeImpact(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<GuestCollectionChangeImpact> {
+    return this.sourceOrderService.getGuestCollectionChangeImpact(
+      request.user.organizationId,
+      id,
+    )
   }
 
   @Patch('source-orders/:id')

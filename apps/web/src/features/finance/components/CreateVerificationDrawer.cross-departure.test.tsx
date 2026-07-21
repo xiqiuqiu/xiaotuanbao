@@ -43,6 +43,7 @@ function makeTransaction(): FinanceTransactionSummary {
     voidedAt: null,
     voidReason: null,
     notes: null,
+    sourceAmountChanged: false,
     createdAt: '2026-07-15T00:00:00.000Z',
     updatedAt: '2026-07-15T00:00:00.000Z',
   }

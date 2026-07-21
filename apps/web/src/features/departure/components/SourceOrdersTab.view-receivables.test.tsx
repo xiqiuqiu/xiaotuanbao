@@ -24,6 +24,7 @@ vi.mock('@/services/source-order.service', () => ({
   deleteSourceOrder: vi.fn(),
   generateReceivables: vi.fn(),
   generateReceivablesForDeparture: vi.fn(),
+  getGuestCollectionChangeImpact: vi.fn(async () => ({ affectedTransactionCount: 0 })),
 }))
 
 const departure = {

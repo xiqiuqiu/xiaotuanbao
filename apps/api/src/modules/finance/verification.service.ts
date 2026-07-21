@@ -256,6 +256,15 @@ export class VerificationService {
       },
     })
 
+    await client.financeTransaction.updateMany({
+      where: {
+        id: dto.transactionId,
+        organizationId,
+        sourceAmountChangedAt: { not: null },
+      },
+      data: { sourceAmountChangedAt: null },
+    })
+
     return this.toSummary(verification)
   }
 
@@ -479,12 +488,16 @@ export class VerificationService {
     return result._sum.amountCents ?? 0
   }
 
-  async batchGetAllocatedAmounts(transactionIds: string[]): Promise<Map<string, number>> {
+  async batchGetAllocatedAmounts(
+    transactionIds: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<Map<string, number>> {
     if (transactionIds.length === 0) {
       return new Map()
     }
 
-    const rows = await this.prisma.financeVerification.groupBy({
+    const client = tx ?? this.prisma
+    const rows = await client.financeVerification.groupBy({
       by: ['transactionId'],
       where: {
         transactionId: { in: transactionIds },
@@ -805,6 +818,7 @@ export class VerificationService {
       voidedAt: transaction.voidedAt?.toISOString() ?? null,
       voidReason: transaction.voidReason,
       notes: transaction.notes,
+      sourceAmountChanged: transaction.sourceAmountChangedAt != null,
       createdAt: transaction.createdAt.toISOString(),
       updatedAt: transaction.updatedAt.toISOString(),
     }

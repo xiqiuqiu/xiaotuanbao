@@ -676,12 +676,13 @@ model FinanceTransaction {
   counterpartyName String?              @map("counterparty_name")
   departureId      String?              @map("departure_id")
   departure        Departure?           @relation(fields: [departureId], references: [id])
-  voidedAt         DateTime?            @map("voided_at")
-  voidReason       String?              @map("void_reason")
-  notes            String?
-  createdAt        DateTime             @default(now()) @map("created_at")
-  updatedAt        DateTime             @updatedAt @map("updated_at")
-  verifications    FinanceVerification[]
+  voidedAt               DateTime?            @map("voided_at")
+  voidReason             String?              @map("void_reason")
+  notes                  String?
+  sourceAmountChangedAt  DateTime?            @map("source_amount_changed_at")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  verifications          FinanceVerification[]
 
   @@unique([organizationId, transactionNo])
   @@index([organizationId, departureId])

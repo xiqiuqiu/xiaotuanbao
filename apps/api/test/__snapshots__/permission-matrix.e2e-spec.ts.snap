@@ -235,6 +235,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/finance/transactions",
+    "route": "POST /api/finance/transactions/:id/acknowledge-source-amount-change",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/finance/transactions",
     "route": "POST /api/finance/transactions/:id/void",
   },
   {
@@ -465,6 +470,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/departure",
+    "route": "GET /api/source-orders/:id/guest-collection-change-impact",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/departure",
     "route": "GET /api/source-orders/:id/guests",
   },
   {
@@ -604,6 +614,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/finance/transactions [/finance/transactions]",
     "GET /api/finance/transactions/:id [/finance/transactions]",
     "PUT /api/finance/transactions/:id [/finance/transactions]",
+    "POST /api/finance/transactions/:id/acknowledge-source-amount-change [/finance/transactions]",
     "POST /api/finance/transactions/:id/void [/finance/transactions]",
     "GET /api/finance/verifications [/finance/verification]",
     "POST /api/finance/verifications [/finance/verification]",
@@ -643,6 +654,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/source-orders/:id [/departure]",
     "PATCH /api/source-orders/:id [departure:write]",
     "POST /api/source-orders/:id/generate-receivables [/departure]",
+    "GET /api/source-orders/:id/guest-collection-change-impact [/departure]",
     "GET /api/source-orders/:id/guests [/departure]",
     "POST /api/source-orders/:id/guests [departure:write]",
     "DELETE /api/source-orders/:id/guests/:guestId [departure:write]",
@@ -724,6 +736,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/source-orders/:id [/departure]",
     "PATCH /api/source-orders/:id [departure:write]",
     "POST /api/source-orders/:id/generate-receivables [/departure]",
+    "GET /api/source-orders/:id/guest-collection-change-impact [/departure]",
     "GET /api/source-orders/:id/guests [/departure]",
     "POST /api/source-orders/:id/guests [departure:write]",
     "DELETE /api/source-orders/:id/guests/:guestId [departure:write]",
@@ -777,6 +790,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/finance/transactions [/finance/transactions]",
     "GET /api/finance/transactions/:id [/finance/transactions]",
     "PUT /api/finance/transactions/:id [/finance/transactions]",
+    "POST /api/finance/transactions/:id/acknowledge-source-amount-change [/finance/transactions]",
     "POST /api/finance/transactions/:id/void [/finance/transactions]",
     "GET /api/finance/verifications [/finance/verification]",
     "POST /api/finance/verifications [/finance/verification]",
@@ -800,6 +814,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/segments/:segmentId/resources [/departure]",
     "GET /api/source-orders/:id [/departure]",
     "POST /api/source-orders/:id/generate-receivables [/departure]",
+    "GET /api/source-orders/:id/guest-collection-change-impact [/departure]",
     "GET /api/source-orders/:id/guests [/departure]",
     "GET /api/suppliers [/supplier]",
     "GET /api/suppliers/:id [/supplier]",

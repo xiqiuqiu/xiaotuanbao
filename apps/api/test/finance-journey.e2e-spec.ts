@@ -1729,6 +1729,19 @@ describe('Finance journeys (cross-module e2e)', () => {
     )
 
     const orphanDeparture = await createDeparture('orphan-tx-host')
+    // 发团硬筛：伙伴须有本团源事实，否则无法建流水。
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${orphanDeparture.id}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 1000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
+      })
+      .expect(201)
     const orphanTx = await authRequest(app, financeToken)
       .post('/api/finance/transactions')
       .send({

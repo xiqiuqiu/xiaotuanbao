@@ -51,6 +51,7 @@ describe('finance detail drawer query errors', () => {
         voidedAt: null,
         voidReason: null,
         notes: null,
+        sourceAmountChanged: false,
         createdAt: '2026-07-14T00:00:00.000Z',
         verificationCount: 0,
         lastVerificationAt: null,
