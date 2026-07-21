@@ -36,9 +36,79 @@
   width: 100%;
 }
 
+.coordinatorContent {
+  display: grid;
+  gap: 16px;
+}
+
+.coordinatorMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metricButton {
+  position: relative;
+  min-width: 0;
+  padding: 16px 20px;
+  text-align: left;
+  color: inherit;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: var(--ant-color-bg-container);
+  cursor: pointer;
+  transition: border-color var(--ant-motion-duration-mid), background-color var(--ant-motion-duration-mid);
+}
+
+.metricButton:not(:disabled):hover,
+.metricButton:focus-visible {
+  border-color: var(--ant-color-primary-border);
+  outline: 2px solid var(--ant-color-primary-border);
+  outline-offset: 2px;
+}
+
+.metricButton:not(:disabled):active {
+  background: var(--ant-color-primary-bg);
+}
+
+.metricButton:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.metricArrow {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.recentDeparturesCard {
+  min-width: 0;
+}
+
+.moduleDescription {
+  margin-bottom: 12px !important;
+}
+
+.departureLink {
+  height: auto;
+  padding: 0;
+  font-weight: 600;
+  white-space: normal;
+  text-align: left;
+}
+
 @media (max-width: 767px) {
   .moduleGrid,
-  .metricGrid {
+  .metricGrid,
+  .coordinatorMetricGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metricButton {
+    transition: none;
   }
 }

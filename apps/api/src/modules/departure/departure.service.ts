@@ -46,6 +46,11 @@ import {
   emptyDepartureReadModelAggregate,
   type DepartureReadModelAggregate,
 } from './departure-read-model.utils'
+import { DepartureDataGapService } from './departure-data-gap.service'
+import {
+  buildDepartureOperationalWindowWhere,
+  getDepartureOperationalDates,
+} from './departure-operational-window'
 
 const UPDATE_DEPARTURE_FIELDS = [
   'name',
@@ -72,6 +77,7 @@ export class DepartureService {
     private readonly departureReadModelService: DepartureReadModelService,
     private readonly numberAllocationService: NumberAllocationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
+    private readonly departureDataGapService: DepartureDataGapService,
   ) {}
 
   async list(
@@ -81,6 +87,9 @@ export class DepartureService {
     const page = Math.max(Number(query.page) || 1, 1)
     const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
     const keyword = query.keyword?.trim()
+    const operationalDates = getDepartureOperationalDates(new Date())
+    const { today } = operationalDates
+    const andFilters: Prisma.DepartureWhereInput[] = []
 
     const where: Prisma.DepartureWhereInput = {
       organizationId,
@@ -110,6 +119,39 @@ export class DepartureService {
       }
     }
 
+    if (query.departureProgress) {
+      if (query.departureProgress === 'not_started') {
+        andFilters.push({ startDate: { gt: parseDateOnly(today) } })
+      } else if (query.departureProgress === 'in_progress') {
+        andFilters.push({
+          startDate: { lte: parseDateOnly(today) },
+          endDate: { gte: parseDateOnly(today) },
+        })
+      } else {
+        andFilters.push({ endDate: { lt: parseDateOnly(today) } })
+      }
+    }
+
+    if (query.operationalWindow) {
+      andFilters.push(
+        buildDepartureOperationalWindowWhere(query.operationalWindow, operationalDates),
+      )
+    }
+
+    if (query.departureDataGap === 'any') {
+      const dataGapsByDepartureId = await this.departureDataGapService.findByOrganization(
+        organizationId,
+      )
+      const departureIds = [...dataGapsByDepartureId.entries()]
+        .filter(([, dataGaps]) => dataGaps.length > 0)
+        .map(([departureId]) => departureId)
+      andFilters.push({ id: { in: departureIds } })
+    }
+
+    if (andFilters.length > 0) {
+      where.AND = andFilters
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.departure.findMany({
         where,
@@ -120,15 +162,11 @@ export class DepartureService {
       this.prisma.departure.count({ where }),
     ])
 
-    let summaries = await this.enrichSummaries(items)
-
-    if (query.departureProgress) {
-      summaries = summaries.filter((item) => item.departureProgress === query.departureProgress)
-    }
+    const summaries = await this.enrichSummaries(items)
 
     return {
       items: summaries,
-      total: query.departureProgress ? summaries.length : total,
+      total,
       page,
       pageSize,
     }

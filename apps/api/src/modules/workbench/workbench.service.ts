@@ -10,6 +10,7 @@ import {
   type WorkbenchTemplate,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { CoordinatorWorkbenchService } from './coordinator-workbench.service'
 
 interface ModuleDefinition extends Omit<WorkbenchModule, 'metrics' | 'items'> {
   requiredPermissions: readonly MenuKey[]
@@ -115,7 +116,10 @@ function buildActions(
 
 @Injectable()
 export class WorkbenchService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coordinatorWorkbenchService: CoordinatorWorkbenchService,
+  ) {}
 
   async getSnapshot(userId: string, organizationId: string): Promise<WorkbenchSnapshot> {
     const user = await this.prisma.user.findFirst({
@@ -158,11 +162,25 @@ export class WorkbenchService {
       ),
     )
 
+    const asOf = new Date()
+    const modules = buildModules(template, permissionKeys)
+    if (template === 'coordinator') {
+      const coordinatorDeparturesIndex = modules.findIndex(
+        (module) => module.key === 'coordinator-departures',
+      )
+      if (coordinatorDeparturesIndex >= 0) {
+        modules[coordinatorDeparturesIndex] = await this.coordinatorWorkbenchService.buildModule(
+          organizationId,
+          asOf,
+        )
+      }
+    }
+
     return {
       template,
       organization: user.organization,
-      asOf: new Date().toISOString(),
-      modules: buildModules(template, permissionKeys),
+      asOf: asOf.toISOString(),
+      modules,
       actions: buildActions(template, permissionKeys),
     }
   }

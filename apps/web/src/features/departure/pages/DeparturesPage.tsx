@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useReducer } from 'react'
-import { Button, Card, Table } from 'antd'
+import { Alert, Button, Card, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import { listDepartures } from '@/services/departure.service'
@@ -20,6 +20,7 @@ import {
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
 import { buildDepartureColumns } from './departure-columns'
+import type { DepartureListSearch } from '../utils/departure-list-search'
 
 type DeparturesPageState = {
   keyword: string
@@ -33,6 +34,8 @@ type DeparturesPageState = {
   filtersKey: number
   page: number
   pageSize: number
+  operationalWindow?: DepartureListSearch['operationalWindow']
+  departureDataGap?: DepartureListSearch['departureDataGap']
 }
 
 const initialDeparturesPageState: DeparturesPageState = {
@@ -47,6 +50,17 @@ const initialDeparturesPageState: DeparturesPageState = {
   filtersKey: 0,
   page: 1,
   pageSize: 10,
+  operationalWindow: undefined,
+  departureDataGap: undefined,
+}
+
+function createInitialState(search: DepartureListSearch): DeparturesPageState {
+  return {
+    ...initialDeparturesPageState,
+    departureProgress: search.departureProgress,
+    operationalWindow: search.operationalWindow,
+    departureDataGap: search.departureDataGap,
+  }
 }
 
 type DeparturesPageAction =
@@ -98,8 +112,9 @@ function departuresPageReducer(
 
 export function DeparturesPage() {
   const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as DepartureListSearch
   const canEdit = canEditDeparture(useAuthStore((s) => s.actionKeys))
-  const [state, dispatch] = useReducer(departuresPageReducer, initialDeparturesPageState)
+  const [state, dispatch] = useReducer(departuresPageReducer, search, createInitialState)
 
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
@@ -129,6 +144,8 @@ export function DeparturesPage() {
     state.partnerId,
     startDateFrom,
     startDateTo,
+    state.operationalWindow,
+    state.departureDataGap,
   ].join('\0')
   const placeholderData = useListPlaceholderData(listFilterKey)
 
@@ -151,6 +168,8 @@ export function DeparturesPage() {
       state.partnerId,
       startDateFrom,
       startDateTo,
+      state.operationalWindow,
+      state.departureDataGap,
       state.page,
       state.pageSize,
     ],
@@ -165,6 +184,8 @@ export function DeparturesPage() {
         partnerId: state.partnerId,
         startDateFrom,
         startDateTo,
+        operationalWindow: state.operationalWindow,
+        departureDataGap: state.departureDataGap,
         page: state.page,
         pageSize: state.pageSize,
       }),
@@ -219,6 +240,26 @@ export function DeparturesPage() {
           ) : undefined
         }
       />
+
+      {state.operationalWindow || state.departureDataGap ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title={state.departureDataGap ? '已筛选：近期资料待补充发团' : '已按工作台范围筛选发团'}
+          action={
+            <Button
+              size="small"
+              onClick={() => {
+                dispatch({ type: 'RESET_FILTERS' })
+                void navigate({ to: '/departure', search: {} })
+              }}
+            >
+              清除工作台筛选
+            </Button>
+          }
+        />
+      ) : null}
 
       <DepartureFilters
         key={state.filtersKey}
