@@ -193,4 +193,91 @@ describe('Product Import Session (e2e)', () => {
     expect(Buffer.isBuffer(original.body)).toBe(true)
     expect((original.body as Buffer).byteLength).toBeGreaterThan(1000)
   })
+
+  it('creates products only once under concurrent confirm requests', async () => {
+    const upload = await authRequest(app, coordinatorToken)
+      .post('/api/products/import-sessions')
+      .attach('file', readFileSync(FIXTURE_PATH), {
+        filename: `${testPrefix}-concurrent.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      .expect(201)
+
+    const session = upload.body.data as {
+      id: string
+      storedObjectId: string
+      parseResult: {
+        sheets: Array<{
+          sheetName: string
+          lines: Array<{
+            candidateKey: string
+            name: string
+            shortItinerary: string
+            featuresText: string | null
+            schedules: Array<Record<string, unknown>>
+          }>
+        }>
+      }
+    }
+    createdSessionIds.push(session.id)
+    createdStoredObjectIds.push(session.storedObjectId)
+
+    const north = session.parseResult.sheets.find((sheet) => sheet.sheetName === '北疆大巴纯玩线路')
+    expect(north).toBeDefined()
+    const lineA = north!.lines.find((line) => line.name.includes('A线'))
+    expect(lineA).toBeDefined()
+
+    const payload = {
+      lines: [
+        {
+          candidateKey: lineA!.candidateKey,
+          action: 'accept' as const,
+          name: `${testPrefix}-concurrent-${lineA!.name}`,
+          shortItinerary: lineA!.shortItinerary,
+          featuresText: lineA!.featuresText,
+          tags: ['经典热卖款'],
+          schedules: lineA!.schedules.map((schedule) => ({
+            dateRuleText: schedule.dateRuleText,
+            startDate: schedule.startDate,
+            endDate: schedule.endDate,
+            adultPriceCents: schedule.adultPriceCents,
+            childPriceCents: schedule.childPriceCents,
+            singleRoomSupplementCents: schedule.singleRoomSupplementCents,
+            priceOnInquiry: schedule.priceOnInquiry,
+          })),
+        },
+      ],
+    }
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        authRequest(app, coordinatorToken)
+          .post(`/api/products/import-sessions/${session.id}/confirm`)
+          .send(payload),
+      ),
+    )
+
+    const successResponses = responses.filter((response) => response.status === 201)
+    const rejectedResponses = responses.filter((response) => response.status === 400)
+    expect(successResponses).toHaveLength(1)
+    expect(rejectedResponses).toHaveLength(7)
+    expect(rejectedResponses.every((response) =>
+      String(response.body.message).includes('不能重复确认'),
+    )).toBe(true)
+
+    const productIds = successResponses[0].body.data.createdProducts.map(
+      (product: { id: string }) => product.id,
+    ) as string[]
+    createdProductIds.push(...productIds)
+
+    const productCount = await prisma.product.count({
+      where: { importSessionId: session.id },
+    })
+    expect(productCount).toBe(1)
+
+    const refreshed = await prisma.productImportSession.findUniqueOrThrow({
+      where: { id: session.id },
+    })
+    expect(refreshed.status).toBe('confirmed')
+  })
 })

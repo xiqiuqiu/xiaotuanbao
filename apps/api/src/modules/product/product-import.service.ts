@@ -124,6 +124,25 @@ export class ProductImportService {
 
     const createdProductIds: string[] = []
     await this.prisma.$transaction(async (tx) => {
+      // Serialize concurrent confirms: status was checked outside the tx, so lock + re-check.
+      await tx.$queryRaw`
+        SELECT id
+        FROM product_import_sessions
+        WHERE id = ${sessionId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+      const locked = await tx.productImportSession.findFirst({
+        where: { id: sessionId, organizationId },
+        select: { id: true, status: true },
+      })
+      if (!locked) {
+        throw new NotFoundException('导入会话不存在')
+      }
+      if (locked.status !== ProductImportSessionStatus.pending_confirmation) {
+        throw new BadRequestException('该导入会话已确认或已废弃，不能重复确认')
+      }
+
       for (const line of accepted) {
         const candidate = candidateMap.get(line.candidateKey)!
         const name = line.name!.trim()
@@ -178,13 +197,19 @@ export class ProductImportService {
         createdProductIds.push(product.id)
       }
 
-      await tx.productImportSession.update({
-        where: { id: session.id },
+      const claimed = await tx.productImportSession.updateMany({
+        where: {
+          id: session.id,
+          status: ProductImportSessionStatus.pending_confirmation,
+        },
         data: {
           status: ProductImportSessionStatus.confirmed,
           confirmedAt: new Date(),
         },
       })
+      if (claimed.count !== 1) {
+        throw new BadRequestException('该导入会话已确认或已废弃，不能重复确认')
+      }
     })
 
     const createdProducts: ProductDetail[] = []
