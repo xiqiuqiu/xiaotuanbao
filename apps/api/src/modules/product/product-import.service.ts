@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import type {
@@ -29,6 +30,8 @@ import { ProductService } from './product.service'
 
 @Injectable()
 export class ProductImportService {
+  private readonly logger = new Logger(ProductImportService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storedObjectService: StoredObjectService,
@@ -61,22 +64,33 @@ export class ProductImportService {
     }
 
     const stored = await this.storedObjectService.upload(organizationId, userId, file)
-    const session = await this.prisma.productImportSession.create({
-      data: {
-        organizationId,
-        storedObjectId: stored.id,
-        originalFilename: stored.originalFilename,
-        parseResultJson: parseResult as unknown as Prisma.InputJsonValue,
-        embeddedOleCount: parseResult.embeddedOleCount,
-        createdByUserId: userId,
-        status: ProductImportSessionStatus.pending_confirmation,
-      },
-      include: {
-        products: { select: { id: true } },
-      },
-    })
-
-    return this.toDetail(session)
+    try {
+      const session = await this.prisma.productImportSession.create({
+        data: {
+          organizationId,
+          storedObjectId: stored.id,
+          originalFilename: stored.originalFilename,
+          parseResultJson: parseResult as unknown as Prisma.InputJsonValue,
+          embeddedOleCount: parseResult.embeddedOleCount,
+          createdByUserId: userId,
+          status: ProductImportSessionStatus.pending_confirmation,
+        },
+        include: {
+          products: { select: { id: true } },
+        },
+      })
+      return this.toDetail(session)
+    } catch (error) {
+      try {
+        await this.storedObjectService.delete(organizationId, stored.id)
+      } catch (cleanupError) {
+        this.logger.warn(
+          `Failed to cleanup stored object after import session create failure id=${stored.id}`,
+          cleanupError instanceof Error ? cleanupError.message : undefined,
+        )
+      }
+      throw error
+    }
   }
 
   async getSession(
