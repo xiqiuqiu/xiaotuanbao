@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Form, Input, Modal, Space, Table, Tag, Upload, message } from 'antd'
-import { PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { Button, Card, Dropdown, Form, Input, Modal, Space, Table, Tag, Upload, message } from 'antd'
+import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import type { ColumnsType } from 'antd/es/table'
@@ -19,9 +19,13 @@ import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import {
   createProduct,
   createProductImportSession,
+  downloadProductPeerPackPdf,
+  downloadProductSummaryExcel,
+  getProduct,
   listProducts,
 } from '@/services/product.service'
 import { ProductListFilters } from '../components/ProductListFilters'
+import { warnProductExportGaps } from '../utils/product-export-warnings'
 import { canEditProduct } from '../utils/product-permission'
 import { PRODUCT_STATUS_LABELS } from '../utils/product-labels'
 import type { ProductListSearch } from '../utils/product-list-search'
@@ -40,6 +44,21 @@ export function ProductsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const canEdit = canEditProduct(useAuthStore((state) => state.actionKeys))
+  const [exportingSummary, setExportingSummary] = useState(false)
+  const [exportingPeerPackId, setExportingPeerPackId] = useState<string | null>(null)
+
+  const exportPeerPackFromList = async (productId: string, priced: boolean) => {
+    setExportingPeerPackId(productId)
+    try {
+      const detail = await getProduct(productId)
+      await downloadProductPeerPackPdf(productId, priced)
+      warnProductExportGaps(detail)
+    } catch {
+      // downloadBinary / request 已提示错误
+    } finally {
+      setExportingPeerPackId(null)
+    }
+  }
 
   useEffect(() => {
     setImportSessionId(listSearch.importSessionId ?? '')
@@ -190,6 +209,39 @@ export function ProductsPage() {
       },
     },
     ...buildBusinessTimestampColumns<ProductListItem>(),
+    {
+      title: '操作',
+      key: 'actions',
+      width: 120,
+      fixed: 'right',
+      render: (_, record) => (
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: 'priced',
+                label: '有价 PDF',
+                onClick: () => void exportPeerPackFromList(record.id, true),
+              },
+              {
+                key: 'unpriced',
+                label: '无价 PDF',
+                onClick: () => void exportPeerPackFromList(record.id, false),
+              },
+            ],
+          }}
+        >
+          <Button
+            type="link"
+            size="small"
+            icon={<DownloadOutlined />}
+            loading={exportingPeerPackId === record.id}
+          >
+            同行资料
+          </Button>
+        </Dropdown>
+      ),
+    },
   ]
 
   return (
@@ -197,25 +249,46 @@ export function ProductsPage() {
       <PageHeader
         title="产品中心"
         action={
-          canEdit ? (
-            <Space>
-              <Upload
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  importMutation.mutate(file)
-                  return false
-                }}
-              >
-                <Button icon={<UploadOutlined />} loading={importMutation.isPending}>
-                  导入疆游记
+          <Space>
+            <Button
+              icon={<DownloadOutlined />}
+              loading={exportingSummary}
+              onClick={() => {
+                setExportingSummary(true)
+                void downloadProductSummaryExcel({
+                  search: search || undefined,
+                  importSessionId: importSessionId.trim() || undefined,
+                  sourceSheetName: sourceSheetName.trim() || undefined,
+                  includeOffline: includeOffline || undefined,
+                })
+                  .catch(() => {
+                    // downloadBinary 已提示错误
+                  })
+                  .finally(() => setExportingSummary(false))
+              }}
+            >
+              导出总表
+            </Button>
+            {canEdit ? (
+              <>
+                <Upload
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    importMutation.mutate(file)
+                    return false
+                  }}
+                >
+                  <Button icon={<UploadOutlined />} loading={importMutation.isPending}>
+                    导入疆游记
+                  </Button>
+                </Upload>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  新建产品
                 </Button>
-              </Upload>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-                新建产品
-              </Button>
-            </Space>
-          ) : undefined
+              </>
+            ) : null}
+          </Space>
         }
       />
 

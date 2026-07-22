@@ -1,7 +1,10 @@
-import { Button, Modal, Space, Tag, Typography } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
+import { useState } from 'react'
+import { Button, Dropdown, Modal, Space, Tag, Typography } from 'antd'
+import { ArrowLeftOutlined, DownloadOutlined } from '@ant-design/icons'
 import { ProductStatus } from '@xiaotuanbao/shared'
 import type { ProductDetail } from '@/types/api'
+import { downloadProductPeerPackPdf } from '@/services/product.service'
+import { warnProductExportGaps } from '../utils/product-export-warnings'
 import { PRODUCT_STATUS_LABELS } from '../utils/product-labels'
 
 export function ProductDetailHeader({
@@ -17,6 +20,20 @@ export function ProductDetailHeader({
   onBack: () => void
   onDelete: () => Promise<unknown>
 }) {
+  const [exporting, setExporting] = useState(false)
+
+  const exportPeerPack = async (priced: boolean) => {
+    setExporting(true)
+    try {
+      await downloadProductPeerPackPdf(product.id, priced)
+      warnProductExportGaps(product)
+    } catch {
+      // downloadBinary 已提示错误
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <Space style={{ marginBottom: 16 }} wrap>
       <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }} onClick={onBack}>
@@ -27,6 +44,26 @@ export function ProductDetailHeader({
       </Typography.Title>
       <Tag>{PRODUCT_STATUS_LABELS[product.status as ProductStatus]}</Tag>
       <Tag>散拼</Tag>
+      <Dropdown
+        menu={{
+          items: [
+            {
+              key: 'priced',
+              label: '有价 PDF',
+              onClick: () => void exportPeerPack(true),
+            },
+            {
+              key: 'unpriced',
+              label: '无价 PDF',
+              onClick: () => void exportPeerPack(false),
+            },
+          ],
+        }}
+      >
+        <Button icon={<DownloadOutlined />} loading={exporting}>
+          导出同行资料
+        </Button>
+      </Dropdown>
       {canEdit && product.schedules.length === 0 ? (
         <Button
           danger

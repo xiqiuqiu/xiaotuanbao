@@ -311,3 +311,36 @@ export class ListProductsQueryDto {
   @IsBoolean()
   includeOffline?: boolean
 }
+
+/** 单产品同行资料 PDF：`priced=true` 有价，`false` 无价。 */
+export class PeerPackQueryDto {
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return true
+    }
+    return value === 'true' || value === true || value === '1'
+  })
+  @IsBoolean()
+  priced?: boolean
+}
+
+/** 过渡总表 Excel 筛选（与列表口径对齐，不分页）。 */
+export class ProductSummaryExportQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string
+
+  @IsOptional()
+  @IsString()
+  importSessionId?: string
+
+  @IsOptional()
+  @IsString()
+  sourceSheetName?: string
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  includeOffline?: boolean
+}
