@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { PrismaService } from '../src/database/prisma/prisma.service'
+import { STORED_OBJECT_MAX_UPLOAD_BYTES } from '../src/modules/stored-object/stored-object.constants'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 const TEST_ORIGIN = 'http://localhost:5173'
@@ -60,13 +61,13 @@ describe('StoredObject / FileStore (e2e)', () => {
   })
 
   it('rejects oversize upload', async () => {
-    const oversize = Buffer.alloc(20 * 1024 * 1024 + 1, 1)
+    const oversize = Buffer.alloc(STORED_OBJECT_MAX_UPLOAD_BYTES + 1, 1)
     const response = await authRequest(app, coordinatorToken)
       .post('/api/stored-objects')
       .attach('file', oversize, `${testPrefix}-big.bin`)
       .expect(413)
 
-    expect(String(response.body.message ?? '')).toMatch(/过大|large|20MB/i)
+    expect(String(response.body.message ?? '')).toMatch(/过大|large|50MB/i)
   })
 
   it('uploads then downloads the same bytes with Content-Disposition', async () => {

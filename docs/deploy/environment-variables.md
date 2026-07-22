@@ -95,7 +95,7 @@ AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAME_SITE=lax
 ```
 
-PostgreSQL 通过 `pnpm db:up` 启动，暴露 `localhost:5432`。对象存储通过 `pnpm garage:up` 启动 Garage（配置见 `docker/garage/garage.toml`），S3 API 暴露 `localhost:3900`。附件上传上限 20MB。
+PostgreSQL 通过 `pnpm db:up` 启动，暴露 `localhost:5432`。对象存储通过 `pnpm garage:up` 启动 Garage（配置见 `docker/garage/garage.toml`），S3 API 暴露 `localhost:3900`。附件上传上限 50MB（覆盖试点《疆游记》等大总表）。
 
 ### 场景 B：Docker 全栈部署
 
