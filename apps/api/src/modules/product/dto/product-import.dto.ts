@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer'
 import {
   ArrayMinSize,
+  Equals,
   IsArray,
   IsBoolean,
   IsIn,
@@ -64,6 +65,10 @@ export class ConfirmImportScheduleDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+
+  /** 计调显式确认该班期价格/日期；服务端硬门禁，禁止仅靠客户端校验绕过。 */
+  @Equals(true)
+  confirmed!: true
 }
 
 export class ConfirmImportLineDto {

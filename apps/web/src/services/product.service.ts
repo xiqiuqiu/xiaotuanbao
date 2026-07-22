@@ -27,6 +27,8 @@ export interface ConfirmImportSchedulePayload {
   childPriceCents?: number | null
   singleRoomSupplementCents?: number | null
   notes?: string | null
+  /** 计调已确认该班期价格/日期；服务端要求必须为 true */
+  confirmed: true
 }
 
 export interface ConfirmImportLinePayload {

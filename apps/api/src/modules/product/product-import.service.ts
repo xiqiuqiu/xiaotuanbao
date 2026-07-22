@@ -301,6 +301,9 @@ function assertAcceptableLine(line: ConfirmImportLineDto): void {
   if (!line.schedules || line.schedules.length === 0) {
     throw new BadRequestException(`线路「${line.name}」须至少确认一条班期`)
   }
+  if (line.schedules.some((schedule) => schedule.confirmed !== true)) {
+    throw new BadRequestException(`线路「${line.name}」存在未确认的班期价格/日期`)
+  }
   const hasPricedOrInquiry = line.schedules.some(
     (schedule) => schedule.priceOnInquiry === true || schedule.adultPriceCents != null,
   )

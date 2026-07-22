@@ -28,7 +28,7 @@ import {
 } from '@/services/product.service'
 import { centsToYuan, yuanToCents } from '../utils/product-labels'
 
-type ScheduleDraft = ConfirmImportSchedulePayload & {
+type ScheduleDraft = Omit<ConfirmImportSchedulePayload, 'confirmed'> & {
   adultPriceText: string
   datesParseable: boolean
   confirmed: boolean
@@ -347,6 +347,7 @@ export function ProductImportConfirmPage() {
           childPriceCents: schedule.childPriceCents,
           singleRoomSupplementCents: schedule.singleRoomSupplementCents,
           priceOnInquiry: schedule.priceOnInquiry,
+          confirmed: true as const,
         })),
       }
     })

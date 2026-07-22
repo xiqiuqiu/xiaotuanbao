@@ -123,6 +123,7 @@ describe('Product Import Session (e2e)', () => {
               childPriceCents: schedule.childPriceCents,
               singleRoomSupplementCents: schedule.singleRoomSupplementCents,
               priceOnInquiry: schedule.priceOnInquiry,
+              confirmed: true,
             })),
           },
           ...north!.lines
@@ -194,6 +195,72 @@ describe('Product Import Session (e2e)', () => {
     expect((original.body as Buffer).byteLength).toBeGreaterThan(1000)
   })
 
+  it('rejects confirm when accepted schedules omit price/date acknowledgment', async () => {
+    const upload = await authRequest(app, coordinatorToken)
+      .post('/api/products/import-sessions')
+      .attach('file', readFileSync(FIXTURE_PATH), {
+        filename: `${testPrefix}-unconfirmed.xlsx`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      .expect(201)
+
+    const session = upload.body.data as {
+      id: string
+      storedObjectId: string
+      parseResult: {
+        sheets: Array<{
+          sheetName: string
+          lines: Array<{
+            candidateKey: string
+            name: string
+            shortItinerary: string
+            featuresText: string | null
+            schedules: Array<Record<string, unknown>>
+          }>
+        }>
+      }
+    }
+    createdSessionIds.push(session.id)
+    createdStoredObjectIds.push(session.storedObjectId)
+
+    const north = session.parseResult.sheets.find((sheet) => sheet.sheetName === '北疆大巴纯玩线路')
+    expect(north).toBeDefined()
+    const lineA = north!.lines.find((line) => line.name.includes('A线'))
+    expect(lineA).toBeDefined()
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/products/import-sessions/${session.id}/confirm`)
+      .send({
+        lines: [
+          {
+            candidateKey: lineA!.candidateKey,
+            action: 'accept',
+            name: `${testPrefix}-unconfirmed-${lineA!.name}`,
+            shortItinerary: lineA!.shortItinerary,
+            featuresText: lineA!.featuresText,
+            tags: ['经典热卖款'],
+            schedules: lineA!.schedules.map((schedule) => ({
+              dateRuleText: schedule.dateRuleText,
+              startDate: schedule.startDate,
+              endDate: schedule.endDate,
+              adultPriceCents: schedule.adultPriceCents,
+              childPriceCents: schedule.childPriceCents,
+              singleRoomSupplementCents: schedule.singleRoomSupplementCents,
+              priceOnInquiry: schedule.priceOnInquiry,
+              // intentionally omit confirmed
+            })),
+          },
+        ],
+      })
+      .expect(400)
+
+    expect(JSON.stringify(response.body)).toMatch(/confirmed/i)
+    const productCount = await prisma.product.count({
+      where: { importSessionId: session.id },
+    })
+    expect(productCount).toBe(0)
+  })
+
   it('creates products only once under concurrent confirm requests', async () => {
     const upload = await authRequest(app, coordinatorToken)
       .post('/api/products/import-sessions')
@@ -244,6 +311,7 @@ describe('Product Import Session (e2e)', () => {
             childPriceCents: schedule.childPriceCents,
             singleRoomSupplementCents: schedule.singleRoomSupplementCents,
             priceOnInquiry: schedule.priceOnInquiry,
+            confirmed: true,
           })),
         },
       ],
