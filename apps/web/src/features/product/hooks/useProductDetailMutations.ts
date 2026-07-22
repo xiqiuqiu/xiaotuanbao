@@ -10,6 +10,7 @@ import {
   type UpdateProductPayload,
 } from '@/services/product.service'
 import { yuanToCents } from '../utils/product-labels'
+import { buildProductSchedulePayload } from '../utils/schedule-form'
 import type { SpecForm } from '../components/ProductPricingCard'
 import type { ScheduleForm } from '../components/ProductScheduleDrawer'
 
@@ -62,18 +63,7 @@ export function useProductDetailMutations({
 
   const scheduleMutation = useMutation({
     mutationFn: async (values: ScheduleForm) => {
-      const payload = {
-        title: values.title?.trim() ?? '',
-        dateRuleText: values.dateRuleText?.trim() ?? '',
-        startDate: values.startDate || null,
-        endDate: values.endDate || null,
-        status: values.status,
-        priceOnInquiry: values.priceOnInquiry,
-        adultPriceCents: yuanToCents(values.adultPriceYuan),
-        childPriceCents: yuanToCents(values.childPriceYuan),
-        singleRoomSupplementCents: yuanToCents(values.singleRoomSupplementYuan),
-        notes: values.notes?.trim() || null,
-      }
+      const payload = buildProductSchedulePayload(values)
       if (editingSchedule) {
         return updateProductSchedule(productId, editingSchedule.id, payload)
       }
