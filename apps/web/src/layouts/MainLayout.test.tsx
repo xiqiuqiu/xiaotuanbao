@@ -135,10 +135,11 @@ describe('MainLayout 侧栏开关', () => {
     ['/departure/new', '/departure', '发团管理'],
     ['/partner/partner-1', '/partner', '合作伙伴'],
     ['/supplier/supplier-1', '/supplier', '供应商管理'],
+    ['/product/product-1', '/product', '产品中心'],
   ])('子页面 %s 保持父级菜单 %s 选中', (currentPathname, menuKey, menuLabel) => {
     pathname = currentPathname
     useAuthStore.setState({
-      menuKeys: ['/departure', '/partner', '/supplier'],
+      menuKeys: ['/departure', '/partner', '/supplier', '/product'],
     })
 
     render(

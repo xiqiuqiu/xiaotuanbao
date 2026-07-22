@@ -228,6 +228,31 @@ enum DocumentSequenceType {
   @@map("document_sequence_type")
 }
 
+/// Product Type：第一期仅散拼。
+enum ProductType {
+  group_join
+
+  @@map("product_type")
+}
+
+/// Product Status：草稿 / 销售中 / 已下架。
+enum ProductStatus {
+  draft
+  on_sale
+  offline
+
+  @@map("product_status")
+}
+
+/// Product Schedule Status：销售中 / 已截止 / 已取消。
+enum ProductScheduleStatus {
+  on_sale
+  closed
+  cancelled
+
+  @@map("product_schedule_status")
+}
+
 model Organization {
   id             String             @id @default(cuid())
   name           String
@@ -250,6 +275,7 @@ model Organization {
   financeIdempotencyRecords FinanceIdempotencyRecord[]
   documentSequences DocumentSequence[]
   storedObjects StoredObject[]
+  products Product[]
 
   @@map("organizations")
 }
@@ -734,4 +760,74 @@ model FinanceVerification {
   @@index([paymentScheduleId, status])
   @@index([transactionId, status])
   @@map("finance_verifications")
+}
+
+/// 散拼产品（Product Center）。营销行程与对外报价聚合根；≠ 发团、≠ 常用路线。
+model Product {
+  id                String         @id @default(cuid())
+  organizationId    String         @map("organization_id")
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  name              String
+  productType       ProductType    @default(group_join) @map("product_type")
+  status            ProductStatus  @default(draft)
+  shortItinerary    String         @default("") @map("short_itinerary")
+  detailedItinerary String?        @map("detailed_itinerary")
+  featuresText      String?        @map("features_text")
+  bookingNotice     String?        @map("booking_notice")
+  startCity         String?        @map("start_city")
+  endCity           String?        @map("end_city")
+  dayCount          Int?           @map("day_count")
+  tags              String[]       @default([])
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  specs             ProductSpec[]
+  schedules         ProductSchedule[]
+
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, name])
+  @@map("products")
+}
+
+/// Product Spec：规格默认销售价；供新建班期复制，不回写既有班期（ADR-0025）。
+model ProductSpec {
+  id                         String            @id @default(cuid())
+  productId                  String            @map("product_id")
+  product                    Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name                       String            @default("标准")
+  adultPriceCents            Int?              @map("adult_price_cents")
+  childPriceCents            Int?              @map("child_price_cents")
+  singleRoomSupplementCents  Int?              @map("single_room_supplement_cents")
+  notes                      String?
+  createdAt                  DateTime          @default(now()) @map("created_at")
+  updatedAt                  DateTime          @updatedAt @map("updated_at")
+  schedules                  ProductSchedule[]
+
+  @@unique([productId, name])
+  @@map("product_specs")
+}
+
+/// Product Schedule：班期 + 创建时价格快照（ADR-0025）。
+model ProductSchedule {
+  id                        String                @id @default(cuid())
+  productId                 String                @map("product_id")
+  product                   Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSpecId             String                @map("product_spec_id")
+  productSpec               ProductSpec           @relation(fields: [productSpecId], references: [id], onDelete: Restrict)
+  title                     String                @default("")
+  /// 班期日期规则原文（如「天天发团」「每周一、五」）。
+  dateRuleText              String                @default("") @map("date_rule_text")
+  startDate                 DateTime?             @map("start_date") @db.Date
+  endDate                   DateTime?             @map("end_date") @db.Date
+  status                    ProductScheduleStatus @default(on_sale)
+  /// 明确询价：可无成人价仍作为可展示班期参与上架门槛。
+  priceOnInquiry            Boolean               @default(false) @map("price_on_inquiry")
+  adultPriceCents           Int?                  @map("adult_price_cents")
+  childPriceCents           Int?                  @map("child_price_cents")
+  singleRoomSupplementCents Int?                  @map("single_room_supplement_cents")
+  notes                     String?
+  createdAt                 DateTime              @default(now()) @map("created_at")
+  updatedAt                 DateTime              @updatedAt @map("updated_at")
+
+  @@index([productId, status])
+  @@map("product_schedules")
 }

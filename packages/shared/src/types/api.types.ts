@@ -415,6 +415,77 @@ export interface SupplierListResult {
   pageSize: number
 }
 
+export interface ProductListItem {
+  id: string
+  name: string
+  productType: 'group_join'
+  status: 'draft' | 'on_sale' | 'offline'
+  shortItinerary: string
+  startCity: string | null
+  endCity: string | null
+  dayCount: number | null
+  /** 非已取消班期数量（取消不计入有效班期统计）。 */
+  activeScheduleCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductListResult {
+  items: ProductListItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface ProductSpecSummary {
+  id: string
+  name: string
+  adultPriceCents: number | null
+  childPriceCents: number | null
+  singleRoomSupplementCents: number | null
+  notes: string | null
+  updatedAt: string
+}
+
+export interface ProductScheduleSummary {
+  id: string
+  productId: string
+  productSpecId: string
+  title: string
+  dateRuleText: string
+  startDate: string | null
+  endDate: string | null
+  status: 'on_sale' | 'closed' | 'cancelled'
+  priceOnInquiry: boolean
+  adultPriceCents: number | null
+  childPriceCents: number | null
+  singleRoomSupplementCents: number | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProductDetail {
+  id: string
+  name: string
+  productType: 'group_join'
+  status: 'draft' | 'on_sale' | 'offline'
+  shortItinerary: string
+  detailedItinerary: string | null
+  featuresText: string | null
+  bookingNotice: string | null
+  startCity: string | null
+  endCity: string | null
+  dayCount: number | null
+  tags: string[]
+  spec: ProductSpecSummary
+  schedules: ProductScheduleSummary[]
+  /** 非已取消班期数量。 */
+  activeScheduleCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface PartnerSummary {
   id: string
   name: string

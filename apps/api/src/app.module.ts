@@ -11,6 +11,7 @@ import { RoleModule } from './modules/role/role.module'
 import { UserModule } from './modules/user/user.module'
 import { SupplierModule } from './modules/supplier/supplier.module'
 import { PartnerModule } from './modules/partner/partner.module'
+import { ProductModule } from './modules/product/product.module'
 import { DepartureModule } from './modules/departure/departure.module'
 import { FinanceModule } from './modules/finance/finance.module'
 import { PlatformModule } from './modules/platform/platform.module'
@@ -34,6 +35,7 @@ import { WorkbenchModule } from './modules/workbench/workbench.module'
     UserModule,
     SupplierModule,
     PartnerModule,
+    ProductModule,
     DepartureModule,
     FinanceModule,
     PlatformModule,

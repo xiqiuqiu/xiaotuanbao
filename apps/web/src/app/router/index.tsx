@@ -293,6 +293,24 @@ const supplierDetailRoute = createRoute({
   ),
 })
 
+const productRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/product',
+  component: lazyRouteComponent(
+    () => import('@/features/product/pages/ProductsPage'),
+    'ProductsPage',
+  ),
+})
+
+const productDetailRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/product/$productId',
+  component: lazyRouteComponent(
+    () => import('@/features/product/pages/ProductDetailPage'),
+    'ProductDetailPage',
+  ),
+})
+
 const systemOrganizationRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/system/organization',
@@ -333,6 +351,8 @@ const routeTree = rootRoute.addChildren([
     partnerDetailRoute,
     supplierRoute,
     supplierDetailRoute,
+    productRoute,
+    productDetailRoute,
     systemOrganizationRoute,
     systemUsersRoute,
   ]),

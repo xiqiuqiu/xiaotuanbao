@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { MenuProps } from 'antd'
 import {
+  AppstoreOutlined,
   BankOutlined,
   DashboardOutlined,
   DollarOutlined,
@@ -20,6 +21,7 @@ export const mainMenuItems: MenuItem[] = [
   item('发团管理', '/departure', <UnorderedListOutlined />),
   item('合作伙伴', '/partner', <TeamOutlined />),
   item('供应商管理', '/supplier', <BankOutlined />),
+  item('产品中心', '/product', <AppstoreOutlined />),
   item('财务管理', 'finance', <DollarOutlined />, [
     item('应收管理', '/finance/receivable'),
     item('应付管理', '/finance/payable'),
@@ -41,6 +43,7 @@ export const routeTitles: Record<string, string> = {
   '/finance/verification': '核销管理',
   '/partner': '合作伙伴',
   '/supplier': '供应商管理',
+  '/product': '产品中心',
   '/system/organization': '组织管理',
   '/system/users': '员工管理',
 }
