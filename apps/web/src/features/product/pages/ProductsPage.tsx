@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, message } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Button, Card, Form, Input, Modal, Space, Table, Tag, Upload, message } from 'antd'
+import { PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import type { ColumnsType } from 'antd/es/table'
 import { ProductStatus, type ProductListItem } from '@xiaotuanbao/shared'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -16,22 +16,44 @@ import {
 } from '@/lib/query/list-query-ux'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
-import { createProduct, listProducts } from '@/services/product.service'
+import {
+  createProduct,
+  createProductImportSession,
+  listProducts,
+} from '@/services/product.service'
+import { ProductListFilters } from '../components/ProductListFilters'
 import { canEditProduct } from '../utils/product-permission'
 import { PRODUCT_STATUS_LABELS } from '../utils/product-labels'
+import type { ProductListSearch } from '../utils/product-list-search'
 
 export function ProductsPage() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const listSearch = useSearch({ strict: false }) as ProductListSearch
   const [createForm] = Form.useForm<{ name: string }>()
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ProductStatus | undefined>()
   const [includeOffline, setIncludeOffline] = useState(false)
+  const [importSessionId, setImportSessionId] = useState(listSearch.importSessionId ?? '')
+  const [sourceSheetName, setSourceSheetName] = useState(listSearch.sourceSheetName ?? '')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const canEdit = canEditProduct(useAuthStore((state) => state.actionKeys))
 
-  const listFilterKey = [search, statusFilter, includeOffline].join('\0')
+  useEffect(() => {
+    setImportSessionId(listSearch.importSessionId ?? '')
+    setSourceSheetName(listSearch.sourceSheetName ?? '')
+    setPage(1)
+  }, [listSearch.importSessionId, listSearch.sourceSheetName])
+
+  const listFilterKey = [
+    search,
+    statusFilter,
+    includeOffline,
+    importSessionId,
+    sourceSheetName,
+  ].join('\0')
   const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
 
   const {
@@ -43,13 +65,24 @@ export function ProductsPage() {
     isPlaceholderData,
     refetch,
   } = useQuery({
-    queryKey: ['products', search, statusFilter, includeOffline, page, pageSize],
+    queryKey: [
+      'products',
+      search,
+      statusFilter,
+      includeOffline,
+      importSessionId,
+      sourceSheetName,
+      page,
+      pageSize,
+    ],
     queryFn: ({ signal }) =>
       listProducts(
         {
           search: search || undefined,
           status: statusFilter,
           includeOffline,
+          importSessionId: importSessionId || undefined,
+          sourceSheetName: sourceSheetName || undefined,
           page,
           pageSize,
         },
@@ -82,15 +115,50 @@ export function ProductsPage() {
     },
   })
 
+  const importMutation = useMutation({
+    mutationFn: (file: File) => createProductImportSession(file),
+    onSuccess: (session) => {
+      message.success('解析完成，请确认线路')
+      queryClient.setQueryData(['product-import-session', session.id], session)
+      void navigate({
+        to: '/product/import/$sessionId',
+        params: { sessionId: session.id },
+      })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '导入失败')
+    },
+  })
+
+  const syncListSearch = () => {
+    void navigate({
+      to: '/product',
+      search: {
+        importSessionId: importSessionId.trim() || undefined,
+        sourceSheetName: sourceSheetName.trim() || undefined,
+      },
+    })
+  }
+
   const columns: ColumnsType<ProductListItem> = [
     {
       title: '产品名称',
       dataIndex: 'name',
       render: (name: string, record) => (
-        <Link className={nameLinkStyles.nameLink} to="/product/$productId" params={{ productId: record.id }}>
+        <Link
+          className={nameLinkStyles.nameLink}
+          to="/product/$productId"
+          params={{ productId: record.id }}
+        >
           {name}
         </Link>
       ),
+    },
+    {
+      title: '来源 Sheet',
+      dataIndex: 'sourceSheetName',
+      width: 180,
+      render: (value: string | null) => value || '-',
     },
     {
       title: '有效班期',
@@ -130,48 +198,49 @@ export function ProductsPage() {
         title="产品中心"
         action={
           canEdit ? (
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              新建产品
-            </Button>
+            <Space>
+              <Upload
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  importMutation.mutate(file)
+                  return false
+                }}
+              >
+                <Button icon={<UploadOutlined />} loading={importMutation.isPending}>
+                  导入疆游记
+                </Button>
+              </Upload>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                新建产品
+              </Button>
+            </Space>
           ) : undefined
         }
       />
 
       <Card>
-        <Space wrap style={{ marginBottom: 16 }}>
-          <Input.Search
-            allowClear
-            placeholder="搜索产品名称或城市"
-            style={{ width: 240 }}
-            onSearch={(value) => {
-              setSearch(value.trim())
-              setPage(1)
-            }}
-          />
-          <Select
-            allowClear
-            placeholder="状态"
-            style={{ width: 140 }}
-            value={statusFilter}
-            options={Object.values(ProductStatus).map((status) => ({
-              value: status,
-              label: PRODUCT_STATUS_LABELS[status],
-            }))}
-            onChange={(value) => {
-              setStatusFilter(value)
-              setPage(1)
-            }}
-          />
-          <Checkbox
-            checked={includeOffline}
-            onChange={(event) => {
-              setIncludeOffline(event.target.checked)
-              setPage(1)
-            }}
-          >
-            含已下架
-          </Checkbox>
-        </Space>
+        <ProductListFilters
+          statusFilter={statusFilter}
+          includeOffline={includeOffline}
+          importSessionId={importSessionId}
+          sourceSheetName={sourceSheetName}
+          onSearch={(value) => {
+            setSearch(value.trim())
+            setPage(1)
+          }}
+          onStatusChange={(value) => {
+            setStatusFilter(value)
+            setPage(1)
+          }}
+          onIncludeOfflineChange={(value) => {
+            setIncludeOffline(value)
+            setPage(1)
+          }}
+          onImportSessionIdChange={setImportSessionId}
+          onSourceSheetNameChange={setSourceSheetName}
+          onCommitImportFilters={syncListSearch}
+        />
 
         <StaleDataAlert
           isFetching={isFetching}

@@ -47,6 +47,9 @@ export class ProductService {
     const search = query.search?.trim()
     const includeOffline = query.includeOffline === true
 
+    const importSessionId = query.importSessionId?.trim()
+    const sourceSheetName = query.sourceSheetName?.trim()
+
     const where = {
       organizationId,
       ...(query.status
@@ -54,6 +57,8 @@ export class ProductService {
         : includeOffline
           ? {}
           : { status: { not: ProductStatus.offline } }),
+      ...(importSessionId ? { importSessionId } : {}),
+      ...(sourceSheetName ? { sourceSheetName } : {}),
       ...(search
         ? {
             OR: [
@@ -69,7 +74,9 @@ export class ProductService {
       this.prisma.product.findMany({
         where,
         include: {
-          schedules: { select: { status: true } },
+          schedules: {
+            select: { status: true, startDate: true, endDate: true },
+          },
         },
         orderBy: [{ updatedAt: 'desc' }, { name: 'asc' }],
         skip: (page - 1) * pageSize,
@@ -361,7 +368,13 @@ export class ProductService {
   }
 
   private toListItem(
-    product: Product & { schedules: Array<{ status: ProductScheduleStatus }> },
+    product: Product & {
+      schedules: Array<{
+        status: ProductScheduleStatus
+        startDate: Date | null
+        endDate: Date | null
+      }>
+    },
   ): ProductListItem {
     return {
       id: product.id,
@@ -372,7 +385,9 @@ export class ProductService {
       startCity: product.startCity,
       endCity: product.endCity,
       dayCount: product.dayCount,
-      activeScheduleCount: countActiveSchedules(product.schedules),
+      importSessionId: product.importSessionId,
+      sourceSheetName: product.sourceSheetName,
+      activeScheduleCount: countSaleableSchedules(product.schedules),
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
     }
@@ -393,9 +408,11 @@ export class ProductService {
       endCity: product.endCity,
       dayCount: product.dayCount,
       tags: product.tags,
+      importSessionId: product.importSessionId,
+      sourceSheetName: product.sourceSheetName,
       spec: this.toSpecSummary(spec),
       schedules: product.schedules.map((schedule) => this.toScheduleSummary(schedule)),
-      activeScheduleCount: countActiveSchedules(product.schedules),
+      activeScheduleCount: countSaleableSchedules(product.schedules),
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
     }
@@ -442,17 +459,33 @@ function requirePrimarySpec(product: ProductWithRelations): ProductSpec {
   return spec
 }
 
-function countActiveSchedules(
-  schedules: Array<{ status: ProductScheduleStatus }>,
+/** 可销售统计：非取消，且班期日期已补全（解析不出的日期不计入）。 */
+function countSaleableSchedules(
+  schedules: Array<{
+    status: ProductScheduleStatus
+    startDate: Date | null
+    endDate: Date | null
+  }>,
 ): number {
-  return schedules.filter((schedule) => schedule.status !== ProductScheduleStatus.cancelled)
-    .length
+  return schedules.filter(
+    (schedule) =>
+      schedule.status !== ProductScheduleStatus.cancelled && hasSaleableDates(schedule),
+  ).length
+}
+
+function hasSaleableDates(schedule: {
+  startDate: Date | null
+  endDate: Date | null
+}): boolean {
+  // 日期未补全（起止皆空）不计入可销售统计。
+  return schedule.startDate != null || schedule.endDate != null
 }
 
 function isDisplayableSchedule(schedule: ProductSchedule): boolean {
   if (schedule.status === ProductScheduleStatus.cancelled) {
     return false
   }
+  // 上架门槛仍按有成人价/询价；无日期班期只从「可销售统计」排除，不在此拦截。
   return schedule.priceOnInquiry || schedule.adultPriceCents != null
 }
 

@@ -77,6 +77,8 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'PATCH', path: '/api/products/:id/spec' },
     { method: 'POST', path: '/api/products/:id/schedules' },
     { method: 'PATCH', path: '/api/products/:id/schedules/:scheduleId' },
+    { method: 'POST', path: '/api/products/import-sessions' },
+    { method: 'POST', path: '/api/products/import-sessions/:id/confirm' },
   ],
   financeMutate: [
     { method: 'POST', path: '/api/finance/payment-schedules/:id/cancel' },

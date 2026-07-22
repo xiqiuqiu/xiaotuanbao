@@ -49,6 +49,13 @@ export type {
   ProductSpecSummary,
   ProductScheduleSummary,
   ProductDetail,
+  ProductImportScheduleCandidate,
+  ProductImportLineCandidate,
+  ProductImportSheetResult,
+  ProductImportParseResult,
+  ProductImportSessionSummary,
+  ProductImportSessionDetail,
+  ProductImportConfirmResult,
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
@@ -194,6 +201,7 @@ export { DepartureType } from './enums/departure-type.enum'
 export { ProductType } from './enums/product-type.enum'
 export { ProductStatus } from './enums/product-status.enum'
 export { ProductScheduleStatus } from './enums/product-schedule-status.enum'
+export { ProductImportSessionStatus } from './enums/product-import-session-status.enum'
 export { DepartureRouteSource } from './enums/departure-route-source.enum'
 export { DepartureProgress } from './enums/departure-progress.enum'
 export { PaymentScheduleDirection } from './enums/payment-schedule-direction.enum'

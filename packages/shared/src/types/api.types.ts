@@ -424,7 +424,12 @@ export interface ProductListItem {
   startCity: string | null
   endCity: string | null
   dayCount: number | null
-  /** 非已取消班期数量（取消不计入有效班期统计）。 */
+  importSessionId: string | null
+  sourceSheetName: string | null
+  /**
+   * 可销售班期数量：非已取消，且日期已补全（有 start/end），
+   * 未解析日期的班期保留原文但不计入。
+   */
   activeScheduleCount: number
   createdAt: string
   updatedAt: string
@@ -478,12 +483,72 @@ export interface ProductDetail {
   endCity: string | null
   dayCount: number | null
   tags: string[]
+  importSessionId: string | null
+  sourceSheetName: string | null
   spec: ProductSpecSummary
   schedules: ProductScheduleSummary[]
-  /** 非已取消班期数量。 */
+  /** 可销售班期数量（见 ProductListItem）。 */
   activeScheduleCount: number
   createdAt: string
   updatedAt: string
+}
+
+export interface ProductImportScheduleCandidate {
+  dateRuleText: string
+  adultPriceText: string
+  adultPriceCents: number | null
+  childPriceCents: number | null
+  singleRoomSupplementCents: number | null
+  startDate: string | null
+  endDate: string | null
+  priceOnInquiry: boolean
+  datesParseable: boolean
+}
+
+export interface ProductImportLineCandidate {
+  candidateKey: string
+  sheetName: string
+  name: string
+  tags: string[]
+  shortItinerary: string
+  featuresText: string | null
+  schedules: ProductImportScheduleCandidate[]
+  rawNameBlock: string
+}
+
+export interface ProductImportSheetResult {
+  sheetName: string
+  sheetIndex: number
+  headerNotice: string | null
+  lines: ProductImportLineCandidate[]
+}
+
+export interface ProductImportParseResult {
+  sheets: ProductImportSheetResult[]
+  embeddedOleCount: number
+  defaultYear: number
+}
+
+export interface ProductImportSessionSummary {
+  id: string
+  status: 'pending_confirmation' | 'confirmed' | 'discarded'
+  originalFilename: string
+  storedObjectId: string
+  embeddedOleCount: number
+  sheetCount: number
+  lineCount: number
+  createdAt: string
+  confirmedAt: string | null
+}
+
+export interface ProductImportSessionDetail extends ProductImportSessionSummary {
+  parseResult: ProductImportParseResult
+  productIds: string[]
+}
+
+export interface ProductImportConfirmResult {
+  session: ProductImportSessionDetail
+  createdProducts: ProductDetail[]
 }
 
 export interface PartnerSummary {

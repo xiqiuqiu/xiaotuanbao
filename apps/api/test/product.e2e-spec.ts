@@ -174,7 +174,12 @@ describe('Product API (e2e)', () => {
 
     const withSchedule = await authRequest(app, coordinatorToken)
       .post(`/api/products/${product.id}/schedules`)
-      .send({ title: '可展示班期', priceOnInquiry: true })
+      .send({
+        title: '可展示班期',
+        priceOnInquiry: true,
+        startDate: '2026-07-01',
+        endDate: '2026-07-31',
+      })
       .expect(201)
 
     await authRequest(app, coordinatorToken)
@@ -236,7 +241,12 @@ describe('Product API (e2e)', () => {
 
     const created = await authRequest(app, coordinatorToken)
       .post(`/api/products/${product.id}/schedules`)
-      .send({ title: '将取消', dateRuleText: '每周一' })
+      .send({
+        title: '将取消',
+        dateRuleText: '每周一',
+        startDate: '2026-07-01',
+        endDate: '2026-09-30',
+      })
       .expect(201)
 
     const scheduleId = created.body.data.schedules[0].id as string

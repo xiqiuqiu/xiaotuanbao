@@ -1,13 +1,42 @@
-import { request } from '@/lib/request'
-import type { ProductDetail, ProductListResult } from '@/types/api'
+import { downloadBinary, request, triggerBrowserDownload } from '@/lib/request'
+import type {
+  ProductDetail,
+  ProductImportConfirmResult,
+  ProductImportSessionDetail,
+  ProductListResult,
+} from '@/types/api'
 import type { ProductScheduleStatus, ProductStatus } from '@xiaotuanbao/shared'
 
 export interface ListProductsParams {
   search?: string
   status?: ProductStatus
   includeOffline?: boolean
+  importSessionId?: string
+  sourceSheetName?: string
   page?: number
   pageSize?: number
+}
+
+export interface ConfirmImportSchedulePayload {
+  dateRuleText: string
+  title?: string
+  startDate?: string | null
+  endDate?: string | null
+  priceOnInquiry?: boolean
+  adultPriceCents?: number | null
+  childPriceCents?: number | null
+  singleRoomSupplementCents?: number | null
+  notes?: string | null
+}
+
+export interface ConfirmImportLinePayload {
+  candidateKey: string
+  action: 'accept' | 'skip'
+  name?: string
+  shortItinerary?: string
+  featuresText?: string | null
+  tags?: string[]
+  schedules?: ConfirmImportSchedulePayload[]
 }
 
 export interface CreateProductPayload {
@@ -99,4 +128,36 @@ export async function updateProductSchedule(
   payload: ProductSchedulePayload,
 ): Promise<ProductDetail> {
   return request.patch<ProductDetail>(`/products/${id}/schedules/${scheduleId}`, payload)
+}
+
+export async function createProductImportSession(file: File): Promise<ProductImportSessionDetail> {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post<ProductImportSessionDetail>('/products/import-sessions', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120_000,
+  })
+}
+
+export async function getProductImportSession(
+  sessionId: string,
+): Promise<ProductImportSessionDetail> {
+  return request.get<ProductImportSessionDetail>(`/products/import-sessions/${sessionId}`)
+}
+
+export async function confirmProductImportSession(
+  sessionId: string,
+  lines: ConfirmImportLinePayload[],
+): Promise<ProductImportConfirmResult> {
+  return request.post<ProductImportConfirmResult>(`/products/import-sessions/${sessionId}/confirm`, {
+    lines,
+  })
+}
+
+export async function downloadProductImportOriginal(
+  storedObjectId: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const { blob, filename } = await downloadBinary(`/stored-objects/${storedObjectId}`)
+  triggerBrowserDownload(blob, filename ?? fallbackFilename)
 }

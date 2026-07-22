@@ -242,6 +242,16 @@ export class ListProductsQueryDto {
   @IsEnum(ProductStatus)
   status?: ProductStatus
 
+  /** 按 Product Import Session 筛选。 */
+  @IsOptional()
+  @IsString()
+  importSessionId?: string
+
+  /** 按来源 Sheet 名筛选。 */
+  @IsOptional()
+  @IsString()
+  sourceSheetName?: string
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()
