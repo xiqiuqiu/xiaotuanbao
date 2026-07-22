@@ -68,6 +68,7 @@ export class ProductExportService {
     organizationId: string,
     query: {
       search?: string
+      status?: ProductStatus
       importSessionId?: string
       sourceSheetName?: string
       includeOffline?: boolean
@@ -81,7 +82,11 @@ export class ProductExportService {
     const products = await this.prisma.product.findMany({
       where: {
         organizationId,
-        ...(includeOffline ? {} : { status: { not: ProductStatus.offline } }),
+        ...(query.status
+          ? { status: query.status }
+          : includeOffline
+            ? {}
+            : { status: { not: ProductStatus.offline } }),
         ...(importSessionId ? { importSessionId } : {}),
         ...(sourceSheetName ? { sourceSheetName } : {}),
         ...(search

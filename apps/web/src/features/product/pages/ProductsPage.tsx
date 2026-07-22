@@ -257,6 +257,7 @@ export function ProductsPage() {
                 setExportingSummary(true)
                 void downloadProductSummaryExcel({
                   search: search || undefined,
+                  status: statusFilter,
                   importSessionId: importSessionId.trim() || undefined,
                   sourceSheetName: sourceSheetName.trim() || undefined,
                   includeOffline: includeOffline || undefined,

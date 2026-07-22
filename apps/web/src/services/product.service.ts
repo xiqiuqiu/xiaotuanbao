@@ -227,6 +227,7 @@ export async function downloadProductPeerPackPdf(
 /** 过渡总表 Excel；筛选口径对齐列表。 */
 export async function downloadProductSummaryExcel(params?: {
   search?: string
+  status?: ProductStatus
   importSessionId?: string
   sourceSheetName?: string
   includeOffline?: boolean

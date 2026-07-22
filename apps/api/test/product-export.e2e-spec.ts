@@ -306,5 +306,33 @@ describe('product export (e2e)', () => {
       const manualValues = manualSheet!.getSheetValues().flat().map(String)
       expect(manualValues.some((cell) => cell.includes(manual.name))).toBe(true)
     })
+
+    it('applies status filter like product list', async () => {
+      const ExcelJS = await import('exceljs')
+      const draft = await createExportableProduct({
+        name: `${testPrefix}-status-draft`,
+      })
+      const onSale = await createExportableProduct({
+        name: `${testPrefix}-status-onsale`,
+        status: 'on_sale',
+      })
+
+      const response = await authRequest(app, financeToken)
+        .get('/api/products/summary.xlsx')
+        .query({ search: `${testPrefix}-status`, status: 'on_sale' })
+        .buffer(true)
+        .parse(parseBinary)
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(response.body as any)
+      const allValues = workbook.worksheets
+        .flatMap((sheet) => sheet.getSheetValues())
+        .flat()
+        .map(String)
+      expect(allValues.some((cell) => cell.includes(onSale.name))).toBe(true)
+      expect(allValues.some((cell) => cell.includes(draft.name))).toBe(false)
+    })
   })
 })

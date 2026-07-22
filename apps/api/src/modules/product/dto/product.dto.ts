@@ -332,6 +332,10 @@ export class ProductSummaryExportQueryDto {
   search?: string
 
   @IsOptional()
+  @IsEnum(ProductStatus)
+  status?: ProductStatus
+
+  @IsOptional()
   @IsString()
   importSessionId?: string
 
