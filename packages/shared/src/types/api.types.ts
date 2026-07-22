@@ -1154,7 +1154,7 @@ export interface SourceOrderListResult {
 }
 
 /**
- * 合作团单 Tab 行（业务事实层）：跨发团的客源单快照，附所属发团信息。
+ * 合作团单·客源分段行（业务事实层）：跨发团的客源单快照，附所属发团信息。
  * 有意不含应收状态与已收/未收字段（归往来账款 Tab）。
  */
 export interface PartnerSourceOrderItem {
@@ -1229,6 +1229,40 @@ export interface SupplierServiceOrderListResult {
   pageSize: number
   /** 三项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
   summary: SupplierServiceOrderListSummary
+}
+
+/** 合作团单·拼出分段三项汇总（与供应商服务团单同构）。 */
+export type PartnerOutsourceOrderListSummary = SupplierServiceOrderListSummary
+
+/**
+ * 合作团单·拼出分段行（业务事实层）：跨发团引用该 Partner 为承接方的拼出资源快照。
+ * 种类恒为拼出，响应不带 resourceKind；有意不含应付状态/已付/未付（归往来账款 Tab）。
+ */
+export interface PartnerOutsourceOrderItem {
+  id: string
+  departureId: string
+  departureNo: string
+  departureName: string
+  routeName: string
+  /** 所属发团出团日期（YYYY-MM-DD） */
+  departureStartDate: string
+  segmentId: string
+  /** 行程段名称 */
+  segmentName: string
+  /** 资源名称 */
+  title: string
+  /** 约定金额（分） */
+  amountCents: number
+  notes: string | null
+}
+
+export interface PartnerOutsourceOrderListResult {
+  items: PartnerOutsourceOrderItem[]
+  total: number
+  page: number
+  pageSize: number
+  /** 三项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
+  summary: PartnerOutsourceOrderListSummary
 }
 
 /**

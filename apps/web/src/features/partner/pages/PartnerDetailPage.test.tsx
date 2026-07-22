@@ -36,6 +36,13 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/services/partner.service', () => ({
   getPartner: vi.fn(),
   updatePartner: vi.fn(),
+  listPartnerOutsourceOrders: vi.fn(async () => ({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 10,
+    summary: { resourceRowCount: 0, departureCount: 0, totalAmountCents: 0 },
+  })),
 }))
 
 vi.mock('@/services/source-order.service', () => ({

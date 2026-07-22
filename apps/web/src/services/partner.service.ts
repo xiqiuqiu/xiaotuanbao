@@ -1,5 +1,9 @@
 import { request } from '@/lib/request'
-import type { PartnerListResult, PartnerSummary } from '@/types/api'
+import type {
+  PartnerListResult,
+  PartnerOutsourceOrderListResult,
+  PartnerSummary,
+} from '@/types/api'
 import type {
   DirectoryProfileStatus,
   PartnerContactRole,
@@ -63,4 +67,22 @@ export async function archivePartner(id: string): Promise<PartnerSummary> {
 
 export async function restorePartner(id: string): Promise<PartnerSummary> {
   return request.post<PartnerSummary>(`/partners/${id}/restore`)
+}
+
+export interface ListPartnerOutsourceOrdersParams {
+  departureDateFrom?: string
+  departureDateTo?: string
+  page?: number
+  pageSize?: number
+}
+
+/** 合作团单·拼出分段：按 Partner 跨发团查询拼出资源行（业务事实层）。 */
+export async function listPartnerOutsourceOrders(
+  partnerId: string,
+  params: ListPartnerOutsourceOrdersParams = {},
+): Promise<PartnerOutsourceOrderListResult> {
+  return request.get<PartnerOutsourceOrderListResult>(
+    `/partners/${partnerId}/outsource-orders`,
+    { params },
+  )
 }

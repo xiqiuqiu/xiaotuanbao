@@ -49,7 +49,7 @@ export interface ListPartnerSourceOrdersParams {
   pageSize?: number
 }
 
-/** 合作团单 Tab：按 Partner 跨发团查询客源单（业务事实层）。 */
+/** 合作团单·客源分段：按 Partner 跨发团查询客源单（业务事实层）。 */
 export async function listPartnerSourceOrders(
   partnerId: string,
   params: ListPartnerSourceOrdersParams = {},

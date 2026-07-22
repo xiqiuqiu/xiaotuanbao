@@ -13,6 +13,7 @@ import {
   type ResourceKind as SharedResourceKind,
   type SegmentResourceListResult,
   type SegmentResourceSummary,
+  type PartnerOutsourceOrderListResult,
   type SupplierServiceOrderListResult,
 } from '@xiaotuanbao/shared'
 import {
@@ -228,6 +229,126 @@ export class SegmentResourceService {
       summary: {
         resourceRowCount: total,
         departureCount,
+        totalAmountCents: aggregate._sum.amountCents ?? 0,
+      },
+    }
+  }
+
+  /**
+   * 合作团单·拼出分段：跨发团查询引用该 Partner 为承接方的拼出资源行（业务事实层）。
+   * 出团日期区间过滤＋默认倒序＋分页；三项汇总覆盖整个筛选集，不随分页变化。
+   */
+  async listOutsourceByPartner(
+    organizationId: string,
+    partnerId: string,
+    query: ListSupplierServiceOrdersQueryDto,
+  ): Promise<PartnerOutsourceOrderListResult> {
+    const partner = await this.prisma.partner.findFirst({
+      where: { id: partnerId, organizationId },
+    })
+    if (!partner) {
+      throw new NotFoundException('合作伙伴不存在')
+    }
+
+    if (
+      query.departureDateFrom &&
+      query.departureDateTo &&
+      query.departureDateFrom > query.departureDateTo
+    ) {
+      throw new BadRequestException('出团日期区间非法')
+    }
+
+    const page = Math.max(Number(query.page) || 1, 1)
+    const pageSize = Math.min(Math.max(Number(query.pageSize) || 10, 1), 100)
+
+    const departureWhere: Prisma.DepartureWhereInput = {
+      organizationId,
+      ...(query.departureDateFrom || query.departureDateTo
+        ? {
+            startDate: {
+              ...(query.departureDateFrom
+                ? { gte: parseDateOnly(query.departureDateFrom) }
+                : {}),
+              ...(query.departureDateTo
+                ? { lte: parseDateOnly(query.departureDateTo) }
+                : {}),
+            },
+          }
+        : {}),
+    }
+
+    const where: Prisma.SegmentResourceWhereInput = {
+      partnerId: partner.id,
+      resourceKind: ResourceKind.outsource,
+      segment: { departure: departureWhere },
+    }
+
+    const [resources, total, aggregate, distinctDepartures] = await Promise.all([
+      this.prisma.segmentResource.findMany({
+        where,
+        include: {
+          segment: {
+            select: {
+              name: true,
+              departureId: true,
+              departure: {
+                select: {
+                  departureNo: true,
+                  name: true,
+                  routeName: true,
+                  startDate: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: [
+          { segment: { departure: { startDate: 'desc' } } },
+          { createdAt: 'desc' },
+        ],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.segmentResource.count({ where }),
+      this.prisma.segmentResource.aggregate({
+        where,
+        _sum: { amountCents: true },
+      }),
+      this.prisma.itinerarySegment.findMany({
+        where: {
+          departure: departureWhere,
+          resources: {
+            some: {
+              partnerId: partner.id,
+              resourceKind: ResourceKind.outsource,
+            },
+          },
+        },
+        select: { departureId: true },
+        distinct: ['departureId'],
+      }),
+    ])
+
+    return {
+      items: resources.map((resource) => ({
+        id: resource.id,
+        departureId: resource.segment.departureId,
+        departureNo: resource.segment.departure.departureNo,
+        departureName: resource.segment.departure.name,
+        routeName: resource.segment.departure.routeName,
+        departureStartDate: formatDateOnly(resource.segment.departure.startDate),
+        segmentId: resource.segmentId,
+        segmentName: resource.segment.name,
+        title: resource.title,
+        amountCents: resource.amountCents,
+        notes: resource.notes,
+      })),
+      total,
+      page,
+      pageSize,
+      summary: {
+        resourceRowCount: total,
+        departureCount: distinctDepartures.length,
         totalAmountCents: aggregate._sum.amountCents ?? 0,
       },
     }

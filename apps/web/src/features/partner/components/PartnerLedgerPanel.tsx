@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import dayjs from 'dayjs'
-import { DatePicker, Segmented, Space } from 'antd'
+import { Segmented, Space } from 'antd'
 import { useAuthStore } from '@/app/store/auth.store'
 import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
 import type { DepartureDateRange } from '@/features/finance/components/PaymentScheduleFilters'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
-import { buildDepartureDateRangePresets } from '@/utils/dateRangePresets'
 import { PartnerLedgerSummaryCards } from './PartnerLedgerSummaryCards'
 
 type LedgerDirection = 'receivable' | 'payable'
@@ -13,7 +11,7 @@ type LedgerDirection = 'receivable' | 'payable'
 /**
  * 往来账款 Tab（财务账款层）：
  * - 应收 / 应付方向切换独立于筛选条（视图选择 ≠ 列表筛选）；
- * - 出团日期主筛 + 次要条件默认折叠（antd advanced-search）；
+ * - 出团日期与次要条件一并平铺（与全局应收/应付筛选条同构）；
  * - 每方向复用 PaymentScheduleWorkspace；游客代收节点不在本 Tab；
  * - 财务操作按 canMutateFinance gating：非财务角色只读（看得到账款、看不到操作按钮）。
  */
@@ -42,31 +40,6 @@ export function PartnerLedgerPanel({ partnerId }: { partnerId: string }) {
         readOnly={readOnly}
         departureDateRange={departureDateRange}
         onDepartureDateRangeChange={setDepartureDateRange}
-        hideDepartureDateFilter
-        collapsibleSecondaryFilters
-        filterToolbarPrimary={({ onDepartureDateRangeChange }) => (
-          <DatePicker.RangePicker
-            allowClear
-            allowEmpty={[true, true]}
-            placeholder={['出团日期起', '出团日期止']}
-            presets={buildDepartureDateRangePresets()}
-            value={
-              departureDateRange
-                ? [
-                    departureDateRange[0] ? dayjs(departureDateRange[0]) : null,
-                    departureDateRange[1] ? dayjs(departureDateRange[1]) : null,
-                  ]
-                : null
-            }
-            onChange={(values) =>
-              onDepartureDateRangeChange(
-                values
-                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                  : null,
-              )
-            }
-          />
-        )}
         renderSummary={({ departureDateFrom, departureDateTo }) => (
           <PartnerLedgerSummaryCards
             partnerId={partnerId}

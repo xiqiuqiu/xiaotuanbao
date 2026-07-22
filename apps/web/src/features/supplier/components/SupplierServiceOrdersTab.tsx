@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import dayjs from 'dayjs'
-import { Col, DatePicker, Empty, Row, Space, Statistic, Table, Tooltip } from 'antd'
+import { Card, Col, DatePicker, Empty, Row, Space, Statistic, Table, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useQuery } from '@tanstack/react-query'
 import { RESOURCE_KIND_LABELS, type ResourceKind } from '@xiaotuanbao/shared'
 import type { SupplierServiceOrderItem } from '@/types/api'
-import { CollapsibleFilterBar } from '@/components/CollapsibleFilterBar'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from '@/features/finance/components/FinanceDepartureLink'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
@@ -95,32 +94,31 @@ export function SupplierServiceOrdersTab({ supplierId }: SupplierServiceOrdersTa
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <CollapsibleFilterBar
-        primary={
-          <DatePicker.RangePicker
-            allowClear
-            allowEmpty={[true, true]}
-            placeholder={['出团日期起', '出团日期止']}
-            presets={buildDepartureDateRangePresets()}
-            value={
-              dateRange
-                ? [
-                    dateRange[0] ? dayjs(dateRange[0]) : null,
-                    dateRange[1] ? dayjs(dateRange[1]) : null,
-                  ]
-                : null
-            }
-            onChange={(values) => {
-              setDateRange(
-                values
-                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                  : null,
-              )
-              setPage(1)
-            }}
-          />
-        }
-      />
+      <Card style={{ marginBottom: 0 }}>
+        <DatePicker.RangePicker
+          allowClear
+          allowEmpty={[true, true]}
+          aria-label="出团日期"
+          placeholder={['出团日期起', '出团日期止']}
+          presets={buildDepartureDateRangePresets()}
+          value={
+            dateRange
+              ? [
+                  dateRange[0] ? dayjs(dateRange[0]) : null,
+                  dateRange[1] ? dayjs(dateRange[1]) : null,
+                ]
+              : null
+          }
+          onChange={(values) => {
+            setDateRange(
+              values
+                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                : null,
+            )
+            setPage(1)
+          }}
+        />
+      </Card>
 
       <Row gutter={[16, 16]} role="group" aria-label="服务团单汇总">
         <Col xs={12} sm={8} xl={4}>

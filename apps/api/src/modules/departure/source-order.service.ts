@@ -124,7 +124,7 @@ export class SourceOrderService {
     }
   }
 
-  /** 合作团单 Tab：按 Partner 跨发团查询客源单，出团日期区间过滤＋倒序＋分页。 */
+  /** 合作团单·客源分段：按 Partner 跨发团查询客源单，出团日期区间过滤＋倒序＋分页。 */
   async listByPartner(
     organizationId: string,
     partnerId: string,

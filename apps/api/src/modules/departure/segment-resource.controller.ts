@@ -13,6 +13,7 @@ import {
 import type {
   BatchFinanceGenerationResult,
   GeneratePayableResult,
+  PartnerOutsourceOrderListResult,
   SegmentResourceListResult,
   SegmentResourceSummary,
   SupplierServiceOrderListResult,
@@ -58,6 +59,21 @@ export class SegmentResourceController {
     return this.segmentResourceService.listBySupplier(
       request.user.organizationId,
       supplierId,
+      query,
+    )
+  }
+
+  /** 合作团单·拼出分段：按 Partner 跨发团查询拼出资源行（业务事实层）。 */
+  @Get('partners/:partnerId/outsource-orders')
+  @RequireMenu('/partner')
+  listOutsourceByPartner(
+    @Req() request: { user: { organizationId: string } },
+    @Param('partnerId') partnerId: string,
+    @Query() query: ListSupplierServiceOrdersQueryDto,
+  ): Promise<PartnerOutsourceOrderListResult> {
+    return this.segmentResourceService.listOutsourceByPartner(
+      request.user.organizationId,
+      partnerId,
       query,
     )
   }

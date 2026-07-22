@@ -121,12 +121,12 @@ export function PartnerDetailPage() {
             {
               key: 'accounts',
               label: '往来账款',
-              children: <PartnerLedgerPanel partnerId={partner.id} />,
+              children: <PartnerLedgerPanel key={partner.id} partnerId={partner.id} />,
             },
             {
               key: 'groups',
               label: '合作团单',
-              children: <PartnerSourceOrdersTab partner={partner} />,
+              children: <PartnerSourceOrdersTab key={partner.id} partner={partner} />,
             },
           ]}
         />

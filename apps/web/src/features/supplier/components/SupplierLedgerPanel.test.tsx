@@ -115,20 +115,21 @@ describe('SupplierLedgerPanel', () => {
     expect(listPayables).not.toHaveBeenCalled()
   })
 
-  it('keeps the departure-date filter as the primary filter in the toolbar', async () => {
+  it('lays out all ledger filters flat without expand/collapse', async () => {
     renderPanel()
 
     await waitFor(() => {
       expect(listSupplierPayables).toHaveBeenCalled()
     })
 
-    const start = screen.getByPlaceholderText('出团日期起')
-    const expandButton = screen.getByRole('button', { name: '展开' })
-    const filterBar = expandButton.closest('div')
-    expect(filterBar).toBeTruthy()
-    expect(filterBar!).toContainElement(start)
-    // 应付无到期日主筛，次要条件默认折叠
-    expect(screen.queryByPlaceholderText('搜索节点编号 / 标题')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('出团日期起')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('搜索节点编号 / 标题')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '节点状态' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /重\s*置/ })).toBeInTheDocument()
+    // 应付无到期日筛
+    expect(screen.queryByPlaceholderText('到期日起')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '展开' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '收起' })).not.toBeInTheDocument()
   })
 
   it('renders finance action buttons when the user can mutate finance', async () => {

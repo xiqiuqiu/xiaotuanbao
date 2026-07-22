@@ -65,16 +65,15 @@ describe('PartnerLedgerPanel', () => {
     })
 
     const directionSwitch = screen.getByRole('radiogroup', { name: 'segmented control' })
-    const expandButton = screen.getByRole('button', { name: '展开' })
-    const filterBar = expandButton.closest('div')
+    const departureStart = screen.getByPlaceholderText('出团日期起')
+    const filterBar = departureStart.closest('.ant-card') ?? departureStart.closest('div')
 
     expect(filterBar).toBeTruthy()
     expect(filterBar!.contains(directionSwitch)).toBe(false)
-    expect(filterBar!).toContainElement(screen.getByPlaceholderText('出团日期起'))
+    expect(filterBar!).toContainElement(departureStart)
   })
 
-  it('keeps secondary filters collapsed until the user expands them', async () => {
-    const user = userEvent.setup()
+  it('lays out all ledger filters flat without expand/collapse', async () => {
     renderPanel()
 
     await waitFor(() => {
@@ -82,14 +81,12 @@ describe('PartnerLedgerPanel', () => {
     })
 
     expect(screen.getByPlaceholderText('出团日期起')).toBeInTheDocument()
-    expect(screen.queryByPlaceholderText('搜索节点编号 / 标题')).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '展开' }))
-    expect(await screen.findByPlaceholderText('搜索节点编号 / 标题')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('搜索节点编号 / 标题')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('到期日起')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '收起' }))
-    expect(screen.queryByPlaceholderText('搜索节点编号 / 标题')).not.toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: '节点状态' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /重\s*置/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '展开' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '收起' })).not.toBeInTheDocument()
   })
 
   it('keeps the shared departure-date filter when switching receivable ↔ payable', async () => {

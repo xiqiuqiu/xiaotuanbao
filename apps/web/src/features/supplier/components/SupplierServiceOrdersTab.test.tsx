@@ -110,6 +110,16 @@ describe('SupplierServiceOrdersTab', () => {
     expect(departureLink).toBeInTheDocument()
   })
 
+  it('lays out the departure-date filter in a flat card without expand/collapse', async () => {
+    vi.mocked(listSupplierServiceOrders).mockResolvedValue(DATA_RESULT)
+    renderTab()
+
+    const departureStart = await screen.findByPlaceholderText('出团日期起')
+    expect(departureStart.closest('.ant-card')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '展开' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '收起' })).not.toBeInTheDocument()
+  })
+
   it('refetches with departureDateFrom/To when the departure date filter changes', async () => {
     vi.mocked(listSupplierServiceOrders).mockResolvedValue(DATA_RESULT)
     const user = userEvent.setup()

@@ -335,6 +335,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/partner",
+    "route": "GET /api/partners/:partnerId/outsource-orders",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/partner",
     "route": "GET /api/partners/:partnerId/payables",
   },
   {
@@ -764,6 +769,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "PATCH /api/partners/:id [partner:write]",
     "POST /api/partners/:id/archive [partner:write]",
     "POST /api/partners/:id/restore [partner:write]",
+    "GET /api/partners/:partnerId/outsource-orders [/partner]",
     "GET /api/partners/:partnerId/payables [/partner]",
     "GET /api/partners/:partnerId/payment-schedule-summary [/partner]",
     "GET /api/partners/:partnerId/receivables [/partner]",
@@ -870,6 +876,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "PATCH /api/partners/:id [partner:write]",
     "POST /api/partners/:id/archive [partner:write]",
     "POST /api/partners/:id/restore [partner:write]",
+    "GET /api/partners/:partnerId/outsource-orders [/partner]",
     "GET /api/partners/:partnerId/payables [/partner]",
     "GET /api/partners/:partnerId/payment-schedule-summary [/partner]",
     "GET /api/partners/:partnerId/receivables [/partner]",
@@ -981,6 +988,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/health [—]",
     "GET /api/partners [/partner]",
     "GET /api/partners/:id [/partner]",
+    "GET /api/partners/:partnerId/outsource-orders [/partner]",
     "GET /api/partners/:partnerId/payables [/partner]",
     "GET /api/partners/:partnerId/payment-schedule-summary [/partner]",
     "GET /api/partners/:partnerId/receivables [/partner]",

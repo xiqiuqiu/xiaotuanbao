@@ -37,15 +37,6 @@ interface PaymentScheduleFiltersProps {
   scope: PaymentScheduleFiltersScope
   /** 应收展示到期日筛选与「已逾期」；应付本版隐藏（ADR-0019）。 */
   isReceivable: boolean
-  /**
-   * 出团日期已上提到父级（Partner 往来账款跨方向共用）时隐藏本处控件。
-   * 默认：partner scope 显示。
-   */
-  hideDepartureDateFilter?: boolean
-  /**
-   * 嵌入父级筛选条时去掉外层 Card（背景/边距由 PartnerListToolbar 提供）。
-   */
-  embedded?: boolean
   onDepartureChange: (value?: string) => void
   onStatusChange: (value?: PaymentScheduleStatusFilter) => void
   onKeywordChange: (value: string) => void
@@ -64,8 +55,6 @@ export function PaymentScheduleFilters({
   departureDateRange = null,
   scope,
   isReceivable,
-  hideDepartureDateFilter = false,
-  embedded = false,
   onDepartureChange,
   onStatusChange,
   onKeywordChange,
@@ -77,7 +66,7 @@ export function PaymentScheduleFilters({
   const isCounterpartyScope = scope === 'partner' || scope === 'supplier'
   const showDepartureFilter = scope === 'global'
   const showCounterpartyFilter = !isCounterpartyScope
-  const showDepartureDateFilter = isCounterpartyScope && !hideDepartureDateFilter
+  const showDepartureDateFilter = isCounterpartyScope
 
   const { data: departuresResult } = useQuery({
     queryKey: FINANCE_DEPARTURE_OPTIONS_QUERY_KEY,
@@ -95,105 +84,101 @@ export function PaymentScheduleFilters({
     ? PAYMENT_SCHEDULE_STATUS_OPTIONS
     : PAYABLE_SCHEDULE_FILTER_OPTIONS
 
-  const filters = (
-    <Space wrap style={{ width: '100%' }}>
-      {showDepartureFilter ? (
-        <Select
-          allowClear
-          showSearch
-          aria-label="筛选发团"
-          placeholder="筛选发团"
-          style={{ width: 280, maxWidth: '100%' }}
-          value={departureId}
-          onChange={onDepartureChange}
-          options={departureOptions}
-          optionFilterProp="label"
-        />
-      ) : null}
-      <Input.Search
-        allowClear
-        aria-label="搜索节点编号 / 标题"
-        placeholder="搜索节点编号 / 标题"
-        style={{ width: 220, maxWidth: '100%' }}
-        value={keyword}
-        onChange={(event) => onKeywordChange(event.target.value)}
-        onSearch={(value) => onKeywordChange(value.trim())}
-      />
-      {showCounterpartyFilter ? (
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <Space wrap style={{ width: '100%' }}>
+        {showDepartureDateFilter ? (
+          <DatePicker.RangePicker
+            allowClear
+            allowEmpty={[true, true]}
+            aria-label="出团日期"
+            placeholder={['出团日期起', '出团日期止']}
+            presets={buildDepartureDateRangePresets()}
+            value={
+              departureDateRange
+                ? [
+                    departureDateRange[0] ? dayjs(departureDateRange[0]) : null,
+                    departureDateRange[1] ? dayjs(departureDateRange[1]) : null,
+                  ]
+                : null
+            }
+            onChange={(values) =>
+              onDepartureDateRangeChange?.(
+                values
+                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                  : null,
+              )
+            }
+            style={{ maxWidth: '100%' }}
+          />
+        ) : null}
+        {showDepartureFilter ? (
+          <Select
+            allowClear
+            showSearch
+            aria-label="筛选发团"
+            placeholder="筛选发团"
+            style={{ width: 280, maxWidth: '100%' }}
+            value={departureId}
+            onChange={onDepartureChange}
+            options={departureOptions}
+            optionFilterProp="label"
+          />
+        ) : null}
         <Input.Search
           allowClear
-          aria-label="往来对象"
-          placeholder="往来对象"
-          style={{ width: 200, maxWidth: '100%' }}
-          value={counterpartyKeyword}
-          onChange={(event) => onCounterpartyKeywordChange(event.target.value)}
-          onSearch={(value) => onCounterpartyKeywordChange(value.trim())}
+          aria-label="搜索节点编号 / 标题"
+          placeholder="搜索节点编号 / 标题"
+          style={{ width: 220, maxWidth: '100%' }}
+          value={keyword}
+          onChange={(event) => onKeywordChange(event.target.value)}
+          onSearch={(value) => onKeywordChange(value.trim())}
         />
-      ) : null}
-      <Select
-        allowClear
-        aria-label="节点状态"
-        placeholder="节点状态"
-        style={{ width: 140, maxWidth: '100%' }}
-        value={statusFilter}
-        onChange={onStatusChange}
-        options={[...statusOptions]}
-      />
-      {showDepartureDateFilter ? (
-        <DatePicker.RangePicker
+        {showCounterpartyFilter ? (
+          <Input.Search
+            allowClear
+            aria-label="往来对象"
+            placeholder="往来对象"
+            style={{ width: 200, maxWidth: '100%' }}
+            value={counterpartyKeyword}
+            onChange={(event) => onCounterpartyKeywordChange(event.target.value)}
+            onSearch={(value) => onCounterpartyKeywordChange(value.trim())}
+          />
+        ) : null}
+        <Select
           allowClear
-          allowEmpty={[true, true]}
-          aria-label="出团日期"
-          placeholder={['出团日期起', '出团日期止']}
-          presets={buildDepartureDateRangePresets()}
-          value={
-            departureDateRange
-              ? [
-                  departureDateRange[0] ? dayjs(departureDateRange[0]) : null,
-                  departureDateRange[1] ? dayjs(departureDateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(values) =>
-            onDepartureDateRangeChange?.(
-              values
-                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                : null,
-            )
-          }
-          style={{ maxWidth: '100%' }}
+          aria-label="节点状态"
+          placeholder="节点状态"
+          style={{ width: 140, maxWidth: '100%' }}
+          value={statusFilter}
+          onChange={onStatusChange}
+          options={[...statusOptions]}
         />
-      ) : null}
-      {isReceivable ? (
-        <DatePicker.RangePicker
-          allowClear
-          aria-label="到期日"
-          placeholder={['到期日起', '到期日止']}
-          value={
-            dueDateRange
-              ? [
-                  dueDateRange[0] ? dayjs(dueDateRange[0]) : null,
-                  dueDateRange[1] ? dayjs(dueDateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(values) =>
-            onDueDateRangeChange(
-              values
-                ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
-                : null,
-            )
-          }
-          style={{ maxWidth: '100%' }}
-        />
-      ) : null}
-      <Button onClick={onReset}>重置</Button>
-    </Space>
+        {isReceivable ? (
+          <DatePicker.RangePicker
+            allowClear
+            aria-label="到期日"
+            placeholder={['到期日起', '到期日止']}
+            value={
+              dueDateRange
+                ? [
+                    dueDateRange[0] ? dayjs(dueDateRange[0]) : null,
+                    dueDateRange[1] ? dayjs(dueDateRange[1]) : null,
+                  ]
+                : null
+            }
+            onChange={(values) =>
+              onDueDateRangeChange(
+                values
+                  ? [values[0]?.format('YYYY-MM-DD'), values[1]?.format('YYYY-MM-DD')]
+                  : null,
+              )
+            }
+            style={{ maxWidth: '100%' }}
+          />
+        ) : null}
+        <Button onClick={onReset}>重置</Button>
+      </Space>
+    </Card>
   )
-
-  if (embedded) {
-    return filters
-  }
-
-  return <Card style={{ marginBottom: 16 }}>{filters}</Card>
 }

@@ -1,6 +1,5 @@
 import { Alert, Button } from 'antd'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
-import { CollapsibleFilterBar } from '@/components/CollapsibleFilterBar'
 import { listSoftFetchingClassName } from '@/lib/query/list-query-ux'
 import { PageHeader } from '@/layouts/PageHeader'
 import {
@@ -55,16 +54,6 @@ export type PaymentScheduleWorkspaceProps = {
   /** 受控出团日期（跨应收/应付共用时由父级持有）。 */
   departureDateRange?: DepartureDateRange
   onDepartureDateRangeChange?: (value: DepartureDateRange) => void
-  /** 出团日期已上提到父级时隐藏筛选项内的 RangePicker。 */
-  hideDepartureDateFilter?: boolean
-  /**
-   * Partner 往来账款：次要筛选默认折叠；主行由 filterToolbarPrimary 注入
-   *（出团日期 + Segmented），样式对齐 antd advanced-search。
-   */
-  collapsibleSecondaryFilters?: boolean
-  filterToolbarPrimary?: (controls: {
-    onDepartureDateRangeChange: (value: DepartureDateRange) => void
-  }) => React.ReactNode
 }
 
 export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
@@ -114,49 +103,6 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
     editMutation,
   } = usePaymentScheduleWorkspace(props)
 
-  const secondaryFiltersActive = Boolean(
-    keyword.trim() || statusFilter || dueDateRange?.[0] || dueDateRange?.[1],
-  )
-
-  const filters = (
-    <PaymentScheduleFilters
-      departureId={effectiveDepartureId}
-      statusFilter={statusFilter}
-      keyword={keyword}
-      counterpartyKeyword={counterpartyKeyword}
-      dueDateRange={dueDateRange}
-      departureDateRange={departureDateRange}
-      scope={scope}
-      isReceivable={isReceivable}
-      hideDepartureDateFilter={props.hideDepartureDateFilter}
-      embedded={Boolean(props.collapsibleSecondaryFilters)}
-      onDepartureChange={(value) => {
-        setDepartureFilter(value)
-        setPage(1)
-      }}
-      onStatusChange={(value) => {
-        setStatusFilter(value)
-        setPage(1)
-      }}
-      onKeywordChange={(value) => {
-        setKeyword(value)
-        setPage(1)
-      }}
-      onCounterpartyKeywordChange={(value) => {
-        setCounterpartyKeyword(value)
-        setPage(1)
-      }}
-      onDueDateRangeChange={(value) => {
-        setDueDateRange(value)
-        setPage(1)
-      }}
-      onDepartureDateRangeChange={(value) => {
-        setDepartureDateRange(value)
-      }}
-      onReset={resetFilters}
-    />
-  )
-
   return (
     <div>
       {props.pageHeader ? (
@@ -165,19 +111,40 @@ export function PaymentScheduleWorkspace(props: PaymentScheduleWorkspaceProps) {
         />
       ) : null}
 
-      {props.collapsibleSecondaryFilters ? (
-        <div style={{ marginBottom: 16 }}>
-          <CollapsibleFilterBar
-            primary={props.filterToolbarPrimary?.({
-              onDepartureDateRangeChange: setDepartureDateRange,
-            })}
-            advanced={filters}
-            advancedActive={secondaryFiltersActive}
-          />
-        </div>
-      ) : (
-        filters
-      )}
+      <PaymentScheduleFilters
+        departureId={effectiveDepartureId}
+        statusFilter={statusFilter}
+        keyword={keyword}
+        counterpartyKeyword={counterpartyKeyword}
+        dueDateRange={dueDateRange}
+        departureDateRange={departureDateRange}
+        scope={scope}
+        isReceivable={isReceivable}
+        onDepartureChange={(value) => {
+          setDepartureFilter(value)
+          setPage(1)
+        }}
+        onStatusChange={(value) => {
+          setStatusFilter(value)
+          setPage(1)
+        }}
+        onKeywordChange={(value) => {
+          setKeyword(value)
+          setPage(1)
+        }}
+        onCounterpartyKeywordChange={(value) => {
+          setCounterpartyKeyword(value)
+          setPage(1)
+        }}
+        onDueDateRangeChange={(value) => {
+          setDueDateRange(value)
+          setPage(1)
+        }}
+        onDepartureDateRangeChange={(value) => {
+          setDepartureDateRange(value)
+        }}
+        onReset={resetFilters}
+      />
 
       {props.renderSummary
         ? props.renderSummary({
