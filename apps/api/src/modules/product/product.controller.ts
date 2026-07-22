@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -17,9 +18,11 @@ import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import {
+  ApplyBookingNoticeTemplateDto,
   CreateProductDto,
   CreateProductScheduleDto,
   ListProductsQueryDto,
+  ReplaceProductFeaturesDto,
   UpdateProductDto,
   UpdateProductScheduleDto,
   UpdateProductSpecDto,
@@ -66,6 +69,30 @@ export class ProductController {
     @Body() dto: UpdateProductDto,
   ): Promise<ProductDetail> {
     return this.productService.update(request.user.organizationId, id, dto)
+  }
+
+  @Put(':id/features')
+  @RequireMenu('product:write')
+  replaceFeatures(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: ReplaceProductFeaturesDto,
+  ): Promise<ProductDetail> {
+    return this.productService.replaceFeatures(request.user.organizationId, id, dto)
+  }
+
+  @Post(':id/booking-notice/from-template')
+  @RequireMenu('product:write')
+  applyBookingNoticeTemplate(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: ApplyBookingNoticeTemplateDto,
+  ): Promise<ProductDetail> {
+    return this.productService.applyBookingNoticeTemplate(
+      request.user.organizationId,
+      id,
+      dto,
+    )
   }
 
   @Delete(':id')

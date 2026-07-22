@@ -48,6 +48,8 @@ export type {
   ProductListResult,
   ProductSpecSummary,
   ProductScheduleSummary,
+  ProductFeatureSummary,
+  BookingNoticeTemplateSummary,
   ProductDetail,
   ProductImportScheduleCandidate,
   ProductImportLineCandidate,

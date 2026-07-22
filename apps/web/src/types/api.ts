@@ -52,6 +52,8 @@ export type {
   ProductImportSheetResult,
   ProductSpecSummary,
   ProductScheduleSummary,
+  ProductFeatureSummary,
+  BookingNoticeTemplateSummary,
   ProductDetail,
   PartnerSummary,
   PartnerListSummary,

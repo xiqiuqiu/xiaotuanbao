@@ -1,5 +1,6 @@
 import { downloadBinary, request, triggerBrowserDownload } from '@/lib/request'
 import type {
+  BookingNoticeTemplateSummary,
   ProductDetail,
   ProductImportConfirmResult,
   ProductImportSessionDetail,
@@ -54,13 +55,22 @@ export interface UpdateProductPayload {
   name?: string
   shortItinerary?: string
   detailedItinerary?: string | null
-  featuresText?: string | null
   bookingNotice?: string | null
   startCity?: string | null
   endCity?: string | null
   dayCount?: number | null
   tags?: string[]
   status?: ProductStatus
+}
+
+export interface ProductFeatureItemPayload {
+  title?: string
+  description?: string
+}
+
+export interface BookingNoticeTemplatePayload {
+  name: string
+  content: string
 }
 
 export interface UpdateProductSpecPayload {
@@ -104,6 +114,45 @@ export async function updateProduct(
   payload: UpdateProductPayload,
 ): Promise<ProductDetail> {
   return request.patch<ProductDetail>(`/products/${id}`, payload)
+}
+
+export async function replaceProductFeatures(
+  id: string,
+  features: ProductFeatureItemPayload[],
+): Promise<ProductDetail> {
+  return request.put<ProductDetail>(`/products/${id}/features`, { features })
+}
+
+export async function applyBookingNoticeTemplate(
+  productId: string,
+  templateId: string,
+): Promise<ProductDetail> {
+  return request.post<ProductDetail>(`/products/${productId}/booking-notice/from-template`, {
+    templateId,
+  })
+}
+
+export async function listBookingNoticeTemplates(
+  signal?: AbortSignal,
+): Promise<BookingNoticeTemplateSummary[]> {
+  return request.get<BookingNoticeTemplateSummary[]>('/booking-notice-templates', { signal })
+}
+
+export async function createBookingNoticeTemplate(
+  payload: BookingNoticeTemplatePayload,
+): Promise<BookingNoticeTemplateSummary> {
+  return request.post<BookingNoticeTemplateSummary>('/booking-notice-templates', payload)
+}
+
+export async function updateBookingNoticeTemplate(
+  id: string,
+  payload: Partial<BookingNoticeTemplatePayload>,
+): Promise<BookingNoticeTemplateSummary> {
+  return request.patch<BookingNoticeTemplateSummary>(`/booking-notice-templates/${id}`, payload)
+}
+
+export async function deleteBookingNoticeTemplate(id: string): Promise<void> {
+  await request.delete<void>(`/booking-notice-templates/${id}`)
 }
 
 export async function deleteProduct(id: string): Promise<void> {

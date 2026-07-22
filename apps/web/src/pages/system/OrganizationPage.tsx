@@ -1,6 +1,7 @@
 import { Card, Descriptions, Spin, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { getOrganization } from '@/services/organization.service'
+import { BookingNoticeTemplatesCard } from './BookingNoticeTemplatesCard'
 
 export function OrganizationPage() {
   const { data: organization, isLoading } = useQuery({
@@ -44,6 +45,8 @@ export function OrganizationPage() {
           <Descriptions.Item label="核销编号示例">{examples?.verification ?? '-'}</Descriptions.Item>
         </Descriptions>
       </Card>
+
+      <BookingNoticeTemplatesCard />
     </div>
   )
 }

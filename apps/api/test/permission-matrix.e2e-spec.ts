@@ -73,6 +73,8 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
   productWrite: [
     { method: 'POST', path: '/api/products' },
     { method: 'PATCH', path: '/api/products/:id' },
+    { method: 'PUT', path: '/api/products/:id/features' },
+    { method: 'POST', path: '/api/products/:id/booking-notice/from-template' },
     { method: 'DELETE', path: '/api/products/:id' },
     { method: 'PATCH', path: '/api/products/:id/spec' },
     { method: 'POST', path: '/api/products/:id/schedules' },

@@ -92,10 +92,18 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   // ---- 产品中心维护 ----
   createProduct: { gating: 'productWrite', endpointKey: 'product:write' },
   updateProduct: { gating: 'productWrite', endpointKey: 'product:write' },
+  replaceProductFeatures: { gating: 'productWrite', endpointKey: 'product:write' },
+  applyBookingNoticeTemplate: { gating: 'productWrite', endpointKey: 'product:write' },
   deleteProduct: { gating: 'productWrite', endpointKey: 'product:write' },
   updateProductSpec: { gating: 'productWrite', endpointKey: 'product:write' },
   createProductSchedule: { gating: 'productWrite', endpointKey: 'product:write' },
   updateProductSchedule: { gating: 'productWrite', endpointKey: 'product:write' },
+  createProductImportSession: { gating: 'productWrite', endpointKey: 'product:write' },
+  confirmProductImportSession: { gating: 'productWrite', endpointKey: 'product:write' },
+  // 组织须知模板由企业管理员在组织管理维护。
+  createBookingNoticeTemplate: { gating: 'menuGated', endpointKey: '/system/organization' },
+  updateBookingNoticeTemplate: { gating: 'menuGated', endpointKey: '/system/organization' },
+  deleteBookingNoticeTemplate: { gating: 'menuGated', endpointKey: '/system/organization' },
 
   // ---- 菜单级：生成应收/应付挂 /departure（发团可见者皆可）----
   generatePayable: { gating: 'menuGated', endpointKey: '/departure' },
@@ -142,6 +150,7 @@ const MUTATION_HOOKS: Record<string, string> = {
     '/src/features/departure/components/useDepartureHeaderActions.ts',
   useSourceOrdersTabMutations:
     '/src/features/departure/hooks/useSourceOrdersTabMutations.tsx',
+  useProductDetailMutations: '/src/features/product/hooks/useProductDetailMutations.ts',
 }
 
 /** gating 意识 token：出现其一即认为该模块「知道要 gating」。刻意不含泛化的 disabled/loading。 */

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common'
 import type {
   ProductDetail,
+  ProductFeatureSummary,
   ProductListItem,
   ProductListResult,
   ProductScheduleSummary,
@@ -15,15 +16,19 @@ import {
   ProductStatus,
   ProductType,
   type Product,
+  type ProductFeature,
   type ProductSchedule,
   type ProductSpec,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { formatDateOnly, parseDateOnly } from '../departure/departure-date.utils'
 import type {
+  ApplyBookingNoticeTemplateDto,
   CreateProductDto,
   CreateProductScheduleDto,
   ListProductsQueryDto,
+  ProductFeatureItemDto,
+  ReplaceProductFeaturesDto,
   UpdateProductDto,
   UpdateProductScheduleDto,
   UpdateProductSpecDto,
@@ -32,6 +37,15 @@ import type {
 type ProductWithRelations = Product & {
   specs: ProductSpec[]
   schedules: ProductSchedule[]
+  features: ProductFeature[]
+  bookingNoticeTemplate: { id: string; name: string } | null
+}
+
+const productDetailInclude = {
+  specs: { orderBy: { createdAt: 'asc' as const } },
+  schedules: { orderBy: { createdAt: 'asc' as const } },
+  features: { orderBy: { sortOrder: 'asc' as const } },
+  bookingNoticeTemplate: { select: { id: true, name: true } },
 }
 
 @Injectable()
@@ -121,10 +135,7 @@ export class ProductService {
           },
         },
       },
-      include: {
-        specs: true,
-        schedules: { orderBy: { createdAt: 'asc' } },
-      },
+      include: productDetailInclude,
     })
 
     return this.toDetail(product)
@@ -162,9 +173,6 @@ export class ProductService {
         ...(dto.detailedItinerary !== undefined
           ? { detailedItinerary: normalizeNullableText(dto.detailedItinerary) }
           : {}),
-        ...(dto.featuresText !== undefined
-          ? { featuresText: normalizeNullableText(dto.featuresText) }
-          : {}),
         ...(dto.bookingNotice !== undefined
           ? { bookingNotice: normalizeNullableText(dto.bookingNotice) }
           : {}),
@@ -178,13 +186,63 @@ export class ProductService {
           : {}),
         ...(dto.status !== undefined ? { status: dto.status } : {}),
       },
-      include: {
-        specs: true,
-        schedules: { orderBy: { createdAt: 'asc' } },
-      },
+      include: productDetailInclude,
     })
 
     return this.toDetail(product)
+  }
+
+  async replaceFeatures(
+    organizationId: string,
+    productId: string,
+    dto: ReplaceProductFeaturesDto,
+  ): Promise<ProductDetail> {
+    await this.findProductOrThrow(organizationId, productId)
+    const normalized = normalizeFeatureItems(dto.features)
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productFeature.deleteMany({ where: { productId } })
+      if (normalized.length > 0) {
+        await tx.productFeature.createMany({
+          data: normalized.map((feature, index) => ({
+            productId,
+            title: feature.title,
+            description: feature.description,
+            sortOrder: index,
+          })),
+        })
+      }
+      await tx.product.update({
+        where: { id: productId },
+        data: { featuresText: featuresTextFromItems(normalized) },
+      })
+    })
+
+    return this.getById(organizationId, productId)
+  }
+
+  async applyBookingNoticeTemplate(
+    organizationId: string,
+    productId: string,
+    dto: ApplyBookingNoticeTemplateDto,
+  ): Promise<ProductDetail> {
+    await this.findProductOrThrow(organizationId, productId)
+    const template = await this.prisma.bookingNoticeTemplate.findFirst({
+      where: { id: dto.templateId, organizationId },
+    })
+    if (!template) {
+      throw new NotFoundException('报名须知模板不存在')
+    }
+
+    await this.prisma.product.update({
+      where: { id: productId },
+      data: {
+        bookingNotice: template.content,
+        bookingNoticeTemplateId: template.id,
+      },
+    })
+
+    return this.getById(organizationId, productId)
   }
 
   async updateSpec(
@@ -338,10 +396,7 @@ export class ProductService {
   ): Promise<ProductWithRelations> {
     const product = await this.prisma.product.findFirst({
       where: { id: productId, organizationId },
-      include: {
-        specs: { orderBy: { createdAt: 'asc' } },
-        schedules: { orderBy: { createdAt: 'asc' } },
-      },
+      include: productDetailInclude,
     })
     if (!product) {
       throw new NotFoundException('产品不存在')
@@ -395,6 +450,7 @@ export class ProductService {
 
   private toDetail(product: ProductWithRelations): ProductDetail {
     const spec = requirePrimarySpec(product)
+    const features = product.features.map((feature) => this.toFeatureSummary(feature))
     return {
       id: product.id,
       name: product.name,
@@ -402,8 +458,11 @@ export class ProductService {
       status: product.status,
       shortItinerary: product.shortItinerary,
       detailedItinerary: product.detailedItinerary,
-      featuresText: product.featuresText,
+      featuresText: product.featuresText ?? featuresTextFromItems(features),
+      features,
       bookingNotice: product.bookingNotice,
+      bookingNoticeTemplateId: product.bookingNoticeTemplateId,
+      bookingNoticeTemplateName: product.bookingNoticeTemplate?.name ?? null,
       startCity: product.startCity,
       endCity: product.endCity,
       dayCount: product.dayCount,
@@ -415,6 +474,15 @@ export class ProductService {
       activeScheduleCount: countSaleableSchedules(product.schedules),
       createdAt: product.createdAt.toISOString(),
       updatedAt: product.updatedAt.toISOString(),
+    }
+  }
+
+  private toFeatureSummary(feature: ProductFeature): ProductFeatureSummary {
+    return {
+      id: feature.id,
+      title: feature.title,
+      description: feature.description,
+      sortOrder: feature.sortOrder,
     }
   }
 
@@ -495,6 +563,34 @@ function normalizeNullableText(value: string | null | undefined): string | null 
   }
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function normalizeFeatureItems(
+  items: ProductFeatureItemDto[],
+): Array<{ title: string; description: string }> {
+  return items
+    .map((item) => ({
+      title: (item.title ?? '').trim(),
+      description: (item.description ?? '').trim(),
+    }))
+    .filter((item) => item.title.length > 0 || item.description.length > 0)
+}
+
+function featuresTextFromItems(
+  items: Array<{ title: string; description: string }>,
+): string | null {
+  if (items.length === 0) {
+    return null
+  }
+  const blocks = items
+    .map((item) => {
+      if (item.title && item.description) {
+        return `${item.title}\n${item.description}`
+      }
+      return item.title || item.description
+    })
+    .filter(Boolean)
+  return blocks.length > 0 ? blocks.join('\n\n') : null
 }
 
 function parseOptionalDate(value: string | null | undefined): Date | null {

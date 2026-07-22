@@ -2,11 +2,14 @@ import { message } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { ProductScheduleSummary } from '@xiaotuanbao/shared'
 import {
+  applyBookingNoticeTemplate,
   createProductSchedule,
   deleteProduct,
+  replaceProductFeatures,
   updateProduct,
   updateProductSchedule,
   updateProductSpec,
+  type ProductFeatureItemPayload,
   type UpdateProductPayload,
 } from '@/services/product.service'
 import { yuanToCents } from '../utils/product-labels'
@@ -91,5 +94,35 @@ export function useProductDetailMutations({
     },
   })
 
-  return { patchProduct, specMutation, scheduleMutation, deleteMutation }
+  const featuresMutation = useMutation({
+    mutationFn: (features: ProductFeatureItemPayload[]) =>
+      replaceProductFeatures(productId, features),
+    onSuccess: () => {
+      message.success('产品特色已保存')
+      invalidate()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '保存特色失败')
+    },
+  })
+
+  const applyTemplateMutation = useMutation({
+    mutationFn: (templateId: string) => applyBookingNoticeTemplate(productId, templateId),
+    onSuccess: () => {
+      message.success('已引用模板（可继续改写，不会回写模板）')
+      invalidate()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '引用模板失败')
+    },
+  })
+
+  return {
+    patchProduct,
+    specMutation,
+    scheduleMutation,
+    deleteMutation,
+    featuresMutation,
+    applyTemplateMutation,
+  }
 }
