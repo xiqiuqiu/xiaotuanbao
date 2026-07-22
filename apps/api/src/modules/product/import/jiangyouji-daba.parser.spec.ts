@@ -115,4 +115,22 @@ describe('price / date helpers', () => {
       datesParseable: true,
     })
   })
+
+  it('rolls end year forward when range crosses year boundary', () => {
+    expect(parseDateRangeFromText('12月20日-1月10日', 2026)).toEqual({
+      startDate: '2026-12-20',
+      endDate: '2027-01-10',
+      datesParseable: true,
+    })
+    expect(parseDateRangeFromText('12月1-1月31', 2026)).toEqual({
+      startDate: '2026-12-01',
+      endDate: '2027-01-31',
+      datesParseable: true,
+    })
+    expect(parseDateRangeFromText('11月15日-2月28日', 2026)).toEqual({
+      startDate: '2026-11-15',
+      endDate: '2027-02-28',
+      datesParseable: true,
+    })
+  })
 })

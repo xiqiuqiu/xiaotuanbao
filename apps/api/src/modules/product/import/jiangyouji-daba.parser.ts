@@ -295,25 +295,25 @@ export function parseDateRangeFromText(
     /(\d{1,2})月(\d{1,2})日?-(\d{1,2})月(\d{1,2})日?/,
   )
   if (fullRange) {
-    const startDate = toIsoDate(defaultYear, Number(fullRange[1]), Number(fullRange[2]))
-    const endDate = toIsoDate(defaultYear, Number(fullRange[3]), Number(fullRange[4]))
-    return {
-      startDate,
-      endDate,
-      datesParseable: Boolean(startDate && endDate),
-    }
+    return resolveMonthDayRange(
+      defaultYear,
+      Number(fullRange[1]),
+      Number(fullRange[2]),
+      Number(fullRange[3]),
+      Number(fullRange[4]),
+    )
   }
 
   // 7月1-7月31（无「日」）
   const compactRange = normalized.match(/(\d{1,2})月(\d{1,2})-(\d{1,2})月(\d{1,2})/)
   if (compactRange) {
-    const startDate = toIsoDate(defaultYear, Number(compactRange[1]), Number(compactRange[2]))
-    const endDate = toIsoDate(defaultYear, Number(compactRange[3]), Number(compactRange[4]))
-    return {
-      startDate,
-      endDate,
-      datesParseable: Boolean(startDate && endDate),
-    }
+    return resolveMonthDayRange(
+      defaultYear,
+      Number(compactRange[1]),
+      Number(compactRange[2]),
+      Number(compactRange[3]),
+      Number(compactRange[4]),
+    )
   }
 
   // 单月：6月 / 7月2380 / 6月450/人
@@ -330,6 +330,26 @@ export function parseDateRangeFromText(
   }
 
   return { startDate: null, endDate: null, datesParseable: false }
+}
+
+/** Build a month/day range; if end falls before start in the same year, treat end as next year. */
+function resolveMonthDayRange(
+  defaultYear: number,
+  startMonth: number,
+  startDay: number,
+  endMonth: number,
+  endDay: number,
+): { startDate: string | null; endDate: string | null; datesParseable: boolean } {
+  const startDate = toIsoDate(defaultYear, startMonth, startDay)
+  let endDate = toIsoDate(defaultYear, endMonth, endDay)
+  if (startDate && endDate && endDate < startDate) {
+    endDate = toIsoDate(defaultYear + 1, endMonth, endDay)
+  }
+  return {
+    startDate,
+    endDate,
+    datesParseable: Boolean(startDate && endDate && endDate >= startDate),
+  }
 }
 
 function toIsoDate(year: number, month: number, day: number): string | null {
