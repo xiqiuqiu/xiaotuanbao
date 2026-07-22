@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import dayjs from 'dayjs'
 import {
   Button,
@@ -176,14 +176,6 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [statementOpen, setStatementOpen] = useState(false)
-
-  // 切换合作伙伴时重置视图选择与筛选（与往来账款「方向切换 ≠ 列表筛选」同理）。
-  useEffect(() => {
-    setSegment(defaultSegment(partner.partnerKind))
-    setDateRange(null)
-    setPage(1)
-    setStatementOpen(false)
-  }, [partner.id, partner.partnerKind])
 
   const hasDateFilter = Boolean(dateRange?.[0] || dateRange?.[1])
   const listParams = {

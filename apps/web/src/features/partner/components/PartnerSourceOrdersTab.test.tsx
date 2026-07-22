@@ -152,7 +152,7 @@ function renderTabWithRerender(partner: PartnerSummary) {
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <PartnerSourceOrdersTab partner={partner} />
+      <PartnerSourceOrdersTab key={partner.id} partner={partner} />
     </QueryClientProvider>,
   )
 
@@ -161,7 +161,7 @@ function renderTabWithRerender(partner: PartnerSummary) {
     rerenderPartner: (next: PartnerSummary) =>
       view.rerender(
         <QueryClientProvider client={queryClient}>
-          <PartnerSourceOrdersTab partner={next} />
+          <PartnerSourceOrdersTab key={next.id} partner={next} />
         </QueryClientProvider>,
       ),
   }
