@@ -9,6 +9,7 @@ import {
   Matches,
   Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator'
 import { Type, Transform } from 'class-transformer'
 import { ProductScheduleStatus, ProductStatus } from '@prisma/client'
@@ -57,10 +58,6 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   detailedItinerary?: string | null
-
-  @IsOptional()
-  @IsString()
-  featuresText?: string | null
 
   @IsOptional()
   @IsString()
@@ -231,6 +228,51 @@ export class UpdateProductScheduleDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+}
+
+export class ProductFeatureItemDto {
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  description?: string
+}
+
+export class ReplaceProductFeaturesDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductFeatureItemDto)
+  features!: ProductFeatureItemDto[]
+}
+
+export class ApplyBookingNoticeTemplateDto {
+  @IsString()
+  @IsNotEmpty()
+  templateId!: string
+}
+
+export class CreateBookingNoticeTemplateDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string
+
+  @IsString()
+  @IsNotEmpty()
+  content!: string
+}
+
+export class UpdateBookingNoticeTemplateDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  name?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  content?: string
 }
 
 export class ListProductsQueryDto {

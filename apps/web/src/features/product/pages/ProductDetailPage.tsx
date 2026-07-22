@@ -7,7 +7,9 @@ import type { ProductScheduleSummary } from '@xiaotuanbao/shared'
 import { useAuthStore } from '@/app/store/auth.store'
 import { getProduct } from '@/services/product.service'
 import { ProductBasicsCard } from '../components/ProductBasicsCard'
+import { ProductBookingNoticeCard } from '../components/ProductBookingNoticeCard'
 import { ProductDetailHeader } from '../components/ProductDetailHeader'
+import { ProductFeaturesCard } from '../components/ProductFeaturesCard'
 import { ProductPricingCard } from '../components/ProductPricingCard'
 import { ProductScheduleDrawer } from '../components/ProductScheduleDrawer'
 import { ProductTextBlockCard } from '../components/ProductTextBlockCard'
@@ -29,7 +31,14 @@ export function ProductDetailPage() {
     enabled: Boolean(productId),
   })
 
-  const { patchProduct, specMutation, scheduleMutation, deleteMutation } = useProductDetailMutations({
+  const {
+    patchProduct,
+    specMutation,
+    scheduleMutation,
+    deleteMutation,
+    featuresMutation,
+    applyTemplateMutation,
+  } = useProductDetailMutations({
     productId: productId ?? '',
     editingSchedule,
     onScheduleSaved: () => {
@@ -95,13 +104,11 @@ export function ProductDetailPage() {
           placeholder="可先整段维护，如 D1…Dn"
           onSave={(content) => patchProduct.mutate({ shortItinerary: content })}
         />
-        <ProductTextBlockCard
-          title="产品特色"
-          content={product.featuresText ?? ''}
+        <ProductFeaturesCard
+          features={product.features}
           canEdit={canEdit}
-          saving={patchProduct.isPending}
-          placeholder="可空"
-          onSave={(content) => patchProduct.mutate({ featuresText: content.trim() || null })}
+          saving={featuresMutation.isPending}
+          onSave={(features) => featuresMutation.mutate(features)}
         />
         <ProductPricingCard
           product={product}
@@ -117,13 +124,15 @@ export function ProductDetailPage() {
             setScheduleOpen(true)
           }}
         />
-        <ProductTextBlockCard
-          title="报名须知"
+        <ProductBookingNoticeCard
           content={product.bookingNotice ?? ''}
+          templateId={product.bookingNoticeTemplateId}
+          templateName={product.bookingNoticeTemplateName}
           canEdit={canEdit}
           saving={patchProduct.isPending}
-          placeholder="可整段粘贴；组织模板后续迭代"
+          applying={applyTemplateMutation.isPending}
           onSave={(content) => patchProduct.mutate({ bookingNotice: content.trim() || null })}
+          onApplyTemplate={(templateId) => applyTemplateMutation.mutate(templateId)}
         />
         <ProductTextBlockCard
           title="详细行程"

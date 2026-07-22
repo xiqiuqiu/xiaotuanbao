@@ -18,6 +18,7 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import type { ProductImportLineCandidate } from '@/types/api'
+import { useAuthStore } from '@/app/store/auth.store'
 import { PageHeader } from '@/layouts/PageHeader'
 import {
   confirmProductImportSession,
@@ -27,6 +28,7 @@ import {
   type ConfirmImportSchedulePayload,
 } from '@/services/product.service'
 import { centsToYuan, yuanToCents } from '../utils/product-labels'
+import { canEditProduct } from '../utils/product-permission'
 
 type ScheduleDraft = Omit<ConfirmImportSchedulePayload, 'confirmed'> & {
   adultPriceText: string
@@ -89,6 +91,7 @@ export function ProductImportConfirmPage() {
   const { sessionId } = useParams({ strict: false })
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const canEdit = canEditProduct(useAuthStore((state) => state.actionKeys))
   const [drafts, setDrafts] = useState<LineDraft[] | null>(null)
 
   const { data: session, isLoading, isError } = useQuery({
@@ -170,7 +173,7 @@ export function ProductImportConfirmPage() {
       render: (_, record) => (
         <Checkbox
           checked={record.accept}
-          disabled={session.status !== 'pending_confirmation'}
+          disabled={!canEdit || session.status !== 'pending_confirmation'}
           onChange={(event) => updateDraft(record.candidateKey, { accept: event.target.checked })}
         />
       ),
@@ -375,6 +378,7 @@ export function ProductImportConfirmPage() {
             {session.status === 'pending_confirmation' ? (
               <Button
                 type="primary"
+                disabled={!canEdit}
                 loading={confirmMutation.isPending}
                 onClick={handleConfirm}
               >

@@ -470,6 +470,21 @@ export interface ProductScheduleSummary {
   updatedAt: string
 }
 
+export interface ProductFeatureSummary {
+  id: string
+  title: string
+  description: string
+  sortOrder: number
+}
+
+export interface BookingNoticeTemplateSummary {
+  id: string
+  name: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProductDetail {
   id: string
   name: string
@@ -477,8 +492,13 @@ export interface ProductDetail {
   status: 'draft' | 'on_sale' | 'offline'
   shortItinerary: string
   detailedItinerary: string | null
+  /** 特色条目派生拼接；真相源为 features。 */
   featuresText: string | null
+  features: ProductFeatureSummary[]
   bookingNotice: string | null
+  /** 最近一次引用的组织须知模板 id；正文已复制到 bookingNotice，不活引用。 */
+  bookingNoticeTemplateId: string | null
+  bookingNoticeTemplateName: string | null
   startCity: string | null
   endCity: string | null
   dayCount: number | null

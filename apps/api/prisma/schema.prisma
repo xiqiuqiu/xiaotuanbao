@@ -286,8 +286,25 @@ model Organization {
   storedObjects StoredObject[]
   products Product[]
   productImportSessions ProductImportSession[]
+  bookingNoticeTemplates BookingNoticeTemplate[]
 
   @@map("organizations")
+}
+
+/// 组织级报名须知模板。产品引用时复制正文，之后改写不回写模板。
+model BookingNoticeTemplate {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  content        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  products       Product[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, updatedAt])
+  @@map("booking_notice_templates")
 }
 
 model FinanceIdempotencyRecord {
@@ -784,8 +801,12 @@ model Product {
   status            ProductStatus  @default(draft)
   shortItinerary    String         @default("") @map("short_itinerary")
   detailedItinerary String?        @map("detailed_itinerary")
+  /// 特色条目的派生拼接（导入兼容 / 导出便利）；真相源为 ProductFeature。
   featuresText      String?        @map("features_text")
   bookingNotice     String?        @map("booking_notice")
+  /// 最近一次引用的组织须知模板；仅作溯源，不活引用正文。
+  bookingNoticeTemplateId String?                 @map("booking_notice_template_id")
+  bookingNoticeTemplate   BookingNoticeTemplate?  @relation(fields: [bookingNoticeTemplateId], references: [id], onDelete: SetNull)
   startCity         String?        @map("start_city")
   endCity           String?        @map("end_city")
   dayCount          Int?           @map("day_count")
@@ -799,12 +820,29 @@ model Product {
   updatedAt         DateTime       @updatedAt @map("updated_at")
   specs             ProductSpec[]
   schedules         ProductSchedule[]
+  features          ProductFeature[]
 
   @@index([organizationId, status, updatedAt])
   @@index([organizationId, name])
   @@index([organizationId, importSessionId])
   @@index([organizationId, sourceSheetName])
+  @@index([bookingNoticeTemplateId])
   @@map("products")
+}
+
+/// Product Feature：营销卖点条目；可空集合；不承载报名规则。
+model ProductFeature {
+  id          String   @id @default(cuid())
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  title       String   @default("")
+  description String   @default("")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([productId, sortOrder])
+  @@map("product_features")
 }
 
 /// Product Import Session：归档原件 + 解析候选项 + 确认落草稿。

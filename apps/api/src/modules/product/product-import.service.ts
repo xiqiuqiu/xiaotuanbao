@@ -161,6 +161,7 @@ export class ProductImportService {
         const candidate = candidateMap.get(line.candidateKey)!
         const name = line.name!.trim()
         const shortItinerary = line.shortItinerary!.trim()
+        const featuresText = normalizeNullableText(line.featuresText)
         const product = await tx.product.create({
           data: {
             organizationId,
@@ -168,13 +169,24 @@ export class ProductImportService {
             productType: ProductType.group_join,
             status: ProductStatus.draft,
             shortItinerary,
-            featuresText: normalizeNullableText(line.featuresText),
+            featuresText,
             tags: (line.tags ?? candidate.tags).map((tag) => tag.trim()).filter(Boolean),
             importSessionId: session.id,
             sourceSheetName: candidate.sheetName,
             specs: {
               create: { name: '标准' },
             },
+            ...(featuresText
+              ? {
+                  features: {
+                    create: {
+                      title: '',
+                      description: featuresText,
+                      sortOrder: 0,
+                    },
+                  },
+                }
+              : {}),
           },
           include: { specs: true },
         })
