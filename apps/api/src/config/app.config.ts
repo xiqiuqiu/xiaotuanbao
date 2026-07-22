@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config'
+import { STORED_OBJECT_MAX_UPLOAD_BYTES } from '../modules/stored-object/stored-object.constants'
 
 const DEFAULT_JWT_SECRET = 'please-change-this-secret'
 const DEFAULT_DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
@@ -51,6 +52,18 @@ export default registerAs('app', () => {
     throw new Error('AUTH_COOKIE_SAME_SITE=none 时 AUTH_COOKIE_SECURE 必须为 true')
   }
 
+  const s3Endpoint = process.env.S3_ENDPOINT?.trim()
+  const s3Bucket = process.env.S3_BUCKET?.trim()
+  const s3AccessKey = process.env.S3_ACCESS_KEY?.trim()
+  const s3SecretKey = process.env.S3_SECRET_KEY?.trim()
+  const s3Region = (process.env.S3_REGION ?? 'garage').trim() || 'garage'
+
+  if (!s3Endpoint || !s3Bucket || !s3AccessKey || !s3SecretKey) {
+    throw new Error(
+      'FileStore 需要配置 S3_ENDPOINT、S3_BUCKET、S3_ACCESS_KEY、S3_SECRET_KEY（ADR-0027；禁止回落本地盘）',
+    )
+  }
+
   return {
     nodeEnv,
     port: Number(process.env.API_PORT ?? 3000),
@@ -58,6 +71,14 @@ export default registerAs('app', () => {
     jwtExpiresIn,
     jwtExpiresInMs: parseDurationMs(jwtExpiresIn),
     uploadDir: process.env.UPLOAD_DIR ?? './uploads',
+    s3: {
+      endpoint: s3Endpoint,
+      region: s3Region,
+      bucket: s3Bucket,
+      accessKey: s3AccessKey,
+      secretKey: s3SecretKey,
+    },
+    storedObjectMaxUploadBytes: STORED_OBJECT_MAX_UPLOAD_BYTES,
     authCookieSecure,
     authCookieSameSite: authCookieSameSite as 'lax' | 'strict' | 'none',
     authCookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,

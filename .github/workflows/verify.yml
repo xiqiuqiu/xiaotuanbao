@@ -101,6 +101,30 @@ jobs:
             -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public\&connection_limit=20\&pool_timeout=60|" \
             .env
 
+      # Real S3-compatible backend required for FileStore e2e (ADR-0027 / #156). No local-disk fallback.
+      - name: Start Garage
+        run: |
+          set -euo pipefail
+          source .env
+          docker run -d --name xiaotuanbao-garage-ci \
+            -p 3900:3900 \
+            -v "${GITHUB_WORKSPACE}/docker/garage/garage.toml:/etc/garage.toml:ro" \
+            -e "GARAGE_DEFAULT_ACCESS_KEY=${S3_ACCESS_KEY}" \
+            -e "GARAGE_DEFAULT_SECRET_KEY=${S3_SECRET_KEY}" \
+            -e "GARAGE_DEFAULT_BUCKET=${S3_BUCKET}" \
+            dxflrs/garage:v2.3.0 \
+            /garage server --single-node --default-bucket
+          for i in $(seq 1 30); do
+            if docker exec xiaotuanbao-garage-ci /garage status >/dev/null 2>&1; then
+              echo "Garage is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs xiaotuanbao-garage-ci || true
+          echo "Garage failed to become ready" >&2
+          exit 1
+
       - name: Prisma generate
         run: pnpm --filter api prisma:generate
 

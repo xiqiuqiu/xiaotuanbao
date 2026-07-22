@@ -72,6 +72,12 @@ Do **not** add path filters that skip e2e for “docs-only” or “web-only” 
 - CI `DATABASE_URL` sets `connection_limit=20&pool_timeout=60` so concurrent e2e (8-way) does not starve Prisma's default tiny pool on Actions runners
 - `prisma migrate deploy` + `prisma:db:seed` on a fresh DB each run
 
+### CI object storage (FileStore / #156)
+
+- `api-e2e` starts **Garage** (`dxflrs/garage:v2.3.0`, `--single-node --default-bucket`) against `docker/garage/garage.toml`
+- `S3_*` come from `.env.example` sample keys; e2e must hit real S3-compatible storage — **no** silent local-disk fallback
+- Locally: `pnpm db:up` + `pnpm garage:up` before FileStore-related e2e
+
 ## Branch protection (P1)
 
 **Target policy** on `main`:

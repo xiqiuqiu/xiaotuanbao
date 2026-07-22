@@ -32,6 +32,9 @@ import {
 const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   'POST /api/auth/login',
   'POST /api/auth/logout',
+  // Platform FileStore slice (#156 / ADR-0027): any authenticated org member; no product menu yet.
+  'POST /api/stored-objects',
+  'DELETE /api/stored-objects/:id',
 ])
 
 /**

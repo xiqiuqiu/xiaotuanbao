@@ -33,6 +33,7 @@
 
 - [ADR-0025](../../adr/0025-product-schedule-price-snapshot.md) — 班期报价为创建时快照，不活引用规格默认价  
 - [ADR-0026](../../adr/0026-product-schedule-generates-departure-by-copy.md) — 由班期生成发团为复制脱钩，价不进财务  
+- [ADR-0027](../../adr/0027-s3-compatible-object-storage.md) — 附件 S3 兼容对象存储 + StoredObject；开发期 Garage  
 - [ADR-0008](../../adr/0008-route-template-structure-only.md) — 常用路线只固化执行结构（与 Product 正交）
 
 **明确分界：**
@@ -312,10 +313,13 @@ P0 默认一个规格占位（如「标准」），班期价挂在该规格上�
 ## 14. 开放实现项（定稿后实现阶段再闭）
 
 - 导入解析的置信度展示与「待处理内容」桶的交互细节
-- PDF/Word 版式像素级还原程度（「接近阅读习惯」即可，不要求与旧文件逐页一致）
+- PDF 版式像素级还原程度（「接近阅读习惯」即可）；具体 PDF 库（pdfkit / react-pdf 等）实现期选定
 - 产品 Menu Key 命名与角色 seed 变更方式（须同步 `CONTEXT.md` 权限相关词条）
 - Short Itinerary 拆日失败时，写入发团的文案落点（备注 vs 说明字段）最终选型
-- Product Import Batch（导入批次）是否升格为 glossary 词条（实现期再定）
+- Product Import Session 会话 TTL / 废弃清理策略
+- 正式环境是否从 Garage 切到阿里云 OSS（开发期固定 Garage，见 ADR-0027）
+
+**已关闭（技术选型 /grill-with-docs 2026-07-22）：** 对象存储 S3 兼容 + StoredObject/FileStore；开发期 Garage；API 代传；同步解析；ExcelJS 西部中旅适配器；P1 库生成 PDF + 总表 Excel，Word=P1.5；先平台竖切再产品 P0 — 见 [ADR-0027](../../adr/0027-s3-compatible-object-storage.md)。
 
 ---
 
@@ -325,3 +329,4 @@ P0 默认一个规格占位（如「标准」），班期价挂在该规格上�
 |------|------|
 | 2026-07-21 | 初稿定稿：策略 D；P0=B（五 Sheet，特色可空，Word 后补）；P1 单页+导出；P2 班期生成发团 |
 | 2026-07-21 | `/grill-with-docs`：§0 术语对齐；CONTEXT Product Center；ADR-0025/0026 |
+| 2026-07-22 | `/grill-with-docs`：实现技术选型；ADR-0027；CONTEXT 增 Product Import Session |

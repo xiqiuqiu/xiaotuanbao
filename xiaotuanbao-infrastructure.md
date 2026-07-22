@@ -12,7 +12,7 @@ Monorepo：pnpm workspace
 后端：NestJS + TypeScript + Prisma + PostgreSQL + JWT
 数据库：自建 PostgreSQL
 部署：Docker Compose + Caddy
-文件存储：本地持久化目录，后续可扩展 MinIO
+文件存储：S3 兼容对象存储（开发/Compose 用 Garage；可迁阿里云 OSS 等）；平台 FileStore + StoredObject（ADR-0027）
 缓存：Redis 可选，第一版可先预留
 ```
 
@@ -86,6 +86,17 @@ NestJS 适合这个项目的原因：
 数据库使用自建 PostgreSQL。
 
 第一版不依赖 Cloudflare D1、KV、R2、Workers、Pages 等基础设施。所有核心业务数据、用户数据、财务数据都进入自建 PostgreSQL。
+
+### 3.3.1 文件与对象存储
+
+持久附件（产品导入原件、后续详细行程 Word 等）进入 **S3 兼容对象存储**，元数据为平台级 **StoredObject**（按 Organization 隔离），业务模块只引用 id。应用经 **FileStore** 访问，只依赖可移植 S3 子集；P0 上传/下载由 API 代传。
+
+- 开发与 Compose 类生产：**Garage**
+- 正式切流前可选迁：**阿里云 OSS** 等国内 S3 兼容服务（换 endpoint/凭证即可）
+- **不采用** MinIO Community Edition（社区版已停更，见 ADR-0027）
+- **不**把即时导出的 PDF/Excel 默认归档进桶（与现有运营表/往来账导出一致）
+
+旧版 `UPLOAD_DIR` 本地目录为遗留配置，随 FileStore 落地淘汰。
 
 ### 3.4 部署
 
@@ -533,7 +544,14 @@ API_PORT=3000
 DATABASE_URL=postgresql://xiaotuanbao:password@postgres:5432/xiaotuanbao?schema=public
 JWT_SECRET=please-change-this-secret
 JWT_EXPIRES_IN=7d
-UPLOAD_DIR=/app/uploads
+
+# Object storage (S3-compatible; ADR-0027). Dev/Compose: Garage.
+S3_ENDPOINT=http://garage:3900
+S3_REGION=garage
+S3_BUCKET=xiaotuanbao
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+# UPLOAD_DIR 遗留，随 FileStore 落地淘汰
 ```
 
 ### 6.4 JWT 认证方案
@@ -641,12 +659,13 @@ pnpm --filter api prisma db seed
 3. Caddy 作为唯一公网入口。
 4. PostgreSQL 数据必须持久化。
 5. Caddy 证书数据必须持久化。
-6. 上传文件必须持久化。
+6. 对象存储数据必须持久化（开发/Compose：Garage 卷；见 ADR-0027）。
 7. api 和 postgres 默认不直接暴露公网端口。
 8. 不使用 Nginx。
-9. 不使用 Cloudflare 基础设施。
+9. 不使用 Cloudflare 基础设施（对象存储亦不默认 R2）。
 10. 不使用 Kubernetes。
 11. 第一版只做单机部署。
+12. 不采用 MinIO Community Edition 作为新对象存储基建。
 
 ### 8.2 Docker 服务划分
 
@@ -656,14 +675,16 @@ pnpm --filter api prisma db seed
 caddy       统一入口、HTTPS、前端静态资源、API 反向代理
 api         NestJS 后端服务
 postgres    PostgreSQL 数据库
+garage      S3 兼容对象存储（FileStore 落地时加入 Compose）
 ```
 
 后续可选服务：
 
 ```txt
 redis       缓存、验证码、任务状态
-minio       文件存储、合同附件、行程单附件
 ```
+
+说明：对象存储实现可换为阿里云 OSS 等；应用只认 S3 兼容 endpoint（ADR-0027）。不引入 MinIO CE。
 
 ### 8.3 生产服务器目录
 
@@ -680,7 +701,8 @@ minio       文件存储、合同附件、行程单附件
   postgres/
     data/
     backup/
-  uploads/
+  garage/
+    data/
   logs/
 ```
 
@@ -694,9 +716,11 @@ caddy/data：Caddy 证书数据，需要持久化
 caddy/config：Caddy 配置数据，需要持久化
 postgres/data：数据库数据，需要持久化
 postgres/backup：数据库备份目录，需要定期备份
-uploads：上传文件目录，需要持久化
+garage/data：对象存储数据，需要持久化（FileStore 落地后）
 logs：日志目录，可按需持久化
 ```
+
+过渡期若仍存在 `uploads/`，仅为 `UPLOAD_DIR` 遗留，不作为新产品附件落点。
 
 ### 8.4 docker-compose.yml 示例
 
@@ -727,8 +751,23 @@ services:
       - .env
     depends_on:
       - postgres
+      - garage
+    # 附件经 S3 API 访问 Garage。过渡期可仍挂载 ./uploads（UPLOAD_DIR 遗留），新产品附件勿写入。
+
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: xiaotuanbao-garage
+    restart: unless-stopped
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    ports:
+      - "3900:3900"
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-xiaotuanbao}
     volumes:
-      - ./uploads:/app/uploads
+      - ./docker/garage/garage.toml:/etc/garage.toml:ro
+      - ./garage/data:/var/lib/garage
 
   postgres:
     image: postgres:16
@@ -852,8 +891,12 @@ POSTGRES_PASSWORD=please-change-this-password
 POSTGRES_DB=xiaotuanbao
 DATABASE_URL=postgresql://xiaotuanbao:please-change-this-password@postgres:5432/xiaotuanbao?schema=public
 
-# Upload
-UPLOAD_DIR=/app/uploads
+# Object storage (S3-compatible; Garage in Compose — ADR-0027)
+S3_ENDPOINT=http://garage:3900
+S3_REGION=garage
+S3_BUCKET=xiaotuanbao
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
 
 # Frontend
 VITE_API_BASE_URL=/api
@@ -991,19 +1034,21 @@ Monorepo：pnpm workspace
 后端：NestJS + TypeScript + Prisma + PostgreSQL
 部署：Docker Compose + Caddy
 数据库：自建 PostgreSQL
+文件存储：S3 兼容（Garage / 可换 OSS）；见 ADR-0027
 
 开发约束：
 
 1. 不使用 Next.js。
 2. 不使用 Nginx。
 3. 不使用 Spring Boot。
-4. 不依赖 Cloudflare 基础设施。
+4. 不依赖 Cloudflare 基础设施（含不以 R2 为默认对象存储）。
 5. 不一次性开发无关模块。
 6. 优先复用 packages/shared 中的类型、枚举和常量。
 7. 前端接口请求必须通过统一 request 和 TanStack Query。
 8. 后端接口必须使用 DTO、参数校验、统一返回格式和全局异常处理。
 9. 涉及数据库变更必须同步更新 Prisma schema 和 migration。
 10. 每次修改后说明改动文件和验证方式。
+11. 持久附件经 FileStore/StoredObject，不新增业务直写本地 uploads；不引入 MinIO CE。
 ```
 
 ## 14. 总结
@@ -1015,6 +1060,7 @@ Vite + React + Ant Design + TanStack
 NestJS + Prisma + PostgreSQL
 pnpm workspace Monorepo
 Docker Compose + Caddy 单机部署
+S3 兼容对象存储（Garage，可迁 OSS）
 ```
 
 该方案适合个人或小团队持续开发，也适合使用 AI 编程工具进行分阶段建设。第一版应优先保证基础工程、前后端连通、数据库迁移、登录认证、Docker 部署闭环稳定，再逐步进入团单、资源和财务等核心业务模块开发。

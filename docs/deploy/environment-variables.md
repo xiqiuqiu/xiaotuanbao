@@ -47,11 +47,16 @@ cp .env.example .env
 | `POSTGRES_DB` | 否 | xiaotuanbao | 数据库名 |
 | `DATABASE_URL` | 本地开发必填 | — | Prisma 连接串（见下方场景说明） |
 
-### 文件上传
+### 对象存储（S3 兼容，ADR-0027）
 
 | 变量 | 必填 | 默认值 | 说明 |
 | ---- | ---- | ------ | ---- |
-| `UPLOAD_DIR` | 否 | `./uploads` | 上传目录。本地相对路径；Docker 容器内为 `/app/uploads` |
+| `S3_ENDPOINT` | 是 | — | S3 API endpoint；本地 `http://127.0.0.1:3900`，Compose 内 api 覆写为 `http://garage:3900` |
+| `S3_REGION` | 否 | `garage` | 区域；Garage 可用占位值；OSS 等按厂商填写 |
+| `S3_BUCKET` | 是 | — | 桶名；须与 Garage `GARAGE_DEFAULT_BUCKET` 一致 |
+| `S3_ACCESS_KEY` | 是 | — | Access Key；须与 Garage `GARAGE_DEFAULT_ACCESS_KEY` 一致 |
+| `S3_SECRET_KEY` | 是 | — | Secret Key；须与 Garage `GARAGE_DEFAULT_SECRET_KEY` 一致 |
+| `UPLOAD_DIR` | 否（遗留） | `./uploads` | **遗留**：本地上传目录；新产品附件走 FileStore，勿再依赖 |
 
 ### 前端构建（Vite）
 
@@ -78,14 +83,19 @@ cp .env.example .env
 NODE_ENV=development
 CADDY_DOMAIN=:80
 DATABASE_URL=postgresql://xiaotuanbao:please-change-this-password@localhost:5432/xiaotuanbao?schema=public
-UPLOAD_DIR=./uploads
+S3_ENDPOINT=http://127.0.0.1:3900
+S3_REGION=garage
+S3_BUCKET=xiaotuanbao
+S3_ACCESS_KEY=GKaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+S3_SECRET_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+# UPLOAD_DIR=./uploads  # 遗留
 VITE_APP_ENV=development
 WEB_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAME_SITE=lax
 ```
 
-PostgreSQL 通过 `pnpm db:up` 启动，暴露 `localhost:5432`。
+PostgreSQL 通过 `pnpm db:up` 启动，暴露 `localhost:5432`。对象存储通过 `pnpm garage:up` 启动 Garage（配置见 `docker/garage/garage.toml`），S3 API 暴露 `localhost:3900`。附件上传上限 50MB（覆盖试点《疆游记》等大总表）。
 
 ### 场景 B：Docker 全栈部署
 
@@ -98,11 +108,15 @@ WEB_ORIGINS=https://your-domain.com
 AUTH_COOKIE_SECURE=true
 AUTH_COOKIE_SAME_SITE=lax
 POSTGRES_PASSWORD=<强密码>
-UPLOAD_DIR=/app/uploads
+S3_ENDPOINT=http://garage:3900
+S3_REGION=garage
+S3_BUCKET=xiaotuanbao
+S3_ACCESS_KEY=<与 Garage 引导密钥一致>
+S3_SECRET_KEY=<与 Garage 引导密钥一致>
 VITE_APP_ENV=production
 ```
 
-`DATABASE_URL` 在 Docker 中由 `docker-compose.yml` 自动注入为 `@postgres:5432`，**无需手动改 `.env` 中的 DATABASE_URL**。
+`DATABASE_URL` 在 Docker 中由 `docker-compose.yml` 自动注入为 `@postgres:5432`，**无需手动改 `.env` 中的 DATABASE_URL**。`S3_ENDPOINT` 同样由 compose 覆写为 `http://garage:3900`（即使 `.env` 写了 `127.0.0.1`）。
 
 ## 生产环境必改项
 
@@ -112,6 +126,7 @@ VITE_APP_ENV=production
 4. `SEED_ADMIN_PASSWORD`（若使用 seed 初始化）
 5. `WEB_ORIGINS=https://实际前端域名`
 6. `AUTH_COOKIE_SECURE=true` 并通过 HTTPS 访问
+7. `S3_ACCESS_KEY` / `S3_SECRET_KEY`（轮换样例密钥；与 Garage/OSS 实际凭证一致）
 
 认证使用服务端 `HttpOnly` Cookie。默认 Docker/Caddy 的 Web 与 `/api` 同源，保持
 `VITE_API_BASE_URL=/api` 与 `AUTH_COOKIE_SAME_SITE=lax`。若 Web 和 API 跨 Origin 但仍同站，
