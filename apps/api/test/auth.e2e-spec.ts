@@ -1,27 +1,19 @@
 import { INestApplication } from '@nestjs/common'
+import {
+  PRESET_ROLE_ACTION_KEYS,
+  PRESET_ROLE_MENU_KEYS,
+  PRESET_ROLE_NAMES,
+} from '@xiaotuanbao/shared'
 import request from 'supertest'
 import { authRequest, createTestApp, loginAs } from './helpers'
 
-const COORDINATOR_MENU_KEYS = ['/', '/departure', '/partner', '/supplier']
-const FINANCE_MENU_KEYS = [
-  '/',
-  '/departure',
-  '/finance/payable',
-  '/finance/receivable',
-  '/finance/transactions',
-  '/finance/verification',
-  '/partner',
-  '/supplier',
-]
-const ADMIN_MENU_KEYS = [
-  ...FINANCE_MENU_KEYS,
-  '/system/organization',
-  '/system/roles',
-  '/system/users',
-]
-const COORDINATOR_ACTION_KEYS = ['departure:write', 'partner:write', 'supplier:write']
-const FINANCE_ACTION_KEYS: string[] = []
-const ADMIN_ACTION_KEYS = ['departure:write', 'partner:write', 'supplier:write']
+/** Auth returns permission keys sorted; keep expectations aligned with preset seed. */
+const COORDINATOR_MENU_KEYS = [...PRESET_ROLE_MENU_KEYS[PRESET_ROLE_NAMES.COORDINATOR]].sort()
+const FINANCE_MENU_KEYS = [...PRESET_ROLE_MENU_KEYS[PRESET_ROLE_NAMES.FINANCE]].sort()
+const ADMIN_MENU_KEYS = [...PRESET_ROLE_MENU_KEYS[PRESET_ROLE_NAMES.ORG_ADMIN]].sort()
+const COORDINATOR_ACTION_KEYS = [...PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.COORDINATOR]].sort()
+const FINANCE_ACTION_KEYS = [...PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]].sort()
+const ADMIN_ACTION_KEYS = [...PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.ORG_ADMIN]].sort()
 
 describe('Auth cookie session (e2e)', () => {
   let app: INestApplication
@@ -91,7 +83,7 @@ describe('Auth menu/action keys per preset role (ADR-0023, e2e)', () => {
     expect(response.body.data.actionKeys).toEqual(COORDINATOR_ACTION_KEYS)
   })
 
-  it('GET /auth/me gives 计调 only 工作台/发团/合作伙伴/供应商 plus departure:write', async () => {
+  it('GET /auth/me gives 计调 only 工作台/发团/合作伙伴/供应商/产品中心 plus write actions', async () => {
     const cookie = await loginAs(app, 'wangjie')
     const response = await authRequest(app, cookie).get('/api/auth/me').expect(200)
 
@@ -111,7 +103,7 @@ describe('Auth menu/action keys per preset role (ADR-0023, e2e)', () => {
     expect(response.body.data.actionKeys).not.toContain('departure:write')
   })
 
-  it('GET /auth/me gives 企业管理员 all menus and departure:write', async () => {
+  it('GET /auth/me gives 企业管理员 all menus and write actions', async () => {
     const cookie = await loginAs(app, 'admin')
     const response = await authRequest(app, cookie).get('/api/auth/me').expect(200)
 
