@@ -137,17 +137,15 @@ export class ProductService {
 
     const nextShortItinerary =
       dto.shortItinerary !== undefined ? dto.shortItinerary.trim() : existing.shortItinerary
+    const nextStatus = dto.status !== undefined ? dto.status : existing.status
 
-    if (dto.status !== undefined && dto.status !== existing.status) {
-      this.assertStatusTransition(
-        {
-          ...existing,
-          name: nextName,
-          shortItinerary: nextShortItinerary,
-        },
-        dto.status,
-      )
-    }
+    // Keep on_sale invariants after field edits, not only on status transition into on_sale.
+    this.assertOnSaleRequirements({
+      ...existing,
+      name: nextName,
+      shortItinerary: nextShortItinerary,
+      status: nextStatus,
+    })
 
     const product = await this.prisma.product.update({
       where: { id: productId },
@@ -254,17 +252,31 @@ export class ProductService {
     scheduleId: string,
     dto: UpdateProductScheduleDto,
   ): Promise<ProductDetail> {
-    await this.findProductOrThrow(organizationId, productId)
+    const product = await this.findProductOrThrow(organizationId, productId)
     const schedule = await this.findScheduleOrThrow(organizationId, productId, scheduleId)
 
     const nextPriceOnInquiry =
       dto.priceOnInquiry !== undefined ? dto.priceOnInquiry : schedule.priceOnInquiry
     const nextAdultPriceCents =
       dto.adultPriceCents !== undefined ? dto.adultPriceCents : schedule.adultPriceCents
+    const nextScheduleStatus = dto.status !== undefined ? dto.status : schedule.status
 
     if (!nextPriceOnInquiry && nextAdultPriceCents == null) {
       throw new BadRequestException('班期须有成人价，或标记为询价')
     }
+
+    const nextSchedule: ProductSchedule = {
+      ...schedule,
+      status: nextScheduleStatus,
+      priceOnInquiry: nextPriceOnInquiry,
+      adultPriceCents: nextAdultPriceCents,
+    }
+    this.assertOnSaleRequirements({
+      ...product,
+      schedules: product.schedules.map((row) =>
+        row.id === schedule.id ? nextSchedule : row,
+      ),
+    })
 
     await this.prisma.productSchedule.update({
       where: { id: schedule.id },
@@ -296,21 +308,20 @@ export class ProductService {
     await this.prisma.product.delete({ where: { id: productId } })
   }
 
-  private assertStatusTransition(
-    product: ProductWithRelations,
-    nextStatus: ProductStatus,
-  ): void {
-    if (nextStatus === ProductStatus.on_sale) {
-      const name = product.name.trim()
-      const shortItinerary = product.shortItinerary.trim()
-      if (!name || !shortItinerary) {
-        throw new BadRequestException('上架须具备名称与简版行程')
-      }
+  private assertOnSaleRequirements(product: ProductWithRelations): void {
+    if (product.status !== ProductStatus.on_sale) {
+      return
+    }
 
-      const displayable = product.schedules.some(isDisplayableSchedule)
-      if (!displayable) {
-        throw new BadRequestException('上架须至少一条可展示班期（有成人价或明确询价）')
-      }
+    const name = product.name.trim()
+    const shortItinerary = product.shortItinerary.trim()
+    if (!name || !shortItinerary) {
+      throw new BadRequestException('上架须具备名称与简版行程')
+    }
+
+    const displayable = product.schedules.some(isDisplayableSchedule)
+    if (!displayable) {
+      throw new BadRequestException('上架须至少一条可展示班期（有成人价或明确询价）')
     }
   }
 

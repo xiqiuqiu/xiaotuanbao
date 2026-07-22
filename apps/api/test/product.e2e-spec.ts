@@ -164,6 +164,68 @@ describe('Product API (e2e)', () => {
     expect(response.body.message).toContain('可展示班期')
   })
 
+  async function publishProduct(nameSuffix: string) {
+    const product = await createDraft(nameSuffix)
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/products/${product.id}/spec`)
+      .send({ adultPriceCents: 100_000 })
+      .expect(200)
+
+    const withSchedule = await authRequest(app, coordinatorToken)
+      .post(`/api/products/${product.id}/schedules`)
+      .send({ title: '可展示班期', priceOnInquiry: true })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .patch(`/api/products/${product.id}`)
+      .send({
+        shortItinerary: 'D1 乌鲁木齐接机\nD2 天山天池',
+        status: ProductStatus.on_sale,
+      })
+      .expect(200)
+
+    return {
+      id: product.id as string,
+      scheduleId: withSchedule.body.data.schedules[0].id as string,
+    }
+  }
+
+  it('rejects clearing short itinerary while product stays on_sale', async () => {
+    const product = await publishProduct('keep-on-sale-short')
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/products/${product.id}`)
+      .send({ shortItinerary: '   ' })
+      .expect(400)
+
+    expect(response.body.message).toContain('简版行程')
+
+    const current = await authRequest(app, coordinatorToken)
+      .get(`/api/products/${product.id}`)
+      .expect(200)
+    expect(current.body.data.status).toBe(ProductStatus.on_sale)
+    expect(current.body.data.shortItinerary).toContain('乌鲁木齐')
+  })
+
+  it('rejects cancelling the last displayable schedule while product stays on_sale', async () => {
+    const product = await publishProduct('keep-on-sale-schedule')
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/products/${product.id}/schedules/${product.scheduleId}`)
+      .send({ status: ProductScheduleStatus.cancelled })
+      .expect(400)
+
+    expect(response.body.message).toContain('可展示班期')
+
+    const current = await authRequest(app, coordinatorToken)
+      .get(`/api/products/${product.id}`)
+      .expect(200)
+    expect(current.body.data.status).toBe(ProductStatus.on_sale)
+    expect(current.body.data.schedules[0].status).toBe(ProductScheduleStatus.on_sale)
+    expect(current.body.data.activeScheduleCount).toBe(1)
+  })
+
   it('cancels schedule without deleting history and excludes from active count', async () => {
     const product = await createDraft('cancel-schedule')
 
