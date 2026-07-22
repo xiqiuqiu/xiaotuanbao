@@ -89,6 +89,14 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   archiveSupplier: { gating: 'supplierWrite', endpointKey: 'supplier:write' },
   restoreSupplier: { gating: 'supplierWrite', endpointKey: 'supplier:write' },
 
+  // ---- 产品中心维护 ----
+  createProduct: { gating: 'productWrite', endpointKey: 'product:write' },
+  updateProduct: { gating: 'productWrite', endpointKey: 'product:write' },
+  deleteProduct: { gating: 'productWrite', endpointKey: 'product:write' },
+  updateProductSpec: { gating: 'productWrite', endpointKey: 'product:write' },
+  createProductSchedule: { gating: 'productWrite', endpointKey: 'product:write' },
+  updateProductSchedule: { gating: 'productWrite', endpointKey: 'product:write' },
+
   // ---- 菜单级：生成应收/应付挂 /departure（发团可见者皆可）----
   generatePayable: { gating: 'menuGated', endpointKey: '/departure' },
   generatePayablesForSegment: { gating: 'menuGated', endpointKey: '/departure' },
@@ -115,6 +123,7 @@ const CAPABILITY_GATINGS = new Set<WriteGating>([
   'departureWrite',
   'partnerWrite',
   'supplierWrite',
+  'productWrite',
   'financeMutate',
 ])
 
@@ -137,7 +146,7 @@ const MUTATION_HOOKS: Record<string, string> = {
 
 /** gating 意识 token：出现其一即认为该模块「知道要 gating」。刻意不含泛化的 disabled/loading。 */
 const GATING_TOKEN =
-  /\b(canEditDeparture|canEditPartner|canEditSupplier|canMutateFinance|canPerformCapability|canEdit|canWrite|readOnly|financeReadOnly|amountReadOnly|mutationLocked|resourceEditable)\b/
+  /\b(canEditDeparture|canEditPartner|canEditSupplier|canEditProduct|canMutateFinance|canPerformCapability|canEdit|canWrite|readOnly|financeReadOnly|amountReadOnly|mutationLocked|resourceEditable)\b/
 
 /**
  * 「文件内无 gating token 但由祖先 gate 覆盖」的合法豁免，逐条登记理由。

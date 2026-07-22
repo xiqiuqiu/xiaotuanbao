@@ -14,18 +14,21 @@ const EXPECTED_MATRIX: Record<string, Record<CapabilityId, boolean>> = {
     departureWrite: true,
     partnerWrite: true,
     supplierWrite: true,
+    productWrite: true,
     financeMutate: true,
   },
   [PRESET_ROLE_NAMES.FINANCE]: {
     departureWrite: false,
     partnerWrite: false,
     supplierWrite: false,
+    productWrite: false,
     financeMutate: true,
   },
   [PRESET_ROLE_NAMES.COORDINATOR]: {
     departureWrite: true,
     partnerWrite: true,
     supplierWrite: true,
+    productWrite: true,
     financeMutate: false,
   },
 }

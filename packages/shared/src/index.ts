@@ -44,6 +44,11 @@ export type {
   EmployeeListResult,
   SupplierSummary,
   SupplierListResult,
+  ProductListItem,
+  ProductListResult,
+  ProductSpecSummary,
+  ProductScheduleSummary,
+  ProductDetail,
   PartnerSummary,
   PartnerListSummary,
   PartnerListResult,
@@ -152,6 +157,7 @@ export {
   DEPARTURE_WRITE_ACTION_KEY,
   PARTNER_WRITE_ACTION_KEY,
   SUPPLIER_WRITE_ACTION_KEY,
+  PRODUCT_WRITE_ACTION_KEY,
   V1_ACTION_KEYS,
   ACTION_KEY_LABELS,
   type ActionKey,
@@ -185,6 +191,9 @@ export { PartnerContactRole } from './enums/partner-contact-role.enum'
 export { DepartureStatus } from './enums/departure-status.enum'
 export { DepartureArchiveAction } from './enums/departure-archive-action.enum'
 export { DepartureType } from './enums/departure-type.enum'
+export { ProductType } from './enums/product-type.enum'
+export { ProductStatus } from './enums/product-status.enum'
+export { ProductScheduleStatus } from './enums/product-schedule-status.enum'
 export { DepartureRouteSource } from './enums/departure-route-source.enum'
 export { DepartureProgress } from './enums/departure-progress.enum'
 export { PaymentScheduleDirection } from './enums/payment-schedule-direction.enum'

@@ -70,6 +70,14 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'POST', path: '/api/suppliers/:id/archive' },
     { method: 'POST', path: '/api/suppliers/:id/restore' },
   ],
+  productWrite: [
+    { method: 'POST', path: '/api/products' },
+    { method: 'PATCH', path: '/api/products/:id' },
+    { method: 'DELETE', path: '/api/products/:id' },
+    { method: 'PATCH', path: '/api/products/:id/spec' },
+    { method: 'POST', path: '/api/products/:id/schedules' },
+    { method: 'PATCH', path: '/api/products/:id/schedules/:scheduleId' },
+  ],
   financeMutate: [
     { method: 'POST', path: '/api/finance/payment-schedules/:id/cancel' },
     { method: 'POST', path: '/api/finance/payment-schedules/:id/reopen' },

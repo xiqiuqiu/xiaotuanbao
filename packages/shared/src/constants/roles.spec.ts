@@ -3,12 +3,13 @@ import { V1_ACTION_KEYS } from './action-keys'
 import { PRESET_ROLE_ACTION_KEYS, PRESET_ROLE_MENU_KEYS, PRESET_ROLE_NAMES } from './roles'
 
 describe('PRESET_ROLE_MENU_KEYS (ADR-0023)', () => {
-  it('gives 计调 only 工作台/发团/合作伙伴/供应商 (no /finance/*)', () => {
+  it('gives 计调 only 工作台/发团/合作伙伴/供应商/产品中心 (no /finance/*)', () => {
     expect(PRESET_ROLE_MENU_KEYS[PRESET_ROLE_NAMES.COORDINATOR]).toEqual([
       '/',
       '/departure',
       '/partner',
       '/supplier',
+      '/product',
     ])
   })
 
@@ -18,6 +19,7 @@ describe('PRESET_ROLE_MENU_KEYS (ADR-0023)', () => {
       '/departure',
       '/partner',
       '/supplier',
+      '/product',
       '/finance/receivable',
       '/finance/payable',
       '/finance/transactions',
@@ -63,6 +65,12 @@ describe('PRESET_ROLE_ACTION_KEYS (ADR-0023)', () => {
     expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.COORDINATOR]).toContain('supplier:write')
     expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.ORG_ADMIN]).toContain('supplier:write')
     expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]).not.toContain('supplier:write')
+  })
+
+  it('grants product:write to 计调 and 企业管理员 but not 财务', () => {
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.COORDINATOR]).toContain('product:write')
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.ORG_ADMIN]).toContain('product:write')
+    expect(PRESET_ROLE_ACTION_KEYS[PRESET_ROLE_NAMES.FINANCE]).not.toContain('product:write')
   })
 
   it('gives 财务 no action keys at all', () => {
