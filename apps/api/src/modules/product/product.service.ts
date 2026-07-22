@@ -197,10 +197,23 @@ export class ProductService {
     productId: string,
     dto: ReplaceProductFeaturesDto,
   ): Promise<ProductDetail> {
-    await this.findProductOrThrow(organizationId, productId)
     const normalized = normalizeFeatureItems(dto.features)
 
     await this.prisma.$transaction(async (tx) => {
+      // Serialize concurrent replaceFeatures on the same product: without a parent
+      // row lock, overlapping deleteMany+createMany under READ COMMITTED can both
+      // insert and leave duplicate ProductFeature rows.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id
+        FROM products
+        WHERE id = ${productId}
+          AND organization_id = ${organizationId}
+        FOR UPDATE
+      `
+      if (locked.length === 0) {
+        throw new NotFoundException('产品不存在')
+      }
+
       await tx.productFeature.deleteMany({ where: { productId } })
       if (normalized.length > 0) {
         await tx.productFeature.createMany({

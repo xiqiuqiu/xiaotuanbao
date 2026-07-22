@@ -94,6 +94,61 @@ describe('Product features & booking notice templates (e2e)', () => {
     expect(withItems.body.data.featuresText).toContain('纯玩保障')
   })
 
+  it('serializes concurrent feature replacements without duplicate rows', async () => {
+    const product = await createDraft('features-concurrent')
+
+    await authRequest(app, coordinatorToken)
+      .put(`/api/products/${product.id}/features`)
+      .send({
+        features: [
+          { title: 'seed', description: 'initial' },
+          { title: 'seed2', description: 'initial2' },
+        ],
+      })
+      .expect(200)
+
+    const payloadA = [
+      { title: 'A0', description: 'da0' },
+      { title: 'A1', description: 'da1' },
+      { title: 'A2', description: 'da2' },
+    ]
+    const payloadB = [
+      { title: 'B0', description: 'db0' },
+      { title: 'B1', description: 'db1' },
+      { title: 'B2', description: 'db2' },
+      { title: 'B3', description: 'db3' },
+      { title: 'B4', description: 'db4' },
+    ]
+
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        authRequest(app, coordinatorToken)
+          .put(`/api/products/${product.id}/features`)
+          .send({ features: index % 2 === 0 ? payloadA : payloadB }),
+      ),
+    )
+
+    expect(responses.every((response) => response.status === 200)).toBe(true)
+
+    const rows = await prisma.productFeature.findMany({
+      where: { productId: product.id },
+      orderBy: { sortOrder: 'asc' },
+    })
+    // Without product FOR UPDATE, overlapping deleteMany+createMany often leaves
+    // 3+5 (or more) rows. With the lock, exactly one writer wins.
+    expect([payloadA.length, payloadB.length]).toContain(rows.length)
+
+    const titles = rows.map((row) => row.title)
+    const winner = titles[0]?.startsWith('A') ? payloadA : payloadB
+    expect(titles).toEqual(winner.map((item) => item.title))
+
+    const detail = await authRequest(app, coordinatorToken)
+      .get(`/api/products/${product.id}`)
+      .expect(200)
+    expect(detail.body.data.features).toHaveLength(winner.length)
+    expect(detail.body.data.featuresText).toContain(winner[0].title)
+  })
+
   it('allows publishing with empty features when other on-sale rules are met', async () => {
     const product = await createDraft('on-sale-no-features')
 
