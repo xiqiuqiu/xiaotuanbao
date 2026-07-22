@@ -458,7 +458,7 @@ export class ProductService {
       status: product.status,
       shortItinerary: product.shortItinerary,
       detailedItinerary: product.detailedItinerary,
-      featuresText: product.featuresText ?? featuresTextFromItems(features),
+      featuresText: featuresTextFromItems(features),
       features,
       bookingNotice: product.bookingNotice,
       bookingNoticeTemplateId: product.bookingNoticeTemplateId,
