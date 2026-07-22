@@ -19,6 +19,7 @@ import { NotFoundPage } from '@/pages/NotFoundPage'
 import { parseDepartureListSearch } from '@/features/departure/utils/departure-list-search'
 import { parseReceivableListSearch } from '@/features/finance/utils/receivable-list-search'
 import { parsePayableListSearch } from '@/features/finance/utils/payable-list-search'
+import { parseProductListSearch } from '@/features/product/utils/product-list-search'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -296,9 +297,19 @@ const supplierDetailRoute = createRoute({
 const productRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/product',
+  validateSearch: parseProductListSearch,
   component: lazyRouteComponent(
     () => import('@/features/product/pages/ProductsPage'),
     'ProductsPage',
+  ),
+})
+
+const productImportRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/product/import/$sessionId',
+  component: lazyRouteComponent(
+    () => import('@/features/product/pages/ProductImportConfirmPage'),
+    'ProductImportConfirmPage',
   ),
 })
 
@@ -352,6 +363,7 @@ const routeTree = rootRoute.addChildren([
     supplierRoute,
     supplierDetailRoute,
     productRoute,
+    productImportRoute,
     productDetailRoute,
     systemOrganizationRoute,
     systemUsersRoute,

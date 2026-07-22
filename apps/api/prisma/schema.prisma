@@ -253,6 +253,15 @@ enum ProductScheduleStatus {
   @@map("product_schedule_status")
 }
 
+/// Product Import Session：外部总表迁入的服务端确认过程。
+enum ProductImportSessionStatus {
+  pending_confirmation
+  confirmed
+  discarded
+
+  @@map("product_import_session_status")
+}
+
 model Organization {
   id             String             @id @default(cuid())
   name           String
@@ -276,6 +285,7 @@ model Organization {
   documentSequences DocumentSequence[]
   storedObjects StoredObject[]
   products Product[]
+  productImportSessions ProductImportSession[]
 
   @@map("organizations")
 }
@@ -332,6 +342,7 @@ model User {
   paymentScheduleVoids PaymentSchedule[] @relation("PaymentScheduleVoidOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
+  createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -351,6 +362,7 @@ model StoredObject {
   createdByUser    User         @relation("StoredObjectCreator", fields: [createdByUserId], references: [id])
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
+  productImportSessions ProductImportSession[]
 
   @@index([organizationId, createdAt])
   @@map("stored_objects")
@@ -778,6 +790,11 @@ model Product {
   endCity           String?        @map("end_city")
   dayCount          Int?           @map("day_count")
   tags              String[]       @default([])
+  /// Product Import Session；手建产品为空。
+  importSessionId   String?        @map("import_session_id")
+  importSession     ProductImportSession? @relation(fields: [importSessionId], references: [id], onDelete: SetNull)
+  /// 来源 Sheet 名，供列表筛选。
+  sourceSheetName   String?        @map("source_sheet_name")
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
   specs             ProductSpec[]
@@ -785,7 +802,33 @@ model Product {
 
   @@index([organizationId, status, updatedAt])
   @@index([organizationId, name])
+  @@index([organizationId, importSessionId])
+  @@index([organizationId, sourceSheetName])
   @@map("products")
+}
+
+/// Product Import Session：归档原件 + 解析候选项 + 确认落草稿。
+model ProductImportSession {
+  id               String                     @id @default(cuid())
+  organizationId   String                     @map("organization_id")
+  organization     Organization               @relation(fields: [organizationId], references: [id])
+  storedObjectId   String                     @map("stored_object_id")
+  storedObject     StoredObject               @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
+  status           ProductImportSessionStatus @default(pending_confirmation)
+  originalFilename String                     @map("original_filename")
+  /// JiangyoujiParseResult JSON（服务端真相）。
+  parseResultJson  Json                       @map("parse_result_json")
+  embeddedOleCount Int                        @default(0) @map("embedded_ole_count")
+  createdByUserId  String                     @map("created_by_user_id")
+  createdByUser    User                       @relation("ProductImportSessionCreator", fields: [createdByUserId], references: [id])
+  confirmedAt      DateTime?                  @map("confirmed_at")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+  products         Product[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@map("product_import_sessions")
 }
 
 /// Product Spec：规格默认销售价；供新建班期复制，不回写既有班期（ADR-0025）。
