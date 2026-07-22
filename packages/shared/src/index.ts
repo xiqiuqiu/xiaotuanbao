@@ -139,6 +139,7 @@ export type {
   DepartureOperationsSheetFinanceSummary,
   DepartureOperationsSheetAnomaly,
   DepartureOperationsSheetSnapshot,
+  StoredObjectSummary,
 } from './types/api.types'
 
 export { PARTNER_RECONCILIATION_CONFIRMATION_NOTES } from './constants/partner-reconciliation'

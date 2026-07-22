@@ -15,6 +15,7 @@ import { DepartureModule } from './modules/departure/departure.module'
 import { FinanceModule } from './modules/finance/finance.module'
 import { PlatformModule } from './modules/platform/platform.module'
 import { PrismaModule } from './database/prisma/prisma.module'
+import { StoredObjectModule } from './modules/stored-object/stored-object.module'
 import { WorkbenchModule } from './modules/workbench/workbench.module'
 
 @Module({
@@ -37,6 +38,7 @@ import { WorkbenchModule } from './modules/workbench/workbench.module'
     FinanceModule,
     PlatformModule,
     WorkbenchModule,
+    StoredObjectModule,
   ],
   providers: [
     {

@@ -249,6 +249,7 @@ model Organization {
   financeVerifications FinanceVerification[]
   financeIdempotencyRecords FinanceIdempotencyRecord[]
   documentSequences DocumentSequence[]
+  storedObjects StoredObject[]
 
   @@map("organizations")
 }
@@ -304,10 +305,29 @@ model User {
   paymentScheduleCancellations PaymentSchedule[] @relation("PaymentScheduleCancelOperator")
   paymentScheduleVoids PaymentSchedule[] @relation("PaymentScheduleVoidOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
+  createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
   @@map("users")
+}
+
+/// Platform attachment metadata (ADR-0027). Bytes live in S3-compatible object storage.
+model StoredObject {
+  id               String       @id @default(cuid())
+  organizationId   String       @map("organization_id")
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  objectKey        String       @unique @map("object_key")
+  originalFilename String       @map("original_filename")
+  contentType      String       @map("content_type")
+  sizeBytes        Int          @map("size_bytes")
+  createdByUserId  String       @map("created_by_user_id")
+  createdByUser    User         @relation("StoredObjectCreator", fields: [createdByUserId], references: [id])
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@index([organizationId, createdAt])
+  @@map("stored_objects")
 }
 
 model Role {

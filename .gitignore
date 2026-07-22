@@ -33,6 +33,8 @@ Thumbs.db
 # Uploads & runtime data
 uploads/*
 !uploads/.gitkeep
+garage/data/*
+!garage/data/.gitkeep
 postgres/data/
 caddy/data/
 caddy/config/
@@ -43,3 +45,4 @@ coverage/
 tmp/
 
 .worktrees/
+ider/（6.20日版大巴）2026年疆游记（西部中旅）.xlsx

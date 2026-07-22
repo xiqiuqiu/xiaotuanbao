@@ -55,7 +55,7 @@
 
 - `.env`、`.env.local`
 - `node_modules/`、`dist/`
-- `uploads/` 中的实际上传文件
+- 对象存储本地数据目录（如 `garage/data/`）与遗留 `uploads/` 中的实际上传文件
 - Docker volume 数据
 
 ## 领域语言

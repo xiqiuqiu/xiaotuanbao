@@ -19,6 +19,8 @@
     "hooks:install": "git config core.hooksPath .githooks && echo 'git hooks 已启用（.githooks）'",
     "db:up": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres",
     "db:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml stop postgres",
+    "garage:up": "docker compose up -d garage",
+    "garage:down": "docker compose stop garage",
     "db:migrate": "pnpm --filter api prisma:migrate:dev",
     "db:seed": "pnpm --filter api prisma:db:seed",
     "finance:integrity-check": "pnpm --filter api finance:integrity-check",

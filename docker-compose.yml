@@ -44,10 +44,15 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-xiaotuanbao}:${POSTGRES_PASSWORD:-please-change-this-password}@postgres:5432/${POSTGRES_DB:-xiaotuanbao}?schema=public
+      # Compose network: talk to Garage by service name (host .env may use 127.0.0.1:3900).
+      S3_ENDPOINT: http://garage:3900
     depends_on:
       postgres:
         condition: service_healthy
+      garage:
+        condition: service_started
     volumes:
+      # Legacy UPLOAD_DIR mount; new attachments use FileStore/S3 (ADR-0027).
       - ./uploads:/app/uploads
     healthcheck:
       test:
@@ -61,6 +66,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
+
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: xiaotuanbao-garage
+    restart: unless-stopped
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    ports:
+      - "3900:3900"
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY:-GKaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY:-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+      GARAGE_DEFAULT_BUCKET: ${S3_BUCKET:-xiaotuanbao}
+    volumes:
+      - ./docker/garage/garage.toml:/etc/garage.toml:ro
+      - ./garage/data:/var/lib/garage
 
   postgres:
     image: postgres:16

@@ -1454,6 +1454,16 @@ export interface DepartureOperationsSheetAnomaly {
   remainingCents: number
 }
 
+/** Platform attachment metadata summary (ADR-0027 / StoredObject). */
+export interface StoredObjectSummary {
+  id: string
+  originalFilename: string
+  contentType: string
+  sizeBytes: number
+  createdAt: string
+  createdByUserId: string
+}
+
 /** Shared structured snapshot for page preview and Excel export (#99). */
 export interface DepartureOperationsSheetSnapshot {
   organizationName: string
