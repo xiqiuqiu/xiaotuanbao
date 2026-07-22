@@ -212,3 +212,26 @@ export async function downloadProductImportOriginal(
   const { blob, filename } = await downloadBinary(`/stored-objects/${storedObjectId}`)
   triggerBrowserDownload(blob, filename ?? fallbackFilename)
 }
+
+/** 单产品同行资料 PDF；有价缺成人价时服务端 400。 */
+export async function downloadProductPeerPackPdf(
+  productId: string,
+  priced: boolean,
+): Promise<void> {
+  const { blob, filename } = await downloadBinary(`/products/${productId}/peer-pack.pdf`, {
+    params: { priced },
+  })
+  triggerBrowserDownload(blob, filename ?? `同行资料_${productId}.pdf`)
+}
+
+/** 过渡总表 Excel；筛选口径对齐列表。 */
+export async function downloadProductSummaryExcel(params?: {
+  search?: string
+  status?: ProductStatus
+  importSessionId?: string
+  sourceSheetName?: string
+  includeOffline?: boolean
+}): Promise<void> {
+  const { blob, filename } = await downloadBinary('/products/summary.xlsx', { params })
+  triggerBrowserDownload(blob, filename ?? '产品总表.xlsx')
+}
