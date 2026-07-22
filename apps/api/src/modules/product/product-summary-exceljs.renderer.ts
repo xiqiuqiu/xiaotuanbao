@@ -30,8 +30,11 @@ export async function renderProductSummaryExcel(
   workbook.creator = 'xiaotuanbao'
   workbook.created = new Date()
 
+  const usedSheetNames = new Set<string>()
   for (const sheet of snapshot.sheets) {
-    const worksheet = workbook.addWorksheet(sanitizeSheetName(sheet.sheetName))
+    const worksheet = workbook.addWorksheet(
+      allocateUniqueSheetName(sheet.sheetName, usedSheetNames),
+    )
     worksheet.addRow([...HEADERS])
     const header = worksheet.getRow(1)
     header.font = { bold: true }
@@ -94,10 +97,39 @@ function formatYuanCell(cents: number | null): number | string {
   return cents / 100
 }
 
+/**
+ * Excel sheet names: max 31 chars; cannot contain \ / * ? : [ ].
+ * Different sourceSheetName values can collapse after sanitize (invalid chars or
+ * truncation), so callers must allocate unique names before addWorksheet.
+ */
 function sanitizeSheetName(name: string): string {
   const cleaned = name.replace(/[\\/*?:\[\]]/g, '_').trim()
   const base = cleaned.length > 0 ? cleaned : 'Sheet'
   return base.slice(0, 31)
+}
+
+/** Excel treats sheet names as case-insensitive; keep used keys lowercased. */
+function allocateUniqueSheetName(name: string, used: Set<string>): string {
+  const base = sanitizeSheetName(name)
+  const key = base.toLowerCase()
+  if (!used.has(key)) {
+    used.add(key)
+    return base
+  }
+
+  let n = 2
+  while (n < 10_000) {
+    const suffix = ` (${n})`
+    const candidate = `${base.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`
+    const candidateKey = candidate.toLowerCase()
+    if (!used.has(candidateKey)) {
+      used.add(candidateKey)
+      return candidate
+    }
+    n += 1
+  }
+
+  throw new Error(`Unable to allocate unique Excel sheet name for: ${name}`)
 }
 
 function columnWidth(title: string): number {
