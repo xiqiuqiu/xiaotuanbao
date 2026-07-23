@@ -30,14 +30,20 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * Gutter must be padding (not margin): MainLayout scrolls .app-content with
+ * overflow:auto, which clips at the padding edge. Outward hover rings
+ * (e.g. workbench metricButton outline-offset) need room inside that edge.
+ */
 .app-content {
   min-width: 0;
-  margin: 16px;
+  margin: 0;
+  padding: 16px;
 }
 
 @media (max-width: 767px) {
   .app-content {
-    margin: 12px;
+    padding: 12px;
   }
 }
 

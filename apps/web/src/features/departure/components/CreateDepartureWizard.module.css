@@ -3,7 +3,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  /* MainLayout header 64px + .app-content vertical margin 32px */
+  /* MainLayout header 64px + .app-content vertical padding 32px */
   height: calc(100dvh - 96px);
   min-height: 0;
 }
@@ -98,7 +98,7 @@
 
 @media (max-width: 767px) {
   .page {
-    /* .app-content margin is 12px on each side below md */
+    /* .app-content padding is 12px on each side below md */
     height: calc(100dvh - 88px);
   }
 }

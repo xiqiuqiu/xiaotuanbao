@@ -103,27 +103,9 @@ export function SupplierDetailPage() {
       <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
         返回供应商列表
       </Button>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div>
-          <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
-            {supplier.name}
-          </Typography.Title>
-        </div>
-        {canEdit ? (
-          <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
-            编辑
-          </Button>
-        ) : null}
-      </div>
+      <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>
+        {supplier.name}
+      </Typography.Title>
 
       <Card>
         <Tabs
@@ -132,7 +114,18 @@ export function SupplierDetailPage() {
             {
               key: 'profile',
               label: '基本信息',
-              children: <SupplierReadonlySections supplier={supplier} />,
+              children: (
+                <SupplierReadonlySections
+                  supplier={supplier}
+                  extra={
+                    canEdit ? (
+                      <Button type="text" icon={<EditOutlined />} onClick={openEditDrawer}>
+                        编辑
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ),
             },
             {
               key: 'accounts',

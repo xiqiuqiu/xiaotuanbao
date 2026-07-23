@@ -1,9 +1,28 @@
 .shell {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .sider {
   border-right: 1px solid var(--shell-border);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.main {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.main :global(.app-content) {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
 }
 
 .brand {
@@ -43,6 +62,7 @@
 }
 
 .header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

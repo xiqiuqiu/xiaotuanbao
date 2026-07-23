@@ -8,7 +8,6 @@ import {
   Empty,
   Flex,
   Segmented,
-  Space,
   Statistic,
   Tag,
   Typography,
@@ -283,6 +282,7 @@ export function FinanceReceivablesModule({
   sections?: FinanceReceivablesSection[]
 }) {
   const navigate = useNavigate()
+  const { token } = theme.useToken()
   const showMetrics = sections.includes('metrics')
   const showFollowUp = sections.includes('follow-up')
   const showAging = sections.includes('aging')
@@ -298,8 +298,14 @@ export function FinanceReceivablesModule({
       ].filter(Boolean).join(' ')}
       title={module.title}
       extra={module.href ? (
-        <Button type="link" onClick={() => void navigate({ to: module.href! })}>
-          查看全部 {module.total ?? 0} 项 <RightOutlined />
+        <Button
+          type="link"
+          icon={<RightOutlined />}
+          iconPlacement="end"
+          styles={{ root: { paddingInline: 0 } }}
+          onClick={() => void navigate({ to: module.href! })}
+        >
+          查看全部 {module.total ?? 0} 项
         </Button>
       ) : null}
     >
@@ -309,35 +315,49 @@ export function FinanceReceivablesModule({
           description="当前没有需要跟进的逾期或近期到期应收"
         />
       ) : (
-        <Space orientation="vertical" size={0} className={styles.queueList}>
-          {items.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={styles.queueItem}
-              aria-label={item.title}
-              title={item.title}
-              onClick={() => void navigate({ to: item.href })}
-            >
-              <span className={styles.queueBody}>
-                <span className={styles.queueTitleRow}>
-                  <span className={styles.queueTitle}>{item.title}</span>
-                </span>
-                <span className={styles.queueMeta}>
-                  {item.dueDate}
-                  {' · '}
-                  {formatCents(item.unsettledAmountCents)}
-                  {item.overdueDays != null ? ` · 逾期 ${item.overdueDays} 天` : ' · 近期到期'}
-                  {item.counterpartyName ? ` · ${item.counterpartyName}` : ''}
-                </span>
-              </span>
-              <span className={styles.queueTrailing}>
-                {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
-                <RightOutlined />
-              </span>
-            </button>
-          ))}
-        </Space>
+        <Flex vertical gap={0} className={styles.queueList}>
+          {items.map((item) => {
+            const meta = [
+              item.dueDate,
+              formatCents(item.unsettledAmountCents),
+              item.overdueDays != null ? `逾期 ${item.overdueDays} 天` : '近期到期',
+              item.counterpartyName,
+            ].filter(Boolean).join(' · ')
+            return (
+              <button
+                type="button"
+                key={item.id}
+                className={styles.queueItem}
+                aria-label={item.title}
+                title={item.title}
+                onClick={() => void navigate({ to: item.href })}
+              >
+                <Flex vertical gap={token.marginXXS} className={styles.queueBody}>
+                  <Flex align="center" gap={token.marginXS} className={styles.queueTitleRow}>
+                    <Typography.Text
+                      strong
+                      ellipsis={{ tooltip: item.title }}
+                      className={styles.queueTitle}
+                    >
+                      {item.title}
+                    </Typography.Text>
+                  </Flex>
+                  <Typography.Text
+                    type="secondary"
+                    ellipsis={{ tooltip: meta }}
+                    className={styles.queueMeta}
+                  >
+                    {meta}
+                  </Typography.Text>
+                </Flex>
+                <Flex align="center" gap={token.marginXXS} className={styles.queueTrailing}>
+                  {item.departureClosed ? <Tag color="default">发团已关闭</Tag> : null}
+                  <RightOutlined aria-hidden className={styles.queueChevron} />
+                </Flex>
+              </button>
+            )
+          })}
+        </Flex>
       )}
     </Card>
   ) : null

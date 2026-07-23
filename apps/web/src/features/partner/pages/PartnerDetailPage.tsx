@@ -98,16 +98,9 @@ export function PartnerDetailPage() {
       <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
         返回合作伙伴列表
       </Button>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 0 }}>
-          {partner.name}
-        </Typography.Title>
-        {canEdit ? (
-          <Button type="primary" icon={<EditOutlined />} onClick={openEditDrawer}>
-            编辑
-          </Button>
-        ) : null}
-      </div>
+      <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>
+        {partner.name}
+      </Typography.Title>
 
       <Card>
         <Tabs
@@ -116,7 +109,18 @@ export function PartnerDetailPage() {
             {
               key: 'profile',
               label: '基本信息',
-              children: <PartnerReadonlySections partner={partner} />,
+              children: (
+                <PartnerReadonlySections
+                  partner={partner}
+                  extra={
+                    canEdit ? (
+                      <Button type="text" icon={<EditOutlined />} onClick={openEditDrawer}>
+                        编辑
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ),
             },
             {
               key: 'accounts',

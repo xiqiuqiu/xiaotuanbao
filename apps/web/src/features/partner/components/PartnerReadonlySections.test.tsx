@@ -48,4 +48,18 @@ describe('PartnerReadonlySections', () => {
       expect(node.className).toMatch(/equalWidth/)
     }
   })
+
+  it('renders Descriptions.extra inside 基础信息 header', () => {
+    const { container } = render(
+      <PartnerReadonlySections
+        partner={mockPartner}
+        extra={<button type="button">编辑</button>}
+      />,
+    )
+    const extra = container.querySelector('.ant-descriptions-extra')
+    expect(extra).toContainElement(screen.getByRole('button', { name: '编辑' }))
+    expect(extra?.closest('.ant-descriptions')?.querySelector('.ant-descriptions-title')).toHaveTextContent(
+      '基础信息',
+    )
+  })
 })
