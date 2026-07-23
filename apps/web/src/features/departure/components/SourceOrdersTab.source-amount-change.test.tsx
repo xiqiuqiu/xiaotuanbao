@@ -42,7 +42,13 @@ vi.mock('./SourceOrderDrawer', () => ({
   }: {
     open: boolean
     editing: SourceOrderSummary | null
-    onSubmit: (payload: Record<string, unknown>) => void
+    onSubmit: (
+      payload: Record<string, unknown>,
+      pathBaseline: {
+        guestCollectCents: number
+        partnerCollectedCents: number
+      } | null,
+    ) => void
     onClose: () => void
   }) =>
     open && editing ? (
@@ -50,20 +56,26 @@ vi.mock('./SourceOrderDrawer', () => ({
         <button
           type="button"
           onClick={() =>
-            onSubmit({
-              partnerId: editing.partnerId,
-              adultGuestCount: editing.adultGuestCount,
-              childGuestCount: editing.childGuestCount,
-              adultUnitPriceCents: 30000,
-              childUnitPriceCents: editing.childUnitPriceCents,
-              discountType: editing.discountType,
-              discountCents: editing.discountCents,
-              discountNotes: editing.discountNotes,
-              collectionMode: editing.collectionMode,
-              partnerCollectedCents: editing.partnerCollectedCents,
-              settlementNotes: editing.settlementNotes,
-              notes: editing.notes,
-            })
+            onSubmit(
+              {
+                partnerId: editing.partnerId,
+                adultGuestCount: editing.adultGuestCount,
+                childGuestCount: editing.childGuestCount,
+                adultUnitPriceCents: 30000,
+                childUnitPriceCents: editing.childUnitPriceCents,
+                discountType: editing.discountType,
+                discountCents: editing.discountCents,
+                discountNotes: editing.discountNotes,
+                collectionMode: editing.collectionMode,
+                partnerCollectedCents: editing.partnerCollectedCents,
+                settlementNotes: editing.settlementNotes,
+                notes: editing.notes,
+              },
+              {
+                guestCollectCents: editing.guestCollectCents,
+                partnerCollectedCents: editing.partnerCollectedCents,
+              },
+            )
           }
         >
           模拟保存改价

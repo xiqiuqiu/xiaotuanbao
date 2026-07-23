@@ -205,10 +205,16 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
   }
 }
 
+/** Path amounts used as the baseline for guest-collection change detection. */
+export type SourceOrderPathBaseline = {
+  guestCollectCents: number
+  partnerCollectedCents: number
+}
+
 /** Path amounts implied by an update payload (mirrors server computeSourceOrderAmounts). */
 export function resolvePathAmountsFromPayload(
   payload: ReturnType<typeof formValuesToPayload>,
-): { guestCollectCents: number; partnerCollectedCents: number } {
+): SourceOrderPathBaseline {
   const grossReceivableCents =
     payload.adultUnitPriceCents * payload.adultGuestCount +
     payload.childUnitPriceCents * payload.childGuestCount

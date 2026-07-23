@@ -35,6 +35,7 @@ import {
   sourceOrderToFormValues,
   totalGuestCount,
   type SourceOrderFormValues,
+  type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
 
 interface SourceOrderDrawerProps {
@@ -44,7 +45,10 @@ interface SourceOrderDrawerProps {
   amountReadOnly?: boolean
   loading: boolean
   onClose: () => void
-  onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
+  onSubmit: (
+    values: ReturnType<typeof formValuesToPayload>,
+    pathBaseline: SourceOrderPathBaseline | null,
+  ) => void
 }
 
 function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0] }) {
@@ -259,7 +263,15 @@ export function SourceOrderDrawer({
         layout="vertical"
         disabled={readOnly}
         initialValues={initialValues}
-        onFinish={(values) => onSubmit(formValuesToPayload(values))}
+        onFinish={(values) => {
+          const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
+            ? {
+                guestCollectCents: resolvedOrder.guestCollectCents,
+                partnerCollectedCents: resolvedOrder.partnerCollectedCents,
+              }
+            : null
+          onSubmit(formValuesToPayload(values), pathBaseline)
+        }}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>
           基础信息

@@ -22,6 +22,7 @@ import {
 import {
   formValuesToPayload,
   resolvePathAmountsFromPayload,
+  type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
 import type { DrawerState } from '../components/source-orders-tab-state'
 
@@ -128,76 +129,80 @@ export function useSourceOrderSubmit({
   impactAbortRef,
   latestEditingOrderIdRef,
 }: UseSourceOrderSubmitParams) {
-  return useCallback(async (payload: ReturnType<typeof formValuesToPayload>) => {
-    if (!editingOrder) {
-      saveMutation.mutate(payload)
-      return
-    }
-
-    const nextPath = resolvePathAmountsFromPayload(payload)
-    const pathChanged = didSourceAmountPathChange(
-      {
-        guestCollectCents: editingOrder.guestCollectCents,
-        partnerCollectedCents: editingOrder.partnerCollectedCents,
-      },
-      nextPath,
-    )
-    if (!pathChanged) {
-      saveMutation.mutate(payload)
-      return
-    }
-
-    impactAbortRef.current?.abort()
-    const controller = new AbortController()
-    impactAbortRef.current = controller
-    const requestOrderId = editingOrder.id
-
-    let impact
-    try {
-      impact = await getGuestCollectionChangeImpact(requestOrderId, controller.signal)
-    } catch (error) {
-      if (controller.signal.aborted) {
+  return useCallback(
+    async (
+      payload: ReturnType<typeof formValuesToPayload>,
+      /**
+       * Authoritative path amounts for change detection. Must come from the drawer GET
+       * detail used to hydrate the form; the list row can lag after receivable sync.
+       */
+      pathBaseline: SourceOrderPathBaseline | null = null,
+    ) => {
+      if (!editingOrder || !pathBaseline) {
+        saveMutation.mutate(payload)
         return
       }
-      throw error
-    }
 
-    if (latestEditingOrderIdRef.current !== requestOrderId) {
-      return
-    }
+      const nextPath = resolvePathAmountsFromPayload(payload)
+      const pathChanged = didSourceAmountPathChange(pathBaseline, nextPath)
+      if (!pathChanged) {
+        saveMutation.mutate(payload)
+        return
+      }
 
-    if (impact.affectedTransactionCount <= 0) {
-      saveMutation.mutate(payload)
-      return
-    }
+      impactAbortRef.current?.abort()
+      const controller = new AbortController()
+      impactAbortRef.current = controller
+      const requestOrderId = editingOrder.id
 
-    Modal.confirm({
-      title: '关联流水金额可能受影响',
-      content: (
-        <Space orientation="vertical" size={4} style={{ width: '100%' }}>
-          <span>
-            我方代收 {formatCents(editingOrder.guestCollectCents)} →{' '}
-            {formatCents(nextPath.guestCollectCents)}
-            {editingOrder.partnerCollectedCents !== nextPath.partnerCollectedCents
-              ? `；客户已收 ${formatCents(editingOrder.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
-              : ''}
-          </span>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            本单有 {impact.affectedTransactionCount}{' '}
-            笔未核销游客代收流水创建于变更前，保存后将标记「客源金额已变更」。确认继续？
-          </Typography.Text>
-        </Space>
-      ),
-      okText: '仍要保存',
-      cancelText: '取消',
-      onOk: () => {
-        if (latestEditingOrderIdRef.current !== requestOrderId) {
+      let impact
+      try {
+        impact = await getGuestCollectionChangeImpact(requestOrderId, controller.signal)
+      } catch (error) {
+        if (controller.signal.aborted) {
           return
         }
-        return saveMutation.mutateAsync(payload)
-      },
-    })
-  }, [editingOrder, impactAbortRef, latestEditingOrderIdRef, saveMutation])
+        throw error
+      }
+
+      if (latestEditingOrderIdRef.current !== requestOrderId) {
+        return
+      }
+
+      if (impact.affectedTransactionCount <= 0) {
+        saveMutation.mutate(payload)
+        return
+      }
+
+      Modal.confirm({
+        title: '关联流水金额可能受影响',
+        content: (
+          <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+            <span>
+              我方代收 {formatCents(pathBaseline.guestCollectCents)} →{' '}
+              {formatCents(nextPath.guestCollectCents)}
+              {pathBaseline.partnerCollectedCents !== nextPath.partnerCollectedCents
+                ? `；客户已收 ${formatCents(pathBaseline.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
+                : ''}
+            </span>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              本单有 {impact.affectedTransactionCount}{' '}
+              笔未核销游客代收流水创建于变更前，保存后将标记「客源金额已变更」。确认继续？
+            </Typography.Text>
+          </Space>
+        ),
+        okText: '仍要保存',
+        cancelText: '取消',
+        onOk: () => {
+          if (latestEditingOrderIdRef.current !== requestOrderId) {
+            return
+          }
+          return saveMutation.mutateAsync(payload)
+        },
+      })
+    },
+    [editingOrder, impactAbortRef, latestEditingOrderIdRef, saveMutation],
+  )
 }
 
 export function confirmBatchGenerateReceivables(
