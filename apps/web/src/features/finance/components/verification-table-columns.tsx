@@ -75,7 +75,7 @@ export function buildVerificationColumns({
 
   columns.push(
     { title: '流水号', dataIndex: 'transactionNo' },
-    { title: '收付款节点编号', dataIndex: 'scheduleNo' },
+    { title: '收付款单号', dataIndex: 'scheduleNo' },
     {
       title: '本次核销金额',
       dataIndex: 'amountCents',

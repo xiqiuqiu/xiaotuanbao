@@ -433,7 +433,7 @@ export function VerificationDetailDrawer({
                 <DetailColumns
                   left={
                     <>
-                      <Descriptions.Item label="收付款节点编号">
+                      <Descriptions.Item label="收付款单号">
                         <Typography.Text copyable>{schedule.scheduleNo}</Typography.Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="节点金额">

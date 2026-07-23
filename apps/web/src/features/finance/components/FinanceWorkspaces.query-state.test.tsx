@@ -106,7 +106,7 @@ describe('finance workspace query states', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
     await user.type(screen.getByPlaceholderText('流水号'), 'TX-8')
-    await user.type(screen.getByPlaceholderText('节点编号'), 'AR-3')
+    await user.type(screen.getByPlaceholderText('收付款单号'), 'AR-3')
     await user.type(screen.getByPlaceholderText('发团号/名称关键字'), '西湖')
     expect(listVerifications).toHaveBeenCalledTimes(1)
     await act(async () => void (await vi.advanceTimersByTimeAsync(300)))

@@ -123,7 +123,7 @@ describe('SupplierLedgerPanel', () => {
     })
 
     expect(screen.getByPlaceholderText('出团日期起')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('搜索节点编号 / 标题')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('搜索应付单号 / 费用项目')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '节点状态' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /重\s*置/ })).toBeInTheDocument()
     // 应付无到期日筛

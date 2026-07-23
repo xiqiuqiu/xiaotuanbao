@@ -81,7 +81,7 @@ describe('PartnerLedgerPanel', () => {
     })
 
     expect(screen.getByPlaceholderText('出团日期起')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('搜索节点编号 / 标题')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('搜索应收单号 / 收款方式')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('到期日起')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: '节点状态' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /重\s*置/ })).toBeInTheDocument()

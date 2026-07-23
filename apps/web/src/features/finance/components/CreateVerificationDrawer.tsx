@@ -364,7 +364,7 @@ function ScheduleSelectionSection({
       <div className={styles.selectionContent}>
         {selectedSchedule ? (
           <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-            <Descriptions.Item label="节点编号">
+            <Descriptions.Item label="收付款单号">
               {selectedSchedule.scheduleNo}
             </Descriptions.Item>
             <Descriptions.Item label="标题">
