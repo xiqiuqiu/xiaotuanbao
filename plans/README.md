@@ -104,6 +104,27 @@
 2. **性能**：041、042、043、044、047、048。
 3. **无障碍 / 结构**：045、046。
 
+## 2026-07-23 追加（基线 commit `03e5455`）
+
+来源：2026-07-23 `improve-animations` 工作台（`HomePage`）动效审计。范围：`HomePage.module.css` + 财务/计调/企业管理员图表与队列模块；按压 CSS 已大体合规，缺口在图表入场、触控 hover、占比条 `transition: all`、扫掠 Tooltip 延迟、按压 scale 不一致。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 49 | [049 — 关闭工作台图表入场动画](049-disable-workbench-chart-enter-animation.md) | HIGH | DONE | 无；建议最先 |
+| 50 | [050 — 工作台 hover 仅限精细指针](050-gate-workbench-hover-fine-pointer.md) | MEDIUM | DONE | 无；与 053 同改 CSS，可同批 |
+| 51 | [051 — 账龄占比条改用 transform](051-aging-share-progress-transform.md) | MEDIUM | DONE | 无；与 050/053 同改 `HomePage.module.css`，合并注意 |
+| 52 | [052 — 日/月条 Tooltip 零进入延迟](052-workbench-strip-tooltip-instant.md) | MEDIUM | DONE | 无 |
+| 53 | [053 — 统一账龄占比行 scale(0.97)](053-unify-aging-share-press-scale.md) | LOW | DONE | 建议 050 后或同 PR（同文件 `:active`） |
+
+建议批次：
+1. **HIGH**：049（三图表 `animate: false`）。
+2. **CSS 一组**：050、053、051（同改 `HomePage.module.css`，051 另动 `FinanceReceivablesModule`）。
+3. **Tooltip**：052（独立，可并行）。
+
+执行：`improve-animations execute plans/049-…`（或任意 agent 按计划落地）；改完跑 `pnpm --filter web typecheck` 与计划内 vitest。
+
+执行记录（分支 `animation/049-053-workbench-motion`）：049–053 已落地；vitest 5 文件 22 通过；`pnpm --filter web typecheck` 绿。基线无 `.settlementQueueItem`（050 仅门控既有 4 类 hover）；合并含结算队列 WIP 时请补 fine-pointer 门控。
+
 ## 批次与验证门
 
 1. **安全与正确性**：001、002、004、005、006、007；以及 026–029。每个计划先跑聚焦测试；批次结束跑 web typecheck 与相关 vitest。

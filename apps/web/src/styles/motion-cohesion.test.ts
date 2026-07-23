@@ -35,6 +35,7 @@ describe('motion cohesion CSS', () => {
       'utf8',
     )
     const loginCss = readFileSync(resolve(__dirname, '../pages/LoginPage.module.css'), 'utf8')
+    const homeCss = readFileSync(resolve(__dirname, '../pages/HomePage.module.css'), 'utf8')
 
     expect(globalCss).toMatch(
       /\.ant-btn\s*\{[^}]*transition:\s*transform 100ms var\(--ant-motion-ease-out-quint/,
@@ -52,5 +53,9 @@ describe('motion cohesion CSS', () => {
     expect(loginCss).not.toMatch(
       /\.submit\s*\{[\s\S]*?background-color [^;]*cubic-bezier\(0\.23, 1, 0\.32, 1\)/,
     )
+
+    expect(homeCss).toContain('scale(0.97)')
+    expect(homeCss).not.toContain('scale(0.99)')
   })
 })
+

@@ -107,7 +107,9 @@ describe('FinanceReceivablesModule aging chart selection', () => {
     const user = userEvent.setup()
     renderAging(extremeBuckets)
 
-    expect(screen.getByTestId('workbench-aging-share-list')).toBeInTheDocument()
+    const shareList = screen.getByTestId('workbench-aging-share-list')
+    expect(shareList).toBeInTheDocument()
+    expect(shareList.querySelector('.ant-progress')).toBeNull()
     expect(columnSpy).not.toHaveBeenCalled()
     expect(dualAxesSpy).not.toHaveBeenCalled()
     expect(screen.getByLabelText('账龄图表显示模式')).toBeInTheDocument()
