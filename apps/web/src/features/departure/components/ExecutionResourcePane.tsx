@@ -94,13 +94,13 @@ function ExecutionResourceHeader({
         <Typography.Text strong>资源安排</Typography.Text>
         {showAmountMeta ? (
           <Typography.Text type="secondary" aria-label="本段资源金额汇总">
-            资源 {amountSummary.resourceCount} 项 · 资源金额{' '}
+            资源 {amountSummary.resourceCount} 项 ｜ 资源金额{' '}
             <Typography.Text strong>
               {formatCents(amountSummary.resourceAmountCents)}
             </Typography.Text>
             {amountSummary.ungeneratedPayableCents > 0 ? (
               <>
-                {' · 尚未生成应付 '}
+                {' ｜ 尚未生成应付 '}
                 <Typography.Text strong style={{ color: token.colorWarning }}>
                   {formatCents(amountSummary.ungeneratedPayableCents)}
                 </Typography.Text>

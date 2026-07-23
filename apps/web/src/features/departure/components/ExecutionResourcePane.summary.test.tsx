@@ -129,8 +129,9 @@ describe('ExecutionResourcePane amount summary', () => {
 
     const summary = await screen.findByLabelText('本段资源金额汇总')
     expect(summary.textContent).toContain('资源 2 项')
-    expect(summary.textContent).toContain('资源金额 ¥11,200.00')
-    expect(summary.textContent).toContain('尚未生成应付 ¥11,200.00')
+    expect(summary.textContent).toContain(
+      '资源 2 项 ｜ 资源金额 ¥11,200.00 ｜ 尚未生成应付 ¥11,200.00',
+    )
   })
 
   it('omits the summary when the segment has no resources', async () => {
