@@ -23,6 +23,12 @@ type DepartureColumnsActions = {
   purgePendingId?: string | null
 }
 
+/**
+ * 与 `buildDepartureColumns` 列宽之和对齐（含复制+删除操作列）。
+ * Table `scroll.x` 不得小于此值，否则 fixed 操作列会压住左侧内容。
+ */
+export const DEPARTURE_LIST_TABLE_SCROLL_X = 2300
+
 export function buildDepartureColumns(
   actions: DepartureColumnsActions,
   canEdit: boolean,
@@ -123,7 +129,7 @@ export function buildDepartureColumns(
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 140,
+      width: 160,
       render: (_value, record) => (
         <Space size="small">
           <Button

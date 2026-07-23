@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DepartureSummary } from '@/types/api'
-import { buildDepartureColumns } from './departure-columns'
+import { buildDepartureColumns, DEPARTURE_LIST_TABLE_SCROLL_X } from './departure-columns'
 
 afterEach(() => {
   cleanup()
@@ -63,5 +63,18 @@ describe('发团列表操作列', () => {
       false,
     ).find((column) => 'key' in column && column.key === 'actions')
     expect(actionColumn).toBeUndefined()
+  })
+
+  it('含删除的操作列有足够宽度，且全部列宽之和不超过表格横向滚动宽度', () => {
+    const columns = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true)
+    const actionColumn = columns.find((column) => 'key' in column && column.key === 'actions')
+    expect(actionColumn?.width).toBeGreaterThanOrEqual(160)
+
+    const totalWidth = columns.reduce((sum, column) => {
+      const width = typeof column.width === 'number' ? column.width : 0
+      return sum + width
+    }, 0)
+
+    expect(totalWidth).toBeLessThanOrEqual(DEPARTURE_LIST_TABLE_SCROLL_X)
   })
 })

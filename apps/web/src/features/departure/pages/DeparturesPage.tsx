@@ -20,7 +20,7 @@ import {
 } from '@/lib/query/list-query-ux'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
-import { buildDepartureColumns } from './departure-columns'
+import { buildDepartureColumns, DEPARTURE_LIST_TABLE_SCROLL_X } from './departure-columns'
 import {
   hasWorkbenchDepartureListSearch,
   resolveWorkbenchDepartureFilterBanner,
@@ -362,7 +362,7 @@ export function DeparturesPage() {
           loading={hardLoading}
           columns={columns}
           dataSource={departuresResult?.items ?? []}
-          scroll={{ x: 2100 }}
+          scroll={{ x: DEPARTURE_LIST_TABLE_SCROLL_X }}
           className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: state.page,
