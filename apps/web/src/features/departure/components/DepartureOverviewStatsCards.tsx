@@ -286,7 +286,9 @@ export function DepartureOverviewStatsCards({
           <SummaryCard
             title="结算应收"
             value={formatCents(departure.netReceivableCents)}
-            equationDescription="结算应收是全部客源单优惠后的团款合计，不含手工创建的其他应收。"
+            equationDescription="本团当前应向客户收取的金额。
+计算：原始团款合计-优惠合计。
+根据客源单实时统计，无需生成应收。"
             animateEnter={animateEnter}
           />
         </Col>
