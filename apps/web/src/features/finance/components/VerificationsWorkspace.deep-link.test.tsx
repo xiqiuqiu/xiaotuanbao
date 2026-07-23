@@ -81,7 +81,7 @@ describe('VerificationsWorkspace deep-link lock lifecycle', () => {
       expect(params).not.toHaveProperty('transactionNo')
       expect(params).not.toHaveProperty('transactionNoMatch')
     })
-    expect((screen.getByPlaceholderText('流水号') as HTMLInputElement).value).toBe('')
+    expect((screen.getByPlaceholderText('关联流水号') as HTMLInputElement).value).toBe('')
   })
 
   it('does not reset when the user manually edits the number in locked state', async () => {
@@ -100,7 +100,7 @@ describe('VerificationsWorkspace deep-link lock lifecycle', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
     // Manual edit unlocks (reducer clears lock) and clears the URL via navigate({}).
-    await user.type(screen.getByPlaceholderText('流水号'), '9')
+    await user.type(screen.getByPlaceholderText('关联流水号'), '9')
     await act(async () => void (await vi.advanceTimersByTimeAsync(300)))
 
     expect(navigate).toHaveBeenCalled()
@@ -112,7 +112,7 @@ describe('VerificationsWorkspace deep-link lock lifecycle', () => {
       expect(params).not.toHaveProperty('transactionNoMatch')
     })
     // Input retained, not wiped by the deep-link effect.
-    expect((screen.getByPlaceholderText('流水号') as HTMLInputElement).value).toBe(
+    expect((screen.getByPlaceholderText('关联流水号') as HTMLInputElement).value).toBe(
       'TX-10019',
     )
   })

@@ -93,8 +93,8 @@ function VerificationBasicsSection({
         <Col xs={24} md={7}>
           <Form.Item
             name="direction"
-            label="核销方向"
-            rules={[{ required: true, message: '请选择核销方向' }]}
+            label="核销类型"
+            rules={[{ required: true, message: '请选择核销类型' }]}
           >
             <Radio.Group
               disabled={directionLocked}
@@ -204,7 +204,7 @@ function TransactionSelectionSection({
       <div className={styles.selectionContent}>
         {selectedTransaction ? (
           <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-            <Descriptions.Item label="流水号">
+            <Descriptions.Item label="关联流水号">
               {selectedTransaction.transactionNo}
             </Descriptions.Item>
             <Descriptions.Item label="交易日期">
@@ -261,14 +261,14 @@ function TransactionSelectionSection({
         ) : !direction ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="请先选择核销方向"
+            description="请先选择核销类型"
           />
         ) : (
           <>
             <Input.Search
               allowClear
               aria-label="搜索资金流水"
-              placeholder="搜索流水号、往来对象或发团"
+              placeholder="搜索关联流水号、往来对象或发团"
               value={searchKeyword}
               onChange={(event) => onSearchKeywordChange(event.target.value)}
               onSearch={(value) => onSearchKeywordChange(value)}
@@ -364,7 +364,7 @@ function ScheduleSelectionSection({
       <div className={styles.selectionContent}>
         {selectedSchedule ? (
           <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-            <Descriptions.Item label="收付款单号">
+            <Descriptions.Item label="关联账款单号">
               {selectedSchedule.scheduleNo}
             </Descriptions.Item>
             <Descriptions.Item label="标题">
@@ -676,7 +676,7 @@ function VerificationPreview({
       <section>
         <Typography.Title level={5}>核销条件</Typography.Title>
         <Descriptions column={{ xs: 1, sm: 3 }} size="small">
-          <Descriptions.Item label="核销方向">
+          <Descriptions.Item label="核销类型">
             {catalogLabel(VERIFICATION_DIRECTION_LABELS, values.direction)}
           </Descriptions.Item>
           <Descriptions.Item label="核销日期">

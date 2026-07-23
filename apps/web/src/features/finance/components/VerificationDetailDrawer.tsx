@@ -179,10 +179,10 @@ function VerificationFlow({
   const { token } = theme.useToken()
   const scheduleLabel =
     schedule.direction === 'receivable'
-      ? '应收节点'
+      ? '应收单号'
       : schedule.direction === 'payable'
-        ? '应付节点'
-        : '收付款节点'
+        ? '应付单号'
+        : '收付款单号'
 
   return (
     <DetailSection title="核销链路">
@@ -329,7 +329,7 @@ export function VerificationDetailDrawer({
               <Descriptions.Item label="核销单号">
                 <Typography.Text copyable>{verification?.verificationNo}</Typography.Text>
               </Descriptions.Item>
-              <Descriptions.Item label="核销方向">
+              <Descriptions.Item label="核销类型">
                 <Tag color={VERIFICATION_DIRECTION_COLORS[verification?.direction ?? '']}>
                   {catalogLabel(VERIFICATION_DIRECTION_LABELS, verification?.direction)}
                 </Tag>
@@ -337,12 +337,12 @@ export function VerificationDetailDrawer({
               <Descriptions.Item label="核销日期">
                 {verification?.verificationDate}
               </Descriptions.Item>
-              <Descriptions.Item label="状态">
+              <Descriptions.Item label="核销状态">
                 <Tag color={VERIFICATION_STATUS_COLORS[verification?.status ?? '']}>
                   {catalogLabel(VERIFICATION_STATUS_LABELS, verification?.status)}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="核销人">{verification?.createdByName}</Descriptions.Item>
+              <Descriptions.Item label="操作人">{verification?.createdByName}</Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {verification?.createdAt ? formatDateTime(verification.createdAt) : '-'}
               </Descriptions.Item>
@@ -358,7 +358,7 @@ export function VerificationDetailDrawer({
                   emphasis: true,
                 },
                 {
-                  label: '核销后未结金额',
+                  label: '账款剩余未结金额',
                   value: formatCents(verification?.billUnsettledAfterCents ?? 0),
                 },
               ]}
@@ -383,7 +383,7 @@ export function VerificationDetailDrawer({
                 <DetailColumns
                   left={
                     <>
-                      <Descriptions.Item label="流水号">
+                      <Descriptions.Item label="关联流水号">
                         <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="流水金额">
@@ -433,7 +433,7 @@ export function VerificationDetailDrawer({
                 <DetailColumns
                   left={
                     <>
-                      <Descriptions.Item label="收付款单号">
+                      <Descriptions.Item label="关联账款单号">
                         <Typography.Text copyable>{schedule.scheduleNo}</Typography.Text>
                       </Descriptions.Item>
                       <Descriptions.Item label="节点金额">
