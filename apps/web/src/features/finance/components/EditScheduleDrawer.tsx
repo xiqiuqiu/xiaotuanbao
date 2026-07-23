@@ -74,14 +74,17 @@ export function EditScheduleDrawer({
               <DatePicker style={{ width: '100%' }} disabled={financeLocked} />
             </Form.Item>
           ) : null}
-          <Form.Item label="往来对象类型">
+          <Form.Item label={isReceivable ? '收款对象类型' : '付款对象类型'}>
             <Select
               disabled
               value={schedule.counterpartyType}
               options={[...COUNTERPARTY_TYPE_OPTIONS]}
             />
           </Form.Item>
-          <Form.Item name="counterpartyName" label="往来对象名称">
+          <Form.Item
+            name="counterpartyName"
+            label={isReceivable ? '收款对象名称' : '付款对象名称'}
+          >
             <Input disabled={financeLocked} />
           </Form.Item>
         </Form>

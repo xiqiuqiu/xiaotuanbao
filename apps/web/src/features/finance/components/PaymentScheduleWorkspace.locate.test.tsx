@@ -317,7 +317,7 @@ describe('PaymentScheduleWorkspace server search debounce', () => {
     const firstSignal = listDepartureReceivables.mock.calls[0]?.[2] as AbortSignal
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
 
-    await user.type(screen.getByPlaceholderText('往来对象'), '上海')
+    await user.type(screen.getByPlaceholderText('收款对象'), '上海')
     expect(listDepartureReceivables).toHaveBeenCalledTimes(1)
 
     await act(async () => {

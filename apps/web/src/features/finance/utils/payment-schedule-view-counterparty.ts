@@ -2,7 +2,7 @@ export type ViewCounterpartyFilter = {
   counterpartyKeyword: string
 }
 
-/** Map 客源单「客户」→ 应收往来对象名称关键字。 */
+/** Map 客源单「客户」→ 应收收款对象名称关键字。 */
 export function counterpartyFilterFromSourceOrder(order: {
   partnerName: string
 }): ViewCounterpartyFilter | undefined {
@@ -13,7 +13,7 @@ export function counterpartyFilterFromSourceOrder(order: {
   return { counterpartyKeyword }
 }
 
-/** Map 资源对手方 → 应付往来对象名称关键字。 */
+/** Map 资源对手方 → 应付付款对象名称关键字。 */
 export function counterpartyFilterFromSegmentResource(resource: {
   counterpartyName: string
 }): ViewCounterpartyFilter | undefined {

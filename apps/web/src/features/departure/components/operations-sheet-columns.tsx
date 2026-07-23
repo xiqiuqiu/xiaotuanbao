@@ -145,7 +145,7 @@ export const resourceColumns: ColumnsType<DepartureOperationsSheetResourceRow> =
     width: 90,
   },
   {
-    title: '对手方',
+    title: '供应商',
     dataIndex: 'counterpartyName',
     width: 140,
   },

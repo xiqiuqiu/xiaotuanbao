@@ -13,7 +13,7 @@ import { PaymentChannel, PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs } from './helpers'
 
 /**
- * 端到端验证应收/应付列表新列（费用类别/费用项目/客源单/收款方式/往来对象）
+ * 端到端验证应收/应付列表新列（费用类别/费用项目/来源客源单/收款方式/收款对象或付款对象）
  * 派生字段 resourceKind / resourceTitle / sourceOrderName 在真实状态流转
  * （生成 → 源事实改名 → 登记收付款 → 关闭）下的显示正确性。四个 scope 的列表
  * 都走同一 PaymentScheduleService.list，此处以发团 scope 与全局 scope 覆盖。

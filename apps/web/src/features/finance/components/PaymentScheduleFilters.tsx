@@ -29,9 +29,9 @@ interface PaymentScheduleFiltersProps {
   departureDateRange?: DepartureDateRange
   /**
    * 场景决定筛选项组合：
-   * - global：显示发团筛选与往来对象搜索；
+   * - global：显示发团筛选与收款/付款对象搜索；
    * - departure：发团已锚定，隐藏发团筛选；
-   * - partner / supplier：往来对象已锚定，隐藏往来对象搜索，
+   * - partner / supplier：对手方已锚定，隐藏收款/付款对象搜索，
    *   改为出团日期区间主时间轴（与确认单周期同口径）。
    */
   scope: PaymentScheduleFiltersScope
@@ -137,8 +137,8 @@ export function PaymentScheduleFilters({
         {showCounterpartyFilter ? (
           <Input.Search
             allowClear
-            aria-label="往来对象"
-            placeholder="往来对象"
+            aria-label={isReceivable ? '收款对象' : '付款对象'}
+            placeholder={isReceivable ? '收款对象' : '付款对象'}
             style={{ width: 200, maxWidth: '100%' }}
             value={counterpartyKeyword}
             onChange={(event) => onCounterpartyKeywordChange(event.target.value)}

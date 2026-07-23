@@ -165,7 +165,9 @@ export function PaymentScheduleDetailDrawer({
                 <Descriptions.Item label="未结清">
                   {formatCents(schedule.unsettledAmountCents)}
                 </Descriptions.Item>
-                <Descriptions.Item label="结清进度">{settlement?.label ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label={isReceivable ? '收款状态' : '付款状态'}>
+                  {settlement?.label ?? '-'}
+                </Descriptions.Item>
                 <Descriptions.Item label="关闭状态">
                   {schedule.cancelledAt
                     ? `已关闭 · ${catalogLabel(CLOSE_DISPOSITION_LABELS, schedule.closeDisposition)}`

@@ -16,7 +16,7 @@ export function resolveSegmentResourceCounterparty(
 } {
   if (input.resourceKind === ResourceKind.outsource) {
     if (!input.partnerId) {
-      throw new BadRequestException('请选择承接同行')
+      throw new BadRequestException('请选择承接方')
     }
     if (input.supplierId) {
       throw new BadRequestException('拼出资源不能关联供应商')

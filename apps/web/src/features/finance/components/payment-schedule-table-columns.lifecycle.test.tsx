@@ -208,7 +208,7 @@ describe('应付资源节点状态流转的列表显示', () => {
     expect(within(settledRow).getByText('已介入')).toBeTruthy()
 
     const closedRow = row('AP-CLOSED')
-    // 关闭仍有未结清：结清进度保持「部分付款」并叠加「已关闭」标签。
+    // 关闭仍有未结清：付款状态保持「部分付款」并叠加「已关闭」标签。
     expect(within(closedRow).getByText('部分付款')).toBeTruthy()
     expect(within(closedRow).getByText('已关闭')).toBeTruthy()
     expect(within(closedRow).getByText('¥300.00')).toBeTruthy()
@@ -294,19 +294,21 @@ describe('应收客源节点状态流转的列表显示', () => {
     renderList(true, [pending, overdue, partialOverdue, collected])
 
     expect(screen.getByText('应收单号')).toBeTruthy()
-    expect(screen.getByText('客源单')).toBeTruthy()
+    expect(screen.getByText('来源客源单')).toBeTruthy()
     expect(screen.getByText('收款方式')).toBeTruthy()
+    expect(screen.getByText('收款对象')).toBeTruthy()
+    expect(screen.getByText('收款状态')).toBeTruthy()
 
     const pendingRow = row('AR-PENDING')
     expect(within(pendingRow).getByText('福建土楼专线地接 7月15日发客')).toBeTruthy()
     expect(within(pendingRow).getByText('客户补款')).toBeTruthy()
-    // 客户补款往来对象为发客 Partner 名。
+    // 客户补款收款对象为发客 Partner 名。
     expect(within(pendingRow).getByText('福建土楼专线地接')).toBeTruthy()
     expect(within(pendingRow).getByText('待收款')).toBeTruthy()
     expect(within(pendingRow).queryByText('已逾期')).toBeNull()
 
     const overdueRow = row('AR-OVERDUE')
-    // 逾期：结清进度仍是「待收款」，叠加「已逾期」标签。
+    // 逾期：收款状态仍是「待收款」，叠加「已逾期」标签。
     expect(within(overdueRow).getByText('待收款')).toBeTruthy()
     expect(within(overdueRow).getByText('已逾期')).toBeTruthy()
 
@@ -322,7 +324,7 @@ describe('应收客源节点状态流转的列表显示', () => {
     expect(within(collectedRow).queryByText('已逾期')).toBeNull()
   })
 
-  it('游客代收：往来对象统一显示「游客」，关闭后叠加已关闭', () => {
+  it('游客代收：收款对象统一显示「游客」，关闭后叠加已关闭', () => {
     const guestPending = deriveRow({
       direction: 'receivable',
       amountCents: 300000,

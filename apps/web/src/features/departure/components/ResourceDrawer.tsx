@@ -212,12 +212,12 @@ export function ResourceDrawer({
         {outsource ? (
           <Form.Item
             name="partnerId"
-            label="承接同行"
-            rules={[{ required: true, message: '请选择承接同行' }]}
+            label="承接方"
+            rules={[{ required: true, message: '请选择承接方' }]}
           >
             <Select
               showSearch={{ optionFilterProp: 'label' }}
-              placeholder="选择合作伙伴"
+              placeholder="选择承接方"
               options={partnersResult?.items.map((partner) => ({
                 value: partner.id,
                 label: partner.name,

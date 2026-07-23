@@ -1,6 +1,6 @@
 import { Col, DatePicker, Divider, Drawer, Form, Input, InputNumber, Row, Select, Space, Button, Typography } from 'antd'
 import type { FormInstance } from 'antd/es/form'
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { CounterpartyType, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { PAYMENT_CHANNEL_OPTIONS, formatCents } from '../catalog'
 import {
   counterpartyCollectionMethodText,
@@ -30,7 +30,7 @@ const COPY: Record<
   payment: {
     title: '登记付款',
     scheduleNoLabel: '应付单号',
-    counterpartyLabel: '供应商',
+    counterpartyLabel: '付款对象',
     totalLabel: '应付总额',
     settledLabel: '已付',
     unsettledLabel: '未付',
@@ -43,7 +43,7 @@ const COPY: Record<
   collection: {
     title: '登记收款',
     scheduleNoLabel: '应收单号',
-    counterpartyLabel: '客户',
+    counterpartyLabel: '收款对象',
     totalLabel: '应收总额',
     settledLabel: '已收',
     unsettledLabel: '未收',
@@ -128,7 +128,14 @@ export function RegisterSettlementDrawer({
               />
             </Form.Item>
             <Form.Item label={copy.counterpartyLabel}>
-              <Input value={counterpartyDisplayName(schedule.counterpartyName)} disabled />
+              <Input
+                value={
+                  schedule.counterpartyType === CounterpartyType.GUEST
+                    ? '游客'
+                    : counterpartyDisplayName(schedule.counterpartyName)
+                }
+                disabled
+              />
             </Form.Item>
 
             <Row gutter={16}>

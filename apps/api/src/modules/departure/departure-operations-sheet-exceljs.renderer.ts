@@ -207,7 +207,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       row = writeSegmentTitle(sheet, row, segment.name, meta || '-')
       row = writeHeaderRow(sheet, row, [
         '资源种类',
-        '对手方',
+        '供应商',
         '名称',
         '约定应付',
         '财务金额',

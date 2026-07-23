@@ -67,7 +67,7 @@ export function buildExecutionResourceColumns({
       render: (value: string) => catalogLabel(RESOURCE_KIND_LABELS, value),
     },
     {
-      title: '对手方',
+      title: '供应商',
       dataIndex: 'counterpartyName',
       width: 140,
     },

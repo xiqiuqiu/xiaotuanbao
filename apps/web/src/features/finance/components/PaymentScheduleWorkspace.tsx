@@ -24,7 +24,7 @@ export type PaymentScheduleWorkspaceProps = {
   highlightSourceOrderId?: string
   /** One-shot locate: flash rows for this segment resource, then clear via onHighlightConsumed. */
   highlightSegmentResourceId?: string
-  /** Prefill 往来对象关键字（如从「查看应收 / 查看应付」带入）。 */
+  /** Prefill 收款/付款对象关键字（如从「查看应收 / 查看应付」带入）。 */
   initialCounterpartyKeyword?: string
   /** 精确节点编号（工作台队列单项下钻，服务端筛选）。 */
   scheduleNo?: string

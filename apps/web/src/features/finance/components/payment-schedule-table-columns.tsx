@@ -43,7 +43,7 @@ function feeItemText(schedule: PaymentScheduleSummary): string {
   return schedule.title || DASH
 }
 
-/** 应收「客源单」：客源单展示名；非客源来源显示「-」。 */
+/** 应收「来源客源单」：客源单展示名；非客源来源显示「-」。 */
 function sourceOrderText(schedule: PaymentScheduleSummary): string {
   return schedule.sourceOrderName || DASH
 }
@@ -53,7 +53,7 @@ function collectionMethodText(schedule: PaymentScheduleSummary): string {
   return RECEIVABLE_COLLECTION_METHOD_LABELS[schedule.sourceType] ?? '其他'
 }
 
-/** 「往来对象」列展示值：游客代收统一显示「游客」，其余显示对手方名称。 */
+/** 收款对象 / 付款对象展示值：游客代收统一显示「游客」，其余显示对手方名称。 */
 function counterpartyText(schedule: PaymentScheduleSummary): string {
   if (schedule.counterpartyType === CounterpartyType.GUEST) {
     return '游客'
@@ -197,7 +197,7 @@ export function buildPaymentScheduleColumns({
   const sourceColumns: ColumnsType<PaymentScheduleSummary> = isReceivable
     ? [
         {
-          title: '客源单',
+          title: '来源客源单',
           width: 140,
           ellipsis: { showTitle: false },
           render: (_, record) => (
@@ -219,7 +219,7 @@ export function buildPaymentScheduleColumns({
       ]
 
   const counterpartyColumn: ColumnsType<PaymentScheduleSummary>[number] = {
-    title: '往来对象',
+    title: isReceivable ? '收款对象' : '付款对象',
     width: 160,
     ellipsis: { showTitle: false },
     render: (_, record) => (
@@ -286,7 +286,7 @@ export function buildPaymentScheduleColumns({
     },
     ...(isReceivable ? [{ title: '到期日', dataIndex: 'dueDate' as const }] : []),
     {
-      title: '结清进度',
+      title: isReceivable ? '收款状态' : '付款状态',
       key: 'settlementLabel',
       render: (_, record) => {
         const direction = isReceivable ? 'receivable' : 'payable'
