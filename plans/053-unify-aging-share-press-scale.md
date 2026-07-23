@@ -1,6 +1,6 @@
 # 053 — 统一账龄占比行按压为 scale(0.97)
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 03e5455
 - **Severity**: LOW
 - **Category**: Cohesion & tokens

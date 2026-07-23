@@ -1,6 +1,6 @@
 # 052 — 工作台日/月条 Tooltip 扫掠零延迟
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 03e5455
 - **Severity**: MEDIUM
 - **Category**: Purpose & frequency / Easing & duration

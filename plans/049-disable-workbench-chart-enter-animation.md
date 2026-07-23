@@ -1,6 +1,6 @@
 # 049 — 关闭工作台图表入场动画
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 03e5455
 - **Severity**: HIGH
 - **Category**: Accessibility / Purpose & frequency

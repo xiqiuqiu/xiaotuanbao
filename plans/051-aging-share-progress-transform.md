@@ -1,6 +1,6 @@
 # 051 — 账龄占比条改用 transform，去掉 transition: all
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 03e5455
 - **Severity**: MEDIUM
 - **Category**: Performance

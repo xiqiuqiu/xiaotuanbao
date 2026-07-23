@@ -817,12 +817,16 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByRole('heading', { name: '待生成应付' })).toBeInTheDocument()
     const payableTooltip = screen.getByLabelText('待生成应付统计口径')
     expect(payableTooltip).toBeInTheDocument()
+    expect(payableTooltip.closest('.ant-card-head-title')).toBeTruthy()
+    expect(payableTooltip.closest('.ant-card-extra')).toBeNull()
     await user.hover(payableTooltip)
     expect(await screen.findByText(
       '按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。',
     )).toBeInTheDocument()
     const receivableTooltip = screen.getByLabelText('待生成应收统计口径')
     expect(receivableTooltip).toBeInTheDocument()
+    expect(receivableTooltip.closest('.ant-card-head-title')).toBeTruthy()
+    expect(receivableTooltip.closest('.ant-card-extra')).toBeNull()
     await user.hover(receivableTooltip)
     expect(await screen.findByText(
       '按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。',
@@ -834,6 +838,12 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('关联发团 1 · 行程段 1')).toBeInTheDocument()
     expect(screen.getAllByText('酒店').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('用车').length).toBeGreaterThanOrEqual(1)
+    const payableTitle = screen.getByText('待生成应付资源 1')
+    expect(payableTitle.closest('button')).toBeTruthy()
+    expect(payableTitle.closest('.ant-typography')).toBeTruthy()
+    expect(
+      screen.getByText('关联发团 1 · 行程段 1').closest('.ant-typography-secondary'),
+    ).toBeTruthy()
     expect(screen.queryByText('可确认结清')).not.toBeInTheDocument()
     expect(screen.getByText('未来团量与客流')).toBeInTheDocument()
 
@@ -1073,8 +1083,8 @@ describe('HomePage workbench lifecycle', () => {
     renderPage()
 
     expect(await screen.findByText('待付款')).toBeInTheDocument()
+    expect(await screen.findByText('待生成账款')).toBeInTheDocument()
     expect(screen.getAllByText('待核销流水').length).toBeGreaterThanOrEqual(2)
-    expect(screen.getByText('待生成账款')).toBeInTheDocument()
     expect(screen.getByText('¥215,400.00')).toBeInTheDocument()
     expect(screen.getByText('¥46,800.00')).toBeInTheDocument()
     expect(screen.getByText(/18 个节点/)).toBeInTheDocument()

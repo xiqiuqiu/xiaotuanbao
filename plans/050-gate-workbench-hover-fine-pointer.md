@@ -1,6 +1,6 @@
 # 050 — 工作台 hover 仅限精细指针
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: 03e5455
 - **Severity**: MEDIUM
 - **Category**: Accessibility

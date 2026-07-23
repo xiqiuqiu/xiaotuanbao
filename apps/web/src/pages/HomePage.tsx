@@ -22,6 +22,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  theme,
 } from 'antd'
 import { useAuthStore } from '@/app/store/auth.store'
 import { PageHeader } from '@/layouts/PageHeader'
@@ -43,7 +44,6 @@ import {
   RESOURCE_KIND_LABELS,
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
-import { FinanceFundsModule } from './FinanceFundsModule'
 import { OrganizationRiskModule } from './OrganizationRiskModule'
 import { workbenchQueryOptions } from './workbench-query'
 
@@ -62,6 +62,12 @@ const FinanceReceivablesModule = lazy(() =>
 const FinanceMetricStrip = lazy(() =>
   import('./FinanceReceivablesModule').then((module) => ({
     default: module.FinanceMetricStrip,
+  })),
+)
+
+const FinanceFundsModule = lazy(() =>
+  import('./FinanceFundsModule').then((module) => ({
+    default: module.FinanceFundsModule,
   })),
 )
 
@@ -236,6 +242,108 @@ function isReceivablePendingItem(
   return 'kind' in item && item.kind === 'coordinator-receivable-pending'
 }
 
+function SettlementQueueCard({
+  title,
+  tooltip,
+  tooltipAriaLabel,
+  viewAllHref,
+  viewAllCount,
+  viewAllAriaLabel,
+  items,
+  emptyText,
+}: {
+  title: string
+  tooltip: string
+  tooltipAriaLabel: string
+  viewAllHref?: string
+  viewAllCount: number
+  viewAllAriaLabel: string
+  items: Array<WorkbenchCoordinatorPayablePendingItem | WorkbenchCoordinatorReceivablePendingItem>
+  emptyText: string
+}) {
+  const navigate = useNavigate()
+  const { token } = theme.useToken()
+  const visibleItems = items.slice(0, 5)
+
+  return (
+    <Card
+      className={styles.settlementCard}
+      title={(
+        <Flex align="center" gap={token.marginXXS}>
+          <Typography.Title level={5}>{title}</Typography.Title>
+          <Tooltip title={tooltip}>
+            <Button
+              type="text"
+              size="small"
+              icon={<InfoCircleOutlined />}
+              aria-label={tooltipAriaLabel}
+              styles={{ root: { width: 24, minWidth: 24, height: 24, padding: 0 } }}
+            />
+          </Tooltip>
+        </Flex>
+      )}
+      extra={viewAllHref ? (
+        <Button
+          type="link"
+          icon={<RightOutlined />}
+          iconPlacement="end"
+          styles={{ root: { paddingInline: 0 } }}
+          aria-label={viewAllAriaLabel}
+          onClick={() => void navigate({ to: viewAllHref })}
+        >
+          查看全部 {viewAllCount} 项
+        </Button>
+      ) : null}
+    >
+      {visibleItems.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
+      ) : (
+        <Flex vertical gap={0} className={styles.settlementQueue}>
+          {visibleItems.map((item) => {
+            const description = isPayablePendingItem(item)
+              ? `${item.departureName} · ${item.segmentName}`
+              : item.departureName
+            return (
+              <button
+                type="button"
+                key={item.id}
+                className={styles.settlementQueueItem}
+                title={item.title}
+                onClick={() => void navigate({ to: item.href })}
+              >
+                <Flex vertical gap={token.marginXXS} className={styles.settlementQueueBody}>
+                  <Flex align="center" gap={token.marginXS} className={styles.settlementQueueTitleRow}>
+                    {isPayablePendingItem(item) ? (
+                      <Tag style={{ marginInlineEnd: 0 }}>
+                        {catalogLabel(RESOURCE_KIND_LABELS, item.resourceKind)}
+                      </Tag>
+                    ) : null}
+                    <Typography.Text
+                      strong
+                      ellipsis={{ tooltip: item.title }}
+                      className={styles.settlementQueueTitle}
+                    >
+                      {item.title}
+                    </Typography.Text>
+                  </Flex>
+                  <Typography.Text
+                    type="secondary"
+                    ellipsis={{ tooltip: description }}
+                    style={{ fontSize: token.fontSizeSM }}
+                  >
+                    {description}
+                  </Typography.Text>
+                </Flex>
+                <RightOutlined aria-hidden className={styles.settlementQueueChevron} />
+              </button>
+            )
+          })}
+        </Flex>
+      )}
+    </Card>
+  )
+}
+
 function CoordinatorSettlementModule({
   module,
   payableMetric,
@@ -243,101 +351,32 @@ function CoordinatorSettlementModule({
   module: WorkbenchModule
   payableMetric?: WorkbenchModule['metrics'][number]
 }) {
-  const navigate = useNavigate()
   const pendingMetric = module.metrics.find((metric) => metric.key === 'pending-receivables')
   const payableItems = module.items.filter(isPayablePendingItem)
   const pendingItems = module.items.filter(isReceivablePendingItem)
 
-  const queue = (
-    items: Array<WorkbenchCoordinatorPayablePendingItem | WorkbenchCoordinatorReceivablePendingItem>,
-    emptyText: string,
-  ) => items.length === 0 ? (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
-  ) : (
-    <Space orientation="vertical" size={0} className={styles.queueList}>
-      {items.slice(0, 5).map((item) => (
-        <button
-          type="button"
-          key={item.id}
-          className={styles.queueItem}
-          title={item.title}
-          onClick={() => void navigate({ to: item.href })}
-        >
-          <span className={styles.queueBody}>
-            <span className={styles.queueTitleRow}>
-              {isPayablePendingItem(item) ? (
-                <Tag>{catalogLabel(RESOURCE_KIND_LABELS, item.resourceKind)}</Tag>
-              ) : null}
-              <span className={styles.queueTitle}>{item.title}</span>
-            </span>
-            <span className={styles.queueMeta}>
-              {isPayablePendingItem(item)
-                ? `${item.departureName} · ${item.segmentName}`
-                : item.departureName}
-            </span>
-          </span>
-          <span className={styles.queueTrailing}>
-            <RightOutlined />
-          </span>
-        </button>
-      ))}
-    </Space>
-  )
-
   return (
     <div className={styles.settlementGrid}>
-      <Card
-        title={<Typography.Title level={5}>待生成应付</Typography.Title>}
-        extra={(
-          <Space size={4}>
-            <Tooltip title="按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。">
-              <Button
-                type="text"
-                size="small"
-                icon={<InfoCircleOutlined />}
-                aria-label="待生成应付统计口径"
-              />
-            </Tooltip>
-            {payableMetric?.href ? (
-              <Button
-                type="link"
-                aria-label={`查看全部待生成应付 ${payableMetric.value ?? 0} 项`}
-                onClick={() => void navigate({ to: payableMetric.href! })}
-              >
-                查看全部 {payableMetric.value ?? 0} 项 <RightOutlined />
-              </Button>
-            ) : null}
-          </Space>
-        )}
-      >
-        {queue(payableItems, '当前没有待生成应付的资源')}
-      </Card>
-      <Card
-        title={<Typography.Title level={5}>待生成应收</Typography.Title>}
-        extra={(
-          <Space size={4}>
-            <Tooltip title="按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。">
-              <Button
-                type="text"
-                size="small"
-                icon={<InfoCircleOutlined />}
-                aria-label="待生成应收统计口径"
-              />
-            </Tooltip>
-            {pendingMetric?.href ? (
-              <Button
-                type="link"
-                aria-label={`查看全部待生成应收 ${pendingMetric.value ?? 0} 项`}
-                onClick={() => void navigate({ to: pendingMetric.href! })}
-              >
-                查看全部 {pendingMetric.value ?? 0} 项 <RightOutlined />
-              </Button>
-            ) : null}
-          </Space>
-        )}
-      >
-        {queue(pendingItems, '当前没有待生成应收的客源单')}
-      </Card>
+      <SettlementQueueCard
+        title="待生成应付"
+        tooltip="按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。"
+        tooltipAriaLabel="待生成应付统计口径"
+        viewAllHref={payableMetric?.href}
+        viewAllCount={payableMetric?.value ?? 0}
+        viewAllAriaLabel={`查看全部待生成应付 ${payableMetric?.value ?? 0} 项`}
+        items={payableItems}
+        emptyText="当前没有待生成应付的资源"
+      />
+      <SettlementQueueCard
+        title="待生成应收"
+        tooltip="按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。"
+        tooltipAriaLabel="待生成应收统计口径"
+        viewAllHref={pendingMetric?.href}
+        viewAllCount={pendingMetric?.value ?? 0}
+        viewAllAriaLabel={`查看全部待生成应收 ${pendingMetric?.value ?? 0} 项`}
+        items={pendingItems}
+        emptyText="当前没有待生成应收的客源单"
+      />
     </div>
   )
 }
@@ -479,7 +518,11 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
                 />
               </LazyChartModule>
             ) : null}
-            {fundsModule ? <FinanceFundsModule module={fundsModule} /> : null}
+            {fundsModule ? (
+              <LazyChartModule>
+                <FinanceFundsModule module={fundsModule} />
+              </LazyChartModule>
+            ) : null}
           </div>
         ) : null}
         {receivablesModule ? (
