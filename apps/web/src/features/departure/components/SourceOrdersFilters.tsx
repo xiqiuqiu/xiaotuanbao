@@ -72,6 +72,7 @@ export function SourceOrdersFilters({
             style={{ width: 220 }}
             value={draft.keyword}
             onChange={(event) => onDraftChange({ ...draft, keyword: event.target.value })}
+            onPressEnter={onApply}
           />
           <Button onClick={onApply}>查询</Button>
           <Button onClick={onReset}>重置</Button>
