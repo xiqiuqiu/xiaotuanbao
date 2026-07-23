@@ -128,7 +128,7 @@ export function MainLayout({ children }: PropsWithChildren) {
         />
       </Sider>
 
-      <Layout>
+      <Layout className={styles.main}>
         <Header
           className={styles.header}
         >
