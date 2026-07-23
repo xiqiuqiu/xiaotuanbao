@@ -218,6 +218,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['payment-schedule-detail'] })
       void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
+      // Explicit adjust also syncs source-order path amounts (ADR-0010).
+      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['source-order'] })
       void queryClient.invalidateQueries({ queryKey: ['departure'] })
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
     },
@@ -252,6 +255,7 @@ export function usePaymentScheduleMutations({
       // Ordinary amount edits sync source facts; keep execution / source-order tabs fresh.
       void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
       void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['source-order'] })
       void queryClient.invalidateQueries({ queryKey: ['departure'] })
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
     },

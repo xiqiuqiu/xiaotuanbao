@@ -5,13 +5,16 @@ import type {
   PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
 import {
-  COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
   TRANSACTION_DIRECTION_COLORS,
   TRANSACTION_DIRECTION_LABELS,
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 
 export function formatDepartureLabel(
   departureId: string | null | undefined,
@@ -27,29 +30,27 @@ export function formatDepartureLabel(
   return `${departure.departureNo} · ${departure.name}`
 }
 
-function formatCounterpartyLabel(
-  counterpartyType: string,
-  counterpartyName: string | null,
-): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
-  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
-}
-
-export function formatTransactionCounterpartyLabel(
-  transaction: FinanceTransactionSummary,
-): string {
-  return formatCounterpartyLabel(
-    transaction.counterpartyType,
-    transaction.counterpartyName,
-  )
-}
-
-export function formatScheduleCounterpartyLabel(
-  schedule: PaymentScheduleSummary,
-): string {
-  return formatCounterpartyLabel(
-    schedule.counterpartyType,
-    schedule.counterpartyName,
+function CounterpartyDepartureCell({
+  counterpartyType,
+  counterpartyName,
+  departureId,
+  departureMap,
+}: {
+  counterpartyType: string
+  counterpartyName: string | null
+  departureId: string | null | undefined
+  departureMap: Map<string, { departureNo: string; name: string }>
+}) {
+  return (
+    <Space orientation="vertical" size={0}>
+      <Typography.Text>
+        {counterpartyCollectionMethodText(counterpartyType)}
+      </Typography.Text>
+      <Typography.Text>{counterpartyDisplayName(counterpartyName)}</Typography.Text>
+      <Typography.Text type="secondary">
+        {formatDepartureLabel(departureId, departureMap)}
+      </Typography.Text>
+    </Space>
   )
 }
 
@@ -78,17 +79,15 @@ export function buildTransactionColumns(
       ),
     },
     {
-      title: '往来对象 / 发团',
+      title: '收款方式 / 往来对象',
       width: 260,
       render: (_, record) => (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text>
-            {formatTransactionCounterpartyLabel(record)}
-          </Typography.Text>
-          <Typography.Text type="secondary">
-            {formatDepartureLabel(record.departureId, departureMap)}
-          </Typography.Text>
-        </Space>
+        <CounterpartyDepartureCell
+          counterpartyType={record.counterpartyType}
+          counterpartyName={record.counterpartyName}
+          departureId={record.departureId}
+          departureMap={departureMap}
+        />
       ),
     },
     {
@@ -128,17 +127,15 @@ export function buildScheduleColumns(
       ),
     },
     {
-      title: '往来对象 / 发团',
+      title: '收款方式 / 往来对象',
       width: 260,
       render: (_, record) => (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text>
-            {formatScheduleCounterpartyLabel(record)}
-          </Typography.Text>
-          <Typography.Text type="secondary">
-            {formatDepartureLabel(record.departureId, departureMap)}
-          </Typography.Text>
-        </Space>
+        <CounterpartyDepartureCell
+          counterpartyType={record.counterpartyType}
+          counterpartyName={record.counterpartyName}
+          departureId={record.departureId}
+          departureMap={departureMap}
+        />
       ),
     },
     {

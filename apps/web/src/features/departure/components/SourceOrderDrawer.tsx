@@ -21,6 +21,7 @@ import {
 } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
+import { getSourceOrder } from '@/services/source-order.service'
 import {
   SOURCE_ORDER_COLLECTION_OPTIONS,
   SOURCE_ORDER_DISCOUNT_OPTIONS,
@@ -34,6 +35,7 @@ import {
   sourceOrderToFormValues,
   totalGuestCount,
   type SourceOrderFormValues,
+  type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
 
 interface SourceOrderDrawerProps {
@@ -43,7 +45,10 @@ interface SourceOrderDrawerProps {
   amountReadOnly?: boolean
   loading: boolean
   onClose: () => void
-  onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
+  onSubmit: (
+    values: ReturnType<typeof formValuesToPayload>,
+    pathBaseline: SourceOrderPathBaseline | null,
+  ) => void
 }
 
 function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0] }) {
@@ -116,13 +121,33 @@ export function SourceOrderDrawer({
   onSubmit,
 }: SourceOrderDrawerProps) {
   const [form] = Form.useForm<SourceOrderFormValues>()
+  const sourceOrderId = editing?.id ?? null
+  const isCreate = open && !sourceOrderId
+
+  const {
+    data: detail,
+    isLoading: detailLoading,
+    isError: detailError,
+    refetch: refetchDetail,
+  } = useQuery({
+    queryKey: ['source-order', sourceOrderId],
+    queryFn: ({ signal }) => getSourceOrder(sourceOrderId!, signal),
+    enabled: open && Boolean(sourceOrderId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+
+  // View/edit always hydrate from a fresh GET; create uses empty defaults.
+  const resolvedOrder = isCreate ? null : (detail ?? null)
+  const detailReady = isCreate || Boolean(detail)
+
   const discountType = Form.useWatch('discountType', form)
   const collectionMode = Form.useWatch('collectionMode', form)
   const adultGuestCount = Form.useWatch('adultGuestCount', form) ?? 0
   const childGuestCount = Form.useWatch('childGuestCount', form) ?? 0
   const adultUnitPriceYuan = Form.useWatch('adultUnitPriceYuan', form)
   const childUnitPriceYuan = Form.useWatch('childUnitPriceYuan', form)
-  const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
+  const amountFieldsLocked = Boolean(resolvedOrder?.amountFieldsLocked)
   const lockAmounts = readOnly || amountReadOnly || amountFieldsLocked
 
   const derivedTotalGuests = totalGuestCount({
@@ -140,20 +165,23 @@ export function SourceOrderDrawer({
       collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
     }).grossReceivableCents / 100
 
-  const formKey = editing?.id ?? 'new'
+  const formKey = sourceOrderId ?? 'new'
   const initialValues = useMemo(
-    () => (editing ? sourceOrderToFormValues(editing) : createEmptySourceOrderFormValues()),
-    [editing],
+    () =>
+      resolvedOrder
+        ? sourceOrderToFormValues(resolvedOrder)
+        : createEmptySourceOrderFormValues(),
+    [resolvedOrder],
   )
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !detailReady) {
       return
     }
 
     form.resetFields()
     form.setFieldsValue(initialValues)
-  }, [form, initialValues, open])
+  }, [detailReady, form, initialValues, open])
 
   const handleClose = () => {
     form.resetFields()
@@ -170,33 +198,56 @@ export function SourceOrderDrawer({
     enabled: open,
   })
 
+  const drawerLoading = Boolean(sourceOrderId) && detailLoading && !detail
+
   return (
     <Drawer
-      title={readOnly ? '查看客源单' : editing ? '编辑客源单' : '添加客源单'}
+      title={readOnly ? '查看客源单' : sourceOrderId ? '编辑客源单' : '添加客源单'}
       open={open}
       size={560}
       onClose={handleClose}
       destroyOnHidden
+      loading={drawerLoading}
       styles={{ footer: { paddingBlock: 16 } }}
       footer={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <AmountPreview form={form} />
+        detailError && sourceOrderId ? null : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {detailReady ? <AmountPreview form={form} /> : null}
+            </div>
+            {readOnly ? (
+              <Button onClick={handleClose}>关闭</Button>
+            ) : (
+              <Space>
+                <Button onClick={handleClose}>取消</Button>
+                <Button
+                  type="primary"
+                  loading={loading}
+                  disabled={!detailReady}
+                  onClick={() => form.submit()}
+                >
+                  保存
+                </Button>
+              </Space>
+            )}
           </div>
-          {readOnly ? (
-            <Button onClick={handleClose}>关闭</Button>
-          ) : (
-            <Space>
-              <Button onClick={handleClose}>取消</Button>
-              <Button type="primary" loading={loading} onClick={() => form.submit()}>
-                保存
-              </Button>
-            </Space>
-          )}
-        </div>
+        )
       }
     >
-      {editing?.hasSourceAmountMismatch ? (
+      {detailError && sourceOrderId ? (
+        <Alert
+          type="error"
+          showIcon
+          title="客源单加载失败"
+          description="请检查网络后重试。"
+          action={
+            <Button size="small" onClick={() => void refetchDetail()}>
+              重试
+            </Button>
+          }
+        />
+      ) : null}
+      {resolvedOrder?.hasSourceAmountMismatch ? (
         <Alert
           type="warning"
           showIcon
@@ -205,13 +256,22 @@ export function SourceOrderDrawer({
           style={{ marginBottom: 16 }}
         />
       ) : null}
+      {detailReady && !detailError ? (
       <Form
         key={formKey}
         form={form}
         layout="vertical"
         disabled={readOnly}
         initialValues={initialValues}
-        onFinish={(values) => onSubmit(formValuesToPayload(values))}
+        onFinish={(values) => {
+          const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
+            ? {
+                guestCollectCents: resolvedOrder.guestCollectCents,
+                partnerCollectedCents: resolvedOrder.partnerCollectedCents,
+              }
+            : null
+          onSubmit(formValuesToPayload(values), pathBaseline)
+        }}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>
           基础信息
@@ -397,6 +457,7 @@ export function SourceOrderDrawer({
           <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
         </Form.Item>
       </Form>
+      ) : null}
     </Drawer>
   )
 }

@@ -142,7 +142,7 @@ export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
 }
 
 export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderFormValues {
-  return {
+  const values: SourceOrderFormValues = {
     partnerId: order.partnerId,
     adultGuestCount: order.adultGuestCount,
     childGuestCount: order.childGuestCount,
@@ -156,6 +156,29 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
     settlementNotes: order.settlementNotes ?? undefined,
     notes: order.notes ?? undefined,
   }
+
+  // Receivable path sync may update gross/net/guestCollect without rewriting unit prices.
+  // Reconcile the dominant unit price so form preview matches authoritative stored amounts.
+  const computed = computeFormAmounts(values)
+  if (computed.grossReceivableCents === order.grossReceivableCents) {
+    return values
+  }
+
+  if (order.adultGuestCount > 0) {
+    const childCents =
+      yuanToCents(
+        effectiveUnitPriceYuan(order.childGuestCount, values.childUnitPriceYuan),
+      ) * order.childGuestCount
+    values.adultUnitPriceYuan = centsToYuan(
+      Math.round((order.grossReceivableCents - childCents) / order.adultGuestCount),
+    )
+  } else if (order.childGuestCount > 0) {
+    values.childUnitPriceYuan = centsToYuan(
+      Math.round(order.grossReceivableCents / order.childGuestCount),
+    )
+  }
+
+  return values
 }
 
 export function formValuesToPayload(values: SourceOrderFormValues) {
@@ -182,10 +205,16 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
   }
 }
 
+/** Path amounts used as the baseline for guest-collection change detection. */
+export type SourceOrderPathBaseline = {
+  guestCollectCents: number
+  partnerCollectedCents: number
+}
+
 /** Path amounts implied by an update payload (mirrors server computeSourceOrderAmounts). */
 export function resolvePathAmountsFromPayload(
   payload: ReturnType<typeof formValuesToPayload>,
-): { guestCollectCents: number; partnerCollectedCents: number } {
+): SourceOrderPathBaseline {
   const grossReceivableCents =
     payload.adultUnitPriceCents * payload.adultGuestCount +
     payload.childUnitPriceCents * payload.childGuestCount

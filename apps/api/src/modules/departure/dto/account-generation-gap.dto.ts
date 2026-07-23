@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer'
-import { IsInt, IsOptional, Min } from 'class-validator'
+import { IsIn, IsInt, IsOptional, Min } from 'class-validator'
 
 export class ListAccountGenerationGapsQueryDto {
   @IsOptional()
@@ -13,4 +13,8 @@ export class ListAccountGenerationGapsQueryDto {
   @IsInt()
   @Min(1)
   pageSize?: number
+
+  @IsOptional()
+  @IsIn(['receivable', 'payable'])
+  generationKind?: 'receivable' | 'payable'
 }

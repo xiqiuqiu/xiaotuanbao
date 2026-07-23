@@ -261,8 +261,8 @@ export function SourceOrdersTab({
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
         onClose={closeDrawer}
-        onSubmit={(payload) => {
-          void submitSourceOrder(payload)
+        onSubmit={(payload, pathBaseline) => {
+          void submitSourceOrder(payload, pathBaseline)
         }}
       />
 

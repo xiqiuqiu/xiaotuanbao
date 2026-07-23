@@ -732,7 +732,7 @@ describe('Departure API (e2e)', () => {
         receivableStatus: 'not_generated',
         hasPaymentSchedule: false,
       })
-      expect(response.body.data.displayName).toBe(`${testPrefix}-partner 7月1日发客`)
+      expect(response.body.data.displayName).toBe(`${testPrefix}-partner`)
     })
 
     it('derives guestCount and gross from adult/child pricing (2×1200 + 1×800)', async () => {
@@ -830,7 +830,7 @@ describe('Departure API (e2e)', () => {
         .send(sourceOrderPayload())
         .expect(201)
 
-      expect(second.body.data.displayName).toBe(`${testPrefix}-partner 7月1日发客 2`)
+      expect(second.body.data.displayName).toBe(`${testPrefix}-partner 2`)
     })
 
     it('validates split collection amounts', async () => {

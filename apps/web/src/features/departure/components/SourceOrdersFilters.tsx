@@ -53,12 +53,14 @@ export function SourceOrdersFilters({
             options={[...SOURCE_ORDER_COLLECTION_OPTIONS]}
           />
           <Select
-            aria-label="优惠筛选"
+            allowClear
+            aria-label="优惠状态"
+            placeholder="优惠状态"
             style={{ width: 120 }}
             value={draft.hasDiscount}
             onChange={(value) => onDraftChange({ ...draft, hasDiscount: value })}
             options={[
-              { value: 'all', label: '全部优惠' },
+              { value: 'all', label: '全部' },
               { value: 'yes', label: '有优惠' },
               { value: 'no', label: '无优惠' },
             ]}
@@ -70,6 +72,7 @@ export function SourceOrdersFilters({
             style={{ width: 220 }}
             value={draft.keyword}
             onChange={(event) => onDraftChange({ ...draft, keyword: event.target.value })}
+            onPressEnter={onApply}
           />
           <Button onClick={onApply}>查询</Button>
           <Button onClick={onReset}>重置</Button>

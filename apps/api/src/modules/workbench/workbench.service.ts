@@ -66,7 +66,7 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     },
     {
       key: 'coordinator-settlement',
-      title: '结算衔接',
+      title: '待生成账款',
       requiredPermissions: ['/departure'],
     },
     {
@@ -220,7 +220,7 @@ export class WorkbenchService {
         modules[coordinatorDeparturesIndex] = await this.coordinatorWorkbenchService.buildModule(
           organizationId,
           asOf,
-          settlementSnapshot.readyRows.length,
+          settlementSnapshot.payableRows.length,
           settlementSnapshot.pendingCountByDepartureId,
         )
       }

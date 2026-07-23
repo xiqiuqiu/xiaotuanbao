@@ -41,6 +41,7 @@ import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import {
   buildSourceOrderDisplayName,
   computeSourceOrderAmounts,
+  resolveSourceOrderAmountChange,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
 import {
@@ -422,7 +423,28 @@ export class SourceOrderService {
       ...normalized,
     })
 
-    const amounts = computeSourceOrderAmounts(normalized)
+    const recomputedAmounts = computeSourceOrderAmounts(normalized)
+    const { amountInputsChanged } = resolveSourceOrderAmountChange(order, {
+      adultGuestCount: normalized.adultGuestCount,
+      childGuestCount: normalized.childGuestCount,
+      adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+      childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
+      discountType: normalized.discountType,
+      discountCents: normalized.discountCents,
+      collectionMode: normalized.collectionMode,
+      partnerCollectedCents: normalized.partnerCollectedCents,
+    })
+    // When amount inputs are unchanged, keep stored path amounts — receivable path sync
+    // may have updated gross/net/guestCollect without rewriting unit prices.
+    const amounts = amountInputsChanged
+      ? recomputedAmounts
+      : {
+          grossReceivableCents: order.grossReceivableCents,
+          discountCents: order.discountCents,
+          netReceivableCents: order.netReceivableCents,
+          partnerCollectedCents: order.partnerCollectedCents,
+          guestCollectCents: order.guestCollectCents,
+        }
     const guestCount = normalized.adultGuestCount + normalized.childGuestCount
     const pathAmountChanged = didSourceAmountPathChange(
       {
@@ -445,9 +467,9 @@ export class SourceOrderService {
         adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
         childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
         discountType: normalized.discountType,
-        discountCents: amounts.discountCents,
+        discountCents: normalized.discountCents,
         collectionMode: normalized.collectionMode,
-        partnerCollectedCents: amounts.partnerCollectedCents,
+        partnerCollectedCents: normalized.partnerCollectedCents,
       },
     )
 
@@ -683,11 +705,7 @@ export class SourceOrderService {
       },
     })
 
-    return buildSourceOrderDisplayName(
-      partnerName,
-      departure.startDate,
-      existingCount + 1,
-    )
+    return buildSourceOrderDisplayName(partnerName, existingCount + 1)
   }
 
   private async loadScheduleMeta(organizationId: string, sourceOrderIds: string[]) {

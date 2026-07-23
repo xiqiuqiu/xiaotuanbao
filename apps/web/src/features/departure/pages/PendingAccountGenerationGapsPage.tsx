@@ -7,25 +7,43 @@ import { PageHeader } from '@/layouts/PageHeader'
 import { listAccountGenerationGaps } from '@/services/account-generation-gap.service'
 import { formatCents } from '@/features/finance/catalog'
 
+function pageTitle(generationKind?: AccountGenerationGapItem['generationKind']): string {
+  if (generationKind === 'payable') return '待生成应付'
+  if (generationKind === 'receivable') return '待生成应收'
+  return '待生成账款'
+}
+
+function emptyDescription(generationKind?: AccountGenerationGapItem['generationKind']): string {
+  if (generationKind === 'payable') return '当前没有待生成应付的资源'
+  if (generationKind === 'receivable') return '当前没有待生成应收的客源单'
+  return '当前没有待生成的应收或应付'
+}
+
 export function PendingAccountGenerationGapsPage() {
   const navigate = useNavigate()
-  const search = useSearch({ strict: false }) as { page?: number; pageSize?: number }
+  const search = useSearch({ strict: false }) as {
+    page?: number
+    pageSize?: number
+    generationKind?: 'receivable' | 'payable'
+  }
   const page = search.page ?? 1
   const pageSize = search.pageSize ?? 10
+  const generationKind = search.generationKind
+  const title = pageTitle(generationKind)
   const query = useQuery({
-    queryKey: ['account-generation-gaps', page, pageSize],
-    queryFn: () => listAccountGenerationGaps({ page, pageSize }),
+    queryKey: ['account-generation-gaps', page, pageSize, generationKind],
+    queryFn: () => listAccountGenerationGaps({ page, pageSize, generationKind }),
   })
 
   if (query.isError && !query.data) {
     return (
       <div>
-        <PageHeader title="待生成账款" />
+        <PageHeader title={title} />
         <Card>
           <Alert
             type="error"
             showIcon
-            title="待生成账款列表加载失败"
+            title={`${title}列表加载失败`}
             description={query.error instanceof Error ? query.error.message : '请稍后重试'}
             action={(
               <Button loading={query.isFetching} onClick={() => void query.refetch()}>
@@ -40,7 +58,7 @@ export function PendingAccountGenerationGapsPage() {
 
   return (
     <div>
-      <PageHeader title="待生成账款" />
+      <PageHeader title={title} />
       <Card>
         <StaleDataAlert
           isFetching={query.isFetching}
@@ -93,7 +111,7 @@ export function PendingAccountGenerationGapsPage() {
           ]}
           locale={{
             emptyText: (
-              <Empty description="当前没有待生成的应收或应付">
+              <Empty description={emptyDescription(generationKind)}>
                 <Button onClick={() => void navigate({ to: '/departure' })}>查看发团</Button>
               </Empty>
             ),
@@ -107,7 +125,11 @@ export function PendingAccountGenerationGapsPage() {
             onChange: (nextPage, nextPageSize) => {
               void navigate({
                 to: '/departure/account-generation-gaps',
-                search: { page: nextPage, pageSize: nextPageSize },
+                search: {
+                  page: nextPage,
+                  pageSize: nextPageSize,
+                  generationKind,
+                },
               })
             },
           }}

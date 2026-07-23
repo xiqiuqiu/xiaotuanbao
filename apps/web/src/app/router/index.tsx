@@ -197,9 +197,14 @@ const accountGenerationGapsRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): {
     page?: number
     pageSize?: number
+    generationKind?: 'receivable' | 'payable'
   } => ({
     page: typeof search.page === 'number' ? search.page : undefined,
     pageSize: typeof search.pageSize === 'number' ? search.pageSize : undefined,
+    generationKind:
+      search.generationKind === 'receivable' || search.generationKind === 'payable'
+        ? search.generationKind
+        : undefined,
   }),
   component: lazyRouteComponent(
     () => import('@/features/departure/pages/PendingAccountGenerationGapsPage'),

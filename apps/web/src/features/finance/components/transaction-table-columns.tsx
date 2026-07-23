@@ -3,7 +3,6 @@ import type { ColumnsType } from 'antd/es/table'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
 import { DepartureStatus, deriveTransactionWriteoffStatus } from '@xiaotuanbao/shared'
 import {
-  COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
   TRANSACTION_DIRECTION_COLORS,
   TRANSACTION_DIRECTION_LABELS,
@@ -13,6 +12,10 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
@@ -70,13 +73,17 @@ export function buildTransactionColumns({
     },
     { title: '交易日期', dataIndex: 'transactionDate' },
     {
+      title: '收款方式',
+      width: 100,
+      render: (_, record) => counterpartyCollectionMethodText(record.counterpartyType),
+    },
+    {
       title: '往来对象',
       width: 200,
       ellipsis: { showTitle: false },
       render: (_, record) => (
         <EllipsisTooltipText>
-          {catalogLabel(COUNTERPARTY_TYPE_LABELS, record.counterpartyType)}
-          {record.counterpartyName ? ` · ${record.counterpartyName}` : ''}
+          {counterpartyDisplayName(record.counterpartyName)}
         </EllipsisTooltipText>
       ),
     },

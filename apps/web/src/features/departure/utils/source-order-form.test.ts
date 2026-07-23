@@ -126,6 +126,7 @@ describe('sourceOrderToFormValues', () => {
       childGuestCount: 1,
       adultUnitPriceCents: 120000,
       childUnitPriceCents: 80000,
+      grossReceivableCents: 320000,
       discountType: SourceOrderDiscountType.NONE,
       discountCents: 0,
       discountNotes: null,
@@ -154,6 +155,7 @@ describe('sourceOrderToFormValues', () => {
       childGuestCount: 0,
       adultUnitPriceCents: 100000,
       childUnitPriceCents: 0,
+      grossReceivableCents: 300000,
       discountType: SourceOrderDiscountType.NONE,
       discountCents: 0,
       discountNotes: null,
@@ -176,6 +178,42 @@ describe('sourceOrderToFormValues', () => {
       childGuestCount: 0,
       adultUnitPriceCents: 100000,
       childUnitPriceCents: 0,
+    })
+  })
+
+  it('reconciles unit price when stored gross diverges after receivable path sync', () => {
+    const order = {
+      partnerId: 'partner-1',
+      guestCount: 1,
+      adultGuestCount: 1,
+      childGuestCount: 0,
+      adultUnitPriceCents: 700000,
+      childUnitPriceCents: 0,
+      grossReceivableCents: 720000,
+      netReceivableCents: 720000,
+      discountType: SourceOrderDiscountType.NONE,
+      discountCents: 0,
+      discountNotes: null,
+      collectionMode: SourceOrderCollectionMode.SPLIT,
+      partnerCollectedCents: 100000,
+      guestCollectCents: 620000,
+      settlementNotes: null,
+      notes: null,
+    } as SourceOrderSummary
+
+    const values = sourceOrderToFormValues(order)
+    expect(values.adultUnitPriceYuan).toBe(7200)
+    expect(computeFormAmounts(values)).toMatchObject({
+      grossReceivableCents: 720000,
+      netReceivableCents: 720000,
+      partnerCollectedCents: 100000,
+      guestCollectCents: 620000,
+    })
+    // Payload unit prices diverge from DB; API must treat matching path amounts as non-edit
+    // (otherwise amountFieldsLocked notes-only save is rejected).
+    expect(formValuesToPayload(values)).toMatchObject({
+      adultUnitPriceCents: 720000,
+      partnerCollectedCents: 100000,
     })
   })
 })

@@ -122,12 +122,13 @@ describe('payable list columns', () => {
 })
 
 describe('receivable list columns', () => {
-  it('shows title, source order, customer-settlement method and partner payer', () => {
+  it('shows source order, customer-settlement method and partner payer without a title column', () => {
     renderTable(true, [
       schedule({
         direction: 'receivable',
         scheduleNo: 'AR-CUST',
-        title: '喀纳斯环线团尾款',
+        // 客源单路径的 title 与收款方式同源（客户补款/游客代收），列表不应再露标题列。
+        title: '客户补款',
         sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
         sourceId: 'so-1',
         counterpartyType: 'partner',
@@ -136,16 +137,30 @@ describe('receivable list columns', () => {
       }),
     ])
     expect(screen.getByText('应收单号')).toBeTruthy()
-    expect(screen.getAllByRole('columnheader', { name: '标题' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('columnheader', { name: '标题' })).toBeNull()
+    expect(screen.getByRole('columnheader', { name: '收款方式' })).toBeTruthy()
     const row = rowOf('AR-CUST')
-    expect(within(row).getByText('喀纳斯环线团尾款')).toBeTruthy()
     expect(within(row).getByText('福建土楼专线地接 7月15日发客')).toBeTruthy()
     expect(within(row).getByText('客户补款')).toBeTruthy()
     expect(within(row).getByText('福建土楼专线地接')).toBeTruthy()
   })
 
-  it('does not expose a dedicated title column on payable lists', () => {
+  it('does not expose a dedicated title column on payable or receivable lists', () => {
     renderTable(false, [schedule({ scheduleNo: 'AP-NO-TITLE-COL' })])
+    expect(screen.queryByRole('columnheader', { name: '标题' })).toBeNull()
+    cleanup()
+    renderTable(true, [
+      schedule({
+        direction: 'receivable',
+        scheduleNo: 'AR-NO-TITLE-COL',
+        title: '游客代收',
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        sourceId: 'so-2',
+        counterpartyType: 'guest',
+        counterpartyName: '苏州水乡地接社 7月15日发客',
+        sourceOrderName: '苏州水乡地接社 7月15日发客',
+      }),
+    ])
     expect(screen.queryByRole('columnheader', { name: '标题' })).toBeNull()
   })
 

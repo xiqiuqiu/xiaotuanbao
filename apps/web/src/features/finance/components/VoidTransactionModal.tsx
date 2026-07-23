@@ -1,7 +1,11 @@
 import { Form, Input, Modal } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
-import { COUNTERPARTY_TYPE_LABELS, catalogLabel, formatCents } from '../catalog'
+import { formatCents } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 
 export interface VoidTransactionFormValues {
   voidReason: string
@@ -44,9 +48,15 @@ export function VoidTransactionModal({
           <Form.Item label="流水金额">
             <Input value={formatCents(transaction.amountCents)} disabled />
           </Form.Item>
+          <Form.Item label="收款方式">
+            <Input
+              value={counterpartyCollectionMethodText(transaction.counterpartyType)}
+              disabled
+            />
+          </Form.Item>
           <Form.Item label="往来对象">
             <Input
-              value={`${catalogLabel(COUNTERPARTY_TYPE_LABELS, transaction.counterpartyType)}${transaction.counterpartyName ? ` · ${transaction.counterpartyName}` : ''}`}
+              value={counterpartyDisplayName(transaction.counterpartyName)}
               disabled
             />
           </Form.Item>
