@@ -198,9 +198,11 @@ describe('Route Template API (e2e)', () => {
     })
     expect(segments).toHaveLength(2)
     expect(segments[0]!.name).toBe('喀纳斯')
+    expect(segments[0]!.pendingCheck).toBe(true)
     expect(segments[0]!.startDate!.toISOString().slice(0, 10)).toBe('2026-08-01')
     expect(segments[0]!.endDate!.toISOString().slice(0, 10)).toBe('2026-08-03')
     expect(segments[1]!.name).toBe('阿勒泰')
+    expect(segments[1]!.pendingCheck).toBe(true)
     expect(segments[1]!.startDate!.toISOString().slice(0, 10)).toBe('2026-08-04')
     expect(segments[1]!.endDate!.toISOString().slice(0, 10)).toBe('2026-08-10')
 
@@ -209,6 +211,7 @@ describe('Route Template API (e2e)', () => {
     })
     expect(resources).toHaveLength(3)
     expect(resources.every((resource) => resource.amountCents === 0)).toBe(true)
+    expect(resources.every((resource) => resource.pendingCheck)).toBe(true)
     expect(resources.map((resource) => resource.title).sort()).toEqual(
       ['区间车', '喀纳斯酒店', '拼出接待'].sort(),
     )

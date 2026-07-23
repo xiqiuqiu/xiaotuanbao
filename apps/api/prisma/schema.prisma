@@ -649,6 +649,8 @@ model ItinerarySegment {
   dayCount             Int?              @map("day_count")
   destination  String?
   notes        String?
+  /// Copy/template skeleton awaiting coordinator review; cleared on segment drawer save.
+  pendingCheck Boolean @default(false) @map("pending_check")
   resources            SegmentResource[]
 
   @@map("itinerary_segments")
@@ -667,6 +669,8 @@ model SegmentResource {
   title            String
   amountCents      Int              @map("amount_cents")
   notes            String?
+  /// Copy/template skeleton awaiting coordinator review; cleared on resource drawer save.
+  pendingCheck     Boolean          @default(false) @map("pending_check")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 

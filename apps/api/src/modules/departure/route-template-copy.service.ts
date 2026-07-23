@@ -44,6 +44,7 @@ export class RouteTemplateCopyService {
           dayCount: dateRange.dayCount,
           destination: templateSegment.destination,
           notes: templateSegment.notes,
+          pendingCheck: true,
         },
       })
 
@@ -61,6 +62,7 @@ export class RouteTemplateCopyService {
           title: resource.title,
           amountCents: 0,
           notes: resource.notes,
+          pendingCheck: true,
         })),
       })
     }

@@ -192,6 +192,7 @@ export class SegmentService {
             : {}),
         ...(destination !== undefined ? { destination } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
+        pendingCheck: false,
       },
       include: {
         resources: {
@@ -305,6 +306,7 @@ export class SegmentService {
       dayCount: segment.dayCount,
       destination: segment.destination,
       notes: segment.notes,
+      pendingCheck: segment.pendingCheck,
       resourceCount,
       outsourceCount,
       resourceAmountCents,

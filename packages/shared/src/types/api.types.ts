@@ -1401,6 +1401,12 @@ export interface ItinerarySegmentSummary {
   dayCount: number | null
   destination: string | null
   notes: string | null
+  /**
+   * True when this segment was created from copy/template and has not been
+   * saved via the segment drawer yet. Named pendingCheck (not needsReview) to
+   * avoid clashing with finance ops-sheet amount-mismatch needsReview.
+   */
+  pendingCheck: boolean
   resourceCount: number
   outsourceCount: number
   resourceAmountCents: number
@@ -1452,6 +1458,12 @@ export interface SegmentResourceSummary {
   title: string
   amountCents: number
   notes: string | null
+  /**
+   * True when this resource was created from copy/template and has not been
+   * saved via the resource drawer yet. Named pendingCheck (not needsReview) to
+   * avoid clashing with finance ops-sheet amount-mismatch needsReview.
+   */
+  pendingCheck: boolean
   hasPaymentSchedule: boolean
   payableStatus: string
   hasSourceAmountMismatch: boolean

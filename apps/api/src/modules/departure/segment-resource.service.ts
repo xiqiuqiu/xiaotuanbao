@@ -469,6 +469,7 @@ export class SegmentResourceService {
         ...(dto.title !== undefined ? { title: dto.title.trim() } : {}),
         ...(dto.amountCents !== undefined ? { amountCents: dto.amountCents } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
+        pendingCheck: false,
       },
       include: {
         partner: true,
@@ -726,6 +727,7 @@ export class SegmentResourceService {
       title: resource.title,
       amountCents: resource.amountCents,
       notes: resource.notes,
+      pendingCheck: resource.pendingCheck,
       hasPaymentSchedule: meta?.hasSchedule ?? false,
       payableStatus: meta?.payableStatus ?? SegmentPayableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: meta?.hasSourceAmountMismatch ?? false,

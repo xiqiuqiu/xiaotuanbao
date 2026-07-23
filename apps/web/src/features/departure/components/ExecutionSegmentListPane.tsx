@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { Button, Card, Col, Tooltip, Typography, theme } from 'antd'
+import { Button, Card, Col, Tag, Tooltip, Typography, theme } from 'antd'
 import { EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ItinerarySegmentSummary } from '@/types/api'
@@ -148,6 +148,7 @@ function SegmentNavItem({
         <div className={styles.segmentItemHeader}>
           <div className={styles.segmentItemTitle}>
             <span>{segment.name}</span>
+            {segment.pendingCheck ? <Tag color="warning">待检查</Tag> : null}
           </div>
         </div>
         {meta ? <span className={styles.segmentItemMeta}>{meta}</span> : null}

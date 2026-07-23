@@ -74,8 +74,13 @@ export function buildExecutionResourceColumns({
     {
       title: '资源项目',
       dataIndex: 'title',
-      width: 140,
-      render: (value: string) => value || '-',
+      width: 180,
+      render: (value: string, record) => (
+        <Space size={6} wrap>
+          <span>{value || '-'}</span>
+          {record.pendingCheck ? <Tag color="warning">待检查</Tag> : null}
+        </Space>
+      ),
     },
     {
       title: '资源金额',

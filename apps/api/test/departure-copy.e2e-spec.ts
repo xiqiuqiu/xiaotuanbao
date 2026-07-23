@@ -274,6 +274,7 @@ describe('Departure copy & save template (e2e)', () => {
     expect(segmentsResponse.body.data.items).toHaveLength(1)
     expect(segmentsResponse.body.data.items[0].name).toBe('喀纳斯段')
     expect(segmentsResponse.body.data.items[0]).not.toHaveProperty('fromTemplate')
+    expect(segmentsResponse.body.data.items[0].pendingCheck).toBe(true)
     expect(segmentsResponse.body.data.items[0].startDate).toBe('2026-09-01')
 
     const segmentId = segmentsResponse.body.data.items[0].id as string
@@ -282,6 +283,7 @@ describe('Departure copy & save template (e2e)', () => {
       .expect(200)
     expect(resourcesResponse.body.data.items).toHaveLength(1)
     expect(resourcesResponse.body.data.items[0]).not.toHaveProperty('fromTemplate')
+    expect(resourcesResponse.body.data.items[0].pendingCheck).toBe(true)
     expect(resourcesResponse.body.data.items[0].amountCents).toBe(0)
     expect(resourcesResponse.body.data.items[0].title).toBe('喀纳斯酒店')
 
@@ -291,13 +293,28 @@ describe('Departure copy & save template (e2e)', () => {
     })
     expect(segments).toHaveLength(1)
     expect(segments[0]).not.toHaveProperty('fromTemplate')
+    expect(segments[0].pendingCheck).toBe(true)
 
     const resources = await prisma.segmentResource.findMany({
       where: { segmentId: segments[0].id },
     })
     expect(resources).toHaveLength(1)
     expect(resources[0]).not.toHaveProperty('fromTemplate')
+    expect(resources[0].pendingCheck).toBe(true)
     expect(resources[0].amountCents).toBe(0)
+
+    const clearedSegment = await authRequest(app, coordinatorToken)
+      .patch(`/api/segments/${segmentId}`)
+      .send({ name: '喀纳斯段' })
+      .expect(200)
+    expect(clearedSegment.body.data.pendingCheck).toBe(false)
+
+    const resourceId = resourcesResponse.body.data.items[0].id as string
+    const clearedResource = await authRequest(app, coordinatorToken)
+      .patch(`/api/segment-resources/${resourceId}`)
+      .send({ title: '喀纳斯酒店' })
+      .expect(200)
+    expect(clearedResource.body.data.pendingCheck).toBe(false)
 
     const sourceOrders = await prisma.sourceOrder.count({
       where: { departureId: copiedDepartureId },

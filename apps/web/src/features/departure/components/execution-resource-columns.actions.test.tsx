@@ -19,6 +19,7 @@ function resource(overrides: Partial<SegmentResourceSummary> = {}): SegmentResou
     title: '测试用车',
     amountCents: 100000,
     notes: null,
+    pendingCheck: false,
     hasPaymentSchedule: true,
     payableStatus: 'pending',
     hasSourceAmountMismatch: false,
