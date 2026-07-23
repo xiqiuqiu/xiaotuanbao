@@ -37,6 +37,7 @@ import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
 import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
+import { resolveSourceOrderAmountChange } from './source-order.utils'
 
 /** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
 export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
@@ -338,6 +339,9 @@ export class DepartureFinanceBridgeService {
       | 'discountCents'
       | 'collectionMode'
       | 'partnerCollectedCents'
+      | 'guestCollectCents'
+      | 'grossReceivableCents'
+      | 'netReceivableCents'
     >,
     nextAmounts: Pick<
       SourceOrder,
@@ -351,17 +355,8 @@ export class DepartureFinanceBridgeService {
       | 'partnerCollectedCents'
     >,
   ): Promise<void> {
-    const amountChanged =
-      order.adultGuestCount !== nextAmounts.adultGuestCount ||
-      order.childGuestCount !== nextAmounts.childGuestCount ||
-      order.adultUnitPriceCents !== nextAmounts.adultUnitPriceCents ||
-      order.childUnitPriceCents !== nextAmounts.childUnitPriceCents ||
-      order.discountType !== nextAmounts.discountType ||
-      order.discountCents !== nextAmounts.discountCents ||
-      order.collectionMode !== nextAmounts.collectionMode ||
-      order.partnerCollectedCents !== nextAmounts.partnerCollectedCents
-
-    if (!amountChanged) {
+    const { amountOutcomeChanged } = resolveSourceOrderAmountChange(order, nextAmounts)
+    if (!amountOutcomeChanged) {
       return
     }
 

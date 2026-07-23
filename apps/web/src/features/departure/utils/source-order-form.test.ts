@@ -209,6 +209,12 @@ describe('sourceOrderToFormValues', () => {
       partnerCollectedCents: 100000,
       guestCollectCents: 620000,
     })
+    // Payload unit prices diverge from DB; API must treat matching path amounts as non-edit
+    // (otherwise amountFieldsLocked notes-only save is rejected).
+    expect(formValuesToPayload(values)).toMatchObject({
+      adultUnitPriceCents: 720000,
+      partnerCollectedCents: 100000,
+    })
   })
 })
 

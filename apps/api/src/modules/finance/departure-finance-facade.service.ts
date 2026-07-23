@@ -27,6 +27,7 @@ import {
   formatDateOnly,
   getShanghaiTodayString,
 } from '../departure/departure-date.utils'
+import { reconcileUnitPricesToGross } from '../departure/source-order.utils'
 
 type TxClient = Prisma.TransactionClient
 
@@ -640,6 +641,10 @@ export class DepartureFinanceFacade {
         partnerCollectedCents: true,
         guestCollectCents: true,
         discountCents: true,
+        adultGuestCount: true,
+        childGuestCount: true,
+        adultUnitPriceCents: true,
+        childUnitPriceCents: true,
       },
     })
     if (!order) {
@@ -658,6 +663,17 @@ export class DepartureFinanceFacade {
     }
 
     const netReceivableCents = partnerCollectedCents + guestCollectCents
+    // Keep gross − discount = net after path-level agreed-amount correction.
+    const grossReceivableCents = netReceivableCents + order.discountCents
+    // Also rewrite dominant unit price so count × price stays consistent with gross.
+    // Otherwise drawer reconcile + notes-only save looks like a locked amount change.
+    const unitPrices = reconcileUnitPricesToGross({
+      adultGuestCount: order.adultGuestCount,
+      childGuestCount: order.childGuestCount,
+      adultUnitPriceCents: order.adultUnitPriceCents,
+      childUnitPriceCents: order.childUnitPriceCents,
+      grossReceivableCents,
+    })
 
     await tx.sourceOrder.update({
       where: { id: order.id },
@@ -665,8 +681,9 @@ export class DepartureFinanceFacade {
         partnerCollectedCents,
         guestCollectCents,
         netReceivableCents,
-        // Keep gross − discount = net after path-level agreed-amount correction.
-        grossReceivableCents: netReceivableCents + order.discountCents,
+        grossReceivableCents,
+        adultUnitPriceCents: unitPrices.adultUnitPriceCents,
+        childUnitPriceCents: unitPrices.childUnitPriceCents,
       },
     })
   }
