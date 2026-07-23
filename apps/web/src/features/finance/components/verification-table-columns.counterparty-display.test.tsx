@@ -79,4 +79,21 @@ describe('buildVerificationColumns counterparty display', () => {
     expect(within(row).getByText('福建土楼专线地接 7月25日发客')).toBeTruthy()
     expect(within(row).queryByText(/游客代收\s*·/)).toBeNull()
   })
+
+  it('uses screenshot-aligned terminology for verification list headers', () => {
+    renderTable([makeVerification()])
+
+    for (const name of [
+      '核销类型',
+      '关联流水号',
+      '关联账款单号',
+      '账款剩余未结金额',
+      '核销状态',
+      '操作人',
+    ]) {
+      expect(screen.getByRole('columnheader', { name })).toBeTruthy()
+    }
+    expect(screen.queryByRole('columnheader', { name: '核销方向' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: '核销人' })).toBeNull()
+  })
 })

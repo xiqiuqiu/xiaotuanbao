@@ -156,8 +156,59 @@ describe('finance detail drawer query errors', () => {
     expect(screen.getByRole('heading', { name: '核销链路' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '流水信息' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '收付款节点' })).toBeInTheDocument()
+    expect(screen.getByText('应收单号')).toBeInTheDocument()
+    expect(screen.queryByText('应收节点')).toBeNull()
     expect(screen.getAllByText('TXXTB20260715000004')).toHaveLength(2)
     expect(screen.getAllByText('ARXTB202607000002')).toHaveLength(2)
+  })
+
+  it('labels payable schedule node as 应付单号 in the verification flow', async () => {
+    getVerification.mockResolvedValueOnce({
+      verification: {
+        verificationNo: 'WBDB-CL-0001',
+        direction: 'payable',
+        verificationDate: '2026-07-21',
+        status: 'normal',
+        amountCents: 4000,
+        billUnsettledAfterCents: 6000,
+        createdByName: '财务',
+        createdAt: '2026-07-21T08:43:00.000Z',
+        remark: null,
+        departureNo: null,
+        departureName: null,
+      },
+      transaction: {
+        transactionNo: 'WBDB-TX-0007',
+        direction: 'expense',
+        amountCents: 10000,
+        allocatedAmountCents: 4000,
+        unallocatedAmountCents: 6000,
+        transactionDate: '2026-07-21',
+        paymentChannel: 'other',
+        counterpartyType: 'partner',
+        counterpartyName: '部分核销支出',
+        departureId: null,
+      },
+      schedule: {
+        scheduleNo: 'WBDB-AP-0037',
+        direction: 'payable',
+        amountCents: 10000,
+        settledAmountCents: 4000,
+        unsettledAmountCents: 6000,
+        status: 'pending',
+        counterpartyType: 'partner',
+        counterpartyName: '部分核销支出',
+        departureId: null,
+      },
+    })
+
+    renderWithQueryClient(
+      <VerificationDetailDrawer open verificationId="verification-payable" onClose={vi.fn()} />,
+    )
+
+    expect(await screen.findByRole('heading', { name: '核销链路' })).toBeInTheDocument()
+    expect(screen.getByText('应付单号')).toBeInTheDocument()
+    expect(screen.queryByText('应付节点')).toBeNull()
   })
 
   it('presents a transaction with the same overview-first information hierarchy', async () => {

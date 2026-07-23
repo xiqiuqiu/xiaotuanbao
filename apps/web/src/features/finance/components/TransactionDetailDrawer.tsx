@@ -183,7 +183,7 @@ export function TransactionDetailDrawer({
       dataIndex: 'verificationNo',
     },
     {
-      title: '核销方向',
+      title: '核销类型',
       dataIndex: 'scheduleDirection',
       render: (value: string) => catalogLabel(VERIFICATION_DIRECTION_LABELS, value),
     },

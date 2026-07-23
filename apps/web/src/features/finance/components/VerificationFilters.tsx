@@ -76,8 +76,8 @@ export function VerificationFilters({
           />
           <Select
             allowClear
-            aria-label="核销方向"
-            placeholder="核销方向"
+            aria-label="核销类型"
+            placeholder="核销类型"
             style={{ width: 120 }}
             value={direction}
             onChange={onDirectionChange}
@@ -94,8 +94,8 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
-            aria-label="流水号"
-            placeholder="流水号"
+            aria-label="关联流水号"
+            placeholder="关联流水号"
             style={{ width: 180 }}
             value={transactionNo}
             onChange={(event) => onTransactionNoChange(event.target.value)}
@@ -103,8 +103,8 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
-            aria-label="收付款单号"
-            placeholder="收付款单号"
+            aria-label="关联账款单号"
+            placeholder="关联账款单号"
             style={{ width: 180 }}
             value={scheduleNo}
             onChange={(event) => onScheduleNoChange(event.target.value)}

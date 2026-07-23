@@ -41,7 +41,7 @@ export function buildVerificationColumns({
     },
     { title: '核销日期', dataIndex: 'verificationDate' },
     {
-      title: '核销方向',
+      title: '核销类型',
       dataIndex: 'direction',
       render: (value: string) => catalogLabel(VERIFICATION_DIRECTION_LABELS, value),
     },
@@ -74,20 +74,20 @@ export function buildVerificationColumns({
   }
 
   columns.push(
-    { title: '流水号', dataIndex: 'transactionNo' },
-    { title: '收付款单号', dataIndex: 'scheduleNo' },
+    { title: '关联流水号', dataIndex: 'transactionNo' },
+    { title: '关联账款单号', dataIndex: 'scheduleNo' },
     {
       title: '本次核销金额',
       dataIndex: 'amountCents',
       render: (value: number) => formatCents(value),
     },
     {
-      title: '核销后未结金额',
+      title: '账款剩余未结金额',
       dataIndex: 'billUnsettledAfterCents',
       render: (value: number) => formatCents(value),
     },
     {
-      title: '状态',
+      title: '核销状态',
       dataIndex: 'status',
       render: (itemStatus: string) => (
         <Tag color={VERIFICATION_STATUS_COLORS[itemStatus]}>
@@ -95,7 +95,7 @@ export function buildVerificationColumns({
         </Tag>
       ),
     },
-    { title: '核销人', dataIndex: 'createdByName' },
+    { title: '操作人', dataIndex: 'createdByName' },
     ...buildBusinessTimestampColumns<FinanceVerificationListItem>(),
     {
       title: '操作',
