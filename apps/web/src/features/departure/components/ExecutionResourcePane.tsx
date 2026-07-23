@@ -3,6 +3,7 @@ import {
   Alert,
   Button,
   Empty,
+  Flex,
   Form,
   Modal,
   Space,
@@ -10,16 +11,23 @@ import {
   Table,
   Typography,
   message,
+  theme,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { DepartureStatus } from '@xiaotuanbao/shared'
 import type {
   DepartureDetail,
   ItinerarySegmentSummary,
   SegmentResourceSummary,
 } from '@/types/api'
+import { formatCents } from '../catalog'
+import {
+  summarizeSegmentResourceAmounts,
+  type SegmentResourceAmountSummary,
+} from '../utils/segment-resource-amount-summary'
 import {
   createSegmentResource,
   deleteSegmentResource,
@@ -61,6 +69,7 @@ interface ExecutionResourcePaneProps {
 }
 
 interface ExecutionResourceHeaderProps {
+  amountSummary: SegmentResourceAmountSummary
   showBatchGenerate: boolean
   batchGenerating: boolean
   showAddResource: boolean
@@ -69,23 +78,37 @@ interface ExecutionResourceHeaderProps {
 }
 
 function ExecutionResourceHeader({
+  amountSummary,
   showBatchGenerate,
   batchGenerating,
   showAddResource,
   onBatchGenerate,
   onAddResource,
 }: ExecutionResourceHeaderProps) {
+  const { token } = theme.useToken()
+  const showAmountMeta = amountSummary.resourceCount > 0
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-        marginBottom: 16,
-      }}
-    >
-      <Typography.Text strong>资源安排</Typography.Text>
+    <Flex align="center" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 16 }}>
+      <Flex align="baseline" gap={16} wrap="wrap">
+        <Typography.Text strong>资源安排</Typography.Text>
+        {showAmountMeta ? (
+          <Typography.Text type="secondary" aria-label="本段资源金额汇总">
+            资源 {amountSummary.resourceCount} 项 · 资源金额{' '}
+            <Typography.Text strong>
+              {formatCents(amountSummary.resourceAmountCents)}
+            </Typography.Text>
+            {amountSummary.ungeneratedPayableCents > 0 ? (
+              <>
+                {' · 尚未生成应付 '}
+                <Typography.Text strong style={{ color: token.colorWarning }}>
+                  {formatCents(amountSummary.ungeneratedPayableCents)}
+                </Typography.Text>
+              </>
+            ) : null}
+          </Typography.Text>
+        ) : null}
+      </Flex>
       <Space>
         {showBatchGenerate ? (
           <Button onClick={onBatchGenerate} loading={batchGenerating}>
@@ -98,7 +121,7 @@ function ExecutionResourceHeader({
           </Button>
         ) : null}
       </Space>
-    </div>
+    </Flex>
   )
 }
 
@@ -197,6 +220,13 @@ export function ExecutionResourcePane({
   })
 
   const resources = listResult?.items ?? []
+  const amountSummary = useMemo(
+    () =>
+      summarizeSegmentResourceAmounts(listResult?.items ?? [], {
+        departureSettled: departure.status === DepartureStatus.SETTLED,
+      }),
+    [departure.status, listResult?.items],
+  )
   const payableGap = segmentPayableGenerationGap(
     segment.payableGeneratedCount,
     segment.resourceCount,
@@ -401,6 +431,7 @@ export function ExecutionResourcePane({
   return (
     <div>
       <ExecutionResourceHeader
+        amountSummary={amountSummary}
         showBatchGenerate={showBatchGenerate}
         batchGenerating={batchGenerateMutation.isPending}
         showAddResource={
