@@ -44,4 +44,18 @@ describe('SupplierReadonlySections', () => {
     expect(screen.getByText('张经理')).toBeInTheDocument()
     expect(screen.getByText('最大接待 200 人')).toBeInTheDocument()
   })
+
+  it('renders Descriptions.extra inside 基础信息 header', () => {
+    const { container } = render(
+      <SupplierReadonlySections
+        supplier={mockSupplier}
+        extra={<button type="button">编辑</button>}
+      />,
+    )
+    const extra = container.querySelector('.ant-descriptions-extra')
+    expect(extra).toContainElement(screen.getByRole('button', { name: '编辑' }))
+    expect(extra?.closest('.ant-descriptions')?.querySelector('.ant-descriptions-title')).toHaveTextContent(
+      '基础信息',
+    )
+  })
 })

@@ -122,13 +122,22 @@ describe('PartnerDetailPage', () => {
     })
   })
 
-  it('shows partner name and opens shared edit drawer from header', async () => {
+  it('places edit inside 基础信息 Descriptions extra and opens the shared drawer', async () => {
     const user = userEvent.setup()
     renderDetailPage()
 
     expect(await screen.findByRole('heading', { level: 4, name: '华东国旅' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /返回合作伙伴列表/ })).toBeInTheDocument()
 
+    const editButton = screen.getByRole('button', { name: /编辑/ })
+    const basicsHeader = screen.getByText('基础信息').closest('.ant-descriptions-header')
+    expect(basicsHeader).toContainElement(editButton)
+
+    // 编辑只属于基本信息：切走后不应残留在页头
+    await user.click(screen.getByRole('tab', { name: '往来账款' }))
+    expect(screen.queryByRole('button', { name: /编辑/ })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '基本信息' }))
     await user.click(screen.getByRole('button', { name: /编辑/ }))
     expect(await screen.findByText('编辑合作伙伴')).toBeInTheDocument()
     expect(screen.getByLabelText('合作伙伴名称')).toHaveValue('华东国旅')
