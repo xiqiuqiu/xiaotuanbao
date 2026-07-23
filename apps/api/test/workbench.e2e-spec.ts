@@ -371,7 +371,7 @@ describe('Workbench contract (e2e)', () => {
           {
             key: 'pending-payables',
             label: '待生成应付',
-            value: 0,
+            value: 3,
             suffix: '个资源',
             href: '/departure/account-generation-gaps?generationKind=payable',
           },
