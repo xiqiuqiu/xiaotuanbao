@@ -3,6 +3,12 @@ import type {
   DueDateRange,
   PaymentScheduleStatusFilter,
 } from '../components/PaymentScheduleFilters'
+import {
+  collectionMethodText,
+  feeCategoryText,
+  feeItemText,
+  sourceOrderText,
+} from './payment-schedule-identity-display'
 
 export function applyPaymentScheduleClientFilters(
   items: PaymentScheduleSummary[],
@@ -18,7 +24,17 @@ export function applyPaymentScheduleClientFilters(
     }
 
     if (normalizedKeyword) {
-      const haystack = `${item.scheduleNo} ${item.title}`.toLowerCase()
+      // 与单向页 placeholder 对齐：单号 + 收款方式/费用项目（及同源 title、溯源列）。
+      const haystack = [
+        item.scheduleNo,
+        item.title,
+        sourceOrderText(item),
+        collectionMethodText(item),
+        feeCategoryText(item),
+        feeItemText(item),
+      ]
+        .join(' ')
+        .toLowerCase()
       if (!haystack.includes(normalizedKeyword)) {
         return false
       }

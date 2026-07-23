@@ -361,12 +361,13 @@ export class PaymentScheduleService {
     scheduleId: string,
   ): Promise<PaymentScheduleDetail> {
     const schedule = await this.findScheduleOrThrow(organizationId, direction, scheduleId)
-    const [settledAmountCents, hasVerificationHistory, activities, departureStatus] =
+    const [settledAmountCents, hasVerificationHistory, activities, departureStatus, sourceMetaMap] =
       await Promise.all([
         this.verificationService.getSettledAmountCents(schedule.id),
         this.verificationService.hasVerificationHistory(schedule.id),
         this.loadActivities(schedule.id),
         this.departureFinanceFacade.getStatusById(organizationId, schedule.departureId),
+        this.loadScheduleSourceMeta(organizationId, [schedule]),
       ])
     return {
       ...this.toSummary(
@@ -375,6 +376,7 @@ export class PaymentScheduleService {
         hasVerificationHistory,
         departureStatus,
         schedule.voidOperator?.name ?? null,
+        sourceMetaMap.get(schedule.id) ?? EMPTY_SCHEDULE_SOURCE_META,
       ),
       activities,
     }

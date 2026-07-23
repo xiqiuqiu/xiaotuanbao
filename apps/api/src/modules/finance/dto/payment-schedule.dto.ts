@@ -115,7 +115,7 @@ export class ListPaymentSchedulesQueryDto {
   @IsString()
   counterpartyKeyword?: string
 
-  /** 精确匹配节点编号（工作台队列单项下钻）。 */
+  /** 精确匹配单号 scheduleNo（工作台队列单项下钻）。 */
   @IsOptional()
   @IsString()
   scheduleNo?: string

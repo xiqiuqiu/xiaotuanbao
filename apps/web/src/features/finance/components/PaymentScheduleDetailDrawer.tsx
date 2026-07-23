@@ -11,6 +11,13 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  collectionMethodText,
+  counterpartyText,
+  feeCategoryText,
+  feeItemText,
+  sourceOrderText,
+} from '../utils/payment-schedule-identity-display'
 
 interface PaymentScheduleDetailDrawerProps {
   open: boolean
@@ -118,7 +125,7 @@ export function PaymentScheduleDetailDrawer({
 
   return (
     <Drawer
-      title={isReceivable ? '应收节点详情' : '应付节点详情'}
+      title={isReceivable ? '应收单详情' : '应付单详情'}
       open={open}
       onClose={onClose}
       size="min(560px, 100vw)"
@@ -138,8 +145,32 @@ export function PaymentScheduleDetailDrawer({
       ) : schedule ? (
         <>
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="节点编号">{schedule.scheduleNo}</Descriptions.Item>
-            <Descriptions.Item label="标题">{schedule.title}</Descriptions.Item>
+            <Descriptions.Item label={isReceivable ? '应收单号' : '应付单号'}>
+              {schedule.scheduleNo}
+            </Descriptions.Item>
+            {isReceivable ? (
+              <>
+                <Descriptions.Item label="来源客源单">
+                  {sourceOrderText(schedule)}
+                </Descriptions.Item>
+                <Descriptions.Item label="收款方式">
+                  {collectionMethodText(schedule)}
+                </Descriptions.Item>
+                <Descriptions.Item label="收款对象">
+                  {counterpartyText(schedule)}
+                </Descriptions.Item>
+              </>
+            ) : (
+              <>
+                <Descriptions.Item label="费用类别">
+                  {feeCategoryText(schedule)}
+                </Descriptions.Item>
+                <Descriptions.Item label="费用项目">{feeItemText(schedule)}</Descriptions.Item>
+                <Descriptions.Item label="付款对象">
+                  {counterpartyText(schedule)}
+                </Descriptions.Item>
+              </>
+            )}
             {schedule.voidedAt ? (
               <>
                 <Descriptions.Item label="状态">已作废</Descriptions.Item>
@@ -159,6 +190,9 @@ export function PaymentScheduleDetailDrawer({
                 <Descriptions.Item label="约定金额">
                   {formatCents(schedule.amountCents)}
                 </Descriptions.Item>
+                {isReceivable ? (
+                  <Descriptions.Item label="到期日">{schedule.dueDate}</Descriptions.Item>
+                ) : null}
                 <Descriptions.Item label="已核销">
                   {formatCents(schedule.settledAmountCents)}
                 </Descriptions.Item>

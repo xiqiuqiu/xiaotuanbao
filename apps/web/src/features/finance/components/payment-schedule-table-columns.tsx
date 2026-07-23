@@ -4,62 +4,26 @@ import { Button, Dropdown, Space, Tag, Tooltip } from 'antd'
 import { DownOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
-  CounterpartyType,
   DepartureStatus,
   PaymentScheduleDirection,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
-  RESOURCE_KIND_LABELS,
   deriveSettlementLabel,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
+import { SETTLEMENT_LABEL_COLORS, formatCents } from '../catalog'
 import {
-  RECEIVABLE_COLLECTION_METHOD_LABELS,
-  SETTLEMENT_LABEL_COLORS,
-  formatCents,
-} from '../catalog'
+  collectionMethodText,
+  counterpartyText,
+  feeCategoryText,
+  feeItemText,
+  sourceOrderText,
+} from '../utils/payment-schedule-identity-display'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 
 const DASH = '-'
-
-/** 应付「费用类别」：资源种类 label；非资源来源显示「-」。 */
-function feeCategoryText(schedule: PaymentScheduleSummary): string {
-  if (!schedule.resourceKind) {
-    return DASH
-  }
-  return RESOURCE_KIND_LABELS[schedule.resourceKind as never] ?? schedule.resourceKind
-}
-
-/** 应付「费用项目」：实时资源项目名，缺失回落资源种类；手工行回落节点标题。 */
-function feeItemText(schedule: PaymentScheduleSummary): string {
-  if (schedule.resourceTitle) {
-    return schedule.resourceTitle
-  }
-  if (schedule.resourceKind) {
-    return RESOURCE_KIND_LABELS[schedule.resourceKind as never] ?? schedule.resourceKind
-  }
-  return schedule.title || DASH
-}
-
-/** 应收「来源客源单」：客源单展示名；非客源来源显示「-」。 */
-function sourceOrderText(schedule: PaymentScheduleSummary): string {
-  return schedule.sourceOrderName || DASH
-}
-
-/** 应收「收款方式」：客户补款 / 游客代收；手工其他应收回落「其他」。 */
-function collectionMethodText(schedule: PaymentScheduleSummary): string {
-  return RECEIVABLE_COLLECTION_METHOD_LABELS[schedule.sourceType] ?? '其他'
-}
-
-/** 收款对象 / 付款对象展示值：游客代收统一显示「游客」，其余显示对手方名称。 */
-function counterpartyText(schedule: PaymentScheduleSummary): string {
-  if (schedule.counterpartyType === CounterpartyType.GUEST) {
-    return '游客'
-  }
-  return schedule.counterpartyName || DASH
-}
 
 function isScheduleActionable(schedule: PaymentScheduleSummary): boolean {
   return schedule.status !== PaymentScheduleStatus.CANCELLED
@@ -228,7 +192,7 @@ export function buildPaymentScheduleColumns({
   }
 
   // 客源单应收的 title 与「收款方式」同源（客户补款/游客代收），列表不单开标题列；
-  // 检索仍可用筛选「节点编号 / 标题」；应付由费用项目覆盖资源名或标题回落。
+  // 检索 placeholder 为「搜索应收单号 / 收款方式」（底层仍可命中 title）；应付由费用项目覆盖。
   const identityColumns: ColumnsType<PaymentScheduleSummary> = [
     scheduleNoColumn,
     ...departureColumns,

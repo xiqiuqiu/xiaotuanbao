@@ -51,7 +51,7 @@ export interface ListPaymentSchedulesParams {
   counterpartyName?: string
   counterpartyKeyword?: string
   status?: 'voided'
-  /** 精确匹配节点编号（工作台队列单项下钻）。 */
+  /** 精确匹配单号 scheduleNo（工作台队列单项下钻）。 */
   scheduleNo?: string
   /** 工作台应收跟进 / 账龄下钻窗口（服务端筛选）。 */
   receivableFollowUp?:

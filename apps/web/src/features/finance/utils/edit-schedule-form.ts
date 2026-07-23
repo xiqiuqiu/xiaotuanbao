@@ -1,4 +1,4 @@
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { CounterpartyType, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   centsToYuan,
   dateStringToDayjs,
@@ -7,7 +7,6 @@ import {
 } from './finance-form'
 
 export interface EditScheduleFormValues {
-  title: string
   amountYuan?: number
   dueDate?: ReturnType<typeof dateStringToDayjs>
   counterpartyName?: string
@@ -15,10 +14,12 @@ export interface EditScheduleFormValues {
 
 export function scheduleToEditValues(schedule: PaymentScheduleSummary): EditScheduleFormValues {
   return {
-    title: schedule.title,
     amountYuan: centsToYuan(schedule.amountCents),
     dueDate: dateStringToDayjs(schedule.dueDate),
-    counterpartyName: schedule.counterpartyName ?? undefined,
+    counterpartyName:
+      schedule.counterpartyType === CounterpartyType.GUEST
+        ? undefined
+        : (schedule.counterpartyName ?? undefined),
   }
 }
 
@@ -32,7 +33,8 @@ export function buildUpdateSchedulePayload(
     dueDate?: string
     counterpartyName?: string | null
   } = {
-    title: values.title.trim(),
+    // 列表/编辑/详情不再展示标题；提交沿用原存储 title。
+    title: schedule.title,
   }
 
   if (!schedule.financeTouched) {
@@ -42,7 +44,10 @@ export function buildUpdateSchedulePayload(
     if (values.dueDate) {
       payload.dueDate = dayjsToDateString(values.dueDate)
     }
-    if (values.counterpartyName !== undefined) {
+    if (
+      schedule.counterpartyType !== CounterpartyType.GUEST &&
+      values.counterpartyName !== undefined
+    ) {
       payload.counterpartyName = values.counterpartyName.trim() || null
     }
   }

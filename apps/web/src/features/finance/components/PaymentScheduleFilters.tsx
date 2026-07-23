@@ -127,8 +127,12 @@ export function PaymentScheduleFilters({
         ) : null}
         <Input.Search
           allowClear
-          aria-label="搜索节点编号 / 标题"
-          placeholder="搜索节点编号 / 标题"
+          aria-label={
+            isReceivable ? '搜索应收单号 / 收款方式' : '搜索应付单号 / 费用项目'
+          }
+          placeholder={
+            isReceivable ? '搜索应收单号 / 收款方式' : '搜索应付单号 / 费用项目'
+          }
           style={{ width: 220, maxWidth: '100%' }}
           value={keyword}
           onChange={(event) => onKeywordChange(event.target.value)}

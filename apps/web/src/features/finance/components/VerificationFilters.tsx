@@ -103,8 +103,8 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
-            aria-label="节点编号"
-            placeholder="节点编号"
+            aria-label="收付款单号"
+            placeholder="收付款单号"
             style={{ width: 180 }}
             value={scheduleNo}
             onChange={(event) => onScheduleNoChange(event.target.value)}

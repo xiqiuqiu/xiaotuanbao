@@ -44,7 +44,7 @@ export type UsePaymentScheduleWorkspaceOptions = {
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
   initialCounterpartyKeyword?: string
-  /** 精确节点编号；服务端筛选，计入列表 total。 */
+  /** 精确单号（scheduleNo）；服务端筛选，计入列表 total。 */
   scheduleNo?: string
   /** 工作台应收跟进窗口；服务端筛选，计入列表 total。 */
   receivableFollowUp?:

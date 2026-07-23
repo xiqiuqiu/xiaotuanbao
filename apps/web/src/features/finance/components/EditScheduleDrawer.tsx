@@ -1,8 +1,15 @@
 import { DatePicker, Drawer, Form, Input, InputNumber, Select, Space, Button } from 'antd'
 import type { FormInstance } from 'antd/es/form'
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import { CounterpartyType, type PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { COUNTERPARTY_TYPE_OPTIONS } from '../catalog'
 import type { EditScheduleFormValues } from '../utils/edit-schedule-form'
+import {
+  collectionMethodText,
+  counterpartyText,
+  feeCategoryText,
+  feeItemText,
+  sourceOrderText,
+} from '../utils/payment-schedule-identity-display'
 
 interface EditScheduleDrawerProps {
   open: boolean
@@ -25,10 +32,11 @@ export function EditScheduleDrawer({
   onSubmit,
 }: EditScheduleDrawerProps) {
   const financeLocked = schedule?.financeTouched ?? false
+  const isGuestCounterparty = schedule?.counterpartyType === CounterpartyType.GUEST
 
   return (
     <Drawer
-      title="编辑节点"
+      title={isReceivable ? '编辑应收单' : '编辑应付单'}
       open={open}
       size="min(480px, 100vw)"
       onClose={onClose}
@@ -43,16 +51,47 @@ export function EditScheduleDrawer({
     >
       {schedule ? (
         <Form form={form} layout="vertical" onFinish={onSubmit}>
-          <Form.Item label="节点编号">
+          <Form.Item label={isReceivable ? '应收单号' : '应付单号'}>
             <Input value={schedule.scheduleNo} disabled />
           </Form.Item>
-          <Form.Item
-            name="title"
-            label="标题"
-            rules={[{ required: true, message: '请输入标题' }]}
-          >
-            <Input maxLength={100} />
+          {isReceivable ? (
+            <>
+              <Form.Item label="来源客源单">
+                <Input value={sourceOrderText(schedule)} disabled />
+              </Form.Item>
+              <Form.Item label="收款方式">
+                <Input value={collectionMethodText(schedule)} disabled />
+              </Form.Item>
+            </>
+          ) : (
+            <>
+              <Form.Item label="费用类别">
+                <Input value={feeCategoryText(schedule)} disabled />
+              </Form.Item>
+              <Form.Item label="费用项目">
+                <Input value={feeItemText(schedule)} disabled />
+              </Form.Item>
+            </>
+          )}
+          <Form.Item label={isReceivable ? '收款对象类型' : '付款对象类型'}>
+            <Select
+              disabled
+              value={schedule.counterpartyType}
+              options={[...COUNTERPARTY_TYPE_OPTIONS]}
+            />
           </Form.Item>
+          {isGuestCounterparty ? (
+            <Form.Item label={isReceivable ? '收款对象名称' : '付款对象名称'}>
+              <Input value={counterpartyText(schedule)} disabled />
+            </Form.Item>
+          ) : (
+            <Form.Item
+              name="counterpartyName"
+              label={isReceivable ? '收款对象名称' : '付款对象名称'}
+            >
+              <Input disabled={financeLocked} />
+            </Form.Item>
+          )}
           <Form.Item
             name="amountYuan"
             label="金额（元）"
@@ -74,19 +113,6 @@ export function EditScheduleDrawer({
               <DatePicker style={{ width: '100%' }} disabled={financeLocked} />
             </Form.Item>
           ) : null}
-          <Form.Item label={isReceivable ? '收款对象类型' : '付款对象类型'}>
-            <Select
-              disabled
-              value={schedule.counterpartyType}
-              options={[...COUNTERPARTY_TYPE_OPTIONS]}
-            />
-          </Form.Item>
-          <Form.Item
-            name="counterpartyName"
-            label={isReceivable ? '收款对象名称' : '付款对象名称'}
-          >
-            <Input disabled={financeLocked} />
-          </Form.Item>
         </Form>
       ) : null}
     </Drawer>
