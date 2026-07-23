@@ -171,14 +171,6 @@ export function buildPaymentScheduleColumns({
     ),
   }
 
-  const titleColumn: ColumnsType<PaymentScheduleSummary>[number] = {
-    title: '标题',
-    dataIndex: 'title',
-    width: 200,
-    ellipsis: { showTitle: false },
-    render: (value: string) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
-  }
-
   const departureColumns: ColumnsType<PaymentScheduleSummary> = isDepartureScope
     ? []
     : [
@@ -235,10 +227,10 @@ export function buildPaymentScheduleColumns({
     ),
   }
 
-  // 应收列表靠标题检索/对账，必须露出节点标题；应付费用项目已覆盖资源名或标题回落。
+  // 客源单应收的 title 与「收款方式」同源（客户补款/游客代收），列表不单开标题列；
+  // 检索仍可用筛选「节点编号 / 标题」；应付由费用项目覆盖资源名或标题回落。
   const identityColumns: ColumnsType<PaymentScheduleSummary> = [
     scheduleNoColumn,
-    ...(isReceivable ? [titleColumn] : []),
     ...departureColumns,
     ...sourceColumns,
     counterpartyColumn,
