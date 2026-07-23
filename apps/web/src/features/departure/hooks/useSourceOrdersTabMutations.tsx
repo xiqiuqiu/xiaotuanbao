@@ -40,6 +40,7 @@ export function useSourceOrdersTabMutations({
 
   const invalidateSourceOrders = () => {
     void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
+    void queryClient.invalidateQueries({ queryKey: ['source-order'] })
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
   }
 
