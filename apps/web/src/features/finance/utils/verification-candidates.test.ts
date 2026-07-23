@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   filterCandidateSchedules,
   filterCandidateTransactions,
+  formatCounterpartySearchText,
   matchesCounterparty,
 } from './verification-candidates'
 
@@ -110,6 +111,13 @@ describe('filterCandidateTransactions', () => {
 
     expect(result).toHaveLength(1)
     expect(result[0]?.id).toBe('tx-1')
+  })
+
+  it('search text keeps method and name without middle-dot concat', () => {
+    expect(formatCounterpartySearchText('guest', '福建土楼专线地接 7月25日发客')).toBe(
+      '游客代收 福建土楼专线地接 7月25日发客',
+    )
+    expect(formatCounterpartySearchText('guest', null)).toBe('游客代收')
   })
 })
 

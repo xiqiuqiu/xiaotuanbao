@@ -26,7 +26,6 @@ import {
 } from '@/services/finance.service'
 import { canMutateFinance } from '../utils/finance-permission'
 import {
-  COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
   TRANSACTION_DIRECTION_COLORS,
   TRANSACTION_DIRECTION_LABELS,
@@ -39,6 +38,10 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 interface TransactionDetailDrawerProps {
@@ -70,14 +73,6 @@ function formatDepartureLink(
       {departureName ? `${departureNo} · ${departureName}` : departureNo}
     </FinanceDepartureLink>
   )
-}
-
-function formatCounterpartyLabel(
-  counterpartyType: string,
-  counterpartyName: string | null,
-): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
-  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
 }
 
 function DetailSection({ title, children }: { title: string; children: ReactNode }) {
@@ -299,11 +294,11 @@ export function TransactionDetailDrawer({
               <Descriptions.Item label="收付款通道">
                 {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
               </Descriptions.Item>
+              <Descriptions.Item label="收款方式">
+                {counterpartyCollectionMethodText(transaction.counterpartyType)}
+              </Descriptions.Item>
               <Descriptions.Item label="往来对象">
-                {formatCounterpartyLabel(
-                  transaction.counterpartyType,
-                  transaction.counterpartyName,
-                )}
+                {counterpartyDisplayName(transaction.counterpartyName)}
               </Descriptions.Item>
               <Descriptions.Item label="关联发团">
                 {formatDepartureLink(

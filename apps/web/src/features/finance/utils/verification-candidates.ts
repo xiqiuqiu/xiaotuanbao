@@ -4,7 +4,7 @@ import {
   type FinanceTransactionSummary,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
-import { COUNTERPARTY_TYPE_LABELS, catalogLabel } from '../catalog'
+import { counterpartyCollectionMethodText } from './counterparty-display'
 import type { VerificationDirection } from './verification-form'
 
 export function matchesCounterparty(
@@ -26,12 +26,18 @@ function expectedTransactionDirection(direction: VerificationDirection): string 
   return direction === 'receivable' ? TransactionDirection.INFLOW : TransactionDirection.OUTFLOW
 }
 
+/** 候选搜索用文案：收款方式与往来对象分词，不再用「·」拼接展示串。 */
 export function formatCounterpartySearchText(
   counterpartyType: string,
   counterpartyName: string | null | undefined,
 ): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
-  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
+  const method = counterpartyCollectionMethodText(counterpartyType)
+  const name = counterpartyName?.trim()
+  if (!name) {
+    return method
+  }
+  // 名称非空时不回落「-」，避免无效搜索词。
+  return `${method} ${name}`
 }
 
 function formatDepartureLabel(

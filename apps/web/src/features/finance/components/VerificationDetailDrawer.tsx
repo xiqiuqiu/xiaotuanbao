@@ -21,7 +21,6 @@ import {
 } from '@xiaotuanbao/shared'
 import { getVerification } from '@/services/finance.service'
 import {
-  COUNTERPARTY_TYPE_LABELS,
   PAYMENT_CHANNEL_LABELS,
   PAYMENT_SCHEDULE_STATUS_COLORS,
   PAYMENT_SCHEDULE_STATUS_LABELS,
@@ -34,6 +33,10 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 interface VerificationDetailDrawerProps {
@@ -50,14 +53,6 @@ function formatDateTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function formatCounterpartyLabel(
-  counterpartyType: string,
-  counterpartyName: string | null,
-): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
-  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
 }
 
 interface AmountStripItem {
@@ -415,11 +410,11 @@ export function VerificationDetailDrawer({
                       <Descriptions.Item label="收付款通道">
                         {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
                       </Descriptions.Item>
+                      <Descriptions.Item label="收款方式">
+                        {counterpartyCollectionMethodText(transaction.counterpartyType)}
+                      </Descriptions.Item>
                       <Descriptions.Item label="往来对象">
-                        {formatCounterpartyLabel(
-                          transaction.counterpartyType,
-                          transaction.counterpartyName ?? null,
-                        )}
+                        {counterpartyDisplayName(transaction.counterpartyName)}
                       </Descriptions.Item>
                       <Descriptions.Item label="关联发团">
                         {departureLink(transaction.departureId)}
@@ -464,11 +459,11 @@ export function VerificationDetailDrawer({
                           {catalogLabel(VERIFICATION_DIRECTION_LABELS, schedule.direction)}
                         </Tag>
                       </Descriptions.Item>
+                      <Descriptions.Item label="收款方式">
+                        {counterpartyCollectionMethodText(schedule.counterpartyType)}
+                      </Descriptions.Item>
                       <Descriptions.Item label="往来对象">
-                        {formatCounterpartyLabel(
-                          schedule.counterpartyType,
-                          schedule.counterpartyName ?? null,
-                        )}
+                        {counterpartyDisplayName(schedule.counterpartyName)}
                       </Descriptions.Item>
                       <Descriptions.Item label="关联发团">
                         {departureLink(schedule.departureId)}

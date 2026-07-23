@@ -48,11 +48,13 @@ import type {
 } from '../utils/verification-form'
 import { useCreateVerificationDrawerState } from '../hooks/useCreateVerificationDrawerState'
 import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
+import {
   buildScheduleColumns,
   buildTransactionColumns,
   formatDepartureLabel,
-  formatScheduleCounterpartyLabel,
-  formatTransactionCounterpartyLabel,
 } from './create-verification-table-columns'
 import styles from './CreateVerificationDrawer.module.css'
 
@@ -226,8 +228,11 @@ function TransactionSelectionSection({
                 selectedTransaction.paymentChannel,
               )}
             </Descriptions.Item>
-            <Descriptions.Item label="往来对象" span="filled">
-              {formatTransactionCounterpartyLabel(selectedTransaction)}
+            <Descriptions.Item label="收款方式">
+              {counterpartyCollectionMethodText(selectedTransaction.counterpartyType)}
+            </Descriptions.Item>
+            <Descriptions.Item label="往来对象">
+              {counterpartyDisplayName(selectedTransaction.counterpartyName)}
             </Descriptions.Item>
             <Descriptions.Item label="关联发团" span="filled">
               {selectedTransaction.departureNo &&
@@ -365,8 +370,11 @@ function ScheduleSelectionSection({
             <Descriptions.Item label="标题">
               {selectedSchedule.title}
             </Descriptions.Item>
-            <Descriptions.Item label="往来对象" span="filled">
-              {formatScheduleCounterpartyLabel(selectedSchedule)}
+            <Descriptions.Item label="收款方式">
+              {counterpartyCollectionMethodText(selectedSchedule.counterpartyType)}
+            </Descriptions.Item>
+            <Descriptions.Item label="往来对象">
+              {counterpartyDisplayName(selectedSchedule.counterpartyName)}
             </Descriptions.Item>
             <Descriptions.Item label="关联发团" span="filled">
               {formatDepartureLabel(selectedSchedule.departureId, departureMap)}
@@ -700,7 +708,10 @@ function VerificationPreview({
               {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
             </Typography.Text>
             <Typography.Text>
-              {formatTransactionCounterpartyLabel(transaction)}
+              {counterpartyCollectionMethodText(transaction.counterpartyType)}
+            </Typography.Text>
+            <Typography.Text>
+              {counterpartyDisplayName(transaction.counterpartyName)}
             </Typography.Text>
             <Typography.Text type="secondary">
               {transaction.departureNo && transaction.departureName
@@ -739,7 +750,10 @@ function VerificationPreview({
             </Typography.Text>
             <Typography.Text>{schedule.title}</Typography.Text>
             <Typography.Text>
-              {formatScheduleCounterpartyLabel(schedule)}
+              {counterpartyCollectionMethodText(schedule.counterpartyType)}
+            </Typography.Text>
+            <Typography.Text>
+              {counterpartyDisplayName(schedule.counterpartyName)}
             </Typography.Text>
             <Typography.Text type="secondary">
               {formatDepartureLabel(schedule.departureId, departureMap)}

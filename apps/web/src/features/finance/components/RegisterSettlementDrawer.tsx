@@ -1,7 +1,11 @@
 import { Col, DatePicker, Divider, Drawer, Form, Input, InputNumber, Row, Select, Space, Button, Typography } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
-import { PAYMENT_CHANNEL_OPTIONS, catalogLabel, COUNTERPARTY_TYPE_LABELS, formatCents } from '../catalog'
+import { PAYMENT_CHANNEL_OPTIONS, formatCents } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 import { centsToYuan, yuanToCents } from '../utils/finance-form'
 import type { RegisterSettlementFormValues } from '../utils/register-settlement-form'
 
@@ -73,11 +77,6 @@ function formatDepartureLabel(
   return `${departure.departureNo} · ${departure.name}`
 }
 
-function formatCounterpartyLabel(schedule: PaymentScheduleSummary): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, schedule.counterpartyType)
-  return schedule.counterpartyName ? `${typeLabel} · ${schedule.counterpartyName}` : typeLabel
-}
-
 export function RegisterSettlementDrawer({
   variant,
   open,
@@ -122,8 +121,14 @@ export function RegisterSettlementDrawer({
             <Form.Item label="关联团单">
               <Input value={formatDepartureLabel(schedule, departureMap)} disabled />
             </Form.Item>
+            <Form.Item label="收款方式">
+              <Input
+                value={counterpartyCollectionMethodText(schedule.counterpartyType)}
+                disabled
+              />
+            </Form.Item>
             <Form.Item label={copy.counterpartyLabel}>
-              <Input value={formatCounterpartyLabel(schedule)} disabled />
+              <Input value={counterpartyDisplayName(schedule.counterpartyName)} disabled />
             </Form.Item>
 
             <Row gutter={16}>

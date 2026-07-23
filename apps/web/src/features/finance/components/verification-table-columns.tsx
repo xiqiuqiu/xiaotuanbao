@@ -6,22 +6,17 @@ import {
 } from '@xiaotuanbao/shared'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 import {
-  COUNTERPARTY_TYPE_LABELS,
   VERIFICATION_DIRECTION_LABELS,
   VERIFICATION_STATUS_COLORS,
   VERIFICATION_STATUS_LABELS,
   catalogLabel,
   formatCents,
 } from '../catalog'
+import {
+  counterpartyCollectionMethodText,
+  counterpartyDisplayName,
+} from '../utils/counterparty-display'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
-
-function formatCounterpartyLabel(
-  counterpartyType: string,
-  counterpartyName: string | null,
-): string {
-  const typeLabel = catalogLabel(COUNTERPARTY_TYPE_LABELS, counterpartyType)
-  return counterpartyName ? `${typeLabel} · ${counterpartyName}` : typeLabel
-}
 
 export function buildVerificationColumns({
   isDepartureScope,
@@ -51,10 +46,16 @@ export function buildVerificationColumns({
       render: (value: string) => catalogLabel(VERIFICATION_DIRECTION_LABELS, value),
     },
     {
+      title: '收款方式',
+      key: 'collectionMethod',
+      width: 100,
+      render: (_: unknown, record) =>
+        counterpartyCollectionMethodText(record.counterpartyType),
+    },
+    {
       title: '往来对象',
       key: 'counterparty',
-      render: (_: unknown, record) =>
-        formatCounterpartyLabel(record.counterpartyType, record.counterpartyName),
+      render: (_: unknown, record) => counterpartyDisplayName(record.counterpartyName),
     },
   ]
 
