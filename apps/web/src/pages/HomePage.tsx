@@ -197,7 +197,7 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
               ) : <Typography.Text type="secondary">-</Typography.Text>,
             },
             {
-              title: '应收衔接',
+              title: '待生成应收',
               dataIndex: 'pendingReceivableCount',
               width: 140,
               render: (value: number) => value > 0
