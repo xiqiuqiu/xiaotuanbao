@@ -85,6 +85,11 @@ export async function unarchiveDeparture(
   return request.post<DepartureDetail>(`/departures/${id}/unarchive`, payload)
 }
 
+/** Departure Purge：删除无客源且无财务痕迹的误建发团。 */
+export async function purgeDeparture(id: string): Promise<void> {
+  await request.delete(`/departures/${id}`)
+}
+
 export async function getDepartureOperationsSheet(
   id: string,
 ): Promise<DepartureOperationsSheetSnapshot> {

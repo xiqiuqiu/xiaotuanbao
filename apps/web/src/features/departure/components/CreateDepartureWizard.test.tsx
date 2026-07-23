@@ -103,6 +103,7 @@ const mockDeparture: DepartureSummary = {
   netReceivableCents: 0,
   payableCents: 0,
   estimatedMarginCents: 0,
+  canPurge: true,
 }
 
 function renderWizard({ strict = false }: { strict?: boolean } = {}) {

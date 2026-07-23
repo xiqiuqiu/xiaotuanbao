@@ -50,7 +50,11 @@ describe('业务列表名称列蓝色链接样式', () => {
 
   it('发团列表团名列挂载 TableNameLink，且省略文本继承链接色', () => {
     const record = { id: 'dep-1', name: '南疆6日游 7月22日团' } as DepartureSummary
-    renderNameColumn('团名', buildDepartureColumns(vi.fn(), true), record)
+    renderNameColumn(
+      '团名',
+      buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true),
+      record,
+    )
 
     const link = screen.getByRole('link', { name: '南疆6日游 7月22日团' })
     expect(link).toHaveClass(nameLinkStyles.nameLink)

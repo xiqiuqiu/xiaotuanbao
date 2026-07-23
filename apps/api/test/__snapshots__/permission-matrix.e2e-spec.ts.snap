@@ -99,6 +99,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   },
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
+    "route": "DELETE /api/departures/:id",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/departure",
     "route": "GET /api/departures/:id",
   },
@@ -722,6 +727,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/departures/:departureId/source-orders [/departure]",
     "POST /api/departures/:departureId/source-orders [departure:write]",
     "GET /api/departures/:departureId/verifications [/departure]",
+    "DELETE /api/departures/:id [departure:write]",
     "GET /api/departures/:id [/departure]",
     "PATCH /api/departures/:id [departure:write]",
     "POST /api/departures/:id/close [departure:write]",
@@ -853,6 +859,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/departures/:departureId/source-orders [/departure]",
     "POST /api/departures/:departureId/source-orders [departure:write]",
     "GET /api/departures/:departureId/verifications [/departure]",
+    "DELETE /api/departures/:id [departure:write]",
     "GET /api/departures/:id [/departure]",
     "PATCH /api/departures/:id [departure:write]",
     "POST /api/departures/:id/close [departure:write]",

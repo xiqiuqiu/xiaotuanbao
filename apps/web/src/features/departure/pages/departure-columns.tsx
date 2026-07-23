@@ -1,5 +1,5 @@
-import { Button, Space, Tag } from 'antd'
-import { CopyOutlined } from '@ant-design/icons'
+import { Button, Popconfirm, Space, Tag } from 'antd'
+import { CopyOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
@@ -17,8 +17,14 @@ import {
   renderCompletionTags,
 } from '../catalog'
 
+type DepartureColumnsActions = {
+  onCopy: (departureId: string) => void
+  onPurge: (departure: DepartureSummary) => void
+  purgePendingId?: string | null
+}
+
 export function buildDepartureColumns(
-  onCopy: (departureId: string) => void,
+  actions: DepartureColumnsActions,
   canEdit: boolean,
 ): ColumnsType<DepartureSummary> {
   const columns: ColumnsType<DepartureSummary> = [
@@ -111,18 +117,37 @@ export function buildDepartureColumns(
     ...buildBusinessTimestampColumns<DepartureSummary>(),
   ]
 
-  // 复制会走 POST /departures/:id/copy（要 departure:write）；财务无此权限，隐藏整列操作。
+  // 复制/删除均要 departure:write；财务无此权限，隐藏整列操作。
   if (canEdit) {
     columns.push({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 80,
+      width: 140,
       render: (_value, record) => (
         <Space size="small">
-          <Button type="link" size="small" icon={<CopyOutlined />} onClick={() => onCopy(record.id)}>
+          <Button
+            type="link"
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => actions.onCopy(record.id)}
+          >
             复制
           </Button>
+          {record.canPurge ? (
+            <Popconfirm
+              title="确认删除该发团？"
+              description={`将永久删除 ${record.departureNo}「${record.name}」，不可恢复。`}
+              okText="删除"
+              okButtonProps={{ danger: true, loading: actions.purgePendingId === record.id }}
+              cancelText="取消"
+              onConfirm={() => actions.onPurge(record)}
+            >
+              <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+                删除
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     })

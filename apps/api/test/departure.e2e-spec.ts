@@ -10,6 +10,7 @@ import {
   ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
+  TransactionDirection,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
 import { PaymentChannel } from '@xiaotuanbao/shared'
@@ -315,8 +316,203 @@ describe('Departure API (e2e)', () => {
       .send(createPayload({ ...overrides }))
       .expect(201)
 
-    return response.body.data as { id: string; departureNo: string }
+    return response.body.data as { id: string; departureNo: string; canPurge?: boolean }
   }
+
+  describe('Departure Purge (ADR-0028)', () => {
+    it('purges empty editing departure and returns 404 on detail', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-empty` })
+      expect(created.canPurge).toBe(true)
+
+      await authRequest(app, coordinatorToken).delete(`/api/departures/${created.id}`).expect(200)
+
+      await authRequest(app, coordinatorToken).get(`/api/departures/${created.id}`).expect(404)
+
+      const listed = await authRequest(app, coordinatorToken)
+        .get('/api/departures')
+        .query({ keyword: `${testPrefix}-purge-empty`, pageSize: 50 })
+        .expect(200)
+      expect(
+        (listed.body.data.items as Array<{ id: string }>).some((item) => item.id === created.id),
+      ).toBe(false)
+    })
+
+    it('purges pending_settlement empty shell and keeps departureNo unreleased', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-pending` })
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${created.id}/transition`)
+        .send({ targetStatus: DepartureStatus.pending_settlement })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.canPurge).toBe(true)
+
+      await authRequest(app, coordinatorToken).delete(`/api/departures/${created.id}`).expect(200)
+
+      const next = await authRequest(app, coordinatorToken).get('/api/departures/next-no').expect(200)
+      expect(next.body.data.departureNo).not.toBe(created.departureNo)
+    })
+
+    it('purges departure that only has itinerary segments', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-segments` })
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${created.id}/segments`)
+        .send({ name: 'D1 乌鲁木齐' })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.segmentCount).toBe(1)
+      expect(detail.body.data.canPurge).toBe(true)
+
+      await authRequest(app, coordinatorToken).delete(`/api/departures/${created.id}`).expect(200)
+
+      const segmentCount = await prisma.itinerarySegment.count({
+        where: { departureId: created.id },
+      })
+      expect(segmentCount).toBe(0)
+    })
+
+    it('forbids finance role on DELETE /departures/:id', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-finance` })
+      await authRequest(app, financeToken).delete(`/api/departures/${created.id}`).expect(403)
+    })
+
+    it('returns 409 when closed', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-closed` })
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${created.id}/close`)
+        .send({ reason: '归档后不可 purge' })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.canPurge).toBe(false)
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/departures/${created.id}`)
+        .expect(409)
+      expect(response.body.message).toBe('已结清或已关闭的发团不能删除，请使用关闭/解除归档')
+    })
+
+    it('returns 409 when settled', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-settled` })
+      // 空壳通常无法经 transition 进入已结清；直接置状态以覆盖 purge 状态门。
+      await prisma.departure.update({
+        where: { id: created.id },
+        data: { status: DepartureStatus.settled },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.status).toBe(DepartureStatus.settled)
+      expect(detail.body.data.canPurge).toBe(false)
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/departures/${created.id}`)
+        .expect(409)
+      expect(response.body.message).toBe('已结清或已关闭的发团不能删除，请使用关闭/解除归档')
+    })
+
+    it('returns 409 when source order exists', async () => {
+      const partner = await prisma.partner.create({
+        data: {
+          organizationId,
+          name: `${testPrefix}-purge-partner`,
+          partnerKind: PartnerKind.group_agent,
+          partnerType: PartnerType.group_agency,
+          status: DirectoryProfileStatus.active,
+        },
+      })
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-source` })
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${created.id}/source-orders`)
+        .send({
+          partnerId: partner.id,
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+        })
+        .expect(201)
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.canPurge).toBe(false)
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/departures/${created.id}`)
+        .expect(409)
+      expect(response.body.message).toBe('已有客源单，不能删除发团')
+    })
+
+    it('returns 409 when voided payment schedule exists', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-voided-ps` })
+      await prisma.paymentSchedule.create({
+        data: {
+          organizationId,
+          departureId: created.id,
+          direction: PaymentScheduleDirection.payable,
+          scheduleNo: `${testPrefix}-AP-void`,
+          title: '已作废应付',
+          amountCents: 10000,
+          dueDate: new Date('2026-08-01T00:00:00.000Z'),
+          counterpartyType: CounterpartyType.supplier,
+          sourceType: 'manual',
+          voidedAt: new Date(),
+          voidReason: '误生成',
+          voidedAmountCents: 10000,
+        },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.canPurge).toBe(false)
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/departures/${created.id}`)
+        .expect(409)
+      expect(response.body.message).toBe('已有收付款节点，不能删除发团')
+    })
+
+    it('returns 409 when voided finance transaction exists', async () => {
+      const created = await createTestDeparture({ name: `${testPrefix}-purge-voided-tx` })
+      await prisma.financeTransaction.create({
+        data: {
+          organizationId,
+          departureId: created.id,
+          transactionNo: `${testPrefix}-TX-void`,
+          direction: TransactionDirection.inflow,
+          paymentChannel: PaymentChannel.OTHER,
+          amountCents: 10000,
+          transactionDate: new Date('2026-08-01T00:00:00.000Z'),
+          counterpartyType: CounterpartyType.partner,
+          counterpartyName: '测试往来',
+          voidedAt: new Date(),
+          voidReason: '误录',
+        },
+      })
+
+      const detail = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${created.id}`)
+        .expect(200)
+      expect(detail.body.data.canPurge).toBe(false)
+
+      const response = await authRequest(app, coordinatorToken)
+        .delete(`/api/departures/${created.id}`)
+        .expect(409)
+      expect(response.body.message).toBe('已有归属本团的收支流水，不能删除发团')
+    })
+  })
 
   it('allows finance role on GET /departures/:id (ADR-0016 early-launch menus)', async () => {
     const departure = await createTestDeparture()

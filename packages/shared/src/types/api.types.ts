@@ -640,6 +640,11 @@ export interface DepartureSummary {
   netReceivableCents: number
   payableCents: number
   estimatedMarginCents: number
+  /**
+   * Departure Purge（发团误建删除）是否可执行。
+   * 由服务端按状态与客源/财务痕迹门槛派生；前端仅用于隐藏入口。
+   */
+  canPurge: boolean
 }
 
 export interface DepartureListResult {

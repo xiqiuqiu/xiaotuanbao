@@ -46,6 +46,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'POST', path: '/api/departures' },
     { method: 'POST', path: '/api/departures/:id/copy' },
     { method: 'PATCH', path: '/api/departures/:id' },
+    { method: 'DELETE', path: '/api/departures/:id' },
     { method: 'POST', path: '/api/departures/:id/transition' },
     { method: 'POST', path: '/api/departures/:id/close' },
     { method: 'POST', path: '/api/departures/:id/source-orders' },

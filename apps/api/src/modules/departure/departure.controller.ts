@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -124,6 +125,16 @@ export class DepartureController {
     @Body() dto: UpdateDepartureDto,
   ): Promise<DepartureDetail> {
     return this.departureService.update(request.user.organizationId, id, dto)
+  }
+
+  @Delete(':id')
+  @RequireMenu('departure:write')
+  async purge(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<{ success: true }> {
+    await this.departureService.purge(request.user.organizationId, id)
+    return { success: true }
   }
 
   @Post(':id/transition')

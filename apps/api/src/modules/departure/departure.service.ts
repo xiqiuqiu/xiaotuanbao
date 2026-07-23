@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -67,6 +68,11 @@ const TRANSITION_TARGETS: Partial<Record<DepartureStatus, DepartureStatus[]>> = 
   [DepartureStatus.editing]: [DepartureStatus.pending_settlement],
   [DepartureStatus.pending_settlement]: [DepartureStatus.settled],
 }
+
+const PURGEABLE_STATUSES: DepartureStatus[] = [
+  DepartureStatus.editing,
+  DepartureStatus.pending_settlement,
+]
 
 @Injectable()
 export class DepartureService {
@@ -407,6 +413,17 @@ export class DepartureService {
     return this.toDepartureDetailAsync(updated)
   }
 
+  /**
+   * Departure Purge：物理删除无客源、无任何财务痕迹的编辑中/待结算发团。
+   * @see docs/adr/0028-departure-purge-for-empty-shells.md
+   */
+  async purge(organizationId: string, departureId: string): Promise<void> {
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    await this.assertPurgeAllowed(organizationId, departure)
+
+    await this.prisma.departure.delete({ where: { id: departure.id } })
+  }
+
   async transition(
     organizationId: string,
     departureId: string,
@@ -552,36 +569,117 @@ export class DepartureService {
       return []
     }
 
+    const organizationId = departures[0].organizationId
     const departureIds = departures.map((departure) => departure.id)
     const ownerUserIds = departures.map((departure) => departure.ownerUserId)
-    const [readModelMap, ownerNameMap] = await Promise.all([
-      this.departureReadModelService.batchGetForDepartures(
-        departures[0].organizationId,
-        departureIds,
-      ),
+    const [readModelMap, ownerNameMap, financeTouchedIds] = await Promise.all([
+      this.departureReadModelService.batchGetForDepartures(organizationId, departureIds),
       this.departureReadModelService.batchGetOwnerNames(ownerUserIds),
+      this.batchGetFinanceTouchedDepartureIds(organizationId, departureIds),
     ])
 
     return departures.map((departure) => {
       const readModel = readModelMap.get(departure.id) ?? emptyDepartureReadModelAggregate()
-      return this.toDepartureSummary(departure, readModel, ownerNameMap.get(departure.ownerUserId))
+      return this.toDepartureSummary(
+        departure,
+        readModel,
+        ownerNameMap.get(departure.ownerUserId),
+        this.computeCanPurge(departure, readModel.sourceOrderCount, financeTouchedIds.has(departure.id)),
+      )
     })
   }
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
-    const [readModel, ownerNameMap, archiveHistory, settlementHistory] = await Promise.all([
-      this.departureReadModelService.getForDeparture(departure.organizationId, departure.id),
-      this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
-      this.loadArchiveHistory(departure.id),
-      this.loadSettlementHistory(departure.id),
-    ])
+    const [readModel, ownerNameMap, archiveHistory, settlementHistory, financeTouchedIds] =
+      await Promise.all([
+        this.departureReadModelService.getForDeparture(departure.organizationId, departure.id),
+        this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
+        this.loadArchiveHistory(departure.id),
+        this.loadSettlementHistory(departure.id),
+        this.batchGetFinanceTouchedDepartureIds(departure.organizationId, [departure.id]),
+      ])
     return this.toDepartureDetail(
       departure,
       readModel,
       ownerNameMap.get(departure.ownerUserId),
       archiveHistory,
       settlementHistory,
+      this.computeCanPurge(
+        departure,
+        readModel.sourceOrderCount,
+        financeTouchedIds.has(departure.id),
+      ),
     )
+  }
+
+  private async batchGetFinanceTouchedDepartureIds(
+    organizationId: string,
+    departureIds: string[],
+  ): Promise<Set<string>> {
+    if (departureIds.length === 0) {
+      return new Set()
+    }
+
+    const [schedules, transactions] = await Promise.all([
+      this.prisma.paymentSchedule.findMany({
+        where: { organizationId, departureId: { in: departureIds } },
+        select: { departureId: true },
+        distinct: ['departureId'],
+      }),
+      this.prisma.financeTransaction.findMany({
+        where: { organizationId, departureId: { in: departureIds } },
+        select: { departureId: true },
+        distinct: ['departureId'],
+      }),
+    ])
+
+    const touched = new Set<string>()
+    for (const row of schedules) {
+      touched.add(row.departureId)
+    }
+    for (const row of transactions) {
+      if (row.departureId) {
+        touched.add(row.departureId)
+      }
+    }
+    return touched
+  }
+
+  private computeCanPurge(
+    departure: Pick<Departure, 'status'>,
+    sourceOrderCount: number,
+    hasFinanceTouch: boolean,
+  ): boolean {
+    if (!PURGEABLE_STATUSES.includes(departure.status)) {
+      return false
+    }
+    return sourceOrderCount === 0 && !hasFinanceTouch
+  }
+
+  private async assertPurgeAllowed(organizationId: string, departure: Departure): Promise<void> {
+    if (!PURGEABLE_STATUSES.includes(departure.status)) {
+      throw new ConflictException('已结清或已关闭的发团不能删除，请使用关闭/解除归档')
+    }
+
+    const [sourceOrderCount, scheduleCount, transactionCount] = await Promise.all([
+      this.prisma.sourceOrder.count({ where: { departureId: departure.id } }),
+      this.prisma.paymentSchedule.count({
+        where: { organizationId, departureId: departure.id },
+      }),
+      this.prisma.financeTransaction.count({
+        where: { organizationId, departureId: departure.id },
+      }),
+    ])
+
+    if (sourceOrderCount > 0) {
+      throw new ConflictException('已有客源单，不能删除发团')
+    }
+    if (scheduleCount > 0) {
+      throw new ConflictException('已有收付款节点，不能删除发团')
+    }
+    if (transactionCount > 0) {
+      throw new ConflictException('已有归属本团的收支流水，不能删除发团')
+    }
   }
 
   private async loadArchiveHistory(departureId: string): Promise<DepartureArchiveHistoryItem[]> {
@@ -680,9 +778,10 @@ export class DepartureService {
     ownerName: string | undefined,
     archiveHistory: DepartureArchiveHistoryItem[],
     settlementHistory: DepartureSettlementHistoryItem[],
+    canPurge: boolean,
   ): DepartureDetail {
     return {
-      ...this.toDepartureSummary(departure, readModel, ownerName),
+      ...this.toDepartureSummary(departure, readModel, ownerName, canPurge),
       grossReceivableCents: readModel.grossReceivableCents,
       discountCents: readModel.discountCents,
       verifiedReceivableCents: readModel.verifiedReceivableCents,
@@ -702,6 +801,7 @@ export class DepartureService {
     departure: Departure,
     readModel: DepartureReadModelAggregate = emptyDepartureReadModelAggregate(),
     ownerName?: string,
+    canPurge = false,
   ): DepartureSummary {
     return {
       id: departure.id,
@@ -729,6 +829,7 @@ export class DepartureService {
       netReceivableCents: readModel.netReceivableCents,
       payableCents: readModel.payableCents,
       estimatedMarginCents: readModel.estimatedMarginCents,
+      canPurge,
     }
   }
 }

@@ -65,6 +65,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
     netReceivableCents: 1_000_000,
     payableCents: 700_000,
     estimatedMarginCents: 300_000,
+    canPurge: false,
     verifiedReceivableCents: 0,
     openUnsettledReceivableCents: 1_000_000,
     verifiedPayableCents: 0,

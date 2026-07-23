@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import { Alert, Button, Card, Table } from 'antd'
+import { Alert, Button, Card, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DepartureProgress, DepartureStatus, DepartureType, DirectoryProfileStatus } from '@xiaotuanbao/shared'
-import { listDepartures } from '@/services/departure.service'
+import type { DepartureSummary } from '@/types/api'
+import { listDepartures, purgeDeparture } from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -126,6 +127,7 @@ function departuresPageReducer(
 
 export function DeparturesPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const search = useSearch({ strict: false }) as DepartureListSearch
   const canEdit = canEditDeparture(useAuthStore((s) => s.actionKeys))
   const [state, dispatch] = useReducer(departuresPageReducer, search, createInitialState)
@@ -243,7 +245,36 @@ export function DeparturesPage() {
     [navigate],
   )
 
-  const columns = useMemo(() => buildDepartureColumns(handleCopy, canEdit), [handleCopy, canEdit])
+  const purgeMutation = useMutation({
+    mutationFn: (departure: DepartureSummary) => purgeDeparture(departure.id),
+    onSuccess: () => {
+      message.success('发团已删除')
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '删除发团失败')
+    },
+  })
+
+  const handlePurge = useCallback(
+    (departure: DepartureSummary) => {
+      purgeMutation.mutate(departure)
+    },
+    [purgeMutation],
+  )
+
+  const columns = useMemo(
+    () =>
+      buildDepartureColumns(
+        {
+          onCopy: handleCopy,
+          onPurge: handlePurge,
+          purgePendingId: purgeMutation.isPending ? purgeMutation.variables?.id : null,
+        },
+        canEdit,
+      ),
+    [canEdit, handleCopy, handlePurge, purgeMutation.isPending, purgeMutation.variables?.id],
+  )
 
   const ownerOptions =
     employeeOptionsResult?.map((employee) => ({

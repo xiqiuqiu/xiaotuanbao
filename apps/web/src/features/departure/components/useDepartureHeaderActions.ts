@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Form, message } from 'antd'
+import { Form, Modal, message } from 'antd'
 import type { MenuProps } from 'antd'
+import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import {
   closeDeparture,
+  purgeDeparture,
   transitionDeparture,
   unarchiveDeparture,
 } from '@/services/departure.service'
@@ -19,6 +21,7 @@ export function useDepartureHeaderActions(
   canWrite: boolean,
   onUpdated: () => void,
 ) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [overviewForm] = Form.useForm<DepartureOverviewFormValues>()
   const [closeForm] = Form.useForm<CloseDepartureFormValues>()
@@ -41,6 +44,7 @@ export function useDepartureHeaderActions(
     departure.isFinanciallySettled
   const canClose = canWrite && departure.status !== DepartureStatus.CLOSED
   const canUnarchive = canWrite && departure.status === DepartureStatus.CLOSED
+  const canPurge = canWrite && departure.canPurge
 
   const invalidateDeparture = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
@@ -87,8 +91,34 @@ export function useDepartureHeaderActions(
     },
   })
 
+  const purgeMutation = useMutation({
+    mutationFn: () => purgeDeparture(departure.id),
+    onSuccess: () => {
+      message.success('发团已删除')
+      void queryClient.invalidateQueries({ queryKey: ['departures'] })
+      void navigate({ to: '/departure' })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '删除发团失败')
+    },
+  })
+
+  const confirmPurge = useCallback(() => {
+    Modal.confirm({
+      title: '确认删除该发团？',
+      content: `将永久删除 ${departure.departureNo}「${departure.name}」，不可恢复。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: () => purgeMutation.mutateAsync(),
+    })
+  }, [departure.departureNo, departure.name, purgeMutation])
+
   const actionLoading =
-    transitionMutation.isPending || closeMutation.isPending || unarchiveMutation.isPending
+    transitionMutation.isPending ||
+    closeMutation.isPending ||
+    unarchiveMutation.isPending ||
+    purgeMutation.isPending
 
   const openEditDrawer = useCallback(() => {
     overviewForm.setFieldsValue(departureToFormValues(departure))
@@ -176,6 +206,15 @@ export function useDepartureHeaderActions(
       })
     }
 
+    if (canPurge) {
+      statusItems.push({
+        key: 'purge',
+        label: '删除',
+        danger: true,
+        onClick: confirmPurge,
+      })
+    }
+
     if (statusItems.length > 0) {
       items.push({ type: 'divider' }, ...statusItems)
     }
@@ -184,10 +223,12 @@ export function useDepartureHeaderActions(
   }, [
     canClose,
     canEdit,
+    canPurge,
     canTransitionToPending,
     canTransitionToSettled,
     canUnarchive,
     canWrite,
+    confirmPurge,
     openEditDrawer,
   ])
 
