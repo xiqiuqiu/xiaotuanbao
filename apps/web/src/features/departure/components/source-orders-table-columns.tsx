@@ -19,8 +19,8 @@ interface BuildSourceOrdersColumnsOptions {
   canGenerate: boolean
   deleteMutation: UseMutationResult<unknown, Error, string, unknown>
   generateMutation: UseMutationResult<unknown, Error, string, unknown>
-  onView: (record: SourceOrderSummary) => void
-  onEdit: (record: SourceOrderSummary) => void
+  /** 打开同一客源单抽屉；`viewOnly` 时只读（无写权限或发团只读）。 */
+  onOpen: (record: SourceOrderSummary, viewOnly: boolean) => void
   onOpenGuests: (record: SourceOrderSummary) => void
   onViewReceivables: (record: SourceOrderSummary) => void
 }
@@ -29,48 +29,56 @@ function canGenerateReceivable(record: SourceOrderSummary): boolean {
   return record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED
 }
 
+function renderCents(value: number) {
+  return <span style={{ whiteSpace: 'nowrap' }}>{formatCents(value)}</span>
+}
+
 export function buildSourceOrdersColumns({
   canEdit,
   canGenerate,
   deleteMutation,
   generateMutation,
-  onView,
-  onEdit,
+  onOpen,
   onOpenGuests,
   onViewReceivables,
 }: BuildSourceOrdersColumnsOptions): ColumnsType<SourceOrderSummary> {
   return [
     { title: '客户', dataIndex: 'partnerName', width: 140 },
-    { title: '总人数', dataIndex: 'guestCount', width: 90 },
+    { title: '总人数', dataIndex: 'guestCount', width: 80, align: 'right' },
     {
       title: '原始应收',
       dataIndex: 'grossReceivableCents',
-      width: 110,
-      render: (value: number) => formatCents(value),
+      width: 120,
+      align: 'right',
+      render: renderCents,
     },
     {
       title: '优惠金额',
       dataIndex: 'discountCents',
-      width: 100,
-      render: (value: number) => formatCents(value),
+      width: 120,
+      align: 'right',
+      render: renderCents,
     },
     {
       title: '结算金额',
       dataIndex: 'netReceivableCents',
-      width: 110,
-      render: (value: number) => formatCents(value),
+      width: 120,
+      align: 'right',
+      render: renderCents,
     },
     {
       title: '客户已收',
       dataIndex: 'partnerCollectedCents',
-      width: 100,
-      render: (value: number) => formatCents(value),
+      width: 120,
+      align: 'right',
+      render: renderCents,
     },
     {
       title: '我方代收',
       dataIndex: 'guestCollectCents',
-      width: 100,
-      render: (value: number) => formatCents(value),
+      width: 120,
+      align: 'right',
+      render: renderCents,
     },
     {
       title: '收款方式',
@@ -98,14 +106,15 @@ export function buildSourceOrdersColumns({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 280,
+      width: 260,
       render: (_: unknown, record: SourceOrderSummary) => {
         const allowGenerate = canGenerateReceivable(record)
+        const viewOnly = !canEdit
 
         return (
           <Space size="small" wrap>
-            <Button type="link" size="small" onClick={() => onView(record)}>
-              查看
+            <Button type="link" size="small" onClick={() => onOpen(record, viewOnly)}>
+              {viewOnly ? '查看' : '编辑'}
             </Button>
             {!allowGenerate ? (
               <Button type="link" size="small" onClick={() => onViewReceivables(record)}>
@@ -113,14 +122,9 @@ export function buildSourceOrdersColumns({
               </Button>
             ) : null}
             {canEdit ? (
-              <>
-                <Button type="link" size="small" onClick={() => onEdit(record)}>
-                  编辑
-                </Button>
-                <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
-                  客人名单
-                </Button>
-              </>
+              <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
+                客人名单
+              </Button>
             ) : null}
             {canGenerate && allowGenerate ? (
               <Button

@@ -60,8 +60,7 @@ function renderActions(
     canGenerate: options.canGenerate ?? true,
     deleteMutation: stubMutation(),
     generateMutation: stubMutation(),
-    onView: vi.fn(),
-    onEdit: vi.fn(),
+    onOpen: vi.fn(),
     onOpenGuests: vi.fn(),
     onViewReceivables,
   })
@@ -83,6 +82,8 @@ describe('source orders action column', () => {
   it('shows 生成应收 when receivable has not been created', () => {
     renderActions(baseOrder())
 
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
@@ -97,14 +98,15 @@ describe('source orders action column', () => {
       }),
     )
 
-    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
-  it('shows 查看应收 for closed receivable status and keeps 查看', () => {
+  it('shows 查看应收 for closed receivable status and keeps 编辑 when writable', () => {
     renderActions(
       baseOrder({
         receivableStatus: 'closed',
@@ -113,18 +115,19 @@ describe('source orders action column', () => {
       }),
     )
 
-    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
-  it('keeps 生成应收 visible but hides 编辑/删除 for 财务 (no departure:write)', () => {
+  it('keeps 生成应收 visible but opens 查看 (not 编辑) for 财务 (no departure:write)', () => {
     renderActions(baseOrder(), { canEdit: false, canGenerate: true })
 
     expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+    expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '客人名单' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
@@ -133,7 +136,32 @@ describe('source orders action column', () => {
     renderActions(baseOrder(), { canEdit: false, canGenerate: false })
 
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+  })
+
+  it('opens the shared drawer in edit mode when 编辑 is clicked', async () => {
+    const user = userEvent.setup()
+    const order = baseOrder()
+    const onOpen = vi.fn()
+    const columns = buildSourceOrdersColumns({
+      canEdit: true,
+      canGenerate: true,
+      deleteMutation: stubMutation(),
+      generateMutation: stubMutation(),
+      onOpen,
+      onOpenGuests: vi.fn(),
+      onViewReceivables: vi.fn(),
+    })
+
+    render(
+      <ConfigProvider>
+        <Table rowKey="id" columns={columns} dataSource={[order]} pagination={false} />
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    expect(onOpen).toHaveBeenCalledWith(order, false)
   })
 
   it('calls onViewReceivables when 查看应收 is clicked', async () => {

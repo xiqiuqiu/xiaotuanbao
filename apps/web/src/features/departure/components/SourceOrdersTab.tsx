@@ -13,6 +13,7 @@ import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrderGuestDrawer } from './SourceOrderGuestDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
 import { buildSourceOrdersColumns } from './source-orders-table-columns'
+import { renderSourceOrdersTableSummary } from './source-orders-table-summary'
 import {
   drawerReducer,
   filterReducer,
@@ -134,12 +135,8 @@ export function SourceOrdersTab({
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
 
-  const onView = useCallback((order: SourceOrderSummary) => {
-    dispatchDrawer({ type: 'OPEN_VIEW', order })
-  }, [])
-
-  const onEdit = useCallback((order: SourceOrderSummary) => {
-    dispatchDrawer({ type: 'OPEN_EDIT', order })
+  const onOpen = useCallback((order: SourceOrderSummary, viewOnly: boolean) => {
+    dispatchDrawer({ type: viewOnly ? 'OPEN_VIEW' : 'OPEN_EDIT', order })
   }, [])
 
   const onOpenGuests = useCallback((order: SourceOrderSummary) => {
@@ -169,8 +166,7 @@ export function SourceOrdersTab({
         canGenerate: !readOnly,
         deleteMutation,
         generateMutation,
-        onView,
-        onEdit,
+        onOpen,
         onOpenGuests,
         onViewReceivables,
       }),
@@ -178,9 +174,8 @@ export function SourceOrdersTab({
       deleteMutation,
       editable,
       generateMutation,
-      onEdit,
+      onOpen,
       onOpenGuests,
-      onView,
       onViewReceivables,
       readOnly,
     ],
@@ -249,8 +244,9 @@ export function SourceOrdersTab({
           loading={isLoading}
           columns={columns}
           dataSource={listResult?.items ?? []}
-          scroll={{ x: 1760 }}
+          scroll={{ x: 1840 }}
           pagination={false}
+          summary={renderSourceOrdersTableSummary}
         />
       )}
 

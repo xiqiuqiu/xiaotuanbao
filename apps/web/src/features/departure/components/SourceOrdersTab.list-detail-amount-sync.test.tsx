@@ -8,8 +8,8 @@ import { SourceOrdersTab } from './SourceOrdersTab'
 
 /**
  * After ordinary receivable edit syncs path amounts onto the source order
- * (gross/net/guestCollect updated, unit prices left stale), opening 查看/编辑
- * must fetch the latest source order and show those stored path amounts.
+ * (gross/net/guestCollect updated, unit prices left stale), opening the shared
+ * drawer must fetch the latest source order and show those stored path amounts.
  */
 
 const getSourceOrder = vi.fn()
@@ -110,7 +110,7 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
     getSourceOrder.mockReset()
   })
 
-  it('fetches latest source order on 查看 and shows stored path amounts in footer', async () => {
+  it('fetches latest source order on 编辑 and shows stored path amounts in footer', async () => {
     const user = userEvent.setup()
     getSourceOrder.mockResolvedValue(postReceivableSyncOrder())
     renderTab()
@@ -120,14 +120,14 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
     expect(within(listRow as HTMLElement).getAllByText('¥7,200.00').length).toBeGreaterThanOrEqual(1)
     expect(within(listRow as HTMLElement).getByText('¥6,200.00')).toBeTruthy()
 
-    await user.click(within(listRow as HTMLElement).getByRole('button', { name: '查看' }))
+    await user.click(within(listRow as HTMLElement).getByRole('button', { name: '编辑' }))
 
     await waitFor(() => {
       expect(getSourceOrder).toHaveBeenCalledWith('order-1', expect.any(AbortSignal))
     })
 
     await waitFor(() => {
-      expect(screen.getByText('查看客源单')).toBeTruthy()
+      expect(screen.getByText('编辑客源单')).toBeTruthy()
     })
 
     expect(
