@@ -7,7 +7,6 @@ import {
   Card,
   Empty,
   Flex,
-  Progress,
   Segmented,
   Space,
   Statistic,
@@ -192,13 +191,17 @@ function FinanceReceivablesAgingCard({
                         <Typography.Text strong>{row.label}</Typography.Text>
                         <Typography.Text>{row.amountLabel}</Typography.Text>
                       </span>
-                      <Progress
-                        percent={row.sharePercent}
-                        showInfo={false}
-                        size="small"
-                        strokeColor={token.colorPrimary}
-                        railColor={token.colorFillSecondary}
-                      />
+                      <span className={styles.agingShareTrack} aria-hidden>
+                        <span
+                          className={styles.agingShareFill}
+                          style={{
+                            ['--aging-share' as string]: Math.min(
+                              Math.max(row.sharePercent / 100, 0),
+                              1,
+                            ),
+                          }}
+                        />
+                      </span>
                       <Typography.Text type="secondary" className={styles.agingShareMeta}>
                         {row.countLabel}
                         {' · '}
@@ -242,6 +245,7 @@ function FinanceReceivablesAgingCard({
                     },
                   },
                 ]}
+                animate={false}
                 onReady={onReady}
               />
             )}

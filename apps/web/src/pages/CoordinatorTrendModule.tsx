@@ -124,6 +124,7 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 style: { maxWidth: 28, fill: token.colorPrimary, cursor: 'pointer' },
                 axis: { y: { title: '发团数', position: 'left' } },
                 tooltip: false,
+                animate: false,
                 label: {
                   text: (datum: { dataGapDepartureCount: number }) =>
                     datum.dataGapDepartureCount > 0 ? String(datum.dataGapDepartureCount) : '',
@@ -144,13 +145,19 @@ export function CoordinatorTrendModule({ module }: { module: WorkbenchModule }) 
                 style: { lineWidth: 2, stroke: token.colorSuccess, cursor: 'pointer' },
                 axis: { y: { title: '客人人数', position: 'right' } },
                 tooltip: false,
+                animate: false,
               },
             ]}
           </DualAxes>
 
           <Flex className={styles.trendDayStrip} wrap gap={4}>
             {buckets.map((bucket) => (
-              <Tooltip key={bucket.date} title={bucketTooltipTitle(bucket)}>
+              <Tooltip
+                key={bucket.date}
+                title={bucketTooltipTitle(bucket)}
+                mouseEnterDelay={0}
+                mouseLeaveDelay={0.1}
+              >
                 <button
                   type="button"
                   className={styles.trendDayButton}

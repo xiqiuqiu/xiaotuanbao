@@ -136,6 +136,7 @@ export function OrganizationScaleModule({
                   colorField: () => '发团数',
                   style: { maxWidth: 36, fill: token.colorPrimary, cursor: 'pointer' },
                   axis: { y: { title: '发团数', position: 'left' } },
+                  animate: false,
                 },
                 {
                   data: chartRows,
@@ -145,6 +146,7 @@ export function OrganizationScaleModule({
                   shapeField: 'smooth',
                   style: { lineWidth: 2, stroke: token.colorSuccess, cursor: 'pointer' },
                   axis: { y: { title: '客源人次', position: 'right' } },
+                  animate: false,
                 },
               ]}
             </DualAxes>
@@ -152,7 +154,12 @@ export function OrganizationScaleModule({
 
           <Flex className={styles.trendDayStrip} wrap gap={4}>
             {buckets.map((bucket) => (
-              <Tooltip key={bucket.month} title={bucketTooltipTitle(bucket)}>
+              <Tooltip
+                key={bucket.month}
+                title={bucketTooltipTitle(bucket)}
+                mouseEnterDelay={0}
+                mouseLeaveDelay={0.1}
+              >
                 <button
                   type="button"
                   className={styles.trendDayButton}
