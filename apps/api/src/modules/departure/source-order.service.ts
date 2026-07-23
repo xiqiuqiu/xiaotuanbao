@@ -683,11 +683,7 @@ export class SourceOrderService {
       },
     })
 
-    return buildSourceOrderDisplayName(
-      partnerName,
-      departure.startDate,
-      existingCount + 1,
-    )
+    return buildSourceOrderDisplayName(partnerName, existingCount + 1)
   }
 
   private async loadScheduleMeta(organizationId: string, sourceOrderIds: string[]) {

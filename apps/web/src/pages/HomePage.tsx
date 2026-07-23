@@ -29,8 +29,8 @@ import { getWorkbench } from '@/services/workbench.service'
 import type {
   WorkbenchAction,
   WorkbenchCoordinatorDepartureItem,
+  WorkbenchCoordinatorPayablePendingItem,
   WorkbenchCoordinatorReceivablePendingItem,
-  WorkbenchCoordinatorSettlementReadyItem,
   WorkbenchModule,
   WorkbenchSnapshot,
   WorkbenchTemplate,
@@ -40,6 +40,7 @@ import {
   catalogLabel,
   DEPARTURE_STATUS_COLORS,
   DEPARTURE_STATUS_LABELS,
+  RESOURCE_KIND_LABELS,
 } from '@/features/departure/catalog'
 import styles from './HomePage.module.css'
 import { FinanceFundsModule } from './FinanceFundsModule'
@@ -223,10 +224,10 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
   )
 }
 
-function isSettlementReadyItem(
+function isPayablePendingItem(
   item: WorkbenchModule['items'][number],
-): item is WorkbenchCoordinatorSettlementReadyItem {
-  return 'kind' in item && item.kind === 'coordinator-settlement-ready'
+): item is WorkbenchCoordinatorPayablePendingItem {
+  return 'kind' in item && item.kind === 'coordinator-payable-pending'
 }
 
 function isReceivablePendingItem(
@@ -237,18 +238,18 @@ function isReceivablePendingItem(
 
 function CoordinatorSettlementModule({
   module,
-  readyMetric,
+  payableMetric,
 }: {
   module: WorkbenchModule
-  readyMetric?: WorkbenchModule['metrics'][number]
+  payableMetric?: WorkbenchModule['metrics'][number]
 }) {
   const navigate = useNavigate()
   const pendingMetric = module.metrics.find((metric) => metric.key === 'pending-receivables')
-  const readyItems = module.items.filter(isSettlementReadyItem)
+  const payableItems = module.items.filter(isPayablePendingItem)
   const pendingItems = module.items.filter(isReceivablePendingItem)
 
   const queue = (
-    items: Array<WorkbenchCoordinatorSettlementReadyItem | WorkbenchCoordinatorReceivablePendingItem>,
+    items: Array<WorkbenchCoordinatorPayablePendingItem | WorkbenchCoordinatorReceivablePendingItem>,
     emptyText: string,
   ) => items.length === 0 ? (
     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyText} />
@@ -264,10 +265,15 @@ function CoordinatorSettlementModule({
         >
           <span className={styles.queueBody}>
             <span className={styles.queueTitleRow}>
+              {isPayablePendingItem(item) ? (
+                <Tag>{catalogLabel(RESOURCE_KIND_LABELS, item.resourceKind)}</Tag>
+              ) : null}
               <span className={styles.queueTitle}>{item.title}</span>
             </span>
             <span className={styles.queueMeta}>
-              {'departureName' in item ? item.departureName : `结束日期 ${item.endDate}`}
+              {isPayablePendingItem(item)
+                ? `${item.departureName} · ${item.segmentName}`
+                : item.departureName}
             </span>
           </span>
           <span className={styles.queueTrailing}>
@@ -281,18 +287,30 @@ function CoordinatorSettlementModule({
   return (
     <div className={styles.settlementGrid}>
       <Card
-        title={<Typography.Title level={5}>可确认结清</Typography.Title>}
-        extra={readyMetric?.href ? (
-          <Button
-            type="link"
-            aria-label={`查看全部可确认结清 ${readyMetric.value ?? 0} 项`}
-            onClick={() => void navigate({ to: readyMetric.href! })}
-          >
-            查看全部 {readyMetric.value ?? 0} 项 <RightOutlined />
-          </Button>
-        ) : null}
+        title={<Typography.Title level={5}>待生成应付</Typography.Title>}
+        extra={(
+          <Space size={4}>
+            <Tooltip title="按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。">
+              <Button
+                type="text"
+                size="small"
+                icon={<InfoCircleOutlined />}
+                aria-label="待生成应付统计口径"
+              />
+            </Tooltip>
+            {payableMetric?.href ? (
+              <Button
+                type="link"
+                aria-label={`查看全部待生成应付 ${payableMetric.value ?? 0} 项`}
+                onClick={() => void navigate({ to: payableMetric.href! })}
+              >
+                查看全部 {payableMetric.value ?? 0} 项 <RightOutlined />
+              </Button>
+            ) : null}
+          </Space>
+        )}
       >
-        {queue(readyItems, '当前没有可确认结清发团')}
+        {queue(payableItems, '当前没有待生成应付的资源')}
       </Card>
       <Card
         title={<Typography.Title level={5}>待生成应收</Typography.Title>}
@@ -485,8 +503,8 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
       (module) => module.key === 'coordinator-settlement',
     )
     const trendModule = snapshot.modules.find((module) => module.key === 'coordinator-trend')
-    const readyMetric = coordinatorModule.metrics.find(
-      (metric) => metric.key === 'settlement-ready',
+    const payableMetric = coordinatorModule.metrics.find(
+      (metric) => metric.key === 'pending-payables',
     )
     const remainingModules = snapshot.modules.filter(
       (module) =>
@@ -500,7 +518,7 @@ function WorkbenchContent({ snapshot }: { snapshot: WorkbenchSnapshot }) {
         {settlementModule ? (
           <CoordinatorSettlementModule
             module={settlementModule}
-            readyMetric={readyMetric}
+            payableMetric={payableMetric}
           />
         ) : null}
         {trendModule ? (

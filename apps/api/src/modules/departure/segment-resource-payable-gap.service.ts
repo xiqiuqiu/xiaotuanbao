@@ -18,6 +18,7 @@ export type PendingPayableSegmentResourceRow = Prisma.SegmentResourceGetPayload<
     supplier: { select: { name: true } }
     segment: {
       select: {
+        name: true
         departure: {
           select: {
             id: true
@@ -57,6 +58,7 @@ export class SegmentResourcePayableGapService {
         supplier: { select: { name: true } },
         segment: {
           select: {
+            name: true,
             departure: {
               select: {
                 id: true,

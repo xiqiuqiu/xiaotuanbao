@@ -93,7 +93,7 @@ export class CoordinatorWorkbenchService {
   async buildModule(
     organizationId: string,
     asOf: Date,
-    settlementReadyCount: number,
+    pendingPayableCount: number,
     pendingReceivableCountByDepartureId: ReadonlyMap<string, number>,
   ): Promise<WorkbenchModule> {
     const dates = getDepartureOperationalDates(asOf)
@@ -150,11 +150,11 @@ export class CoordinatorWorkbenchService {
           href: '/departure?operationalWindow=current_and_next_7_days&departureDataGap=any',
         },
         {
-          key: 'settlement-ready',
-          label: '可确认结清',
-          value: settlementReadyCount,
-          suffix: '个发团',
-          href: '/departure?settlementReadiness=ready',
+          key: 'pending-payables',
+          label: '待生成应付',
+          value: pendingPayableCount,
+          suffix: '个资源',
+          href: '/departure/account-generation-gaps?generationKind=payable',
         },
       ],
       items: sortedRows.slice(0, 8).map((row) =>

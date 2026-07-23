@@ -70,17 +70,7 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
   }
 }
 
-export function formatDepartureDateChinese(date: Date): string {
-  const month = date.getUTCMonth() + 1
-  const day = date.getUTCDate()
-  return `${month}月${day}日`
-}
-
-export function buildSourceOrderDisplayName(
-  partnerName: string,
-  startDate: Date,
-  sequence: number,
-): string {
-  const base = `${partnerName} ${formatDepartureDateChinese(startDate)}发客`
-  return sequence > 1 ? `${base} ${sequence}` : base
+/** 客源单展示名：合作伙伴名；同发团同伙伴多单时追加序号。不拼出团日期（发团页顶栏已有）。 */
+export function buildSourceOrderDisplayName(partnerName: string, sequence: number): string {
+  return sequence > 1 ? `${partnerName} ${sequence}` : partnerName
 }

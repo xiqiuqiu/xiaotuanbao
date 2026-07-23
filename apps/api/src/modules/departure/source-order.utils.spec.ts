@@ -155,15 +155,13 @@ describe('computeSourceOrderAmounts', () => {
 })
 
 describe('buildSourceOrderDisplayName', () => {
-  it('builds base name without sequence', () => {
-    expect(
-      buildSourceOrderDisplayName('西安某旅行社', new Date('2026-07-01T00:00:00.000Z'), 1),
-    ).toBe('西安某旅行社 7月1日发客')
+  it('uses partner name only (no departure-date suffix)', () => {
+    // 发团详情页顶栏已有出团日期；客源单展示名再拼「X月X日发客」会重复干扰（应收客源单列同此名）
+    expect(buildSourceOrderDisplayName('思达典雅', 1)).toBe('思达典雅')
+    expect(buildSourceOrderDisplayName('西安某旅行社', 1)).toBe('西安某旅行社')
   })
 
   it('appends sequence for duplicates', () => {
-    expect(
-      buildSourceOrderDisplayName('西安某旅行社', new Date('2026-07-01T00:00:00.000Z'), 2),
-    ).toBe('西安某旅行社 7月1日发客 2')
+    expect(buildSourceOrderDisplayName('西安某旅行社', 2)).toBe('西安某旅行社 2')
   })
 })

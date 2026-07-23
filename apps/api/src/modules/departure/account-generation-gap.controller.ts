@@ -23,6 +23,7 @@ export class AccountGenerationGapController {
       request.user.organizationId,
       query.page,
       query.pageSize,
+      query.generationKind,
     )
   }
 }

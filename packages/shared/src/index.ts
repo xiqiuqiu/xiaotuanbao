@@ -12,7 +12,7 @@ export type {
   DepartureDataGapCode,
   DepartureDataGap,
   WorkbenchCoordinatorDepartureItem,
-  WorkbenchCoordinatorSettlementReadyItem,
+  WorkbenchCoordinatorPayablePendingItem,
   WorkbenchCoordinatorReceivablePendingItem,
   WorkbenchCoordinatorTrendBucket,
   WorkbenchOrganizationScaleBucket,

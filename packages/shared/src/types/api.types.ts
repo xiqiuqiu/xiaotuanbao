@@ -88,10 +88,14 @@ export interface WorkbenchCoordinatorDepartureItem extends WorkbenchItem {
   pendingReceivableCount: number
 }
 
-export interface WorkbenchCoordinatorSettlementReadyItem extends WorkbenchItem {
-  kind: 'coordinator-settlement-ready'
+export interface WorkbenchCoordinatorPayablePendingItem extends WorkbenchItem {
+  kind: 'coordinator-payable-pending'
   href: string
-  endDate: string
+  departureName: string
+  /** 所属行程段名称。 */
+  segmentName: string
+  /** Segment Resource 的资源种类（用车/酒店/拼出等）。 */
+  resourceKind: string
 }
 
 export interface WorkbenchCoordinatorReceivablePendingItem extends WorkbenchItem {
@@ -196,7 +200,7 @@ export interface WorkbenchModule {
   items: Array<
     | WorkbenchItem
     | WorkbenchCoordinatorDepartureItem
-    | WorkbenchCoordinatorSettlementReadyItem
+    | WorkbenchCoordinatorPayablePendingItem
     | WorkbenchCoordinatorReceivablePendingItem
     | WorkbenchFinanceReceivableItem
     | WorkbenchFinancePendingSettlementItem

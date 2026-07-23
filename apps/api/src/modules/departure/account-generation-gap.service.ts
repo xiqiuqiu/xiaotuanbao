@@ -38,10 +38,13 @@ export class AccountGenerationGapService {
     organizationId: string,
     pageInput?: number,
     pageSizeInput?: number,
+    generationKind?: AccountGenerationGapItem['generationKind'],
   ): Promise<AccountGenerationGapListResult> {
     const page = Math.max(Number(pageInput) || 1, 1)
     const pageSize = Math.min(Math.max(Number(pageSizeInput) || 10, 1), 100)
-    const items = await this.findPendingItems(organizationId)
+    const items = (await this.findPendingItems(organizationId)).filter(
+      (item) => !generationKind || item.generationKind === generationKind,
+    )
     const start = (page - 1) * pageSize
 
     return {

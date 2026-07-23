@@ -1,24 +1,20 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  WorkbenchCoordinatorPayablePendingItem,
   WorkbenchCoordinatorReceivablePendingItem,
-  WorkbenchCoordinatorSettlementReadyItem,
   WorkbenchModule,
 } from '@xiaotuanbao/shared'
-import type { Prisma } from '@prisma/client'
-import { PrismaService } from '../../database/prisma/prisma.service'
-import { formatDateOnly } from '../departure/departure-date.utils'
-import { DepartureSettlementReadinessService } from '../departure/departure-settlement-readiness.service'
+import {
+  SegmentResourcePayableGapService,
+  type PendingPayableSegmentResourceRow,
+} from '../departure/segment-resource-payable-gap.service'
 import {
   SourceOrderReceivableGapService,
   type PendingReceivableSourceOrderRow,
 } from '../departure/source-order-receivable-gap.service'
 
-type SettlementReadyRow = Prisma.DepartureGetPayload<{
-  select: { id: true; name: true; endDate: true }
-}>
-
 export interface CoordinatorSettlementSnapshot {
-  readyRows: SettlementReadyRow[]
+  payableRows: PendingPayableSegmentResourceRow[]
   pendingRows: PendingReceivableSourceOrderRow[]
   pendingCountByDepartureId: ReadonlyMap<string, number>
 }
@@ -26,21 +22,15 @@ export interface CoordinatorSettlementSnapshot {
 @Injectable()
 export class CoordinatorSettlementWorkbenchService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly departureSettlementReadinessService: DepartureSettlementReadinessService,
+    private readonly segmentResourcePayableGapService: SegmentResourcePayableGapService,
     private readonly sourceOrderReceivableGapService: SourceOrderReceivableGapService,
   ) {}
 
   async loadSnapshot(organizationId: string): Promise<CoordinatorSettlementSnapshot> {
-    const [readyIds, pendingRows] = await Promise.all([
-      this.departureSettlementReadinessService.findReadyDepartureIds(organizationId),
+    const [payableRows, pendingRows] = await Promise.all([
+      this.segmentResourcePayableGapService.findPendingRows(organizationId),
       this.sourceOrderReceivableGapService.findPendingRows(organizationId),
     ])
-    const readyRows = await this.prisma.departure.findMany({
-      where: { organizationId, id: { in: readyIds } },
-      select: { id: true, name: true, endDate: true },
-      orderBy: [{ endDate: 'asc' }, { name: 'asc' }],
-    })
     const pendingCountByDepartureId = new Map<string, number>()
     for (const row of pendingRows) {
       pendingCountByDepartureId.set(
@@ -49,18 +39,20 @@ export class CoordinatorSettlementWorkbenchService {
       )
     }
 
-    return { readyRows, pendingRows, pendingCountByDepartureId }
+    return { payableRows, pendingRows, pendingCountByDepartureId }
   }
 
   buildModule(snapshot: CoordinatorSettlementSnapshot): WorkbenchModule {
-    const readyItems: WorkbenchCoordinatorSettlementReadyItem[] = snapshot.readyRows
+    const payableItems: WorkbenchCoordinatorPayablePendingItem[] = snapshot.payableRows
       .slice(0, 5)
       .map((row) => ({
-        kind: 'coordinator-settlement-ready',
+        kind: 'coordinator-payable-pending',
         id: row.id,
-        title: row.name,
-        href: `/departure/${row.id}`,
-        endDate: formatDateOnly(row.endDate),
+        title: row.title,
+        href: `/departure/${row.segment.departure.id}?tab=execution&highlightSegmentResourceId=${encodeURIComponent(row.id)}`,
+        departureName: row.segment.departure.name,
+        segmentName: row.segment.name,
+        resourceKind: row.resourceKind,
       }))
     const pendingItems: WorkbenchCoordinatorReceivablePendingItem[] = snapshot.pendingRows
       .slice(0, 5)
@@ -74,7 +66,7 @@ export class CoordinatorSettlementWorkbenchService {
 
     return {
       key: 'coordinator-settlement',
-      title: '结算衔接',
+      title: '待生成账款',
       metrics: [
         {
           key: 'pending-receivables',
@@ -84,7 +76,7 @@ export class CoordinatorSettlementWorkbenchService {
           href: '/source-orders?receivableGeneration=not_generated',
         },
       ],
-      items: [...readyItems, ...pendingItems],
+      items: [...payableItems, ...pendingItems],
     }
   }
 }

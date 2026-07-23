@@ -368,7 +368,13 @@ describe('Workbench contract (e2e)', () => {
           { key: 'in-progress', label: '进行中发团', value: 2, suffix: '个发团' },
           { key: 'next-7-days', label: '未来 7 天发团', value: 3, suffix: '个发团' },
           { key: 'data-gaps', label: '资料待补充', value: 3, suffix: '个发团' },
-          { key: 'settlement-ready', label: '可确认结清', value: 0, suffix: '个发团' },
+          {
+            key: 'pending-payables',
+            label: '待生成应付',
+            value: 0,
+            suffix: '个资源',
+            href: '/departure/account-generation-gaps?generationKind=payable',
+          },
         ],
       })
       expect(coordinatorModule.items).toHaveLength(5)
@@ -412,9 +418,13 @@ describe('Workbench contract (e2e)', () => {
       })
 
       for (const metric of coordinatorModule.metrics) {
-        const drillDown = await authRequest(app, cookie)
-          .get(metric.href.replace('/departure', '/api/departures'))
-          .expect(200)
+        const path = metric.href.startsWith('/departure/account-generation-gaps')
+          ? metric.href.replace(
+            '/departure/account-generation-gaps',
+            '/api/account-generation-gaps',
+          )
+          : metric.href.replace('/departure', '/api/departures')
+        const drillDown = await authRequest(app, cookie).get(path).expect(200)
         expect(drillDown.body.data.total).toBe(metric.value)
       }
       const viewAll = await authRequest(app, cookie)
@@ -463,7 +473,7 @@ describe('Workbench contract (e2e)', () => {
     }
   })
 
-  it('returns settlement-ready departures and only ungenerated receivable source orders with matching drill-down totals', async () => {
+  it('returns pending payable resources and only ungenerated receivable source orders with matching drill-down totals', async () => {
     const suffix = Date.now().toString(26).replace(/[^a-z]/g, 'a').slice(-3).toUpperCase()
     const username = `e2e-workbench-settlement-${Date.now()}`
     const organization = await prisma.organization.create({
@@ -541,7 +551,7 @@ describe('Workbench contract (e2e)', () => {
 
     try {
       const ready = await createDepartureWithOrder(
-        '账款均关闭可确认结清',
+        '账款均关闭可标已结清',
         DepartureStatus.pending_settlement,
       )
       const open = await createDepartureWithOrder(
@@ -614,11 +624,14 @@ describe('Workbench contract (e2e)', () => {
       )
 
       expect(departureModule.metrics[3]).toMatchObject({
-        key: 'settlement-ready',
-        label: '可确认结清',
+        key: 'pending-payables',
+        label: '待生成应付',
         value: 1,
-        suffix: '个发团',
-        href: '/departure?settlementReadiness=ready',
+        suffix: '个资源',
+        href: '/departure/account-generation-gaps?generationKind=payable',
+      })
+      expect(settlementModule).toMatchObject({
+        title: '待生成账款',
       })
       expect(settlementModule.metrics).toEqual([
         expect.objectContaining({
@@ -630,12 +643,20 @@ describe('Workbench contract (e2e)', () => {
         }),
       ])
       expect(settlementModule.items.filter(
-        (item: { kind: string }) => item.kind === 'coordinator-settlement-ready',
-      )).toHaveLength(1)
+        (item: { kind: string }) => item.kind === 'coordinator-payable-pending',
+      )).toEqual([
+        expect.objectContaining({
+          title: '待生成应付资源',
+          departureName: '仍有开放账款不可结清',
+          segmentName: '存在待生成应付的行程段',
+          resourceKind: 'transport',
+        }),
+      ])
       expect(settlementModule.items.filter(
         (item: { kind: string }) => item.kind === 'coordinator-receivable-pending',
       )).toHaveLength(5)
-      expect(JSON.stringify(settlementModule)).not.toContain('payable')
+      expect(JSON.stringify(response.body.data)).not.toContain('可确认结清')
+      expect(JSON.stringify(response.body.data)).not.toContain('settlement-ready')
       expect(JSON.stringify(response.body.data)).not.toContain('待提交结算')
 
       const financeCookie = await loginAs(app, createdUsernames[0])
@@ -643,12 +664,18 @@ describe('Workbench contract (e2e)', () => {
         .get('/api/workbench')
         .expect(200)
       expect(financeWorkbench.body.data.template).toBe('finance')
-      expect(JSON.stringify(financeWorkbench.body.data)).not.toContain('settlement-ready')
+      expect(JSON.stringify(financeWorkbench.body.data)).not.toContain('pending-payables')
 
-      const readyList = await authRequest(app, cookie)
-        .get('/api/departures?settlementReadiness=ready')
+      const pendingPayables = await authRequest(app, cookie)
+        .get('/api/account-generation-gaps?generationKind=payable&pageSize=100')
         .expect(200)
-      expect(readyList.body.data.total).toBe(departureModule.metrics[3].value)
+      expect(pendingPayables.body.data.total).toBe(departureModule.metrics[3].value)
+      expect(pendingPayables.body.data.items).toEqual([
+        expect.objectContaining({
+          generationKind: 'payable',
+          title: '待生成应付资源',
+        }),
+      ])
 
       const pendingReceivables = await authRequest(app, cookie)
         .get('/api/source-orders?receivableGeneration=not_generated&pageSize=100')
