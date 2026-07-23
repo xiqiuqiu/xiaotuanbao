@@ -37,8 +37,11 @@ export function formatChineseMonthDay(dateStr: string): string {
   return `${month}月${day}日`
 }
 
-export function buildDefaultDepartureName(routeName: string, startDate: string): string {
-  return `${routeName} ${formatChineseMonthDay(startDate)}团`
+/** 默认团名：仅路线名；传入出团日期后拼接「M月D日团」。 */
+export function buildDefaultDepartureName(routeName: string, startDate?: string): string {
+  const trimmed = routeName.trim()
+  if (!startDate) return trimmed
+  return `${trimmed} ${formatChineseMonthDay(startDate)}团`
 }
 
 export function addDays(dateStr: string, days: number): string {
@@ -78,7 +81,8 @@ export function buildInitialInfoValues(
       : startDate
 
   return {
-    name: buildDefaultDepartureName(route.routeName, startDate),
+    // 进入填写步时默认不带日期；用户选择出团日期后再由 UI 写入日期后缀
+    name: buildDefaultDepartureName(route.routeName),
     departureNo: '',
     departureType: DepartureType.COMBINED,
     startDate,
@@ -143,7 +147,8 @@ export function createInfoFormValues(
       : startDate
 
   return {
-    name: buildDefaultDepartureName(route.routeName, startDate),
+    // 进入填写步时默认不带日期；用户选择出团日期后再由 UI 写入日期后缀
+    name: buildDefaultDepartureName(route.routeName),
     departureNo,
     departureType: DepartureType.COMBINED,
     startDate,

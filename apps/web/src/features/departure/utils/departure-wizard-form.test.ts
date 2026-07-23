@@ -17,10 +17,16 @@ describe('departure-wizard-form', () => {
     expect(formatChineseMonthDay('2026-12-25')).toBe('12月25日')
   })
 
-  it('builds default departure name', () => {
+  it('builds default departure name without date when startDate omitted', () => {
+    expect(buildDefaultDepartureName('南疆6日游')).toBe('南疆6日游')
+    expect(buildDefaultDepartureName('  南疆6日游  ')).toBe('南疆6日游')
+  })
+
+  it('builds default departure name with departure date when startDate provided', () => {
     expect(buildDefaultDepartureName('喀纳斯阿勒泰10日线', '2026-08-01')).toBe(
       '喀纳斯阿勒泰10日线 8月1日团',
     )
+    expect(buildDefaultDepartureName('南疆6日游', '2026-07-22')).toBe('南疆6日游 7月22日团')
   })
 
   it('computes end date from default day count', () => {
@@ -38,7 +44,7 @@ describe('departure-wizard-form', () => {
     expect(isEndDateBeforeStartDate('2026-08-01', '2026-08-10')).toBe(false)
   })
 
-  it('builds initial info values with default day count', () => {
+  it('builds initial info values with route name only (no date suffix)', () => {
     const values = buildInitialInfoValues(
       { mode: 'manual', routeName: '喀纳斯阿勒泰10日线', defaultDayCount: 10 },
       'user-1',
@@ -46,12 +52,13 @@ describe('departure-wizard-form', () => {
     )
 
     expect(values).toMatchObject({
-      name: '喀纳斯阿勒泰10日线 8月1日团',
+      name: '喀纳斯阿勒泰10日线',
       departureType: DepartureType.COMBINED,
       startDate: '2026-08-01',
       endDate: '2026-08-10',
       ownerUserId: 'user-1',
     })
+    expect(values.name).not.toMatch(/\d+月\d+日团$/)
   })
 
   it('builds create payload from route and info values', () => {

@@ -86,7 +86,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
         <div className={styles.sectionHeader}>
           <Typography.Title level={5}>发团基础信息</Typography.Title>
           <Typography.Paragraph type="secondary">
-            团名和结束日期已按所选路线生成，可根据本次实际团期调整。
+            团名默认取路线名称；选择出团日期后会自动带入日期，也可按本次实际团期调整。
           </Typography.Paragraph>
         </div>
 
@@ -98,7 +98,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
                 label="团名"
                 rules={[{ required: true, message: '请输入团名' }]}
               >
-                <Input placeholder="路线名称 + 出团日期" />
+                <Input placeholder="路线名称，选择出团日期后可带入日期" />
               </Form.Item>
             </Col>
 
