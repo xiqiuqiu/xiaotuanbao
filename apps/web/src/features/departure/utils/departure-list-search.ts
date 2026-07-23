@@ -47,3 +47,40 @@ export function parseDepartureListSearch(search: Record<string, unknown>): Depar
     ...(excludeClosed ? { excludeClosed } : {}),
   }
 }
+
+/** URL deep-link markers from the workbench (not local list-filter UI state). */
+export function hasWorkbenchDepartureListSearch(search: DepartureListSearch): boolean {
+  return Boolean(
+    search.operationalWindow
+    || search.departureDataGap
+    || search.settlementReadiness
+    || search.excludeClosed
+    || search.startDateFrom
+    || search.startDateTo,
+  )
+}
+
+/**
+ * Banner copy for workbench drill-down. Driven by URL search only so local
+ * date/status filters on /departure do not look like a workbench handoff.
+ */
+export function resolveWorkbenchDepartureFilterBanner(
+  search: DepartureListSearch,
+): { title: string } | null {
+  if (!hasWorkbenchDepartureListSearch(search)) {
+    return null
+  }
+
+  if (search.settlementReadiness) {
+    return { title: '已筛选：可确认结清发团' }
+  }
+  if (search.departureDataGap) {
+    return { title: '已筛选：近期资料待补充发团' }
+  }
+  if (search.startDateFrom || search.startDateTo) {
+    return {
+      title: `已筛选：出团日 ${search.startDateFrom ?? '…'} 至 ${search.startDateTo ?? '…'}`,
+    }
+  }
+  return { title: '已按工作台范围筛选发团' }
+}

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { parseDepartureListSearch } from './departure-list-search'
+import {
+  parseDepartureListSearch,
+  resolveWorkbenchDepartureFilterBanner,
+} from './departure-list-search'
 
 describe('parseDepartureListSearch', () => {
   it('keeps stable workbench drill-down filters and rejects unknown values', () => {
@@ -29,5 +32,35 @@ describe('parseDepartureListSearch', () => {
       startDateFrom: '22/07/2026',
       excludeClosed: 'true',
     })).toEqual({})
+  })
+})
+
+describe('resolveWorkbenchDepartureFilterBanner', () => {
+  it('returns null when URL has no workbench drill-down markers', () => {
+    expect(resolveWorkbenchDepartureFilterBanner({})).toBeNull()
+  })
+
+  it('prefers settlement / data-gap copy over bare date range', () => {
+    expect(resolveWorkbenchDepartureFilterBanner({
+      settlementReadiness: 'ready',
+      startDateFrom: '2026-07-23',
+    })).toEqual({ title: '已筛选：可确认结清发团' })
+
+    expect(resolveWorkbenchDepartureFilterBanner({
+      departureDataGap: 'any',
+      startDateFrom: '2026-07-23',
+    })).toEqual({ title: '已筛选：近期资料待补充发团' })
+  })
+
+  it('describes workbench date deep links and operational windows', () => {
+    expect(resolveWorkbenchDepartureFilterBanner({
+      startDateFrom: '2026-07-23',
+      startDateTo: '2026-07-26',
+      excludeClosed: '1',
+    })).toEqual({ title: '已筛选：出团日 2026-07-23 至 2026-07-26' })
+
+    expect(resolveWorkbenchDepartureFilterBanner({
+      operationalWindow: 'current_and_next_7_days',
+    })).toEqual({ title: '已按工作台范围筛选发团' })
   })
 })

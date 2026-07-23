@@ -20,7 +20,11 @@ import {
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
 import { buildDepartureColumns } from './departure-columns'
-import type { DepartureListSearch } from '../utils/departure-list-search'
+import {
+  hasWorkbenchDepartureListSearch,
+  resolveWorkbenchDepartureFilterBanner,
+  type DepartureListSearch,
+} from '../utils/departure-list-search'
 
 type DeparturesPageState = {
   keyword: string
@@ -128,6 +132,7 @@ export function DeparturesPage() {
 
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
+  const workbenchFilterBanner = resolveWorkbenchDepartureFilterBanner(search)
   const debouncedRouteName = useDebouncedValue(state.routeName)
 
   const { data: employeeOptionsResult } = useQuery({
@@ -225,7 +230,11 @@ export function DeparturesPage() {
 
   const resetFilters = useCallback(() => {
     dispatch({ type: 'RESET_FILTERS' })
-  }, [])
+    // 本地筛选不写 URL；若仍带着工作台深链，重置时一并清掉，避免提示残留。
+    if (hasWorkbenchDepartureListSearch(search)) {
+      void navigate({ to: '/departure', search: {} })
+    }
+  }, [navigate, search])
 
   const handleCopy = useCallback(
     (departureId: string) => {
@@ -265,25 +274,12 @@ export function DeparturesPage() {
         }
       />
 
-      {state.operationalWindow
-        || state.departureDataGap
-        || state.settlementReadiness
-        || state.excludeClosed
-        || startDateFrom
-        || startDateTo ? (
+      {workbenchFilterBanner ? (
         <Alert
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          title={
-            state.settlementReadiness
-              ? '已筛选：可确认结清发团'
-              : state.departureDataGap
-                ? '已筛选：近期资料待补充发团'
-                : startDateFrom || startDateTo
-                  ? `已筛选：出团日 ${startDateFrom ?? '…'} 至 ${startDateTo ?? '…'}`
-                  : '已按工作台范围筛选发团'
-          }
+          title={workbenchFilterBanner.title}
           action={
             <Button
               size="small"
