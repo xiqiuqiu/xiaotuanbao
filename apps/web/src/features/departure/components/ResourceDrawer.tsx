@@ -9,6 +9,7 @@ import {
   Select,
   Space,
   Typography,
+  theme,
 } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
@@ -50,6 +51,7 @@ export function ResourceDrawer({
   onClose,
   onSubmit,
 }: ResourceDrawerProps) {
+  const { token } = theme.useToken()
   const [form] = Form.useForm<ResourceFormValues>()
   const resourceKind = Form.useWatch('resourceKind', form)
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
@@ -62,6 +64,13 @@ export function ResourceDrawer({
     () => (editing ? resourceToFormValues(editing) : createEmptyResourceFormValues()),
     [editing],
   )
+
+  const drawerTitle = readOnly ? '查看资源' : editing ? '编辑资源' : '添加资源'
+  const segmentContext = segment
+    ? [segment.name, formatSegmentDateRange(segment.startDate, segment.endDate)]
+        .filter(Boolean)
+        .join('｜')
+    : null
 
   useEffect(() => {
     if (!open) {
@@ -123,11 +132,23 @@ export function ResourceDrawer({
 
   return (
     <Drawer
-      title={readOnly ? '查看资源' : editing ? '编辑资源' : '添加资源'}
+      title={
+        segmentContext ? (
+          <Space orientation="vertical" size={token.marginXXS}>
+            <span>{drawerTitle}</span>
+            <Typography.Text type="secondary" style={{ fontWeight: 'normal' }}>
+              {segmentContext}
+            </Typography.Text>
+          </Space>
+        ) : (
+          drawerTitle
+        )
+      }
       open={open}
-      width="min(520px, 100vw)"
+      size="min(480px, 100vw)"
       destroyOnHidden
       onClose={handleClose}
+      styles={{ footer: { paddingBlock: token.paddingMD } }}
       footer={
         readOnly ? (
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
@@ -143,21 +164,13 @@ export function ResourceDrawer({
         )
       }
     >
-      {segment ? (
-        <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          {[segment.name, formatSegmentDateRange(segment.startDate, segment.endDate)]
-            .filter(Boolean)
-            .join('｜')}
-        </Typography.Paragraph>
-      ) : null}
-
       {editing?.hasSourceAmountMismatch ? (
         <Alert
           type="warning"
           showIcon
           title="来源差异警示"
           description="资源金额与已生成的应付节点不一致，且财务已介入，请核对后再处理。"
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: token.marginMD }}
         />
       ) : null}
 
@@ -171,8 +184,8 @@ export function ResourceDrawer({
       >
         <Form.Item
           name="resourceKind"
-          label="资源种类"
-          rules={[{ required: true, message: '请选择资源种类' }]}
+          label="资源类型"
+          rules={[{ required: true, message: '请选择资源类型' }]}
         >
           <Select
             options={RESOURCE_KIND_OPTIONS.map((item) => ({
@@ -203,9 +216,8 @@ export function ResourceDrawer({
             rules={[{ required: true, message: '请选择承接同行' }]}
           >
             <Select
-              showSearch
+              showSearch={{ optionFilterProp: 'label' }}
               placeholder="选择合作伙伴"
-              optionFilterProp="label"
               options={partnersResult?.items.map((partner) => ({
                 value: partner.id,
                 label: partner.name,
@@ -220,9 +232,8 @@ export function ResourceDrawer({
             rules={[{ required: true, message: '请选择供应商' }]}
           >
             <Select
-              showSearch
+              showSearch={{ optionFilterProp: 'label' }}
               placeholder="选择供应商"
-              optionFilterProp="label"
               options={suppliersResult?.items.map((supplier) => ({
                 value: supplier.id,
                 label: supplier.name,
@@ -232,7 +243,11 @@ export function ResourceDrawer({
           </Form.Item>
         ) : null}
 
-        <Form.Item name="title" label="资源项目">
+        <Form.Item
+          name="title"
+          label="资源名称"
+          rules={[{ required: true, whitespace: true, message: '请填写资源名称' }]}
+        >
           <Input placeholder="如喀纳斯用车、阿勒泰拼出、贾登峪住宿" disabled={readOnly} />
         </Form.Item>
 
@@ -256,8 +271,11 @@ export function ResourceDrawer({
           />
         </Form.Item>
 
-        <Form.Item name="notes" label="备注">
-          <Input.TextArea rows={3} placeholder="使用日期、数量、明细、特殊约定" />
+        <Form.Item name="notes" label="备注" style={{ marginBottom: 0 }}>
+          <Input.TextArea
+            autoSize={{ minRows: 3, maxRows: 6 }}
+            placeholder="使用日期、数量、明细、特殊约定"
+          />
         </Form.Item>
       </Form>
     </Drawer>
