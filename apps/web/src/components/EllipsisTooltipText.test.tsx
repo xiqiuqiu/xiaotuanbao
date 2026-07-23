@@ -32,5 +32,7 @@ describe('EllipsisTooltipText', () => {
     expect(text).toBeInTheDocument()
     // Typography ellipsis enables antd Tooltip when content overflows
     expect(text.className).toMatch(/ant-typography/)
+    // Inherit parent color so TableNameLink wrappers keep their blue prompt style
+    expect(text.style.color).toBe('inherit')
   })
 })

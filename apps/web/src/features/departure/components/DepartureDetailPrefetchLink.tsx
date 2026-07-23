@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { DepartureSummary } from '@/types/api'
 import { getDeparture } from '@/services/departure.service'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
+import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 
 /** Exported for tests — list hover prefetches detail data, not route beforeLoad. */
 export function DepartureDetailPrefetchLink({
@@ -30,6 +31,7 @@ export function DepartureDetailPrefetchLink({
 
   return (
     <Link
+      className={nameLinkStyles.nameLink}
       to="/departure/$departureId"
       params={{ departureId: record.id }}
       search={{ tab: 'overview' }}
@@ -37,7 +39,13 @@ export function DepartureDetailPrefetchLink({
       onMouseEnter={prefetchDetail}
       onFocus={prefetchDetail}
     >
-      {strong ? <Typography.Text strong>{children}</Typography.Text> : children}
+      {strong ? (
+        <Typography.Text strong style={{ color: 'inherit' }}>
+          {children}
+        </Typography.Text>
+      ) : (
+        children
+      )}
     </Link>
   )
 }

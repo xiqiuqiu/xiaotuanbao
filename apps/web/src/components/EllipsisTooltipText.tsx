@@ -17,7 +17,11 @@ export function EllipsisTooltipText({
     children === null || children === undefined || children === '' ? empty : children
 
   return (
-    <Typography.Text ellipsis={{ tooltip: content }} style={{ width: '100%', margin: 0 }}>
+    <Typography.Text
+      ellipsis={{ tooltip: content }}
+      // Inherit parent color so TableNameLink (and other link wrappers) stay blue.
+      style={{ width: '100%', margin: 0, color: 'inherit' }}
+    >
       {content}
     </Typography.Text>
   )
