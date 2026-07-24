@@ -82,8 +82,13 @@ export function ResourceDrawer({
         .join('｜')
     : null
 
+  const resetSubmitIntent = () => {
+    submitIntentRef.current = 'save'
+  }
+
   useEffect(() => {
     if (!open) {
+      resetSubmitIntent()
       return
     }
 
@@ -92,6 +97,7 @@ export function ResourceDrawer({
   }, [form, initialValues, open])
 
   const handleClose = () => {
+    resetSubmitIntent()
     form.resetFields()
     onClose()
   }
@@ -214,9 +220,10 @@ export function ResourceDrawer({
         initialValues={initialValues}
         onFinish={(values) => {
           const generatePayable = submitIntentRef.current === 'saveAndGenerate'
-          submitIntentRef.current = 'save'
+          resetSubmitIntent()
           onSubmit(formValuesToPayload(values), { generatePayable })
         }}
+        onFinishFailed={resetSubmitIntent}
       >
         <Form.Item
           name="resourceKind"

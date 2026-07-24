@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -108,6 +108,30 @@ describe('ResourceDrawer save and generate', () => {
 
     await fillValidCreateForm(user)
     await user.click(screen.getByRole('button', { name: /保\s*存$/ }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '天山天池用车' }),
+        { generatePayable: false },
+      )
+    })
+  })
+
+  it('does not keep saveAndGenerate intent after validation failure', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+
+    renderDrawer({
+      canSaveAndGenerate: true,
+      onSubmit,
+    })
+
+    await user.click(screen.getByRole('button', { name: '保存并生成应付' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    await screen.findByText('请选择供应商')
+
+    await fillValidCreateForm(user)
+    fireEvent.submit(document.querySelector('form')!)
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(

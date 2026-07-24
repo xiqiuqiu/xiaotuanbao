@@ -182,8 +182,16 @@ export function SourceOrderDrawer({
     [resolvedOrder],
   )
 
+  const resetSubmitIntent = () => {
+    submitIntentRef.current = 'save'
+  }
+
   useEffect(() => {
-    if (!open || !detailReady) {
+    if (!open) {
+      resetSubmitIntent()
+      return
+    }
+    if (!detailReady) {
       return
     }
 
@@ -192,6 +200,7 @@ export function SourceOrderDrawer({
   }, [detailReady, form, initialValues, open])
 
   const handleClose = () => {
+    resetSubmitIntent()
     form.resetFields()
     onClose()
   }
@@ -296,11 +305,12 @@ export function SourceOrderDrawer({
               }
             : null
           const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
-          submitIntentRef.current = 'save'
+          resetSubmitIntent()
           onSubmit(formValuesToPayload(values), pathBaseline, {
             generateReceivable,
           })
         }}
+        onFinishFailed={resetSubmitIntent}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>
           基础信息
