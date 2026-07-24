@@ -4,6 +4,8 @@
 from pathlib import Path
 import re
 import struct
+import subprocess
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +14,7 @@ ALPHA_ASSETS = (
     ROOT / "apps/web/public/login-travel-operations-transparent-v2.png",
     ROOT / "apps/web/public/xiaotuanbao-brand-lockup-transparent-v2.png",
 )
+BRAND_ALIGN_CHECK = ROOT / "scripts/check_brand_logo_alignment.py"
 
 
 def png_color_type(path: Path) -> int:
@@ -35,4 +38,8 @@ for asset_path in ALPHA_ASSETS:
     color_type = png_color_type(asset_path)
     assert color_type in (4, 6), f"{asset_path.name} 没有 alpha 通道，矩形底色会暴露"
 
-print("PASS: 登录页中间断点保持双栏，旅游插画具备 alpha 通道")
+align = subprocess.run([sys.executable, str(BRAND_ALIGN_CHECK)], check=False)
+if align.returncode != 0:
+    raise SystemExit(align.returncode)
+
+print("PASS: 登录页中间断点保持双栏，旅游插画具备 alpha 通道，品牌 lockup 垂直对齐")

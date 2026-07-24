@@ -105,14 +105,11 @@ export function MainLayout({ children }: PropsWithChildren) {
           aria-label={env.appName}
         >
           <img
-            className={styles.brandLogo}
-            src="/xiaotuanbao-brand-mark-v2.png"
+            className={styles.brandLockup}
+            src="/xiaotuanbao-brand-lockup-transparent-v2.png"
             alt=""
             aria-hidden="true"
           />
-          {!sidebarCollapsed ? (
-            <span className={styles.brandName}>{env.appName}</span>
-          ) : null}
         </div>
         <Menu
           mode="inline"

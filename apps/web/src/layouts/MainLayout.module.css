@@ -29,35 +29,23 @@
   height: 64px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
   padding-inline: 20px;
   border-bottom: 1px solid var(--shell-border);
   color: var(--shell-text);
-  white-space: nowrap;
   overflow: hidden;
 }
 
-.brandLogo {
+/* lockup 原生约 621×190（宽高比 ≈ 3.27）：以高度定宽，避免拉伸 */
+.brandLockup {
   display: block;
-  width: 32px;
   height: 32px;
-  flex-shrink: 0;
+  width: auto;
+  max-width: 100%;
   object-fit: contain;
-  border-radius: 8px;
-}
-
-.brandName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
 }
 
 .brandCollapsed {
-  justify-content: center;
   padding-inline: 0;
 }
 
