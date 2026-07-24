@@ -102,6 +102,7 @@
 
 .brandLockup {
   width: fit-content;
+  align-items: center;
 }
 
 .brandLogo {
@@ -117,8 +118,11 @@
   color: var(--ant-color-text-heading) !important;
   font-size: 36px !important;
   font-weight: 600 !important;
-  line-height: 1.15 !important;
+  /* 与 mark 光学居中；Title 默认行高会把字形顶偏 */
+  line-height: 1 !important;
   letter-spacing: 0.04em;
+  display: flex !important;
+  align-items: center;
 }
 
 .copyBlock {
