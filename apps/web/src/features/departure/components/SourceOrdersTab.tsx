@@ -4,7 +4,7 @@ import { PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
-import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { DirectoryProfileStatus, SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartners } from '@/services/partner.service'
 import { listSourceOrders } from '@/services/source-order.service'
@@ -115,19 +115,30 @@ export function SourceOrdersTab({
     dispatchDrawer({ type: 'CLOSE_DRAWER' })
   }, [])
 
-  const { saveMutation, deleteMutation, generateMutation, batchGenerateMutation } =
-    useSourceOrdersTabMutations({
-      departure,
-      drawer,
-      onCloseDrawer: closeDrawer,
-    })
+  const {
+    saveMutation,
+    saveAndGenerateMutation,
+    deleteMutation,
+    generateMutation,
+    batchGenerateMutation,
+  } = useSourceOrdersTabMutations({
+    departure,
+    drawer,
+    onCloseDrawer: closeDrawer,
+  })
 
   const submitSourceOrder = useSourceOrderSubmit({
     editingOrder: drawer.editingOrder,
     saveMutation,
+    saveAndGenerateMutation,
     impactAbortRef,
     latestEditingOrderIdRef,
   })
+
+  const canSaveAndGenerate =
+    editable &&
+    (drawer.editingOrder == null ||
+      drawer.editingOrder.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED)
 
   const pendingReceivableCount = useMemo(
     () => countPendingReceivables(allOrdersForBatchCount?.items),
@@ -256,9 +267,11 @@ export function SourceOrdersTab({
         readOnly={!editable || drawer.viewOnly}
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
+        canSaveAndGenerate={canSaveAndGenerate && !drawer.viewOnly}
+        saveAndGenerateLoading={saveAndGenerateMutation.isPending}
         onClose={closeDrawer}
-        onSubmit={(payload, pathBaseline) => {
-          void submitSourceOrder(payload, pathBaseline)
+        onSubmit={(payload, pathBaseline, options) => {
+          void submitSourceOrder(payload, pathBaseline, options)
         }}
       />
 

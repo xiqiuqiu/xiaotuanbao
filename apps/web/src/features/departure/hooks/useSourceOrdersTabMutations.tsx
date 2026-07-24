@@ -68,6 +68,48 @@ export function useSourceOrdersTabMutations({
     },
   })
 
+  const saveAndGenerateMutation = useMutation({
+    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+      const editingId = drawer.editingOrder?.id ?? null
+      const saved = editingId
+        ? await updateSourceOrder(editingId, payload)
+        : await createSourceOrder(departure.id, payload)
+      try {
+        const generateResult = await generateReceivables(saved.id)
+        return { saved, editingId, generateOk: true as const, generateResult }
+      } catch (error) {
+        return { saved, editingId, generateOk: false as const, generateError: error }
+      }
+    },
+    onSuccess: (result) => {
+      invalidateSourceOrders()
+      if ((drawer.editingOrder?.id ?? null) !== result.editingId) {
+        return
+      }
+      if (!result.generateOk) {
+        message.warning(
+          `客源单已保存，但生成应收失败：${
+            result.generateError instanceof Error
+              ? result.generateError.message
+              : '请稍后在列表中重试'
+          }`,
+        )
+        onCloseDrawer()
+        return
+      }
+      message.success(
+        result.generateResult.sourceAmountMismatch
+          ? '已保存并生成应收，存在来源金额差异，请核对'
+          : '已保存并生成应收',
+      )
+      invalidateFinance()
+      onCloseDrawer()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '保存客源单失败')
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSourceOrder(id),
     onSuccess: () => {
@@ -110,6 +152,7 @@ export function useSourceOrdersTabMutations({
 
   return {
     saveMutation,
+    saveAndGenerateMutation,
     deleteMutation,
     generateMutation,
     batchGenerateMutation,
@@ -119,6 +162,9 @@ export function useSourceOrdersTabMutations({
 interface UseSourceOrderSubmitParams {
   editingOrder: SourceOrderSummary | null
   saveMutation: ReturnType<typeof useSourceOrdersTabMutations>['saveMutation']
+  saveAndGenerateMutation: ReturnType<
+    typeof useSourceOrdersTabMutations
+  >['saveAndGenerateMutation']
   impactAbortRef: MutableRefObject<AbortController | null>
   latestEditingOrderIdRef: MutableRefObject<string | undefined>
 }
@@ -126,6 +172,7 @@ interface UseSourceOrderSubmitParams {
 export function useSourceOrderSubmit({
   editingOrder,
   saveMutation,
+  saveAndGenerateMutation,
   impactAbortRef,
   latestEditingOrderIdRef,
 }: UseSourceOrderSubmitParams) {
@@ -137,16 +184,26 @@ export function useSourceOrderSubmit({
        * detail used to hydrate the form; the list row can lag after receivable sync.
        */
       pathBaseline: SourceOrderPathBaseline | null = null,
+      options: { generateReceivable?: boolean } = {},
     ) => {
+      const runSave = () =>
+        options.generateReceivable
+          ? saveAndGenerateMutation.mutate(payload)
+          : saveMutation.mutate(payload)
+      const runSaveAsync = () =>
+        options.generateReceivable
+          ? saveAndGenerateMutation.mutateAsync(payload)
+          : saveMutation.mutateAsync(payload)
+
       if (!editingOrder || !pathBaseline) {
-        saveMutation.mutate(payload)
+        runSave()
         return
       }
 
       const nextPath = resolvePathAmountsFromPayload(payload)
       const pathChanged = didSourceAmountPathChange(pathBaseline, nextPath)
       if (!pathChanged) {
-        saveMutation.mutate(payload)
+        runSave()
         return
       }
 
@@ -170,7 +227,7 @@ export function useSourceOrderSubmit({
       }
 
       if (impact.affectedTransactionCount <= 0) {
-        saveMutation.mutate(payload)
+        runSave()
         return
       }
 
@@ -191,17 +248,23 @@ export function useSourceOrderSubmit({
             </Typography.Text>
           </Space>
         ),
-        okText: '仍要保存',
+        okText: options.generateReceivable ? '仍要保存并生成' : '仍要保存',
         cancelText: '取消',
         onOk: () => {
           if (latestEditingOrderIdRef.current !== requestOrderId) {
             return
           }
-          return saveMutation.mutateAsync(payload)
+          return runSaveAsync()
         },
       })
     },
-    [editingOrder, impactAbortRef, latestEditingOrderIdRef, saveMutation],
+    [
+      editingOrder,
+      impactAbortRef,
+      latestEditingOrderIdRef,
+      saveAndGenerateMutation,
+      saveMutation,
+    ],
   )
 }
 
