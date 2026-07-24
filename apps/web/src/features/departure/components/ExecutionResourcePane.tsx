@@ -17,7 +17,7 @@ import { PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DepartureStatus } from '@xiaotuanbao/shared'
+import { DepartureStatus, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type {
   DepartureDetail,
   ItinerarySegmentSummary,
@@ -260,6 +260,11 @@ export function ExecutionResourcePane({
     [],
   )
 
+  const invalidatePayableQueries = () => {
+    void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+    void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+  }
+
   const saveMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
       const editingId = editingResource?.id ?? null
@@ -274,6 +279,47 @@ export function ExecutionResourcePane({
       if ((editingResource?.id ?? null) !== editingId) {
         return
       }
+      closeDrawer()
+    },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '保存资源失败'))
+    },
+  })
+
+  const saveAndGenerateMutation = useMutation({
+    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+      const editingId = editingResource?.id ?? null
+      const saved = editingId
+        ? await updateSegmentResource(editingId, payload)
+        : await createSegmentResource(segment.id, payload)
+      try {
+        const generateResult = await generatePayable(saved.id)
+        return { saved, editingId, generateOk: true as const, generateResult }
+      } catch (error) {
+        return { saved, editingId, generateOk: false as const, generateError: error }
+      }
+    },
+    onSuccess: (result) => {
+      invalidateResourceQueries()
+      if ((editingResource?.id ?? null) !== result.editingId) {
+        return
+      }
+      if (!result.generateOk) {
+        message.warning(
+          `资源已保存，但生成应付失败：${mutationErrorMessage(
+            result.generateError,
+            '请稍后在列表中重试',
+          )}`,
+        )
+        closeDrawer()
+        return
+      }
+      message.success(
+        result.generateResult.sourceAmountMismatch
+          ? '已保存并生成应付，存在来源金额差异，请核对'
+          : '已保存并生成应付',
+      )
+      invalidatePayableQueries()
       closeDrawer()
     },
     onError: (error) => {
@@ -301,8 +347,7 @@ export function ExecutionResourcePane({
           : '应付已生成',
       )
       invalidateResourceQueries()
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      invalidatePayableQueries()
     },
     onError: (error) => {
       message.error(mutationErrorMessage(error, '生成应付失败'))
@@ -321,8 +366,7 @@ export function ExecutionResourcePane({
         message.info(text)
       }
       invalidateResourceQueries()
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      invalidatePayableQueries()
     },
     onError: (error) => {
       message.error(mutationErrorMessage(error, '批量生成应付失败'))
@@ -341,8 +385,7 @@ export function ExecutionResourcePane({
       setVoidingResource(null)
       voidForm.resetFields()
       invalidateResourceQueries()
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      invalidatePayableQueries()
     },
     onError: (error) => message.error(mutationErrorMessage(error, '作废应付失败')),
   })
@@ -360,8 +403,7 @@ export function ExecutionResourcePane({
       setClosingResource(null)
       closeForm.resetFields()
       invalidateResourceQueries()
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      invalidatePayableQueries()
     },
     onError: (error) => message.error(mutationErrorMessage(error, '关闭节点失败')),
   })
@@ -458,8 +500,22 @@ export function ExecutionResourcePane({
         readOnly={mutationLocked || viewOnly || !canEdit}
         amountReadOnly={amountReadOnly}
         loading={saveMutation.isPending}
+        canSaveAndGenerate={
+          resourceEditable &&
+          !viewOnly &&
+          !mutationLocked &&
+          (editingResource == null ||
+            editingResource.payableStatus === SegmentPayableStatus.NOT_GENERATED)
+        }
+        saveAndGenerateLoading={saveAndGenerateMutation.isPending}
         onClose={closeDrawer}
-        onSubmit={(values) => saveMutation.mutate(values)}
+        onSubmit={(values, options) => {
+          if (options?.generatePayable) {
+            saveAndGenerateMutation.mutate(values)
+            return
+          }
+          saveMutation.mutate(values)
+        }}
       />
       <VoidResourcePayableModal
         resource={voidingResource}

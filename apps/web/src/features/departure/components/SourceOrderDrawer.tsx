@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Alert,
   Col,
@@ -44,10 +44,14 @@ interface SourceOrderDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
+  /** 未生成应收时可展示「保存并生成应收」。 */
+  canSaveAndGenerate?: boolean
+  saveAndGenerateLoading?: boolean
   onClose: () => void
   onSubmit: (
     values: ReturnType<typeof formValuesToPayload>,
     pathBaseline: SourceOrderPathBaseline | null,
+    options?: { generateReceivable?: boolean },
   ) => void
 }
 
@@ -117,12 +121,16 @@ export function SourceOrderDrawer({
   readOnly,
   amountReadOnly = false,
   loading,
+  canSaveAndGenerate = false,
+  saveAndGenerateLoading = false,
   onClose,
   onSubmit,
 }: SourceOrderDrawerProps) {
   const [form] = Form.useForm<SourceOrderFormValues>()
+  const submitIntentRef = useRef<'save' | 'saveAndGenerate'>('save')
   const sourceOrderId = editing?.id ?? null
   const isCreate = open && !sourceOrderId
+  const actionsBusy = loading || saveAndGenerateLoading
 
   const {
     data: detail,
@@ -219,12 +227,29 @@ export function SourceOrderDrawer({
               <Button onClick={handleClose}>关闭</Button>
             ) : (
               <Space>
-                <Button onClick={handleClose}>取消</Button>
+                <Button onClick={handleClose} disabled={actionsBusy}>
+                  取消
+                </Button>
+                {canSaveAndGenerate ? (
+                  <Button
+                    loading={saveAndGenerateLoading}
+                    disabled={!detailReady || loading}
+                    onClick={() => {
+                      submitIntentRef.current = 'saveAndGenerate'
+                      form.submit()
+                    }}
+                  >
+                    保存并生成应收
+                  </Button>
+                ) : null}
                 <Button
                   type="primary"
                   loading={loading}
-                  disabled={!detailReady}
-                  onClick={() => form.submit()}
+                  disabled={!detailReady || saveAndGenerateLoading}
+                  onClick={() => {
+                    submitIntentRef.current = 'save'
+                    form.submit()
+                  }}
                 >
                   保存
                 </Button>
@@ -270,7 +295,11 @@ export function SourceOrderDrawer({
                 partnerCollectedCents: resolvedOrder.partnerCollectedCents,
               }
             : null
-          onSubmit(formValuesToPayload(values), pathBaseline)
+          const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
+          submitIntentRef.current = 'save'
+          onSubmit(formValuesToPayload(values), pathBaseline, {
+            generateReceivable,
+          })
         }}
       >
         <Typography.Title level={5} style={{ marginTop: 0 }}>

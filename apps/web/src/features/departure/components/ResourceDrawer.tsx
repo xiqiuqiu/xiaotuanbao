@@ -37,8 +37,14 @@ interface ResourceDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
+  /** 未生成应付时可展示「保存并生成应付」。 */
+  canSaveAndGenerate?: boolean
+  saveAndGenerateLoading?: boolean
   onClose: () => void
-  onSubmit: (values: ReturnType<typeof formValuesToPayload>) => void
+  onSubmit: (
+    values: ReturnType<typeof formValuesToPayload>,
+    options?: { generatePayable?: boolean },
+  ) => void
 }
 
 export function ResourceDrawer({
@@ -48,12 +54,16 @@ export function ResourceDrawer({
   readOnly,
   amountReadOnly = false,
   loading,
+  canSaveAndGenerate = false,
+  saveAndGenerateLoading = false,
   onClose,
   onSubmit,
 }: ResourceDrawerProps) {
   const { token } = theme.useToken()
   const [form] = Form.useForm<ResourceFormValues>()
+  const submitIntentRef = useRef<'save' | 'saveAndGenerate'>('save')
   const resourceKind = Form.useWatch('resourceKind', form)
+  const actionsBusy = loading || saveAndGenerateLoading
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const outsource = isOutsourceKind(resourceKind)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
@@ -156,8 +166,30 @@ export function ResourceDrawer({
           </Space>
         ) : (
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            <Button onClick={handleClose}>取消</Button>
-            <Button type="primary" loading={loading} onClick={() => form.submit()}>
+            <Button onClick={handleClose} disabled={actionsBusy}>
+              取消
+            </Button>
+            {canSaveAndGenerate ? (
+              <Button
+                loading={saveAndGenerateLoading}
+                disabled={loading}
+                onClick={() => {
+                  submitIntentRef.current = 'saveAndGenerate'
+                  form.submit()
+                }}
+              >
+                保存并生成应付
+              </Button>
+            ) : null}
+            <Button
+              type="primary"
+              loading={loading}
+              disabled={saveAndGenerateLoading}
+              onClick={() => {
+                submitIntentRef.current = 'save'
+                form.submit()
+              }}
+            >
               保存
             </Button>
           </Space>
@@ -180,7 +212,11 @@ export function ResourceDrawer({
         layout="vertical"
         disabled={readOnly}
         initialValues={initialValues}
-        onFinish={(values) => onSubmit(formValuesToPayload(values))}
+        onFinish={(values) => {
+          const generatePayable = submitIntentRef.current === 'saveAndGenerate'
+          submitIntentRef.current = 'save'
+          onSubmit(formValuesToPayload(values), { generatePayable })
+        }}
       >
         <Form.Item
           name="resourceKind"

@@ -84,10 +84,15 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
         mutate: saveMutate,
         mutateAsync: vi.fn(),
       } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveMutation']
+      const saveAndGenerateMutation = {
+        mutate: vi.fn(),
+        mutateAsync: vi.fn(),
+      } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveAndGenerateMutation']
 
       const submit = useSourceOrderSubmit({
         editingOrder: listOrder,
         saveMutation,
+        saveAndGenerateMutation,
         impactAbortRef,
         latestEditingOrderIdRef,
       })
@@ -154,10 +159,15 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
         mutate: saveMutate,
         mutateAsync: vi.fn(),
       } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveMutation']
+      const saveAndGenerateMutation = {
+        mutate: vi.fn(),
+        mutateAsync: vi.fn(),
+      } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveAndGenerateMutation']
 
       const submit = useSourceOrderSubmit({
         editingOrder: listOrder,
         saveMutation,
+        saveAndGenerateMutation,
         impactAbortRef,
         latestEditingOrderIdRef,
       })
