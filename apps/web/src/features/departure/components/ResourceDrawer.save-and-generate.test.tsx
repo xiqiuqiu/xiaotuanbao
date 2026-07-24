@@ -74,6 +74,27 @@ describe('ResourceDrawer save and generate', () => {
     expect(screen.queryByRole('button', { name: '保存并生成应付' })).toBeNull()
   })
 
+  it('disables 保存并生成应付 while saveAndGenerateLoading', () => {
+    renderDrawer({
+      canSaveAndGenerate: true,
+      saveAndGenerateLoading: true,
+      onSubmit: vi.fn(),
+    })
+
+    expect(screen.getByRole('button', { name: /保存并生成应付/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /保\s*存$/ })).toBeDisabled()
+  })
+
+  it('disables 保存并生成应付 while loading', () => {
+    renderDrawer({
+      canSaveAndGenerate: true,
+      loading: true,
+      onSubmit: vi.fn(),
+    })
+
+    expect(screen.getByRole('button', { name: /保存并生成应付/ })).toBeDisabled()
+  })
+
   it('submits with generatePayable when 保存并生成应付 is clicked', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()

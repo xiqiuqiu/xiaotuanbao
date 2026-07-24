@@ -242,7 +242,7 @@ export function SourceOrderDrawer({
                 {canSaveAndGenerate ? (
                   <Button
                     loading={saveAndGenerateLoading}
-                    disabled={!detailReady || loading}
+                    disabled={!detailReady || actionsBusy}
                     onClick={() => {
                       submitIntentRef.current = 'saveAndGenerate'
                       form.submit()

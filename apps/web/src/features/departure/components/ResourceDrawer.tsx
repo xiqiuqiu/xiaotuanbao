@@ -178,7 +178,7 @@ export function ResourceDrawer({
             {canSaveAndGenerate ? (
               <Button
                 loading={saveAndGenerateLoading}
-                disabled={loading}
+                disabled={actionsBusy}
                 onClick={() => {
                   submitIntentRef.current = 'saveAndGenerate'
                   form.submit()
