@@ -104,7 +104,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
 
             <Col xs={24} md={8}>
               <Form.Item name="departureNo" label="团号">
-                <Input readOnly placeholder="系统自动分配" />
+                <Input disabled placeholder="系统自动分配" />
               </Form.Item>
             </Col>
 
@@ -156,7 +156,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
 
             <Col xs={24} md={4}>
               <Form.Item name="dayCount" label="天数">
-                <Input readOnly />
+                <Input disabled />
               </Form.Item>
             </Col>
 
