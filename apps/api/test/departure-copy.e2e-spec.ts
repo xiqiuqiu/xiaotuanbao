@@ -327,6 +327,64 @@ describe('Departure copy & save template (e2e)', () => {
     expect(paymentSchedules).toBe(0)
   })
 
+  it('copies departure including segments with unset dates', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/departures')
+      .send({
+        name: `${testPrefix}-undated-src`,
+        routeName: `${testPrefix}-未定日期复制`,
+        startDate: '2026-08-01',
+        endDate: '2026-08-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const departureId = createResponse.body.data.id as string
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({
+        name: '有日期段',
+        startDate: '2026-08-01',
+        endDate: '2026-08-03',
+      })
+      .expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/segments`)
+      .send({ name: '未定日期段' })
+      .expect(201)
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/copy`)
+      .send({
+        name: `${testPrefix}-undated-copied`,
+        startDate: '2026-09-01',
+        endDate: '2026-09-10',
+        ownerUserId,
+      })
+      .expect(201)
+
+    const copiedDepartureId = response.body.data.id as string
+    const segmentsResponse = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/segments`)
+      .expect(200)
+
+    expect(segmentsResponse.body.data.items).toHaveLength(2)
+    expect(segmentsResponse.body.data.items[0]).toMatchObject({
+      name: '有日期段',
+      startDate: '2026-09-01',
+      endDate: '2026-09-03',
+      dayCount: 3,
+    })
+    expect(segmentsResponse.body.data.items[1]).toMatchObject({
+      name: '未定日期段',
+      startDate: null,
+      endDate: null,
+      dayCount: null,
+    })
+  })
+
   it('rejects departure copy when copy flags are present', async () => {
     const { departureId } = await createRichDeparture('copy-flags')
 

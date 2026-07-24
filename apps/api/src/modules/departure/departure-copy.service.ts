@@ -55,13 +55,9 @@ export class DepartureCopyService {
       return
     }
 
-    if (segments.some((segment) => segment.dayCount == null)) {
-      throw new BadRequestException('存在未定日期的行程段，无法复制到新发团')
-    }
-
     const dateRanges = allocateSegmentDates(
       targetStartDate,
-      segments.map((segment) => segment.dayCount as number),
+      segments.map((segment) => segment.dayCount),
     )
 
     for (const [index, sourceSegment] of segments.entries()) {
