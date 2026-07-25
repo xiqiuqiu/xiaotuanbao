@@ -12,7 +12,7 @@ const CUSTOMER_REQUIRED_SYSTEM_LABELS = [
   '儿童门票',
   '学生门票已优惠过',
   '儿童半价门票已优惠过',
-  '老人免票已优惠过',
+  '老人免票或半价已优惠过',
   '不含首晚或末晚住宿',
   '续住',
   '其他补充费用',
@@ -36,7 +36,7 @@ describe('FARE_ADJUSTMENT_KIND_CATALOG covers customer-required kinds', () => {
     expect(byLabel['其他补充费用']).toBe('increase')
     expect(byLabel['学生门票已优惠过']).toBe('decrease')
     expect(byLabel['儿童半价门票已优惠过']).toBe('decrease')
-    expect(byLabel['老人免票已优惠过']).toBe('decrease')
+    expect(byLabel['老人免票或半价已优惠过']).toBe('decrease')
     expect(byLabel['不含首晚或末晚住宿']).toBe('decrease')
   })
 

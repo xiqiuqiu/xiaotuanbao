@@ -56,7 +56,8 @@ export const FARE_ADJUSTMENT_KIND_CATALOG: FareAdjustmentKindCatalogEntry[] = [
     direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
       FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED
     ],
-    label: '老人免票已优惠过',
+    // Covers both 老免 and 老半 pre-discounted ticket adjustments.
+    label: '老人免票或半价已优惠过',
   },
   {
     kind: FareAdjustmentKind.EXCLUDED_FIRST_OR_LAST_NIGHT,
