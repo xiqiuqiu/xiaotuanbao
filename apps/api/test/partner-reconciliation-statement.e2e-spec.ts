@@ -453,7 +453,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
   })
 
   describe('xlsx export', () => {
-    it('downloads a valid workbook with title, 17-column header, totals row and print setup', async () => {
+    it('downloads a valid workbook with title, 18-column header, totals row and print setup', async () => {
       const ExcelJS = await import('exceljs')
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
@@ -499,7 +499,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       // 标题按周期规则生成（同年跨月）
       expect(worksheet.getCell(1, 1).value).toBe('2026年6-7月往来账确认单')
 
-      // 17 列表头整行匹配，且被设置为分页重复表头
+      // 18 列表头整行匹配，且被设置为分页重复表头
       const expectedHeaders = [
         '序号',
         '出团日期',
@@ -513,6 +513,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         '拼入单价（成人）',
         '拼入单价（儿童）',
         '原始应收（拼入合计）',
+        '调整净额',
         '优惠金额',
         '实际应收',
         '客户已收押金',
@@ -546,8 +547,16 @@ describe('Partner reconciliation statement API (e2e)', () => {
         })
       })
 
-      // 六项汇总、确认说明、双方签章栏
-      for (const label of ['客源单数', '总人数', '拼入合计', '优惠合计', '实际应收', '游客代收']) {
+      // 七项汇总、确认说明、双方签章栏
+      for (const label of [
+        '客源单数',
+        '总人数',
+        '拼入合计',
+        '调整净额',
+        '优惠合计',
+        '实际应收',
+        '游客代收',
+      ]) {
         expect(cellTexts).toContain(label)
       }
       expect(cellTexts).toContain('确认说明')
