@@ -39,6 +39,8 @@ export function pendingSettlementTransactionHref(transactionNo: string): string 
   return `/finance/transactions?status=normal&transactionNo=${encodeURIComponent(transactionNo)}`
 }
 
-export function accountGenerationGapsHref(): string {
-  return '/departure/account-generation-gaps'
+export function accountGenerationGapsHref(
+  kind: 'any' | 'payable' | 'receivable' = 'any',
+): string {
+  return `/departure?accountGenerationGap=${kind}`
 }

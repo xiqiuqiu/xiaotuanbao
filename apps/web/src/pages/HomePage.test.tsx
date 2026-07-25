@@ -83,7 +83,7 @@ const coordinatorDeliverySnapshot = {
           label: '待生成应付',
           value: 6,
           suffix: '个资源',
-          href: '/departure/account-generation-gaps?generationKind=payable',
+          href: '/departure?accountGenerationGap=payable',
         },
       ],
       items: [
@@ -588,7 +588,7 @@ const financeReceivablesSnapshot = {
       total: 3,
       href: '/finance/transactions?status=normal&pendingSettlement=1',
       secondaryTotal: 2,
-      secondaryHref: '/departure/account-generation-gaps',
+      secondaryHref: '/departure?accountGenerationGap=any',
       metrics: [
         {
           key: 'pending-payment',
@@ -869,7 +869,7 @@ describe('HomePage workbench lifecycle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看全部待生成应付 6 项' }))
     expect(navigate).toHaveBeenCalledWith({
-      to: '/departure/account-generation-gaps?generationKind=payable',
+      to: '/departure?accountGenerationGap=payable',
     })
 
     fireEvent.click(screen.getByRole('button', { name: '查看全部待生成应收 7 项' }))
@@ -1114,7 +1114,7 @@ describe('HomePage workbench lifecycle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /查看全部 2 项/ }))
     expect(navigate).toHaveBeenCalledWith({
-      to: '/departure/account-generation-gaps',
+      to: '/departure?accountGenerationGap=any',
     })
 
     fireEvent.click(screen.getByRole('button', { name: '阳光学校' }))

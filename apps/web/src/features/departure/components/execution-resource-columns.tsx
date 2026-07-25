@@ -72,7 +72,7 @@ export function buildExecutionResourceColumns({
       width: 140,
     },
     {
-      title: '资源项目',
+      title: '资源名称',
       dataIndex: 'title',
       width: 180,
       render: (value: string, record) => (

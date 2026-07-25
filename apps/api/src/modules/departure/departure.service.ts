@@ -48,6 +48,7 @@ import {
   type DepartureReadModelAggregate,
 } from './departure-read-model.utils'
 import { DepartureDataGapService } from './departure-data-gap.service'
+import { AccountGenerationGapService } from './account-generation-gap.service'
 import {
   buildDepartureOperationalWindowWhere,
   getDepartureOperationalDates,
@@ -85,6 +86,7 @@ export class DepartureService {
     private readonly numberAllocationService: NumberAllocationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly departureDataGapService: DepartureDataGapService,
+    private readonly accountGenerationGapService: AccountGenerationGapService,
     private readonly departureSettlementReadinessService: DepartureSettlementReadinessService,
   ) {}
 
@@ -163,6 +165,14 @@ export class DepartureService {
     if (query.settlementReadiness === 'ready') {
       const departureIds =
         await this.departureSettlementReadinessService.findReadyDepartureIds(organizationId)
+      andFilters.push({ id: { in: departureIds } })
+    }
+
+    if (query.accountGenerationGap) {
+      const departureIds = await this.accountGenerationGapService.findDepartureIdsWithGaps(
+        organizationId,
+        query.accountGenerationGap,
+      )
       andFilters.push({ id: { in: departureIds } })
     }
 

@@ -41,16 +41,20 @@ _Avoid_: 最近活跃作在线状态, 实时在线
 _Avoid_: 把 Platform Admin 挂在客户 Organization 下, organizationId 为空的平台账号, 平台组织当客户开户
 
 **Platform Admin**:
-平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）。创建客户组织时须同事务建立 Initial Organization Admin（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization；客户组织档案可只读展示 Initial Organization Admin 的登录用户名与显示名称，不因此开放平台侧员工管理。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
-_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码, 平台档案展示等同员工管理
+平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）及 **Organization Module Entitlement** 配置。创建客户组织时须同事务建立 Initial Organization Admin（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization；客户组织档案可只读展示 Initial Organization Admin 的登录用户名与显示名称，不因此开放平台侧员工管理。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
+_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码, 平台档案展示等同员工管理, 权限管理（作平台开通能力的产品文案）
+
+**Organization Module Entitlement UI（模块开通）**:
+平台区客户 Organization 名录操作列中的入口，产品文案为 **模块开通**（不用「权限管理」）。打开抽屉勾选该组织已开通的业务模块 Entitlement Key 并保存。不提供名录列上直接勾选；不代入租户后台。
+_Avoid_: 权限管理, 功能开关, 名录行内直接改开通, 平台区改租户 RolePermission
 
 **Initial Organization Admin（初始企业管理员）**:
 Platform Admin 开户时同事务写入的那一名企业管理员 User，是客户 Organization 的开户联系人。平台区客户 Organization **档案详情**只读展示其登录用户名与显示名称（名录列表不展示），读的是该 User 的**当前**字段（租户侧改名后档案跟随变化）；停用后仍展示这两项，不因此从档案抹去。认定规则：该组织内开户写入的那一名；实现上可用该组织最早创建的企业管理员 User 代表（第一版无员工删除 UI 时与开户那人一致）。认定不到时详情仍展示该区块并为空态（如「未设置」），不阻断改名/停用等名录操作。不是 Platform Admin，也不表示组织内只能有一名企业管理员。
 _Avoid_: 平台超管, 把租户内全部企业管理员当成初始联系人, 平台档案列出全部员工, 开户快照与现网登录名长期分叉, 停用后从平台档案隐藏初始管理员, 名录列表展示初始管理员, 缺初始管理员时详情接口报错
 
 **Organization Onboarding**:
-客户 Organization 的开通交付。现行开户：Platform Admin 创建组织时同事务写入 Initial Organization Admin（登录用户名、显示名称、初始密码必填），绑定企业管理员 Role，创建后可立即登录租户后台；登录用户名规则与租户员工管理相同（见 Login Username），不拼业务前缀。邀请链接让客户自设密码仍为后置可选能力，非开户必经。Platform Admin 开户后不在平台区重置该管理员密码或管理其员工档案；平台区客户 Organization 档案可只读展示 Initial Organization Admin 的登录用户名与显示名称（不含密码，不提供改密/停用/改名等操作）。
-_Avoid_: 自助注册, 开放注册, 创建组织只建壳不建管理员, 开户必经邀请链接, 平台区事后管理租户员工, 开户登录名强制加业务前缀, 平台档案展示初始密码, 平台档案做成员工管理入口
+客户 Organization 的开通交付。现行开户：Platform Admin 创建组织时同事务写入 Initial Organization Admin（登录用户名、显示名称、初始密码必填），绑定企业管理员 Role，并按当时业务模块基线写入 Organization Module Entitlement，创建后可立即登录租户后台；登录用户名规则与租户员工管理相同（见 Login Username），不拼业务前缀。开户表单不勾选模块；若需收窄或加开，开户后在名录「模块开通」中配置。邀请链接让客户自设密码仍为后置可选能力，非开户必经。Platform Admin 开户后不在平台区重置该管理员密码或管理其员工档案；平台区客户 Organization 档案可只读展示 Initial Organization Admin 的登录用户名与显示名称（不含密码，不提供改密/停用/改名等操作）。
+_Avoid_: 自助注册, 开放注册, 创建组织只建壳不建管理员, 开户必经邀请链接, 平台区事后管理租户员工, 开户登录名强制加业务前缀, 平台档案展示初始密码, 平台档案做成员工管理入口, 开户表单内嵌模块勾选（第一版）
 
 **Organization Business Prefix（组织业务前缀）**:
 Organization 创建时必填、仅可设置一次的 2–4 位大写英文字母标识，用于生成发团编号及财务类业务编号。未设置前缀的 Organization 不得创建发团、收付款节点、流水或核销。前缀建议全系统唯一。
@@ -91,8 +95,8 @@ Role、Permission 及其映射为全平台共享的定义，不按 Organization 
 _Avoid_: 租户级角色表, 每组织复制角色
 
 **企业管理员**:
-Organization 的拥有者或最高管理者，拥有全部 Menu Permission。实现上通过 seed 为企业管理员 Role 绑定所有 Permission 行，权限解析无特殊分支。
-_Avoid_: 老板, admin, 总经理, 系统管理员, 代码特判
+Organization 的拥有者或最高管理者，在 **Organization Module Entitlement 已开通范围内**拥有全部 Menu Permission 与对应 Action Permission。实现上通过 seed 为企业管理员 Role 绑定所有 Permission 行，再与组织开通集取交集；权限解析对企业管理员无绕过开通上限的特殊分支。
+_Avoid_: 老板, admin, 总经理, 系统管理员, 代码特判, 企业管理员无视组织模块开通
 
 **财务**:
 负责应收、应付、收支流水、核销等财务相关菜单。可进入发团、产品中心、合作伙伴、供应商，但对这些业务对象**只读**：不新建/编辑发团、不改客源与执行/资源、不维护产品/合作伙伴与供应商目录（`departure:write`、`product:write`、`partner:write`、`supplier:write` 均无）；可触发生成应收/应付（生成挂在 `/departure`，不受 write action 限制）。重新打开已结清发团下的收付款节点时，财务可在明确确认联动影响后直接使发团回到待结算，无需 OP 预先审批；操作完整留痕并对 OP 可见，之后仍由 OP 重新确认已结清。
@@ -112,8 +116,24 @@ _Avoid_: 全员系统设置, HR 角色
 
 ## Permissions
 
+**Organization Module Entitlement（组织模块开通）**:
+Platform Admin 为某客户 Organization 配置的、该组织可使用能力的上限，以 **Entitlement Key** 集合表示。它不改变全局 Role Catalog，也不替代组织内 User 的 Role 权限；租户内**所有** User（含企业管理员）的有效菜单/能力均为「所绑 Role 的权限」与「该 Organization 已开通 Entitlement」的交集，无角色可绕过。第一版仅 Platform Admin 可配置；企业管理员不可在租户侧改开通集。
+_Avoid_: 权限管理（作该平台能力名）, 租户级角色表, 按 Organization 改 RolePermission, 功能开关（泛称）, Feature Flag（作该领域正式名）, 企业管理员绕过组织开通
+
+**Entitlement Key（开通键）**:
+标识一项可对 Organization 开通或关闭的能力的稳定键。可对应一组 Menu Key / Action Key（模块级），也可在后续对应发团内增值等非菜单能力；同一套开通与解析机制，不另建平行体系。第一版业务模块键为：`module:departure`（发团）、`module:product`（产品中心）、`module:finance`（财务四菜单捆绑）、`module:partner`（合作伙伴）、`module:supplier`（供应商）；在出现明确可售卖/可灰度的增值点之前，不预先拆发团内部或财务叶子细键。`/system/*` 对已启用客户 Organization 默认必开，不纳入商业勾选。
+_Avoid_: 把开通键等同于 Menu Key, 第一版按臆测拆 addon 细键, 为增值服务另做第二套开关体系, 第一版将财务拆成四个独立开通键
+
+**Organization Entitlement Default（组织开通默认）**:
+存量启用 Organization 在能力上线时获得**当时已有业务模块**的基线开通，使用中无感。目录中**新出现的 Entitlement Key** 默认不对任何客户 Organization 开通，须由 Platform Admin 显式开通（用于自家灰度或指定客户）。新建客户 Organization 第一版直接套用「创建当时的业务模块基线全开」，不单独做开户模板引擎。
+_Avoid_: 上线时全部默认关闭再逐家勾选, 第一版先做开通模板/套餐引擎, 新模块自动对所有组织放开
+
+**Organization Entitlement Revocation（组织开通撤销）**:
+Platform Admin 取消某 Entitlement Key 后，该 Organization 内所有 User 立即失去对应菜单与能力（有效权限按交集重算）；相关 API 拒绝访问。不删除已有业务数据；再开通后数据与菜单恢复可见。第一版不做「关闭后只读」、也不因已有业务数据而禁止关闭。第一版只持久化**当前开通集**，不提供开通变更操作履历；履历为后续增强。
+_Avoid_: 关闭后只读保留, 有数据则禁止关闭, 关闭时级联删除业务数据, 仅前端隐藏菜单而后端仍可访问, 第一版强制开通变更审计表
+
 **Menu Permission**:
-权限的菜单级维度，决定 User 能否看到并访问某个菜单模块。菜单级之外，另有 **Action Permission**（按钮级）控制同一菜单内可写到什么程度；两者同存于 `Permission` 表，通过 `key` 区分（menuKey 如 `/finance/receivable`，action key 如 `departure:write`）。第一版仍不做数据级（只看自己的数据）权限。
+权限的菜单级维度，决定 User 能否看到并访问某个菜单模块。菜单级之外，另有 **Action Permission**（按钮级）控制同一菜单内可写到什么程度；两者同存于 `Permission` 表，通过 `key` 区分（menuKey 如 `/finance/receivable`，action key 如 `departure:write`）。第一版仍不做数据级（只看自己的数据）权限。有效菜单还受 Organization Module Entitlement 上限约束。
 _Avoid_: 数据权限, 菜单级即全部权限
 
 **Action Permission（按钮级权限）**:
@@ -125,12 +145,12 @@ _Avoid_: 按 role 名硬编码能力, 按 Organization 自定义按钮权限, �
 _Avoid_: permission code, 菜单 id
 
 **Menu Permission Resolution**:
-User 的有效 Menu Permission 由后端根据其所绑 Role 的权限并集计算，经登录与 `/auth/me` 接口以 `menuKeys` 返回（两者共用同一组装逻辑）。前端仅据此过滤菜单与路由，不维护独立的 code 映射或权限规则。页面刷新或 token 恢复时通过 `/auth/me` 重新拉取。
-_Avoid_: 前端硬编码权限, 前端 code 表, 仅登录返回权限
+User 的有效 Menu Permission 由后端根据其所绑 Role 的权限并集计算，再与所属 Organization 的 Organization Module Entitlement 取交集，经登录与 `/auth/me` 接口以 `menuKeys` 返回（两者共用同一组装逻辑）。前端仅据此过滤菜单与路由，不维护独立的 code 映射或权限规则。页面刷新或 token 恢复时通过 `/auth/me` 重新拉取。
+_Avoid_: 前端硬编码权限, 前端 code 表, 仅登录返回权限, 仅按 Role 下发忽略组织开通上限
 
 **Menu Permission Enforcement**:
-Menu Permission 同时约束菜单可见性与后端访问，不能仅靠前端隐藏菜单。第一版对系统管理类 Menu Key 强制后端校验；业务类 Menu Key 随各业务模块落地时补齐。
-_Avoid_: 仅前端校验
+Menu Permission 同时约束菜单可见性与后端访问，不能仅靠前端隐藏菜单。第一版对系统管理类 Menu Key 强制后端校验；业务类 Menu Key 随各业务模块落地时补齐。因 Organization Module Entitlement 未开通而被裁掉的菜单，租户侧表现与「无该 Menu Permission」相同，第一版不单独提示「未对贵司开通」。
+_Avoid_: 仅前端校验, 第一版为未开通单独做租户侧商业文案
 
 **Supplier Management Access**:
 供应商管理（`/supplier` 及其详情子路由）企业管理员、计调、财务三 Role 均可访问；其中企业管理员与计调可编辑（持有 `supplier:write`），**财务只读**（无 `supplier:write`，可查看账期规则、结算说明、更多财务信息等结算信息，用于应付/付款实务，但不维护目录 CRUD）。合作伙伴（`/partner`）同理：财务可进入（含往来账款），但目录业务信息只读（无 `partner:write`）。产品中心（`/product`）同理：财务可进入查看，但无 `product:write`，不可维护 Product/Spec/Schedule。

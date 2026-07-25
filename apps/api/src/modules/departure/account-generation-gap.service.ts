@@ -54,6 +54,18 @@ export class AccountGenerationGapService {
       pageSize,
     }
   }
+
+  /** 发团列表工作台下钻：有待生成账款缺口的发团 id（可按应收/应付收窄）。 */
+  async findDepartureIdsWithGaps(
+    organizationId: string,
+    generationKind?: AccountGenerationGapItem['generationKind'] | 'any',
+  ): Promise<string[]> {
+    const kind = generationKind === 'any' ? undefined : generationKind
+    const items = (await this.findPendingItems(organizationId)).filter(
+      (item) => !kind || item.generationKind === kind,
+    )
+    return [...new Set(items.map((item) => item.departureId))]
+  }
 }
 
 function toReceivableItem(row: PendingReceivableSourceOrderRow): AccountGenerationGapItem {

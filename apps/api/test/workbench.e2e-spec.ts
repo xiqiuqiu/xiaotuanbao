@@ -373,7 +373,7 @@ describe('Workbench contract (e2e)', () => {
             label: '待生成应付',
             value: 3,
             suffix: '个资源',
-            href: '/departure/account-generation-gaps?generationKind=payable',
+            href: '/departure?accountGenerationGap=payable',
           },
         ],
       })
@@ -418,14 +418,15 @@ describe('Workbench contract (e2e)', () => {
       })
 
       for (const metric of coordinatorModule.metrics) {
-        const path = metric.href.startsWith('/departure/account-generation-gaps')
-          ? metric.href.replace(
-            '/departure/account-generation-gaps',
-            '/api/account-generation-gaps',
-          )
-          : metric.href.replace('/departure', '/api/departures')
+        const path = metric.href.replace('/departure', '/api/departures')
         const drillDown = await authRequest(app, cookie).get(path).expect(200)
-        expect(drillDown.body.data.total).toBe(metric.value)
+        // 待生成应付指标按资源行计数；发团列表下钻按发团去重，总数可不一致
+        if (metric.key === 'pending-payables') {
+          expect(drillDown.body.data.total).toBeGreaterThan(0)
+          expect(drillDown.body.data.total).toBeLessThanOrEqual(metric.value)
+        } else {
+          expect(drillDown.body.data.total).toBe(metric.value)
+        }
       }
       const viewAll = await authRequest(app, cookie)
         .get(coordinatorModule.href.replace('/departure', '/api/departures'))
@@ -628,7 +629,7 @@ describe('Workbench contract (e2e)', () => {
         label: '待生成应付',
         value: 1,
         suffix: '个资源',
-        href: '/departure/account-generation-gaps?generationKind=payable',
+        href: '/departure?accountGenerationGap=payable',
       })
       expect(settlementModule).toMatchObject({
         title: '待生成账款',
@@ -1751,7 +1752,7 @@ describe('Workbench contract (e2e)', () => {
       expect(fundsModule.total).toBe(2)
       expect(fundsModule.href).toBe('/finance/transactions?status=normal&pendingSettlement=1')
       expect(fundsModule.secondaryTotal).toBe(3)
-      expect(fundsModule.secondaryHref).toBe('/departure/account-generation-gaps')
+      expect(fundsModule.secondaryHref).toBe('/departure?accountGenerationGap=any')
 
       const settlementItems = fundsModule.items.filter(
         (item: { kind: string }) => item.kind === 'finance-pending-settlement',
@@ -1799,11 +1800,6 @@ describe('Workbench contract (e2e)', () => {
         { href: fundsModule.metrics[1].href, api: '/api/finance/transactions', total: 2 },
         { href: fundsModule.href, api: '/api/finance/transactions', total: 2 },
         {
-          href: fundsModule.secondaryHref,
-          api: '/api/account-generation-gaps',
-          total: 3,
-        },
-        {
           href: settlementItems[0].href,
           api: '/api/finance/transactions',
           total: 1,
@@ -1813,10 +1809,22 @@ describe('Workbench contract (e2e)', () => {
         const path = target.href
           .replace('/finance/payable', '/api/finance/payables')
           .replace('/finance/transactions', '/api/finance/transactions')
-          .replace('/departure/account-generation-gaps', '/api/account-generation-gaps')
         const drillDown = await authRequest(app, cookie).get(path).expect(200)
         expect(drillDown.body.data.total).toBe(target.total)
       }
+
+      // 待生成账款按资源/客源单计数；查看全部落到发团列表（按发团去重）
+      const generationDepartures = await authRequest(app, cookie)
+        .get(fundsModule.secondaryHref.replace('/departure', '/api/departures'))
+        .expect(200)
+      expect(generationDepartures.body.data.total).toBeGreaterThan(0)
+      expect(generationDepartures.body.data.total).toBeLessThanOrEqual(
+        fundsModule.secondaryTotal,
+      )
+      const gaps = await authRequest(app, cookie)
+        .get('/api/account-generation-gaps?pageSize=100')
+        .expect(200)
+      expect(gaps.body.data.total).toBe(fundsModule.secondaryTotal)
 
       expect([
         noneIncome.id,

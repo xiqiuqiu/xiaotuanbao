@@ -11,6 +11,7 @@ describe('parseDepartureListSearch', () => {
       departureDataGap: 'any',
       departureProgress: 'in_progress',
       settlementReadiness: 'ready',
+      accountGenerationGap: 'payable',
       startDateFrom: '2026-07-22',
       startDateTo: '2026-07-22',
       excludeClosed: '1',
@@ -19,6 +20,7 @@ describe('parseDepartureListSearch', () => {
       departureDataGap: 'any',
       departureProgress: 'in_progress',
       settlementReadiness: 'ready',
+      accountGenerationGap: 'payable',
       startDateFrom: '2026-07-22',
       startDateTo: '2026-07-22',
       excludeClosed: '1',
@@ -29,6 +31,7 @@ describe('parseDepartureListSearch', () => {
       departureDataGap: 'risk',
       departureProgress: 'preparing',
       settlementReadiness: 'pending',
+      accountGenerationGap: 'missing',
       startDateFrom: '22/07/2026',
       excludeClosed: 'true',
     })).toEqual({})
@@ -40,11 +43,20 @@ describe('resolveWorkbenchDepartureFilterBanner', () => {
     expect(resolveWorkbenchDepartureFilterBanner({})).toBeNull()
   })
 
-  it('prefers settlement / data-gap copy over bare date range', () => {
+  it('prefers settlement / account-gap / data-gap copy over bare date range', () => {
     expect(resolveWorkbenchDepartureFilterBanner({
       settlementReadiness: 'ready',
       startDateFrom: '2026-07-23',
     })).toEqual({ title: '已筛选：可确认结清发团' })
+
+    expect(resolveWorkbenchDepartureFilterBanner({
+      accountGenerationGap: 'any',
+      startDateFrom: '2026-07-23',
+    })).toEqual({ title: '已筛选：待生成账款发团' })
+
+    expect(resolveWorkbenchDepartureFilterBanner({
+      accountGenerationGap: 'payable',
+    })).toEqual({ title: '已筛选：待生成应付发团' })
 
     expect(resolveWorkbenchDepartureFilterBanner({
       departureDataGap: 'any',

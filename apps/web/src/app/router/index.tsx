@@ -4,6 +4,7 @@ import {
   createRouter,
   lazyRouteComponent,
   Outlet,
+  redirect,
 } from '@tanstack/react-router'
 import {
   ensureAnonymousSession,
@@ -191,25 +192,26 @@ const financePayableRoute = createRoute({
   ),
 })
 
+/** 旧独立清单页书签兼容：统一落到发团列表筛选。 */
 const accountGenerationGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/account-generation-gaps',
   validateSearch: (search: Record<string, unknown>): {
-    page?: number
-    pageSize?: number
     generationKind?: 'receivable' | 'payable'
   } => ({
-    page: typeof search.page === 'number' ? search.page : undefined,
-    pageSize: typeof search.pageSize === 'number' ? search.pageSize : undefined,
     generationKind:
       search.generationKind === 'receivable' || search.generationKind === 'payable'
         ? search.generationKind
         : undefined,
   }),
-  component: lazyRouteComponent(
-    () => import('@/features/departure/pages/PendingAccountGenerationGapsPage'),
-    'PendingAccountGenerationGapsPage',
-  ),
+  beforeLoad: ({ search }) => {
+    throw redirect({
+      to: '/departure',
+      search: {
+        accountGenerationGap: search.generationKind ?? 'any',
+      },
+    })
+  },
 })
 
 const financeTransactionsRoute = createRoute({

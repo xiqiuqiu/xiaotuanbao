@@ -4,6 +4,7 @@ export interface DepartureListSearch {
   operationalWindow?: 'in_progress' | 'next_7_days' | 'current_and_next_7_days'
   departureDataGap?: 'any'
   settlementReadiness?: 'ready'
+  accountGenerationGap?: 'any' | 'payable' | 'receivable'
   departureProgress?: DepartureProgress
   startDateFrom?: string
   startDateTo?: string
@@ -15,6 +16,7 @@ const OPERATIONAL_WINDOWS = new Set([
   'next_7_days',
   'current_and_next_7_days',
 ])
+const ACCOUNT_GENERATION_GAPS = new Set(['any', 'payable', 'receivable'])
 const DEPARTURE_PROGRESS_VALUES = new Set(Object.values(DepartureProgress))
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
@@ -29,6 +31,10 @@ export function parseDepartureListSearch(search: Record<string, unknown>): Depar
     : undefined
   const departureDataGap = search.departureDataGap === 'any' ? 'any' : undefined
   const settlementReadiness = search.settlementReadiness === 'ready' ? 'ready' : undefined
+  const accountGenerationGap = typeof search.accountGenerationGap === 'string'
+    && ACCOUNT_GENERATION_GAPS.has(search.accountGenerationGap)
+    ? search.accountGenerationGap as DepartureListSearch['accountGenerationGap']
+    : undefined
   const departureProgress = typeof search.departureProgress === 'string'
     && DEPARTURE_PROGRESS_VALUES.has(search.departureProgress as DepartureProgress)
     ? search.departureProgress as DepartureProgress
@@ -41,6 +47,7 @@ export function parseDepartureListSearch(search: Record<string, unknown>): Depar
     ...(operationalWindow ? { operationalWindow } : {}),
     ...(departureDataGap ? { departureDataGap } : {}),
     ...(settlementReadiness ? { settlementReadiness } : {}),
+    ...(accountGenerationGap ? { accountGenerationGap } : {}),
     ...(departureProgress ? { departureProgress } : {}),
     ...(startDateFrom ? { startDateFrom } : {}),
     ...(startDateTo ? { startDateTo } : {}),
@@ -54,6 +61,7 @@ export function hasWorkbenchDepartureListSearch(search: DepartureListSearch): bo
     search.operationalWindow
     || search.departureDataGap
     || search.settlementReadiness
+    || search.accountGenerationGap
     || search.excludeClosed
     || search.startDateFrom
     || search.startDateTo,
@@ -73,6 +81,15 @@ export function resolveWorkbenchDepartureFilterBanner(
 
   if (search.settlementReadiness) {
     return { title: '已筛选：可确认结清发团' }
+  }
+  if (search.accountGenerationGap === 'payable') {
+    return { title: '已筛选：待生成应付发团' }
+  }
+  if (search.accountGenerationGap === 'receivable') {
+    return { title: '已筛选：待生成应收发团' }
+  }
+  if (search.accountGenerationGap === 'any') {
+    return { title: '已筛选：待生成账款发团' }
   }
   if (search.departureDataGap) {
     return { title: '已筛选：近期资料待补充发团' }

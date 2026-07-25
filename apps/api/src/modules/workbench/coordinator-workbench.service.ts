@@ -154,7 +154,7 @@ export class CoordinatorWorkbenchService {
           label: '待生成应付',
           value: pendingPayableCount,
           suffix: '个资源',
-          href: '/departure/account-generation-gaps?generationKind=payable',
+          href: '/departure?accountGenerationGap=payable',
         },
       ],
       items: sortedRows.slice(0, 8).map((row) =>

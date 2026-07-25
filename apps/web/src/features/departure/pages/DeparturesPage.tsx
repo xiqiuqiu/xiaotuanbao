@@ -42,6 +42,7 @@ type DeparturesPageState = {
   operationalWindow?: DepartureListSearch['operationalWindow']
   departureDataGap?: DepartureListSearch['departureDataGap']
   settlementReadiness?: DepartureListSearch['settlementReadiness']
+  accountGenerationGap?: DepartureListSearch['accountGenerationGap']
   excludeClosed?: DepartureListSearch['excludeClosed']
 }
 
@@ -60,6 +61,7 @@ const initialDeparturesPageState: DeparturesPageState = {
   operationalWindow: undefined,
   departureDataGap: undefined,
   settlementReadiness: undefined,
+  accountGenerationGap: undefined,
   excludeClosed: undefined,
 }
 
@@ -73,6 +75,7 @@ function createInitialState(search: DepartureListSearch): DeparturesPageState {
     operationalWindow: search.operationalWindow,
     departureDataGap: search.departureDataGap,
     settlementReadiness: search.settlementReadiness,
+    accountGenerationGap: search.accountGenerationGap,
     excludeClosed: search.excludeClosed,
     startDateRange,
   }
@@ -164,6 +167,7 @@ export function DeparturesPage() {
     state.operationalWindow,
     state.departureDataGap,
     state.settlementReadiness,
+    state.accountGenerationGap,
     state.excludeClosed,
   ].join('\0')
   const { placeholderData, commitListFilterKey } = useListPlaceholderData(listFilterKey)
@@ -191,6 +195,7 @@ export function DeparturesPage() {
       state.operationalWindow,
       state.departureDataGap,
       state.settlementReadiness,
+      state.accountGenerationGap,
       state.excludeClosed,
       state.page,
       state.pageSize,
@@ -210,6 +215,7 @@ export function DeparturesPage() {
           operationalWindow: state.operationalWindow,
           departureDataGap: state.departureDataGap,
           settlementReadiness: state.settlementReadiness,
+          accountGenerationGap: state.accountGenerationGap,
           excludeClosed: state.excludeClosed,
           page: state.page,
           pageSize: state.pageSize,

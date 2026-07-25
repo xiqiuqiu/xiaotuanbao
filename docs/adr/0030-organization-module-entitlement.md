@@ -1,0 +1,3 @@
+# Organization Module Entitlement 与全局 Role Catalog 分层
+
+Platform Admin 需要按客户 Organization 控制「能用哪些业务模块」（灰度自家、暂不对客户开放、后续增值包），但不得推翻 ADR-0001 的全局 Role Catalog，也不得让 Platform Admin 代入租户改 RolePermission。决定新增 **Organization Module Entitlement**：以 Entitlement Key 集合表示组织可用能力上限；租户内所有 User（含企业管理员）的有效菜单/能力为「Role 权限 ∩ 组织开通集」。第一版只 seed 模块级键（发团、产品中心、财务捆绑、合作伙伴、供应商），`/system/*` 必开；机制预留后续 addon 细键，但不在无明确售卖点时预拆。存量与新开户套当时业务基线全开，目录中新键默认全关须显式开通；撤销硬切断且保留数据；平台区名录「模块开通」配置，开户表单不勾；租户侧未开通与无 Menu Permission 同态；第一版不存开通变更履历。曾考虑按 Organization 改 RolePermission、或企业管理员绕过开通、或第一版直接拆发团内增值细键，分别与全局 catalog、商业控制有效性、以及尚无 SKU 时的键稳定性冲突，故弃用。

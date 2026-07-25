@@ -28,6 +28,7 @@ describe('pending-settlement', () => {
     expect(pendingSettlementTransactionHref('TX/测 1')).toBe(
       '/finance/transactions?status=normal&transactionNo=TX%2F%E6%B5%8B%201',
     )
-    expect(accountGenerationGapsHref()).toBe('/departure/account-generation-gaps')
+    // 与「资料待补充 / 可确认结清」一致：下钻到发团列表带筛选，不进独立清单页
+    expect(accountGenerationGapsHref()).toBe('/departure?accountGenerationGap=any')
   })
 })

@@ -50,6 +50,12 @@ function columnTitles() {
 describe('execution resource timestamp columns', () => {
   afterEach(cleanup)
 
+  it('资源安排列表列名与添加资源表单一致，使用「资源名称」', () => {
+    const titles = columnTitles()
+    expect(titles).toContain('资源名称')
+    expect(titles).not.toContain('资源项目')
+  })
+
   it('在备注与操作之间展示创建时间和更新时间列', () => {
     const titles = columnTitles()
     const notesIndex = titles.indexOf('备注')
