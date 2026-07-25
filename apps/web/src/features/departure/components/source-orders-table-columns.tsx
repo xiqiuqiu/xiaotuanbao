@@ -53,6 +53,13 @@ export function buildSourceOrdersColumns({
       render: renderCents,
     },
     {
+      title: '调整净额',
+      dataIndex: 'fareAdjustmentNetCents',
+      width: 120,
+      align: 'right',
+      render: renderCents,
+    },
+    {
       title: '优惠金额',
       dataIndex: 'discountCents',
       width: 120,

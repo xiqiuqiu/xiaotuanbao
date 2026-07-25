@@ -173,7 +173,13 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
     row += 1
 
     row = writeSectionHeader(sheet, row, '客源及应收')
-    row = writeHeaderRow(sheet, row, ['合作方', '游客代表', '成人/儿童/合计', '约定应收'])
+    row = writeHeaderRow(sheet, row, [
+      '合作方',
+      '游客代表',
+      '成人/儿童/合计',
+      '调整净额',
+      '约定应收',
+    ])
     writeNotesHeader(sheet, row - 1)
     for (const order of snapshot.sourceOrders) {
       row = writeSourceOrderRow(sheet, row, order)
@@ -574,8 +580,9 @@ function writeSourceOrderRow(
   sheet.getCell(row, 2).value = guestRepresentativeText(order)
   sheet.getCell(row, 3).value =
     `${order.adultGuestCount}/${order.childGuestCount}/${order.guestCount}`
-  writeMoney(sheet.getCell(row, 4), order.agreedReceivableCents)
-  for (let col = 1; col <= 4; col += 1) {
+  writeMoney(sheet.getCell(row, 4), order.fareAdjustmentNetCents)
+  writeMoney(sheet.getCell(row, 5), order.agreedReceivableCents)
+  for (let col = 1; col <= 5; col += 1) {
     applyTableChrome(sheet.getCell(row, col))
   }
   writeNotes(sheet, row, formatSourceOrderNotes(order))

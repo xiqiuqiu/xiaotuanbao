@@ -1096,6 +1096,7 @@ describe('Departure API (e2e)', () => {
         totalGuests: 5,
         partnerCount: 1,
         totalGrossReceivableCents: 500000,
+        totalFareAdjustmentNetCents: 0,
         totalDiscountCents: 50000,
         totalNetReceivableCents: 450000,
       })
@@ -2621,6 +2622,7 @@ describe('Departure API (e2e)', () => {
         adultGuestCount: 4,
         childGuestCount: 0,
         guestCount: 4,
+        fareAdjustmentNetCents: 0,
         agreedReceivableCents: 480000,
         notes: '先建客源备注',
         settlementNotes: null,
@@ -2644,6 +2646,7 @@ describe('Departure API (e2e)', () => {
         adultGuestCount: 2,
         childGuestCount: 1,
         guestCount: 3,
+        fareAdjustmentNetCents: 0,
         agreedReceivableCents: 280000,
         notes: '后建客源备注',
         settlementNotes: '后建结算备注',

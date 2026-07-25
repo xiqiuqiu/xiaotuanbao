@@ -96,6 +96,13 @@ const DETAIL_COLUMNS: ColumnsType<PartnerReconciliationStatementRow> = [
     render: (value: number) => formatCents(value),
   },
   {
+    title: '调整净额',
+    dataIndex: 'fareAdjustmentNetCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
     title: '优惠金额',
     dataIndex: 'discountCents',
     width: 110,
@@ -298,22 +305,25 @@ function StatementPreview({
         </div>
 
         <Row gutter={[16, 16]} role="group" aria-label="确认单汇总">
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="客源单数" value={totals.orderCount} />
           </Col>
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="总人数" value={totals.totalGuestCount} />
           </Col>
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="拼入合计" value={formatCents(totals.originalReceivableCents)} />
           </Col>
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
+            <Statistic title="调整净额" value={formatCents(totals.fareAdjustmentNetCents)} />
+          </Col>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="优惠合计" value={formatCents(totals.discountCents)} />
           </Col>
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="实际应收" value={formatCents(totals.actualReceivableCents)} />
           </Col>
-          <Col xs={12} sm={8} xl={4}>
+          <Col xs={12} sm={8} xl={3}>
             <Statistic title="游客代收" value={formatCents(totals.guestCollectCents)} />
           </Col>
         </Row>
@@ -347,22 +357,27 @@ function StatementPreview({
                 </Typography.Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={12} align="right">
-                <Typography.Text strong>{formatCents(totals.discountCents)}</Typography.Text>
+                <Typography.Text strong>
+                  {formatCents(totals.fareAdjustmentNetCents)}
+                </Typography.Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={13} align="right">
+                <Typography.Text strong>{formatCents(totals.discountCents)}</Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={14} align="right">
                 <Typography.Text strong>
                   {formatCents(totals.actualReceivableCents)}
                 </Typography.Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={14} align="right">
+              <Table.Summary.Cell index={15} align="right">
                 <Typography.Text strong>
                   {formatCents(totals.customerDepositCents)}
                 </Typography.Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={15} align="right">
+              <Table.Summary.Cell index={16} align="right">
                 <Typography.Text strong>{formatCents(totals.guestCollectCents)}</Typography.Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={16} />
+              <Table.Summary.Cell index={17} />
             </Table.Summary.Row>
           )}
         />

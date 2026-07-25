@@ -98,6 +98,7 @@ export class PartnerReconciliationStatementService {
         adultUnitPriceCents: order.adultUnitPriceCents,
         childUnitPriceCents: order.childUnitPriceCents,
         originalReceivableCents: order.grossReceivableCents,
+        fareAdjustmentNetCents: order.fareAdjustmentNetCents,
         discountCents: order.discountCents,
         actualReceivableCents: order.netReceivableCents,
         customerDepositCents: order.partnerCollectedCents,
@@ -121,6 +122,10 @@ export class PartnerReconciliationStatementService {
         totalGuestCount: rows.reduce((sum, row) => sum + row.totalGuestCount, 0),
         originalReceivableCents: rows.reduce(
           (sum, row) => sum + row.originalReceivableCents,
+          0,
+        ),
+        fareAdjustmentNetCents: rows.reduce(
+          (sum, row) => sum + row.fareAdjustmentNetCents,
           0,
         ),
         discountCents: rows.reduce((sum, row) => sum + row.discountCents, 0),

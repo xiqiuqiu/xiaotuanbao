@@ -115,6 +115,7 @@ describe('PartnerDetailPage', () => {
         totalGuests: 0,
         partnerCount: 0,
         totalGrossReceivableCents: 0,
+        totalFareAdjustmentNetCents: 0,
         totalDiscountCents: 0,
         totalNetReceivableCents: 0,
         totalGuestCollectCents: 0,

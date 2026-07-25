@@ -257,6 +257,7 @@ describe('Partner source orders API (e2e)', () => {
       adultUnitPriceCents: 80000,
       childUnitPriceCents: 0,
       grossReceivableCents: 400000,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 400000,
       partnerCollectedCents: 400000,
@@ -271,7 +272,7 @@ describe('Partner source orders API (e2e)', () => {
     expect(grossValues).not.toContain(8999100)
   })
 
-  it('computes summary with six metrics under mixed fixtures', async () => {
+  it('computes summary with seven metrics under mixed fixtures', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get(`/api/partners/${partnerId}/source-orders`)
       .expect(200)
@@ -280,6 +281,7 @@ describe('Partner source orders API (e2e)', () => {
       orderCount: 3,
       totalGuests: 9,
       totalGrossReceivableCents: 710000,
+      totalFareAdjustmentNetCents: 0,
       totalDiscountCents: 30000,
       totalNetReceivableCents: 680000,
       totalGuestCollectCents: 160000,
@@ -299,6 +301,7 @@ describe('Partner source orders API (e2e)', () => {
       departureId: departure1.id,
       departureStartDate: '2026-06-10',
       grossReceivableCents: 250000,
+      fareAdjustmentNetCents: 0,
       discountCents: 30000,
       netReceivableCents: 220000,
       partnerCollectedCents: 120000,
@@ -308,6 +311,7 @@ describe('Partner source orders API (e2e)', () => {
       orderCount: 1,
       totalGuests: 3,
       totalGrossReceivableCents: 250000,
+      totalFareAdjustmentNetCents: 0,
       totalDiscountCents: 30000,
       totalNetReceivableCents: 220000,
       totalGuestCollectCents: 100000,
@@ -390,5 +394,48 @@ describe('Partner source orders API (e2e)', () => {
     // 业务事实层不渗透财务处置：不返回应收状态类字段
     expect(closedOrder).not.toHaveProperty('receivableStatus')
     expect(data.summary.totalNetReceivableCents).toBe(680000)
+  })
+
+  it('includes fareAdjustmentNetCents on items and summary when adjustments exist', async () => {
+    const departure = await createDeparture(`${testPrefix}-adj`, '2026-08-01', '2026-08-05')
+    await createOrder(departure.id, {
+      partnerId,
+      adultGuestCount: 1,
+      childGuestCount: 0,
+      adultUnitPriceCents: 100000,
+      childUnitPriceCents: 0,
+      discountType: SourceOrderDiscountType.none,
+      collectionMode: SourceOrderCollectionMode.guest_only,
+      fareAdjustments: [
+        {
+          kind: 'single_room_supplement',
+          direction: 'increase',
+          amountCents: 20000,
+        },
+      ],
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .get(`/api/partners/${partnerId}/source-orders`)
+      .query({ departureDateFrom: '2026-08-01', departureDateTo: '2026-08-31' })
+      .expect(200)
+
+    const data = response.body.data
+    expect(data.total).toBe(1)
+    expect(data.items[0]).toMatchObject({
+      grossReceivableCents: 100000,
+      fareAdjustmentNetCents: 20000,
+      discountCents: 0,
+      netReceivableCents: 120000,
+      guestCollectCents: 120000,
+    })
+    expect(data.summary).toMatchObject({
+      orderCount: 1,
+      totalGrossReceivableCents: 100000,
+      totalFareAdjustmentNetCents: 20000,
+      totalDiscountCents: 0,
+      totalNetReceivableCents: 120000,
+      totalGuestCollectCents: 120000,
+    })
   })
 })

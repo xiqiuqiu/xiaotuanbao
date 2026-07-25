@@ -15,6 +15,7 @@ export interface SourceOrderAggregate {
   count: number
   totalGuests: number
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
 }
@@ -37,6 +38,7 @@ export interface DepartureReadModelAggregate {
   segmentCount: number
   resourceCount: number
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
   payableCents: number
@@ -56,6 +58,7 @@ export const EMPTY_SOURCE_ORDER_AGGREGATE: SourceOrderAggregate = {
   count: 0,
   totalGuests: 0,
   grossReceivableCents: 0,
+  fareAdjustmentNetCents: 0,
   discountCents: 0,
   netReceivableCents: 0,
 }
@@ -312,6 +315,7 @@ export function buildDepartureReadModelAggregate(input: {
     segmentCount,
     resourceCount,
     grossReceivableCents: sourceOrders.grossReceivableCents,
+    fareAdjustmentNetCents: sourceOrders.fareAdjustmentNetCents,
     discountCents: sourceOrders.discountCents,
     netReceivableCents: sourceOrders.netReceivableCents,
     payableCents,

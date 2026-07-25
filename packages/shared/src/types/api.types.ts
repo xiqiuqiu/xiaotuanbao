@@ -756,6 +756,8 @@ export interface DepartureOverviewStats {
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
   grossReceivableCents: number
+  /** 本团全部客源单的团款调整净额合计（增项 − 减项）。 */
+  fareAdjustmentNetCents: number
   discountCents: number
   verifiedReceivableCents: number
   openUnsettledReceivableCents: number
@@ -1169,6 +1171,8 @@ export interface SourceOrderListSummary {
   totalGuests: number
   partnerCount: number
   totalGrossReceivableCents: number
+  /** 团款调整净额合计（增项 − 减项；可为负）。 */
+  totalFareAdjustmentNetCents: number
   totalDiscountCents: number
   totalNetReceivableCents: number
   totalGuestCollectCents: number
@@ -1199,6 +1203,8 @@ export interface PartnerSourceOrderItem {
   adultUnitPriceCents: number
   childUnitPriceCents: number
   grossReceivableCents: number
+  /** 团款调整净额（增项 − 减项；可为负）。 */
+  fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
   partnerCollectedCents: number
@@ -1211,7 +1217,7 @@ export interface PartnerSourceOrderListResult {
   total: number
   page: number
   pageSize: number
-  /** 六项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
+  /** 七项汇总跟随筛选（覆盖整个筛选集，不随分页变化） */
   summary: SourceOrderListSummary
 }
 
@@ -1317,8 +1323,10 @@ export interface PartnerReconciliationStatementRow {
   childUnitPriceCents: number
   /** 原始应收（拼入合计）＝原始团款＝成人×成人价＋儿童×儿童价 */
   originalReceivableCents: number
+  /** 调整净额（团款调整项净影响；可为负） */
+  fareAdjustmentNetCents: number
   discountCents: number
-  /** 实际应收＝结算金额＝原始应收−优惠 */
+  /** 实际应收＝结算金额＝原始应收＋调整净额−优惠 */
   actualReceivableCents: number
   /** 客户已收押金＝客户补款 */
   customerDepositCents: number
@@ -1327,13 +1335,14 @@ export interface PartnerReconciliationStatementRow {
   notes: string | null
 }
 
-/** 合计行与六项汇总共用的求和口径（覆盖周期内全部行，无分页概念）。 */
+/** 合计行与七项汇总共用的求和口径（覆盖周期内全部行，无分页概念）。 */
 export interface PartnerReconciliationStatementTotals {
   orderCount: number
   adultGuestCount: number
   childGuestCount: number
   totalGuestCount: number
   originalReceivableCents: number
+  fareAdjustmentNetCents: number
   discountCents: number
   actualReceivableCents: number
   customerDepositCents: number
@@ -1572,6 +1581,8 @@ export interface DepartureOperationsSheetSourceOrderRow {
   adultGuestCount: number
   childGuestCount: number
   guestCount: number
+  /** 团款调整净额（与系统内列表同口径；不展开种类明细）。 */
+  fareAdjustmentNetCents: number
   /** Net business receivable across paths (parent identity row). */
   agreedReceivableCents: number
   settlementNotes: string | null

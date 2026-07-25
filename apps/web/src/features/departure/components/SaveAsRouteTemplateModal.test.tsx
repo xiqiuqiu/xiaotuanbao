@@ -47,6 +47,7 @@ const mockDeparture: DepartureDetail = {
   estimatedMarginCents: 0,
   canPurge: true,
   grossReceivableCents: 0,
+  fareAdjustmentNetCents: 0,
   discountCents: 0,
   verifiedReceivableCents: 0,
   openUnsettledReceivableCents: 0,

@@ -351,6 +351,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         adultUnitPriceCents: 100000,
         childUnitPriceCents: 50000,
         originalReceivableCents: 250000,
+        fareAdjustmentNetCents: 0,
         discountCents: 30000,
         actualReceivableCents: 220000,
         customerDepositCents: 120000,
@@ -369,7 +370,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       expect(row2).not.toHaveProperty('receivableStatus')
     })
 
-    it('every row is recomputable: original = adult×price + child×price, actual = original − discount, guest collect = actual − deposit', async () => {
+    it('every row is recomputable: original = adult×price + child×price, actual = original + adjustment − discount, guest collect = actual − deposit', async () => {
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement`)
         .query(PERIOD)
@@ -381,7 +382,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
             row.childGuestCount * row.childUnitPriceCents,
         )
         expect(row.actualReceivableCents).toBe(
-          row.originalReceivableCents - row.discountCents,
+          row.originalReceivableCents + row.fareAdjustmentNetCents - row.discountCents,
         )
         expect(row.guestCollectCents).toBe(
           row.actualReceivableCents - row.customerDepositCents,
@@ -410,6 +411,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         childGuestCount: 1,
         totalGuestCount: 8,
         originalReceivableCents: 650000,
+        fareAdjustmentNetCents: 0,
         discountCents: 30000,
         actualReceivableCents: 620000,
         customerDepositCents: 520000,

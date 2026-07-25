@@ -70,6 +70,7 @@ describe('aggregateSourceOrdersTableTotals', () => {
     expect(totals).toEqual({
       guestCount: 55,
       grossReceivableCents: 5390000,
+      fareAdjustmentNetCents: 0,
       discountCents: 10000,
       netReceivableCents: 5380000,
       partnerCollectedCents: 50000,
@@ -81,6 +82,7 @@ describe('aggregateSourceOrdersTableTotals', () => {
     expect(aggregateSourceOrdersTableTotals([])).toEqual({
       guestCount: 0,
       grossReceivableCents: 0,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 0,
       partnerCollectedCents: 0,
@@ -141,6 +143,7 @@ describe('renderSourceOrdersTableSummary', () => {
     expect(summaryRow).toBeTruthy()
     expect(summaryRow?.textContent).toContain(String(totals.guestCount))
     expect(summaryRow?.textContent).toContain(formatCents(totals.grossReceivableCents))
+    expect(summaryRow?.textContent).toContain(formatCents(totals.fareAdjustmentNetCents))
     expect(summaryRow?.textContent).toContain(formatCents(totals.discountCents))
     expect(summaryRow?.textContent).toContain(formatCents(totals.netReceivableCents))
     expect(summaryRow?.textContent).toContain(formatCents(totals.partnerCollectedCents))

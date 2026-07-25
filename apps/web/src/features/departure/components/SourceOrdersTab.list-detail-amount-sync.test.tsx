@@ -32,6 +32,8 @@ vi.mock('@/services/source-order.service', () => ({
       orderCount: 1,
       totalGuests: 1,
       partnerCount: 1,
+      totalGrossReceivableCents: 0,
+      totalFareAdjustmentNetCents: 0,
       totalDiscountCents: 0,
       totalNetReceivableCents: 720000,
       totalGuestCollectCents: 620000,

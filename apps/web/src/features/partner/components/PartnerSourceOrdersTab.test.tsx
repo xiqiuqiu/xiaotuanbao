@@ -60,6 +60,7 @@ const EMPTY_SOURCE: PartnerSourceOrderListResult = {
     totalGuests: 0,
     partnerCount: 0,
     totalGrossReceivableCents: 0,
+    totalFareAdjustmentNetCents: 0,
     totalDiscountCents: 0,
     totalNetReceivableCents: 0,
     totalGuestCollectCents: 0,
@@ -90,6 +91,7 @@ const SOURCE_DATA: PartnerSourceOrderListResult = {
       adultUnitPriceCents: 100000,
       childUnitPriceCents: 50000,
       grossReceivableCents: 250000,
+      fareAdjustmentNetCents: 0,
       discountCents: 30000,
       netReceivableCents: 220000,
       partnerCollectedCents: 120000,
@@ -105,6 +107,7 @@ const SOURCE_DATA: PartnerSourceOrderListResult = {
     totalGuests: 3,
     partnerCount: 1,
     totalGrossReceivableCents: 250000,
+    totalFareAdjustmentNetCents: 0,
     totalDiscountCents: 30000,
     totalNetReceivableCents: 220000,
     totalGuestCollectCents: 100000,
@@ -223,8 +226,10 @@ describe('PartnerSourceOrdersTab', () => {
     expect(await screen.findByText('华东国旅 6月10日发客')).toBeInTheDocument()
     expect(screen.getByText('客源单数')).toBeInTheDocument()
     expect(screen.getByText('原始团款合计')).toBeInTheDocument()
+    expect(screen.getByText('调整净额合计')).toBeInTheDocument()
     expect(screen.getByText('游客代收合计')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: '关联发团' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '调整净额' })).toBeInTheDocument()
     expect(screen.getByText('喀纳斯6月团')).toBeInTheDocument()
     expect(screen.getByText('2026-06-10')).toBeInTheDocument()
     expect(screen.getByText('2/1')).toBeInTheDocument()
