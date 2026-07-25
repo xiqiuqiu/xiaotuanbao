@@ -39,7 +39,10 @@ import type {
 } from './dto/segment-resource.dto'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import type { SegmentResourceFinanceState } from '../finance/departure-finance-facade.service'
-import { resolveSegmentResourceCounterparty } from './segment-resource.validation'
+import {
+  resolveSegmentResourceCounterparty,
+  resolveSegmentResourceCounterpartyForUpdate,
+} from './segment-resource.validation'
 import {
   httpExceptionMessage,
   isAlreadyGeneratedConflict,
@@ -427,20 +430,28 @@ export class SegmentResourceService {
 
     const resourceKind = dto.resourceKind ?? resource.resourceKind
     // 写路径统一走供应商；勿把历史 partnerId 并入 resolve（否则会与 supplier 冲突）。
+    // 无 supplier 时由 ForUpdate 保留历史 Partner 拼出行（ADR-0032）。
     const supplierId =
       dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
 
-    const counterparty = resolveSegmentResourceCounterparty({
+    const counterparty = resolveSegmentResourceCounterpartyForUpdate({
       resourceKind,
       partnerId: dto.partnerId,
       supplierId,
+      existing: {
+        counterpartyType: resource.counterpartyType,
+        partnerId: resource.partnerId,
+        supplierId: resource.supplierId,
+      },
     })
 
-    await this.ensureSelectableSupplier(
-      organizationId,
-      counterparty.supplierId!,
-      resourceKind,
-    )
+    if (counterparty.supplierId) {
+      await this.ensureSelectableSupplier(
+        organizationId,
+        counterparty.supplierId,
+        resourceKind,
+      )
+    }
 
     const nextAmountCents = dto.amountCents ?? resource.amountCents
     await this.financeBridge.assertResourceAmountEditable(
