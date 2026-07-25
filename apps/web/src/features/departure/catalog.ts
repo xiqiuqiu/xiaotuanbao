@@ -2,6 +2,7 @@ import {
   DepartureStatus,
   FareAdjustmentDirection,
   FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_CATALOG,
   FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
   SegmentPayableStatus,
   SourceOrderCollectionMode,
@@ -169,21 +170,10 @@ export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
 ] as const
 
 export const FARE_ADJUSTMENT_KIND_OPTIONS = [
-  { value: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT, label: '单房差' },
-  { value: FareAdjustmentKind.CHILD_TICKET, label: '儿童门票' },
-  { value: FareAdjustmentKind.EXTENDED_STAY, label: '续住' },
-  {
-    value: FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED,
-    label: '学生门票已优惠过',
-  },
-  {
-    value: FareAdjustmentKind.CHILD_HALF_TICKET_PRE_DISCOUNTED,
-    label: '儿童半价门票已优惠过',
-  },
-  {
-    value: FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED,
-    label: '老人免票已优惠过',
-  },
+  ...FARE_ADJUSTMENT_KIND_CATALOG.map((item) => ({
+    value: item.kind,
+    label: item.label,
+  })),
   { value: FareAdjustmentKind.CUSTOM, label: '自定义' },
 ] as const
 

@@ -243,6 +243,10 @@ export {
   FareAdjustmentKind,
   FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
 } from './enums/fare-adjustment-kind.enum'
+export {
+  FARE_ADJUSTMENT_KIND_CATALOG,
+  type FareAdjustmentKindCatalogEntry,
+} from './enums/fare-adjustment-kind.catalog'
 export { GuestGender } from './enums/guest-gender.enum'
 export { SourceOrderReceivableStatus } from './enums/source-order-receivable-status.enum'
 export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
