@@ -1682,14 +1682,13 @@ describe('Departure API (e2e)', () => {
       expect(response.body.message).toBe('资源种类「用车」不属于该供应商的类别集合')
     })
 
-    it('still creates outsource resources with partner (no supplier category check)', async () => {
+    it('creates outsource resources with travel-agency supplier (category containment)', async () => {
       const segmentId = await createResourceSegment()
-      const partner = await prisma.partner.create({
+      const travelAgency = await prisma.supplier.create({
         data: {
           organizationId,
-          name: `${testPrefix}-outsource-partner`,
-          partnerKind: PartnerKind.group_agent,
-          partnerType: PartnerType.group_agency,
+          name: `${testPrefix}-outsource-agency`,
+          categories: [ResourceKind.outsource],
           status: DirectoryProfileStatus.active,
         },
       })
@@ -1698,7 +1697,7 @@ describe('Departure API (e2e)', () => {
         .post(`/api/segments/${segmentId}/resources`)
         .send({
           resourceKind: ResourceKind.outsource,
-          partnerId: partner.id,
+          supplierId: travelAgency.id,
           title: '拼出阿勒泰',
           amountCents: 150000,
         })
@@ -1706,8 +1705,9 @@ describe('Departure API (e2e)', () => {
 
       expect(response.body.data).toMatchObject({
         resourceKind: ResourceKind.outsource,
-        partnerId: partner.id,
-        supplierId: null,
+        supplierId: travelAgency.id,
+        partnerId: null,
+        counterpartyType: CounterpartyType.supplier,
       })
     })
   })
@@ -2415,7 +2415,6 @@ describe('Departure API (e2e)', () => {
   describe('Operations sheet (issue #95)', () => {
     let opsPartnerId: string
     let opsSupplierId: string
-    let opsOutsourcePartnerId: string
 
     beforeAll(async () => {
       const partner = await prisma.partner.create({
@@ -2429,17 +2428,6 @@ describe('Departure API (e2e)', () => {
       })
       opsPartnerId = partner.id
 
-      const outsourcePartner = await prisma.partner.create({
-        data: {
-          organizationId,
-          name: `${testPrefix}-ops-outsource`,
-          partnerKind: PartnerKind.peer,
-          partnerType: PartnerType.local_agency,
-          status: DirectoryProfileStatus.active,
-        },
-      })
-      opsOutsourcePartnerId = outsourcePartner.id
-
       const supplier = await prisma.supplier.create({
         data: {
           organizationId,
@@ -2449,6 +2437,7 @@ describe('Departure API (e2e)', () => {
             ResourceKind.meal,
             ResourceKind.transport,
             ResourceKind.guide,
+            ResourceKind.outsource,
           ],
           status: DirectoryProfileStatus.active,
         },
@@ -2586,7 +2575,7 @@ describe('Departure API (e2e)', () => {
         .post(`/api/segments/${segmentA.body.data.id}/resources`)
         .send({
           resourceKind: ResourceKind.outsource,
-          partnerId: opsOutsourcePartnerId,
+          supplierId: opsSupplierId,
           title: '拼出阿勒泰',
           amountCents: 150000,
         })

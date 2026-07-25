@@ -149,16 +149,16 @@ describe('Supplier API (e2e)', () => {
     expect(response.body.code).toBe(400)
   })
 
-  it('rejects outsource as a supplier category', async () => {
+  it('accepts outsource as supplier category 旅行社', async () => {
     const response = await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
       .send({
         name: `${testSupplierPrefix}-outsource-category`,
         categories: [ResourceKind.outsource],
       })
-      .expect(400)
+      .expect(201)
 
-    expect(response.body.code).toBe(400)
+    expect(response.body.data.categories).toEqual([ResourceKind.outsource])
   })
 
   it('filters suppliers by category containment', async () => {
@@ -327,7 +327,7 @@ describe('Supplier API (e2e)', () => {
     expect(response.body.message).toContain('供应商类别不能为空')
   })
 
-  it('rejects outsource as a supplier category on PATCH', async () => {
+  it('accepts outsource as supplier category on PATCH', async () => {
     const createResponse = await authRequest(app, coordinatorToken)
       .post('/api/suppliers')
       .send({
@@ -343,10 +343,12 @@ describe('Supplier API (e2e)', () => {
         categories: [ResourceKind.hotel, ResourceKind.outsource],
         status: DirectoryProfileStatus.active,
       })
-      .expect(400)
+      .expect(200)
 
-    expect(response.body.code).toBe(400)
-    expect(response.body.message).toContain('拼出不得作为供应商类别')
+    expect(response.body.data.categories).toEqual([
+      ResourceKind.hotel,
+      ResourceKind.outsource,
+    ])
   })
 
   it('rejects removing a category still used by segment resources', async () => {

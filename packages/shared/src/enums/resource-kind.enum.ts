@@ -30,12 +30,16 @@ export const RESOURCE_KIND_LABELS = Object.fromEntries(
   RESOURCE_KIND_OPTIONS.map((item) => [item.value, item.label]),
 ) as Record<ResourceKind, string>
 
-/** Resource kinds allowed on supplier category sets (excludes outsource). */
-export const SUPPLIER_ALLOWED_RESOURCE_KINDS = Object.values(ResourceKind).filter(
-  (kind) => kind !== ResourceKind.OUTSOURCE,
-) as Exclude<ResourceKind, ResourceKind.OUTSOURCE>[]
+/**
+ * Resource kinds allowed on supplier category sets.
+ * Includes outsource（供应商类别 UI label「旅行社」；资源种类仍为「拼出」）.
+ */
+export const SUPPLIER_ALLOWED_RESOURCE_KINDS = Object.values(ResourceKind) as ResourceKind[]
 
-export type SupplierAllowedResourceKind = (typeof SUPPLIER_ALLOWED_RESOURCE_KINDS)[number]
+export type SupplierAllowedResourceKind = ResourceKind
+
+/** Supplier-category label for outsource; resource-kind label stays「拼出」. */
+export const SUPPLIER_CATEGORY_OUTSOURCE_LABEL = '旅行社'
 
 /** Fixed Resource Kind order for Departure Operations Sheet (CONTEXT / ADR-0018). */
 export const RESOURCE_KIND_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_OPTIONS.map(

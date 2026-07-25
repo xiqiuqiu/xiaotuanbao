@@ -16,7 +16,6 @@ import {
   deriveScheduleState,
   computeReceivableDueDate,
   PaymentScheduleStatus,
-  ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -509,16 +508,16 @@ export class DepartureFinanceBridgeService {
   }
 
   private buildPayableSpec(resource: SegmentResourceWithRelations): PayableSpec {
-    const counterpartyName =
-      resource.resourceKind === ResourceKind.OUTSOURCE
-        ? resource.partner?.name
-        : resource.supplier?.name
+    const isPartnerCounterparty = resource.counterpartyType === CounterpartyType.partner
+    const counterpartyName = isPartnerCounterparty
+      ? resource.partner?.name
+      : resource.supplier?.name
 
     const title =
       resource.title.trim() ||
       `${this.resourceKindLabel(resource.resourceKind)}·${counterpartyName ?? '未命名'}`
 
-    if (resource.resourceKind === ResourceKind.OUTSOURCE) {
+    if (isPartnerCounterparty) {
       return {
         amountCents: resource.amountCents,
         title,

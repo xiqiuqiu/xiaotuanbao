@@ -1,8 +1,10 @@
 import {
   InvoiceAvailable,
   InvoiceType,
+  ResourceKind,
   RESOURCE_KIND_OPTIONS,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  SUPPLIER_CATEGORY_OUTSOURCE_LABEL,
   type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 
@@ -18,10 +20,20 @@ export {
 
 export type { SupplierAllowedResourceKind }
 
-/** Supplier-allowed resource kinds with unified labels (用车/餐/门票). */
-export const SUPPLIER_CATEGORY_OPTIONS = RESOURCE_KIND_OPTIONS.filter((item) =>
-  (SUPPLIER_ALLOWED_RESOURCE_KINDS as readonly string[]).includes(item.value),
-)
+/** Supplier-allowed resource kinds; outsource shown as 旅行社 (resource kind stays 拼出). */
+export const SUPPLIER_CATEGORY_OPTIONS = RESOURCE_KIND_OPTIONS.reduce<
+  { value: ResourceKind; label: string }[]
+>((options, item) => {
+  if (!(SUPPLIER_ALLOWED_RESOURCE_KINDS as readonly string[]).includes(item.value)) {
+    return options
+  }
+  options.push(
+    item.value === ResourceKind.OUTSOURCE
+      ? { value: item.value, label: SUPPLIER_CATEGORY_OUTSOURCE_LABEL }
+      : item,
+  )
+  return options
+}, [])
 
 export const SUPPLIER_CATEGORY_LABELS = Object.fromEntries(
   SUPPLIER_CATEGORY_OPTIONS.map((item) => [item.value, item.label]),

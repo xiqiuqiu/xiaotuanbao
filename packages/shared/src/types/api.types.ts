@@ -1217,7 +1217,7 @@ export interface PartnerSourceOrderListResult {
 
 /** 供应商服务团单 Tab 三项汇总（跟随筛选、所见即所算）。 */
 export interface SupplierServiceOrderListSummary {
-  /** 资源行数（当前筛选集内引用该供应商的非拼出资源行数） */
+  /** 资源行数（当前筛选集内引用该供应商的资源行数，含拼出／旅行社） */
   resourceRowCount: number
   /** 关联发团数（去重后的发团数量） */
   departureCount: number

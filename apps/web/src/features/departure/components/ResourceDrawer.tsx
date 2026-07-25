@@ -14,14 +14,12 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
-import { listPartners } from '@/services/partner.service'
 import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import { RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import {
   createEmptyResourceFormValues,
   formValuesToPayload,
-  isOutsourceKind,
   resourceToFormValues,
   type ResourceFormValues,
 } from '../utils/resource-form'
@@ -65,7 +63,6 @@ export function ResourceDrawer({
   const resourceKind = Form.useWatch('resourceKind', form)
   const actionsBusy = loading || saveAndGenerateLoading
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
-  const outsource = isOutsourceKind(resourceKind)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
   const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(new Map())
 
@@ -102,16 +99,6 @@ export function ResourceDrawer({
     onClose()
   }
 
-  const { data: partnersResult } = useQuery({
-    queryKey: ['partners', 'resource-select'],
-    queryFn: () =>
-      listPartners({
-        status: DirectoryProfileStatus.ACTIVE,
-        pageSize: 100,
-      }),
-    enabled: open && outsource,
-  })
-
   const { data: suppliersResult } = useQuery({
     queryKey: ['suppliers', 'resource-select', supplierFilterKind],
     queryFn: () =>
@@ -120,7 +107,7 @@ export function ResourceDrawer({
         category: supplierFilterKind,
         pageSize: 100,
       }),
-    enabled: open && !outsource && Boolean(supplierFilterKind),
+    enabled: open && Boolean(supplierFilterKind),
   })
 
   const editingSupplierId = editing?.supplierId ?? undefined
@@ -252,23 +239,7 @@ export function ResourceDrawer({
           />
         </Form.Item>
 
-        {outsource ? (
-          <Form.Item
-            name="partnerId"
-            label="承接方"
-            rules={[{ required: true, message: '请选择承接方' }]}
-          >
-            <Select
-              showSearch={{ optionFilterProp: 'label' }}
-              placeholder="选择承接方"
-              options={partnersResult?.items.map((partner) => ({
-                value: partner.id,
-                label: partner.name,
-              }))}
-              disabled={readOnly || amountFieldsLocked}
-            />
-          </Form.Item>
-        ) : resourceKind ? (
+        {resourceKind ? (
           <Form.Item
             name="supplierId"
             label="供应商"

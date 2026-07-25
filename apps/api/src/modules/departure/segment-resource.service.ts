@@ -17,6 +17,7 @@ import {
   type SupplierServiceOrderListResult,
 } from '@xiaotuanbao/shared'
 import {
+  CounterpartyType,
   DirectoryProfileStatus,
   PaymentScheduleDirection,
   ResourceKind,
@@ -111,7 +112,7 @@ export class SegmentResourceService {
   }
 
   /**
-   * 供应商服务团单 Tab：跨发团查询引用该供应商的非拼出资源行（业务事实层）。
+   * 供应商服务团单 Tab：跨发团查询引用该供应商的资源行（含拼出／旅行社，业务事实层）。
    * 出团日期区间过滤＋默认倒序＋分页；三项汇总覆盖整个筛选集，不随分页变化。
    */
   async listBySupplier(
@@ -155,7 +156,6 @@ export class SegmentResourceService {
 
     const where: Prisma.SegmentResourceWhereInput = {
       supplierId: supplier.id,
-      resourceKind: { not: ResourceKind.outsource },
       segment: { departure: departureWhere },
     }
 
@@ -197,7 +197,6 @@ export class SegmentResourceService {
           resources: {
             some: {
               supplierId: supplier.id,
-              resourceKind: { not: ResourceKind.outsource },
             },
           },
         },
@@ -235,7 +234,8 @@ export class SegmentResourceService {
   }
 
   /**
-   * 合作团单·拼出分段：跨发团查询引用该 Partner 为承接方的拼出资源行（业务事实层）。
+   * 合作团单·拼出分段：跨发团查询历史以该 Partner 为承接方的拼出资源行（业务事实层）。
+   * 新写拼出挂供应商；本接口仅覆盖存量 Partner 承接行。
    * 出团日期区间过滤＋默认倒序＋分页；三项汇总覆盖整个筛选集，不随分页变化。
    */
   async listOutsourceByPartner(
@@ -368,15 +368,11 @@ export class SegmentResourceService {
       supplierId: dto.supplierId,
     })
 
-    if (dto.resourceKind === ResourceKind.outsource) {
-      await this.ensureSelectablePartner(organizationId, counterparty.partnerId!)
-    } else {
-      await this.ensureSelectableSupplier(
-        organizationId,
-        counterparty.supplierId!,
-        dto.resourceKind,
-      )
-    }
+    await this.ensureSelectableSupplier(
+      organizationId,
+      counterparty.supplierId!,
+      dto.resourceKind,
+    )
 
     const created = await this.prisma.segmentResource.create({
       data: {
@@ -430,26 +426,21 @@ export class SegmentResourceService {
     this.ensureDepartureEditable(resource.segment.departure)
 
     const resourceKind = dto.resourceKind ?? resource.resourceKind
-    const partnerId =
-      dto.partnerId !== undefined ? dto.partnerId : resource.partnerId ?? undefined
+    // 写路径统一走供应商；勿把历史 partnerId 并入 resolve（否则会与 supplier 冲突）。
     const supplierId =
       dto.supplierId !== undefined ? dto.supplierId : resource.supplierId ?? undefined
 
     const counterparty = resolveSegmentResourceCounterparty({
       resourceKind,
-      partnerId,
+      partnerId: dto.partnerId,
       supplierId,
     })
 
-    if (resourceKind === ResourceKind.outsource) {
-      await this.ensureSelectablePartner(organizationId, counterparty.partnerId!)
-    } else {
-      await this.ensureSelectableSupplier(
-        organizationId,
-        counterparty.supplierId!,
-        resourceKind,
-      )
-    }
+    await this.ensureSelectableSupplier(
+      organizationId,
+      counterparty.supplierId!,
+      resourceKind,
+    )
 
     const nextAmountCents = dto.amountCents ?? resource.amountCents
     await this.financeBridge.assertResourceAmountEditable(
@@ -658,22 +649,6 @@ export class SegmentResourceService {
     return resource
   }
 
-  private async ensureSelectablePartner(organizationId: string, partnerId: string) {
-    const partner = await this.prisma.partner.findFirst({
-      where: { id: partnerId, organizationId },
-    })
-
-    if (!partner) {
-      throw new BadRequestException('客户不存在')
-    }
-
-    if (partner.status !== DirectoryProfileStatus.active) {
-      throw new BadRequestException('客户不可用，请选择有效客户')
-    }
-
-    return partner
-  }
-
   private async ensureSelectableSupplier(
     organizationId: string,
     supplierId: string,
@@ -709,7 +684,7 @@ export class SegmentResourceService {
     meta?: SegmentResourceFinanceState,
   ): SegmentResourceSummary {
     const counterpartyName =
-      resource.resourceKind === ResourceKind.outsource
+      resource.counterpartyType === CounterpartyType.partner
         ? resource.partner?.name ?? '-'
         : resource.supplier?.name ?? '-'
 

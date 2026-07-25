@@ -1,12 +1,16 @@
 import { BadRequestException } from '@nestjs/common'
-import { CounterpartyType, ResourceKind } from '@prisma/client'
+import { CounterpartyType } from '@prisma/client'
 
 interface SegmentResourceCounterpartyInput {
-  resourceKind: ResourceKind
+  resourceKind: string
   partnerId?: string | null
   supplierId?: string | null
 }
 
+/**
+ * 全部资源种类（含拼出）挂供应商；拼出对应供应商类别 outsource／旅行社。
+ * 历史拼出行可能仍挂 Partner，读路径按 counterpartyType 处理；写路径不再接受 partnerId。
+ */
 export function resolveSegmentResourceCounterparty(
   input: SegmentResourceCounterpartyInput,
 ): {
@@ -14,25 +18,11 @@ export function resolveSegmentResourceCounterparty(
   partnerId: string | null
   supplierId: string | null
 } {
-  if (input.resourceKind === ResourceKind.outsource) {
-    if (!input.partnerId) {
-      throw new BadRequestException('请选择承接方')
-    }
-    if (input.supplierId) {
-      throw new BadRequestException('拼出资源不能关联供应商')
-    }
-    return {
-      counterpartyType: CounterpartyType.partner,
-      partnerId: input.partnerId,
-      supplierId: null,
-    }
-  }
-
   if (!input.supplierId) {
     throw new BadRequestException('请选择供应商')
   }
   if (input.partnerId) {
-    throw new BadRequestException('非拼出资源不能关联客户')
+    throw new BadRequestException('资源不能同时关联客户与供应商')
   }
 
   return {

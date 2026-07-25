@@ -227,6 +227,7 @@ export {
   RESOURCE_KIND_LABELS,
   RESOURCE_KIND_SORT_ORDER,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  SUPPLIER_CATEGORY_OUTSOURCE_LABEL,
   resourceKindSortIndex,
   compareSegmentResourcesForOperationsSheet,
   type SupplierAllowedResourceKind,

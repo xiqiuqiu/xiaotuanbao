@@ -63,7 +63,7 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
       data: {
         organizationId,
         name: supplierName,
-        categories: [ResourceKind.transport],
+        categories: [ResourceKind.transport, ResourceKind.outsource],
         status: DirectoryProfileStatus.active,
       },
     })
@@ -264,13 +264,13 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
       })
     })
 
-    it('拼出资源：费用类别为拼出，往来对象为承接 Partner', async () => {
+    it('拼出资源：费用类别为拼出，付款对象为旅行社供应商', async () => {
       const departure = await createDeparture()
       const segment = await createSegment(departure.id)
       const resource = await createResource(segment.id, {
         resourceKind: ResourceKind.outsource,
-        supplierId: undefined,
-        partnerId,
+        supplierId,
+        partnerId: undefined,
         title: '喀纳斯段拼出',
         amountCents: 800000,
       })
@@ -283,8 +283,8 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
       expect(row).toMatchObject({
         resourceKind: ResourceKind.outsource,
         resourceTitle: '喀纳斯段拼出',
-        counterpartyType: CounterpartyType.partner,
-        counterpartyName: partnerName,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyName: supplierName,
         sourceOrderName: null,
       })
     })

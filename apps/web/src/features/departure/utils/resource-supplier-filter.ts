@@ -1,14 +1,13 @@
 import { ResourceKind, type SupplierAllowedResourceKind } from '@xiaotuanbao/shared'
 
 /**
- * Returns the supplier list filter key for a self-operated resource kind.
+ * Returns the supplier list filter key for a resource kind (含拼出→outsource／旅行社).
  * List API matches suppliers whose categories contain this kind (∈).
- * Returns undefined for outsource (partner path) or unset kind.
  */
 export function resolveSupplierFilterKind(
   resourceKind: ResourceKind | undefined,
 ): SupplierAllowedResourceKind | undefined {
-  if (!resourceKind || resourceKind === ResourceKind.OUTSOURCE) {
+  if (!resourceKind) {
     return undefined
   }
 
@@ -17,17 +16,13 @@ export function resolveSupplierFilterKind(
 
 /**
  * When resource kind changes: keep the current supplier if the new kind is still
- * in that supplier's category set; otherwise clear. Outsource always clears.
+ * in that supplier's category set; otherwise clear.
  */
 export function resolveSupplierIdAfterKindChange(input: {
   nextKind: ResourceKind
   currentSupplierId?: string
   currentSupplierCategories?: readonly string[]
 }): string | undefined {
-  if (input.nextKind === ResourceKind.OUTSOURCE) {
-    return undefined
-  }
-
   const { currentSupplierId, currentSupplierCategories } = input
   if (!currentSupplierId || !currentSupplierCategories) {
     return undefined
