@@ -1058,7 +1058,7 @@ describe('Departure API (e2e)', () => {
         )
         .expect(400)
 
-      expect(response.body.message).toBe('优惠金额不能大于原始应收')
+      expect(response.body.message).toBe('结算金额不能为负数')
     })
 
     it('rejects disabled partner', async () => {

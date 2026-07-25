@@ -150,7 +150,8 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
    * 7 月团（julyDepartureId，出团 2026-07-05）：
    *   - 客源单 split：客户补款 90000＋游客代收 60000
    *   - 手工应收（其他应收）30000
-   *   - 拼出资源应付 80000（有效）＋ 99900（作废，不计入汇总）
+   *   - 历史 Partner 挂靠拼出资源应付 80000（有效）＋ 99900（作废，不计入汇总）
+   *     （写路径已改挂供应商；账本回归仍覆盖读路径上的历史 Partner 拼出）
    */
   async function setupSummaryFixtures() {
     const summaryPartner = await prisma.partner.create({
@@ -281,7 +282,7 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       })
       .expect(201)
 
-    // 7 月拼出资源应付：一条有效 80000，一条作废 99900（不计入汇总）
+    // 7 月历史 Partner 拼出资源应付：一条有效 80000，一条作废 99900（不计入汇总）
     const segmentResponse = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${julyDepartureId}/segments`)
       .send({
@@ -293,30 +294,32 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(201)
     const segmentId = segmentResponse.body.data.id as string
 
-    const activeResource = await authRequest(app, coordinatorToken)
-      .post(`/api/segments/${segmentId}/resources`)
-      .send({
+    const activeResource = await prisma.segmentResource.create({
+      data: {
+        segmentId,
         resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.partner,
         partnerId: summaryPartnerId,
         title: `${testPrefix}-拼出`,
         amountCents: 80000,
-      })
-      .expect(201)
+      },
+    })
     await authRequest(app, coordinatorToken)
-      .post(`/api/segment-resources/${activeResource.body.data.id as string}/generate-payable`)
+      .post(`/api/segment-resources/${activeResource.id}/generate-payable`)
       .expect(201)
 
-    const voidedResource = await authRequest(app, coordinatorToken)
-      .post(`/api/segments/${segmentId}/resources`)
-      .send({
+    const voidedResource = await prisma.segmentResource.create({
+      data: {
+        segmentId,
         resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.partner,
         partnerId: summaryPartnerId,
         title: `${testPrefix}-拼出-误生成`,
         amountCents: 99900,
-      })
-      .expect(201)
+      },
+    })
     const voidedGenerated = await authRequest(app, coordinatorToken)
-      .post(`/api/segment-resources/${voidedResource.body.data.id as string}/generate-payable`)
+      .post(`/api/segment-resources/${voidedResource.id}/generate-payable`)
       .expect(201)
     // ADR-0023: 资源应付作废归 departure:write（计调），财务无权。
     await authRequest(app, coordinatorToken)
