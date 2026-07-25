@@ -172,6 +172,7 @@ export class DepartureReadModelService {
         count: 0,
         totalGuests: 0,
         grossReceivableCents: 0,
+        fareAdjustmentNetCents: 0,
         discountCents: 0,
         netReceivableCents: 0,
       }
@@ -227,6 +228,7 @@ export class DepartureReadModelService {
       _sum: {
         guestCount: true,
         grossReceivableCents: true,
+        fareAdjustmentNetCents: true,
         discountCents: true,
         netReceivableCents: true,
       },
@@ -238,6 +240,7 @@ export class DepartureReadModelService {
         count: row._count.id,
         totalGuests: row._sum.guestCount ?? 0,
         grossReceivableCents: row._sum.grossReceivableCents ?? 0,
+        fareAdjustmentNetCents: row._sum.fareAdjustmentNetCents ?? 0,
         discountCents: row._sum.discountCents ?? 0,
         netReceivableCents: row._sum.netReceivableCents ?? 0,
       })

@@ -12,16 +12,14 @@ import {
   theme,
 } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
+import { CounterpartyType, DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
-import { listPartners } from '@/services/partner.service'
 import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import { RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import {
   createEmptyResourceFormValues,
   formValuesToPayload,
-  isOutsourceKind,
   resourceToFormValues,
   type ResourceFormValues,
 } from '../utils/resource-form'
@@ -65,9 +63,17 @@ export function ResourceDrawer({
   const resourceKind = Form.useWatch('resourceKind', form)
   const actionsBusy = loading || saveAndGenerateLoading
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
-  const outsource = isOutsourceKind(resourceKind)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
   const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(new Map())
+  /** 历史 Partner 拼出行：无 supplierId，可继续编辑；改选供应商则迁移。 */
+  const isHistoricalPartnerResource = Boolean(
+    editing &&
+      editing.counterpartyType === CounterpartyType.PARTNER &&
+      !editing.supplierId,
+  )
+  const supplierRequired = !(
+    isHistoricalPartnerResource && resourceKind === ResourceKind.OUTSOURCE
+  )
 
   const formKey = editing?.id ?? 'new'
   const initialValues = useMemo(
@@ -102,16 +108,6 @@ export function ResourceDrawer({
     onClose()
   }
 
-  const { data: partnersResult } = useQuery({
-    queryKey: ['partners', 'resource-select'],
-    queryFn: () =>
-      listPartners({
-        status: DirectoryProfileStatus.ACTIVE,
-        pageSize: 100,
-      }),
-    enabled: open && outsource,
-  })
-
   const { data: suppliersResult } = useQuery({
     queryKey: ['suppliers', 'resource-select', supplierFilterKind],
     queryFn: () =>
@@ -120,7 +116,7 @@ export function ResourceDrawer({
         category: supplierFilterKind,
         pageSize: 100,
       }),
-    enabled: open && !outsource && Boolean(supplierFilterKind),
+    enabled: open && Boolean(supplierFilterKind),
   })
 
   const editingSupplierId = editing?.supplierId ?? undefined
@@ -212,6 +208,16 @@ export function ResourceDrawer({
         />
       ) : null}
 
+      {isHistoricalPartnerResource && !readOnly ? (
+        <Alert
+          type="info"
+          showIcon
+          title="历史承接方资源"
+          description={`当前对手方为承接方「${editing?.counterpartyName ?? '-'}」。可继续编辑；若选择供应商将改为供应商对手方。`}
+          style={{ marginBottom: token.marginMD }}
+        />
+      ) : null}
+
       <Form
         key={formKey}
         form={form}
@@ -252,31 +258,20 @@ export function ResourceDrawer({
           />
         </Form.Item>
 
-        {outsource ? (
-          <Form.Item
-            name="partnerId"
-            label="承接方"
-            rules={[{ required: true, message: '请选择承接方' }]}
-          >
-            <Select
-              showSearch={{ optionFilterProp: 'label' }}
-              placeholder="选择承接方"
-              options={partnersResult?.items.map((partner) => ({
-                value: partner.id,
-                label: partner.name,
-              }))}
-              disabled={readOnly || amountFieldsLocked}
-            />
-          </Form.Item>
-        ) : resourceKind ? (
+        {resourceKind ? (
           <Form.Item
             name="supplierId"
             label="供应商"
-            rules={[{ required: true, message: '请选择供应商' }]}
+            rules={
+              supplierRequired ? [{ required: true, message: '请选择供应商' }] : undefined
+            }
           >
             <Select
+              allowClear={!supplierRequired}
               showSearch={{ optionFilterProp: 'label' }}
-              placeholder="选择供应商"
+              placeholder={
+                supplierRequired ? '选择供应商' : '可选：改选供应商以迁移对手方'
+              }
               options={suppliersResult?.items.map((supplier) => ({
                 value: supplier.id,
                 label: supplier.name,

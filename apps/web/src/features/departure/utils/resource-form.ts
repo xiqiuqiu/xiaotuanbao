@@ -32,9 +32,7 @@ export function formValuesToPayload(values: ResourceFormValues): CreateSegmentRe
   const amountCents = Math.round(values.amountYuan * 100)
   return {
     resourceKind: values.resourceKind,
-    ...(values.resourceKind === ResourceKind.OUTSOURCE
-      ? { partnerId: values.partnerId }
-      : { supplierId: values.supplierId }),
+    supplierId: values.supplierId,
     title: values.title?.trim() || undefined,
     amountCents,
     notes: values.notes?.trim() || undefined,

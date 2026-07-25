@@ -255,7 +255,7 @@ export function SourceOrdersTab({
           loading={isLoading}
           columns={columns}
           dataSource={listResult?.items ?? []}
-          scroll={{ x: 1840 }}
+          scroll={{ x: 1960 }}
           pagination={false}
           summary={renderSourceOrdersTableSummary}
         />

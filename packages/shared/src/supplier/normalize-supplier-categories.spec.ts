@@ -32,13 +32,13 @@ describe('normalizeSupplierCategories', () => {
     expect(() => normalizeSupplierCategories(undefined)).toThrow('供应商类别不能为空')
   })
 
-  it('rejects outsource', () => {
-    expect(() => normalizeSupplierCategories([ResourceKind.OUTSOURCE])).toThrow(
-      '拼出不得作为供应商类别',
-    )
-    expect(() =>
+  it('accepts outsource as supplier category 旅行社', () => {
+    expect(normalizeSupplierCategories([ResourceKind.OUTSOURCE])).toEqual([
+      ResourceKind.OUTSOURCE,
+    ])
+    expect(
       normalizeSupplierCategories([ResourceKind.HOTEL, ResourceKind.OUTSOURCE]),
-    ).toThrow('拼出不得作为供应商类别')
+    ).toEqual([ResourceKind.HOTEL, ResourceKind.OUTSOURCE])
   })
 
   it('rejects unknown or legacy values such as restaurant', () => {

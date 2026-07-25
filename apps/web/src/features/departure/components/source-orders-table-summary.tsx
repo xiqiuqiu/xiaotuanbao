@@ -6,6 +6,7 @@ import { formatCents } from '../catalog'
 export interface SourceOrdersTableTotals {
   guestCount: number
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
   partnerCollectedCents: number
@@ -19,6 +20,7 @@ export function aggregateSourceOrdersTableTotals(
     (totals, order) => ({
       guestCount: totals.guestCount + order.guestCount,
       grossReceivableCents: totals.grossReceivableCents + order.grossReceivableCents,
+      fareAdjustmentNetCents: totals.fareAdjustmentNetCents + order.fareAdjustmentNetCents,
       discountCents: totals.discountCents + order.discountCents,
       netReceivableCents: totals.netReceivableCents + order.netReceivableCents,
       partnerCollectedCents: totals.partnerCollectedCents + order.partnerCollectedCents,
@@ -27,6 +29,7 @@ export function aggregateSourceOrdersTableTotals(
     {
       guestCount: 0,
       grossReceivableCents: 0,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 0,
       partnerCollectedCents: 0,
@@ -60,20 +63,23 @@ function SourceOrdersTableSummaryRow({ pageData }: { pageData: readonly SourceOr
           <SummaryAmount value={totals.grossReceivableCents} />
         </Table.Summary.Cell>
         <Table.Summary.Cell index={3} align="right">
-          <SummaryAmount value={totals.discountCents} />
+          <SummaryAmount value={totals.fareAdjustmentNetCents} />
         </Table.Summary.Cell>
         <Table.Summary.Cell index={4} align="right">
-          <SummaryAmount value={totals.netReceivableCents} />
+          <SummaryAmount value={totals.discountCents} />
         </Table.Summary.Cell>
         <Table.Summary.Cell index={5} align="right">
-          <SummaryAmount value={totals.partnerCollectedCents} />
+          <SummaryAmount value={totals.netReceivableCents} />
         </Table.Summary.Cell>
         <Table.Summary.Cell index={6} align="right">
+          <SummaryAmount value={totals.partnerCollectedCents} />
+        </Table.Summary.Cell>
+        <Table.Summary.Cell index={7} align="right">
           <SummaryAmount value={totals.guestCollectCents} />
         </Table.Summary.Cell>
         {/* 收款方式～更新时间：无合计语义，合并占位；操作列单独占位以对齐 fixed 列 */}
-        <Table.Summary.Cell index={7} colSpan={5} />
-        <Table.Summary.Cell index={12} />
+        <Table.Summary.Cell index={8} colSpan={5} />
+        <Table.Summary.Cell index={13} />
       </Table.Summary.Row>
     </Table.Summary>
   )

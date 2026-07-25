@@ -351,6 +351,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         adultUnitPriceCents: 100000,
         childUnitPriceCents: 50000,
         originalReceivableCents: 250000,
+        fareAdjustmentNetCents: 0,
         discountCents: 30000,
         actualReceivableCents: 220000,
         customerDepositCents: 120000,
@@ -369,7 +370,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       expect(row2).not.toHaveProperty('receivableStatus')
     })
 
-    it('every row is recomputable: original = adult×price + child×price, actual = original − discount, guest collect = actual − deposit', async () => {
+    it('every row is recomputable: original = adult×price + child×price, actual = original + adjustment − discount, guest collect = actual − deposit', async () => {
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement`)
         .query(PERIOD)
@@ -381,7 +382,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
             row.childGuestCount * row.childUnitPriceCents,
         )
         expect(row.actualReceivableCents).toBe(
-          row.originalReceivableCents - row.discountCents,
+          row.originalReceivableCents + row.fareAdjustmentNetCents - row.discountCents,
         )
         expect(row.guestCollectCents).toBe(
           row.actualReceivableCents - row.customerDepositCents,
@@ -410,6 +411,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         childGuestCount: 1,
         totalGuestCount: 8,
         originalReceivableCents: 650000,
+        fareAdjustmentNetCents: 0,
         discountCents: 30000,
         actualReceivableCents: 620000,
         customerDepositCents: 520000,
@@ -451,7 +453,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
   })
 
   describe('xlsx export', () => {
-    it('downloads a valid workbook with title, 17-column header, totals row and print setup', async () => {
+    it('downloads a valid workbook with title, 18-column header, totals row and print setup', async () => {
       const ExcelJS = await import('exceljs')
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
@@ -497,7 +499,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       // 标题按周期规则生成（同年跨月）
       expect(worksheet.getCell(1, 1).value).toBe('2026年6-7月往来账确认单')
 
-      // 17 列表头整行匹配，且被设置为分页重复表头
+      // 18 列表头整行匹配，且被设置为分页重复表头
       const expectedHeaders = [
         '序号',
         '出团日期',
@@ -511,6 +513,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         '拼入单价（成人）',
         '拼入单价（儿童）',
         '原始应收（拼入合计）',
+        '调整净额',
         '优惠金额',
         '实际应收',
         '客户已收押金',
@@ -544,8 +547,16 @@ describe('Partner reconciliation statement API (e2e)', () => {
         })
       })
 
-      // 六项汇总、确认说明、双方签章栏
-      for (const label of ['客源单数', '总人数', '拼入合计', '优惠合计', '实际应收', '游客代收']) {
+      // 七项汇总、确认说明、双方签章栏
+      for (const label of [
+        '客源单数',
+        '总人数',
+        '拼入合计',
+        '调整净额',
+        '优惠合计',
+        '实际应收',
+        '游客代收',
+      ]) {
         expect(cellTexts).toContain(label)
       }
       expect(cellTexts).toContain('确认说明')

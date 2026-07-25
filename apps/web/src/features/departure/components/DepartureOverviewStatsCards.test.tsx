@@ -61,6 +61,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       payables: '应付已生成',
     },
     grossReceivableCents: 1_200_000,
+    fareAdjustmentNetCents: 50_000,
     discountCents: 200_000,
     netReceivableCents: 1_000_000,
     payableCents: 700_000,
@@ -177,13 +178,15 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText('应付合计')).not.toBeInTheDocument()
   })
 
-  it('经营补充展示原始团款、优惠合计与 1 位小数毛利率', () => {
+  it('经营补充展示原始团款、调整净额、优惠合计与 1 位小数毛利率', () => {
     renderCards()
 
     const supplementRow = screen.getByRole('group', { name: '经营补充' })
     expect(within(supplementRow).getByText('原始团款')).toBeInTheDocument()
+    expect(within(supplementRow).getByText('调整净额')).toBeInTheDocument()
     expect(within(supplementRow).getByText('优惠合计')).toBeInTheDocument()
     expect(within(supplementRow).getByText('毛利率')).toBeInTheDocument()
+    expect(within(supplementRow).getByText('¥500.00')).toBeInTheDocument()
     expect(within(supplementRow).getByText('30.0%')).toBeInTheDocument()
   })
 

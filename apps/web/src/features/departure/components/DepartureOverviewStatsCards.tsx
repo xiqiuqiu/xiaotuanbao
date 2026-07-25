@@ -334,21 +334,28 @@ export function DepartureOverviewStatsCards({
       </Row>
 
       <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="原始团款"
             value={formatCents(departure.grossReceivableCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
+          <SummaryCard
+            title="调整净额"
+            value={formatCents(departure.fareAdjustmentNetCents)}
+            animateEnter={animateEnter}
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="优惠合计"
             value={formatCents(departure.discountCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="毛利率"
             value={marginRateLabel ?? '暂无数据'}

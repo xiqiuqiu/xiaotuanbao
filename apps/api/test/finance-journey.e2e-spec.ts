@@ -73,7 +73,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        categories: [ResourceKind.transport],
+        categories: [ResourceKind.transport, ResourceKind.outsource],
         status: DirectoryProfileStatus.active,
       },
     })
@@ -892,8 +892,8 @@ describe('Finance journeys (cross-module e2e)', () => {
               },
               {
                 resourceKind: ResourceKind.outsource,
-                counterpartyType: CounterpartyType.partner,
-                partnerId,
+                counterpartyType: CounterpartyType.supplier,
+                supplierId,
                 title: '拼出接待',
                 amountCents: 150000,
               },
@@ -979,16 +979,19 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(payablesTab.body.data.total).toBe(2)
 
-    const supplierPayable = payablesTab.body.data.items.find(
+    const supplierPayables = payablesTab.body.data.items.filter(
       (item: { counterpartyType: string }) =>
         item.counterpartyType === CounterpartyType.supplier,
     )
-    const partnerPayable = payablesTab.body.data.items.find(
-      (item: { counterpartyType: string }) =>
-        item.counterpartyType === CounterpartyType.partner,
+    expect(supplierPayables).toHaveLength(2)
+    const transportPayable = supplierPayables.find(
+      (item: { amountCents: number }) => item.amountCents === 200000,
     )
-    expect(supplierPayable.amountCents).toBe(200000)
-    expect(partnerPayable.amountCents).toBe(150000)
+    const outsourcePayable = supplierPayables.find(
+      (item: { amountCents: number }) => item.amountCents === 150000,
+    )
+    expect(transportPayable).toBeDefined()
+    expect(outsourcePayable).toBeDefined()
 
     await authRequest(app, financeToken)
       .post(`/api/finance/receivables/${receivable.body.data.schedules[0].id}/confirm-collection`)
@@ -1003,7 +1006,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(201)
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/payables/${supplierPayable.id}/confirm-payment`)
+      .post(`/api/finance/payables/${transportPayable.id}/confirm-payment`)
       .send({
         amountCents: 200000,
         transactionDate: '2026-08-05',
@@ -1015,14 +1018,14 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(201)
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/payables/${partnerPayable.id}/confirm-payment`)
+      .post(`/api/finance/payables/${outsourcePayable.id}/confirm-payment`)
       .send({
         amountCents: 150000,
         transactionDate: '2026-08-05',
         paymentChannel: PaymentChannel.WECHAT,
-        counterpartyType: CounterpartyType.partner,
-        counterpartyId: partnerId,
-        counterpartyName: `${testPrefix}-partner`,
+        counterpartyType: CounterpartyType.supplier,
+        counterpartyId: supplierId,
+        counterpartyName: `${testPrefix}-supplier`,
       })
       .expect(201)
 

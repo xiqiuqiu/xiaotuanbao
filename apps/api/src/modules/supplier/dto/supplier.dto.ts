@@ -36,7 +36,7 @@ export class CreateSupplierDto {
   @IsEnum(ResourceKind, { each: true })
   @IsIn([...SUPPLIER_ALLOWED_RESOURCE_KINDS], {
     each: true,
-    message: '拼出不得作为供应商类别',
+    message: '无效的供应商类别',
   })
   categories!: SupplierAllowedResourceKind[]
 
@@ -109,7 +109,7 @@ export class UpdateSupplierDto {
   @IsEnum(ResourceKind, { each: true })
   @IsIn([...SUPPLIER_ALLOWED_RESOURCE_KINDS], {
     each: true,
-    message: '拼出不得作为供应商类别',
+    message: '无效的供应商类别',
   })
   categories!: SupplierAllowedResourceKind[]
 

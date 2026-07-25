@@ -1,5 +1,9 @@
 import {
   DepartureStatus,
+  FareAdjustmentDirection,
+  FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_CATALOG,
+  FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
   SegmentPayableStatus,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
@@ -164,6 +168,35 @@ export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
   { value: SourceOrderDiscountType.NONE, label: '无优惠' },
   { value: SourceOrderDiscountType.LUMP_SUM, label: '整单优惠' },
 ] as const
+
+export const FARE_ADJUSTMENT_KIND_OPTIONS = [
+  ...FARE_ADJUSTMENT_KIND_CATALOG.map((item) => ({
+    value: item.kind,
+    label: item.label,
+  })),
+  { value: FareAdjustmentKind.CUSTOM, label: '自定义' },
+] as const
+
+export const FARE_ADJUSTMENT_KIND_LABELS = Object.fromEntries(
+  FARE_ADJUSTMENT_KIND_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>
+
+export const FARE_ADJUSTMENT_DIRECTION_OPTIONS = [
+  { value: FareAdjustmentDirection.INCREASE, label: '增项' },
+  { value: FareAdjustmentDirection.DECREASE, label: '减项' },
+] as const
+
+export function defaultDirectionForFareAdjustmentKind(
+  kind: FareAdjustmentKind,
+): FareAdjustmentDirection {
+  if (kind === FareAdjustmentKind.CUSTOM) {
+    return FareAdjustmentDirection.INCREASE
+  }
+  const locked = FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[kind]
+  return locked === 'decrease'
+    ? FareAdjustmentDirection.DECREASE
+    : FareAdjustmentDirection.INCREASE
+}
 
 export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   [SourceOrderReceivableStatus.NOT_GENERATED]: '未生成',

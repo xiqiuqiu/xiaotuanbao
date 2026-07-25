@@ -18,11 +18,11 @@ describe('Supplier service orders API (e2e)', () => {
   let otherSupplierId: string
   const testPrefix = `e2e-supplier-svo-${Date.now()}`
 
-  // 固定 fixtures（引用 S1 的非拼出资源行，跨三个发团）：
+  // 固定 fixtures（引用 S1 的资源行，跨三个发团）：
   // D1 出团 2026-06-10：酒店 2500.00（备注「窗口位」）＋ 餐 300.00（同发团两行，验证发团去重）
   // D2 出团 2026-07-05：导游 4000.00
   // D3 出团 2026-05-20：门票 600.00
-  // 干扰：D1 另一供应商 S2 资源 9999.00；D1 一条 supplierId=S1 但 resourceKind=outsource（应被排除）
+  // 干扰：D1 另一供应商 S2 资源 9999.00
   let departure1: { id: string; departureNo: string }
   let departure2: { id: string; departureNo: string }
   let departure3: { id: string; departureNo: string }
@@ -117,7 +117,7 @@ describe('Supplier service orders API (e2e)', () => {
     await createSupplierResource(segment2, ResourceKind.guide, '全程导游', 400000)
     await createSupplierResource(segment3, ResourceKind.ticket, '景区门票', 60000)
 
-    // 干扰 1：同发团、另一供应商 —— 不得混入
+    // 干扰：同发团、另一供应商 —— 不得混入
     await createSupplierResource(
       segment1,
       ResourceKind.hotel,
@@ -126,8 +126,6 @@ describe('Supplier service orders API (e2e)', () => {
       null,
       otherSupplierId,
     )
-    // 干扰 2：supplierId=S1 但拼出 —— 按 resourceKind != outsource 过滤应被排除
-    await createSupplierResource(segment1, ResourceKind.outsource, '拼出团位', 888800)
   })
 
   afterAll(async () => {
@@ -218,7 +216,7 @@ describe('Supplier service orders API (e2e)', () => {
       .expect(200)
 
     const data = response.body.data
-    // 仅 S1 的非拼出行：4 行；排除另一供应商与拼出行
+    // 仅 S1 的资源行：4 行；排除另一供应商
     expect(data.total).toBe(4)
     expect(data.items).toHaveLength(4)
     expect(
@@ -237,10 +235,9 @@ describe('Supplier service orders API (e2e)', () => {
       amountCents: 400000,
     })
 
-    // 另一供应商与拼出行的金额均不得出现
+    // 另一供应商金额不得出现
     const amounts = data.items.map((item: { amountCents: number }) => item.amountCents)
     expect(amounts).not.toContain(999900)
-    expect(amounts).not.toContain(888800)
     // 不渗透财务处置字段
     expect(first).not.toHaveProperty('payableStatus')
   })

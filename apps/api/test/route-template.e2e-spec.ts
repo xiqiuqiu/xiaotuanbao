@@ -10,7 +10,6 @@ describe('Route Template API (e2e)', () => {
   let financeToken: string
   let organizationId: string
   let ownerUserId: string
-  let partnerId: string
   let supplierId: string
   const testPrefix = `e2e-route-template-${Date.now()}`
 
@@ -28,14 +27,6 @@ describe('Route Template API (e2e)', () => {
     }
     organizationId = user.organizationId
     ownerUserId = user.id
-
-    const partner = await prisma.partner.findFirst({
-      where: { organizationId },
-    })
-    if (!partner) {
-      throw new Error('Seed partner not found')
-    }
-    partnerId = partner.id
 
     const supplier = await prisma.supplier.findFirst({
       where: { organizationId },
@@ -124,8 +115,8 @@ describe('Route Template API (e2e)', () => {
               },
               {
                 resourceKind: ResourceKind.outsource,
-                counterpartyType: CounterpartyType.partner,
-                partnerId,
+                counterpartyType: CounterpartyType.supplier,
+                supplierId,
                 title: '拼出接待',
                 amountCents: 80000,
               },

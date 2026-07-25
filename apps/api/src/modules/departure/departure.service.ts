@@ -793,6 +793,7 @@ export class DepartureService {
     return {
       ...this.toDepartureSummary(departure, readModel, ownerName, canPurge),
       grossReceivableCents: readModel.grossReceivableCents,
+      fareAdjustmentNetCents: readModel.fareAdjustmentNetCents,
       discountCents: readModel.discountCents,
       verifiedReceivableCents: readModel.verifiedReceivableCents,
       openUnsettledReceivableCents: readModel.openUnsettledReceivableCents,

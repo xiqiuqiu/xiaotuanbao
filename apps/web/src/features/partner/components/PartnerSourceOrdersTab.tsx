@@ -80,6 +80,13 @@ const SOURCE_COLUMNS: ColumnsType<PartnerSourceOrderItem> = [
     render: (value: number) => formatCents(value),
   },
   {
+    title: '调整净额',
+    dataIndex: 'fareAdjustmentNetCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
     title: '优惠',
     dataIndex: 'discountCents',
     width: 100,
@@ -263,42 +270,49 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
       ) : isSource ? (
         <>
           <Row gutter={[16, 16]} role="group" aria-label="客源汇总">
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="客源单数"
                 value={sourceResult?.summary.orderCount ?? 0}
                 loading={isLoading}
               />
             </Col>
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="总人数"
                 value={sourceResult?.summary.totalGuests ?? 0}
                 loading={isLoading}
               />
             </Col>
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="原始团款合计"
                 value={formatCents(sourceResult?.summary.totalGrossReceivableCents ?? 0)}
                 loading={isLoading}
               />
             </Col>
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
+              <Statistic
+                title="调整净额合计"
+                value={formatCents(sourceResult?.summary.totalFareAdjustmentNetCents ?? 0)}
+                loading={isLoading}
+              />
+            </Col>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="优惠合计"
                 value={formatCents(sourceResult?.summary.totalDiscountCents ?? 0)}
                 loading={isLoading}
               />
             </Col>
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="结算金额合计"
                 value={formatCents(sourceResult?.summary.totalNetReceivableCents ?? 0)}
                 loading={isLoading}
               />
             </Col>
-            <Col xs={12} sm={8} xl={4}>
+            <Col xs={12} sm={8} xl={3}>
               <Statistic
                 title="游客代收合计"
                 value={formatCents(sourceResult?.summary.totalGuestCollectCents ?? 0)}
@@ -312,7 +326,7 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
             loading={isLoading}
             columns={SOURCE_COLUMNS}
             dataSource={sourceResult?.items ?? []}
-            scroll={{ x: 1600 }}
+            scroll={{ x: 1720 }}
             pagination={{
               current: page,
               pageSize,

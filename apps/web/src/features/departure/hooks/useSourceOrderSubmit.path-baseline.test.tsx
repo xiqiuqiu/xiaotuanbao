@@ -33,6 +33,8 @@ function staleListOrder(): SourceOrderSummary {
     childUnitPriceCents: 0,
     // List row still shows pre-sync path amounts.
     grossReceivableCents: 700000,
+    fareAdjustmentNetCents: 0,
+    fareAdjustments: [],
     discountType: 'none',
     discountCents: 0,
     discountNotes: null,

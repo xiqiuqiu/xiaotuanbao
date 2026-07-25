@@ -9,6 +9,7 @@ import type {
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
   PartnerSourceOrderListResult,
+  SourceOrderFareAdjustmentSummary,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -22,9 +23,12 @@ import {
   DirectoryProfileStatus,
   PaymentScheduleDirection,
   type Departure,
+  type FareAdjustmentDirection,
+  type FareAdjustmentKind,
   type Partner,
   type Prisma,
   type SourceOrder,
+  type SourceOrderFareAdjustment,
   type SourceOrderGuest,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -42,6 +46,7 @@ import {
   buildSourceOrderDisplayName,
   computeSourceOrderAmounts,
   resolveSourceOrderAmountChange,
+  type SourceOrderFareAdjustmentInput,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
 import {
@@ -55,7 +60,41 @@ import {
 } from './departure-finance-bridge.service'
 import { TransactionService } from '../finance/transaction.service'
 
-type SourceOrderWithPartner = SourceOrder & { partner: Partner }
+type SourceOrderFareAdjustmentRow = Pick<
+  SourceOrderFareAdjustment,
+  'id' | 'kind' | 'direction' | 'amountCents' | 'customName' | 'sortOrder'
+>
+
+type SourceOrderWithPartner = SourceOrder & {
+  partner: Partner
+  fareAdjustments?: SourceOrderFareAdjustmentRow[]
+}
+
+function toFareAdjustmentInputs(
+  items: SourceOrderFareAdjustmentInput[] | SourceOrderFareAdjustment[] | undefined,
+): SourceOrderFareAdjustmentInput[] {
+  return (items ?? []).map((item) => ({
+    kind: item.kind,
+    direction: item.direction as 'increase' | 'decrease',
+    amountCents: item.amountCents,
+    customName: item.customName ?? null,
+  }))
+}
+
+function toFareAdjustmentCreateRows(
+  sourceOrderId: string,
+  items: SourceOrderFareAdjustmentInput[],
+) {
+  return items.map((item, index) => ({
+    sourceOrderId,
+    kind: item.kind as FareAdjustmentKind,
+    direction: item.direction as FareAdjustmentDirection,
+    amountCents: item.amountCents,
+    customName:
+      item.kind === 'custom' ? (item.customName?.trim() || null) : null,
+    sortOrder: index,
+  }))
+}
 
 @Injectable()
 export class SourceOrderService {
@@ -96,7 +135,10 @@ export class SourceOrderService {
 
     const orders = await this.prisma.sourceOrder.findMany({
       where,
-      include: { partner: true },
+      include: {
+        partner: true,
+        fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+      },
       orderBy: [{ createdAt: 'asc' }],
     })
 
@@ -116,6 +158,10 @@ export class SourceOrderService {
         partnerCount: partnerIds.size,
         totalGrossReceivableCents: items.reduce(
           (sum, item) => sum + item.grossReceivableCents,
+          0,
+        ),
+        totalFareAdjustmentNetCents: items.reduce(
+          (sum, item) => sum + item.fareAdjustmentNetCents,
           0,
         ),
         totalDiscountCents: items.reduce((sum, item) => sum + item.discountCents, 0),
@@ -186,6 +232,7 @@ export class SourceOrderService {
         _sum: {
           guestCount: true,
           grossReceivableCents: true,
+          fareAdjustmentNetCents: true,
           discountCents: true,
           netReceivableCents: true,
           guestCollectCents: true,
@@ -208,6 +255,7 @@ export class SourceOrderService {
         adultUnitPriceCents: order.adultUnitPriceCents,
         childUnitPriceCents: order.childUnitPriceCents,
         grossReceivableCents: order.grossReceivableCents,
+        fareAdjustmentNetCents: order.fareAdjustmentNetCents,
         discountCents: order.discountCents,
         netReceivableCents: order.netReceivableCents,
         partnerCollectedCents: order.partnerCollectedCents,
@@ -222,6 +270,7 @@ export class SourceOrderService {
         totalGuests: aggregate._sum.guestCount ?? 0,
         partnerCount: total > 0 ? 1 : 0,
         totalGrossReceivableCents: aggregate._sum.grossReceivableCents ?? 0,
+        totalFareAdjustmentNetCents: aggregate._sum.fareAdjustmentNetCents ?? 0,
         totalDiscountCents: aggregate._sum.discountCents ?? 0,
         totalNetReceivableCents: aggregate._sum.netReceivableCents ?? 0,
         totalGuestCollectCents: aggregate._sum.guestCollectCents ?? 0,
@@ -238,7 +287,8 @@ export class SourceOrderService {
     this.ensureDepartureEditable(departure)
 
     const partner = await this.ensureSelectablePartner(organizationId, dto.partnerId)
-    const normalized = this.normalizeInput(dto)
+    const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
+    const normalized = this.normalizeInput({ ...dto, fareAdjustments })
 
     validateSourceOrderInput({
       partnerId: partner.id,
@@ -253,28 +303,44 @@ export class SourceOrderService {
       partner.id,
     )
 
-    const created = await this.prisma.sourceOrder.create({
-      data: {
-        departureId: departure.id,
-        partnerId: partner.id,
-        displayName,
-        guestCount,
-        adultGuestCount: normalized.adultGuestCount,
-        childGuestCount: normalized.childGuestCount,
-        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
-        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
-        grossReceivableCents: amounts.grossReceivableCents,
-        discountType: normalized.discountType,
-        discountCents: amounts.discountCents,
-        discountNotes: dto.discountNotes?.trim() || null,
-        netReceivableCents: amounts.netReceivableCents,
-        collectionMode: normalized.collectionMode,
-        partnerCollectedCents: amounts.partnerCollectedCents,
-        guestCollectCents: amounts.guestCollectCents,
-        settlementNotes: dto.settlementNotes?.trim() || null,
-        notes: dto.notes?.trim() || null,
-      },
-      include: { partner: true },
+    const created = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.sourceOrder.create({
+        data: {
+          departureId: departure.id,
+          partnerId: partner.id,
+          displayName,
+          guestCount,
+          adultGuestCount: normalized.adultGuestCount,
+          childGuestCount: normalized.childGuestCount,
+          adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
+          childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
+          grossReceivableCents: amounts.grossReceivableCents,
+          fareAdjustmentNetCents: amounts.fareAdjustmentNetCents,
+          discountType: normalized.discountType,
+          discountCents: amounts.discountCents,
+          discountNotes: dto.discountNotes?.trim() || null,
+          netReceivableCents: amounts.netReceivableCents,
+          collectionMode: normalized.collectionMode,
+          partnerCollectedCents: amounts.partnerCollectedCents,
+          guestCollectCents: amounts.guestCollectCents,
+          settlementNotes: dto.settlementNotes?.trim() || null,
+          notes: dto.notes?.trim() || null,
+        },
+      })
+
+      if (fareAdjustments.length > 0) {
+        await tx.sourceOrderFareAdjustment.createMany({
+          data: toFareAdjustmentCreateRows(order.id, fareAdjustments),
+        })
+      }
+
+      return tx.sourceOrder.findFirstOrThrow({
+        where: { id: order.id },
+        include: {
+          partner: true,
+          fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        },
+      })
     })
 
     return this.toSourceOrderSummary(created, {
@@ -396,6 +462,11 @@ export class SourceOrderService {
         ? await this.ensureSelectablePartner(organizationId, partnerId)
         : order.partner
 
+    const existingFareAdjustments = toFareAdjustmentInputs(order.fareAdjustments)
+    const fareAdjustments =
+      dto.fareAdjustments !== undefined
+        ? toFareAdjustmentInputs(dto.fareAdjustments)
+        : existingFareAdjustments
     const normalized = this.normalizeInput(
       {
         adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
@@ -414,6 +485,7 @@ export class SourceOrderService {
         partnerCollectedCents:
           dto.partnerCollectedCents ??
           (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
+        fareAdjustments,
       },
       order,
     )
@@ -424,7 +496,22 @@ export class SourceOrderService {
     })
 
     const recomputedAmounts = computeSourceOrderAmounts(normalized)
-    const { amountInputsChanged } = resolveSourceOrderAmountChange(order, {
+    const storedAmounts = {
+      adultGuestCount: order.adultGuestCount,
+      childGuestCount: order.childGuestCount,
+      adultUnitPriceCents: order.adultUnitPriceCents,
+      childUnitPriceCents: order.childUnitPriceCents,
+      discountType: order.discountType,
+      discountCents: order.discountCents,
+      collectionMode: order.collectionMode,
+      partnerCollectedCents: order.partnerCollectedCents,
+      guestCollectCents: order.guestCollectCents,
+      grossReceivableCents: order.grossReceivableCents,
+      fareAdjustmentNetCents: order.fareAdjustmentNetCents,
+      netReceivableCents: order.netReceivableCents,
+      fareAdjustments: existingFareAdjustments,
+    }
+    const nextAmountInputs = {
       adultGuestCount: normalized.adultGuestCount,
       childGuestCount: normalized.childGuestCount,
       adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
@@ -433,13 +520,19 @@ export class SourceOrderService {
       discountCents: normalized.discountCents,
       collectionMode: normalized.collectionMode,
       partnerCollectedCents: normalized.partnerCollectedCents,
-    })
+      fareAdjustments: normalized.fareAdjustments,
+    }
+    const { amountInputsChanged } = resolveSourceOrderAmountChange(
+      storedAmounts,
+      nextAmountInputs,
+    )
     // When amount inputs are unchanged, keep stored path amounts — receivable path sync
     // may have updated gross/net/guestCollect without rewriting unit prices.
     const amounts = amountInputsChanged
       ? recomputedAmounts
       : {
           grossReceivableCents: order.grossReceivableCents,
+          fareAdjustmentNetCents: order.fareAdjustmentNetCents,
           discountCents: order.discountCents,
           netReceivableCents: order.netReceivableCents,
           partnerCollectedCents: order.partnerCollectedCents,
@@ -460,17 +553,8 @@ export class SourceOrderService {
     await this.financeBridge.assertAmountFieldsEditable(
       organizationId,
       order.id,
-      order,
-      {
-        adultGuestCount: normalized.adultGuestCount,
-        childGuestCount: normalized.childGuestCount,
-        adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
-        childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
-        discountType: normalized.discountType,
-        discountCents: normalized.discountCents,
-        collectionMode: normalized.collectionMode,
-        partnerCollectedCents: normalized.partnerCollectedCents,
-      },
+      storedAmounts,
+      nextAmountInputs,
     )
 
     const displayName =
@@ -480,7 +564,7 @@ export class SourceOrderService {
 
     const changeAt = new Date()
     const updated = await this.prisma.$transaction(async (tx) => {
-      const next = await tx.sourceOrder.update({
+      await tx.sourceOrder.update({
         where: { id: order.id },
         data: {
           partnerId: partner.id,
@@ -491,6 +575,7 @@ export class SourceOrderService {
           adultUnitPriceCents: normalized.adultUnitPriceCents ?? 0,
           childUnitPriceCents: normalized.childUnitPriceCents ?? 0,
           grossReceivableCents: amounts.grossReceivableCents,
+          fareAdjustmentNetCents: amounts.fareAdjustmentNetCents,
           discountType: normalized.discountType,
           discountCents: amounts.discountCents,
           discountNotes:
@@ -503,8 +588,16 @@ export class SourceOrderService {
             dto.settlementNotes !== undefined ? dto.settlementNotes?.trim() || null : undefined,
           notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
         },
-        include: { partner: true, departure: true },
       })
+
+      if (dto.fareAdjustments !== undefined) {
+        await tx.sourceOrderFareAdjustment.deleteMany({ where: { sourceOrderId: order.id } })
+        if (fareAdjustments.length > 0) {
+          await tx.sourceOrderFareAdjustment.createMany({
+            data: toFareAdjustmentCreateRows(order.id, fareAdjustments),
+          })
+        }
+      }
 
       if (pathAmountChanged) {
         await this.transactionService.markGuestCollectionSourceAmountChanged(
@@ -515,7 +608,14 @@ export class SourceOrderService {
         )
       }
 
-      return next
+      return tx.sourceOrder.findFirstOrThrow({
+        where: { id: order.id },
+        include: {
+          partner: true,
+          departure: true,
+          fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        },
+      })
     })
 
     const financeMeta = await this.financeBridge.syncSourceOrderSchedules(
@@ -644,6 +744,7 @@ export class SourceOrderService {
       discountCents?: number
       collectionMode: CreateSourceOrderDto['collectionMode']
       partnerCollectedCents?: number
+      fareAdjustments?: SourceOrderFareAdjustmentInput[]
     },
     existing?: SourceOrder,
   ) {
@@ -655,6 +756,7 @@ export class SourceOrderService {
       dto.adultGuestCount === 0 ? (dto.adultUnitPriceCents ?? 0) : dto.adultUnitPriceCents
     const childUnitPriceCents =
       dto.childGuestCount === 0 ? (dto.childUnitPriceCents ?? 0) : dto.childUnitPriceCents
+    const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
 
     const amountInput = {
       adultGuestCount: dto.adultGuestCount,
@@ -665,9 +767,9 @@ export class SourceOrderService {
       discountCents,
       collectionMode,
       partnerCollectedCents: 0,
+      fareAdjustments,
     }
-    const gross = computeSourceOrderAmounts(amountInput).grossReceivableCents
-    const net = gross - discountCents
+    const net = computeSourceOrderAmounts(amountInput).netReceivableCents
 
     let partnerCollectedCents = 0
     if (collectionMode === 'partner_settled') {
@@ -688,6 +790,7 @@ export class SourceOrderService {
       discountCents,
       collectionMode,
       partnerCollectedCents,
+      fareAdjustments,
     }
   }
 
@@ -742,6 +845,7 @@ export class SourceOrderService {
       include: {
         partner: true,
         departure: true,
+        fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
       },
     })
 
@@ -788,6 +892,17 @@ export class SourceOrderService {
     order: SourceOrderWithPartner,
     scheduleMeta?: SourceOrderFinanceMeta,
   ): SourceOrderSummary {
+    const fareAdjustments: SourceOrderFareAdjustmentSummary[] = (
+      order.fareAdjustments ?? []
+    ).map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      direction: item.direction,
+      amountCents: item.amountCents,
+      customName: item.customName,
+      sortOrder: item.sortOrder,
+    }))
+
     return {
       id: order.id,
       departureId: order.departureId,
@@ -800,6 +915,8 @@ export class SourceOrderService {
       adultUnitPriceCents: order.adultUnitPriceCents,
       childUnitPriceCents: order.childUnitPriceCents,
       grossReceivableCents: order.grossReceivableCents,
+      fareAdjustmentNetCents: order.fareAdjustmentNetCents,
+      fareAdjustments,
       discountType: order.discountType,
       discountCents: order.discountCents,
       discountNotes: order.discountNotes,

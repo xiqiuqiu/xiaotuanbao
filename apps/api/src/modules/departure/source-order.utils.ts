@@ -1,5 +1,12 @@
 import type { SourceOrderCollectionMode, SourceOrderDiscountType } from '@prisma/client'
 
+export interface SourceOrderFareAdjustmentInput {
+  kind: string
+  direction: 'increase' | 'decrease'
+  amountCents: number
+  customName?: string | null
+}
+
 export interface SourceOrderAmountInput {
   adultGuestCount: number
   childGuestCount: number
@@ -11,10 +18,13 @@ export interface SourceOrderAmountInput {
   discountCents: number
   collectionMode: SourceOrderCollectionMode
   partnerCollectedCents: number
+  /** Omitted / empty → adjustment net 0 (historical orders). */
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
 
 export interface SourceOrderAmounts {
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
   partnerCollectedCents: number
@@ -33,7 +43,9 @@ export interface SourceOrderStoredAmounts {
   partnerCollectedCents: number
   guestCollectCents: number
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
   netReceivableCents: number
+  fareAdjustments: SourceOrderFareAdjustmentInput[]
 }
 
 export interface SourceOrderAmountChange {
@@ -58,6 +70,38 @@ function effectiveUnitPriceCents(
   return unitPriceCents ?? 0
 }
 
+function canonicalizeFareAdjustment(item: SourceOrderFareAdjustmentInput): string {
+  const customName = (item.customName ?? '').trim()
+  return `${item.kind}|${item.direction}|${item.amountCents}|${customName}`
+}
+
+export function fareAdjustmentsEqual(
+  left: SourceOrderFareAdjustmentInput[] | undefined,
+  right: SourceOrderFareAdjustmentInput[] | undefined,
+): boolean {
+  const a = (left ?? []).map(canonicalizeFareAdjustment).sort()
+  const b = (right ?? []).map(canonicalizeFareAdjustment).sort()
+  if (a.length !== b.length) {
+    return false
+  }
+  return a.every((value, index) => value === b[index])
+}
+
+export function computeFareAdjustmentNetCents(
+  fareAdjustments: SourceOrderFareAdjustmentInput[] | undefined,
+): number {
+  let net = 0
+  for (const item of fareAdjustments ?? []) {
+    const amount = Math.max(item.amountCents, 0)
+    if (item.direction === 'increase') {
+      net += amount
+    } else {
+      net -= amount
+    }
+  }
+  return net
+}
+
 export function computeSourceOrderAmounts(input: SourceOrderAmountInput): SourceOrderAmounts {
   const adultUnitPriceCents = effectiveUnitPriceCents(
     input.adultGuestCount,
@@ -69,9 +113,10 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
   )
   const grossReceivableCents =
     adultUnitPriceCents * input.adultGuestCount + childUnitPriceCents * input.childGuestCount
+  const fareAdjustmentNetCents = computeFareAdjustmentNetCents(input.fareAdjustments)
   const discountCents =
     input.discountType === 'lump_sum' ? Math.max(input.discountCents, 0) : 0
-  const netReceivableCents = grossReceivableCents - discountCents
+  const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
 
   let partnerCollectedCents = 0
   let guestCollectCents = netReceivableCents
@@ -89,6 +134,7 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
 
   return {
     grossReceivableCents,
+    fareAdjustmentNetCents,
     discountCents,
     netReceivableCents,
     partnerCollectedCents,
@@ -165,7 +211,8 @@ export function resolveSourceOrderAmountChange(
     order.discountType !== next.discountType ||
     order.discountCents !== nextDiscountCents ||
     order.collectionMode !== next.collectionMode ||
-    order.partnerCollectedCents !== next.partnerCollectedCents
+    order.partnerCollectedCents !== next.partnerCollectedCents ||
+    !fareAdjustmentsEqual(order.fareAdjustments, next.fareAdjustments)
 
   if (!amountInputsChanged) {
     return { amountInputsChanged: false, amountOutcomeChanged: false }
@@ -174,14 +221,22 @@ export function resolveSourceOrderAmountChange(
   const nextComputed = computeSourceOrderAmounts(next)
   const outcomesMatch =
     order.grossReceivableCents === nextComputed.grossReceivableCents &&
+    order.fareAdjustmentNetCents === nextComputed.fareAdjustmentNetCents &&
     order.discountCents === nextComputed.discountCents &&
     order.netReceivableCents === nextComputed.netReceivableCents &&
     order.partnerCollectedCents === nextComputed.partnerCollectedCents &&
     order.guestCollectCents === nextComputed.guestCollectCents
 
+  // Fare-adjustment line edits are amount facts even when net/path cents stay the same
+  // (e.g. 单房差 200 ↔ 续住 200); lock them with finance-touched the same as other amount fields.
+  const fareAdjustmentsChanged = !fareAdjustmentsEqual(
+    order.fareAdjustments,
+    next.fareAdjustments,
+  )
+
   return {
     amountInputsChanged: true,
-    amountOutcomeChanged: !outcomesMatch,
+    amountOutcomeChanged: !outcomesMatch || fareAdjustmentsChanged,
   }
 }
 

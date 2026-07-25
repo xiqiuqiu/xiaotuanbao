@@ -1,8 +1,17 @@
 import {
+  FareAdjustmentDirection,
+  FareAdjustmentKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
+
+export interface SourceOrderFareAdjustmentFormRow {
+  kind: FareAdjustmentKind
+  direction: FareAdjustmentDirection
+  amountYuan?: number
+  customName?: string
+}
 
 export interface SourceOrderFormValues {
   partnerId: string
@@ -19,6 +28,7 @@ export interface SourceOrderFormValues {
   partnerCollectedYuan?: number
   settlementNotes?: string
   notes?: string
+  fareAdjustments: SourceOrderFareAdjustmentFormRow[]
 }
 
 export type SourceOrderFormAmountInput = Pick<
@@ -31,6 +41,7 @@ export type SourceOrderFormAmountInput = Pick<
   | 'discountYuan'
   | 'collectionMode'
   | 'partnerCollectedYuan'
+  | 'fareAdjustments'
 >
 
 function yuanToCents(yuan: number): number {
@@ -69,6 +80,24 @@ export function totalGuestCount(
   return (values.adultGuestCount ?? 0) + (values.childGuestCount ?? 0)
 }
 
+export function computeFareAdjustmentNetCents(
+  fareAdjustments: SourceOrderFareAdjustmentFormRow[] | undefined,
+): number {
+  let net = 0
+  for (const item of fareAdjustments ?? []) {
+    const amountCents = yuanToCents(item.amountYuan ?? 0)
+    if (amountCents <= 0) {
+      continue
+    }
+    if (item.direction === FareAdjustmentDirection.INCREASE) {
+      net += amountCents
+    } else {
+      net -= amountCents
+    }
+  }
+  return net
+}
+
 export function computeFormAmounts(values: SourceOrderFormAmountInput) {
   const adultUnitPriceYuan = effectiveUnitPriceYuan(
     values.adultGuestCount,
@@ -81,11 +110,12 @@ export function computeFormAmounts(values: SourceOrderFormAmountInput) {
   const grossReceivableCents =
     yuanToCents(adultUnitPriceYuan) * values.adultGuestCount +
     yuanToCents(childUnitPriceYuan) * values.childGuestCount
+  const fareAdjustmentNetCents = computeFareAdjustmentNetCents(values.fareAdjustments)
   const discountCents =
     values.discountType === SourceOrderDiscountType.LUMP_SUM
       ? yuanToCents(values.discountYuan ?? 0)
       : 0
-  const netReceivableCents = grossReceivableCents - discountCents
+  const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
 
   let partnerCollectedCents = 0
   let guestCollectCents = netReceivableCents
@@ -100,6 +130,7 @@ export function computeFormAmounts(values: SourceOrderFormAmountInput) {
 
   return {
     grossReceivableCents,
+    fareAdjustmentNetCents,
     discountCents,
     netReceivableCents,
     partnerCollectedCents,
@@ -138,7 +169,8 @@ export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
     childGuestCount: 0,
     discountType: SourceOrderDiscountType.NONE,
     collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-  } as SourceOrderFormValues
+    fareAdjustments: [],
+  } as unknown as SourceOrderFormValues
 }
 
 export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderFormValues {
@@ -155,6 +187,12 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
     partnerCollectedYuan: centsToYuan(order.partnerCollectedCents),
     settlementNotes: order.settlementNotes ?? undefined,
     notes: order.notes ?? undefined,
+    fareAdjustments: (order.fareAdjustments ?? []).map((item) => ({
+      kind: item.kind as FareAdjustmentKind,
+      direction: item.direction as FareAdjustmentDirection,
+      amountYuan: centsToYuan(item.amountCents),
+      customName: item.customName ?? undefined,
+    })),
   }
 
   // Receivable path sync may update gross/net/guestCollect without rewriting unit prices.
@@ -202,6 +240,23 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
     partnerCollectedCents: amounts.partnerCollectedCents,
     settlementNotes: values.settlementNotes,
     notes: values.notes,
+    fareAdjustments: (values.fareAdjustments ?? []).flatMap((item) => {
+      const amountYuan = item.amountYuan ?? 0
+      if (amountYuan <= 0) {
+        return []
+      }
+      return [
+        {
+          kind: item.kind,
+          direction: item.direction,
+          amountCents: yuanToCents(amountYuan),
+          customName:
+            item.kind === FareAdjustmentKind.CUSTOM
+              ? item.customName?.trim() || null
+              : null,
+        },
+      ]
+    }),
   }
 }
 
@@ -215,10 +270,19 @@ export type SourceOrderPathBaseline = {
 export function resolvePathAmountsFromPayload(
   payload: ReturnType<typeof formValuesToPayload>,
 ): SourceOrderPathBaseline {
+  let fareAdjustmentNetCents = 0
+  for (const item of payload.fareAdjustments ?? []) {
+    if (item.direction === FareAdjustmentDirection.INCREASE) {
+      fareAdjustmentNetCents += item.amountCents
+    } else {
+      fareAdjustmentNetCents -= item.amountCents
+    }
+  }
   const grossReceivableCents =
     payload.adultUnitPriceCents * payload.adultGuestCount +
     payload.childUnitPriceCents * payload.childGuestCount
-  const netReceivableCents = grossReceivableCents - payload.discountCents
+  const netReceivableCents =
+    grossReceivableCents + fareAdjustmentNetCents - payload.discountCents
 
   if (payload.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
     return {

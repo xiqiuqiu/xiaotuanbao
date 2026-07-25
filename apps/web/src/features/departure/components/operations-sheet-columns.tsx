@@ -52,6 +52,13 @@ export const sourceColumns: ColumnsType<DepartureOperationsSheetSourceOrderRow> 
     render: (_, row) => `${row.adultGuestCount}/${row.childGuestCount}/${row.guestCount}`,
   },
   {
+    title: '调整净额',
+    dataIndex: 'fareAdjustmentNetCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
     title: '约定应收',
     dataIndex: 'agreedReceivableCents',
     width: 110,

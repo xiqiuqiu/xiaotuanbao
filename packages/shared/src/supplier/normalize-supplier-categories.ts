@@ -1,5 +1,4 @@
 import {
-  ResourceKind,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
   type SupplierAllowedResourceKind,
 } from '../enums/resource-kind.enum'
@@ -15,7 +14,7 @@ const ALLOWED = new Set<string>(SUPPLIER_ALLOWED_RESOURCE_KINDS)
 
 /**
  * Normalize and validate supplier category sets.
- * Non-empty; each item must be a supplier-allowed ResourceKind; outsource forbidden.
+ * Non-empty; each item must be a supplier-allowed ResourceKind（含 outsource／旅行社）.
  */
 export function normalizeSupplierCategories(
   categories: readonly string[] | null | undefined,
@@ -28,9 +27,6 @@ export function normalizeSupplierCategories(
   const seen = new Set<string>()
 
   for (const raw of categories) {
-    if (raw === ResourceKind.OUTSOURCE) {
-      throw new InvalidSupplierCategoriesError('拼出不得作为供应商类别')
-    }
     if (!ALLOWED.has(raw)) {
       throw new InvalidSupplierCategoriesError(`无效的供应商类别：${raw}`)
     }

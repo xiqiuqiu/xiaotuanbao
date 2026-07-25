@@ -139,7 +139,13 @@ describe('Source order generate receivables (e2e)', () => {
       })
       .expect(201)
 
-    return response.body.data as { id: string; displayName: string }
+    return response.body.data as {
+      id: string
+      displayName: string
+      fareAdjustmentNetCents: number
+      netReceivableCents: number
+      guestCollectCents: number
+    }
   }
 
   it('creates dual-path receivables for split collection mode', async () => {
@@ -346,6 +352,160 @@ describe('Source order generate receivables (e2e)', () => {
     // Source→schedule sync must not stamp amountAdjustedAt / financeTouched.
     expect(customerSchedule?.amountAdjustedAt).toBeNull()
     expect(guestSchedule?.amountAdjustedAt).toBeNull()
+  })
+
+  it('syncs receivables when fare adjustments change before finance touch', async () => {
+    const departure = await createDeparture()
+    const created = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.guest_only,
+      fareAdjustments: [
+        {
+          kind: 'single_room_supplement',
+          direction: 'increase',
+          amountCents: 20000,
+        },
+      ],
+    })
+
+    expect(created).toMatchObject({
+      fareAdjustmentNetCents: 20000,
+      netReceivableCents: 1020000,
+      guestCollectCents: 1020000,
+    })
+
+    const detail = await authRequest(app, coordinatorToken)
+      .get(`/api/source-orders/${created.id}`)
+      .expect(200)
+    expect(detail.body.data.fareAdjustments).toEqual([
+      expect.objectContaining({
+        kind: 'single_room_supplement',
+        direction: 'increase',
+        amountCents: 20000,
+      }),
+    ])
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${created.id}/generate-receivables`)
+      .expect(201)
+
+    const patched = await authRequest(app, coordinatorToken)
+      .patch(`/api/source-orders/${created.id}`)
+      .send({
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 50000,
+          },
+          {
+            kind: 'student_ticket_pre_discounted',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+        ],
+      })
+      .expect(200)
+
+    expect(patched.body.data).toMatchObject({
+      fareAdjustmentNetCents: 40000,
+      netReceivableCents: 1040000,
+      guestCollectCents: 1040000,
+      hasSourceAmountMismatch: false,
+    })
+
+    const guestSchedule = await prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: created.id,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        cancelledAt: null,
+      },
+    })
+    expect(guestSchedule?.amountCents).toBe(1040000)
+    expect(guestSchedule?.amountAdjustedAt).toBeNull()
+  })
+
+  it('blocks fare-adjustment patch after finance touch', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.guest_only,
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(201)
+    const scheduleId = generated.body.data.schedules[0].id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: 100000,
+        transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.displayName,
+      })
+      .expect(201)
+
+    const blocked = await authRequest(app, coordinatorToken)
+      .patch(`/api/source-orders/${sourceOrder.id}`)
+      .send({
+        fareAdjustments: [
+          {
+            kind: 'extended_stay',
+            direction: 'increase',
+            amountCents: 30000,
+          },
+        ],
+      })
+      .expect(400)
+
+    expect(blocked.body.message).toBe('当前客源单已发生收款，不允许修改金额')
+  })
+
+  it('blocks same-net fare-adjustment line swap after finance touch', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.guest_only,
+      fareAdjustments: [
+        {
+          kind: 'single_room_supplement',
+          direction: 'increase',
+          amountCents: 20000,
+        },
+      ],
+    })
+
+    const generated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(201)
+    const scheduleId = generated.body.data.schedules[0].id as string
+
+    await authRequest(app, financeToken)
+      .post(`/api/finance/receivables/${scheduleId}/confirm-collection`)
+      .send({
+        amountCents: 100000,
+        transactionDate: '2026-07-01',
+        paymentChannel: PaymentChannel.OTHER,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyName: sourceOrder.displayName,
+      })
+      .expect(201)
+
+    const blocked = await authRequest(app, coordinatorToken)
+      .patch(`/api/source-orders/${sourceOrder.id}`)
+      .send({
+        fareAdjustments: [
+          {
+            kind: 'extended_stay',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+        ],
+      })
+      .expect(400)
+
+    expect(blocked.body.message).toBe('当前客源单已发生收款，不允许修改金额')
   })
 
   it('creates missing receivable path on save when not finance-touched', async () => {

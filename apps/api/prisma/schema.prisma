@@ -210,6 +210,27 @@ enum SourceOrderCollectionMode {
   @@map("source_order_collection_mode")
 }
 
+enum FareAdjustmentDirection {
+  increase
+  decrease
+
+  @@map("fare_adjustment_direction")
+}
+
+enum FareAdjustmentKind {
+  single_room_supplement
+  child_ticket
+  extended_stay
+  other_supplement
+  student_ticket_pre_discounted
+  child_half_ticket_pre_discounted
+  senior_free_ticket_pre_discounted
+  excluded_first_or_last_night
+  custom
+
+  @@map("fare_adjustment_kind")
+}
+
 enum GuestGender {
   male
   female
@@ -595,33 +616,51 @@ model DepartureSettlementHistory {
 }
 
 model SourceOrder {
-  id                    String                    @id @default(cuid())
-  departureId           String                    @map("departure_id")
-  departure             Departure                 @relation(fields: [departureId], references: [id], onDelete: Cascade)
-  partnerId             String                    @map("partner_id")
-  partner               Partner                   @relation(fields: [partnerId], references: [id])
-  displayName           String                    @map("display_name")
-  guestCount            Int                       @map("guest_count")
-  adultGuestCount       Int                       @map("adult_guest_count")
-  childGuestCount       Int                       @map("child_guest_count")
-  adultUnitPriceCents   Int                       @map("adult_unit_price_cents")
-  childUnitPriceCents   Int                       @map("child_unit_price_cents")
-  grossReceivableCents  Int                       @map("gross_receivable_cents")
-  discountType          SourceOrderDiscountType   @default(none) @map("discount_type")
-  discountCents         Int                       @default(0) @map("discount_cents")
-  discountNotes         String?                   @map("discount_notes")
-  netReceivableCents    Int                       @map("net_receivable_cents")
-  collectionMode        SourceOrderCollectionMode @map("collection_mode")
-  partnerCollectedCents Int                       @map("partner_collected_cents")
-  guestCollectCents     Int                       @map("guest_collect_cents")
-  settlementNotes       String?                   @map("settlement_notes")
-  notes                 String?
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  updatedAt             DateTime                  @updatedAt @map("updated_at")
-  guests                SourceOrderGuest[]
+  id                       String                      @id @default(cuid())
+  departureId              String                      @map("departure_id")
+  departure                Departure                   @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  partnerId                String                      @map("partner_id")
+  partner                  Partner                     @relation(fields: [partnerId], references: [id])
+  displayName              String                      @map("display_name")
+  guestCount               Int                         @map("guest_count")
+  adultGuestCount          Int                         @map("adult_guest_count")
+  childGuestCount          Int                         @map("child_guest_count")
+  adultUnitPriceCents      Int                         @map("adult_unit_price_cents")
+  childUnitPriceCents      Int                         @map("child_unit_price_cents")
+  grossReceivableCents     Int                         @map("gross_receivable_cents")
+  fareAdjustmentNetCents   Int                         @default(0) @map("fare_adjustment_net_cents")
+  discountType             SourceOrderDiscountType     @default(none) @map("discount_type")
+  discountCents            Int                         @default(0) @map("discount_cents")
+  discountNotes            String?                     @map("discount_notes")
+  netReceivableCents       Int                         @map("net_receivable_cents")
+  collectionMode           SourceOrderCollectionMode   @map("collection_mode")
+  partnerCollectedCents    Int                         @map("partner_collected_cents")
+  guestCollectCents        Int                         @map("guest_collect_cents")
+  settlementNotes          String?                     @map("settlement_notes")
+  notes                    String?
+  createdAt                DateTime                    @default(now()) @map("created_at")
+  updatedAt                DateTime                    @updatedAt @map("updated_at")
+  guests                   SourceOrderGuest[]
+  fareAdjustments          SourceOrderFareAdjustment[]
 
   @@index([departureId, partnerId])
   @@map("source_orders")
+}
+
+model SourceOrderFareAdjustment {
+  id            String                  @id @default(cuid())
+  sourceOrderId String                  @map("source_order_id")
+  sourceOrder   SourceOrder             @relation(fields: [sourceOrderId], references: [id], onDelete: Cascade)
+  kind          FareAdjustmentKind
+  direction     FareAdjustmentDirection
+  amountCents   Int                     @map("amount_cents")
+  customName    String?                 @map("custom_name")
+  sortOrder     Int                     @default(0) @map("sort_order")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  @@index([sourceOrderId])
+  @@map("source_order_fare_adjustments")
 }
 
 model SourceOrderGuest {

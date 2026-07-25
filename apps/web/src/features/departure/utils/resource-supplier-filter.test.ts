@@ -11,11 +11,9 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-describe('resource kind → supplier filter (issue #64)', () => {
-  it('returns the resourceKind itself for each self-operated kind (∈ filter key)', () => {
-    const selfOperated = RESOURCE_KIND_OPTIONS.filter((item) => item.value !== 'outsource')
-
-    for (const kind of selfOperated) {
+describe('resource kind → supplier filter', () => {
+  it('returns the resourceKind itself for each kind including outsource (∈ filter key)', () => {
+    for (const kind of RESOURCE_KIND_OPTIONS) {
       const filter = resolveSupplierFilterKind(kind.value as ResourceKind)
       expect(
         filter,
@@ -25,10 +23,6 @@ describe('resource kind → supplier filter (issue #64)', () => {
     }
   })
 
-  it('does not map outsource to a supplier filter', () => {
-    expect(resolveSupplierFilterKind(ResourceKind.OUTSOURCE)).toBeUndefined()
-  })
-
   it('ResourceDrawer lists suppliers with category containment filter from resourceKind', () => {
     const source = readFileSync(join(here, '../components/ResourceDrawer.tsx'), 'utf8')
 
@@ -36,11 +30,14 @@ describe('resource kind → supplier filter (issue #64)', () => {
     expect(source).toMatch(/listSuppliers\(\{[\s\S]*category:\s*supplierFilterKind/)
     expect(source).toMatch(/queryKey:\s*\[[\s\S]*supplierFilterKind/)
     expect(source).toMatch(/getSupplier\(editingSupplierId/)
+    expect(source).not.toMatch(/listPartners/)
+    expect(source).not.toMatch(/承接方/)
   })
 })
 
-describe('resolveSupplierIdAfterKindChange (issue #64)', () => {
+describe('resolveSupplierIdAfterKindChange', () => {
   const hotelMealCategories = [ResourceKind.HOTEL, ResourceKind.MEAL]
+  const travelAgencyCategories = [ResourceKind.OUTSOURCE]
   const supplierId = 'supplier-hotel-meal'
 
   it('keeps supplier when next kind is still in categories', () => {
@@ -71,14 +68,14 @@ describe('resolveSupplierIdAfterKindChange (issue #64)', () => {
     ).toBeUndefined()
   })
 
-  it('clears supplier when switching to outsource', () => {
+  it('keeps supplier when switching to outsource if category includes outsource', () => {
     expect(
       resolveSupplierIdAfterKindChange({
         nextKind: ResourceKind.OUTSOURCE,
-        currentSupplierId: supplierId,
-        currentSupplierCategories: hotelMealCategories,
+        currentSupplierId: 'supplier-travel-agency',
+        currentSupplierCategories: travelAgencyCategories,
       }),
-    ).toBeUndefined()
+    ).toBe('supplier-travel-agency')
   })
 
   it('clears when no supplier is selected', () => {

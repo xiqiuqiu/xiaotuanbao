@@ -133,6 +133,7 @@ export class DepartureOperationsSheetService {
           adultGuestCount: order.adultGuestCount,
           childGuestCount: order.childGuestCount,
           guestCount: order.guestCount,
+          fareAdjustmentNetCents: order.fareAdjustmentNetCents,
           agreedReceivableCents: order.netReceivableCents,
           settlementNotes: order.settlementNotes,
           notes: order.notes,

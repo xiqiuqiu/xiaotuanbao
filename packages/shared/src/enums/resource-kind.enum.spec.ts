@@ -45,12 +45,10 @@ describe('ResourceKind', () => {
     )
   })
 
-  it('excludes outsource from supplier-allowed kinds', () => {
-    expect(SUPPLIER_ALLOWED_RESOURCE_KINDS).not.toContain(ResourceKind.OUTSOURCE)
-    expect(SUPPLIER_ALLOWED_RESOURCE_KINDS.sort()).toEqual(
-      Object.values(ResourceKind)
-        .filter((kind) => kind !== ResourceKind.OUTSOURCE)
-        .sort(),
+  it('includes outsource in supplier-allowed kinds (category label 旅行社)', () => {
+    expect(SUPPLIER_ALLOWED_RESOURCE_KINDS).toContain(ResourceKind.OUTSOURCE)
+    expect([...SUPPLIER_ALLOWED_RESOURCE_KINDS].sort()).toEqual(
+      Object.values(ResourceKind).sort(),
     )
   })
 

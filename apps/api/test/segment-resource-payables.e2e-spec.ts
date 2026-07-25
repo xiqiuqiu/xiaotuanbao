@@ -3,8 +3,6 @@ import {
   CounterpartyType,
   DepartureStatus,
   DirectoryProfileStatus,
-  PartnerKind,
-  PartnerType,
   PaymentScheduleDirection,
   ResourceKind,
 } from '@prisma/client'
@@ -20,7 +18,6 @@ describe('Segment resource generate payables (e2e)', () => {
   let organizationId: string
   let ownerUserId: string
   let ownerUserName: string
-  let partnerId: string
   let supplierId: string
   const testPrefix = `e2e-sr-ap-${Date.now()}`
 
@@ -40,22 +37,11 @@ describe('Segment resource generate payables (e2e)', () => {
     ownerUserId = user.id
     ownerUserName = user.name
 
-    const partner = await prisma.partner.create({
-      data: {
-        organizationId,
-        name: `${testPrefix}-partner`,
-        partnerKind: PartnerKind.group_agent,
-        partnerType: PartnerType.group_agency,
-        status: DirectoryProfileStatus.active,
-      },
-    })
-    partnerId = partner.id
-
     const supplier = await prisma.supplier.create({
       data: {
         organizationId,
         name: `${testPrefix}-supplier`,
-        categories: [ResourceKind.transport],
+        categories: [ResourceKind.transport, ResourceKind.outsource],
         status: DirectoryProfileStatus.active,
       },
     })
@@ -107,9 +93,6 @@ describe('Segment resource generate payables (e2e)', () => {
       },
     })
     await prisma.supplier.deleteMany({
-      where: { organizationId, name: { startsWith: testPrefix } },
-    })
-    await prisma.partner.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.departure.deleteMany({
@@ -194,13 +177,12 @@ describe('Segment resource generate payables (e2e)', () => {
     })
   })
 
-  it('uses Partner counterparty for outsource resources', async () => {
+  it('uses Supplier counterparty for outsource resources', async () => {
     const departure = await createDeparture()
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id, {
       resourceKind: ResourceKind.outsource,
-      partnerId,
-      supplierId: undefined,
+      supplierId,
       title: '阿勒泰拼出',
       amountCents: 800000,
     })
@@ -210,8 +192,8 @@ describe('Segment resource generate payables (e2e)', () => {
       .expect(201)
 
     expect(response.body.data.schedule).toMatchObject({
-      counterpartyType: CounterpartyType.partner,
-      counterpartyId: partnerId,
+      counterpartyType: CounterpartyType.supplier,
+      counterpartyId: supplierId,
       amountCents: 800000,
       title: '阿勒泰拼出',
     })
