@@ -11,6 +11,7 @@ const validBase = {
   discountCents: 0,
   collectionMode: 'guest_only' as const,
   partnerCollectedCents: 0,
+  fareAdjustments: [],
 }
 
 describe('validateSourceOrderInput', () => {
@@ -115,14 +116,48 @@ describe('validateSourceOrderInput', () => {
     ).toThrow(new BadRequestException('儿童团款单价不能为负数'))
   })
 
-  it('rejects discount greater than adult/child gross receivable', () => {
+  it('rejects when settlement would be negative from discount alone', () => {
     expect(() =>
       validateSourceOrderInput({
         ...validBase,
         discountType: 'lump_sum',
         discountCents: 320001,
       }),
-    ).toThrow(new BadRequestException('优惠金额不能大于原始应收'))
+    ).toThrow(new BadRequestException('结算金额不能为负数'))
+  })
+
+  it('allows discount above gross when increase adjustments keep settlement non-negative', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        discountType: 'lump_sum',
+        discountCents: 340000,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects when decrease adjustments and discount make settlement negative', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        discountType: 'lump_sum',
+        discountCents: 200000,
+        fareAdjustments: [
+          {
+            kind: 'student_ticket_pre_discounted',
+            direction: 'decrease',
+            amountCents: 130000,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('结算金额不能为负数'))
   })
 
   it('rejects partner collected greater than net from adult/child gross', () => {
@@ -133,5 +168,93 @@ describe('validateSourceOrderInput', () => {
         partnerCollectedCents: 320001,
       }),
     ).toThrow(new BadRequestException('客户已收金额不能大于结算金额'))
+  })
+
+  it('rejects duplicate fixed fare-adjustment kinds', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 10000,
+          },
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('同一固定种类的团款调整项只能有一行'))
+  })
+
+  it('rejects zero-amount fare adjustments', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'child_ticket',
+            direction: 'increase',
+            amountCents: 0,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('团款调整项金额必须大于0'))
+  })
+
+  it('rejects custom fare adjustments without a name', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'custom',
+            direction: 'increase',
+            amountCents: 10000,
+            customName: '  ',
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('自定义团款调整项必须填写名称'))
+  })
+
+  it('rejects fixed kinds with a mismatched direction', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('固定种类的团款调整方向不可修改'))
+  })
+
+  it('accepts multiple custom fare adjustments with names', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'custom',
+            direction: 'increase',
+            amountCents: 10000,
+            customName: '不含首晚住宿补偿',
+          },
+          {
+            kind: 'custom',
+            direction: 'decrease',
+            amountCents: 5000,
+            customName: '其他协商扣减',
+          },
+        ],
+      }),
+    ).not.toThrow()
   })
 })

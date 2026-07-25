@@ -72,6 +72,8 @@ function postReceivableSyncOrder(
     childUnitPriceCents: 0,
     // Stored path amounts already synced from receivable edit.
     grossReceivableCents: 720000,
+    fareAdjustmentNetCents: 0,
+    fareAdjustments: [],
     discountType: 'none',
     discountCents: 0,
     discountNotes: null,

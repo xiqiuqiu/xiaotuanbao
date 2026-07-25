@@ -21,6 +21,8 @@ import {
 import {
   CounterpartyType,
   PaymentScheduleDirection,
+  type FareAdjustmentDirection,
+  type FareAdjustmentKind,
   type Partner,
   type PaymentSchedule,
   type Prisma,
@@ -37,7 +39,11 @@ import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
 import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
-import { resolveSourceOrderAmountChange } from './source-order.utils'
+import {
+  resolveSourceOrderAmountChange,
+  type SourceOrderAmountInput,
+  type SourceOrderStoredAmounts,
+} from './source-order.utils'
 
 /** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
 export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
@@ -51,6 +57,14 @@ type SourceOrderWithRelations = SourceOrder & {
     startDate: Date
     endDate: Date
   }
+  fareAdjustments?: Array<{
+    id: string
+    kind: FareAdjustmentKind
+    direction: FareAdjustmentDirection
+    amountCents: number
+    customName: string | null
+    sortOrder: number
+  }>
 }
 
 export interface SourceOrderFinanceMeta {
@@ -93,7 +107,10 @@ export class DepartureFinanceBridgeService {
     organizationId: string,
     sourceOrderId: string,
     toSourceOrderSummary: (
-      order: SourceOrder & { partner: Partner },
+      order: SourceOrder & {
+        partner: Partner
+        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
+      },
       meta: SourceOrderFinanceMeta,
     ) => SourceOrderSummary,
   ): Promise<GenerateReceivablesResult> {
@@ -329,31 +346,8 @@ export class DepartureFinanceBridgeService {
   async assertAmountFieldsEditable(
     organizationId: string,
     sourceOrderId: string,
-    order: Pick<
-      SourceOrder,
-      | 'adultGuestCount'
-      | 'childGuestCount'
-      | 'adultUnitPriceCents'
-      | 'childUnitPriceCents'
-      | 'discountType'
-      | 'discountCents'
-      | 'collectionMode'
-      | 'partnerCollectedCents'
-      | 'guestCollectCents'
-      | 'grossReceivableCents'
-      | 'netReceivableCents'
-    >,
-    nextAmounts: Pick<
-      SourceOrder,
-      | 'adultGuestCount'
-      | 'childGuestCount'
-      | 'adultUnitPriceCents'
-      | 'childUnitPriceCents'
-      | 'discountType'
-      | 'discountCents'
-      | 'collectionMode'
-      | 'partnerCollectedCents'
-    >,
+    order: SourceOrderStoredAmounts,
+    nextAmounts: SourceOrderAmountInput,
   ): Promise<void> {
     const { amountOutcomeChanged } = resolveSourceOrderAmountChange(order, nextAmounts)
     if (!amountOutcomeChanged) {
@@ -684,6 +678,7 @@ export class DepartureFinanceBridgeService {
             endDate: true,
           },
         },
+        fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
       },
     })
 

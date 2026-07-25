@@ -109,6 +109,8 @@ export type {
   ConfirmCollectionDto,
   ConfirmPaymentDto,
   LinkTransactionDto,
+  SourceOrderFareAdjustmentSummary,
+  SourceOrderFareAdjustmentInput,
   SourceOrderSummary,
   SourceOrderListSummary,
   SourceOrderListResult,
@@ -236,6 +238,11 @@ export {
 } from './supplier/normalize-supplier-categories'
 export { SourceOrderDiscountType } from './enums/source-order-discount-type.enum'
 export { SourceOrderCollectionMode } from './enums/source-order-collection-mode.enum'
+export { FareAdjustmentDirection } from './enums/fare-adjustment-direction.enum'
+export {
+  FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
+} from './enums/fare-adjustment-kind.enum'
 export { GuestGender } from './enums/guest-gender.enum'
 export { SourceOrderReceivableStatus } from './enums/source-order-receivable-status.enum'
 export { SegmentPayableStatus } from './enums/segment-payable-status.enum'

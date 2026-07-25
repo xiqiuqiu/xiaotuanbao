@@ -1,4 +1,6 @@
 import {
+  FareAdjustmentDirection,
+  FareAdjustmentKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@xiaotuanbao/shared'
@@ -84,13 +86,50 @@ describe('computeFormAmounts', () => {
         discountYuan: 200,
         collectionMode: SourceOrderCollectionMode.SPLIT,
         partnerCollectedYuan: 1000,
+        fareAdjustments: [],
       }),
     ).toMatchObject({
       grossReceivableCents: 320000,
+      fareAdjustmentNetCents: 0,
       discountCents: 20000,
       netReceivableCents: 300000,
       partnerCollectedCents: 100000,
       guestCollectCents: 200000,
+    })
+  })
+
+  it('includes fare adjustments in settlement and collection split', () => {
+    // 原始 1000；单房差 +200；学生门票已优惠过 −50；优惠 50 → 结算 1100；客户已收 400 → 代收 700
+    expect(
+      computeFormAmounts({
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceYuan: 1000,
+        childUnitPriceYuan: 0,
+        discountType: SourceOrderDiscountType.LUMP_SUM,
+        discountYuan: 50,
+        collectionMode: SourceOrderCollectionMode.SPLIT,
+        partnerCollectedYuan: 400,
+        fareAdjustments: [
+          {
+            kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+            direction: FareAdjustmentDirection.INCREASE,
+            amountYuan: 200,
+          },
+          {
+            kind: FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED,
+            direction: FareAdjustmentDirection.DECREASE,
+            amountYuan: 50,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      grossReceivableCents: 100000,
+      fareAdjustmentNetCents: 15000,
+      discountCents: 5000,
+      netReceivableCents: 110000,
+      partnerCollectedCents: 40000,
+      guestCollectCents: 70000,
     })
   })
 })
@@ -102,6 +141,7 @@ describe('createEmptySourceOrderFormValues', () => {
       childGuestCount: 0,
       discountType: SourceOrderDiscountType.NONE,
       collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+      fareAdjustments: [],
     })
   })
 })
@@ -229,6 +269,7 @@ describe('formValuesToPayload', () => {
         childUnitPriceYuan: 800,
         discountType: SourceOrderDiscountType.NONE,
         collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        fareAdjustments: [],
       }),
     ).toMatchObject({
       partnerId: 'partner-1',
@@ -240,6 +281,7 @@ describe('formValuesToPayload', () => {
       discountCents: 0,
       collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
       partnerCollectedCents: 0,
+      fareAdjustments: [],
     })
   })
 
@@ -253,6 +295,7 @@ describe('formValuesToPayload', () => {
         childUnitPriceYuan: 9999,
         discountType: SourceOrderDiscountType.NONE,
         collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        fareAdjustments: [],
       }),
     ).toMatchObject({
       adultGuestCount: 2,
@@ -261,12 +304,52 @@ describe('formValuesToPayload', () => {
       childUnitPriceCents: 0,
     })
   })
+
+  it('sends fare adjustments in cents with custom names', () => {
+    expect(
+      formValuesToPayload({
+        partnerId: 'partner-1',
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceYuan: 1000,
+        discountType: SourceOrderDiscountType.NONE,
+        collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        fareAdjustments: [
+          {
+            kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+            direction: FareAdjustmentDirection.INCREASE,
+            amountYuan: 200,
+          },
+          {
+            kind: FareAdjustmentKind.CUSTOM,
+            direction: FareAdjustmentDirection.DECREASE,
+            amountYuan: 50,
+            customName: '不含首晚住宿',
+          },
+        ],
+      }).fareAdjustments,
+    ).toEqual([
+      {
+        kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+        direction: FareAdjustmentDirection.INCREASE,
+        amountCents: 20000,
+        customName: null,
+      },
+      {
+        kind: FareAdjustmentKind.CUSTOM,
+        direction: FareAdjustmentDirection.DECREASE,
+        amountCents: 5000,
+        customName: '不含首晚住宿',
+      },
+    ])
+  })
 })
 
 describe('formatSourceOrderAmountSummary', () => {
   const formatCents = (cents: number) => `¥${(cents / 100).toFixed(2)}`
   const amounts = {
     grossReceivableCents: 399600,
+    fareAdjustmentNetCents: 0,
     discountCents: 0,
     netReceivableCents: 399600,
     partnerCollectedCents: 50000,

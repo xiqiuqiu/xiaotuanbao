@@ -22,6 +22,8 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     adultUnitPriceCents: 98000,
     childUnitPriceCents: 0,
     grossReceivableCents: 2450000,
+    fareAdjustmentNetCents: 0,
+    fareAdjustments: [],
     discountType: 'none',
     discountCents: 0,
     discountNotes: null,

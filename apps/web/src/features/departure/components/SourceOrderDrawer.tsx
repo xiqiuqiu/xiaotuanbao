@@ -13,8 +13,10 @@ import {
   Typography,
   Button,
 } from 'antd'
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import {
+  FareAdjustmentKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
   DirectoryProfileStatus,
@@ -23,8 +25,11 @@ import type { SourceOrderSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
 import { getSourceOrder } from '@/services/source-order.service'
 import {
+  FARE_ADJUSTMENT_DIRECTION_OPTIONS,
+  FARE_ADJUSTMENT_KIND_OPTIONS,
   SOURCE_ORDER_COLLECTION_OPTIONS,
   SOURCE_ORDER_DISCOUNT_OPTIONS,
+  defaultDirectionForFareAdjustmentKind,
   formatCents,
 } from '../catalog'
 import {
@@ -75,6 +80,7 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
       discountYuan: watched.discountYuan,
       collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
       partnerCollectedYuan: watched.partnerCollectedYuan,
+      fareAdjustments: watched.fareAdjustments ?? [],
     })
   }, [watched])
 
@@ -162,16 +168,25 @@ export function SourceOrderDrawer({
     adultGuestCount,
     childGuestCount,
   })
-  const derivedGrossYuan =
-    computeFormAmounts({
-      adultGuestCount: adultGuestCount ?? 0,
-      childGuestCount: childGuestCount ?? 0,
-      adultUnitPriceYuan,
-      childUnitPriceYuan,
-      discountType: discountType ?? SourceOrderDiscountType.NONE,
-      discountYuan: undefined,
-      collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-    }).grossReceivableCents / 100
+  const fareAdjustments =
+    Form.useWatch('fareAdjustments', form) ?? ([] as SourceOrderFormValues['fareAdjustments'])
+  const derivedAmounts = computeFormAmounts({
+    adultGuestCount: adultGuestCount ?? 0,
+    childGuestCount: childGuestCount ?? 0,
+    adultUnitPriceYuan,
+    childUnitPriceYuan,
+    discountType: discountType ?? SourceOrderDiscountType.NONE,
+    discountYuan: undefined,
+    collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+    fareAdjustments,
+  })
+  const derivedGrossYuan = derivedAmounts.grossReceivableCents / 100
+  const derivedAdjustmentNetYuan = derivedAmounts.fareAdjustmentNetCents / 100
+  const usedFixedKinds = new Set(
+    fareAdjustments
+      .map((item) => item?.kind)
+      .filter((kind): kind is FareAdjustmentKind => Boolean(kind) && kind !== FareAdjustmentKind.CUSTOM),
+  )
 
   const formKey = sourceOrderId ?? 'new'
   const initialValues = useMemo(
@@ -438,6 +453,147 @@ export function SourceOrderDrawer({
             </Form.Item>
           </Col>
         </Row>
+
+        <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>
+          团款调整项
+        </Typography.Text>
+        <Form.List name="fareAdjustments">
+          {(fields, { add, remove }) => (
+            <Space direction="vertical" size={12} style={{ width: '100%', marginBottom: 16 }}>
+              {fields.map((field) => {
+                const kind = fareAdjustments[field.name]?.kind
+                const isCustom = kind === FareAdjustmentKind.CUSTOM
+                const directionLocked = Boolean(kind) && !isCustom
+                return (
+                  <div
+                    key={field.key}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isCustom
+                        ? '140px 1fr 100px 110px 32px'
+                        : '160px 100px 110px 32px',
+                      gap: 8,
+                      alignItems: 'start',
+                    }}
+                  >
+                    <Form.Item
+                      {...field}
+                      name={[field.name, 'kind']}
+                      rules={[{ required: true, message: '请选择种类' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select
+                        options={FARE_ADJUSTMENT_KIND_OPTIONS.filter(
+                          (option) =>
+                            option.value === FareAdjustmentKind.CUSTOM ||
+                            option.value === kind ||
+                            !usedFixedKinds.has(option.value),
+                        )}
+                        disabled={lockAmounts}
+                        onChange={(nextKind: FareAdjustmentKind) => {
+                          form.setFieldValue(
+                            ['fareAdjustments', field.name, 'direction'],
+                            defaultDirectionForFareAdjustmentKind(nextKind),
+                          )
+                          if (nextKind !== FareAdjustmentKind.CUSTOM) {
+                            form.setFieldValue(
+                              ['fareAdjustments', field.name, 'customName'],
+                              undefined,
+                            )
+                          }
+                        }}
+                      />
+                    </Form.Item>
+                    {isCustom ? (
+                      <Form.Item
+                        {...field}
+                        name={[field.name, 'customName']}
+                        rules={[{ required: true, message: '请填写名称' }]}
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Input placeholder="自定义名称" disabled={lockAmounts} />
+                      </Form.Item>
+                    ) : null}
+                    <Form.Item
+                      {...field}
+                      name={[field.name, 'direction']}
+                      rules={[{ required: true, message: '请选择方向' }]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <Select
+                        options={[...FARE_ADJUSTMENT_DIRECTION_OPTIONS]}
+                        disabled={lockAmounts || directionLocked}
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      {...field}
+                      name={[field.name, 'amountYuan']}
+                      rules={[
+                        { required: true, message: '请输入金额' },
+                        {
+                          type: 'number',
+                          min: 0.01,
+                          message: '金额必须大于0',
+                        },
+                      ]}
+                      style={{ marginBottom: 0 }}
+                    >
+                      <InputNumber
+                        min={0.01}
+                        precision={2}
+                        style={{ width: '100%' }}
+                        disabled={lockAmounts}
+                        placeholder="金额"
+                      />
+                    </Form.Item>
+                    {!lockAmounts && !readOnly ? (
+                      <Button
+                        type="text"
+                        danger
+                        icon={<MinusCircleOutlined />}
+                        aria-label="删除团款调整项"
+                        onClick={() => remove(field.name)}
+                      />
+                    ) : (
+                      <span />
+                    )}
+                  </div>
+                )
+              })}
+              {!lockAmounts && !readOnly ? (
+                <Space>
+                  <Button
+                    type="dashed"
+                    icon={<PlusOutlined />}
+                    onClick={() => {
+                      const nextFixed = FARE_ADJUSTMENT_KIND_OPTIONS.find(
+                        (option) =>
+                          option.value !== FareAdjustmentKind.CUSTOM &&
+                          !usedFixedKinds.has(option.value),
+                      )
+                      const kind = nextFixed?.value ?? FareAdjustmentKind.CUSTOM
+                      add({
+                        kind,
+                        direction: defaultDirectionForFareAdjustmentKind(kind),
+                      })
+                    }}
+                  >
+                    添加调整项
+                  </Button>
+                  <Typography.Text type="secondary">
+                    调整净额 ¥{derivedAdjustmentNetYuan.toFixed(2)}
+                  </Typography.Text>
+                </Space>
+              ) : (
+                <Typography.Text type="secondary">
+                  调整净额 ¥{derivedAdjustmentNetYuan.toFixed(2)}
+                  {fields.length === 0 ? '（无）' : null}
+                </Typography.Text>
+              )}
+            </Space>
+          )}
+        </Form.List>
+
         <Form.Item
           name="discountType"
           label="优惠方式"

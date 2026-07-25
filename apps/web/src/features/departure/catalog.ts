@@ -1,5 +1,8 @@
 import {
   DepartureStatus,
+  FareAdjustmentDirection,
+  FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
   SegmentPayableStatus,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
@@ -164,6 +167,46 @@ export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
   { value: SourceOrderDiscountType.NONE, label: '无优惠' },
   { value: SourceOrderDiscountType.LUMP_SUM, label: '整单优惠' },
 ] as const
+
+export const FARE_ADJUSTMENT_KIND_OPTIONS = [
+  { value: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT, label: '单房差' },
+  { value: FareAdjustmentKind.CHILD_TICKET, label: '儿童门票' },
+  { value: FareAdjustmentKind.EXTENDED_STAY, label: '续住' },
+  {
+    value: FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED,
+    label: '学生门票已优惠过',
+  },
+  {
+    value: FareAdjustmentKind.CHILD_HALF_TICKET_PRE_DISCOUNTED,
+    label: '儿童半价门票已优惠过',
+  },
+  {
+    value: FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED,
+    label: '老人免票已优惠过',
+  },
+  { value: FareAdjustmentKind.CUSTOM, label: '自定义' },
+] as const
+
+export const FARE_ADJUSTMENT_KIND_LABELS = Object.fromEntries(
+  FARE_ADJUSTMENT_KIND_OPTIONS.map((item) => [item.value, item.label]),
+) as Record<string, string>
+
+export const FARE_ADJUSTMENT_DIRECTION_OPTIONS = [
+  { value: FareAdjustmentDirection.INCREASE, label: '增项' },
+  { value: FareAdjustmentDirection.DECREASE, label: '减项' },
+] as const
+
+export function defaultDirectionForFareAdjustmentKind(
+  kind: FareAdjustmentKind,
+): FareAdjustmentDirection {
+  if (kind === FareAdjustmentKind.CUSTOM) {
+    return FareAdjustmentDirection.INCREASE
+  }
+  const locked = FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[kind]
+  return locked === 'decrease'
+    ? FareAdjustmentDirection.DECREASE
+    : FareAdjustmentDirection.INCREASE
+}
 
 export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
   [SourceOrderReceivableStatus.NOT_GENERATED]: '未生成',

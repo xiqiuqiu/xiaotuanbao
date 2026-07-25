@@ -1091,6 +1091,22 @@ export interface LinkTransactionDto {
   amountCents: number
 }
 
+export interface SourceOrderFareAdjustmentSummary {
+  id: string
+  kind: string
+  direction: string
+  amountCents: number
+  customName: string | null
+  sortOrder: number
+}
+
+export interface SourceOrderFareAdjustmentInput {
+  kind: string
+  direction: string
+  amountCents: number
+  customName?: string | null
+}
+
 export interface SourceOrderSummary {
   id: string
   departureId: string
@@ -1103,6 +1119,8 @@ export interface SourceOrderSummary {
   adultUnitPriceCents: number
   childUnitPriceCents: number
   grossReceivableCents: number
+  fareAdjustmentNetCents: number
+  fareAdjustments: SourceOrderFareAdjustmentSummary[]
   discountType: string
   discountCents: number
   discountNotes: string | null
@@ -1354,6 +1372,7 @@ export interface CreateSourceOrderDto {
   partnerCollectedCents?: number
   settlementNotes?: string
   notes?: string
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
 
 export interface UpdateSourceOrderDto {
@@ -1369,6 +1388,7 @@ export interface UpdateSourceOrderDto {
   partnerCollectedCents?: number
   settlementNotes?: string | null
   notes?: string | null
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
 
 export interface SourceOrderGuestSummary {

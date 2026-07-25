@@ -3,7 +3,15 @@ import type {
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@prisma/client'
-import { computeSourceOrderAmounts, type SourceOrderAmountInput } from './source-order.utils'
+import {
+  FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
+  FareAdjustmentKind,
+} from '@xiaotuanbao/shared'
+import {
+  computeSourceOrderAmounts,
+  type SourceOrderAmountInput,
+  type SourceOrderFareAdjustmentInput,
+} from './source-order.utils'
 
 export interface SourceOrderValidationInput {
   partnerId?: string
@@ -15,10 +23,57 @@ export interface SourceOrderValidationInput {
   discountCents: number
   collectionMode: SourceOrderCollectionMode
   partnerCollectedCents: number
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
 
 function isMissingUnitPrice(unitPriceCents: number | null | undefined): boolean {
   return unitPriceCents === undefined || unitPriceCents === null
+}
+
+const FIXED_KIND_DIRECTIONS = FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION as Record<
+  string,
+  'increase' | 'decrease'
+>
+
+function validateFareAdjustments(
+  fareAdjustments: SourceOrderFareAdjustmentInput[] | undefined,
+): void {
+  if (!fareAdjustments || fareAdjustments.length === 0) {
+    return
+  }
+
+  const seenFixedKinds = new Set<string>()
+
+  for (const item of fareAdjustments) {
+    if (!Object.values(FareAdjustmentKind).includes(item.kind as FareAdjustmentKind)) {
+      throw new BadRequestException('团款调整种类无效')
+    }
+
+    if (item.direction !== 'increase' && item.direction !== 'decrease') {
+      throw new BadRequestException('团款调整方向无效')
+    }
+
+    if (!Number.isInteger(item.amountCents) || item.amountCents <= 0) {
+      throw new BadRequestException('团款调整项金额必须大于0')
+    }
+
+    if (item.kind === FareAdjustmentKind.CUSTOM) {
+      if (!item.customName?.trim()) {
+        throw new BadRequestException('自定义团款调整项必须填写名称')
+      }
+      continue
+    }
+
+    if (seenFixedKinds.has(item.kind)) {
+      throw new BadRequestException('同一固定种类的团款调整项只能有一行')
+    }
+    seenFixedKinds.add(item.kind)
+
+    const lockedDirection = FIXED_KIND_DIRECTIONS[item.kind]
+    if (lockedDirection && item.direction !== lockedDirection) {
+      throw new BadRequestException('固定种类的团款调整方向不可修改')
+    }
+  }
 }
 
 export function validateSourceOrderInput(input: SourceOrderValidationInput): void {
@@ -54,10 +109,12 @@ export function validateSourceOrderInput(input: SourceOrderValidationInput): voi
     throw new BadRequestException('儿童团款单价不能为负数')
   }
 
+  validateFareAdjustments(input.fareAdjustments)
+
   const amounts = computeSourceOrderAmounts(input as SourceOrderAmountInput)
 
-  if (amounts.discountCents > amounts.grossReceivableCents) {
-    throw new BadRequestException('优惠金额不能大于原始应收')
+  if (amounts.netReceivableCents < 0) {
+    throw new BadRequestException('结算金额不能为负数')
   }
 
   if (amounts.partnerCollectedCents > amounts.netReceivableCents) {

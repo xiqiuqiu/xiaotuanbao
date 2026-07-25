@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsEnum,
   IsIn,
@@ -7,9 +8,12 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator'
 import { Type } from 'class-transformer'
 import {
+  FareAdjustmentDirection as PrismaFareAdjustmentDirection,
+  FareAdjustmentKind as PrismaFareAdjustmentKind,
   GuestGender as PrismaGuestGender,
   SourceOrderCollectionMode as PrismaCollectionMode,
   SourceOrderDiscountType as PrismaDiscountType,
@@ -72,6 +76,23 @@ export class ListPendingReceivableSourceOrdersQueryDto {
   pageSize?: number
 }
 
+export class SourceOrderFareAdjustmentDto {
+  @IsEnum(PrismaFareAdjustmentKind)
+  kind!: PrismaFareAdjustmentKind
+
+  @IsEnum(PrismaFareAdjustmentDirection)
+  direction!: PrismaFareAdjustmentDirection
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  amountCents!: number
+
+  @IsOptional()
+  @IsString()
+  customName?: string | null
+}
+
 export class CreateSourceOrderDto {
   @IsString()
   @IsNotEmpty()
@@ -130,6 +151,12 @@ export class CreateSourceOrderDto {
   @IsOptional()
   @IsString()
   notes?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SourceOrderFareAdjustmentDto)
+  fareAdjustments?: SourceOrderFareAdjustmentDto[]
 }
 
 export class UpdateSourceOrderDto {
@@ -193,6 +220,12 @@ export class UpdateSourceOrderDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SourceOrderFareAdjustmentDto)
+  fareAdjustments?: SourceOrderFareAdjustmentDto[]
 }
 
 export class CreateSourceOrderGuestDto {

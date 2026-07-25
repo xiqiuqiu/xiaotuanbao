@@ -21,6 +21,7 @@ describe('computeSourceOrderAmounts', () => {
       }),
     ).toEqual({
       grossReceivableCents: 320000,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 320000,
       partnerCollectedCents: 0,
@@ -87,6 +88,7 @@ describe('computeSourceOrderAmounts', () => {
       }),
     ).toEqual({
       grossReceivableCents: 1000000,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 1000000,
       partnerCollectedCents: 0,
@@ -108,6 +110,7 @@ describe('computeSourceOrderAmounts', () => {
       }),
     ).toEqual({
       grossReceivableCents: 1000000,
+      fareAdjustmentNetCents: 0,
       discountCents: 50000,
       netReceivableCents: 950000,
       partnerCollectedCents: 300000,
@@ -129,6 +132,7 @@ describe('computeSourceOrderAmounts', () => {
       }),
     ).toEqual({
       grossReceivableCents: 100000,
+      fareAdjustmentNetCents: 0,
       discountCents: 0,
       netReceivableCents: 100000,
       partnerCollectedCents: 100000,
@@ -151,10 +155,96 @@ describe('computeSourceOrderAmounts', () => {
       }),
     ).toEqual({
       grossReceivableCents: 320000,
+      fareAdjustmentNetCents: 0,
       discountCents: 20000,
       netReceivableCents: 300000,
       partnerCollectedCents: 100000,
       guestCollectCents: 200000,
+    })
+  })
+
+  it('adds increase adjustments into settlement and collection split', () => {
+    // 原始 1000；单房差 +200；结算 1200；客户已收 400 → 代收 800
+    expect(
+      computeSourceOrderAmounts({
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
+        discountType: 'none',
+        discountCents: 0,
+        collectionMode: 'split',
+        partnerCollectedCents: 40000,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+        ],
+      }),
+    ).toEqual({
+      grossReceivableCents: 100000,
+      fareAdjustmentNetCents: 20000,
+      discountCents: 0,
+      netReceivableCents: 120000,
+      partnerCollectedCents: 40000,
+      guestCollectCents: 80000,
+    })
+  })
+
+  it('nets decrease adjustments against increases and lump-sum discount', () => {
+    // 原始 1000；续住 +300；学生门票已优惠过 −100；整单优惠 50 → 结算 1150
+    expect(
+      computeSourceOrderAmounts({
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
+        discountType: 'lump_sum',
+        discountCents: 5000,
+        collectionMode: 'guest_only',
+        partnerCollectedCents: 0,
+        fareAdjustments: [
+          {
+            kind: 'extended_stay',
+            direction: 'increase',
+            amountCents: 30000,
+          },
+          {
+            kind: 'student_ticket_pre_discounted',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+        ],
+      }),
+    ).toEqual({
+      grossReceivableCents: 100000,
+      fareAdjustmentNetCents: 20000,
+      discountCents: 5000,
+      netReceivableCents: 115000,
+      partnerCollectedCents: 0,
+      guestCollectCents: 115000,
+    })
+  })
+
+  it('treats omitted fare adjustments as zero net', () => {
+    expect(
+      computeSourceOrderAmounts({
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 50000,
+        childUnitPriceCents: 0,
+        discountType: 'none',
+        discountCents: 0,
+        collectionMode: 'partner_settled',
+        partnerCollectedCents: 0,
+      }),
+    ).toMatchObject({
+      fareAdjustmentNetCents: 0,
+      netReceivableCents: 50000,
+      partnerCollectedCents: 50000,
+      guestCollectCents: 0,
     })
   })
 })
@@ -203,7 +293,9 @@ describe('resolveSourceOrderAmountChange', () => {
     partnerCollectedCents: 100000,
     guestCollectCents: 620000,
     grossReceivableCents: 720000,
+    fareAdjustmentNetCents: 0,
     netReceivableCents: 720000,
+    fareAdjustments: [],
   }
 
   it('treats reconciled unit prices that match stored path amounts as no outcome change', () => {
@@ -254,6 +346,70 @@ describe('resolveSourceOrderAmountChange', () => {
         discountCents: 0,
         collectionMode: 'split',
         partnerCollectedCents: 100000,
+      }),
+    ).toEqual({
+      amountInputsChanged: true,
+      amountOutcomeChanged: true,
+    })
+  })
+
+  it('flags fare-adjustment edits that change settlement as an outcome change', () => {
+    expect(
+      resolveSourceOrderAmountChange(postPathSyncOrder, {
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 720000,
+        childUnitPriceCents: 0,
+        discountType: 'none',
+        discountCents: 0,
+        collectionMode: 'split',
+        partnerCollectedCents: 100000,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 10000,
+          },
+        ],
+      }),
+    ).toEqual({
+      amountInputsChanged: true,
+      amountOutcomeChanged: true,
+    })
+  })
+
+  it('flags fare-adjustment line swaps with the same net as an outcome change', () => {
+    const withSingleRoom = {
+      ...postPathSyncOrder,
+      fareAdjustmentNetCents: 20000,
+      netReceivableCents: 740000,
+      guestCollectCents: 640000,
+      fareAdjustments: [
+        {
+          kind: 'single_room_supplement',
+          direction: 'increase' as const,
+          amountCents: 20000,
+        },
+      ],
+    }
+
+    expect(
+      resolveSourceOrderAmountChange(withSingleRoom, {
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 720000,
+        childUnitPriceCents: 0,
+        discountType: 'none',
+        discountCents: 0,
+        collectionMode: 'split',
+        partnerCollectedCents: 100000,
+        fareAdjustments: [
+          {
+            kind: 'extended_stay',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+        ],
       }),
     ).toEqual({
       amountInputsChanged: true,
