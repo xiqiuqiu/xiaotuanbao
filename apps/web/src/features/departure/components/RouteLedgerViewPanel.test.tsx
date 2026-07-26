@@ -29,6 +29,23 @@ const ledgerFixture: RouteLedgerResult = {
         partnerCollectedCents: 420000,
         guestCollectCents: 0,
       },
+      outsource: {
+        totalAmountCents: 200000,
+        items: [
+          {
+            id: 'os-a1',
+            supplierName: '伊犁拼出社',
+            amountCents: 80000,
+            title: '伊犁段拼出',
+          },
+          {
+            id: 'os-a2',
+            supplierName: '那拉提拼出社',
+            amountCents: 120000,
+            title: '那拉提段拼出',
+          },
+        ],
+      },
       departures: [
         {
           departureId: 'dep-a',
@@ -42,6 +59,23 @@ const ledgerFixture: RouteLedgerResult = {
             netReceivableCents: 180000,
             partnerCollectedCents: 180000,
             guestCollectCents: 0,
+          },
+          outsource: {
+            totalAmountCents: 200000,
+            items: [
+              {
+                id: 'os-a1',
+                supplierName: '伊犁拼出社',
+                amountCents: 80000,
+                title: '伊犁段拼出',
+              },
+              {
+                id: 'os-a2',
+                supplierName: '那拉提拼出社',
+                amountCents: 120000,
+                title: '那拉提段拼出',
+              },
+            ],
           },
           sourceOrders: [
             {
@@ -73,6 +107,17 @@ const ledgerFixture: RouteLedgerResult = {
             netReceivableCents: 240000,
             partnerCollectedCents: 240000,
             guestCollectCents: 0,
+          },
+          outsource: {
+            totalAmountCents: 150000,
+            items: [
+              {
+                id: 'os-b1',
+                supplierName: '独库拼出社',
+                amountCents: 150000,
+                title: '独库整段拼出',
+              },
+            ],
           },
           sourceOrders: [
             {
@@ -160,11 +205,38 @@ describe('RouteLedgerViewPanel', () => {
     for (const title of ['发客客户', '人数', '原始团款', '结算金额', '客户已收', '我方代收', '备注']) {
       expect(screen.getAllByRole('columnheader', { name: title }).length).toBeGreaterThan(0)
     }
+    expect(screen.queryByRole('columnheader', { name: /拼出/ })).not.toBeInTheDocument()
     expect(screen.queryByText('实收业务')).not.toBeInTheDocument()
 
     const tables = screen.getAllByRole('table')
     expect(tables).toHaveLength(2)
     expect(within(tables[0]).getByText('同日团 A')).toBeInTheDocument()
     expect(within(tables[1]).getByText('同日团 B')).toBeInTheDocument()
+  })
+
+  it('日/发团标题展示拼出汇总：单拼出写清承接方，多拼出列表呈现，不进客源列', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+
+    const combobox = await screen.findByRole('combobox', { name: '路线名称' })
+    await user.click(combobox)
+    await user.click(await screen.findByRole('option', { name: '伊犁环线' }))
+
+    await waitFor(() => {
+      expect(getDepartureRouteLedger).toHaveBeenCalled()
+    })
+
+    // 多拼出：列表 + 合计
+    expect(screen.getAllByText(/拼出 2 项 · 合计/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/伊犁拼出社/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/那拉提拼出社/).length).toBeGreaterThan(0)
+
+    // 单拼出常见路径
+    expect(screen.getByText(/拼出 · 独库拼出社/)).toBeInTheDocument()
+
+    // 客源表无拼出列
+    expect(screen.queryByRole('columnheader', { name: '拼出' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '拼出价' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '拼出合计' })).not.toBeInTheDocument()
   })
 })

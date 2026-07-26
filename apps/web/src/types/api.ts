@@ -62,6 +62,8 @@ export type {
   DepartureListResult,
   DepartureRouteNamesResult,
   RouteLedgerTotals,
+  RouteLedgerOutsourceLine,
+  RouteLedgerOutsourceSummary,
   RouteLedgerSourceOrderRow,
   RouteLedgerDepartureGroup,
   RouteLedgerDateBlock,

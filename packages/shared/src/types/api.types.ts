@@ -670,8 +670,26 @@ export interface RouteLedgerTotals {
 }
 
 /**
+ * 线路视图拼出行（#184）：挂在日/发团汇总，不进客源行，也不表示客源分配关系。
+ * 仅 Resource Kind = 拼出；自营资源不计入。供应商名含新写 Supplier 与历史 Partner 承接方。
+ */
+export interface RouteLedgerOutsourceLine {
+  id: string
+  /** 供应商（新写）或历史 Partner 承接方展示名 */
+  supplierName: string
+  amountCents: number
+  title: string
+}
+
+/** 日块 / 发团组的拼出汇总。 */
+export interface RouteLedgerOutsourceSummary {
+  totalAmountCents: number
+  items: RouteLedgerOutsourceLine[]
+}
+
+/**
  * 线路视图客源明细行（#183）：约定口径字段，不含核销已收/未收与行级实收业务。
- * 本票不含游客代表、拼入价算式、拼出汇总。
+ * 不含游客代表、拼入价算式；拼出汇总挂在日/发团，不进本行。
  */
 export interface RouteLedgerSourceOrderRow {
   id: string
@@ -701,6 +719,8 @@ export interface RouteLedgerDepartureGroup {
   /** 出团日期（YYYY-MM-DD） */
   startDate: string
   totals: RouteLedgerTotals
+  /** 本发团拼出资源汇总（#184） */
+  outsource: RouteLedgerOutsourceSummary
   sourceOrders: RouteLedgerSourceOrderRow[]
 }
 
@@ -708,6 +728,8 @@ export interface RouteLedgerDateBlock {
   /** 出团日期（YYYY-MM-DD） */
   startDate: string
   totals: RouteLedgerTotals
+  /** 当日各发团拼出合并汇总（#184） */
+  outsource: RouteLedgerOutsourceSummary
   departures: RouteLedgerDepartureGroup[]
 }
 

@@ -13,15 +13,19 @@ import type {
   DepartureSummary,
   RouteLedgerDateBlock,
   RouteLedgerDepartureGroup,
+  RouteLedgerOutsourceLine,
+  RouteLedgerOutsourceSummary,
   RouteLedgerResult,
   RouteLedgerSourceOrderRow,
   RouteLedgerTotals,
 } from '@xiaotuanbao/shared'
 import {
+  CounterpartyType,
   DepartureArchiveAction,
   DepartureRouteSource,
   DepartureStatus,
   DepartureType,
+  ResourceKind,
   type Departure,
   type DepartureArchiveHistory,
   type DepartureSettlementHistory,
@@ -114,8 +118,8 @@ export class DepartureService {
   }
 
   /**
-   * 线路视图读模型（#183）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行。
-   * 不含拼出汇总 / 游客代表 / 拼入价算式（后续票）。
+   * 线路视图读模型（#183 + #184）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
+   * 拼出（Resource Kind）汇总挂在日/发团，不进客源行。不含游客代表 / 拼入价算式（后续票）。
    */
   async getRouteLedger(
     organizationId: string,
@@ -162,6 +166,25 @@ export class DepartureService {
           },
           orderBy: { createdAt: 'asc' },
         },
+        itinerarySegments: {
+          select: {
+            sortOrder: true,
+            resources: {
+              where: { resourceKind: ResourceKind.outsource },
+              select: {
+                id: true,
+                title: true,
+                amountCents: true,
+                counterpartyType: true,
+                createdAt: true,
+                partner: { select: { name: true } },
+                supplier: { select: { name: true } },
+              },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            },
+          },
+          orderBy: { sortOrder: 'asc' },
+        },
       },
       orderBy: [{ startDate: 'asc' }, { departureNo: 'asc' }],
     })
@@ -185,12 +208,25 @@ export class DepartureService {
         guestCollectCents: order.guestCollectCents,
         notes: order.notes,
       }))
+      const outsourceItems: RouteLedgerOutsourceLine[] = departure.itinerarySegments.flatMap(
+        (segment) =>
+          segment.resources.map((resource) => ({
+            id: resource.id,
+            supplierName:
+              resource.counterpartyType === CounterpartyType.partner
+                ? (resource.partner?.name ?? '-')
+                : (resource.supplier?.name ?? '-'),
+            amountCents: resource.amountCents,
+            title: resource.title,
+          })),
+      )
       const group: RouteLedgerDepartureGroup = {
         departureId: departure.id,
         departureNo: departure.departureNo,
         departureName: departure.name,
         startDate,
         totals: sumRouteLedgerRows(sourceOrders),
+        outsource: toRouteLedgerOutsourceSummary(outsourceItems),
         sourceOrders,
       }
 
@@ -199,6 +235,7 @@ export class DepartureService {
         block = {
           startDate,
           totals: emptyRouteLedgerTotals(),
+          outsource: emptyRouteLedgerOutsourceSummary(),
           departures: [],
         }
         blocksByDate.set(startDate, block)
@@ -209,6 +246,9 @@ export class DepartureService {
     const dateBlocks = [...blocksByDate.values()].map((block) => ({
       ...block,
       totals: sumRouteLedgerTotals(block.departures.map((group) => group.totals)),
+      outsource: toRouteLedgerOutsourceSummary(
+        block.departures.flatMap((group) => group.outsource.items),
+      ),
     }))
 
     return {
@@ -982,6 +1022,19 @@ function emptyRouteLedgerTotals(): RouteLedgerTotals {
     netReceivableCents: 0,
     partnerCollectedCents: 0,
     guestCollectCents: 0,
+  }
+}
+
+function emptyRouteLedgerOutsourceSummary(): RouteLedgerOutsourceSummary {
+  return { totalAmountCents: 0, items: [] }
+}
+
+function toRouteLedgerOutsourceSummary(
+  items: RouteLedgerOutsourceLine[],
+): RouteLedgerOutsourceSummary {
+  return {
+    totalAmountCents: items.reduce((sum, item) => sum + item.amountCents, 0),
+    items,
   }
 }
 

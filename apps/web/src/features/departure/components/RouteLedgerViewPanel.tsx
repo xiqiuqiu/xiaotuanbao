@@ -4,7 +4,11 @@ import { Alert, DatePicker, Empty, Select, Skeleton, Space, Table, Typography } 
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
-import type { RouteLedgerSourceOrderRow, RouteLedgerTotals } from '@/types/api'
+import type {
+  RouteLedgerOutsourceSummary,
+  RouteLedgerSourceOrderRow,
+  RouteLedgerTotals,
+} from '@/types/api'
 import {
   getDepartureRouteLedger,
   listDepartureRouteNames,
@@ -25,6 +29,35 @@ function formatTotalsHint(label: string, totals: RouteLedgerTotals): string {
     `客户已收 ${formatCents(totals.partnerCollectedCents)}`,
     `我方代收 ${formatCents(totals.guestCollectCents)}`,
   ].join(' · ')
+}
+
+/** 日/发团标题上的拼出汇总：单行写清承接方与金额；多拼出以列表呈现。 */
+function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
+  if (outsource.items.length === 0) {
+    return null
+  }
+
+  if (outsource.items.length === 1) {
+    const item = outsource.items[0]
+    return (
+      <Typography.Text type="secondary">
+        拼出 · {item.supplierName} {formatCents(item.amountCents)}
+      </Typography.Text>
+    )
+  }
+
+  return (
+    <Space orientation="vertical" size={0}>
+      <Typography.Text type="secondary">
+        拼出 {outsource.items.length} 项 · 合计 {formatCents(outsource.totalAmountCents)}
+      </Typography.Text>
+      {outsource.items.map((item) => (
+        <Typography.Text key={item.id} type="secondary">
+          · {item.supplierName} {formatCents(item.amountCents)}
+        </Typography.Text>
+      ))}
+    </Space>
+  )
 }
 
 const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
@@ -76,9 +109,10 @@ const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
 ]
 
 /**
- * 线路视图（#182 壳 + #183 账本主干）：
+ * 线路视图（#182 壳 + #183 账本主干 + #184 拼出汇总）：
  * - 须先精确选定一条发团 `routeName`；
- * - 选定后按出团日 → 发团 → 客源只读表渲染；可选出团日区间。
+ * - 选定后按出团日 → 发团 → 客源只读表渲染；可选出团日区间；
+ * - 拼出成本挂在日/发团标题，不进客源列。
  */
 export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerViewPanelProps) {
   const [routeName, setRouteName] = useState<string | undefined>()
@@ -211,6 +245,9 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
                 <Typography.Text type="secondary">
                   {formatTotalsHint('日合计', block.totals)}
                 </Typography.Text>
+                <div>
+                  <OutsourceSummaryHint outsource={block.outsource} />
+                </div>
               </div>
               {block.departures.map((group) => (
                 <Space
@@ -228,6 +265,9 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
                     <Typography.Text type="secondary">
                       {formatTotalsHint('发团合计', group.totals)}
                     </Typography.Text>
+                    <div>
+                      <OutsourceSummaryHint outsource={group.outsource} />
+                    </div>
                   </div>
                   <Table<RouteLedgerSourceOrderRow>
                     size="small"

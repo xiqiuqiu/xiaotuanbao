@@ -1,17 +1,20 @@
 import type { INestApplication } from '@nestjs/common'
 import {
+  CounterpartyType,
   DirectoryProfileStatus,
   PartnerKind,
   PartnerType,
   PrismaClient,
+  ResourceKind,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 /**
- * #183 线路账本主干读 API：
- * GET /departures/route-ledger — 精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行。
+ * #183 线路账本主干 + #184 日/团拼出汇总：
+ * GET /departures/route-ledger — 精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
+ * 拼出挂在日/发团汇总，不进客源行。
  */
 describe('Departure route ledger API (e2e)', () => {
   let app: INestApplication
@@ -21,14 +24,17 @@ describe('Departure route ledger API (e2e)', () => {
   let organizationId: string
   let ownerUserId: string
   let partnerId: string
+  let outsourceSupplierAId: string
+  let outsourceSupplierBId: string
+  let hotelSupplierId: string
   const testPrefix = `e2e-route-ledger-${Date.now()}`
   const routeName = `${testPrefix}-伊犁环线`
   const otherRouteName = `${testPrefix}-阿勒泰拼车`
 
   // Fixtures（本组织）：
   // D-early  出团 2026-07-10：早于同日多团日，用于日期正序
-  // D-same-a / D-same-b  同日出团 2026-07-15：验证发团嵌套不打平
-  // D-late   出团 2026-07-20：字段映射样例（含优惠与收款拆分）
+  // D-same-a / D-same-b  同日出团 2026-07-15：验证发团嵌套不打平；same-a 含多拼出
+  // D-late   出团 2026-07-20：字段映射样例（含优惠与收款拆分）+ 单拼出 + 自营酒店干扰
   // D-other-route：近似路线名，精确匹配时不得混入
   // D-aug：出团 2026-08-05，日期区间过滤时排除
   let departureEarly: { id: string; departureNo: string }
@@ -36,6 +42,9 @@ describe('Departure route ledger API (e2e)', () => {
   let departureSameB: { id: string; departureNo: string }
   let departureLate: { id: string; departureNo: string }
   let orderLateId: string
+  let lateOutsourceId: string
+  let earlyPartnerOutsourceId: string
+  let sameAOutsourceIds: string[]
 
   async function createDeparture(name: string, route: string, startDate: string, endDate: string) {
     const response = await authRequest(app, coordinatorToken)
@@ -60,6 +69,13 @@ describe('Departure route ledger API (e2e)', () => {
       .send(payload)
       .expect(201)
     return response.body.data.id as string
+  }
+
+  async function createSegment(departureId: string, name: string, sortOrder: number) {
+    const segment = await prisma.itinerarySegment.create({
+      data: { departureId, name, sortOrder },
+    })
+    return segment.id
   }
 
   beforeAll(async () => {
@@ -87,6 +103,36 @@ describe('Departure route ledger API (e2e)', () => {
       },
     })
     partnerId = partner.id
+
+    const supplierA = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-伊犁拼出社`,
+        categories: [ResourceKind.outsource],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    outsourceSupplierAId = supplierA.id
+
+    const supplierB = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-那拉提拼出社`,
+        categories: [ResourceKind.outsource],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    outsourceSupplierBId = supplierB.id
+
+    const hotelSupplier = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-自营酒店`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      },
+    })
+    hotelSupplierId = hotelSupplier.id
 
     departureEarly = await createDeparture(`${testPrefix}-early`, routeName, '2026-07-10', '2026-07-14')
     departureSameA = await createDeparture(`${testPrefix}-same-a`, routeName, '2026-07-15', '2026-07-19')
@@ -136,13 +182,85 @@ describe('Departure route ledger API (e2e)', () => {
       partnerCollectedCents: 120000,
       notes: '窗口位',
     })
+
+    // #184：单拼出（late）+ 自营酒店干扰；多拼出（same-a）；same-b 无拼出；
+    // early 含历史 Partner 承接拼出（读路径兼容）。
+    const earlySegmentId = await createSegment(departureEarly.id, '第一段', 0)
+    const earlyPartnerOutsource = await prisma.segmentResource.create({
+      data: {
+        segmentId: earlySegmentId,
+        resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.partner,
+        partnerId,
+        title: '历史 Partner 拼出',
+        amountCents: 45000,
+      },
+    })
+    earlyPartnerOutsourceId = earlyPartnerOutsource.id
+
+    const lateSegmentId = await createSegment(departureLate.id, '第一段', 0)
+    const lateOutsource = await prisma.segmentResource.create({
+      data: {
+        segmentId: lateSegmentId,
+        resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId: outsourceSupplierAId,
+        title: '伊犁整段拼出',
+        amountCents: 150000,
+      },
+    })
+    lateOutsourceId = lateOutsource.id
+    await prisma.segmentResource.create({
+      data: {
+        segmentId: lateSegmentId,
+        resourceKind: ResourceKind.hotel,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId: hotelSupplierId,
+        title: '自营双床房',
+        amountCents: 999900,
+      },
+    })
+
+    const sameASegmentId = await createSegment(departureSameA.id, '第一段', 0)
+    const sameAFirst = await prisma.segmentResource.create({
+      data: {
+        segmentId: sameASegmentId,
+        resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId: outsourceSupplierAId,
+        title: '伊犁段拼出',
+        amountCents: 80000,
+      },
+    })
+    const sameASecond = await prisma.segmentResource.create({
+      data: {
+        segmentId: sameASegmentId,
+        resourceKind: ResourceKind.outsource,
+        counterpartyType: CounterpartyType.supplier,
+        supplierId: outsourceSupplierBId,
+        title: '那拉提段拼出',
+        amountCents: 120000,
+      },
+    })
+    sameAOutsourceIds = [sameAFirst.id, sameASecond.id]
   })
 
   afterAll(async () => {
+    await prisma.segmentResource.deleteMany({
+      where: {
+        segment: { departure: { organizationId, name: { startsWith: testPrefix } } },
+      },
+    })
+    await prisma.itinerarySegment.deleteMany({
+      where: { departure: { organizationId, name: { startsWith: testPrefix } } },
+    })
     await prisma.sourceOrder.deleteMany({
       where: { departure: { organizationId, name: { startsWith: testPrefix } } },
     })
     await prisma.departure.deleteMany({
+      where: { organizationId, name: { startsWith: testPrefix } },
+    })
+    await prisma.supplier.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
     await prisma.partner.deleteMany({
@@ -334,5 +452,115 @@ describe('Departure route ledger API (e2e)', () => {
     await prisma.departure.delete({ where: { id: foreignDeparture.id } })
     await prisma.user.delete({ where: { id: foreignOwner.id } })
     await prisma.organization.delete({ where: { id: otherOrg.id } })
+  })
+
+  it('summarizes single outsource on day/departure and excludes self-operated resources', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateFrom: '2026-07-20', startDateTo: '2026-07-20' })
+      .expect(200)
+
+    const block = response.body.data.dateBlocks[0]
+    const group = block.departures[0]
+    const expectedLine = {
+      id: lateOutsourceId,
+      supplierName: `${testPrefix}-伊犁拼出社`,
+      amountCents: 150000,
+      title: '伊犁整段拼出',
+    }
+
+    expect(group.outsource).toMatchObject({
+      totalAmountCents: 150000,
+      items: [expectedLine],
+    })
+    expect(block.outsource).toMatchObject({
+      totalAmountCents: 150000,
+      items: [expectedLine],
+    })
+
+    // 自营酒店不得进入拼出汇总
+    expect(JSON.stringify(group.outsource)).not.toContain(`${testPrefix}-自营酒店`)
+    expect(JSON.stringify(group.outsource)).not.toContain('999900')
+
+    for (const row of group.sourceOrders) {
+      expect(row).not.toHaveProperty('outsource')
+      expect(row).not.toHaveProperty('outsourceAmountCents')
+      expect(row).not.toHaveProperty('outsourceTotalCents')
+      expect(row).not.toHaveProperty('outsourceSupplierName')
+    }
+  })
+
+  it('resolves historical partner-backed outsource supplierName on day/departure summary', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateFrom: '2026-07-10', startDateTo: '2026-07-10' })
+      .expect(200)
+
+    const block = response.body.data.dateBlocks[0]
+    const group = block.departures[0]
+    const expectedLine = {
+      id: earlyPartnerOutsourceId,
+      supplierName: `${testPrefix}-华东国旅`,
+      amountCents: 45000,
+      title: '历史 Partner 拼出',
+    }
+
+    expect(group.outsource).toMatchObject({
+      totalAmountCents: 45000,
+      items: [expectedLine],
+    })
+    expect(block.outsource).toMatchObject({
+      totalAmountCents: 45000,
+      items: [expectedLine],
+    })
+  })
+
+  it('lists multiple outsources on day/departure summary without source-order outsource fields', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
+      .expect(200)
+
+    const block = response.body.data.dateBlocks[0]
+    const groupA = block.departures.find(
+      (d: { departureId: string }) => d.departureId === departureSameA.id,
+    )
+    const groupB = block.departures.find(
+      (d: { departureId: string }) => d.departureId === departureSameB.id,
+    )
+
+    expect(groupA.outsource.totalAmountCents).toBe(200000)
+    expect(groupA.outsource.items).toHaveLength(2)
+    expect(groupA.outsource.items.map((item: { id: string }) => item.id).sort()).toEqual(
+      [...sameAOutsourceIds].sort(),
+    )
+    expect(groupA.outsource.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          supplierName: `${testPrefix}-伊犁拼出社`,
+          amountCents: 80000,
+        }),
+        expect.objectContaining({
+          supplierName: `${testPrefix}-那拉提拼出社`,
+          amountCents: 120000,
+        }),
+      ]),
+    )
+
+    expect(groupB.outsource).toMatchObject({ totalAmountCents: 0, items: [] })
+
+    // 同日汇总合并各发团拼出，不伪造客源分配
+    expect(block.outsource.totalAmountCents).toBe(200000)
+    expect(block.outsource.items).toHaveLength(2)
+
+    for (const group of block.departures) {
+      for (const row of group.sourceOrders) {
+        expect(row).not.toHaveProperty('outsource')
+        expect(row).not.toHaveProperty('outsourceAmountCents')
+        expect(row).not.toHaveProperty('outsourceTotalCents')
+        expect(row).not.toHaveProperty('outsourceSupplierName')
+        expect(JSON.stringify(row)).not.toMatch(/拼出价|拼出合计/)
+      }
+    }
   })
 })
