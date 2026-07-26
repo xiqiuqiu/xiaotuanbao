@@ -66,14 +66,20 @@ describe('SourceOrderDrawer fare adjustments', () => {
 
     expect(directionInputs().length).toBe(2)
 
-    const rows = [...document.querySelectorAll('div')].filter((el) =>
-      (el.getAttribute('style') || '').includes('grid-template-columns'),
-    )
+    const rows = screen.getAllByTestId('fare-adjustment-row')
     expect(rows.length).toBe(2)
     for (const row of rows) {
-      const selects = within(row as HTMLElement).getAllByRole('combobox')
+      const selects = within(row).getAllByRole('combobox')
       // 非自定义行：种类 + 方向
       expect(selects.length).toBe(2)
     }
+  })
+
+  it('exposes fare adjustments as a dedicated section', () => {
+    renderDrawer()
+    expect(screen.getByText('团款调整')).toBeTruthy()
+    expect(screen.getByText('团款计价')).toBeTruthy()
+    expect(screen.getByText('优惠')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /添加调整项/ })).toBeTruthy()
   })
 })
