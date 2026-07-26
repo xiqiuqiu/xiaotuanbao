@@ -2724,6 +2724,97 @@ describe('Departure API (e2e)', () => {
       expect(sheet.anomalies).toEqual([])
     })
 
+    it('exposes fareAdjustmentNetCents on source main row in preview and xlsx without kind detail (#178)', async () => {
+      const ExcelJS = await import('exceljs')
+      const departure = await createOpsDeparture({ name: `${testPrefix}-ops-fare-adj` })
+      const customName = '旺季加价-运营表勿展开'
+
+      // 原始 1000 + 调整净额 150（单房差 200 + 自定义 50 − 老人免 100）= 约定应收 1150（元）
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: opsPartnerId,
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.partner_settled,
+          fareAdjustments: [
+            {
+              kind: 'single_room_supplement',
+              direction: 'increase',
+              amountCents: 20000,
+            },
+            {
+              kind: 'custom',
+              direction: 'increase',
+              amountCents: 5000,
+              customName,
+            },
+            {
+              kind: 'senior_free_ticket_pre_discounted',
+              direction: 'decrease',
+              amountCents: 10000,
+            },
+          ],
+        })
+        .expect(201)
+
+      const preview = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      expect(preview.body.data.sourceOrders).toHaveLength(1)
+      expect(preview.body.data.sourceOrders[0]).toMatchObject({
+        fareAdjustmentNetCents: 15000,
+        agreedReceivableCents: 115000,
+      })
+      expect(preview.body.data.sourceOrders[0]).not.toHaveProperty('fareAdjustments')
+      expect(JSON.stringify(preview.body.data)).not.toContain(customName)
+      expect(JSON.stringify(preview.body.data)).not.toContain('single_room_supplement')
+
+      const xlsxResponse = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(xlsxResponse.body as any)
+      const worksheet = workbook.worksheets[0]
+
+      let sourceHeaderRow = 0
+      worksheet.eachRow((row, rowNumber) => {
+        if (row.getCell(1).value === '合作方' && row.getCell(4).value === '调整净额') {
+          sourceHeaderRow = rowNumber
+        }
+      })
+      expect(sourceHeaderRow).toBeGreaterThan(0)
+      // 金额列为元：调整净额 150、约定应收 1150
+      expect(worksheet.getRow(sourceHeaderRow + 1).getCell(4).value).toBe(150)
+      expect(worksheet.getRow(sourceHeaderRow + 1).getCell(5).value).toBe(1150)
+
+      const cellTexts: string[] = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            cellTexts.push(text)
+          }
+        })
+      })
+      expect(cellTexts).toContain('调整净额')
+      expect(cellTexts).not.toContain(customName)
+      expect(cellTexts).not.toContain('单房差')
+      expect(cellTexts).not.toContain('老人免票或半价已优惠过')
+    })
+
     it('wires resource payable progress from finance facade (#96)', async () => {
       const departure = await createOpsDeparture({ name: `${testPrefix}-ops-payable-progress` })
 
