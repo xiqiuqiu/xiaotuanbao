@@ -8,6 +8,7 @@ import type {
   DepartureArchiveHistoryItem,
   DepartureDetail,
   DepartureListResult,
+  DepartureRouteNamesResult,
   DepartureSettlementHistoryItem,
   DepartureSummary,
 } from '@xiaotuanbao/shared'
@@ -89,6 +90,22 @@ export class DepartureService {
     private readonly accountGenerationGapService: AccountGenerationGapService,
     private readonly departureSettlementReadinessService: DepartureSettlementReadinessService,
   ) {}
+
+  async listRouteNames(organizationId: string): Promise<DepartureRouteNamesResult> {
+    const rows = await this.prisma.departure.findMany({
+      where: {
+        organizationId,
+        routeName: { not: '' },
+      },
+      select: { routeName: true },
+      distinct: ['routeName'],
+      orderBy: { routeName: 'asc' },
+    })
+
+    return {
+      items: rows.map((row) => row.routeName),
+    }
+  }
 
   async list(
     organizationId: string,

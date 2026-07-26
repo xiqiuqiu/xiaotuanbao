@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer } from 'react'
-import { Alert, Button, Card, Table, message } from 'antd'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import { Alert, Button, Card, Segmented, Space, Table, message } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -20,12 +20,15 @@ import {
 } from '@/lib/query/list-query-ux'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { DepartureFilters } from '../components/DepartureFilters'
+import { RouteLedgerViewPanel } from '../components/RouteLedgerViewPanel'
 import { buildDepartureColumns, DEPARTURE_LIST_TABLE_SCROLL_X } from './departure-columns'
 import {
   hasWorkbenchDepartureListSearch,
   resolveWorkbenchDepartureFilterBanner,
   type DepartureListSearch,
 } from '../utils/departure-list-search'
+
+type DepartureManagementView = 'departure-list' | 'route-ledger'
 
 type DeparturesPageState = {
   keyword: string
@@ -133,7 +136,9 @@ export function DeparturesPage() {
   const queryClient = useQueryClient()
   const search = useSearch({ strict: false }) as DepartureListSearch
   const canEdit = canEditDeparture(useAuthStore((s) => s.actionKeys))
+  const [view, setView] = useState<DepartureManagementView>('departure-list')
   const [state, dispatch] = useReducer(departuresPageReducer, search, createInitialState)
+  const isListView = view === 'departure-list'
 
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
@@ -143,6 +148,7 @@ export function DeparturesPage() {
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'departure-filters'],
     queryFn: () => listEmployeeOptions(),
+    enabled: isListView,
   })
 
   const { data: partnersResult } = useQuery({
@@ -152,6 +158,7 @@ export function DeparturesPage() {
         status: DirectoryProfileStatus.ACTIVE,
         pageSize: 100,
       }),
+    enabled: isListView,
   })
 
   const listFilterKey = [
@@ -223,6 +230,7 @@ export function DeparturesPage() {
         signal,
       ),
     placeholderData,
+    enabled: isListView,
     ...operationalQueryOptions(),
   })
 
@@ -311,77 +319,95 @@ export function DeparturesPage() {
         }
       />
 
-      {workbenchFilterBanner ? (
-        <Alert
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
-          title={workbenchFilterBanner.title}
-          action={
-            <Button
-              size="small"
-              onClick={() => {
-                dispatch({ type: 'RESET_FILTERS' })
-                void navigate({ to: '/departure', search: {} })
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <Segmented<DepartureManagementView>
+          value={view}
+          options={[
+            { label: '发团视图', value: 'departure-list' },
+            { label: '线路视图', value: 'route-ledger' },
+          ]}
+          onChange={setView}
+        />
+
+        {isListView ? (
+          <>
+            {workbenchFilterBanner ? (
+              <Alert
+                type="info"
+                showIcon
+                title={workbenchFilterBanner.title}
+                action={
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      dispatch({ type: 'RESET_FILTERS' })
+                      void navigate({ to: '/departure', search: {} })
+                    }}
+                  >
+                    清除工作台筛选
+                  </Button>
+                }
+              />
+            ) : null}
+
+            <DepartureFilters
+              key={state.filtersKey}
+              statusFilter={state.statusFilter}
+              routeNameFilter={state.routeName}
+              departureTypeFilter={state.departureType}
+              departureProgressFilter={state.departureProgress}
+              ownerUserIdFilter={state.ownerUserId}
+              partnerIdFilter={state.partnerId}
+              startDateRange={state.startDateRange}
+              ownerOptions={ownerOptions}
+              partnerOptions={partnerOptions}
+              onSearch={(value) => dispatch({ type: 'SET_KEYWORD', value })}
+              onRouteNameChange={(value) => dispatch({ type: 'SET_ROUTE_NAME', value })}
+              onDepartureTypeChange={(value) => dispatch({ type: 'SET_DEPARTURE_TYPE', value })}
+              onDepartureProgressChange={(value) =>
+                dispatch({ type: 'SET_DEPARTURE_PROGRESS', value })
+              }
+              onStatusChange={(value) => dispatch({ type: 'SET_STATUS', value })}
+              onOwnerChange={(value) => dispatch({ type: 'SET_OWNER', value })}
+              onPartnerChange={(value) => dispatch({ type: 'SET_PARTNER', value })}
+              onStartDateRangeChange={(value) => dispatch({ type: 'SET_START_DATE_RANGE', value })}
+              onReset={resetFilters}
+            />
+
+            <StaleDataAlert
+              isFetching={isFetching}
+              isError={isError}
+              hasData={Boolean(departuresResult)}
+              onRefresh={() => {
+                void refetch()
               }}
-            >
-              清除工作台筛选
-            </Button>
-          }
-        />
-      ) : null}
+            />
 
-      <DepartureFilters
-        key={state.filtersKey}
-        statusFilter={state.statusFilter}
-        routeNameFilter={state.routeName}
-        departureTypeFilter={state.departureType}
-        departureProgressFilter={state.departureProgress}
-        ownerUserIdFilter={state.ownerUserId}
-        partnerIdFilter={state.partnerId}
-        startDateRange={state.startDateRange}
-        ownerOptions={ownerOptions}
-        partnerOptions={partnerOptions}
-        onSearch={(value) => dispatch({ type: 'SET_KEYWORD', value })}
-        onRouteNameChange={(value) => dispatch({ type: 'SET_ROUTE_NAME', value })}
-        onDepartureTypeChange={(value) => dispatch({ type: 'SET_DEPARTURE_TYPE', value })}
-        onDepartureProgressChange={(value) => dispatch({ type: 'SET_DEPARTURE_PROGRESS', value })}
-        onStatusChange={(value) => dispatch({ type: 'SET_STATUS', value })}
-        onOwnerChange={(value) => dispatch({ type: 'SET_OWNER', value })}
-        onPartnerChange={(value) => dispatch({ type: 'SET_PARTNER', value })}
-        onStartDateRangeChange={(value) => dispatch({ type: 'SET_START_DATE_RANGE', value })}
-        onReset={resetFilters}
-      />
-
-      <StaleDataAlert
-        isFetching={isFetching}
-        isError={isError}
-        hasData={Boolean(departuresResult)}
-        onRefresh={() => {
-          void refetch()
-        }}
-      />
-
-      <Card>
-        <Table
-          rowKey="id"
-          loading={hardLoading}
-          columns={columns}
-          dataSource={departuresResult?.items ?? []}
-          scroll={{ x: DEPARTURE_LIST_TABLE_SCROLL_X }}
-          className={listSoftFetchingClassName(softFetching)}
-          pagination={{
-            current: state.page,
-            pageSize: state.pageSize,
-            total: departuresResult?.total ?? 0,
-            showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条`,
-            onChange: (nextPage, nextPageSize) => {
-              dispatch({ type: 'SET_PAGE', page: nextPage, pageSize: nextPageSize })
-            },
-          }}
-        />
-      </Card>
+            <Card>
+              <Table
+                rowKey="id"
+                loading={hardLoading}
+                columns={columns}
+                dataSource={departuresResult?.items ?? []}
+                scroll={{ x: DEPARTURE_LIST_TABLE_SCROLL_X }}
+                className={listSoftFetchingClassName(softFetching)}
+                pagination={{
+                  current: state.page,
+                  pageSize: state.pageSize,
+                  total: departuresResult?.total ?? 0,
+                  showSizeChanger: true,
+                  showTotal: (total) => `共 ${total} 条`,
+                  onChange: (nextPage, nextPageSize) => {
+                    dispatch({ type: 'SET_PAGE', page: nextPage, pageSize: nextPageSize })
+                  },
+                }}
+              />
+            </Card>
+          </>
+        ) : (
+          <RouteLedgerViewPanel onSwitchToDepartureList={() => setView('departure-list')} />
+        )}
+      </Space>
     </div>
   )
 }

@@ -654,6 +654,11 @@ export interface DepartureListResult {
   pageSize: number
 }
 
+/** Distinct `routeName` values present on the org's departures (exact match keys). */
+export interface DepartureRouteNamesResult {
+  items: string[]
+}
+
 export interface CreateDepartureDto {
   name: string
   routeName: string

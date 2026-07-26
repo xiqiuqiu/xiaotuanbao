@@ -64,6 +64,7 @@ export type {
   DepartureCompletionTags,
   DepartureSummary,
   DepartureListResult,
+  DepartureRouteNamesResult,
   DepartureDetail,
   DepartureArchiveHistoryItem,
   DepartureSettlementHistoryItem,

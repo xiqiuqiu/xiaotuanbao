@@ -6,6 +6,7 @@ import type {
   DepartureDetail,
   DepartureListResult,
   DepartureOperationsSheetSnapshot,
+  DepartureRouteNamesResult,
   DepartureSummary,
   TransitionDepartureDto,
   UnarchiveDepartureDto,
@@ -37,6 +38,12 @@ export async function listDepartures(
   signal?: AbortSignal,
 ): Promise<DepartureListResult> {
   return request.get<DepartureListResult>('/departures', { params, signal })
+}
+
+export async function listDepartureRouteNames(
+  signal?: AbortSignal,
+): Promise<DepartureRouteNamesResult> {
+  return request.get<DepartureRouteNamesResult>('/departures/route-names', { signal })
 }
 
 export async function createDeparture(payload: CreateDepartureDto): Promise<DepartureSummary> {

@@ -15,6 +15,7 @@ import type {
   DepartureDetail,
   DepartureListResult,
   DepartureOperationsSheetSnapshot,
+  DepartureRouteNamesResult,
   DepartureSummary,
 } from '@xiaotuanbao/shared'
 import type { Response } from 'express'
@@ -57,6 +58,14 @@ export class DepartureController {
     @Req() request: { user: { organizationId: string } },
   ): Promise<{ departureNo: string }> {
     return this.departureService.previewNextDepartureNo(request.user.organizationId)
+  }
+
+  @Get('route-names')
+  @RequireMenu('/departure')
+  listRouteNames(
+    @Req() request: { user: { organizationId: string } },
+  ): Promise<DepartureRouteNamesResult> {
+    return this.departureService.listRouteNames(request.user.organizationId)
   }
 
   @Post()

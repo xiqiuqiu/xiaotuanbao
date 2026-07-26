@@ -60,6 +60,7 @@ export type {
   PartnerListResult,
   DepartureSummary,
   DepartureListResult,
+  DepartureRouteNamesResult,
   DepartureDetail,
   DepartureArchiveHistoryItem,
   DepartureSettlementHistoryItem,
