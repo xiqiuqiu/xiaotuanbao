@@ -688,8 +688,8 @@ export interface RouteLedgerOutsourceSummary {
 }
 
 /**
- * 线路视图客源明细行（#183）：约定口径字段，不含核销已收/未收与行级实收业务。
- * 不含游客代表、拼入价算式；拼出汇总挂在日/发团，不进本行。
+ * 线路视图客源明细行（#183/#185）：约定口径字段，不含核销已收/未收与行级实收业务。
+ * 拼出汇总挂在日/发团，不进本行。拼入单价供前端拼只读算式，不参与服务端合计权威计算。
  */
 export interface RouteLedgerSourceOrderRow {
   id: string
@@ -698,9 +698,17 @@ export interface RouteLedgerSourceOrderRow {
   /** 发客客户 */
   partnerName: string
   displayName: string
+  /** 游客代表：客人名单最早一条姓名；名单空则 null */
+  guestRepresentativeName: string | null
+  /** 游客代表联系电话；名单空则 null */
+  guestRepresentativePhone: string | null
   adultGuestCount: number
   childGuestCount: number
   guestCount: number
+  /** 拼入单价（成人），供只读算式；权威金额仍以 gross/net 字段为准 */
+  adultUnitPriceCents: number
+  /** 拼入单价（儿童），供只读算式 */
+  childUnitPriceCents: number
   /** 原始团款 */
   grossReceivableCents: number
   /** 结算金额 */

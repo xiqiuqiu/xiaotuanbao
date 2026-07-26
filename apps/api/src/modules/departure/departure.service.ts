@@ -118,8 +118,9 @@ export class DepartureService {
   }
 
   /**
-   * 线路视图读模型（#183 + #184）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
-   * 拼出（Resource Kind）汇总挂在日/发团，不进客源行。不含游客代表 / 拼入价算式（后续票）。
+   * 线路视图读模型（#183 + #184 + #185）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
+   * 拼出（Resource Kind）汇总挂在日/发团，不进客源行。
+   * 客源行附游客代表（名单最早一条）与拼入单价（前端只读算式输入，不参与合计权威计算）。
    */
   async getRouteLedger(
     organizationId: string,
@@ -156,12 +157,19 @@ export class DepartureService {
             adultGuestCount: true,
             childGuestCount: true,
             guestCount: true,
+            adultUnitPriceCents: true,
+            childUnitPriceCents: true,
             grossReceivableCents: true,
             netReceivableCents: true,
             partnerCollectedCents: true,
             guestCollectCents: true,
             notes: true,
             partner: { select: { name: true } },
+            guests: {
+              orderBy: { createdAt: 'asc' },
+              take: 1,
+              select: { name: true, phone: true },
+            },
             createdAt: true,
           },
           orderBy: { createdAt: 'asc' },
@@ -193,21 +201,28 @@ export class DepartureService {
 
     for (const departure of departures) {
       const startDate = formatDateOnly(departure.startDate)
-      const sourceOrders: RouteLedgerSourceOrderRow[] = departure.sourceOrders.map((order) => ({
-        id: order.id,
-        departureId: order.departureId,
-        partnerId: order.partnerId,
-        partnerName: order.partner.name,
-        displayName: order.displayName,
-        adultGuestCount: order.adultGuestCount,
-        childGuestCount: order.childGuestCount,
-        guestCount: order.guestCount,
-        grossReceivableCents: order.grossReceivableCents,
-        netReceivableCents: order.netReceivableCents,
-        partnerCollectedCents: order.partnerCollectedCents,
-        guestCollectCents: order.guestCollectCents,
-        notes: order.notes,
-      }))
+      const sourceOrders: RouteLedgerSourceOrderRow[] = departure.sourceOrders.map((order) => {
+        const representative = order.guests[0] ?? null
+        return {
+          id: order.id,
+          departureId: order.departureId,
+          partnerId: order.partnerId,
+          partnerName: order.partner.name,
+          displayName: order.displayName,
+          guestRepresentativeName: representative?.name ?? null,
+          guestRepresentativePhone: representative?.phone ?? null,
+          adultGuestCount: order.adultGuestCount,
+          childGuestCount: order.childGuestCount,
+          guestCount: order.guestCount,
+          adultUnitPriceCents: order.adultUnitPriceCents,
+          childUnitPriceCents: order.childUnitPriceCents,
+          grossReceivableCents: order.grossReceivableCents,
+          netReceivableCents: order.netReceivableCents,
+          partnerCollectedCents: order.partnerCollectedCents,
+          guestCollectCents: order.guestCollectCents,
+          notes: order.notes,
+        }
+      })
       const outsourceItems: RouteLedgerOutsourceLine[] = departure.itinerarySegments.flatMap(
         (segment) =>
           segment.resources.map((resource) => ({

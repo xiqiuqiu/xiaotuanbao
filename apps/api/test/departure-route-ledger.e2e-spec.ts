@@ -12,9 +12,9 @@ import {
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 /**
- * #183 线路账本主干 + #184 日/团拼出汇总：
+ * #183 线路账本主干 + #184 日/团拼出汇总 + #185 扫读抛光字段：
  * GET /departures/route-ledger — 精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
- * 拼出挂在日/发团汇总，不进客源行。
+ * 拼出挂在日/发团汇总，不进客源行；客源行含游客代表与拼入单价（算式输入）。
  */
 describe('Departure route ledger API (e2e)', () => {
   let app: INestApplication
@@ -182,6 +182,15 @@ describe('Departure route ledger API (e2e)', () => {
       partnerCollectedCents: 120000,
       notes: '窗口位',
     })
+    // #185：两条客人名单，最早一条为游客代表；同日团 A 不建名单 → 代表字段为空
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${orderLateId}/guests`)
+      .send({ name: '陈志明', phone: '13800002211' })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${orderLateId}/guests`)
+      .send({ name: '林晓芳', phone: '13900008876' })
+      .expect(201)
 
     // #184：单拼出（late）+ 自营酒店干扰；多拼出（same-a）；same-b 无拼出；
     // early 含历史 Partner 承接拼出（读路径兼容）。
@@ -253,6 +262,9 @@ describe('Departure route ledger API (e2e)', () => {
     })
     await prisma.itinerarySegment.deleteMany({
       where: { departure: { organizationId, name: { startsWith: testPrefix } } },
+    })
+    await prisma.sourceOrderGuest.deleteMany({
+      where: { sourceOrder: { departure: { organizationId, name: { startsWith: testPrefix } } } },
     })
     await prisma.sourceOrder.deleteMany({
       where: { departure: { organizationId, name: { startsWith: testPrefix } } },
@@ -362,12 +374,22 @@ describe('Departure route ledger API (e2e)', () => {
       adultGuestCount: 2,
       childGuestCount: 1,
       guestCount: 3,
+      adultUnitPriceCents: 100000,
+      childUnitPriceCents: 50000,
+      guestRepresentativeName: '陈志明',
+      guestRepresentativePhone: '13800002211',
       grossReceivableCents: 250000,
       netReceivableCents: 220000,
       partnerCollectedCents: 120000,
       guestCollectCents: 100000,
       notes: '窗口位',
     })
+    // 拼入单价仅作算式输入，权威合计仍走已存 gross/net，不另造算式合计字段
+    expect(row).not.toHaveProperty('inboundPriceFormula')
+    expect(row).not.toHaveProperty('inboundPriceFormulaCents')
+    expect(row.adultUnitPriceCents * row.adultGuestCount + row.childUnitPriceCents * row.childGuestCount).toBe(
+      row.grossReceivableCents,
+    )
 
     // 不混核销已收/未收；无行级「实收业务」
     expect(row).not.toHaveProperty('settledAmountCents')
@@ -391,6 +413,27 @@ describe('Departure route ledger API (e2e)', () => {
       netReceivableCents: 220000,
       partnerCollectedCents: 120000,
       guestCollectCents: 100000,
+    })
+  })
+
+  it('uses earliest guest as representative and leaves empty list null (#185)', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
+      .expect(200)
+
+    const block = response.body.data.dateBlocks[0]
+    const groupA = block.departures.find(
+      (d: { departureId: string }) => d.departureId === departureSameA.id,
+    )
+    const row = groupA.sourceOrders[0]
+    expect(row).toMatchObject({
+      guestRepresentativeName: null,
+      guestRepresentativePhone: null,
+      adultUnitPriceCents: 90000,
+      childUnitPriceCents: 0,
+      adultGuestCount: 2,
+      childGuestCount: 0,
     })
   })
 

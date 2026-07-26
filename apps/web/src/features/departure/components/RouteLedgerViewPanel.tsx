@@ -1,9 +1,21 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, DatePicker, Empty, Select, Skeleton, Space, Table, Typography } from 'antd'
+import { Link, useNavigate } from '@tanstack/react-router'
+import {
+  Alert,
+  DatePicker,
+  Empty,
+  Select,
+  Skeleton,
+  Space,
+  Table,
+  Tooltip,
+  Typography,
+} from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
+import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import type {
   RouteLedgerOutsourceSummary,
   RouteLedgerSourceOrderRow,
@@ -14,6 +26,7 @@ import {
   listDepartureRouteNames,
 } from '@/services/departure.service'
 import { formatCents } from '../catalog'
+import { formatRouteLedgerInboundPriceFormula } from '../utils/route-ledger-inbound-price-formula'
 
 type RouteLedgerViewPanelProps = {
   onSwitchToDepartureList: () => void
@@ -60,41 +73,85 @@ function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSu
   )
 }
 
+function MoneyColumnTitle({ label, habitAlias }: { label: string; habitAlias: string }) {
+  return (
+    <Tooltip title={`习惯称：${habitAlias}`}>
+      <span>{label}</span>
+    </Tooltip>
+  )
+}
+
+function formatGuestRepresentative(row: RouteLedgerSourceOrderRow): string {
+  const name = row.guestRepresentativeName?.trim() || ''
+  const phone = row.guestRepresentativePhone?.trim() || ''
+  if (!name && !phone) {
+    return ''
+  }
+  if (!name) {
+    return phone
+  }
+  return phone ? `${name} ${phone}` : name
+}
+
+function formatGuestCount(row: RouteLedgerSourceOrderRow): string {
+  if (row.childGuestCount > 0) {
+    return `${row.guestCount}（${row.adultGuestCount}大${row.childGuestCount}小）`
+  }
+  return String(row.guestCount)
+}
+
 const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
   {
     title: '发客客户',
     dataIndex: 'partnerName',
+    width: 140,
+  },
+  {
+    title: '游客代表',
+    key: 'guestRepresentative',
     width: 160,
+    render: (_value, row) => formatGuestRepresentative(row),
   },
   {
     title: '人数',
-    dataIndex: 'guestCount',
-    width: 72,
+    key: 'guestCount',
+    width: 110,
     align: 'right',
+    render: (_value, row) => formatGuestCount(row),
   },
   {
-    title: '原始团款',
+    title: (
+      <Tooltip title="单价×人数，只读展示；金额以原始团款为准">
+        <span>拼入价</span>
+      </Tooltip>
+    ),
+    key: 'inboundPriceFormula',
+    width: 140,
+    render: (_value, row) => formatRouteLedgerInboundPriceFormula(row),
+  },
+  {
+    title: <MoneyColumnTitle label="原始团款" habitAlias="拼入合计" />,
     dataIndex: 'grossReceivableCents',
     width: 120,
     align: 'right',
     render: (value: number) => formatCents(value),
   },
   {
-    title: '结算金额',
+    title: <MoneyColumnTitle label="结算金额" habitAlias="实际应收" />,
     dataIndex: 'netReceivableCents',
     width: 120,
     align: 'right',
     render: (value: number) => formatCents(value),
   },
   {
-    title: '客户已收',
+    title: <MoneyColumnTitle label="客户已收" habitAlias="客户已收押金" />,
     dataIndex: 'partnerCollectedCents',
     width: 120,
     align: 'right',
     render: (value: number) => formatCents(value),
   },
   {
-    title: '我方代收',
+    title: <MoneyColumnTitle label="我方代收" habitAlias="游客代收" />,
     dataIndex: 'guestCollectCents',
     width: 120,
     align: 'right',
@@ -109,12 +166,15 @@ const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
 ]
 
 /**
- * 线路视图（#182 壳 + #183 账本主干 + #184 拼出汇总）：
+ * 线路视图（#182 壳 + #183 账本主干 + #184 拼出汇总 + #185 扫读抛光）：
  * - 须先精确选定一条发团 `routeName`；
  * - 选定后按出团日 → 发团 → 客源只读表渲染；可选出团日区间；
- * - 拼出成本挂在日/发团标题，不进客源列。
+ * - 拼出成本挂在日/发团标题，不进客源列；
+ * - 客源行含游客代表、只读拼入价算式；金额列规范名 + tooltip 习惯称；
+ * - 点击团号/客源行跳转既有发团详情与客源管理路径，视图内不可改价改人数。
  */
 export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerViewPanelProps) {
+  const navigate = useNavigate()
   const [routeName, setRouteName] = useState<string | undefined>()
   const [startDateRange, setStartDateRange] = useState<
     [string | undefined, string | undefined] | null
@@ -257,10 +317,19 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
                   style={{ width: '100%' }}
                 >
                   <div>
-                    <Typography.Text strong>
-                      {group.departureNo}
-                      {group.departureName ? ` · ${group.departureName}` : ''}
-                    </Typography.Text>
+                    <Space size={4} wrap>
+                      <Link
+                        className={nameLinkStyles.nameLink}
+                        to="/departure/$departureId"
+                        params={{ departureId: group.departureId }}
+                        search={{ tab: 'overview' }}
+                      >
+                        {group.departureNo}
+                      </Link>
+                      {group.departureName ? (
+                        <Typography.Text strong>· {group.departureName}</Typography.Text>
+                      ) : null}
+                    </Space>
                     <br />
                     <Typography.Text type="secondary">
                       {formatTotalsHint('发团合计', group.totals)}
@@ -276,7 +345,17 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
                     columns={LEDGER_COLUMNS}
                     dataSource={group.sourceOrders}
                     locale={{ emptyText: '该发团暂无客源单' }}
-                    scroll={{ x: 900 }}
+                    scroll={{ x: 1200 }}
+                    onRow={(record) => ({
+                      style: { cursor: 'pointer' },
+                      onClick: () => {
+                        void navigate({
+                          to: '/departure/$departureId',
+                          params: { departureId: record.departureId },
+                          search: { tab: 'sourceOrders' },
+                        })
+                      },
+                    })}
                   />
                 </Space>
               ))}
