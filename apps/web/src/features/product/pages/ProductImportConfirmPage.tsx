@@ -87,6 +87,161 @@ function toDayjs(value: string | null | undefined): Dayjs | null {
   return parsed.isValid() ? parsed : null
 }
 
+interface ImportColumnsOptions {
+  canEdit: boolean
+  pendingConfirmation: boolean
+  updateDraft: (candidateKey: string, patch: Partial<LineDraft>) => void
+  updateSchedule: (
+    candidateKey: string,
+    scheduleIndex: number,
+    patch: Partial<ScheduleDraft>,
+  ) => void
+}
+
+function buildImportColumns({
+  canEdit,
+  pendingConfirmation,
+  updateDraft,
+  updateSchedule,
+}: ImportColumnsOptions): ColumnsType<LineDraft> {
+  return [
+    {
+      title: '接受',
+      width: 70,
+      render: (_, record) => (
+        <Checkbox
+          checked={record.accept}
+          disabled={!canEdit || !pendingConfirmation}
+          onChange={(event) => updateDraft(record.candidateKey, { accept: event.target.checked })}
+        />
+      ),
+    },
+    {
+      title: 'Sheet',
+      dataIndex: 'sheetName',
+      width: 140,
+      render: (value: string) => <Tag>{value}</Tag>,
+    },
+    {
+      title: '产品名称 / 特色',
+      width: 240,
+      render: (_, record) => (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input
+            value={record.name}
+            disabled={!record.accept || !pendingConfirmation}
+            onChange={(event) => updateDraft(record.candidateKey, { name: event.target.value })}
+          />
+          <Input.TextArea
+            autoSize={{ minRows: 1, maxRows: 3 }}
+            placeholder="产品特色（可空）"
+            value={record.featuresText}
+            disabled={!record.accept || !pendingConfirmation}
+            onChange={(event) =>
+              updateDraft(record.candidateKey, { featuresText: event.target.value })
+            }
+          />
+        </Space>
+      ),
+    },
+    {
+      title: '简版行程',
+      width: 240,
+      render: (_, record) => (
+        <Input.TextArea
+          autoSize={{ minRows: 2, maxRows: 4 }}
+          value={record.shortItinerary}
+          disabled={!record.accept || !pendingConfirmation}
+          onChange={(event) =>
+            updateDraft(record.candidateKey, { shortItinerary: event.target.value })
+          }
+        />
+      ),
+    },
+    {
+      title: '班期报价（须确认）',
+      key: 'schedules',
+      width: 420,
+      render: (_, record) => (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {record.schedules.map((schedule, index) => {
+            const disabled = !record.accept || !pendingConfirmation
+            return (
+              <Card key={`${record.candidateKey}-${index}`} size="small">
+                <Typography.Text type="secondary">
+                  原文：{schedule.dateRuleText || '（无）'}
+                  {schedule.adultPriceText ? ` · ${schedule.adultPriceText}` : ''}
+                </Typography.Text>
+                <Space wrap style={{ marginTop: 8 }}>
+                  <DatePicker
+                    placeholder="开始日"
+                    value={toDayjs(schedule.startDate)}
+                    disabled={disabled}
+                    onChange={(value) =>
+                      updateSchedule(record.candidateKey, index, {
+                        startDate: value ? value.format('YYYY-MM-DD') : null,
+                      })
+                    }
+                  />
+                  <DatePicker
+                    placeholder="结束日"
+                    value={toDayjs(schedule.endDate)}
+                    disabled={disabled}
+                    onChange={(value) =>
+                      updateSchedule(record.candidateKey, index, {
+                        endDate: value ? value.format('YYYY-MM-DD') : null,
+                      })
+                    }
+                  />
+                  <InputNumber
+                    min={0}
+                    step={1}
+                    placeholder="成人价(元)"
+                    disabled={disabled || schedule.priceOnInquiry}
+                    value={centsToYuan(schedule.adultPriceCents)}
+                    onChange={(value) =>
+                      updateSchedule(record.candidateKey, index, {
+                        adultPriceCents: yuanToCents(
+                          typeof value === 'number' ? value : null,
+                        ),
+                      })
+                    }
+                  />
+                  <Checkbox
+                    checked={schedule.priceOnInquiry === true}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateSchedule(record.candidateKey, index, {
+                        priceOnInquiry: event.target.checked,
+                        adultPriceCents: event.target.checked
+                          ? null
+                          : schedule.adultPriceCents,
+                      })
+                    }
+                  >
+                    询价/无报价
+                  </Checkbox>
+                  <Checkbox
+                    checked={schedule.confirmed}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      updateSchedule(record.candidateKey, index, {
+                        confirmed: event.target.checked,
+                      })
+                    }
+                  >
+                    已确认价期
+                  </Checkbox>
+                </Space>
+              </Card>
+            )
+          })}
+        </Space>
+      ),
+    },
+  ]
+}
+
 export function ProductImportConfirmPage() {
   const { sessionId } = useParams({ strict: false })
   const navigate = useNavigate()
@@ -166,142 +321,12 @@ export function ProductImportConfirmPage() {
     })
   }
 
-  const columns: ColumnsType<LineDraft> = [
-    {
-      title: '接受',
-      width: 70,
-      render: (_, record) => (
-        <Checkbox
-          checked={record.accept}
-          disabled={!canEdit || session.status !== 'pending_confirmation'}
-          onChange={(event) => updateDraft(record.candidateKey, { accept: event.target.checked })}
-        />
-      ),
-    },
-    {
-      title: 'Sheet',
-      dataIndex: 'sheetName',
-      width: 140,
-      render: (value: string) => <Tag>{value}</Tag>,
-    },
-    {
-      title: '产品名称 / 特色',
-      width: 240,
-      render: (_, record) => (
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Input
-            value={record.name}
-            disabled={!record.accept || session.status !== 'pending_confirmation'}
-            onChange={(event) => updateDraft(record.candidateKey, { name: event.target.value })}
-          />
-          <Input.TextArea
-            autoSize={{ minRows: 1, maxRows: 3 }}
-            placeholder="产品特色（可空）"
-            value={record.featuresText}
-            disabled={!record.accept || session.status !== 'pending_confirmation'}
-            onChange={(event) =>
-              updateDraft(record.candidateKey, { featuresText: event.target.value })
-            }
-          />
-        </Space>
-      ),
-    },
-    {
-      title: '简版行程',
-      width: 240,
-      render: (_, record) => (
-        <Input.TextArea
-          autoSize={{ minRows: 2, maxRows: 4 }}
-          value={record.shortItinerary}
-          disabled={!record.accept || session.status !== 'pending_confirmation'}
-          onChange={(event) =>
-            updateDraft(record.candidateKey, { shortItinerary: event.target.value })
-          }
-        />
-      ),
-    },
-    {
-      title: '班期报价（须确认）',
-      key: 'schedules',
-      width: 420,
-      render: (_, record) => (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          {record.schedules.map((schedule, index) => {
-            const disabled = !record.accept || session.status !== 'pending_confirmation'
-            return (
-              <Card key={`${record.candidateKey}-${index}`} size="small">
-                <Typography.Text type="secondary">
-                  原文：{schedule.dateRuleText || '（无）'}
-                  {schedule.adultPriceText ? ` · ${schedule.adultPriceText}` : ''}
-                </Typography.Text>
-                <Space wrap style={{ marginTop: 8 }}>
-                  <DatePicker
-                    placeholder="开始日"
-                    value={toDayjs(schedule.startDate)}
-                    disabled={disabled}
-                    onChange={(value) =>
-                      updateSchedule(record.candidateKey, index, {
-                        startDate: value ? value.format('YYYY-MM-DD') : null,
-                      })
-                    }
-                  />
-                  <DatePicker
-                    placeholder="结束日"
-                    value={toDayjs(schedule.endDate)}
-                    disabled={disabled}
-                    onChange={(value) =>
-                      updateSchedule(record.candidateKey, index, {
-                        endDate: value ? value.format('YYYY-MM-DD') : null,
-                      })
-                    }
-                  />
-                  <InputNumber
-                    min={0}
-                    step={1}
-                    placeholder="成人价(元)"
-                    disabled={disabled || schedule.priceOnInquiry}
-                    value={centsToYuan(schedule.adultPriceCents)}
-                    onChange={(value) =>
-                      updateSchedule(record.candidateKey, index, {
-                        adultPriceCents: yuanToCents(
-                          typeof value === 'number' ? value : null,
-                        ),
-                      })
-                    }
-                  />
-                  <Checkbox
-                    checked={schedule.priceOnInquiry === true}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateSchedule(record.candidateKey, index, {
-                        priceOnInquiry: event.target.checked,
-                        adultPriceCents: event.target.checked
-                          ? null
-                          : schedule.adultPriceCents,
-                      })
-                    }
-                  >
-                    询价/无报价
-                  </Checkbox>
-                  <Checkbox
-                    checked={schedule.confirmed}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateSchedule(record.candidateKey, index, {
-                        confirmed: event.target.checked,
-                      })
-                    }
-                  >
-                    已确认价期
-                  </Checkbox>
-                </Space>
-              </Card>
-            )
-          })}
-        </Space>
-      ),
-    },
-  ]
+  const columns = buildImportColumns({
+    canEdit,
+    pendingConfirmation: session.status === 'pending_confirmation',
+    updateDraft,
+    updateSchedule,
+  })
 
   const handleConfirm = () => {
     const accepted = lineDrafts.filter((row) => row.accept)

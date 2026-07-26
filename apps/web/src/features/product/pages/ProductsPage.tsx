@@ -30,6 +30,101 @@ import { canEditProduct } from '../utils/product-permission'
 import { PRODUCT_STATUS_LABELS } from '../utils/product-labels'
 import type { ProductListSearch } from '../utils/product-list-search'
 
+interface ProductColumnsOptions {
+  exportingPeerPackId: string | null
+  onExportPeerPack: (productId: string, priced: boolean) => void
+}
+
+function buildProductColumns({
+  exportingPeerPackId,
+  onExportPeerPack,
+}: ProductColumnsOptions): ColumnsType<ProductListItem> {
+  return [
+    {
+      title: '产品名称',
+      dataIndex: 'name',
+      render: (name: string, record) => (
+        <Link
+          className={nameLinkStyles.nameLink}
+          to="/product/$productId"
+          params={{ productId: record.id }}
+        >
+          {name}
+        </Link>
+      ),
+    },
+    {
+      title: '来源 Sheet',
+      dataIndex: 'sourceSheetName',
+      width: 180,
+      render: (value: string | null) => value || '-',
+    },
+    {
+      title: '有效班期',
+      dataIndex: 'activeScheduleCount',
+      width: 100,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 100,
+      render: (status: ProductStatus) => {
+        const color =
+          status === ProductStatus.ON_SALE
+            ? 'success'
+            : status === ProductStatus.OFFLINE
+              ? 'default'
+              : 'processing'
+        return <Tag color={color}>{PRODUCT_STATUS_LABELS[status]}</Tag>
+      },
+    },
+    {
+      title: '起止城市',
+      key: 'cities',
+      render: (_, record) => {
+        if (!record.startCity && !record.endCity) {
+          return '-'
+        }
+        return `${record.startCity ?? '-'} → ${record.endCity ?? '-'}`
+      },
+    },
+    ...buildBusinessTimestampColumns<ProductListItem>(),
+    {
+      title: '操作',
+      key: 'actions',
+      width: 120,
+      fixed: 'right',
+      render: (_, record) => (
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: 'priced',
+                label: '有价 PDF',
+                onClick: () => onExportPeerPack(record.id, true),
+              },
+              {
+                key: 'unpriced',
+                label: '无价 PDF',
+                onClick: () => onExportPeerPack(record.id, false),
+              },
+            ],
+          }}
+        >
+          <Button
+            type="link"
+            size="small"
+            icon={<DownloadOutlined />}
+            loading={exportingPeerPackId === record.id}
+          >
+            同行资料
+          </Button>
+        </Dropdown>
+      ),
+    },
+  ]
+}
+
 export function ProductsPage() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -159,90 +254,10 @@ export function ProductsPage() {
     })
   }
 
-  const columns: ColumnsType<ProductListItem> = [
-    {
-      title: '产品名称',
-      dataIndex: 'name',
-      render: (name: string, record) => (
-        <Link
-          className={nameLinkStyles.nameLink}
-          to="/product/$productId"
-          params={{ productId: record.id }}
-        >
-          {name}
-        </Link>
-      ),
-    },
-    {
-      title: '来源 Sheet',
-      dataIndex: 'sourceSheetName',
-      width: 180,
-      render: (value: string | null) => value || '-',
-    },
-    {
-      title: '有效班期',
-      dataIndex: 'activeScheduleCount',
-      width: 100,
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 100,
-      render: (status: ProductStatus) => {
-        const color =
-          status === ProductStatus.ON_SALE
-            ? 'success'
-            : status === ProductStatus.OFFLINE
-              ? 'default'
-              : 'processing'
-        return <Tag color={color}>{PRODUCT_STATUS_LABELS[status]}</Tag>
-      },
-    },
-    {
-      title: '起止城市',
-      key: 'cities',
-      render: (_, record) => {
-        if (!record.startCity && !record.endCity) {
-          return '-'
-        }
-        return `${record.startCity ?? '-'} → ${record.endCity ?? '-'}`
-      },
-    },
-    ...buildBusinessTimestampColumns<ProductListItem>(),
-    {
-      title: '操作',
-      key: 'actions',
-      width: 120,
-      fixed: 'right',
-      render: (_, record) => (
-        <Dropdown
-          menu={{
-            items: [
-              {
-                key: 'priced',
-                label: '有价 PDF',
-                onClick: () => void exportPeerPackFromList(record.id, true),
-              },
-              {
-                key: 'unpriced',
-                label: '无价 PDF',
-                onClick: () => void exportPeerPackFromList(record.id, false),
-              },
-            ],
-          }}
-        >
-          <Button
-            type="link"
-            size="small"
-            icon={<DownloadOutlined />}
-            loading={exportingPeerPackId === record.id}
-          >
-            同行资料
-          </Button>
-        </Dropdown>
-      ),
-    },
-  ]
+  const columns = buildProductColumns({
+    exportingPeerPackId,
+    onExportPeerPack: (productId, priced) => void exportPeerPackFromList(productId, priced),
+  })
 
   return (
     <div>

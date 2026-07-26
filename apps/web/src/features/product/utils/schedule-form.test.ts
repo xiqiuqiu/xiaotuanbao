@@ -17,7 +17,7 @@ describe('buildProductSchedulePayload', () => {
     expect(payload).not.toHaveProperty('adultPriceCents')
     expect(payload).not.toHaveProperty('childPriceCents')
     expect(payload).not.toHaveProperty('singleRoomSupplementCents')
-    expect(JSON.parse(JSON.stringify(payload))).not.toHaveProperty('adultPriceCents')
+    expect(structuredClone(payload)).not.toHaveProperty('adultPriceCents')
   })
 
   it('includes converted price cents when provided', () => {

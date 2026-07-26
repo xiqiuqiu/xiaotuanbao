@@ -38,7 +38,3 @@ export function formValuesToPayload(values: ResourceFormValues): CreateSegmentRe
     notes: values.notes?.trim() || undefined,
   }
 }
-
-export function isOutsourceKind(resourceKind: ResourceKind | undefined): boolean {
-  return resourceKind === ResourceKind.OUTSOURCE
-}

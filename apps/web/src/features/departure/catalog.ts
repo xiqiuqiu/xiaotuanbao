@@ -177,10 +177,6 @@ export const FARE_ADJUSTMENT_KIND_OPTIONS = [
   { value: FareAdjustmentKind.CUSTOM, label: '自定义' },
 ] as const
 
-export const FARE_ADJUSTMENT_KIND_LABELS = Object.fromEntries(
-  FARE_ADJUSTMENT_KIND_OPTIONS.map((item) => [item.value, item.label]),
-) as Record<string, string>
-
 export const FARE_ADJUSTMENT_DIRECTION_OPTIONS = [
   { value: FareAdjustmentDirection.INCREASE, label: '增项' },
   { value: FareAdjustmentDirection.DECREASE, label: '减项' },
@@ -232,4 +228,3 @@ export const SEGMENT_PAYABLE_STATUS_LABELS: Record<string, string> = {
   [SegmentPayableStatus.PAID]: '已付清',
   [SegmentPayableStatus.CLOSED]: '已关闭',
 }
-

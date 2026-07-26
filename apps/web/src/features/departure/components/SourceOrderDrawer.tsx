@@ -111,6 +111,23 @@ function DerivedMetric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function formatYuan(yuan: number): string {
+  return `¥${yuan.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+function formatSignedYuan(yuan: number): string {
+  if (yuan > 0) {
+    return `+${formatYuan(yuan)}`
+  }
+  if (yuan < 0) {
+    return `−${formatYuan(Math.abs(yuan))}`
+  }
+  return formatYuan(0)
+}
+
 function AmountPipeline({
   grossYuan,
   adjustmentNetYuan,
@@ -123,17 +140,6 @@ function AmountPipeline({
   settlementYuan: number
 }) {
   const { token } = theme.useToken()
-  const formatYuan = (yuan: number) =>
-    `¥${yuan.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const signed = (yuan: number) => {
-    if (yuan > 0) {
-      return `+${formatYuan(yuan)}`
-    }
-    if (yuan < 0) {
-      return `−${formatYuan(Math.abs(yuan))}`
-    }
-    return formatYuan(0)
-  }
 
   return (
     <div
@@ -153,7 +159,7 @@ function AmountPipeline({
           ·
         </Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          调整 {signed(adjustmentNetYuan)}
+          调整 {formatSignedYuan(adjustmentNetYuan)}
         </Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
           ·
@@ -428,6 +434,226 @@ function FareAdjustmentsEditor({
   )
 }
 
+interface SourceOrderFormFieldsProps {
+  form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0]
+  partnerOptions: Array<{ value: string; label: string }>
+  lockAmounts: boolean
+  readOnly: boolean
+  derivedTotalGuests: number
+  derivedGrossYuan: number
+  fareAdjustments: SourceOrderFormValues['fareAdjustments']
+  usedFixedKinds: Set<FareAdjustmentKind>
+  derivedAdjustmentNetYuan: number
+  discountType: SourceOrderDiscountType | undefined
+  showAmountPipeline: boolean
+  derivedDiscountYuan: number
+  derivedSettlementYuan: number
+  collectionMode: SourceOrderCollectionMode | undefined
+}
+
+function SourceOrderFormFields({
+  form,
+  partnerOptions,
+  lockAmounts,
+  readOnly,
+  derivedTotalGuests,
+  derivedGrossYuan,
+  fareAdjustments,
+  usedFixedKinds,
+  derivedAdjustmentNetYuan,
+  discountType,
+  showAmountPipeline,
+  derivedDiscountYuan,
+  derivedSettlementYuan,
+  collectionMode,
+}: SourceOrderFormFieldsProps) {
+  const { token } = theme.useToken()
+
+  return (
+    <>
+      <FormSection title="基础信息" first>
+        <Form.Item
+          name="partnerId"
+          label="客户"
+          rules={[{ required: true, message: '请选择客户' }]}
+        >
+          <Select
+            showSearch={{ optionFilterProp: 'label' }}
+            placeholder="选择合作伙伴"
+            options={partnerOptions}
+          />
+        </Form.Item>
+        <Row gutter={token.marginMD}>
+          <Col span={12}>
+            <Form.Item
+              name="adultGuestCount"
+              label="成人人数"
+              rules={[
+                { required: true, message: '请输入成人人数' },
+                {
+                  type: 'number',
+                  min: 0,
+                  message: '成人人数不能为负数',
+                },
+                ({ getFieldValue }) => ({
+                  validator: totalGuestCountAtLeastOne(getFieldValue),
+                }),
+              ]}
+              dependencies={['childGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={0}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="childGuestCount"
+              label="儿童人数"
+              rules={[
+                {
+                  type: 'number',
+                  min: 0,
+                  message: '儿童人数不能为负数',
+                },
+                ({ getFieldValue }) => ({
+                  validator: totalGuestCountAtLeastOne(getFieldValue),
+                }),
+              ]}
+              dependencies={['adultGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={0}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <DerivedMetric label="总人数" value={`${derivedTotalGuests} 人`} />
+        <Form.Item name="notes" label="备注">
+          <Input.TextArea rows={2} placeholder="免票、特殊要求等" />
+        </Form.Item>
+      </FormSection>
+
+      <FormSection title="团款计价" description="按人数与单价计算原始团款，再叠加调整与优惠。">
+        <Row gutter={token.marginMD}>
+          <Col span={12}>
+            <Form.Item
+              name="adultUnitPriceYuan"
+              label="成人团款单价（元）"
+              rules={[{ required: true, message: '请输入成人团款单价' }]}
+            >
+              <InputNumber
+                min={0}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="childUnitPriceYuan"
+              label="儿童团款单价（元）"
+              rules={[unitPriceRequiredWhenCountPositive('childGuestCount')]}
+              dependencies={['childGuestCount']}
+            >
+              <InputNumber
+                min={0}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+        <DerivedMetric label="原始团款金额" value={`¥${derivedGrossYuan.toFixed(2)}`} />
+      </FormSection>
+
+      <FormSection
+        title="团款调整"
+        description="加收或扣减项；多数单据可跳过。固定种类每项最多一行，自定义可多行。"
+      >
+        <FareAdjustmentsEditor
+          form={form}
+          lockAmounts={lockAmounts}
+          readOnly={readOnly}
+          fareAdjustments={fareAdjustments}
+          usedFixedKinds={usedFixedKinds}
+          adjustmentNetYuan={derivedAdjustmentNetYuan}
+        />
+      </FormSection>
+
+      <FormSection title="优惠">
+        <Form.Item
+          name="discountType"
+          label="优惠方式"
+          rules={[{ required: true, message: '请选择优惠方式' }]}
+        >
+          <Select options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]} disabled={lockAmounts} />
+        </Form.Item>
+        {discountType === SourceOrderDiscountType.LUMP_SUM ? (
+          <Form.Item
+            name="discountYuan"
+            label="优惠金额（元）"
+            rules={[{ required: true, message: '请输入优惠金额' }]}
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={lockAmounts}
+            />
+          </Form.Item>
+        ) : null}
+        <Form.Item name="discountNotes" label="优惠备注">
+          <Input.TextArea rows={2} placeholder="请输入优惠相关备注（选填）" />
+        </Form.Item>
+        {showAmountPipeline ? (
+          <AmountPipeline
+            grossYuan={derivedGrossYuan}
+            adjustmentNetYuan={derivedAdjustmentNetYuan}
+            discountYuan={derivedDiscountYuan}
+            settlementYuan={derivedSettlementYuan}
+          />
+        ) : null}
+      </FormSection>
+
+      <FormSection title="收款信息" description="决定结算金额如何拆分到客户已收与我方代收。">
+        <Form.Item
+          name="collectionMode"
+          label="收款方式"
+          rules={[{ required: true, message: '请选择收款方式' }]}
+        >
+          <Select options={[...SOURCE_ORDER_COLLECTION_OPTIONS]} disabled={lockAmounts} />
+        </Form.Item>
+        {collectionMode === SourceOrderCollectionMode.SPLIT ? (
+          <Form.Item
+            name="partnerCollectedYuan"
+            label="客户已收金额（元）"
+            rules={[{ required: true, message: '请输入客户已收金额' }]}
+          >
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={lockAmounts}
+            />
+          </Form.Item>
+        ) : null}
+        <Form.Item name="settlementNotes" label="结算说明">
+          <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
+        </Form.Item>
+      </FormSection>
+    </>
+  )
+}
+
 export function SourceOrderDrawer({
   open,
   editing,
@@ -640,197 +866,27 @@ export function SourceOrderDrawer({
           }}
           onFinishFailed={resetSubmitIntent}
         >
-          <FormSection title="基础信息" first>
-            <Form.Item
-              name="partnerId"
-              label="客户"
-              rules={[{ required: true, message: '请选择客户' }]}
-            >
-              <Select
-                showSearch={{ optionFilterProp: 'label' }}
-                placeholder="选择合作伙伴"
-                options={partnersResult?.items.map((partner) => ({
-                  value: partner.id,
-                  label: partner.name,
-                }))}
-              />
-            </Form.Item>
-            <Row gutter={token.marginMD}>
-              <Col span={12}>
-                <Form.Item
-                  name="adultGuestCount"
-                  label="成人人数"
-                  rules={[
-                    { required: true, message: '请输入成人人数' },
-                    {
-                      type: 'number',
-                      min: 0,
-                      message: '成人人数不能为负数',
-                    },
-                    ({ getFieldValue }) => ({
-                      validator: totalGuestCountAtLeastOne(getFieldValue),
-                    }),
-                  ]}
-                  dependencies={['childGuestCount']}
-                >
-                  <InputNumber
-                    min={0}
-                    precision={0}
-                    style={{ width: '100%' }}
-                    disabled={lockAmounts}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="childGuestCount"
-                  label="儿童人数"
-                  rules={[
-                    {
-                      type: 'number',
-                      min: 0,
-                      message: '儿童人数不能为负数',
-                    },
-                    ({ getFieldValue }) => ({
-                      validator: totalGuestCountAtLeastOne(getFieldValue),
-                    }),
-                  ]}
-                  dependencies={['adultGuestCount']}
-                >
-                  <InputNumber
-                    min={0}
-                    precision={0}
-                    style={{ width: '100%' }}
-                    disabled={lockAmounts}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-            <DerivedMetric label="总人数" value={`${derivedTotalGuests} 人`} />
-            <Form.Item name="notes" label="备注">
-              <Input.TextArea rows={2} placeholder="免票、特殊要求等" />
-            </Form.Item>
-          </FormSection>
-
-          <FormSection title="团款计价" description="按人数与单价计算原始团款，再叠加调整与优惠。">
-            <Row gutter={token.marginMD}>
-              <Col span={12}>
-                <Form.Item
-                  name="adultUnitPriceYuan"
-                  label="成人团款单价（元）"
-                  rules={[{ required: true, message: '请输入成人团款单价' }]}
-                >
-                  <InputNumber
-                    min={0}
-                    precision={2}
-                    style={{ width: '100%' }}
-                    disabled={lockAmounts}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="childUnitPriceYuan"
-                  label="儿童团款单价（元）"
-                  rules={[unitPriceRequiredWhenCountPositive('childGuestCount')]}
-                  dependencies={['childGuestCount']}
-                >
-                  <InputNumber
-                    min={0}
-                    precision={2}
-                    style={{ width: '100%' }}
-                    disabled={lockAmounts}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-            <DerivedMetric
-              label="原始团款金额"
-              value={`¥${derivedGrossYuan.toFixed(2)}`}
-            />
-          </FormSection>
-
-          <FormSection
-            title="团款调整"
-            description="加收或扣减项；多数单据可跳过。固定种类每项最多一行，自定义可多行。"
-          >
-            <FareAdjustmentsEditor
-              form={form}
-              lockAmounts={lockAmounts}
-              readOnly={readOnly}
-              fareAdjustments={fareAdjustments}
-              usedFixedKinds={usedFixedKinds}
-              adjustmentNetYuan={derivedAdjustmentNetYuan}
-            />
-          </FormSection>
-
-          <FormSection title="优惠">
-            <Form.Item
-              name="discountType"
-              label="优惠方式"
-              rules={[{ required: true, message: '请选择优惠方式' }]}
-            >
-              <Select
-                options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-            {discountType === SourceOrderDiscountType.LUMP_SUM ? (
-              <Form.Item
-                name="discountYuan"
-                label="优惠金额（元）"
-                rules={[{ required: true, message: '请输入优惠金额' }]}
-              >
-                <InputNumber
-                  min={0}
-                  precision={2}
-                  style={{ width: '100%' }}
-                  disabled={lockAmounts}
-                />
-              </Form.Item>
-            ) : null}
-            <Form.Item name="discountNotes" label="优惠备注">
-              <Input.TextArea rows={2} placeholder="请输入优惠相关备注（选填）" />
-            </Form.Item>
-            {showAmountPipeline ? (
-              <AmountPipeline
-                grossYuan={derivedGrossYuan}
-                adjustmentNetYuan={derivedAdjustmentNetYuan}
-                discountYuan={derivedDiscountYuan}
-                settlementYuan={derivedSettlementYuan}
-              />
-            ) : null}
-          </FormSection>
-
-          <FormSection title="收款信息" description="决定结算金额如何拆分到客户已收与我方代收。">
-            <Form.Item
-              name="collectionMode"
-              label="收款方式"
-              rules={[{ required: true, message: '请选择收款方式' }]}
-            >
-              <Select
-                options={[...SOURCE_ORDER_COLLECTION_OPTIONS]}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-            {collectionMode === SourceOrderCollectionMode.SPLIT ? (
-              <Form.Item
-                name="partnerCollectedYuan"
-                label="客户已收金额（元）"
-                rules={[{ required: true, message: '请输入客户已收金额' }]}
-              >
-                <InputNumber
-                  min={0}
-                  precision={2}
-                  style={{ width: '100%' }}
-                  disabled={lockAmounts}
-                />
-              </Form.Item>
-            ) : null}
-            <Form.Item name="settlementNotes" label="结算说明">
-              <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
-            </Form.Item>
-          </FormSection>
+          <SourceOrderFormFields
+            form={form}
+            partnerOptions={
+              partnersResult?.items.map((partner) => ({
+                value: partner.id,
+                label: partner.name,
+              })) ?? []
+            }
+            lockAmounts={lockAmounts}
+            readOnly={readOnly}
+            derivedTotalGuests={derivedTotalGuests}
+            derivedGrossYuan={derivedGrossYuan}
+            fareAdjustments={fareAdjustments}
+            usedFixedKinds={usedFixedKinds}
+            derivedAdjustmentNetYuan={derivedAdjustmentNetYuan}
+            discountType={discountType}
+            showAmountPipeline={showAmountPipeline}
+            derivedDiscountYuan={derivedDiscountYuan}
+            derivedSettlementYuan={derivedSettlementYuan}
+            collectionMode={collectionMode}
+          />
         </Form>
       ) : null}
     </Drawer>

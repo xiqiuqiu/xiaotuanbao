@@ -57,7 +57,8 @@ export function MainLayout({ children }: PropsWithChildren) {
       return
     }
     setOpenKeys((prev) => {
-      if (routeOpenKeys.every((key) => prev.includes(key))) {
+      const openKeySet = new Set(prev)
+      if (routeOpenKeys.every((key) => openKeySet.has(key))) {
         return prev
       }
       return Array.from(new Set([...prev, ...routeOpenKeys]))
