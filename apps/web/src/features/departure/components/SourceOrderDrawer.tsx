@@ -460,13 +460,13 @@ export function SourceOrderDrawer({
         <Form.List name="fareAdjustments">
           {(fields, { add, remove }) => (
             <Space direction="vertical" size={12} style={{ width: '100%', marginBottom: 16 }}>
-              {fields.map((field) => {
-                const kind = fareAdjustments[field.name]?.kind
+              {fields.map(({ key, name, ...restField }) => {
+                const kind = fareAdjustments[name]?.kind
                 const isCustom = kind === FareAdjustmentKind.CUSTOM
                 const directionLocked = Boolean(kind) && !isCustom
                 return (
                   <div
-                    key={field.key}
+                    key={key}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: isCustom
@@ -477,8 +477,8 @@ export function SourceOrderDrawer({
                     }}
                   >
                     <Form.Item
-                      {...field}
-                      name={[field.name, 'kind']}
+                      {...restField}
+                      name={[name, 'kind']}
                       rules={[{ required: true, message: '请选择种类' }]}
                       style={{ marginBottom: 0 }}
                     >
@@ -492,12 +492,12 @@ export function SourceOrderDrawer({
                         disabled={lockAmounts}
                         onChange={(nextKind: FareAdjustmentKind) => {
                           form.setFieldValue(
-                            ['fareAdjustments', field.name, 'direction'],
+                            ['fareAdjustments', name, 'direction'],
                             defaultDirectionForFareAdjustmentKind(nextKind),
                           )
                           if (nextKind !== FareAdjustmentKind.CUSTOM) {
                             form.setFieldValue(
-                              ['fareAdjustments', field.name, 'customName'],
+                              ['fareAdjustments', name, 'customName'],
                               undefined,
                             )
                           }
@@ -506,8 +506,8 @@ export function SourceOrderDrawer({
                     </Form.Item>
                     {isCustom ? (
                       <Form.Item
-                        {...field}
-                        name={[field.name, 'customName']}
+                        {...restField}
+                        name={[name, 'customName']}
                         rules={[{ required: true, message: '请填写名称' }]}
                         style={{ marginBottom: 0 }}
                       >
@@ -515,8 +515,8 @@ export function SourceOrderDrawer({
                       </Form.Item>
                     ) : null}
                     <Form.Item
-                      {...field}
-                      name={[field.name, 'direction']}
+                      {...restField}
+                      name={[name, 'direction']}
                       rules={[{ required: true, message: '请选择方向' }]}
                       style={{ marginBottom: 0 }}
                     >
@@ -526,8 +526,8 @@ export function SourceOrderDrawer({
                       />
                     </Form.Item>
                     <Form.Item
-                      {...field}
-                      name={[field.name, 'amountYuan']}
+                      {...restField}
+                      name={[name, 'amountYuan']}
                       rules={[
                         { required: true, message: '请输入金额' },
                         {
@@ -552,7 +552,7 @@ export function SourceOrderDrawer({
                         danger
                         icon={<MinusCircleOutlined />}
                         aria-label="删除团款调整项"
-                        onClick={() => remove(field.name)}
+                        onClick={() => remove(name)}
                       />
                     ) : (
                       <span />
