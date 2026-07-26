@@ -594,4 +594,133 @@ describe('Partner reconciliation statement API (e2e)', () => {
       expect(moneyCells.some((cell) => cell.value === 9999)).toBe(false)
     })
   })
+
+  describe('fare adjustment net on statement (#178)', () => {
+    // 独立周期夹具：原始 1000 + 调整净额 150 − 优惠 100 = 实际 1050（元）
+    // 增项：单房差 200 + 自定义「旺季加价」50；减项：老人免票 100 → 净额 150
+    // 导出只露净额，不展开固定种类/自定义明细名
+    const ADJ_PERIOD = { periodStart: '2026-08-01', periodEnd: '2026-08-31' }
+    const CUSTOM_ADJUSTMENT_NAME = '旺季加价-确认单勿展开'
+    let adjOrderId: string
+
+    beforeAll(async () => {
+      const departure = await createDeparture(`${testPrefix}-adj`, '2026-08-12', '2026-08-16')
+      adjOrderId = await createOrder(departure.id, {
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 100000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.lump_sum,
+        discountCents: 10000,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+          {
+            kind: 'custom',
+            direction: 'increase',
+            amountCents: 5000,
+            customName: CUSTOM_ADJUSTMENT_NAME,
+          },
+          {
+            kind: 'senior_free_ticket_pre_discounted',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+        ],
+      })
+    })
+
+    it('preview row exposes fareAdjustmentNetCents and recomputes actual = original + net − discount', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${partnerId}/reconciliation-statement`)
+        .query(ADJ_PERIOD)
+        .expect(200)
+
+      const snapshot = response.body.data
+      expect(snapshot.rows).toHaveLength(1)
+      const row = snapshot.rows[0]
+      expect(row).toMatchObject({
+        sourceOrderId: adjOrderId,
+        originalReceivableCents: 100000,
+        fareAdjustmentNetCents: 15000,
+        discountCents: 10000,
+        actualReceivableCents: 105000,
+      })
+      expect(row.actualReceivableCents).toBe(
+        row.originalReceivableCents + row.fareAdjustmentNetCents - row.discountCents,
+      )
+      expect(snapshot.totals).toMatchObject({
+        orderCount: 1,
+        originalReceivableCents: 100000,
+        fareAdjustmentNetCents: 15000,
+        discountCents: 10000,
+        actualReceivableCents: 105000,
+      })
+      // 预览 JSON 不得展开调整种类/自定义明细
+      expect(row).not.toHaveProperty('fareAdjustments')
+      expect(JSON.stringify(snapshot)).not.toContain('single_room_supplement')
+      expect(JSON.stringify(snapshot)).not.toContain('customName')
+      expect(JSON.stringify(snapshot)).not.toContain(CUSTOM_ADJUSTMENT_NAME)
+    })
+
+    it('xlsx writes non-zero adjustment net, recomputes settlement cells, and does not expand kind/custom detail labels', async () => {
+      const ExcelJS = await import('exceljs')
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
+        .query(ADJ_PERIOD)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(response.body as any)
+      const worksheet = workbook.worksheets[0]
+
+      let headerRowNumber = 0
+      worksheet.eachRow((row, rowNumber) => {
+        if (row.getCell(1).value === '序号') {
+          headerRowNumber = rowNumber
+        }
+      })
+      expect(headerRowNumber).toBeGreaterThan(0)
+      expect(worksheet.getRow(headerRowNumber).getCell(13).value).toBe('调整净额')
+
+      const detailRow = worksheet.getRow(headerRowNumber + 1)
+      // 金额列为元：原始 1000 + 调整净额 150 − 优惠 100 = 实际应收 1050
+      const originalYuan = detailRow.getCell(12).value
+      const adjustmentYuan = detailRow.getCell(13).value
+      const discountYuan = detailRow.getCell(14).value
+      const actualYuan = detailRow.getCell(15).value
+      expect(originalYuan).toBe(1000)
+      expect(adjustmentYuan).toBe(150)
+      expect(discountYuan).toBe(100)
+      expect(actualYuan).toBe(1050)
+      expect(actualYuan).toBe(
+        Number(originalYuan) + Number(adjustmentYuan) - Number(discountYuan),
+      )
+
+      const cellTexts: string[] = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            cellTexts.push(text)
+          }
+        })
+      })
+      expect(cellTexts).not.toContain('单房差')
+      expect(cellTexts).not.toContain('老人免票或半价已优惠过')
+      expect(cellTexts).not.toContain(CUSTOM_ADJUSTMENT_NAME)
+    })
+  })
 })
