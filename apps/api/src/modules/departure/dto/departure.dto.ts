@@ -119,6 +119,22 @@ export class ListDeparturesQueryDto {
   pageSize?: number
 }
 
+/** Query for GET /departures/route-ledger (#183). */
+export class ListRouteLedgerQueryDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  routeName!: string
+
+  @IsOptional()
+  @IsDateString()
+  startDateFrom?: string
+
+  @IsOptional()
+  @IsDateString()
+  startDateTo?: string
+}
+
 export class UpdateDepartureDto {
   @IsOptional()
   @IsString()

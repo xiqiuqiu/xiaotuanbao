@@ -11,6 +11,11 @@ import type {
   DepartureRouteNamesResult,
   DepartureSettlementHistoryItem,
   DepartureSummary,
+  RouteLedgerDateBlock,
+  RouteLedgerDepartureGroup,
+  RouteLedgerResult,
+  RouteLedgerSourceOrderRow,
+  RouteLedgerTotals,
 } from '@xiaotuanbao/shared'
 import {
   DepartureArchiveAction,
@@ -30,6 +35,7 @@ import type {
   CopyDepartureDto,
   CloseDepartureDto,
   ListDeparturesQueryDto,
+  ListRouteLedgerQueryDto,
   TransitionDepartureDto,
   UnarchiveDepartureDto,
   UpdateDepartureDto,
@@ -104,6 +110,112 @@ export class DepartureService {
 
     return {
       items: rows.map((row) => row.routeName),
+    }
+  }
+
+  /**
+   * 线路视图读模型（#183）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行。
+   * 不含拼出汇总 / 游客代表 / 拼入价算式（后续票）。
+   */
+  async getRouteLedger(
+    organizationId: string,
+    query: ListRouteLedgerQueryDto,
+  ): Promise<RouteLedgerResult> {
+    const routeName = query.routeName.trim()
+    const startDateFrom = query.startDateFrom?.trim() || null
+    const startDateTo = query.startDateTo?.trim() || null
+
+    const where: Prisma.DepartureWhereInput = {
+      organizationId,
+      routeName,
+    }
+    if (startDateFrom || startDateTo) {
+      where.startDate = {
+        ...(startDateFrom ? { gte: parseDateOnly(startDateFrom) } : {}),
+        ...(startDateTo ? { lte: parseDateOnly(startDateTo) } : {}),
+      }
+    }
+
+    const departures = await this.prisma.departure.findMany({
+      where,
+      select: {
+        id: true,
+        departureNo: true,
+        name: true,
+        startDate: true,
+        sourceOrders: {
+          select: {
+            id: true,
+            departureId: true,
+            partnerId: true,
+            displayName: true,
+            adultGuestCount: true,
+            childGuestCount: true,
+            guestCount: true,
+            grossReceivableCents: true,
+            netReceivableCents: true,
+            partnerCollectedCents: true,
+            guestCollectCents: true,
+            notes: true,
+            partner: { select: { name: true } },
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: [{ startDate: 'asc' }, { departureNo: 'asc' }],
+    })
+
+    const blocksByDate = new Map<string, RouteLedgerDateBlock>()
+
+    for (const departure of departures) {
+      const startDate = formatDateOnly(departure.startDate)
+      const sourceOrders: RouteLedgerSourceOrderRow[] = departure.sourceOrders.map((order) => ({
+        id: order.id,
+        departureId: order.departureId,
+        partnerId: order.partnerId,
+        partnerName: order.partner.name,
+        displayName: order.displayName,
+        adultGuestCount: order.adultGuestCount,
+        childGuestCount: order.childGuestCount,
+        guestCount: order.guestCount,
+        grossReceivableCents: order.grossReceivableCents,
+        netReceivableCents: order.netReceivableCents,
+        partnerCollectedCents: order.partnerCollectedCents,
+        guestCollectCents: order.guestCollectCents,
+        notes: order.notes,
+      }))
+      const group: RouteLedgerDepartureGroup = {
+        departureId: departure.id,
+        departureNo: departure.departureNo,
+        departureName: departure.name,
+        startDate,
+        totals: sumRouteLedgerRows(sourceOrders),
+        sourceOrders,
+      }
+
+      let block = blocksByDate.get(startDate)
+      if (!block) {
+        block = {
+          startDate,
+          totals: emptyRouteLedgerTotals(),
+          departures: [],
+        }
+        blocksByDate.set(startDate, block)
+      }
+      block.departures.push(group)
+    }
+
+    const dateBlocks = [...blocksByDate.values()].map((block) => ({
+      ...block,
+      totals: sumRouteLedgerTotals(block.departures.map((group) => group.totals)),
+    }))
+
+    return {
+      routeName,
+      startDateFrom,
+      startDateTo,
+      dateBlocks,
     }
   }
 
@@ -860,4 +972,43 @@ export class DepartureService {
       canPurge,
     }
   }
+}
+
+function emptyRouteLedgerTotals(): RouteLedgerTotals {
+  return {
+    orderCount: 0,
+    guestCount: 0,
+    grossReceivableCents: 0,
+    netReceivableCents: 0,
+    partnerCollectedCents: 0,
+    guestCollectCents: 0,
+  }
+}
+
+function sumRouteLedgerRows(rows: RouteLedgerSourceOrderRow[]): RouteLedgerTotals {
+  return rows.reduce<RouteLedgerTotals>(
+    (acc, row) => ({
+      orderCount: acc.orderCount + 1,
+      guestCount: acc.guestCount + row.guestCount,
+      grossReceivableCents: acc.grossReceivableCents + row.grossReceivableCents,
+      netReceivableCents: acc.netReceivableCents + row.netReceivableCents,
+      partnerCollectedCents: acc.partnerCollectedCents + row.partnerCollectedCents,
+      guestCollectCents: acc.guestCollectCents + row.guestCollectCents,
+    }),
+    emptyRouteLedgerTotals(),
+  )
+}
+
+function sumRouteLedgerTotals(items: RouteLedgerTotals[]): RouteLedgerTotals {
+  return items.reduce<RouteLedgerTotals>(
+    (acc, item) => ({
+      orderCount: acc.orderCount + item.orderCount,
+      guestCount: acc.guestCount + item.guestCount,
+      grossReceivableCents: acc.grossReceivableCents + item.grossReceivableCents,
+      netReceivableCents: acc.netReceivableCents + item.netReceivableCents,
+      partnerCollectedCents: acc.partnerCollectedCents + item.partnerCollectedCents,
+      guestCollectCents: acc.guestCollectCents + item.guestCollectCents,
+    }),
+    emptyRouteLedgerTotals(),
+  )
 }

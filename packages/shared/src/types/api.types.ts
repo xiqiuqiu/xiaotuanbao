@@ -659,6 +659,66 @@ export interface DepartureRouteNamesResult {
   items: string[]
 }
 
+/** 线路视图客源行金额/人数合计（日块与发团组共用）。 */
+export interface RouteLedgerTotals {
+  orderCount: number
+  guestCount: number
+  grossReceivableCents: number
+  netReceivableCents: number
+  partnerCollectedCents: number
+  guestCollectCents: number
+}
+
+/**
+ * 线路视图客源明细行（#183）：约定口径字段，不含核销已收/未收与行级实收业务。
+ * 本票不含游客代表、拼入价算式、拼出汇总。
+ */
+export interface RouteLedgerSourceOrderRow {
+  id: string
+  departureId: string
+  partnerId: string
+  /** 发客客户 */
+  partnerName: string
+  displayName: string
+  adultGuestCount: number
+  childGuestCount: number
+  guestCount: number
+  /** 原始团款 */
+  grossReceivableCents: number
+  /** 结算金额 */
+  netReceivableCents: number
+  /** 客户已收（客户补款） */
+  partnerCollectedCents: number
+  /** 我方代收（游客代收） */
+  guestCollectCents: number
+  notes: string | null
+}
+
+export interface RouteLedgerDepartureGroup {
+  departureId: string
+  departureNo: string
+  departureName: string
+  /** 出团日期（YYYY-MM-DD） */
+  startDate: string
+  totals: RouteLedgerTotals
+  sourceOrders: RouteLedgerSourceOrderRow[]
+}
+
+export interface RouteLedgerDateBlock {
+  /** 出团日期（YYYY-MM-DD） */
+  startDate: string
+  totals: RouteLedgerTotals
+  departures: RouteLedgerDepartureGroup[]
+}
+
+/** GET /departures/route-ledger 读模型：日期块 → 发团组 → 客源行。 */
+export interface RouteLedgerResult {
+  routeName: string
+  startDateFrom: string | null
+  startDateTo: string | null
+  dateBlocks: RouteLedgerDateBlock[]
+}
+
 export interface CreateDepartureDto {
   name: string
   routeName: string

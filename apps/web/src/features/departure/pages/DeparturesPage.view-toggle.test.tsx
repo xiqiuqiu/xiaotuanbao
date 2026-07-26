@@ -28,6 +28,12 @@ const listDepartureRouteNames = vi.fn().mockResolvedValue({ items: ['伊犁环�
 vi.mock('@/services/departure.service', () => ({
   listDepartures: (...args: unknown[]) => listDepartures(...args),
   listDepartureRouteNames: (...args: unknown[]) => listDepartureRouteNames(...args),
+  getDepartureRouteLedger: vi.fn().mockResolvedValue({
+    routeName: '',
+    startDateFrom: null,
+    startDateTo: null,
+    dateBlocks: [],
+  }),
   purgeDeparture: vi.fn(),
 }))
 

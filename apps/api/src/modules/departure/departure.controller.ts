@@ -17,6 +17,7 @@ import type {
   DepartureOperationsSheetSnapshot,
   DepartureRouteNamesResult,
   DepartureSummary,
+  RouteLedgerResult,
 } from '@xiaotuanbao/shared'
 import type { Response } from 'express'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
@@ -27,6 +28,7 @@ import {
   CopyDepartureDto,
   CloseDepartureDto,
   ListDeparturesQueryDto,
+  ListRouteLedgerQueryDto,
   TransitionDepartureDto,
   UnarchiveDepartureDto,
   UpdateDepartureDto,
@@ -66,6 +68,15 @@ export class DepartureController {
     @Req() request: { user: { organizationId: string } },
   ): Promise<DepartureRouteNamesResult> {
     return this.departureService.listRouteNames(request.user.organizationId)
+  }
+
+  @Get('route-ledger')
+  @RequireMenu('/departure')
+  getRouteLedger(
+    @Req() request: { user: { organizationId: string } },
+    @Query() query: ListRouteLedgerQueryDto,
+  ): Promise<RouteLedgerResult> {
+    return this.departureService.getRouteLedger(request.user.organizationId, query)
   }
 
   @Post()
