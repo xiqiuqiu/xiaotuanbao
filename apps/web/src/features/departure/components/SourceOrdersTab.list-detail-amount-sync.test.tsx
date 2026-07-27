@@ -81,6 +81,8 @@ function postReceivableSyncOrder(
     discountNotes: null,
     netReceivableCents: 720000,
     collectionMode: 'split',
+    depositCents: 100000,
+    balanceCents: 620000,
     partnerCollectedCents: 100000,
     guestCollectCents: 620000,
     settlementNotes: null,
@@ -135,10 +137,14 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
     })
 
     expect(
-      screen.getByText(/结算金额 ¥7,200\.00.*客户已收 ¥1,000\.00.*我方代收 ¥6,200\.00/),
+      screen.getByText(
+        /【团款】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · G约定 ¥6,200\.00/,
+      ),
     ).toBeTruthy()
     expect(
-      screen.queryByText(/结算金额 ¥7,000\.00.*客户已收 ¥1,000\.00.*我方代收 ¥6,000\.00/),
+      screen.queryByText(
+        /【团款】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · G约定 ¥6,000\.00/,
+      ),
     ).toBeNull()
   })
 })

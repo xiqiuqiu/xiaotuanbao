@@ -40,6 +40,8 @@ function staleListOrder(): SourceOrderSummary {
     discountNotes: null,
     netReceivableCents: 700000,
     collectionMode: 'split',
+    depositCents: 100000,
+    balanceCents: 600000,
     partnerCollectedCents: 100000,
     guestCollectCents: 600000,
     settlementNotes: null,
@@ -59,6 +61,8 @@ function freshDetailOrder(): SourceOrderSummary {
     ...staleListOrder(),
     grossReceivableCents: 720000,
     netReceivableCents: 720000,
+    depositCents: 100000,
+    balanceCents: 620000,
     guestCollectCents: 620000,
     amountFieldsLocked: true,
   }
@@ -182,8 +186,9 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
             void submit(
               {
                 ...payload,
-                adultUnitPriceCents: 800000,
-                partnerCollectedCents: 100000,
+                // 新口径下改单价不改路径金额；改尾款才会触发代收路径变更软警示
+                depositCents: 100000,
+                balanceCents: 500000,
               },
               {
                 guestCollectCents: detailOrder.guestCollectCents,

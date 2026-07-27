@@ -1128,7 +1128,13 @@ export interface SourceOrderSummary {
   discountNotes: string | null
   netReceivableCents: number
   collectionMode: string
+  /** 定金（分） */
+  depositCents: number
+  /** 尾款（分） */
+  balanceCents: number
+  /** 客户已收 P（派生） */
   partnerCollectedCents: number
+  /** 我方代收 G约定（派生） */
   guestCollectCents: number
   settlementNotes: string | null
   notes: string | null
@@ -1378,7 +1384,8 @@ export interface CreateSourceOrderDto {
   discountCents?: number
   discountNotes?: string
   collectionMode: string
-  partnerCollectedCents?: number
+  depositCents?: number
+  balanceCents?: number
   settlementNotes?: string
   notes?: string
   fareAdjustments?: SourceOrderFareAdjustmentInput[]
@@ -1394,7 +1401,8 @@ export interface UpdateSourceOrderDto {
   discountCents?: number
   discountNotes?: string | null
   collectionMode?: string
-  partnerCollectedCents?: number
+  depositCents?: number
+  balanceCents?: number
   settlementNotes?: string | null
   notes?: string | null
   fareAdjustments?: SourceOrderFareAdjustmentInput[]

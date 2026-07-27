@@ -29,6 +29,8 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     discountNotes: null,
     netReceivableCents: 2450000,
     collectionMode: 'guest_only',
+    depositCents: 0,
+    balanceCents: 2450000,
     partnerCollectedCents: 0,
     guestCollectCents: 2450000,
     settlementNotes: null,

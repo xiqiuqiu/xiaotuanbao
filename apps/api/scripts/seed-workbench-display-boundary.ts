@@ -264,6 +264,8 @@ async function main() {
                   netReceivableCents:
                     input.sourceOrder.guestCount * (input.sourceOrder.unitPriceCents ?? 10000),
                   collectionMode: SourceOrderCollectionMode.partner_settled,
+                  depositCents: 0,
+                  balanceCents: 0,
                   partnerCollectedCents:
                     input.sourceOrder.guestCount * (input.sourceOrder.unitPriceCents ?? 10000),
                   guestCollectCents: 0,
@@ -716,6 +718,8 @@ async function main() {
             discountCents: 0,
             netReceivableCents: (10 + monthsAgo) * 10000,
             collectionMode: SourceOrderCollectionMode.partner_settled,
+            depositCents: 0,
+            balanceCents: 0,
             partnerCollectedCents: (10 + monthsAgo) * 10000,
             guestCollectCents: 0,
           },

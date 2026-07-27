@@ -17,7 +17,10 @@ export interface SourceOrderAmountInput {
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
-  partnerCollectedCents: number
+  /** 定金（分）；代收场景录入，全部客户结算忽略。 */
+  depositCents: number
+  /** 尾款（分）；代收场景录入，全部客户结算忽略。 */
+  balanceCents: number
   /** Omitted / empty → adjustment net 0 (historical orders). */
   fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
@@ -27,8 +30,19 @@ export interface SourceOrderAmounts {
   fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
+  depositCents: number
+  balanceCents: number
+  /** 客户已收 P（由收款方式与定金/尾款派生）。 */
   partnerCollectedCents: number
+  /** 我方代收 G约定（由收款方式与定金/尾款派生）。 */
   guestCollectCents: number
+}
+
+export interface CollectionSettlementPreview {
+  /** 预估客户补款 = max(0, S − G约定)；P 不进公式。 */
+  estimatedCustomerTopUpCents: number
+  /** 预计返利 = max(0, G约定 − S)；P 不进公式。 */
+  estimatedRebateCents: number
 }
 
 /** Stored amount snapshot used to detect locked-field edits vs unit-price heal. */
@@ -40,6 +54,8 @@ export interface SourceOrderStoredAmounts {
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
+  depositCents: number
+  balanceCents: number
   partnerCollectedCents: number
   guestCollectCents: number
   grossReceivableCents: number
@@ -102,6 +118,16 @@ export function computeFareAdjustmentNetCents(
   return net
 }
 
+export function computeCollectionSettlementPreview(
+  netReceivableCents: number,
+  guestCollectCents: number,
+): CollectionSettlementPreview {
+  return {
+    estimatedCustomerTopUpCents: Math.max(0, netReceivableCents - guestCollectCents),
+    estimatedRebateCents: Math.max(0, guestCollectCents - netReceivableCents),
+  }
+}
+
 export function computeSourceOrderAmounts(input: SourceOrderAmountInput): SourceOrderAmounts {
   const adultUnitPriceCents = effectiveUnitPriceCents(
     input.adultGuestCount,
@@ -118,18 +144,28 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
     input.discountType === 'lump_sum' ? Math.max(input.discountCents, 0) : 0
   const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
 
+  const depositCents = Math.max(input.depositCents, 0)
+  const balanceCents = Math.max(input.balanceCents, 0)
+
+  let persistedDepositCents = depositCents
+  let persistedBalanceCents = balanceCents
   let partnerCollectedCents = 0
-  let guestCollectCents = netReceivableCents
+  let guestCollectCents = 0
 
   if (input.collectionMode === 'guest_only') {
+    // 全部我方代收：P=0，G约定=定金+尾款（可不等于 S）
     partnerCollectedCents = 0
-    guestCollectCents = netReceivableCents
+    guestCollectCents = depositCents + balanceCents
   } else if (input.collectionMode === 'partner_settled') {
+    // 全部客户结算：无代收期次；P 展示为 S，G约定=0
+    persistedDepositCents = 0
+    persistedBalanceCents = 0
     partnerCollectedCents = netReceivableCents
     guestCollectCents = 0
   } else {
-    partnerCollectedCents = input.partnerCollectedCents
-    guestCollectCents = netReceivableCents - partnerCollectedCents
+    // 合作方收定金 + 我方收尾款：P=定金，G约定=尾款
+    partnerCollectedCents = depositCents
+    guestCollectCents = balanceCents
   }
 
   return {
@@ -137,8 +173,111 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
     fareAdjustmentNetCents,
     discountCents,
     netReceivableCents,
+    depositCents: persistedDepositCents,
+    balanceCents: persistedBalanceCents,
     partnerCollectedCents,
     guestCollectCents,
+  }
+}
+
+export type SourceOrderCollectionPeriodInput = {
+  collectionMode: SourceOrderCollectionMode
+  depositCents?: number
+  balanceCents?: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
+  discountType: SourceOrderDiscountType
+  discountCents: number
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
+}
+
+/**
+ * Resolve deposit/balance for create and update.
+ * When guest_only and both periods are omitted, default balance to net receivable
+ * (covers create and update when collectionMode changes without re-sending periods).
+ * Explicit 0 is preserved for validation (代收场景要求 G约定>0).
+ */
+export function resolveSourceOrderCollectionPeriods(
+  input: SourceOrderCollectionPeriodInput,
+): { depositCents: number; balanceCents: number } {
+  if (input.collectionMode !== 'guest_only' && input.collectionMode !== 'split') {
+    return { depositCents: 0, balanceCents: 0 }
+  }
+
+  const depositOmitted = input.depositCents === undefined
+  const balanceOmitted = input.balanceCents === undefined
+  let depositCents = Math.max(input.depositCents ?? 0, 0)
+  let balanceCents = Math.max(input.balanceCents ?? 0, 0)
+
+  // 未传期次时：全部我方代收默认把结算金额记到尾款，避免旧调用方立刻因 G约定=0 失败。
+  // 显式传 0 仍按录入校验（代收场景要求 G约定>0）。
+  if (input.collectionMode === 'guest_only' && depositOmitted && balanceOmitted) {
+    const netReceivableCents = computeSourceOrderAmounts({
+      adultGuestCount: input.adultGuestCount,
+      childGuestCount: input.childGuestCount,
+      adultUnitPriceCents: input.adultUnitPriceCents,
+      childUnitPriceCents: input.childUnitPriceCents,
+      discountType: input.discountType,
+      discountCents: input.discountCents,
+      collectionMode: input.collectionMode,
+      depositCents: 0,
+      balanceCents: 0,
+      fareAdjustments: input.fareAdjustments,
+    }).netReceivableCents
+    balanceCents = Math.max(netReceivableCents, 0)
+  }
+
+  return { depositCents, balanceCents }
+}
+
+export type UpdateCollectionPeriodInput = {
+  dtoDepositCents?: number
+  dtoBalanceCents?: number
+  dtoCollectionMode?: SourceOrderCollectionMode
+  stored: {
+    collectionMode: SourceOrderCollectionMode
+    depositCents: number
+    balanceCents: number
+    guestCollectCents: number
+    netReceivableCents: number
+  }
+}
+
+/**
+ * Decide deposit/balance inputs for update() before normalizeInput.
+ * - Explicit dto period fields win (missing side falls back to stored).
+ * - collectionMode actually changing without periods → omit (guest_only defaults balance=net).
+ * - guest_only still tracking G===S and periods omitted → omit so balance re-defaults to new S
+ *   (covers API callers that only patch unit price / fare adjustments).
+ * - Otherwise keep stored periods (preserves intentional G≠S).
+ */
+export function resolveUpdateCollectionPeriodInputs(
+  input: UpdateCollectionPeriodInput,
+): { depositCents?: number; balanceCents?: number } {
+  if (input.dtoDepositCents !== undefined || input.dtoBalanceCents !== undefined) {
+    return {
+      depositCents: input.dtoDepositCents ?? input.stored.depositCents,
+      balanceCents: input.dtoBalanceCents ?? input.stored.balanceCents,
+    }
+  }
+
+  const nextMode = input.dtoCollectionMode ?? input.stored.collectionMode
+  const collectionModeChanging =
+    input.dtoCollectionMode !== undefined &&
+    input.dtoCollectionMode !== input.stored.collectionMode
+  const guestOnlyTrackingS =
+    nextMode === 'guest_only' &&
+    input.stored.guestCollectCents === input.stored.netReceivableCents
+
+  if (collectionModeChanging || guestOnlyTrackingS) {
+    return { depositCents: undefined, balanceCents: undefined }
+  }
+
+  return {
+    depositCents: input.stored.depositCents,
+    balanceCents: input.stored.balanceCents,
   }
 }
 
@@ -211,7 +350,8 @@ export function resolveSourceOrderAmountChange(
     order.discountType !== next.discountType ||
     order.discountCents !== nextDiscountCents ||
     order.collectionMode !== next.collectionMode ||
-    order.partnerCollectedCents !== next.partnerCollectedCents ||
+    order.depositCents !== next.depositCents ||
+    order.balanceCents !== next.balanceCents ||
     !fareAdjustmentsEqual(order.fareAdjustments, next.fareAdjustments)
 
   if (!amountInputsChanged) {
@@ -224,6 +364,8 @@ export function resolveSourceOrderAmountChange(
     order.fareAdjustmentNetCents === nextComputed.fareAdjustmentNetCents &&
     order.discountCents === nextComputed.discountCents &&
     order.netReceivableCents === nextComputed.netReceivableCents &&
+    order.depositCents === nextComputed.depositCents &&
+    order.balanceCents === nextComputed.balanceCents &&
     order.partnerCollectedCents === nextComputed.partnerCollectedCents &&
     order.guestCollectCents === nextComputed.guestCollectCents
 

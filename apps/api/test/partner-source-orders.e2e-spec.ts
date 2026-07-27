@@ -105,7 +105,8 @@ describe('Partner source orders API (e2e)', () => {
       discountType: SourceOrderDiscountType.lump_sum,
       discountCents: 30000,
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 120000,
+      depositCents: 120000,
+      balanceCents: 100000,
     })
     order2Id = await createOrder(departure2.id, {
       partnerId,

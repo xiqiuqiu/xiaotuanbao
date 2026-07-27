@@ -197,7 +197,8 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
       discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
       discountYuan: watched.discountYuan,
       collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
-      partnerCollectedYuan: watched.partnerCollectedYuan,
+      depositYuan: watched.depositYuan,
+      balanceYuan: watched.balanceYuan,
       fareAdjustments: watched.fareAdjustments ?? [],
     })
   }, [watched])
@@ -211,8 +212,11 @@ function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOr
     SourceOrderCollectionMode.GUEST_ONLY
 
   return (
-    <Typography.Text type="secondary">
-      {formatSourceOrderAmountSummary(amounts, collectionMode, formatCents)}
+    <Typography.Text
+      type="secondary"
+      style={{ whiteSpace: 'pre-line', display: 'block', lineHeight: 1.6 }}
+    >
+      {formatSourceOrderAmountSummary({ ...amounts, collectionMode }, formatCents)}
     </Typography.Text>
   )
 }
@@ -624,7 +628,10 @@ function SourceOrderFormFields({
         ) : null}
       </FormSection>
 
-      <FormSection title="收款信息" description="决定结算金额如何拆分到客户已收与我方代收。">
+      <FormSection
+        title="收款信息"
+        description="按定金/尾款录入代收约定；地接与合作方往来只看 G约定 与结算金额 S，客户已收不计入客户补款。"
+      >
         <Form.Item
           name="collectionMode"
           label="收款方式"
@@ -632,19 +639,46 @@ function SourceOrderFormFields({
         >
           <Select options={[...SOURCE_ORDER_COLLECTION_OPTIONS]} disabled={lockAmounts} />
         </Form.Item>
-        {collectionMode === SourceOrderCollectionMode.SPLIT ? (
-          <Form.Item
-            name="partnerCollectedYuan"
-            label="客户已收金额（元）"
-            rules={[{ required: true, message: '请输入客户已收金额' }]}
-          >
-            <InputNumber
-              min={0}
-              precision={2}
-              style={{ width: '100%' }}
-              disabled={lockAmounts}
-            />
-          </Form.Item>
+        {collectionMode === SourceOrderCollectionMode.GUEST_ONLY ||
+        collectionMode === SourceOrderCollectionMode.SPLIT ? (
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="depositYuan"
+                label={
+                  collectionMode === SourceOrderCollectionMode.SPLIT
+                    ? '定金（客户已收，元）'
+                    : '定金（元）'
+                }
+                rules={[{ required: true, message: '请输入定金' }]}
+              >
+                <InputNumber
+                  min={0}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  disabled={lockAmounts}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="balanceYuan"
+                label={
+                  collectionMode === SourceOrderCollectionMode.SPLIT
+                    ? '尾款（我方代收，元）'
+                    : '尾款（元）'
+                }
+                rules={[{ required: true, message: '请输入尾款' }]}
+              >
+                <InputNumber
+                  min={0}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  disabled={lockAmounts}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
         ) : null}
         <Form.Item name="settlementNotes" label="结算说明">
           <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />

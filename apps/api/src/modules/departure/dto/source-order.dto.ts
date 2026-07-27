@@ -138,11 +138,19 @@ export class CreateSourceOrderDto {
   @IsEnum(PrismaCollectionMode)
   collectionMode!: PrismaCollectionMode
 
+  /** 定金（分）；代收场景录入。 */
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  partnerCollectedCents?: number
+  depositCents?: number
+
+  /** 尾款（分）；代收场景录入。 */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  balanceCents?: number
 
   @IsOptional()
   @IsString()
@@ -211,7 +219,13 @@ export class UpdateSourceOrderDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  partnerCollectedCents?: number
+  depositCents?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  balanceCents?: number
 
   @IsOptional()
   @IsString()

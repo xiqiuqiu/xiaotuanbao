@@ -46,6 +46,8 @@ import {
   buildSourceOrderDisplayName,
   computeSourceOrderAmounts,
   resolveSourceOrderAmountChange,
+  resolveSourceOrderCollectionPeriods,
+  resolveUpdateCollectionPeriodInputs,
   type SourceOrderFareAdjustmentInput,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
@@ -321,6 +323,8 @@ export class SourceOrderService {
           discountNotes: dto.discountNotes?.trim() || null,
           netReceivableCents: amounts.netReceivableCents,
           collectionMode: normalized.collectionMode,
+          depositCents: amounts.depositCents,
+          balanceCents: amounts.balanceCents,
           partnerCollectedCents: amounts.partnerCollectedCents,
           guestCollectCents: amounts.guestCollectCents,
           settlementNotes: dto.settlementNotes?.trim() || null,
@@ -467,28 +471,36 @@ export class SourceOrderService {
       dto.fareAdjustments !== undefined
         ? toFareAdjustmentInputs(dto.fareAdjustments)
         : existingFareAdjustments
-    const normalized = this.normalizeInput(
-      {
-        adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
-        childGuestCount: dto.childGuestCount ?? order.childGuestCount,
-        adultUnitPriceCents:
-          dto.adultUnitPriceCents !== undefined
-            ? dto.adultUnitPriceCents
-            : order.adultUnitPriceCents,
-        childUnitPriceCents:
-          dto.childUnitPriceCents !== undefined
-            ? dto.childUnitPriceCents
-            : order.childUnitPriceCents,
-        discountType: dto.discountType ?? order.discountType,
-        discountCents: dto.discountCents ?? order.discountCents,
-        collectionMode: dto.collectionMode ?? order.collectionMode,
-        partnerCollectedCents:
-          dto.partnerCollectedCents ??
-          (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
-        fareAdjustments,
+    const periodInputs = resolveUpdateCollectionPeriodInputs({
+      dtoDepositCents: dto.depositCents,
+      dtoBalanceCents: dto.balanceCents,
+      dtoCollectionMode: dto.collectionMode,
+      stored: {
+        collectionMode: order.collectionMode,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
+        guestCollectCents: order.guestCollectCents,
+        netReceivableCents: order.netReceivableCents,
       },
-      order,
-    )
+    })
+    const normalized = this.normalizeInput({
+      adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
+      childGuestCount: dto.childGuestCount ?? order.childGuestCount,
+      adultUnitPriceCents:
+        dto.adultUnitPriceCents !== undefined
+          ? dto.adultUnitPriceCents
+          : order.adultUnitPriceCents,
+      childUnitPriceCents:
+        dto.childUnitPriceCents !== undefined
+          ? dto.childUnitPriceCents
+          : order.childUnitPriceCents,
+      discountType: dto.discountType ?? order.discountType,
+      discountCents: dto.discountCents ?? order.discountCents,
+      collectionMode: dto.collectionMode ?? order.collectionMode,
+      depositCents: periodInputs.depositCents,
+      balanceCents: periodInputs.balanceCents,
+      fareAdjustments,
+    })
 
     validateSourceOrderInput({
       partnerId: partner.id,
@@ -504,6 +516,8 @@ export class SourceOrderService {
       discountType: order.discountType,
       discountCents: order.discountCents,
       collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
       partnerCollectedCents: order.partnerCollectedCents,
       guestCollectCents: order.guestCollectCents,
       grossReceivableCents: order.grossReceivableCents,
@@ -519,7 +533,8 @@ export class SourceOrderService {
       discountType: normalized.discountType,
       discountCents: normalized.discountCents,
       collectionMode: normalized.collectionMode,
-      partnerCollectedCents: normalized.partnerCollectedCents,
+      depositCents: normalized.depositCents,
+      balanceCents: normalized.balanceCents,
       fareAdjustments: normalized.fareAdjustments,
     }
     const { amountInputsChanged } = resolveSourceOrderAmountChange(
@@ -535,6 +550,8 @@ export class SourceOrderService {
           fareAdjustmentNetCents: order.fareAdjustmentNetCents,
           discountCents: order.discountCents,
           netReceivableCents: order.netReceivableCents,
+          depositCents: order.depositCents,
+          balanceCents: order.balanceCents,
           partnerCollectedCents: order.partnerCollectedCents,
           guestCollectCents: order.guestCollectCents,
         }
@@ -582,6 +599,8 @@ export class SourceOrderService {
             dto.discountNotes !== undefined ? dto.discountNotes?.trim() || null : undefined,
           netReceivableCents: amounts.netReceivableCents,
           collectionMode: normalized.collectionMode,
+          depositCents: amounts.depositCents,
+          balanceCents: amounts.balanceCents,
           partnerCollectedCents: amounts.partnerCollectedCents,
           guestCollectCents: amounts.guestCollectCents,
           settlementNotes:
@@ -734,20 +753,18 @@ export class SourceOrderService {
     await this.prisma.sourceOrderGuest.delete({ where: { id: guest.id } })
   }
 
-  private normalizeInput(
-    dto: {
-      adultGuestCount: number
-      childGuestCount: number
-      adultUnitPriceCents?: number | null
-      childUnitPriceCents?: number | null
-      discountType: CreateSourceOrderDto['discountType']
-      discountCents?: number
-      collectionMode: CreateSourceOrderDto['collectionMode']
-      partnerCollectedCents?: number
-      fareAdjustments?: SourceOrderFareAdjustmentInput[]
-    },
-    existing?: SourceOrder,
-  ) {
+  private normalizeInput(dto: {
+    adultGuestCount: number
+    childGuestCount: number
+    adultUnitPriceCents?: number | null
+    childUnitPriceCents?: number | null
+    discountType: CreateSourceOrderDto['discountType']
+    discountCents?: number
+    collectionMode: CreateSourceOrderDto['collectionMode']
+    depositCents?: number
+    balanceCents?: number
+    fareAdjustments?: SourceOrderFareAdjustmentInput[]
+  }) {
     const discountType = dto.discountType
     const discountCents =
       discountType === 'lump_sum' ? Math.max(dto.discountCents ?? 0, 0) : 0
@@ -757,29 +774,18 @@ export class SourceOrderService {
     const childUnitPriceCents =
       dto.childGuestCount === 0 ? (dto.childUnitPriceCents ?? 0) : dto.childUnitPriceCents
     const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
-
-    const amountInput = {
+    const { depositCents, balanceCents } = resolveSourceOrderCollectionPeriods({
+      collectionMode,
+      depositCents: dto.depositCents,
+      balanceCents: dto.balanceCents,
       adultGuestCount: dto.adultGuestCount,
       childGuestCount: dto.childGuestCount,
       adultUnitPriceCents,
       childUnitPriceCents,
       discountType,
       discountCents,
-      collectionMode,
-      partnerCollectedCents: 0,
       fareAdjustments,
-    }
-    const net = computeSourceOrderAmounts(amountInput).netReceivableCents
-
-    let partnerCollectedCents = 0
-    if (collectionMode === 'partner_settled') {
-      partnerCollectedCents = net
-    } else if (collectionMode === 'split') {
-      partnerCollectedCents =
-        dto.partnerCollectedCents ??
-        existing?.partnerCollectedCents ??
-        0
-    }
+    })
 
     return {
       adultGuestCount: dto.adultGuestCount,
@@ -789,7 +795,8 @@ export class SourceOrderService {
       discountType,
       discountCents,
       collectionMode,
-      partnerCollectedCents,
+      depositCents,
+      balanceCents,
       fareAdjustments,
     }
   }
@@ -922,6 +929,8 @@ export class SourceOrderService {
       discountNotes: order.discountNotes,
       netReceivableCents: order.netReceivableCents,
       collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
       partnerCollectedCents: order.partnerCollectedCents,
       guestCollectCents: order.guestCollectCents,
       settlementNotes: order.settlementNotes,

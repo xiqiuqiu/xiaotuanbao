@@ -25,7 +25,10 @@ export interface SourceOrderFormValues {
   discountYuan?: number
   discountNotes?: string
   collectionMode: SourceOrderCollectionMode
-  partnerCollectedYuan?: number
+  /** 定金（元）；代收场景录入。 */
+  depositYuan?: number
+  /** 尾款（元）；代收场景录入。 */
+  balanceYuan?: number
   settlementNotes?: string
   notes?: string
   fareAdjustments: SourceOrderFareAdjustmentFormRow[]
@@ -40,7 +43,8 @@ export type SourceOrderFormAmountInput = Pick<
   | 'discountType'
   | 'discountYuan'
   | 'collectionMode'
-  | 'partnerCollectedYuan'
+  | 'depositYuan'
+  | 'balanceYuan'
   | 'fareAdjustments'
 >
 
@@ -98,6 +102,16 @@ export function computeFareAdjustmentNetCents(
   return net
 }
 
+export function computeCollectionSettlementPreview(
+  netReceivableCents: number,
+  guestCollectCents: number,
+) {
+  return {
+    estimatedCustomerTopUpCents: Math.max(0, netReceivableCents - guestCollectCents),
+    estimatedRebateCents: Math.max(0, guestCollectCents - netReceivableCents),
+  }
+}
+
 export function computeFormAmounts(values: SourceOrderFormAmountInput) {
   const adultUnitPriceYuan = effectiveUnitPriceYuan(
     values.adultGuestCount,
@@ -117,50 +131,82 @@ export function computeFormAmounts(values: SourceOrderFormAmountInput) {
       : 0
   const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
 
+  const depositCents = yuanToCents(values.depositYuan ?? 0)
+  const balanceCents = yuanToCents(values.balanceYuan ?? 0)
+
+  let persistedDepositCents = depositCents
+  let persistedBalanceCents = balanceCents
   let partnerCollectedCents = 0
-  let guestCollectCents = netReceivableCents
+  let guestCollectCents = 0
 
   if (values.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    persistedDepositCents = 0
+    persistedBalanceCents = 0
     partnerCollectedCents = netReceivableCents
     guestCollectCents = 0
   } else if (values.collectionMode === SourceOrderCollectionMode.SPLIT) {
-    partnerCollectedCents = yuanToCents(values.partnerCollectedYuan ?? 0)
-    guestCollectCents = netReceivableCents - partnerCollectedCents
+    partnerCollectedCents = depositCents
+    guestCollectCents = balanceCents
+  } else {
+    // guest_only：P=0，G约定=定金+尾款
+    partnerCollectedCents = 0
+    guestCollectCents = depositCents + balanceCents
   }
+
+  const settlementPreview = computeCollectionSettlementPreview(
+    netReceivableCents,
+    guestCollectCents,
+  )
 
   return {
     grossReceivableCents,
     fareAdjustmentNetCents,
     discountCents,
     netReceivableCents,
+    depositCents: persistedDepositCents,
+    balanceCents: persistedBalanceCents,
     partnerCollectedCents,
     guestCollectCents,
+    ...settlementPreview,
   }
 }
 
-/** Footer / preview copy for live amount summary by collection mode. */
+export type SourceOrderAmountPreviewModel = {
+  collectionMode: SourceOrderCollectionMode
+  netReceivableCents: number
+  partnerCollectedCents: number
+  guestCollectCents: number
+  estimatedCustomerTopUpCents: number
+  estimatedRebateCents: number
+}
+
+/** Footer / preview copy：团款 / 代收约定 / 往来结果分区。 */
 export function formatSourceOrderAmountSummary(
-  amounts: ReturnType<typeof computeFormAmounts>,
-  collectionMode: SourceOrderCollectionMode,
+  amounts: SourceOrderAmountPreviewModel,
   formatCents: (cents: number) => string,
 ): string {
-  const parts = [`结算金额 ${formatCents(amounts.netReceivableCents)}`]
+  const lines = [`【团款】结算金额 ${formatCents(amounts.netReceivableCents)}`]
 
-  if (
-    collectionMode === SourceOrderCollectionMode.SPLIT ||
-    collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
-  ) {
-    parts.push(`客户已收 ${formatCents(amounts.partnerCollectedCents)}`)
+  if (amounts.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    lines.push(
+      `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)}（全部客户结算）`,
+    )
+    lines.push('【往来结果】无代收轧差')
+    return lines.join('\n')
   }
 
-  if (
-    collectionMode === SourceOrderCollectionMode.GUEST_ONLY ||
-    collectionMode === SourceOrderCollectionMode.SPLIT
-  ) {
-    parts.push(`我方代收 ${formatCents(amounts.guestCollectCents)}`)
+  lines.push(
+    `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)} · G约定 ${formatCents(amounts.guestCollectCents)}`,
+  )
+  lines.push(
+    `【往来结果】预估客户补款 ${formatCents(amounts.estimatedCustomerTopUpCents)} · 预计返利 ${formatCents(amounts.estimatedRebateCents)}`,
+  )
+  if (amounts.guestCollectCents >= amounts.netReceivableCents) {
+    lines.push('计划期不生成客户补款应收（G约定已覆盖结算金额）')
   }
+  lines.push('客户已收（定金）不计入客户补款金额')
 
-  return parts.join(' · ')
+  return lines.join('\n')
 }
 
 export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
@@ -169,6 +215,8 @@ export function createEmptySourceOrderFormValues(): SourceOrderFormValues {
     childGuestCount: 0,
     discountType: SourceOrderDiscountType.NONE,
     collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+    depositYuan: undefined,
+    balanceYuan: undefined,
     fareAdjustments: [],
   } as unknown as SourceOrderFormValues
 }
@@ -184,7 +232,8 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
     discountYuan: centsToYuan(order.discountCents),
     discountNotes: order.discountNotes ?? undefined,
     collectionMode: order.collectionMode as SourceOrderCollectionMode,
-    partnerCollectedYuan: centsToYuan(order.partnerCollectedCents),
+    depositYuan: centsToYuan(order.depositCents ?? 0),
+    balanceYuan: centsToYuan(order.balanceCents ?? 0),
     settlementNotes: order.settlementNotes ?? undefined,
     notes: order.notes ?? undefined,
     fareAdjustments: (order.fareAdjustments ?? []).map((item) => ({
@@ -237,7 +286,8 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
     discountCents: amounts.discountCents,
     discountNotes: values.discountNotes,
     collectionMode: values.collectionMode,
-    partnerCollectedCents: amounts.partnerCollectedCents,
+    depositCents: amounts.depositCents,
+    balanceCents: amounts.balanceCents,
     settlementNotes: values.settlementNotes,
     notes: values.notes,
     fareAdjustments: (values.fareAdjustments ?? []).flatMap((item) => {
@@ -284,6 +334,9 @@ export function resolvePathAmountsFromPayload(
   const netReceivableCents =
     grossReceivableCents + fareAdjustmentNetCents - payload.discountCents
 
+  const depositCents = payload.depositCents ?? 0
+  const balanceCents = payload.balanceCents ?? 0
+
   if (payload.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
     return {
       partnerCollectedCents: netReceivableCents,
@@ -292,12 +345,12 @@ export function resolvePathAmountsFromPayload(
   }
   if (payload.collectionMode === SourceOrderCollectionMode.SPLIT) {
     return {
-      partnerCollectedCents: payload.partnerCollectedCents,
-      guestCollectCents: netReceivableCents - payload.partnerCollectedCents,
+      partnerCollectedCents: depositCents,
+      guestCollectCents: balanceCents,
     }
   }
   return {
     partnerCollectedCents: 0,
-    guestCollectCents: netReceivableCents,
+    guestCollectCents: depositCents + balanceCents,
   }
 }

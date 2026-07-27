@@ -321,7 +321,8 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
       const departure = await createDeparture()
       const sourceOrder = await createSourceOrder(departure.id, {
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 300000,
+        depositCents: 300000,
+        balanceCents: 700000,
       })
 
       await authRequest(app, coordinatorToken)

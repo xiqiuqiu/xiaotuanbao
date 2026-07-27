@@ -1037,12 +1037,13 @@ describe('Departure API (e2e)', () => {
         .send(
           sourceOrderPayload({
             collectionMode: SourceOrderCollectionMode.split,
-            partnerCollectedCents: 1100000,
+            depositCents: 1100000,
+            balanceCents: 0,
           }),
         )
         .expect(400)
 
-      expect(response.body.message).toBe('客户已收金额不能大于结算金额')
+      expect(response.body.message).toBe('代收场景的 G约定 必须大于0')
     })
 
     it('validates discount cannot exceed gross', async () => {
@@ -3096,7 +3097,8 @@ describe('Departure API (e2e)', () => {
           childUnitPriceCents: 0,
           discountType: SourceOrderDiscountType.none,
           collectionMode: SourceOrderCollectionMode.split,
-          partnerCollectedCents: 120000,
+          depositCents: 120000,
+          balanceCents: 80000,
         })
         .expect(201)
 

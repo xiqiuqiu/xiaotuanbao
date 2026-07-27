@@ -634,7 +634,13 @@ model SourceOrder {
   discountNotes            String?                     @map("discount_notes")
   netReceivableCents       Int                         @map("net_receivable_cents")
   collectionMode           SourceOrderCollectionMode   @map("collection_mode")
+  /** 定金（分）；代收场景录入；全部客户结算为 0。 */
+  depositCents             Int                         @default(0) @map("deposit_cents")
+  /** 尾款（分）；代收场景录入；全部客户结算为 0。 */
+  balanceCents             Int                         @default(0) @map("balance_cents")
+  /** 客户已收 P（由收款方式与定金/尾款派生）。 */
   partnerCollectedCents    Int                         @map("partner_collected_cents")
+  /** 我方代收 G约定（由收款方式与定金/尾款派生）。 */
   guestCollectCents        Int                         @map("guest_collect_cents")
   settlementNotes          String?                     @map("settlement_notes")
   notes                    String?

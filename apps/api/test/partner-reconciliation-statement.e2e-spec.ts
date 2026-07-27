@@ -109,7 +109,8 @@ describe('Partner reconciliation statement API (e2e)', () => {
       discountType: SourceOrderDiscountType.lump_sum,
       discountCents: 30000,
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 120000,
+      depositCents: 120000,
+      balanceCents: 100000,
       notes: '窗口位',
     })
     // 客人名单两条：最早一条为游客代表

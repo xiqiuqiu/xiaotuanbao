@@ -281,7 +281,7 @@ export function confirmBatchGenerateReceivables(
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          收款方式为「客户已收 + 我方代收」的客源单会拆分为两条应收记录。
+          收款方式为「合作方收定金+我方收尾款」的客源单会拆分为两条应收记录。
         </Typography.Text>
       </Space>
     ),
