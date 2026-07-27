@@ -120,6 +120,7 @@ export function SourceOrdersTab({
     saveAndGenerateMutation,
     deleteMutation,
     generateMutation,
+    settleMutation,
     batchGenerateMutation,
   } = useSourceOrdersTabMutations({
     departure,
@@ -177,6 +178,7 @@ export function SourceOrdersTab({
         canGenerate: !readOnly,
         deleteMutation,
         generateMutation,
+        settleMutation,
         onOpen,
         onOpenGuests,
         onViewReceivables,
@@ -185,6 +187,7 @@ export function SourceOrdersTab({
       deleteMutation,
       editable,
       generateMutation,
+      settleMutation,
       onOpen,
       onOpenGuests,
       onViewReceivables,
@@ -255,7 +258,7 @@ export function SourceOrdersTab({
           loading={isLoading}
           columns={columns}
           dataSource={listResult?.items ?? []}
-          scroll={{ x: 1960 }}
+          scroll={{ x: 2020 }}
           pagination={false}
           summary={renderSourceOrdersTableSummary}
         />

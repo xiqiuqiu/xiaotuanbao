@@ -4,6 +4,7 @@ import type {
   CreateSourceOrderGuestDto,
   BatchFinanceGenerationResult,
   GenerateReceivablesResult,
+  SettleByActualCollectionResult,
   GuestCollectionChangeImpact,
   PartnerReconciliationStatementSnapshot,
   PartnerSourceOrderListResult,
@@ -125,6 +126,16 @@ export async function deleteSourceOrder(id: string): Promise<void> {
 export async function generateReceivables(sourceOrderId: string): Promise<GenerateReceivablesResult> {
   return request.post<GenerateReceivablesResult>(
     `/source-orders/${sourceOrderId}/generate-receivables`,
+  )
+}
+
+export async function settleByActualCollection(
+  sourceOrderId: string,
+  payload: { earlySettle?: boolean } = {},
+): Promise<SettleByActualCollectionResult> {
+  return request.post<SettleByActualCollectionResult>(
+    `/source-orders/${sourceOrderId}/settle-by-actual-collection`,
+    payload,
   )
 }
 

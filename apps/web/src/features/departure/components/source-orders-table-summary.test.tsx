@@ -124,6 +124,11 @@ describe('renderSourceOrdersTableSummary', () => {
         variables: undefined,
         mutate: () => undefined,
       } as never,
+      settleMutation: {
+        isPending: false,
+        variables: undefined,
+        mutate: () => undefined,
+      } as never,
       onOpen: () => undefined,
       onOpenGuests: () => undefined,
       onViewReceivables: () => undefined,

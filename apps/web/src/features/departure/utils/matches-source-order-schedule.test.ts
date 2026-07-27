@@ -3,7 +3,7 @@ import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { matchesSourceOrderSchedule } from './matches-source-order-schedule'
 
 describe('matchesSourceOrderSchedule', () => {
-  it('matches guest-collection and customer-settlement rows for the source order', () => {
+  it('matches guest-collection, customer-settlement and rebate rows for the source order', () => {
     expect(
       matchesSourceOrderSchedule(
         {
@@ -18,6 +18,16 @@ describe('matchesSourceOrderSchedule', () => {
       matchesSourceOrderSchedule(
         {
           sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+          sourceId: 'order-1',
+        },
+        'order-1',
+      ),
+    ).toBe(true)
+
+    expect(
+      matchesSourceOrderSchedule(
+        {
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
           sourceId: 'order-1',
         },
         'order-1',

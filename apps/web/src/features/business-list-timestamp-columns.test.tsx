@@ -42,11 +42,12 @@ describe('业务列表时间列', () => {
     expectTimestampsBeforeActions(
       titles(
         buildSourceOrdersColumns({
-          readOnly: false,
+          canEdit: true,
+          canGenerate: true,
           deleteMutation: stubMutation(),
           generateMutation: stubMutation(),
-          onView: noop,
-          onEdit: noop,
+          settleMutation: stubMutation() as never,
+          onOpen: noop,
           onOpenGuests: noop,
           onViewReceivables: noop,
         }),

@@ -1152,6 +1152,21 @@ export interface GenerateReceivablesResult {
   sourceAmountMismatch: boolean
 }
 
+/** 按实收结算请求：默认要求游客代收节点结清；earlySettle 允许提前办理。 */
+export interface SettleByActualCollectionDto {
+  earlySettle?: boolean
+}
+
+export interface SettleByActualCollectionResult {
+  /** 本次生成或更新后的客户补款应收与返利应付（不含游客代收节点）。 */
+  schedules: PaymentScheduleSummary[]
+  sourceOrder: SourceOrderSummary
+  /** G实收（定金/尾款节点有效已核销合计，分） */
+  actualGuestCollectedCents: number
+  customerTopUpCents: number
+  rebateCents: number
+}
+
 export type BatchFinanceGenerationOutcome = 'succeeded' | 'skipped' | 'failed'
 
 export interface BatchFinanceGenerationItem {

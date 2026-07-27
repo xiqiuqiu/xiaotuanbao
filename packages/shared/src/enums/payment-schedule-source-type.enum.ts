@@ -10,6 +10,8 @@ export enum PaymentScheduleSourceType {
   SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION = 'source_order_guest_deposit_collection',
   /** 游客尾款代收（地接向游客收的尾款期次）。 */
   SOURCE_ORDER_GUEST_BALANCE_COLLECTION = 'source_order_guest_balance_collection',
+  /** 客源返利应付（发给发客 Partner；按实收结算后落账）。 */
+  SOURCE_ORDER_REBATE = 'source_order_rebate',
   SEGMENT_RESOURCE = 'segment_resource',
 }
 

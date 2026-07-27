@@ -16,6 +16,7 @@ import type {
   GuestCollectionChangeImpact,
   PartnerSourceOrderListResult,
   PendingReceivableSourceOrderListResult,
+  SettleByActualCollectionResult,
   SourceOrderGuestSummary,
   SourceOrderListResult,
   SourceOrderSummary,
@@ -29,6 +30,7 @@ import {
   ListPartnerSourceOrdersQueryDto,
   ListPendingReceivableSourceOrdersQueryDto,
   ListSourceOrdersQueryDto,
+  SettleByActualCollectionDto,
   UpdateSourceOrderDto,
   UpdateSourceOrderGuestDto,
 } from './dto/source-order.dto'
@@ -201,5 +203,19 @@ export class SourceOrderController {
     @Param('id') id: string,
   ): Promise<GenerateReceivablesResult> {
     return this.sourceOrderService.generateReceivables(request.user.organizationId, id)
+  }
+
+  @Post('source-orders/:id/settle-by-actual-collection')
+  @RequireMenu('/departure')
+  settleByActualCollection(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: SettleByActualCollectionDto,
+  ): Promise<SettleByActualCollectionResult> {
+    return this.sourceOrderService.settleByActualCollection(
+      request.user.organizationId,
+      id,
+      dto,
+    )
   }
 }
