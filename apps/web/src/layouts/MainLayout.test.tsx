@@ -106,10 +106,12 @@ describe('MainLayout 侧栏开关', () => {
     fireEvent.click(logoutItem)
     fireEvent.click(logoutItem)
 
+    // Local session clears before the logout HTTP call resolves, so in-flight
+    // 401s after cookie clear do not toast "Unauthorized" on the login page.
+    await waitFor(() => expect(useAuthStore.getState().isAuthenticated()).toBe(false))
     expect(logout).toHaveBeenCalledTimes(1)
     resolveLogout()
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
-    expect(useAuthStore.getState().isAuthenticated()).toBe(false)
   })
 
   it('服务端退出失败仍清空本地会话并提示风险', async () => {

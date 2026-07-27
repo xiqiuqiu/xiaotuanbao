@@ -74,11 +74,14 @@ export function PlatformLayout() {
                   }
                   logoutPendingRef.current = true
                   try {
+                    // Abort in-flight queries before clearing the cookie so
+                    // Jwt-guarded responses cannot toast "Unauthorized" on /login.
+                    await queryClient.cancelQueries()
+                    clearSession()
                     await logoutSession()
                   } catch {
                     message.warning('服务器会话可能未清除，请勿在公共设备上继续使用')
                   } finally {
-                    clearSession()
                     queryClient.clear()
                     navigate({ to: '/login' })
                     logoutPendingRef.current = false

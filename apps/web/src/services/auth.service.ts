@@ -16,5 +16,8 @@ export async function getMe(config?: RequestConfig): Promise<MeResult> {
 }
 
 export async function logout(): Promise<void> {
-  return request.post<void>('/auth/logout', undefined, { skipAuthRedirect: true })
+  return request.post<void>('/auth/logout', undefined, {
+    skipAuthRedirect: true,
+    silentError: true,
+  })
 }

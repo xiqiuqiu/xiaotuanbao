@@ -76,9 +76,17 @@ http.interceptors.response.use(
         ?.silentError,
     )
 
+    // Post-logout race: cookie already cleared, in-flight Jwt-guarded calls
+    // return Nest's default "Unauthorized". Local session is anonymous — do not
+    // toast or bounce the login page again.
+    const sessionAlreadyCleared = useAuthStore.getState().sessionStatus === 'anonymous'
+
     if (status === 401 && !skipAuthRedirect) {
-      useAuthStore.getState().clearSession()
       const authMessage = apiMessage || '登录已过期，请重新登录'
+      if (sessionAlreadyCleared) {
+        return Promise.reject(new ApiError(authMessage, 401))
+      }
+      useAuthStore.getState().clearSession()
       message.error(authMessage)
       window.location.href = '/login'
       return Promise.reject(new ApiError(authMessage, 401))
@@ -91,7 +99,7 @@ http.interceptors.response.use(
         : (status ?? -1)
     const apiError = new ApiError(errorMessage, errorCode)
 
-    if (silentError) {
+    if (silentError || (status === 401 && sessionAlreadyCleared)) {
       return Promise.reject(apiError)
     }
 

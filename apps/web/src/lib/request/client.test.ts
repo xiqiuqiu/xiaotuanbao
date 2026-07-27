@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AxiosError } from 'axios'
+import { useAuthStore } from '@/app/store/auth.store'
 
 const mocks = vi.hoisted(() => ({
   axiosGet: vi.fn(),
@@ -42,6 +43,12 @@ describe('authenticated request client', () => {
   beforeEach(() => {
     mocks.axiosGet.mockReset()
     mocks.messageError.mockReset()
+    useAuthStore.setState({
+      user: null,
+      menuKeys: [],
+      actionKeys: [],
+      sessionStatus: 'unknown',
+    })
   })
 
   it('uses browser credentials and never injects an Authorization header', async () => {
@@ -142,6 +149,21 @@ describe('authenticated request client', () => {
       error: AxiosError,
     ) => Promise<unknown>
 
+    useAuthStore.setState({
+      user: {
+        id: 'u1',
+        username: 'admin',
+        name: '张三',
+        organizationId: 'org-1',
+        organizationName: '测试旅行社',
+        roles: [],
+        isPlatformAdmin: false,
+      },
+      menuKeys: ['/'],
+      actionKeys: [],
+      sessionStatus: 'authenticated',
+    })
+
     const disabledSessionError = {
       message: 'Request failed with status code 401',
       name: 'AxiosError',
@@ -160,6 +182,39 @@ describe('authenticated request client', () => {
       code: 401,
     })
     expect(mocks.messageError).toHaveBeenCalledWith('账号已停用')
+  })
+
+  /**
+   * Symptom loop for logout race: cookie already cleared → JwtAuthGuard returns
+   * English "Unauthorized" → toast still fires on the login page.
+   * Desired: once local session is anonymous, suppress that toast.
+   */
+  it('does not toast Unauthorized 401 after local session is already anonymous', async () => {
+    await import('./client')
+    const errorHandler = mocks.responseInterceptor.mock.calls[0]?.[1] as (
+      error: AxiosError,
+    ) => Promise<unknown>
+
+    useAuthStore.getState().clearSession()
+
+    const postLogoutRaceError = {
+      message: 'Request failed with status code 401',
+      name: 'AxiosError',
+      isAxiosError: true,
+      config: { url: '/auth/me' },
+      response: {
+        status: 401,
+        data: { statusCode: 401, message: 'Unauthorized' },
+      },
+      toJSON: () => ({}),
+    } as AxiosError
+
+    await expect(errorHandler(postLogoutRaceError)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Unauthorized',
+      code: 401,
+    })
+    expect(mocks.messageError).not.toHaveBeenCalled()
   })
 })
 
