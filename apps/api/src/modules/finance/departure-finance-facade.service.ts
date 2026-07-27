@@ -672,13 +672,13 @@ export class DepartureFinanceFacade {
     let rewriteGross = false
 
     if (params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT) {
-      partnerCollectedCents = params.amountCents
       if (order.collectionMode === 'partner_settled') {
-        // 全部客户结算：客户路径金额即 S。
+        // 全部客户结算：客户路径金额即 S；P 展示与路径一致。
+        partnerCollectedCents = params.amountCents
         netReceivableCents = params.amountCents
         rewriteGross = true
       }
-      // 代收场景的客户补款（#192）只回写 P 展示字段，不强制 net=P+G。
+      // 代收场景客户补款 = max(0,S−G实收)，不是 P；调整约定金额不回写 P。
     } else if (
       params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION
     ) {

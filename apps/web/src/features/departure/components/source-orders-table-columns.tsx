@@ -1,7 +1,10 @@
 import type { ColumnsType } from 'antd/es/table'
 import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { UseMutationResult } from '@tanstack/react-query'
-import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
+import {
+  SourceOrderCollectionMode,
+  SourceOrderReceivableStatus,
+} from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
@@ -11,6 +14,9 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { confirmSettleByActualCollection } from '../hooks/useSourceOrdersTabMutations'
+
+type SettleMutation = Parameters<typeof confirmSettleByActualCollection>[1]
 
 interface BuildSourceOrdersColumnsOptions {
   /** 持有 `departure:write` 且发团未关闭：显示编辑/客人名单/删除。 */
@@ -19,6 +25,7 @@ interface BuildSourceOrdersColumnsOptions {
   canGenerate: boolean
   deleteMutation: UseMutationResult<unknown, Error, string, unknown>
   generateMutation: UseMutationResult<unknown, Error, string, unknown>
+  settleMutation: SettleMutation
   /** 打开同一客源单抽屉；`viewOnly` 时只读（无写权限或发团只读）。 */
   onOpen: (record: SourceOrderSummary, viewOnly: boolean) => void
   onOpenGuests: (record: SourceOrderSummary) => void
@@ -27,6 +34,13 @@ interface BuildSourceOrdersColumnsOptions {
 
 function canGenerateReceivable(record: SourceOrderSummary): boolean {
   return record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED
+}
+
+function canSettleByActualCollection(record: SourceOrderSummary): boolean {
+  if (record.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    return false
+  }
+  return record.receivableStatus !== SourceOrderReceivableStatus.NOT_GENERATED
 }
 
 function renderCents(value: number) {
@@ -38,6 +52,7 @@ export function buildSourceOrdersColumns({
   canGenerate,
   deleteMutation,
   generateMutation,
+  settleMutation,
   onOpen,
   onOpenGuests,
   onViewReceivables,
@@ -113,9 +128,10 @@ export function buildSourceOrdersColumns({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 260,
+      width: 320,
       render: (_: unknown, record: SourceOrderSummary) => {
         const allowGenerate = canGenerateReceivable(record)
+        const allowSettle = canSettleByActualCollection(record)
         const viewOnly = !canEdit
 
         return (
@@ -143,6 +159,18 @@ export function buildSourceOrdersColumns({
                 onClick={() => generateMutation.mutate(record.id)}
               >
                 生成应收
+              </Button>
+            ) : null}
+            {canGenerate && allowSettle ? (
+              <Button
+                type="link"
+                size="small"
+                loading={
+                  settleMutation.isPending && settleMutation.variables?.id === record.id
+                }
+                onClick={() => confirmSettleByActualCollection(record, settleMutation)}
+              >
+                按实收结算
               </Button>
             ) : null}
             {canEdit && allowGenerate ? (

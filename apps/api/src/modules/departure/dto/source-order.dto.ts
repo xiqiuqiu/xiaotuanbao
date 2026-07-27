@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsIn,
@@ -277,4 +278,11 @@ export class UpdateSourceOrderGuestDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+}
+
+export class SettleByActualCollectionDto {
+  /** 未结清游客代收时仍办理按实收结算。 */
+  @IsOptional()
+  @IsBoolean()
+  earlySettle?: boolean
 }

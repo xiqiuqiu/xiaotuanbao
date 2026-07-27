@@ -7,10 +7,12 @@ import {
 import type {
   GenerateReceivablesResult,
   PaymentScheduleSummary,
+  SettleByActualCollectionResult,
   SourceOrderSummary,
 } from '@xiaotuanbao/shared'
 import {
   isFinanceTouched,
+  isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
   SourceOrderReceivableStatus,
   deriveScheduleState,
@@ -38,6 +40,10 @@ import {
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
+import {
+  assertGuestNodesReadyForSettlement,
+  buildActualCollectionSettlementPaths,
+} from './source-order-actual-collection-settlement'
 import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
 import {
   resolveSourceOrderAmountChange,
@@ -181,19 +187,218 @@ export class DepartureFinanceBridgeService {
     }
   }
 
+  async settleByActualCollection(
+    organizationId: string,
+    sourceOrderId: string,
+    options: { earlySettle: boolean },
+    toSourceOrderSummary: (
+      order: SourceOrder & {
+        partner: Partner
+        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
+      },
+      meta: SourceOrderFinanceMeta,
+    ) => SourceOrderSummary,
+  ): Promise<SettleByActualCollectionResult> {
+    const {
+      order,
+      scheduleRefs,
+      actualGuestCollectedCents,
+      customerTopUpCents,
+      rebateCents,
+    } = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`
+          SELECT id
+          FROM source_orders
+          WHERE id = ${sourceOrderId}
+          FOR UPDATE
+        `
+
+        const lockedOrder = await this.loadSourceOrderOrThrow(
+          organizationId,
+          sourceOrderId,
+          tx,
+        )
+        this.ensureDepartureAllowsNewObligation(lockedOrder.departure, '按实收结算')
+
+        if (lockedOrder.collectionMode === 'partner_settled') {
+          throw new BadRequestException('全部客户结算无需按实收结算')
+        }
+
+        const guestSchedules = (
+          await this.loadReceivableSchedules(organizationId, sourceOrderId, tx)
+        ).filter(
+          (schedule) =>
+            schedule.cancelledAt == null &&
+            schedule.voidedAt == null &&
+            isSourceOrderGuestCollectionSourceType(schedule.sourceType),
+        )
+
+        if (guestSchedules.length === 0) {
+          throw new BadRequestException('请先生成游客代收应收，再按实收结算')
+        }
+
+        const guestNodes = await Promise.all(
+          guestSchedules.map(async (schedule) => ({
+            amountCents: schedule.amountCents,
+            settledAmountCents: await this.verificationService.getSettledAmountCents(
+              schedule.id,
+              tx,
+            ),
+          })),
+        )
+
+        try {
+          assertGuestNodesReadyForSettlement({
+            guestNodes,
+            earlySettle: options.earlySettle,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '无法按实收结算'
+          throw new BadRequestException(message)
+        }
+
+        const actualCollected = guestNodes.reduce(
+          (sum, node) => sum + node.settledAmountCents,
+          0,
+        )
+
+        const existingTopUp = await tx.paymentSchedule.findFirst({
+          where: {
+            organizationId,
+            sourceId: sourceOrderId,
+            sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+            direction: PaymentScheduleDirection.receivable,
+            cancelledAt: null,
+            voidedAt: null,
+          },
+        })
+        const existingRebate = await tx.paymentSchedule.findFirst({
+          where: {
+            organizationId,
+            sourceId: sourceOrderId,
+            sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+            direction: PaymentScheduleDirection.payable,
+            cancelledAt: null,
+            voidedAt: null,
+          },
+        })
+
+        await this.assertSettlementNodesNotTouched([existingTopUp, existingRebate], tx)
+
+        const expectedPaths = buildActualCollectionSettlementPaths({
+          sourceOrderId: lockedOrder.id,
+          partnerId: lockedOrder.partnerId,
+          partnerName: lockedOrder.partner.name,
+          netReceivableCents: lockedOrder.netReceivableCents,
+          actualGuestCollectedCents: actualCollected,
+        })
+        const expectedTopUp = expectedPaths.find(
+          (path) =>
+            path.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        )
+        const expectedRebate = expectedPaths.find(
+          (path) => path.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+        )
+
+        const receivableDueDate = computeReceivableDueDate(
+          formatDateOnly(lockedOrder.departure.startDate),
+        )
+        const payableDueDate = formatDateOnly(lockedOrder.departure.endDate)
+        const scheduleRefs: Array<{
+          id: string
+          direction: PaymentScheduleDirection
+        }> = []
+
+        const topUpRef = await this.upsertSettlementSchedule({
+          organizationId,
+          existing: existingTopUp,
+          expected: expectedTopUp
+            ? {
+                direction: PaymentScheduleDirection.receivable,
+                sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+                amountCents: expectedTopUp.amountCents,
+                title: expectedTopUp.title,
+                counterpartyType: CounterpartyType.partner,
+                counterpartyId: expectedTopUp.counterpartyId,
+                counterpartyName: expectedTopUp.counterpartyName,
+                dueDate: receivableDueDate,
+              }
+            : null,
+          departureId: lockedOrder.departureId,
+          sourceOrderId,
+          tx,
+        })
+        if (topUpRef) {
+          scheduleRefs.push(topUpRef)
+        }
+
+        const rebateRef = await this.upsertSettlementSchedule({
+          organizationId,
+          existing: existingRebate,
+          expected: expectedRebate
+            ? {
+                direction: PaymentScheduleDirection.payable,
+                sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+                amountCents: expectedRebate.amountCents,
+                title: expectedRebate.title,
+                counterpartyType: CounterpartyType.partner,
+                counterpartyId: expectedRebate.counterpartyId,
+                counterpartyName: expectedRebate.counterpartyName,
+                dueDate: payableDueDate,
+              }
+            : null,
+          departureId: lockedOrder.departureId,
+          sourceOrderId,
+          tx,
+        })
+        if (rebateRef) {
+          scheduleRefs.push(rebateRef)
+        }
+
+        return {
+          order: lockedOrder,
+          scheduleRefs,
+          actualGuestCollectedCents: actualCollected,
+          customerTopUpCents: expectedTopUp?.amountCents ?? 0,
+          rebateCents: expectedRebate?.amountCents ?? 0,
+        }
+      },
+      { maxWait: 20_000, timeout: 20_000 },
+    )
+
+    const schedules = await Promise.all(
+      scheduleRefs.map((ref) =>
+        this.paymentScheduleService.getById(organizationId, ref.direction, ref.id),
+      ),
+    )
+    const financeMeta = await this.evaluateFinanceMeta(organizationId, sourceOrderId, order)
+
+    return {
+      schedules,
+      sourceOrder: toSourceOrderSummary(order, financeMeta),
+      actualGuestCollectedCents,
+      customerTopUpCents,
+      rebateCents,
+    }
+  }
+
   async syncSourceOrderSchedules(
     organizationId: string,
     order: SourceOrderWithRelations,
   ): Promise<SourceOrderFinanceMeta> {
     const allSchedules = await this.loadReceivableSchedules(organizationId, order.id)
-    if (allSchedules.length === 0) {
+    const rebateSchedules = await this.loadRebateSchedules(organizationId, order.id)
+    if (allSchedules.length === 0 && rebateSchedules.length === 0) {
       return this.evaluateFinanceMeta(organizationId, order.id, order)
     }
 
     const activeSchedules = allSchedules.filter((schedule) => schedule.cancelledAt == null)
+    const activeRebates = rebateSchedules.filter((schedule) => schedule.cancelledAt == null)
+    const schedulesForTouch = [...activeSchedules, ...activeRebates]
 
     const touchResults = await Promise.all(
-      activeSchedules.map(async (schedule) => {
+      schedulesForTouch.map(async (schedule) => {
         const [settledAmountCents, hasVerificationHistory] = await Promise.all([
           this.verificationService.getSettledAmountCents(schedule.id),
           this.verificationService.hasVerificationHistory(schedule.id),
@@ -211,13 +416,19 @@ export class DepartureFinanceBridgeService {
       return this.evaluateFinanceMeta(organizationId, order.id, order)
     }
 
-    // 未核销：按约定全量同步——改金额、关闭多余/零金额、补建缺失。
+    // 未核销：按约定全量同步 Guest（及全部客户结算路径）——改金额、关闭多余/零金额、补建缺失。
+    // 按实收结算产生的补款/返利若尚未 touch，约定变更时关闭，待再次按实收结算。
     const expectedPaths = this.buildReceivablePaths(order)
     const expectedByType = new Map(expectedPaths.map((path) => [path.sourceType, path]))
     const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
     const remainingActiveSourceTypes = new Set<string>()
 
     for (const { schedule } of touchResults) {
+      if (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_REBATE) {
+        await this.cancelScheduleForConventionSync(schedule.id)
+        continue
+      }
+
       const expected = expectedByType.get(schedule.sourceType as PaymentScheduleSourceType)
       if (!expected || expected.amountCents <= 0) {
         await this.cancelScheduleForConventionSync(schedule.id)
@@ -289,7 +500,8 @@ export class DepartureFinanceBridgeService {
       }))
 
     const schedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
-    if (schedules.length === 0) {
+    const rebateSchedules = await this.loadRebateSchedules(organizationId, sourceOrderId)
+    if (schedules.length === 0 && rebateSchedules.length === 0) {
       return {
         hasSchedule: false,
         receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
@@ -299,7 +511,8 @@ export class DepartureFinanceBridgeService {
     }
 
     const activeSchedules = schedules.filter((schedule) => schedule.cancelledAt == null)
-    if (activeSchedules.length === 0) {
+    const activeRebates = rebateSchedules.filter((schedule) => schedule.cancelledAt == null)
+    if (activeSchedules.length === 0 && activeRebates.length === 0) {
       return {
         hasSchedule: true,
         receivableStatus: SourceOrderReceivableStatus.CLOSED,
@@ -308,15 +521,25 @@ export class DepartureFinanceBridgeService {
       }
     }
 
+    const touchCandidates = [...activeSchedules, ...activeRebates]
     const settledMap = await this.verificationService.batchGetSettledAmounts(
-      activeSchedules.map((schedule) => schedule.id),
+      touchCandidates.map((schedule) => schedule.id),
     )
     const historyMap = await this.verificationService.batchHasVerificationHistory(
-      activeSchedules.map((schedule) => schedule.id),
+      touchCandidates.map((schedule) => schedule.id),
     )
 
     let hasSourceAmountMismatch = false
     let amountFieldsLocked = false
+    for (const schedule of activeRebates) {
+      const settledAmountCents = settledMap.get(schedule.id) ?? 0
+      if (
+        isFinanceTouched(schedule, settledAmountCents, historyMap.get(schedule.id) ?? false)
+      ) {
+        amountFieldsLocked = true
+      }
+    }
+
     const scheduleStates = activeSchedules.map((schedule) => {
       const settledAmountCents = settledMap.get(schedule.id) ?? 0
       const touched = isFinanceTouched(
@@ -347,19 +570,24 @@ export class DepartureFinanceBridgeService {
     })
 
     let receivableStatus = SourceOrderReceivableStatus.PENDING
-    const allCollected = scheduleStates.every(
-      (item) => item.status === PaymentScheduleStatus.SETTLED,
-    )
-    const anyPartial = scheduleStates.some(
-      (item) =>
-        item.settledAmountCents > 0 && item.settledAmountCents < item.amountCents,
-    )
+    if (scheduleStates.length === 0) {
+      // 仅剩返利应付、无应收时仍视为已生成财务痕迹。
+      receivableStatus = SourceOrderReceivableStatus.PENDING
+    } else {
+      const allCollected = scheduleStates.every(
+        (item) => item.status === PaymentScheduleStatus.SETTLED,
+      )
+      const anyPartial = scheduleStates.some(
+        (item) =>
+          item.settledAmountCents > 0 && item.settledAmountCents < item.amountCents,
+      )
 
-    if (allCollected) {
-      receivableStatus = SourceOrderReceivableStatus.COLLECTED
-      amountFieldsLocked = true
-    } else if (anyPartial) {
-      receivableStatus = SourceOrderReceivableStatus.PARTIAL
+      if (allCollected) {
+        receivableStatus = SourceOrderReceivableStatus.COLLECTED
+        amountFieldsLocked = true
+      } else if (anyPartial) {
+        receivableStatus = SourceOrderReceivableStatus.PARTIAL
+      }
     }
 
     return {
@@ -698,6 +926,95 @@ export class DepartureFinanceBridgeService {
     })
   }
 
+  private async assertSettlementNodesNotTouched(
+    schedules: Array<PaymentSchedule | null>,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    for (const schedule of schedules) {
+      if (!schedule) {
+        continue
+      }
+      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+        this.verificationService.getSettledAmountCents(schedule.id, tx),
+        this.verificationService.hasVerificationHistory(schedule.id, tx),
+      ])
+      if (isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)) {
+        throw new BadRequestException(
+          '客户补款或返利已有有效核销，不能静默重算；请先撤销核销或走明确调整',
+        )
+      }
+    }
+  }
+
+  private async upsertSettlementSchedule(params: {
+    organizationId: string
+    existing: PaymentSchedule | null
+    expected: {
+      direction: PaymentScheduleDirection
+      sourceType: PaymentScheduleSourceType
+      amountCents: number
+      title: string
+      counterpartyType: CounterpartyType
+      counterpartyId: string
+      counterpartyName: string
+      dueDate: string
+    } | null
+    departureId: string
+    sourceOrderId: string
+    tx: Prisma.TransactionClient
+  }): Promise<{ id: string; direction: PaymentScheduleDirection } | null> {
+    const { organizationId, existing, expected, departureId, sourceOrderId, tx } = params
+
+    if (!expected) {
+      if (existing) {
+        await tx.paymentSchedule.update({
+          where: { id: existing.id },
+          data: {
+            cancelledAt: new Date(),
+            closeDisposition: PaymentScheduleCloseDisposition.other,
+            cancelReason: '按实收结算：轧差后该路径金额为 0',
+          },
+        })
+      }
+      return null
+    }
+
+    if (existing) {
+      if (existing.amountCents !== expected.amountCents || existing.title !== expected.title) {
+        // 按实收结算重算：直接改节点，不走普通编辑回写客源约定字段。
+        await tx.paymentSchedule.update({
+          where: { id: existing.id },
+          data: {
+            amountCents: expected.amountCents,
+            title: expected.title,
+            counterpartyType: expected.counterpartyType,
+            counterpartyId: expected.counterpartyId,
+            counterpartyName: expected.counterpartyName,
+          },
+        })
+      }
+      return { id: existing.id, direction: expected.direction }
+    }
+
+    const created = await this.paymentScheduleService.create(
+      organizationId,
+      expected.direction,
+      {
+        departureId,
+        title: expected.title,
+        amountCents: expected.amountCents,
+        dueDate: expected.dueDate,
+        counterpartyType: expected.counterpartyType,
+        counterpartyId: expected.counterpartyId,
+        counterpartyName: expected.counterpartyName,
+        sourceType: expected.sourceType,
+        sourceId: sourceOrderId,
+      },
+      tx,
+    )
+    return { id: created.id, direction: expected.direction }
+  }
+
   private async loadReceivableSchedules(
     organizationId: string,
     sourceOrderId: string,
@@ -708,6 +1025,21 @@ export class DepartureFinanceBridgeService {
         organizationId,
         sourceId: sourceOrderId,
         direction: PaymentScheduleDirection.receivable,
+      },
+    })
+  }
+
+  private async loadRebateSchedules(
+    organizationId: string,
+    sourceOrderId: string,
+    client: DbClient = this.prisma,
+  ): Promise<PaymentSchedule[]> {
+    return client.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        sourceId: sourceOrderId,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+        direction: PaymentScheduleDirection.payable,
       },
     })
   }

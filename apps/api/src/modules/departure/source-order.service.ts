@@ -364,6 +364,19 @@ export class SourceOrderService {
     )
   }
 
+  async settleByActualCollection(
+    organizationId: string,
+    sourceOrderId: string,
+    dto: { earlySettle?: boolean },
+  ) {
+    return this.financeBridge.settleByActualCollection(
+      organizationId,
+      sourceOrderId,
+      { earlySettle: dto.earlySettle === true },
+      (order, meta) => this.toSourceOrderSummary(order, meta),
+    )
+  }
+
   async generateReceivablesForDeparture(
     organizationId: string,
     departureId: string,

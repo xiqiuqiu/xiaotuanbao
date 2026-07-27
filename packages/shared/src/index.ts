@@ -128,6 +128,8 @@ export type {
   PartnerReconciliationStatementTotals,
   PartnerReconciliationStatementSnapshot,
   GenerateReceivablesResult,
+  SettleByActualCollectionDto,
+  SettleByActualCollectionResult,
   BatchFinanceGenerationOutcome,
   BatchFinanceGenerationItem,
   BatchFinanceGenerationResult,
