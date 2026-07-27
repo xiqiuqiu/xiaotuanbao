@@ -15,8 +15,8 @@ import {
 const RMB_NUM_FMT = '¥#,##0.00'
 /** Excel paperSize enum: A4 */
 const PAPER_SIZE_A4 = 9
-/** 客户模板 18 列：在原始应收与优惠之间增「调整净额」 */
-const COL_COUNT = 18
+/** 客户模板 19 列：押金＝P、客户补款单独列（#191）；返利列后置 */
+const COL_COUNT = 19
 
 const THIN_BORDER: Partial<ExcelJS.Borders> = {
   top: { style: 'thin', color: { argb: 'FF666666' } },
@@ -32,7 +32,7 @@ const HEADER_FILL: ExcelJS.Fill = {
   fgColor: { argb: 'FFECECEC' },
 }
 
-/** 18 列表头（对外客户习惯名，豁免仅限导出物；调整净额用系统规范名） */
+/** 19 列表头（对外客户习惯名，豁免仅限导出物；调整净额用系统规范名） */
 const DETAIL_HEADERS = [
   '序号',
   '出团日期',
@@ -50,6 +50,7 @@ const DETAIL_HEADERS = [
   '优惠金额',
   '实际应收',
   '客户已收押金',
+  '客户补款',
   '游客代收',
   '备注',
 ] as const
@@ -109,8 +110,9 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
       { width: 11 }, // 14 优惠金额
       { width: 12 }, // 15 实际应收
       { width: 12 }, // 16 客户已收押金
-      { width: 12 }, // 17 游客代收
-      { width: 24 }, // 18 备注
+      { width: 11 }, // 17 客户补款
+      { width: 12 }, // 18 游客代收
+      { width: 22 }, // 19 备注
     ]
 
     sheet.pageSetup = {
@@ -202,7 +204,7 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
       [8, 10],
       [11, 13],
       [14, 16],
-      [17, 18],
+      [17, 19],
     ]
     const labelRow = row
     const valueRow = row + 1
@@ -223,7 +225,7 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
     return valueRow + 1
   }
 
-  /** 18 列明细＋合计行；分页时重复明细表头 */
+  /** 19 列明细＋合计行；分页时重复明细表头 */
   private writeDetailTable(
     sheet: ExcelJS.Worksheet,
     row: number,
@@ -274,8 +276,9 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
     money(sheet.getCell(row, 14), statementRow.discountCents)
     money(sheet.getCell(row, 15), statementRow.actualReceivableCents)
     money(sheet.getCell(row, 16), statementRow.customerDepositCents)
-    money(sheet.getCell(row, 17), statementRow.guestCollectCents)
-    sheet.getCell(row, 18).value = statementRow.notes ?? ''
+    money(sheet.getCell(row, 17), statementRow.customerTopUpCents)
+    money(sheet.getCell(row, 18), statementRow.guestCollectCents)
+    sheet.getCell(row, 19).value = statementRow.notes ?? ''
     for (let col = 1; col <= COL_COUNT; col += 1) {
       const cell = sheet.getCell(row, col)
       cell.border = { ...THIN_BORDER }
@@ -287,7 +290,7 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
     sheet.getRow(row).height = 20
   }
 
-  /** 合计行：人数三列求和，单价两列留空，金额六列求和 */
+  /** 合计行：人数三列求和，单价两列留空，金额七列求和 */
   private writeTotalsRow(
     sheet: ExcelJS.Worksheet,
     row: number,
@@ -306,7 +309,8 @@ export class ExcelJsPartnerReconciliationStatementRenderer extends PartnerReconc
     money(sheet.getCell(row, 14), totals.discountCents)
     money(sheet.getCell(row, 15), totals.actualReceivableCents)
     money(sheet.getCell(row, 16), totals.customerDepositCents)
-    money(sheet.getCell(row, 17), totals.guestCollectCents)
+    money(sheet.getCell(row, 17), totals.customerTopUpCents)
+    money(sheet.getCell(row, 18), totals.guestCollectCents)
     for (let col = 1; col <= COL_COUNT; col += 1) {
       const cell = sheet.getCell(row, col)
       cell.border = { ...THIN_BORDER }

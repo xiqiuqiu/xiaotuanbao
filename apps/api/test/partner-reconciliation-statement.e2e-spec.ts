@@ -355,7 +355,10 @@ describe('Partner reconciliation statement API (e2e)', () => {
         fareAdjustmentNetCents: 0,
         discountCents: 30000,
         actualReceivableCents: 220000,
+        // 客户已收押金＝P（定金），不是客户补款
         customerDepositCents: 120000,
+        // 客户补款＝max(0, S−G)；本夹具恰与 P 同值，分列由 #191 专测覆盖
+        customerTopUpCents: 120000,
         guestCollectCents: 100000,
         notes: '窗口位',
       })
@@ -366,12 +369,13 @@ describe('Partner reconciliation statement API (e2e)', () => {
         originalReceivableCents: 400000,
         actualReceivableCents: 400000,
         customerDepositCents: 400000,
+        customerTopUpCents: 400000,
         guestCollectCents: 0,
       })
       expect(row2).not.toHaveProperty('receivableStatus')
     })
 
-    it('every row is recomputable: original = adult×price + child×price, actual = original + adjustment − discount, guest collect = actual − deposit', async () => {
+    it('every row is recomputable: original / actual / top-up=max(0,S−G); P is independent of top-up', async () => {
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement`)
         .query(PERIOD)
@@ -385,8 +389,8 @@ describe('Partner reconciliation statement API (e2e)', () => {
         expect(row.actualReceivableCents).toBe(
           row.originalReceivableCents + row.fareAdjustmentNetCents - row.discountCents,
         )
-        expect(row.guestCollectCents).toBe(
-          row.actualReceivableCents - row.customerDepositCents,
+        expect(row.customerTopUpCents).toBe(
+          Math.max(0, row.actualReceivableCents - row.guestCollectCents),
         )
         expect(row.totalGuestCount).toBe(row.adultGuestCount + row.childGuestCount)
       }
@@ -416,6 +420,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         discountCents: 30000,
         actualReceivableCents: 620000,
         customerDepositCents: 520000,
+        customerTopUpCents: 520000,
         guestCollectCents: 100000,
       })
     })
@@ -454,7 +459,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
   })
 
   describe('xlsx export', () => {
-    it('downloads a valid workbook with title, 18-column header, totals row and print setup', async () => {
+    it('downloads a valid workbook with title, 19-column header, totals row and print setup', async () => {
       const ExcelJS = await import('exceljs')
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
@@ -500,7 +505,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       // 标题按周期规则生成（同年跨月）
       expect(worksheet.getCell(1, 1).value).toBe('2026年6-7月往来账确认单')
 
-      // 18 列表头整行匹配，且被设置为分页重复表头
+      // 19 列表头整行匹配（押金＝P、客户补款单独列、无返利列），且被设置为分页重复表头
       const expectedHeaders = [
         '序号',
         '出团日期',
@@ -518,6 +523,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         '优惠金额',
         '实际应收',
         '客户已收押金',
+        '客户补款',
         '游客代收',
         '备注',
       ]
@@ -532,6 +538,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         (_, index) => worksheet.getRow(headerRowNumber).getCell(index + 1).value,
       )
       expect(headerValues).toEqual(expectedHeaders)
+      expect(headerValues).not.toContain('返利')
       expect(worksheet.pageSetup.printTitlesRow).toContain(String(headerRowNumber))
 
       const cellTexts: string[] = []
@@ -548,7 +555,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         })
       })
 
-      // 七项汇总、确认说明、双方签章栏
+      // 七项汇总、确认说明、双方签章栏；返利列后置，本票不含
       for (const label of [
         '客源单数',
         '总人数',
@@ -560,6 +567,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       ]) {
         expect(cellTexts).toContain(label)
       }
+      expect(cellTexts).not.toContain('返利')
       expect(cellTexts).toContain('确认说明')
       expect(cellTexts.some((text) => text.startsWith('我方确认（盖章）：'))).toBe(true)
       expect(
@@ -593,6 +601,98 @@ describe('Partner reconciliation statement API (e2e)', () => {
       expect(cellTexts).toContain('陈志明')
       expect(cellTexts).not.toContain('林晓芳')
       expect(moneyCells.some((cell) => cell.value === 9999)).toBe(false)
+    })
+  })
+
+  describe('deposit maps to P and customer top-up is a separate column (#191)', () => {
+    // S=5000 元、P=4500、G=1000 → 补款=4000；押金列必须等于 P 且不等于补款
+    const P191_PERIOD = { periodStart: '2026-09-01', periodEnd: '2026-09-30' }
+    let p191OrderId: string
+
+    beforeAll(async () => {
+      const departure = await createDeparture(`${testPrefix}-p191`, '2026-09-08', '2026-09-12')
+      p191OrderId = await createOrder(departure.id, {
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 500000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.split,
+        depositCents: 450000,
+        balanceCents: 100000,
+      })
+    })
+
+    it('preview maps 客户已收押金 to P and exposes 客户补款 as netting top-up', async () => {
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${partnerId}/reconciliation-statement`)
+        .query(P191_PERIOD)
+        .expect(200)
+
+      const snapshot = response.body.data
+      expect(snapshot.rows).toHaveLength(1)
+      const row = snapshot.rows[0]
+      expect(row).toMatchObject({
+        sourceOrderId: p191OrderId,
+        actualReceivableCents: 500000,
+        customerDepositCents: 450000,
+        guestCollectCents: 100000,
+        customerTopUpCents: 400000,
+      })
+      expect(row.customerDepositCents).not.toBe(row.customerTopUpCents)
+      expect(snapshot.totals).toMatchObject({
+        customerDepositCents: 450000,
+        customerTopUpCents: 400000,
+        guestCollectCents: 100000,
+      })
+      expect(JSON.stringify(snapshot)).not.toContain('rebate')
+      expect(JSON.stringify(snapshot)).not.toContain('返利')
+    })
+
+    it('xlsx writes P and top-up in separate columns and has no rebate column', async () => {
+      const ExcelJS = await import('exceljs')
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
+        .query(P191_PERIOD)
+        .buffer(true)
+        .parse((res, callback) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+          res.on('end', () => callback(null, Buffer.concat(chunks)))
+        })
+        .expect(200)
+
+      const workbook = new ExcelJS.Workbook()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await workbook.xlsx.load(response.body as any)
+      const worksheet = workbook.worksheets[0]
+
+      let headerRowNumber = 0
+      worksheet.eachRow((row, rowNumber) => {
+        if (row.getCell(1).value === '序号') {
+          headerRowNumber = rowNumber
+        }
+      })
+      expect(headerRowNumber).toBeGreaterThan(0)
+      const headerRow = worksheet.getRow(headerRowNumber)
+      expect(headerRow.getCell(16).value).toBe('客户已收押金')
+      expect(headerRow.getCell(17).value).toBe('客户补款')
+      expect(headerRow.getCell(18).value).toBe('游客代收')
+      expect(headerRow.getCell(19).value).toBe('备注')
+
+      const headerValues: unknown[] = []
+      for (let col = 1; col <= 20; col += 1) {
+        headerValues.push(headerRow.getCell(col).value)
+      }
+      expect(headerValues).not.toContain('返利')
+
+      const detailRow = worksheet.getRow(headerRowNumber + 1)
+      // 金额列为元：押金 4500 ≠ 补款 4000；游客代收 1000
+      expect(detailRow.getCell(15).value).toBe(5000)
+      expect(detailRow.getCell(16).value).toBe(4500)
+      expect(detailRow.getCell(17).value).toBe(4000)
+      expect(detailRow.getCell(18).value).toBe(1000)
     })
   })
 
@@ -651,6 +751,10 @@ describe('Partner reconciliation statement API (e2e)', () => {
         fareAdjustmentNetCents: 15000,
         discountCents: 10000,
         actualReceivableCents: 105000,
+        // guest_only 且 G约定默认=S：押金 P=0，补款轧差为 0（#191 无补款空态）
+        customerDepositCents: 0,
+        customerTopUpCents: 0,
+        guestCollectCents: 105000,
       })
       expect(row.actualReceivableCents).toBe(
         row.originalReceivableCents + row.fareAdjustmentNetCents - row.discountCents,
@@ -661,6 +765,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
         fareAdjustmentNetCents: 15000,
         discountCents: 10000,
         actualReceivableCents: 105000,
+        customerTopUpCents: 0,
       })
       // 预览 JSON 不得展开调整种类/自定义明细
       expect(row).not.toHaveProperty('fareAdjustments')
