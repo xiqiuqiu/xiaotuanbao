@@ -5,6 +5,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { formatDateOnly, parseDateOnly } from '../departure/departure-date.utils'
+import { computeCollectionSettlementPreview } from '../departure/source-order.utils'
 import {
   PartnerReconciliationStatementExcelRenderer,
   buildReconciliationStatementTitle,
@@ -84,6 +85,12 @@ export class PartnerReconciliationStatementService {
 
     const rows: PartnerReconciliationStatementRow[] = orders.map((order) => {
       const representative = order.guests[0] ?? null
+      // 确认单口径（#191）：押金列＝P；客户补款＝轧差 max(0,S−G)；游客代收＝G约定
+      const { estimatedCustomerTopUpCents: customerTopUpCents } =
+        computeCollectionSettlementPreview(
+          order.netReceivableCents,
+          order.guestCollectCents,
+        )
       return {
         sourceOrderId: order.id,
         departureId: order.departureId,
@@ -102,6 +109,7 @@ export class PartnerReconciliationStatementService {
         discountCents: order.discountCents,
         actualReceivableCents: order.netReceivableCents,
         customerDepositCents: order.partnerCollectedCents,
+        customerTopUpCents,
         guestCollectCents: order.guestCollectCents,
         notes: order.notes,
       }
@@ -137,6 +145,7 @@ export class PartnerReconciliationStatementService {
           (sum, row) => sum + row.customerDepositCents,
           0,
         ),
+        customerTopUpCents: rows.reduce((sum, row) => sum + row.customerTopUpCents, 0),
         guestCollectCents: rows.reduce((sum, row) => sum + row.guestCollectCents, 0),
       },
       rows,

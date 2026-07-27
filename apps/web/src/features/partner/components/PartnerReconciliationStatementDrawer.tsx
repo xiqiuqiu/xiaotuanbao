@@ -124,6 +124,13 @@ const DETAIL_COLUMNS: ColumnsType<PartnerReconciliationStatementRow> = [
     render: (value: number) => formatCents(value),
   },
   {
+    title: '客户补款',
+    dataIndex: 'customerTopUpCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
     title: '游客代收',
     dataIndex: 'guestCollectCents',
     width: 110,
@@ -335,7 +342,7 @@ function StatementPreview({
           columns={DETAIL_COLUMNS}
           dataSource={snapshot.rows}
           pagination={false}
-          scroll={{ x: 1900 }}
+          scroll={{ x: 2050 }}
           summary={() => (
             <Table.Summary.Row>
               <Table.Summary.Cell index={0} colSpan={6}>
@@ -375,9 +382,14 @@ function StatementPreview({
                 </Typography.Text>
               </Table.Summary.Cell>
               <Table.Summary.Cell index={16} align="right">
+                <Typography.Text strong>
+                  {formatCents(totals.customerTopUpCents)}
+                </Typography.Text>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={17} align="right">
                 <Typography.Text strong>{formatCents(totals.guestCollectCents)}</Typography.Text>
               </Table.Summary.Cell>
-              <Table.Summary.Cell index={17} />
+              <Table.Summary.Cell index={18} />
             </Table.Summary.Row>
           )}
         />
