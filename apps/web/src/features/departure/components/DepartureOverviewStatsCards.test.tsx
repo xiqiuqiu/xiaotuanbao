@@ -178,16 +178,27 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText('应付合计')).not.toBeInTheDocument()
   })
 
-  it('经营补充展示原始团款、调整净额、优惠合计与 1 位小数毛利率', () => {
+  it('经营补充展示原始团款、优惠合计与 1 位小数毛利率，不单独展示调整净额', () => {
     renderCards()
 
     const supplementRow = screen.getByRole('group', { name: '经营补充' })
     expect(within(supplementRow).getByText('原始团款')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('调整净额')).toBeInTheDocument()
     expect(within(supplementRow).getByText('优惠合计')).toBeInTheDocument()
     expect(within(supplementRow).getByText('毛利率')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('¥500.00')).toBeInTheDocument()
+    expect(within(supplementRow).queryByText('调整净额')).not.toBeInTheDocument()
+    expect(within(supplementRow).getByText('¥12,000.00')).toBeInTheDocument()
+    expect(within(supplementRow).getByText('¥2,000.00')).toBeInTheDocument()
     expect(within(supplementRow).getByText('30.0%')).toBeInTheDocument()
+  })
+
+  it('结算应收说明公式含调整净额', async () => {
+    const user = userEvent.setup()
+    renderCards()
+
+    await user.hover(screen.getByRole('button', { name: '查看结算应收说明' }))
+    expect(
+      await screen.findByText(/原始团款合计 \+ 调整净额 − 优惠合计/),
+    ).toBeInTheDocument()
   })
 
   it('毛利率分母为零显示暂无数据，负毛利保留真实负比例', () => {

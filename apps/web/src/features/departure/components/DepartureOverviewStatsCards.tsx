@@ -287,7 +287,7 @@ export function DepartureOverviewStatsCards({
             title="结算应收"
             value={formatCents(departure.netReceivableCents)}
             equationDescription="本团当前应向客户收取的金额。
-计算：原始团款合计-优惠合计。
+计算：原始团款合计 + 调整净额 − 优惠合计。
 根据客源单实时统计，无需生成应收。"
             animateEnter={animateEnter}
           />
@@ -334,28 +334,21 @@ export function DepartureOverviewStatsCards({
       </Row>
 
       <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} xl={8}>
           <SummaryCard
             title="原始团款"
             value={formatCents(departure.grossReceivableCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="调整净额"
-            value={formatCents(departure.fareAdjustmentNetCents)}
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} xl={8}>
           <SummaryCard
             title="优惠合计"
             value={formatCents(departure.discountCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={6}>
+        <Col xs={24} sm={12} xl={8}>
           <SummaryCard
             title="毛利率"
             value={marginRateLabel ?? '暂无数据'}
