@@ -242,6 +242,10 @@ export function useSourceOrderSubmit({
               {pathBaseline.partnerCollectedCents !== nextPath.partnerCollectedCents
                 ? `；客户已收 ${formatCents(pathBaseline.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
                 : ''}
+              {pathBaseline.depositCents !== nextPath.depositCents ||
+              pathBaseline.balanceCents !== nextPath.balanceCents
+                ? `；定金 ${formatCents(pathBaseline.depositCents)} → ${formatCents(nextPath.depositCents)}；尾款 ${formatCents(pathBaseline.balanceCents)} → ${formatCents(nextPath.balanceCents)}`
+                : ''}
             </span>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               本单有 {impact.affectedTransactionCount}{' '}

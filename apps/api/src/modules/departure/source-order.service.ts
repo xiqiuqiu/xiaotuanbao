@@ -560,10 +560,14 @@ export class SourceOrderService {
       {
         guestCollectCents: order.guestCollectCents,
         partnerCollectedCents: order.partnerCollectedCents,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
       },
       {
         guestCollectCents: amounts.guestCollectCents,
         partnerCollectedCents: amounts.partnerCollectedCents,
+        depositCents: amounts.depositCents,
+        balanceCents: amounts.balanceCents,
       },
     )
 
