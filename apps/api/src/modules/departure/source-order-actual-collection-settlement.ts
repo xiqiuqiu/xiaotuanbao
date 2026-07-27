@@ -76,3 +76,25 @@ export function assertGuestNodesReadyForSettlement(params: {
     throw new Error('相关游客代收节点尚未结清，如需办理请选择提前按实收结算')
   }
 }
+
+export const OBSOLETE_SETTLEMENT_PATH_CANCEL_REASON =
+  '按实收结算：轧差后该路径金额为 0'
+
+/**
+ * 轧差后路径金额为 0：关闭节点并将约定收到已核销额。
+ * 若只关不改金额，closedUnreceived 会虚增原约定，触发收款守恒异常。
+ */
+export function buildObsoleteSettlementPathCloseData(input: {
+  settledAmountCents: number
+  now?: Date
+}): {
+  cancelledAt: Date
+  cancelReason: string
+  amountCents: number
+} {
+  return {
+    cancelledAt: input.now ?? new Date(),
+    cancelReason: OBSOLETE_SETTLEMENT_PATH_CANCEL_REASON,
+    amountCents: Math.max(0, input.settledAmountCents),
+  }
+}

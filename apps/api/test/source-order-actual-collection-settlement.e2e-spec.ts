@@ -370,6 +370,59 @@ describe('Source order settle by actual collection (e2e) #192', () => {
     })
   })
 
+  it('early settle then re-settle to rebate leaves no closed top-up unreceived / receivable_balance', async () => {
+    // 浏览器回测同构：G实收=0 提前结算出补款 → Guest 收齐后二次结算翻转为返利。
+    // 期望：作废路径金额为 0，概览不出现收款守恒异常。
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      depositCents: 20000,
+      balanceCents: 600000,
+    })
+    expect(sourceOrder.netReceivableCents).toBe(500000)
+
+    const guestSchedules = await generateReceivables(sourceOrder.id)
+
+    const early = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
+      .send({ earlySettle: true })
+      .expect(201)
+    expect(early.body.data).toMatchObject({
+      actualGuestCollectedCents: 0,
+      customerTopUpCents: 500000,
+      rebateCents: 0,
+    })
+
+    const topUpId = early.body.data.schedules.find(
+      (item: { sourceType: string }) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+    ).id as string
+
+    await settleFullyCollectedGuestNodes(sourceOrder, guestSchedules)
+
+    const second = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
+      .send({})
+      .expect(201)
+    expect(second.body.data).toMatchObject({
+      actualGuestCollectedCents: 620000,
+      customerTopUpCents: 0,
+      rebateCents: 120000,
+    })
+
+    const closedTopUp = await prisma.paymentSchedule.findFirstOrThrow({
+      where: { id: topUpId },
+    })
+    expect(closedTopUp.cancelledAt).not.toBeNull()
+    // 取消原因写明「金额为 0」：关闭后未收必须为 0，否则概览 closedUnreceived 虚增 S。
+    expect(closedTopUp.amountCents).toBe(0)
+
+    const detail = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}`)
+      .expect(200)
+    expect(detail.body.data.overviewStats.closedUnreceivedCents).toBe(0)
+    expect(detail.body.data.overviewStats.anomalies).toEqual([])
+  })
+
   it('rejects silent recalculation after top-up is finance-touched', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {

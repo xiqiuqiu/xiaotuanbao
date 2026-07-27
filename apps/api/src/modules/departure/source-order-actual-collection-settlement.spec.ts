@@ -6,6 +6,8 @@ import {
 import {
   assertGuestNodesReadyForSettlement,
   buildActualCollectionSettlementPaths,
+  buildObsoleteSettlementPathCloseData,
+  OBSOLETE_SETTLEMENT_PATH_CANCEL_REASON,
 } from './source-order-actual-collection-settlement'
 
 describe('buildActualCollectionSettlementPaths', () => {
@@ -74,6 +76,25 @@ describe('buildActualCollectionSettlementPaths', () => {
         actualGuestCollectedCents: 500000,
       }),
     ).toEqual([])
+  })
+})
+
+describe('buildObsoleteSettlementPathCloseData', () => {
+  it('sets amountCents to settled so closed unreceived becomes 0', () => {
+    const now = new Date('2026-07-28T00:00:00.000Z')
+    expect(
+      buildObsoleteSettlementPathCloseData({ settledAmountCents: 0, now }),
+    ).toEqual({
+      cancelledAt: now,
+      cancelReason: OBSOLETE_SETTLEMENT_PATH_CANCEL_REASON,
+      amountCents: 0,
+    })
+  })
+
+  it('keeps any already-settled amount when closing an obsolete path', () => {
+    expect(
+      buildObsoleteSettlementPathCloseData({ settledAmountCents: 100_000 }).amountCents,
+    ).toBe(100_000)
   })
 })
 
