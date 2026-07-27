@@ -17,11 +17,11 @@ import {
 import {
   deriveScheduleState,
   isFinanceTouched,
-  isSourceOrderGuestCollectionSourceType,
+  isSourceOrderReceivableSourceType,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
   SegmentPayableStatus,
-  SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
+  SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES,
   SourceOrderReceivableStatus,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -64,6 +64,7 @@ export interface SegmentResourceFinanceState {
  */
 export type SourceOrderReceivablePathType =
   | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
+  | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
   | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION
   | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION
 
@@ -231,10 +232,7 @@ export class DepartureFinanceFacade {
       const remainingCents = schedule.amountCents - receivedOrPaidCents
 
       if (schedule.direction === PaymentScheduleDirection.receivable) {
-        const isSourceReceivable =
-          schedule.sourceType ===
-            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-          isSourceOrderGuestCollectionSourceType(schedule.sourceType)
+        const isSourceReceivable = isSourceOrderReceivableSourceType(schedule.sourceType)
         if (isSourceReceivable) {
           snapshot.sourceReceivableReceivedCents += receivedOrPaidCents
           if (schedule.cancelledAt) {
@@ -856,10 +854,7 @@ export class DepartureFinanceFacade {
         sourceId: { in: uniqueIds },
         direction: PaymentScheduleDirection.receivable,
         sourceType: {
-          in: [
-            PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-            ...SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
-          ],
+          in: [...SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES],
         },
       },
     })
@@ -909,9 +904,11 @@ export class DepartureFinanceFacade {
       const customerKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
       const depositKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION}`
       const balanceKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION}`
+      const legacyGuestKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION}`
       const customerSchedule = scheduleByKey.get(customerKey) ?? null
       const depositSchedule = scheduleByKey.get(depositKey) ?? null
       const balanceSchedule = scheduleByKey.get(balanceKey) ?? null
+      const legacyGuestSchedule = scheduleByKey.get(legacyGuestKey) ?? null
 
       const expectCustomer =
         amounts.collectionMode === 'partner_settled' &&
@@ -958,6 +955,19 @@ export class DepartureFinanceFacade {
             balanceSchedule,
             balanceSchedule ? (settledMap.get(balanceSchedule.id) ?? 0) : 0,
             balanceSchedule ? (historyMap.get(balanceSchedule.id) ?? false) : false,
+          ),
+        )
+      }
+
+      // pre-split 单节点游客代收：只读展示，避免路径列表漏掉仍存在的 legacy 节点。
+      if (legacyGuestSchedule) {
+        paths.push(
+          this.toPathFinanceState(
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+            amounts.guestCollectCents,
+            legacyGuestSchedule,
+            settledMap.get(legacyGuestSchedule.id) ?? 0,
+            historyMap.get(legacyGuestSchedule.id) ?? false,
           ),
         )
       }

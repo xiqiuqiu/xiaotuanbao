@@ -1,9 +1,10 @@
+import { CounterpartyType } from '../enums/counterparty-type.enum'
+import { PaymentScheduleSourceType } from '../enums/payment-schedule-source-type.enum'
+import { SourceOrderCollectionMode } from '../enums/source-order-collection-mode.enum'
 import {
-  CounterpartyType,
-  PaymentScheduleSourceType,
-  SourceOrderCollectionMode,
-} from '@xiaotuanbao/shared'
-import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
+  buildSourceOrderReceivablePaths,
+  countSourceOrderReceivablePaths,
+} from './source-order-receivable-paths'
 
 describe('buildSourceOrderReceivablePaths', () => {
   const base = {
@@ -120,5 +121,36 @@ describe('buildSourceOrderReceivablePaths', () => {
           path.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
       ),
     ).toBe(false)
+  })
+})
+
+describe('countSourceOrderReceivablePaths', () => {
+  it('matches generated path counts for each collection mode', () => {
+    expect(
+      countSourceOrderReceivablePaths({
+        collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        depositCents: 100000,
+        balanceCents: 600000,
+        netReceivableCents: 500000,
+      }),
+    ).toBe(2)
+
+    expect(
+      countSourceOrderReceivablePaths({
+        collectionMode: SourceOrderCollectionMode.SPLIT,
+        depositCents: 300000,
+        balanceCents: 700000,
+        netReceivableCents: 1000000,
+      }),
+    ).toBe(1)
+
+    expect(
+      countSourceOrderReceivablePaths({
+        collectionMode: SourceOrderCollectionMode.PARTNER_SETTLED,
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 1000000,
+      }),
+    ).toBe(1)
   })
 })

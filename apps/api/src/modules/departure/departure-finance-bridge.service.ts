@@ -16,6 +16,7 @@ import {
   deriveScheduleState,
   computeReceivableDueDate,
   PaymentScheduleStatus,
+  shouldCancelSourceOrderScheduleOnConventionSync,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -205,9 +206,14 @@ export class DepartureFinanceBridgeService {
       }),
     )
     const anyTouched = touchResults.some((item) => item.touched)
+    const hasLegacyGuestCollection = touchResults.some(
+      (item) =>
+        item.schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    )
 
-    if (anyTouched) {
-      // 任一节点已 finance-touch：锁定约定同步（不改金额、不增删路径）。
+    if (anyTouched || hasLegacyGuestCollection) {
+      // 任一节点已 finance-touch，或仍存在 pre-split legacy 游客代收：
+      // 锁定约定同步（不改金额、不增删路径，避免误取消 legacy）。
       return this.evaluateFinanceMeta(organizationId, order.id, order)
     }
 
@@ -219,8 +225,17 @@ export class DepartureFinanceBridgeService {
 
     for (const { schedule } of touchResults) {
       const expected = expectedByType.get(schedule.sourceType as PaymentScheduleSourceType)
-      if (!expected || expected.amountCents <= 0) {
+      if (
+        shouldCancelSourceOrderScheduleOnConventionSync({
+          scheduleSourceType: schedule.sourceType,
+          expectedAmountCents: expected?.amountCents,
+        })
+      ) {
         await this.cancelScheduleForConventionSync(schedule.id)
+        continue
+      }
+      if (!expected || expected.amountCents <= 0) {
+        // 非约定管理类型（如 legacy）：保留，不参与补建去重。
         continue
       }
 

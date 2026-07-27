@@ -23,6 +23,16 @@ describe('matchesSourceOrderSchedule', () => {
         'order-1',
       ),
     ).toBe(true)
+
+    expect(
+      matchesSourceOrderSchedule(
+        {
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceId: 'order-1',
+        },
+        'order-1',
+      ),
+    ).toBe(true)
   })
 
   it('rejects other source types or different source ids', () => {

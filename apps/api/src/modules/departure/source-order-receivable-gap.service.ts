@@ -8,17 +8,9 @@ import type {
   PendingReceivableSourceOrderItem,
   PendingReceivableSourceOrderListResult,
 } from '@xiaotuanbao/shared'
-import {
-  PaymentScheduleSourceType,
-  SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
-} from '@xiaotuanbao/shared'
+import { SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { formatDateOnly } from './departure-date.utils'
-
-const SOURCE_ORDER_RECEIVABLE_TYPES = [
-  PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-  ...SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
-] as const
 
 export type PendingReceivableSourceOrderRow = Prisma.SourceOrderGetPayload<{
   include: {
@@ -75,7 +67,7 @@ export class SourceOrderReceivableGapService {
           where: {
             organizationId,
             direction: PaymentScheduleDirection.receivable,
-            sourceType: { in: [...SOURCE_ORDER_RECEIVABLE_TYPES] },
+            sourceType: { in: [...SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES] },
             sourceId: { in: rows.map(({ id }) => id) },
           },
           select: { sourceId: true },
