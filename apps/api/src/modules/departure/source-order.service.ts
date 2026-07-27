@@ -47,6 +47,7 @@ import {
   computeSourceOrderAmounts,
   resolveSourceOrderAmountChange,
   resolveSourceOrderCollectionPeriods,
+  resolveUpdateCollectionPeriodInputs,
   type SourceOrderFareAdjustmentInput,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
@@ -470,6 +471,18 @@ export class SourceOrderService {
       dto.fareAdjustments !== undefined
         ? toFareAdjustmentInputs(dto.fareAdjustments)
         : existingFareAdjustments
+    const periodInputs = resolveUpdateCollectionPeriodInputs({
+      dtoDepositCents: dto.depositCents,
+      dtoBalanceCents: dto.balanceCents,
+      dtoCollectionMode: dto.collectionMode,
+      stored: {
+        collectionMode: order.collectionMode,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
+        guestCollectCents: order.guestCollectCents,
+        netReceivableCents: order.netReceivableCents,
+      },
+    })
     const normalized = this.normalizeInput({
       adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
       childGuestCount: dto.childGuestCount ?? order.childGuestCount,
@@ -484,12 +497,8 @@ export class SourceOrderService {
       discountType: dto.discountType ?? order.discountType,
       discountCents: dto.discountCents ?? order.discountCents,
       collectionMode: dto.collectionMode ?? order.collectionMode,
-      depositCents:
-        dto.depositCents ??
-        (dto.collectionMode !== undefined ? undefined : order.depositCents),
-      balanceCents:
-        dto.balanceCents ??
-        (dto.collectionMode !== undefined ? undefined : order.balanceCents),
+      depositCents: periodInputs.depositCents,
+      balanceCents: periodInputs.balanceCents,
       fareAdjustments,
     })
 

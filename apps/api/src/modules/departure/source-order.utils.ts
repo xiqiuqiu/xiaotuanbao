@@ -232,6 +232,55 @@ export function resolveSourceOrderCollectionPeriods(
   return { depositCents, balanceCents }
 }
 
+export type UpdateCollectionPeriodInput = {
+  dtoDepositCents?: number
+  dtoBalanceCents?: number
+  dtoCollectionMode?: SourceOrderCollectionMode
+  stored: {
+    collectionMode: SourceOrderCollectionMode
+    depositCents: number
+    balanceCents: number
+    guestCollectCents: number
+    netReceivableCents: number
+  }
+}
+
+/**
+ * Decide deposit/balance inputs for update() before normalizeInput.
+ * - Explicit dto period fields win (missing side falls back to stored).
+ * - collectionMode actually changing without periods → omit (guest_only defaults balance=net).
+ * - guest_only still tracking G===S and periods omitted → omit so balance re-defaults to new S
+ *   (covers API callers that only patch unit price / fare adjustments).
+ * - Otherwise keep stored periods (preserves intentional G≠S).
+ */
+export function resolveUpdateCollectionPeriodInputs(
+  input: UpdateCollectionPeriodInput,
+): { depositCents?: number; balanceCents?: number } {
+  if (input.dtoDepositCents !== undefined || input.dtoBalanceCents !== undefined) {
+    return {
+      depositCents: input.dtoDepositCents ?? input.stored.depositCents,
+      balanceCents: input.dtoBalanceCents ?? input.stored.balanceCents,
+    }
+  }
+
+  const nextMode = input.dtoCollectionMode ?? input.stored.collectionMode
+  const collectionModeChanging =
+    input.dtoCollectionMode !== undefined &&
+    input.dtoCollectionMode !== input.stored.collectionMode
+  const guestOnlyTrackingS =
+    nextMode === 'guest_only' &&
+    input.stored.guestCollectCents === input.stored.netReceivableCents
+
+  if (collectionModeChanging || guestOnlyTrackingS) {
+    return { depositCents: undefined, balanceCents: undefined }
+  }
+
+  return {
+    depositCents: input.stored.depositCents,
+    balanceCents: input.stored.balanceCents,
+  }
+}
+
 /**
  * Reconcile dominant unit price so count × price matches authoritative gross.
  * Used after receivable path sync updates gross without rewriting unit prices.

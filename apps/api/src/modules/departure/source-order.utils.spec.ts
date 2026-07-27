@@ -5,6 +5,7 @@ import {
   reconcileUnitPricesToGross,
   resolveSourceOrderAmountChange,
   resolveSourceOrderCollectionPeriods,
+  resolveUpdateCollectionPeriodInputs,
 } from './source-order.utils'
 
 describe('computeSourceOrderAmounts', () => {
@@ -574,6 +575,92 @@ describe('resolveSourceOrderCollectionPeriods', () => {
     ).toEqual({
       depositCents: 300000,
       balanceCents: 700000,
+    })
+  })
+})
+
+describe('resolveUpdateCollectionPeriodInputs', () => {
+  const trackingGuestOnly = {
+    collectionMode: 'guest_only' as const,
+    depositCents: 0,
+    balanceCents: 50000,
+    guestCollectCents: 50000,
+    netReceivableCents: 50000,
+  }
+
+  it('omits periods when guest_only still tracks G===S (price/fare-only patch)', () => {
+    // 创建默认尾款=S；只改单价/加减项且未重传期次时，应重新默认尾款=新 S，否则 G 冻结、sourceAmountChanged 不触发。
+    expect(
+      resolveUpdateCollectionPeriodInputs({
+        stored: trackingGuestOnly,
+      }),
+    ).toEqual({
+      depositCents: undefined,
+      balanceCents: undefined,
+    })
+  })
+
+  it('keeps stored periods when guest_only intentionally has G≠S', () => {
+    expect(
+      resolveUpdateCollectionPeriodInputs({
+        stored: {
+          ...trackingGuestOnly,
+          balanceCents: 60000,
+          guestCollectCents: 60000,
+          netReceivableCents: 50000,
+        },
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 60000,
+    })
+  })
+
+  it('omits periods when collectionMode actually changes', () => {
+    expect(
+      resolveUpdateCollectionPeriodInputs({
+        dtoCollectionMode: 'guest_only',
+        stored: {
+          collectionMode: 'partner_settled',
+          depositCents: 0,
+          balanceCents: 0,
+          guestCollectCents: 0,
+          netReceivableCents: 50000,
+        },
+      }),
+    ).toEqual({
+      depositCents: undefined,
+      balanceCents: undefined,
+    })
+  })
+
+  it('does not omit when echoing the same collectionMode with intentional G≠S', () => {
+    expect(
+      resolveUpdateCollectionPeriodInputs({
+        dtoCollectionMode: 'guest_only',
+        stored: {
+          ...trackingGuestOnly,
+          balanceCents: 60000,
+          guestCollectCents: 60000,
+          netReceivableCents: 50000,
+        },
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 60000,
+    })
+  })
+
+  it('prefers explicit dto periods over tracking omit', () => {
+    expect(
+      resolveUpdateCollectionPeriodInputs({
+        dtoDepositCents: 10000,
+        dtoBalanceCents: 40000,
+        stored: trackingGuestOnly,
+      }),
+    ).toEqual({
+      depositCents: 10000,
+      balanceCents: 40000,
     })
   })
 })
