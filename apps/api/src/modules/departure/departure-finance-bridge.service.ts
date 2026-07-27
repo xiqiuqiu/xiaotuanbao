@@ -542,7 +542,7 @@ export class DepartureFinanceBridgeService {
       hotel: '酒店',
       guide: '导游',
       ticket: '门票',
-      meal: '餐',
+      meal: '用餐',
       outsource: '拼出',
       other: '其他',
     }

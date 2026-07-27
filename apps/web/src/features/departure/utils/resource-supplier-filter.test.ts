@@ -31,7 +31,9 @@ describe('resource kind → supplier filter', () => {
     expect(source).toMatch(/queryKey:\s*\[[\s\S]*supplierFilterKind/)
     expect(source).toMatch(/getSupplier\(editingSupplierId/)
     expect(source).not.toMatch(/listPartners/)
-    expect(source).not.toMatch(/承接方/)
+    // New write path: supplier field, not partner picker (历史 Partner 提示文案可含「承接方」)
+    expect(source).toMatch(/label="供应商"/)
+    expect(source).not.toMatch(/name="partnerId"/)
   })
 })
 

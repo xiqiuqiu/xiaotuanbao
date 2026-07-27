@@ -10,10 +10,10 @@ describe('SupplierCategoryTags', () => {
     )
 
     const hotel = screen.getByText('酒店')
-    const meal = screen.getByText('餐')
+    const meal = screen.getByText('用餐')
     expect(hotel.closest('.ant-tag')).toBeTruthy()
     expect(meal.closest('.ant-tag')).toBeTruthy()
-    expect(screen.queryByText('酒店、餐')).not.toBeInTheDocument()
+    expect(screen.queryByText('酒店、用餐')).not.toBeInTheDocument()
   })
 
   it('renders an em dash when categories are empty', () => {

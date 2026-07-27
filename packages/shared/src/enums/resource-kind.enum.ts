@@ -12,17 +12,21 @@ export enum ResourceKind {
   OTHER = 'other',
 }
 
+/**
+ * Resource-kind picker options (添加/编辑资源、等).
+ * 拼出 kept in the first five for common use; meal UI label「用餐」.
+ */
 export const RESOURCE_KIND_OPTIONS = [
   { value: ResourceKind.TRANSPORT, label: '用车' },
   { value: ResourceKind.HOTEL, label: '酒店' },
   { value: ResourceKind.GUIDE, label: '导游' },
+  { value: ResourceKind.OUTSOURCE, label: '拼出' },
   { value: ResourceKind.TICKET, label: '门票' },
-  { value: ResourceKind.MEAL, label: '餐' },
+  { value: ResourceKind.MEAL, label: '用餐' },
   { value: ResourceKind.SCENIC, label: '景区' },
   { value: ResourceKind.SHOP, label: '购物店' },
   { value: ResourceKind.ENTERTAINMENT, label: '演出' },
   { value: ResourceKind.INSURANCE, label: '保险' },
-  { value: ResourceKind.OUTSOURCE, label: '拼出' },
   { value: ResourceKind.OTHER, label: '其他' },
 ] as const
 
@@ -38,13 +42,37 @@ export const SUPPLIER_ALLOWED_RESOURCE_KINDS = Object.values(ResourceKind) as Re
 
 export type SupplierAllowedResourceKind = ResourceKind
 
-/** Supplier-category label for outsource; resource-kind label stays「拼出」. */
+/** Supplier-category label for outsource; resource-kind label stays「拼出». */
 export const SUPPLIER_CATEGORY_OUTSOURCE_LABEL = '旅行社'
 
-/** Fixed Resource Kind order for Departure Operations Sheet (CONTEXT / ADR-0018). */
-export const RESOURCE_KIND_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_OPTIONS.map(
+/** Supplier-category label for meal (aligned with resource-kind UI「用餐」). */
+export const SUPPLIER_CATEGORY_MEAL_LABEL = '用餐'
+
+/**
+ * Display order for supplier-category pickers (filters / forms).
+ * Matches RESOURCE_KIND_OPTIONS picker order; outsource shown as 旅行社.
+ */
+export const SUPPLIER_CATEGORY_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_OPTIONS.map(
   (item) => item.value,
 )
+
+/**
+ * Fixed Resource Kind order for Departure Operations Sheet (CONTEXT / ADR-0018).
+ * Independent of picker display order in RESOURCE_KIND_OPTIONS.
+ */
+export const RESOURCE_KIND_SORT_ORDER: readonly ResourceKind[] = [
+  ResourceKind.TRANSPORT,
+  ResourceKind.HOTEL,
+  ResourceKind.GUIDE,
+  ResourceKind.TICKET,
+  ResourceKind.MEAL,
+  ResourceKind.SCENIC,
+  ResourceKind.SHOP,
+  ResourceKind.ENTERTAINMENT,
+  ResourceKind.INSURANCE,
+  ResourceKind.OUTSOURCE,
+  ResourceKind.OTHER,
+]
 
 export function resourceKindSortIndex(kind: string): number {
   const index = RESOURCE_KIND_SORT_ORDER.indexOf(kind as ResourceKind)
@@ -68,4 +96,3 @@ export function compareSegmentResourcesForOperationsSheet(
 
   return left.counterpartyName.localeCompare(right.counterpartyName, 'zh-CN')
 }
-

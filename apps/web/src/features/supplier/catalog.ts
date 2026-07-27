@@ -2,9 +2,11 @@ import {
   InvoiceAvailable,
   InvoiceType,
   ResourceKind,
-  RESOURCE_KIND_OPTIONS,
+  RESOURCE_KIND_LABELS,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
+  SUPPLIER_CATEGORY_MEAL_LABEL,
   SUPPLIER_CATEGORY_OUTSOURCE_LABEL,
+  SUPPLIER_CATEGORY_SORT_ORDER,
   type SupplierAllowedResourceKind,
 } from '@xiaotuanbao/shared'
 
@@ -20,18 +22,23 @@ export {
 
 export type { SupplierAllowedResourceKind }
 
-/** Supplier-allowed resource kinds; outsource shown as 旅行社 (resource kind stays 拼出). */
-export const SUPPLIER_CATEGORY_OPTIONS = RESOURCE_KIND_OPTIONS.reduce<
+function supplierCategoryLabel(kind: ResourceKind): string {
+  if (kind === ResourceKind.OUTSOURCE) return SUPPLIER_CATEGORY_OUTSOURCE_LABEL
+  if (kind === ResourceKind.MEAL) return SUPPLIER_CATEGORY_MEAL_LABEL
+  return RESOURCE_KIND_LABELS[kind]
+}
+
+/**
+ * Supplier-allowed resource kinds with supplier-only labels/order:
+ * outsource → 旅行社, meal → 用餐; 旅行社 in first five (resource kinds unchanged).
+ */
+export const SUPPLIER_CATEGORY_OPTIONS = SUPPLIER_CATEGORY_SORT_ORDER.reduce<
   { value: ResourceKind; label: string }[]
->((options, item) => {
-  if (!(SUPPLIER_ALLOWED_RESOURCE_KINDS as readonly string[]).includes(item.value)) {
+>((options, kind) => {
+  if (!(SUPPLIER_ALLOWED_RESOURCE_KINDS as readonly string[]).includes(kind)) {
     return options
   }
-  options.push(
-    item.value === ResourceKind.OUTSOURCE
-      ? { value: item.value, label: SUPPLIER_CATEGORY_OUTSOURCE_LABEL }
-      : item,
-  )
+  options.push({ value: kind, label: supplierCategoryLabel(kind) })
   return options
 }, [])
 

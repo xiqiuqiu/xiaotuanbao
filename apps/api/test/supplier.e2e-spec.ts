@@ -408,7 +408,7 @@ describe('Supplier API (e2e)', () => {
       .expect(400)
 
     expect(response.body.code).toBe(400)
-    expect(response.body.message).toContain('餐')
+    expect(response.body.message).toContain('用餐')
     expect(response.body.message).toMatch(/仍被|无法移除/)
 
     const kept = await prisma.supplier.findUniqueOrThrow({ where: { id: supplierId } })

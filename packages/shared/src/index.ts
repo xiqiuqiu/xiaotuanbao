@@ -228,6 +228,8 @@ export {
   RESOURCE_KIND_SORT_ORDER,
   SUPPLIER_ALLOWED_RESOURCE_KINDS,
   SUPPLIER_CATEGORY_OUTSOURCE_LABEL,
+  SUPPLIER_CATEGORY_MEAL_LABEL,
+  SUPPLIER_CATEGORY_SORT_ORDER,
   resourceKindSortIndex,
   compareSegmentResourcesForOperationsSheet,
   type SupplierAllowedResourceKind,

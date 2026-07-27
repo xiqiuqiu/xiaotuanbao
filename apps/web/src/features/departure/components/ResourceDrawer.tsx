@@ -233,8 +233,8 @@ export function ResourceDrawer({
       >
         <Form.Item
           name="resourceKind"
-          label="资源类型"
-          rules={[{ required: true, message: '请选择资源类型' }]}
+          label="资源种类"
+          rules={[{ required: true, message: '请选择资源种类' }]}
         >
           <Select
             options={RESOURCE_KIND_OPTIONS.map((item) => ({
