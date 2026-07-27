@@ -243,10 +243,16 @@ export function DepartureOverviewStatsCards({
 }: DepartureOverviewStatsCardsProps) {
   const { token } = theme.useToken()
   const stats = departure.overviewStats
-  const unreceivedCents =
-    stats.openUnreceivedCents +
-    stats.closedUnreceivedCents +
-    stats.ungeneratedReceivableCents
+  const settlementReceivableCents = stats.settlementCollectionReceivableCents
+  const settlementReceivedCents = stats.settlementCollectionReceivedCents
+  const settlementUnreceivedCents = settlementReceivableCents - settlementReceivedCents
+  const guestCollectionUnreceivedCents =
+    stats.guestCollectionAgreedCents - stats.guestCollectionReceivedCents
+  const hasRebateDetails =
+    stats.estimatedRebateCents !== 0 ||
+    stats.confirmedRebateCents !== 0 ||
+    stats.rebatePaidCents !== 0 ||
+    stats.rebateUnpaidCents !== 0
   const hasCostDetails =
     stats.confirmedPayableCents !== 0 ||
     stats.ungeneratedPayableCents !== 0 ||
@@ -366,10 +372,10 @@ export function DepartureOverviewStatsCards({
             className={animateEnter ? styles.metricCardEnter : undefined}
             title={
               <CalculationTitle
-                label="收款进度"
-                description="本团结算应收的实际收回进度。
-计算：已收金额 ÷ 结算应收 × 100%。
-已收仅统计已核销金额实时统计；"
+                label="团款收款进度"
+                description="本团结算金额的收回进度。
+计算：团款已收 ÷ 各单结算金额合计 × 100%。
+单笔团款已收 = min(游客代收已收, 结算金额) + 客户补款已收；代收溢价与返利不计入。"
               />
             }
             extra={
@@ -389,18 +395,18 @@ export function DepartureOverviewStatsCards({
               ) : null
             }
             role="region"
-            aria-label={receivableAnomaly ? '收款进度（数据异常）' : '收款进度'}
+            aria-label={receivableAnomaly ? '团款收款进度（数据异常）' : '团款收款进度'}
             style={anomalyCardStyle}
           >
             <ProgressValue
-              numerator={stats.receivedCents}
-              denominator={departure.netReceivableCents}
+              numerator={settlementReceivedCents}
+              denominator={settlementReceivableCents}
               animate={animateEnter}
             />
             <ProgressBreakdown
               items={[
-                { label: '已收', amountCents: stats.receivedCents },
-                { label: '未收', amountCents: unreceivedCents },
+                { label: '已收', amountCents: settlementReceivedCents },
+                { label: '未收', amountCents: settlementUnreceivedCents },
               ]}
             />
             {receivableAnomaly ? <ReceivableAnomalyAlert anomaly={receivableAnomaly} /> : null}
@@ -412,10 +418,71 @@ export function DepartureOverviewStatsCards({
             className={animateEnter ? styles.metricCardEnter : undefined}
             title={
               <CalculationTitle
+                label="游客代收进度"
+                description="本团游客代收账单的收回进度。
+计算：游客代收已收 ÷ 各单 G约定（定金+尾款）× 100%。
+已收仅统计定金代收/尾款代收节点的有效核销。"
+              />
+            }
+            role="region"
+            aria-label="游客代收进度"
+            style={EQUAL_HEIGHT_CARD_STYLE}
+          >
+            <ProgressValue
+              numerator={stats.guestCollectionReceivedCents}
+              denominator={stats.guestCollectionAgreedCents}
+              animate={animateEnter}
+            />
+            <ProgressBreakdown
+              items={[
+                { label: '已收', amountCents: stats.guestCollectionReceivedCents },
+                { label: '未收', amountCents: guestCollectionUnreceivedCents },
+              ]}
+            />
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={8}>
+          <Card
+            className={animateEnter ? styles.metricCardEnter : undefined}
+            title={
+              <CalculationTitle
+                label="返利"
+                description="本团应付给发客合作方的返利。
+预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自按实收结算后的返利应付节点。
+返利不计入团款收款进度。"
+              />
+            }
+            role="region"
+            aria-label="返利"
+            style={EQUAL_HEIGHT_CARD_STYLE}
+          >
+            {hasRebateDetails ? (
+              <ProgressBreakdown
+                items={[
+                  { label: '预估', amountCents: stats.estimatedRebateCents },
+                  { label: '已确认', amountCents: stats.confirmedRebateCents },
+                  { label: '已付', amountCents: stats.rebatePaidCents },
+                  { label: '未付', amountCents: stats.rebateUnpaidCents },
+                ]}
+              />
+            ) : (
+              <Text strong>暂无数据</Text>
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} className={styles.fourthRow}>
+        <Col xs={24} lg={12}>
+          <Card
+            className={animateEnter ? styles.metricCardEnter : undefined}
+            title={
+              <CalculationTitle
                 label="付款进度"
                 description="本团资源成本的实际支付进度。
 计算：已付金额 ÷ 成本合计 × 100%。
-已付仅统计资源应付的有效核销；手工应付等不计入本进度。"
+已付仅统计资源应付的有效核销；手工应付与返利应付等不计入本进度。"
               />
             }
             extra={
@@ -454,7 +521,7 @@ export function DepartureOverviewStatsCards({
           </Card>
         </Col>
 
-        <Col xs={24} lg={8}>
+        <Col xs={24} lg={12}>
           <Card
             className={animateEnter ? styles.metricCardEnter : undefined}
             title={

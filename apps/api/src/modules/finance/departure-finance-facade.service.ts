@@ -123,6 +123,12 @@ export interface DepartureFinanceSnapshot {
   closedUnpaidCents: number
   resourcePayableCents: number
   otherPayableCents: number
+  /** 已确认返利应付约定合计（SOURCE_ORDER_REBATE）。 */
+  confirmedRebateCents: number
+  /** 返利已付（有效核销）。 */
+  rebatePaidCents: number
+  /** 返利未付。 */
+  rebateUnpaidCents: number
   incomeTransactionCents: number
   expenseTransactionCents: number
   unverifiedIncomeCents: number
@@ -144,6 +150,9 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
   closedUnpaidCents: 0,
   resourcePayableCents: 0,
   otherPayableCents: 0,
+  confirmedRebateCents: 0,
+  rebatePaidCents: 0,
+  rebateUnpaidCents: 0,
   incomeTransactionCents: 0,
   expenseTransactionCents: 0,
   unverifiedIncomeCents: 0,
@@ -261,6 +270,11 @@ export class DepartureFinanceFacade {
           snapshot.resourcePaidCents += receivedOrPaidCents
         } else {
           snapshot.otherPayableCents += schedule.amountCents
+        }
+        if (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_REBATE) {
+          snapshot.confirmedRebateCents += schedule.amountCents
+          snapshot.rebatePaidCents += receivedOrPaidCents
+          snapshot.rebateUnpaidCents += remainingCents
         }
       }
 

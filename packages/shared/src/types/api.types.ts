@@ -732,6 +732,25 @@ export interface DepartureOverviewStats {
   closedUnreceivedCents: number
   ungeneratedReceivableCents: number
   otherReceivableCents: number
+  /**
+   * 团款收款进度分子：各单 min(Guest已收,S)+客户补款已收（单笔不超过 S）。
+   * 不含代收溢价与返利（ADR-0033 / #193）。
+   */
+  settlementCollectionReceivedCents: number
+  /** 团款收款进度分母：各单结算金额 S 合计。 */
+  settlementCollectionReceivableCents: number
+  /** 游客代收进度分子：定金/尾款 Guest 节点有效已核销合计。 */
+  guestCollectionReceivedCents: number
+  /** 游客代收进度分母：各单 G约定（定金+尾款口径）。 */
+  guestCollectionAgreedCents: number
+  /** 返利预估：各单 max(0, G约定−S)。 */
+  estimatedRebateCents: number
+  /** 已确认返利应付（有效返利节点约定合计）。 */
+  confirmedRebateCents: number
+  /** 返利已付（有效核销）。 */
+  rebatePaidCents: number
+  /** 返利未付（约定 − 已付）。 */
+  rebateUnpaidCents: number
   confirmedPayableCents: number
   paidCents: number
   /** 资源应付节点的有效核销合计，主付款进度分子（ADR-0020）；不等于 paidCents。 */

@@ -1836,6 +1836,14 @@ describe('Departure API (e2e)', () => {
         closedUnreceivedCents: 0,
         ungeneratedReceivableCents: 1000000,
         otherReceivableCents: 0,
+        settlementCollectionReceivedCents: 0,
+        settlementCollectionReceivableCents: 1000000,
+        guestCollectionReceivedCents: 0,
+        guestCollectionAgreedCents: 1000000,
+        estimatedRebateCents: 0,
+        confirmedRebateCents: 0,
+        rebatePaidCents: 0,
+        rebateUnpaidCents: 0,
         confirmedPayableCents: 0,
         paidCents: 0,
         resourcePaidCents: 0,
@@ -1929,12 +1937,85 @@ describe('Departure API (e2e)', () => {
         closedUnreceivedCents: 0,
         ungeneratedReceivableCents: 0,
         otherReceivableCents: 0,
+        settlementCollectionReceivedCents: 500000,
+        settlementCollectionReceivableCents: 1000000,
+        guestCollectionReceivedCents: 500000,
+        guestCollectionAgreedCents: 1000000,
+        estimatedRebateCents: 0,
         incomeTransactionCents: 500000,
         expenseTransactionCents: 0,
         cashNetInflowCents: 500000,
         unverifiedIncomeCents: 0,
         anomalies: [],
       })
+    })
+
+    it('splits settlement vs guest collection progress and caps tour progress when G>S', async () => {
+      const departure = await createReadModelDeparture('-dual-progress')
+      const sourceOrder = await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/source-orders`)
+        .send({
+          partnerId: rmPartnerId,
+          adultGuestCount: 5,
+          childGuestCount: 0,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 0,
+          discountType: SourceOrderDiscountType.none,
+          collectionMode: SourceOrderCollectionMode.guest_only,
+          depositCents: 200000,
+          balanceCents: 400000,
+        })
+        .expect(201)
+
+      // S=500000, G约定=600000 → 预估返利 100000
+      expect(sourceOrder.body.data.netReceivableCents).toBe(500000)
+      expect(sourceOrder.body.data.guestCollectCents).toBe(600000)
+
+      const generated = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
+        .expect(201)
+      const schedules = generated.body.data.schedules as Array<{ id: string; amountCents: number }>
+      expect(schedules).toHaveLength(2)
+
+      for (const schedule of schedules) {
+        await authRequest(app, financeToken)
+          .post(`/api/finance/receivables/${schedule.id}/confirm-collection`)
+          .send({
+            amountCents: schedule.amountCents,
+            transactionDate: '2026-08-01',
+            paymentChannel: PaymentChannel.OTHER,
+            counterpartyType: CounterpartyType.guest,
+            counterpartyName: sourceOrder.body.data.displayName,
+          })
+          .expect(201)
+      }
+
+      await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrder.body.data.id}/settle-by-actual-collection`)
+        .send({})
+        .expect(201)
+
+      const response = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}`)
+        .expect(200)
+
+      expect(response.body.data.overviewStats).toMatchObject({
+        settlementCollectionReceivedCents: 500000,
+        settlementCollectionReceivableCents: 500000,
+        guestCollectionReceivedCents: 600000,
+        guestCollectionAgreedCents: 600000,
+        estimatedRebateCents: 100000,
+        confirmedRebateCents: 100000,
+        rebatePaidCents: 0,
+        rebateUnpaidCents: 100000,
+      })
+      // 路径已收合计含溢价，但团款进度分子不超过 S
+      expect(response.body.data.overviewStats.receivedCents).toBe(600000)
+      expect(
+        response.body.data.overviewStats.settlementCollectionReceivedCents,
+      ).toBeLessThanOrEqual(
+        response.body.data.overviewStats.settlementCollectionReceivableCents,
+      )
     })
 
     it('sets isFinanciallySettled when all schedules are settled or cancelled', async () => {
@@ -2294,6 +2375,8 @@ describe('Departure API (e2e)', () => {
       await prisma.sourceOrder.update({
         where: { id: seeded.sourceOrderId },
         data: {
+          depositCents: 0,
+          balanceCents: -100000,
           guestCollectCents: -100000,
           netReceivableCents: -100000,
           grossReceivableCents: -100000,

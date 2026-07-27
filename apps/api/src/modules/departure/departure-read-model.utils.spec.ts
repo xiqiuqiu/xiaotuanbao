@@ -247,18 +247,33 @@ describe('departure-read-model.utils', () => {
           resourcePayableCents: 400_000,
           resourcePaidCents: 380_000,
           otherPayableCents: 100_000,
+          confirmedRebateCents: 80_000,
+          rebatePaidCents: 30_000,
+          rebateUnpaidCents: 50_000,
           verifiedFromExternalCents: 70_000,
           verifiedToOtherDeparturesCents: 20_000,
         },
         overviewSourceFacts: {
           sourceReceivableUngeneratedCents: 1_000_000,
           generatedResourceAgreedCents: 400_000,
+          collectionStats: {
+            settlementCollectionReceivedCents: 400_000,
+            settlementCollectionReceivableCents: 1_000_000,
+            guestCollectionReceivedCents: 400_000,
+            guestCollectionAgreedCents: 1_000_000,
+            estimatedRebateCents: 0,
+          },
         },
       })
 
       // 主付款进度分子：只含资源应付的有效核销，独立于全部已付。
       expect(aggregate.overviewStats.resourcePaidCents).toBe(380_000)
       expect(aggregate.overviewStats.paidCents).toBe(450_000)
+      expect(aggregate.overviewStats.settlementCollectionReceivedCents).toBe(400_000)
+      expect(aggregate.overviewStats.guestCollectionAgreedCents).toBe(1_000_000)
+      expect(aggregate.overviewStats.confirmedRebateCents).toBe(80_000)
+      expect(aggregate.overviewStats.rebatePaidCents).toBe(30_000)
+      expect(aggregate.overviewStats.rebateUnpaidCents).toBe(50_000)
       // 外部核销含他团与无归属流水，合并为一个口径。
       expect(aggregate.overviewStats.verifiedFromExternalCents).toBe(70_000)
       expect(aggregate.overviewStats.verifiedToOtherDeparturesCents).toBe(20_000)
