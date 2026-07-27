@@ -4,6 +4,7 @@ import {
   emptyDepartureFinanceSnapshot,
   type DepartureFinanceSnapshot,
 } from '../finance/departure-finance-facade.service'
+import type { DepartureOverviewCollectionStats } from './departure-overview-collection-stats'
 
 export interface ScheduleSnapshot {
   direction: PaymentScheduleDirection
@@ -71,6 +72,15 @@ export const EMPTY_UNVERIFIED_CASH: UnverifiedCashAggregate = {
 export interface DepartureOverviewSourceFacts {
   sourceReceivableUngeneratedCents: number
   generatedResourceAgreedCents: number
+  collectionStats: DepartureOverviewCollectionStats
+}
+
+export const EMPTY_OVERVIEW_COLLECTION_STATS: DepartureOverviewCollectionStats = {
+  settlementCollectionReceivedCents: 0,
+  settlementCollectionReceivableCents: 0,
+  guestCollectionReceivedCents: 0,
+  guestCollectionAgreedCents: 0,
+  estimatedRebateCents: 0,
 }
 
 function buildDepartureOverviewStats(input: {
@@ -87,6 +97,7 @@ function buildDepartureOverviewStats(input: {
   const confirmedMarginCents = input.netReceivableCents - finance.confirmedPayableCents
   const cashNetInflowCents =
     finance.incomeTransactionCents - finance.expenseTransactionCents
+  const collection = input.sourceFacts.collectionStats
 
   const stats: DepartureOverviewStats = {
     receivedCents: finance.sourceReceivableReceivedCents,
@@ -94,6 +105,15 @@ function buildDepartureOverviewStats(input: {
     closedUnreceivedCents: finance.sourceReceivableClosedUnreceivedCents,
     ungeneratedReceivableCents: input.sourceFacts.sourceReceivableUngeneratedCents,
     otherReceivableCents: finance.otherReceivableCents,
+    settlementCollectionReceivedCents: collection.settlementCollectionReceivedCents,
+    settlementCollectionReceivableCents: collection.settlementCollectionReceivableCents,
+    guestCollectionReceivedCents: collection.guestCollectionReceivedCents,
+    guestCollectionAgreedCents: collection.guestCollectionAgreedCents,
+    estimatedRebateCents: collection.estimatedRebateCents,
+    // 已确认/已付/未付以 Finance snapshot 为准（与全局应付同口径）。
+    confirmedRebateCents: finance.confirmedRebateCents,
+    rebatePaidCents: finance.rebatePaidCents,
+    rebateUnpaidCents: finance.rebateUnpaidCents,
     confirmedPayableCents: finance.confirmedPayableCents,
     paidCents: finance.paidCents,
     resourcePaidCents: finance.resourcePaidCents,
@@ -113,11 +133,13 @@ function buildDepartureOverviewStats(input: {
     anomalies: [],
   }
 
+  // 代收溢价不计入结算应收守恒：从组成合计中扣除各单 max(0, G约定−S)。
   const receivableActualCents =
     stats.receivedCents +
     stats.openUnreceivedCents +
     stats.closedUnreceivedCents +
-    stats.ungeneratedReceivableCents
+    stats.ungeneratedReceivableCents -
+    collection.estimatedRebateCents
   const receivableDifferenceCents = receivableActualCents - input.netReceivableCents
   if (receivableDifferenceCents !== 0) {
     stats.anomalies.push({
@@ -307,6 +329,10 @@ export function buildDepartureReadModelAggregate(input: {
   const overviewSourceFacts = input.overviewSourceFacts ?? {
     sourceReceivableUngeneratedCents: sourceOrders.netReceivableCents,
     generatedResourceAgreedCents: 0,
+    collectionStats: {
+      ...EMPTY_OVERVIEW_COLLECTION_STATS,
+      settlementCollectionReceivableCents: sourceOrders.netReceivableCents,
+    },
   }
 
   return {

@@ -44,6 +44,7 @@ import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
 import {
   assertGuestNodesReadyForSettlement,
   buildActualCollectionSettlementPaths,
+  buildObsoleteSettlementPathCloseData,
 } from './source-order-actual-collection-settlement'
 import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
 import {
@@ -982,12 +983,16 @@ export class DepartureFinanceBridgeService {
 
     if (!expected) {
       if (existing) {
+        const settledAmountCents = await this.verificationService.getSettledAmountCents(
+          existing.id,
+          tx,
+        )
+        const closeData = buildObsoleteSettlementPathCloseData({ settledAmountCents })
         await tx.paymentSchedule.update({
           where: { id: existing.id },
           data: {
-            cancelledAt: new Date(),
+            ...closeData,
             closeDisposition: PaymentScheduleCloseDisposition.other,
-            cancelReason: '按实收结算：轧差后该路径金额为 0',
           },
         })
       }

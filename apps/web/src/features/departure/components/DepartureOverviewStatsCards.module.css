@@ -70,6 +70,18 @@
   animation-delay: 120ms;
 }
 
+.fourthRow > :global(.ant-col):nth-child(1) .metricCardEnter {
+  animation-delay: 135ms;
+}
+
+.fourthRow > :global(.ant-col):nth-child(1) .progressLoad :global(.ant-progress-track) {
+  animation-delay: 180ms;
+}
+
+.fourthRow > :global(.ant-col):nth-child(2) .metricCardEnter {
+  animation-delay: 150ms;
+}
+
 @keyframes metric-card-enter {
   from {
     opacity: 0;

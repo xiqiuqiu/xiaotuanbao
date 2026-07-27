@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import {
   PaymentScheduleSourceType,
+  isSourceOrderGuestCollectionSourceType,
   type DepartureCompletionTags,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -13,8 +14,13 @@ import {
   type DepartureOverviewSourceFacts,
   type ScheduleWithId,
   type SourceOrderAggregate,
+  EMPTY_OVERVIEW_COLLECTION_STATS,
   EMPTY_UNVERIFIED_CASH,
 } from './departure-read-model.utils'
+import {
+  aggregateDepartureOverviewCollectionStats,
+  type DepartureOverviewSourceOrderCollectionInput,
+} from './departure-overview-collection-stats'
 
 interface SegmentRollup {
   segmentCount: number
@@ -125,11 +131,17 @@ export class DepartureReadModelService {
         ),
       ])
 
+      const collectionInputsByDeparture = new Map<
+        string,
+        DepartureOverviewSourceOrderCollectionInput[]
+      >()
       for (const departureId of uniqueIds) {
         overviewSourceFactsMap.set(departureId, {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
+          collectionStats: { ...EMPTY_OVERVIEW_COLLECTION_STATS },
         })
+        collectionInputsByDeparture.set(departureId, [])
       }
       for (const fact of sourceOrderPathFacts) {
         const sourceFacts = overviewSourceFactsMap.get(fact.departureId)!
@@ -150,6 +162,17 @@ export class DepartureReadModelService {
             PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
         )
 
+        const guestReceivedCents = states
+          .filter((state) => isSourceOrderGuestCollectionSourceType(state.pathType))
+          .reduce((sum, state) => sum + (state.receivedCents ?? 0), 0)
+        const customerSettlementReceivedCents = customerState?.receivedCents ?? 0
+        collectionInputsByDeparture.get(fact.departureId)!.push({
+          settlementAmountCents: fact.netReceivableCents,
+          guestAgreedCents: fact.guestCollectCents,
+          guestReceivedCents,
+          customerSettlementReceivedCents,
+        })
+
         if (fact.collectionMode === 'partner_settled') {
           if (!customerState?.hasSchedule) {
             sourceFacts.sourceReceivableUngeneratedCents += fact.netReceivableCents
@@ -168,6 +191,10 @@ export class DepartureReadModelService {
         ) {
           sourceFacts.sourceReceivableUngeneratedCents += fact.balanceCents
         }
+      }
+      for (const [departureId, orders] of collectionInputsByDeparture) {
+        const sourceFacts = overviewSourceFactsMap.get(departureId)!
+        sourceFacts.collectionStats = aggregateDepartureOverviewCollectionStats(orders)
       }
       for (const [departureId, rollup] of segmentRollupMap) {
         const sourceFacts = overviewSourceFactsMap.get(departureId)!

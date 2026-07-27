@@ -225,6 +225,91 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.unverifiedExpenseCents).toBe(400_000)
     })
 
+    it('flags receivable_balance when closed top-up still carries full S after rebate flip', () => {
+      // 浏览器症状最小化：S=5000、Guest 已收 6200、关闭补款未收仍 5000、预估返利 1200
+      // → 组成 6200+5000-1200=10000，应为 5000，差额 +5000。
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 1,
+          grossReceivableCents: 500_000,
+          fareAdjustmentNetCents: 0,
+          discountCents: 0,
+          netReceivableCents: 500_000,
+        },
+        segmentCount: 0,
+        resourceCount: 0,
+        payableCents: 0,
+        schedules: [],
+        settledByScheduleId: new Map(),
+        financeSnapshot: {
+          ...emptyDepartureFinanceSnapshot(),
+          sourceReceivableReceivedCents: 620_000,
+          sourceReceivableClosedUnreceivedCents: 500_000,
+          confirmedRebateCents: 120_000,
+          rebateUnpaidCents: 120_000,
+        },
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 0,
+          generatedResourceAgreedCents: 0,
+          collectionStats: {
+            settlementCollectionReceivedCents: 500_000,
+            settlementCollectionReceivableCents: 500_000,
+            guestCollectionReceivedCents: 620_000,
+            guestCollectionAgreedCents: 620_000,
+            estimatedRebateCents: 120_000,
+          },
+        },
+      })
+
+      expect(aggregate.overviewStats.anomalies).toEqual([
+        {
+          code: 'receivable_balance',
+          expectedCents: 500_000,
+          actualCents: 1_000_000,
+          differenceCents: 500_000,
+        },
+      ])
+    })
+
+    it('keeps receivable conservation when obsolete top-up closedUnreceived is 0', () => {
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 1,
+          grossReceivableCents: 500_000,
+          fareAdjustmentNetCents: 0,
+          discountCents: 0,
+          netReceivableCents: 500_000,
+        },
+        segmentCount: 0,
+        resourceCount: 0,
+        payableCents: 0,
+        schedules: [],
+        settledByScheduleId: new Map(),
+        financeSnapshot: {
+          ...emptyDepartureFinanceSnapshot(),
+          sourceReceivableReceivedCents: 620_000,
+          sourceReceivableClosedUnreceivedCents: 0,
+          confirmedRebateCents: 120_000,
+          rebateUnpaidCents: 120_000,
+        },
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 0,
+          generatedResourceAgreedCents: 0,
+          collectionStats: {
+            settlementCollectionReceivedCents: 500_000,
+            settlementCollectionReceivableCents: 500_000,
+            guestCollectionReceivedCents: 620_000,
+            guestCollectionAgreedCents: 620_000,
+            estimatedRebateCents: 120_000,
+          },
+        },
+      })
+
+      expect(aggregate.overviewStats.anomalies).toEqual([])
+    })
+
     it('exposes resource-paid and external-verification aggregates on overviewStats', () => {
       const aggregate = buildDepartureReadModelAggregate({
         sourceOrders: {
@@ -247,18 +332,33 @@ describe('departure-read-model.utils', () => {
           resourcePayableCents: 400_000,
           resourcePaidCents: 380_000,
           otherPayableCents: 100_000,
+          confirmedRebateCents: 80_000,
+          rebatePaidCents: 30_000,
+          rebateUnpaidCents: 50_000,
           verifiedFromExternalCents: 70_000,
           verifiedToOtherDeparturesCents: 20_000,
         },
         overviewSourceFacts: {
           sourceReceivableUngeneratedCents: 1_000_000,
           generatedResourceAgreedCents: 400_000,
+          collectionStats: {
+            settlementCollectionReceivedCents: 400_000,
+            settlementCollectionReceivableCents: 1_000_000,
+            guestCollectionReceivedCents: 400_000,
+            guestCollectionAgreedCents: 1_000_000,
+            estimatedRebateCents: 0,
+          },
         },
       })
 
       // 主付款进度分子：只含资源应付的有效核销，独立于全部已付。
       expect(aggregate.overviewStats.resourcePaidCents).toBe(380_000)
       expect(aggregate.overviewStats.paidCents).toBe(450_000)
+      expect(aggregate.overviewStats.settlementCollectionReceivedCents).toBe(400_000)
+      expect(aggregate.overviewStats.guestCollectionAgreedCents).toBe(1_000_000)
+      expect(aggregate.overviewStats.confirmedRebateCents).toBe(80_000)
+      expect(aggregate.overviewStats.rebatePaidCents).toBe(30_000)
+      expect(aggregate.overviewStats.rebateUnpaidCents).toBe(50_000)
       // 外部核销含他团与无归属流水，合并为一个口径。
       expect(aggregate.overviewStats.verifiedFromExternalCents).toBe(70_000)
       expect(aggregate.overviewStats.verifiedToOtherDeparturesCents).toBe(20_000)

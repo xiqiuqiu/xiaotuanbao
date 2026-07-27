@@ -79,6 +79,14 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       closedUnreceivedCents: 100_000,
       ungeneratedReceivableCents: 200_000,
       otherReceivableCents: 50_000,
+      settlementCollectionReceivedCents: 400_000,
+      settlementCollectionReceivableCents: 1_000_000,
+      guestCollectionReceivedCents: 400_000,
+      guestCollectionAgreedCents: 1_000_000,
+      estimatedRebateCents: 0,
+      confirmedRebateCents: 0,
+      rebatePaidCents: 0,
+      rebateUnpaidCents: 0,
       confirmedPayableCents: 750_000,
       paidCents: 300_000,
       resourcePaidCents: 210_000,
@@ -118,9 +126,11 @@ describe('DepartureOverviewStatsCards', () => {
   it('首次进入时卡片与进度条挂载入场 class', () => {
     renderCards(makeDeparture(), true)
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
+    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
     const paymentCard = screen.getByRole('region', { name: '付款进度' })
     expect(receiptCard.className).toContain('metricCardEnter')
+    expect(guestCard.className).toContain('metricCardEnter')
     expect(paymentCard.className).toContain('metricCardEnter')
     expect(screen.getByText('总人数').closest('.ant-card')?.className).toContain(
       'metricCardEnter',
@@ -135,7 +145,7 @@ describe('DepartureOverviewStatsCards', () => {
   it('非首次进入时不挂载卡片入场与进度条揭示 class', () => {
     renderCards(makeDeparture(), false)
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
     const paymentCard = screen.getByRole('region', { name: '付款进度' })
     expect(receiptCard.className).not.toContain('metricCardEnter')
     expect(paymentCard.className).not.toContain('metricCardEnter')
@@ -149,7 +159,7 @@ describe('DepartureOverviewStatsCards', () => {
   it('初始化加载动效不延迟进度条语义值与百分比文字', () => {
     renderCards(makeDeparture(), true)
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
     const paymentCard = screen.getByRole('region', { name: '付款进度' })
     expect(within(receiptCard).getByText('40.0%')).toBeInTheDocument()
     expect(within(paymentCard).getByText('30.0%')).toBeInTheDocument()
@@ -277,15 +287,18 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.getByText('确认毛利 ¥2,500.00')).toBeInTheDocument()
   })
 
-  it('进度卡面直接展示已收/未收与已付/未付金额，满足守恒', () => {
+  it('进度卡面直接展示团款/代收已收未收与付款已付未付', () => {
     renderCards()
 
-    // 已收 400000 + 未收 (300000+100000+200000) = 结算应收 1000000
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    // 团款已收 400000 + 未收 600000 = 结算金额 1000000
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
     expect(within(receiptCard).getByText('已收')).toBeInTheDocument()
     expect(within(receiptCard).getByText('¥4,000.00')).toBeInTheDocument()
     expect(within(receiptCard).getByText('未收')).toBeInTheDocument()
     expect(within(receiptCard).getByText('¥6,000.00')).toBeInTheDocument()
+
+    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
+    expect(within(guestCard).getByText('40.0%')).toBeInTheDocument()
 
     // 已付（资源应付已核销）210000 + 未付 490000 = 成本合计 700000
     const paymentCard = screen.getByRole('region', { name: '付款进度' })
@@ -310,11 +323,11 @@ describe('DepartureOverviewStatsCards', () => {
     expect(within(paymentCard).getByText('-¥500.00')).toBeInTheDocument()
   })
 
-  it('收款进度按客源路径已收÷结算应收，并保留收款组成入口', async () => {
+  it('团款收款进度按团款已收÷结算金额，并保留收款组成入口', async () => {
     const user = userEvent.setup()
     renderCards()
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
     expect(within(receiptCard).getByText('40.0%')).toBeInTheDocument()
 
     await user.click(
@@ -323,6 +336,29 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.getByText('尚未生成应收 ¥2,000.00')).toBeInTheDocument()
     expect(screen.getByText('其中已关闭未收 ¥1,000.00')).toBeInTheDocument()
     expect(screen.getByText('其他应收 ¥500.00')).toBeInTheDocument()
+  })
+
+  it('返利卡展示预估与已确认应付/已付/未付', () => {
+    renderCards(
+      makeDeparture({
+        overviewStats: {
+          ...makeDeparture().overviewStats,
+          estimatedRebateCents: 100_000,
+          confirmedRebateCents: 100_000,
+          rebatePaidCents: 40_000,
+          rebateUnpaidCents: 60_000,
+        },
+      }),
+    )
+
+    const rebateCard = screen.getByRole('region', { name: '返利' })
+    expect(within(rebateCard).getByText('预估')).toBeInTheDocument()
+    expect(within(rebateCard).getByText('已确认')).toBeInTheDocument()
+    expect(within(rebateCard).getByText('已付')).toBeInTheDocument()
+    expect(within(rebateCard).getByText('未付')).toBeInTheDocument()
+    expect(within(rebateCard).getAllByText('¥1,000.00')).toHaveLength(2)
+    expect(within(rebateCard).getByText('¥400.00')).toBeInTheDocument()
+    expect(within(rebateCard).getByText('¥600.00')).toBeInTheDocument()
   })
 
   it('付款进度按资源应付已核销÷成本合计，明细保留全部应付核销进度与已关闭未付', async () => {
@@ -389,36 +425,45 @@ describe('DepartureOverviewStatsCards', () => {
           openUnreceivedCents: 0,
           closedUnreceivedCents: 0,
           ungeneratedReceivableCents: 0,
+          settlementCollectionReceivedCents: 0,
+          settlementCollectionReceivableCents: 0,
+          guestCollectionReceivedCents: 0,
+          guestCollectionAgreedCents: 0,
           resourcePaidCents: 0,
         },
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
+    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
     const paymentCard = screen.getByRole('region', { name: '付款进度' })
     expect(within(receiptCard).getByText('暂无数据')).toBeInTheDocument()
+    expect(within(guestCard).getByText('暂无数据')).toBeInTheDocument()
     expect(within(paymentCard).getByText('暂无数据')).toBeInTheDocument()
     expect(within(receiptCard).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
     expect(within(paymentCard).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
   })
 
-  it('文字展示真实超额百分比，进度条视觉封顶 100%', () => {
+  it('代收溢价不抬高团款进度：Guest 已收≥S 时团款为 100%', () => {
     renderCards(
       makeDeparture({
-        netReceivableCents: 800_000,
+        netReceivableCents: 500_000,
         overviewStats: {
           ...makeDeparture().overviewStats,
-          receivedCents: 1_000_000,
-          openUnreceivedCents: -200_000,
-          closedUnreceivedCents: 0,
-          ungeneratedReceivableCents: 0,
+          settlementCollectionReceivedCents: 500_000,
+          settlementCollectionReceivableCents: 500_000,
+          guestCollectionReceivedCents: 600_000,
+          guestCollectionAgreedCents: 600_000,
+          estimatedRebateCents: 100_000,
         },
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度' })
-    expect(within(receiptCard).getByText('125.0%')).toBeInTheDocument()
-    expect(within(receiptCard).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100')
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
+    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
+    expect(within(receiptCard).getByText('100.0%')).toBeInTheDocument()
+    expect(within(guestCard).getByText('100.0%')).toBeInTheDocument()
+    expect(within(receiptCard).queryByText('120.0%')).not.toBeInTheDocument()
   })
 
   it('资金情况突出现金净流入，并将收入支出降为辅助信息', () => {
@@ -479,7 +524,7 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '收款进度（数据异常）' })
+    const receiptCard = screen.getByRole('region', { name: '团款收款进度（数据异常）' })
     expect(within(receiptCard).getByText('收款守恒异常')).toBeInTheDocument()
     expect(
       within(receiptCard).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00'),
