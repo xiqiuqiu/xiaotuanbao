@@ -66,6 +66,7 @@ status: proposed
 
 ## References
 
+- PRD：`docs/prd/source-order-rebate-collection.zh-CN.md`；Issue [#187](https://github.com/xiqiuqiu/xiaotuanbao/issues/187)
 - 产品确认纪要（六问定稿，2026-07-27）：轧差公式、约定+实收、录单拆定金尾款、两张游客应收、补款条件、返利应付与概览展示、无固定办理截止日。
 - `CONTEXT.md`：Source Order、Collection Split、Customer Settlement Receivable、Guest Collection Receivable、Source Order Partner Settlement。
 - ADR-0002、ADR-0007、ADR-0010、ADR-0020。

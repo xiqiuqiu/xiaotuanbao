@@ -2,9 +2,11 @@
 
 日期：2026-07-27  
 分支：`0727返利功能设计`  
-状态：与 ADR-0033 对齐（proposed）
+状态：已定稿 PRD + ADR-0033（proposed）
 
-权威决策见 [`docs/adr/0033-source-order-rebate-and-split-collection.md`](../../adr/0033-source-order-rebate-and-split-collection.md)。本文保留产品六问定稿与验收例，便于评审与实现拆分。
+- **PRD（完整）**：[docs/prd/source-order-rebate-collection.zh-CN.md](../../prd/source-order-rebate-collection.zh-CN.md)
+- **ADR**：[docs/adr/0033-source-order-rebate-and-split-collection.md](../../adr/0033-source-order-rebate-and-split-collection.md)
+- **Issue**：[#187](https://github.com/xiqiuqiu/xiaotuanbao/issues/187)
 
 ## 六问定稿
 
