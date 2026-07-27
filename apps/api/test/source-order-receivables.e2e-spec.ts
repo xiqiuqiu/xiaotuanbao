@@ -152,7 +152,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 300000,
+      depositCents: 300000,
+      balanceCents: 700000,
     })
 
     const response = await authRequest(app, coordinatorToken)
@@ -252,7 +253,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 200000,
+      depositCents: 200000,
+      balanceCents: 800000,
     })
 
     await authRequest(app, coordinatorToken)
@@ -280,7 +282,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 200000,
+      depositCents: 200000,
+      balanceCents: 800000,
     })
 
     const responses = await Promise.all(
@@ -314,7 +317,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 300000,
+      depositCents: 300000,
+      balanceCents: 700000,
     })
 
     await authRequest(app, coordinatorToken)
@@ -323,7 +327,7 @@ describe('Source order generate receivables (e2e)', () => {
 
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/source-orders/${sourceOrder.id}`)
-      .send({ partnerCollectedCents: 400000 })
+      .send({ depositCents: 400000, balanceCents: 600000 })
       .expect(200)
 
     expect(patched.body.data.partnerCollectedCents).toBe(400000)
@@ -527,7 +531,8 @@ describe('Source order generate receivables (e2e)', () => {
       .patch(`/api/source-orders/${sourceOrder.id}`)
       .send({
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 300000,
+        depositCents: 300000,
+        balanceCents: 700000,
       })
       .expect(200)
 
@@ -604,6 +609,8 @@ describe('Source order generate receivables (e2e)', () => {
       where: { id: sourceOrder.id },
       data: {
         collectionMode: SourceOrderCollectionMode.split,
+        depositCents: 300000,
+        balanceCents: 700000,
         partnerCollectedCents: 300000,
         guestCollectCents: 700000,
       },
@@ -670,6 +677,8 @@ describe('Source order generate receivables (e2e)', () => {
         adultUnitPriceCents: 90000,
         grossReceivableCents: 900000,
         netReceivableCents: 900000,
+        depositCents: 0,
+        balanceCents: 900000,
         guestCollectCents: 900000,
       },
     })
@@ -751,7 +760,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 300000,
+      depositCents: 300000,
+      balanceCents: 700000,
     })
 
     const before = await authRequest(app, coordinatorToken)
@@ -800,7 +810,8 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
-      partnerCollectedCents: 300000,
+      depositCents: 300000,
+      balanceCents: 700000,
     })
 
     const generated = await authRequest(app, coordinatorToken)

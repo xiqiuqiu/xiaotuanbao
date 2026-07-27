@@ -156,8 +156,8 @@ export function renderCompletionTags(tags: {
 
 export const SOURCE_ORDER_COLLECTION_OPTIONS = [
   { value: SourceOrderCollectionMode.GUEST_ONLY, label: '全部我方代收' },
-  { value: SourceOrderCollectionMode.SPLIT, label: '客户已收 + 我方代收' },
-  { value: SourceOrderCollectionMode.PARTNER_SETTLED, label: '客户结算' },
+  { value: SourceOrderCollectionMode.SPLIT, label: '合作方收定金+我方收尾款' },
+  { value: SourceOrderCollectionMode.PARTNER_SETTLED, label: '全部客户结算' },
 ] as const
 
 export const SOURCE_ORDER_COLLECTION_LABELS = Object.fromEntries(

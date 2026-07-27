@@ -146,7 +146,8 @@ describe('Departure batch finance generation (e2e)', () => {
         discountType: SourceOrderDiscountType.none,
         discountCents: 0,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 300000,
+        depositCents: 300000,
+        balanceCents: 700000,
         ...overrides,
       })
       .expect(201)
@@ -192,19 +193,18 @@ describe('Departure batch finance generation (e2e)', () => {
     const already = await createSourceOrder(departure.id, {
       adultGuestCount: 1,
       adultUnitPriceCents: 400000,
-      partnerCollectedCents: 0,
       collectionMode: SourceOrderCollectionMode.partner_settled,
     })
     await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${already.id}/generate-receivables`)
       .expect(201)
 
+    // 结算金额为 0 时只能走全部客户结算（代收场景要求 G约定>0）
     const zeroAmount = await createSourceOrder(departure.id, {
       adultGuestCount: 1,
       adultUnitPriceCents: 0,
       childUnitPriceCents: 0,
-      partnerCollectedCents: 0,
-      collectionMode: SourceOrderCollectionMode.guest_only,
+      collectionMode: SourceOrderCollectionMode.partner_settled,
     })
 
     const response = await authRequest(app, coordinatorToken)

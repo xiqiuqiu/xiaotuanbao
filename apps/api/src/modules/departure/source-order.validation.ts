@@ -22,7 +22,8 @@ export interface SourceOrderValidationInput {
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
-  partnerCollectedCents: number
+  depositCents: number
+  balanceCents: number
   fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
 
@@ -111,20 +112,25 @@ export function validateSourceOrderInput(input: SourceOrderValidationInput): voi
 
   validateFareAdjustments(input.fareAdjustments)
 
+  if (!Number.isInteger(input.depositCents) || input.depositCents < 0) {
+    throw new BadRequestException('定金不能为负数')
+  }
+
+  if (!Number.isInteger(input.balanceCents) || input.balanceCents < 0) {
+    throw new BadRequestException('尾款不能为负数')
+  }
+
   const amounts = computeSourceOrderAmounts(input as SourceOrderAmountInput)
 
   if (amounts.netReceivableCents < 0) {
     throw new BadRequestException('结算金额不能为负数')
   }
 
-  if (amounts.partnerCollectedCents > amounts.netReceivableCents) {
-    throw new BadRequestException('客户已收金额不能大于结算金额')
-  }
-
-  if (input.collectionMode === 'split') {
-    const expectedGuestCollect = amounts.netReceivableCents - input.partnerCollectedCents
-    if (amounts.guestCollectCents !== expectedGuestCollect) {
-      throw new BadRequestException('我方代收需等于结算金额减客户已收')
-    }
+  // 代收场景（全部我方代收 / 合作方收定金+我方收尾款）要求 G约定 > 0；不强制 P+G=S，不因 P>S 拦截。
+  if (
+    (input.collectionMode === 'guest_only' || input.collectionMode === 'split') &&
+    amounts.guestCollectCents <= 0
+  ) {
+    throw new BadRequestException('代收场景的 G约定 必须大于0')
   }
 }

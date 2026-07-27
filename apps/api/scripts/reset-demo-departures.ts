@@ -410,6 +410,14 @@ async function seedDemoDepartures(
         sourceOrder.collectionMode === SourceOrderCollectionMode.guest_only
           ? grossReceivableCents
           : grossReceivableCents - partnerCollectedCents
+      const depositCents =
+        sourceOrder.collectionMode === SourceOrderCollectionMode.split
+          ? partnerCollectedCents
+          : 0
+      const balanceCents =
+        sourceOrder.collectionMode === SourceOrderCollectionMode.partner_settled
+          ? 0
+          : guestCollectCents
 
       await prisma.sourceOrder.create({
         data: {
@@ -426,6 +434,8 @@ async function seedDemoDepartures(
           discountCents: 0,
           netReceivableCents: grossReceivableCents,
           collectionMode: sourceOrder.collectionMode,
+          depositCents,
+          balanceCents,
           partnerCollectedCents,
           guestCollectCents,
         },

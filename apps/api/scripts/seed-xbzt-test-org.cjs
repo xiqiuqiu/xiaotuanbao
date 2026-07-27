@@ -533,6 +533,8 @@ async function seedBusinessLoop(organizationId, ownerUserId, financeUserId, dire
       discountCents: 0,
       netReceivableCents: so1Net,
       collectionMode: SourceOrderCollectionMode.guest_only,
+      depositCents: 0,
+      balanceCents: so1Net,
       partnerCollectedCents: 0,
       guestCollectCents: so1Net,
       guests: {
@@ -711,6 +713,8 @@ async function seedBusinessLoop(organizationId, ownerUserId, financeUserId, dire
       discountCents: 0,
       netReceivableCents: so2Net,
       collectionMode: SourceOrderCollectionMode.partner_settled,
+      depositCents: 0,
+      balanceCents: 0,
       partnerCollectedCents: so2Net,
       guestCollectCents: 0,
     },
@@ -888,6 +892,8 @@ async function seedBusinessLoop(organizationId, ownerUserId, financeUserId, dire
       discountNotes: '老客户优惠',
       netReceivableCents: 22 * 98000 + 3 * 68000 - 50000,
       collectionMode: SourceOrderCollectionMode.guest_only,
+      depositCents: 0,
+      balanceCents: 22 * 98000 + 3 * 68000 - 50000,
       partnerCollectedCents: 0,
       guestCollectCents: 22 * 98000 + 3 * 68000 - 50000,
       guests: {

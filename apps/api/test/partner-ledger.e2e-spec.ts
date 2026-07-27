@@ -88,7 +88,8 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 120000,
+        depositCents: 120000,
+        balanceCents: 80000,
       })
       .expect(201)
     await authRequest(app, coordinatorToken)
@@ -188,7 +189,8 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 120000,
+        depositCents: 120000,
+        balanceCents: 80000,
       })
       .expect(201)
     const juneGenerated = await authRequest(app, coordinatorToken)
@@ -261,7 +263,8 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 90000,
+        depositCents: 90000,
+        balanceCents: 60000,
       })
       .expect(201)
     await authRequest(app, coordinatorToken)

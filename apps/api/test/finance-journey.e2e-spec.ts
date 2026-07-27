@@ -787,7 +787,8 @@ describe('Finance journeys (cross-module e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 400000,
+        depositCents: 400000,
+        balanceCents: 600000,
       })
       .expect(201)
 
@@ -3264,7 +3265,8 @@ describe('Finance journeys (cross-module e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: partnerPathCents,
+        depositCents: partnerPathCents,
+        balanceCents: guestPathCents,
       })
       .expect(201)
     const sourceOrderId = sourceOrder.body.data.id as string

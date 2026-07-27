@@ -44,7 +44,8 @@ const payload = {
   discountCents: 0,
   discountNotes: null,
   collectionMode: 'guest_only',
-  partnerCollectedCents: 0,
+  depositCents: 0,
+  balanceCents: 100000,
   settlementNotes: null,
   notes: null,
 }

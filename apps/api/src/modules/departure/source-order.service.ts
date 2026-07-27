@@ -321,6 +321,8 @@ export class SourceOrderService {
           discountNotes: dto.discountNotes?.trim() || null,
           netReceivableCents: amounts.netReceivableCents,
           collectionMode: normalized.collectionMode,
+          depositCents: amounts.depositCents,
+          balanceCents: amounts.balanceCents,
           partnerCollectedCents: amounts.partnerCollectedCents,
           guestCollectCents: amounts.guestCollectCents,
           settlementNotes: dto.settlementNotes?.trim() || null,
@@ -482,9 +484,12 @@ export class SourceOrderService {
         discountType: dto.discountType ?? order.discountType,
         discountCents: dto.discountCents ?? order.discountCents,
         collectionMode: dto.collectionMode ?? order.collectionMode,
-        partnerCollectedCents:
-          dto.partnerCollectedCents ??
-          (dto.collectionMode !== undefined ? undefined : order.partnerCollectedCents),
+        depositCents:
+          dto.depositCents ??
+          (dto.collectionMode !== undefined ? undefined : order.depositCents),
+        balanceCents:
+          dto.balanceCents ??
+          (dto.collectionMode !== undefined ? undefined : order.balanceCents),
         fareAdjustments,
       },
       order,
@@ -504,6 +509,8 @@ export class SourceOrderService {
       discountType: order.discountType,
       discountCents: order.discountCents,
       collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
       partnerCollectedCents: order.partnerCollectedCents,
       guestCollectCents: order.guestCollectCents,
       grossReceivableCents: order.grossReceivableCents,
@@ -519,7 +526,8 @@ export class SourceOrderService {
       discountType: normalized.discountType,
       discountCents: normalized.discountCents,
       collectionMode: normalized.collectionMode,
-      partnerCollectedCents: normalized.partnerCollectedCents,
+      depositCents: normalized.depositCents,
+      balanceCents: normalized.balanceCents,
       fareAdjustments: normalized.fareAdjustments,
     }
     const { amountInputsChanged } = resolveSourceOrderAmountChange(
@@ -535,6 +543,8 @@ export class SourceOrderService {
           fareAdjustmentNetCents: order.fareAdjustmentNetCents,
           discountCents: order.discountCents,
           netReceivableCents: order.netReceivableCents,
+          depositCents: order.depositCents,
+          balanceCents: order.balanceCents,
           partnerCollectedCents: order.partnerCollectedCents,
           guestCollectCents: order.guestCollectCents,
         }
@@ -582,6 +592,8 @@ export class SourceOrderService {
             dto.discountNotes !== undefined ? dto.discountNotes?.trim() || null : undefined,
           netReceivableCents: amounts.netReceivableCents,
           collectionMode: normalized.collectionMode,
+          depositCents: amounts.depositCents,
+          balanceCents: amounts.balanceCents,
           partnerCollectedCents: amounts.partnerCollectedCents,
           guestCollectCents: amounts.guestCollectCents,
           settlementNotes:
@@ -743,7 +755,8 @@ export class SourceOrderService {
       discountType: CreateSourceOrderDto['discountType']
       discountCents?: number
       collectionMode: CreateSourceOrderDto['collectionMode']
-      partnerCollectedCents?: number
+      depositCents?: number
+      balanceCents?: number
       fareAdjustments?: SourceOrderFareAdjustmentInput[]
     },
     existing?: SourceOrder,
@@ -758,27 +771,31 @@ export class SourceOrderService {
       dto.childGuestCount === 0 ? (dto.childUnitPriceCents ?? 0) : dto.childUnitPriceCents
     const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
 
-    const amountInput = {
-      adultGuestCount: dto.adultGuestCount,
-      childGuestCount: dto.childGuestCount,
-      adultUnitPriceCents,
-      childUnitPriceCents,
-      discountType,
-      discountCents,
-      collectionMode,
-      partnerCollectedCents: 0,
-      fareAdjustments,
-    }
-    const net = computeSourceOrderAmounts(amountInput).netReceivableCents
+    let depositCents = 0
+    let balanceCents = 0
+    if (collectionMode === 'guest_only' || collectionMode === 'split') {
+      const depositOmitted = dto.depositCents === undefined && existing === undefined
+      const balanceOmitted = dto.balanceCents === undefined && existing === undefined
+      depositCents = Math.max(dto.depositCents ?? existing?.depositCents ?? 0, 0)
+      balanceCents = Math.max(dto.balanceCents ?? existing?.balanceCents ?? 0, 0)
 
-    let partnerCollectedCents = 0
-    if (collectionMode === 'partner_settled') {
-      partnerCollectedCents = net
-    } else if (collectionMode === 'split') {
-      partnerCollectedCents =
-        dto.partnerCollectedCents ??
-        existing?.partnerCollectedCents ??
-        0
+      // 新建且未传期次时：全部我方代收默认把结算金额记到尾款，避免旧调用方立刻因 G约定=0 失败。
+      // 显式传 0 仍按录入校验（代收场景要求 G约定>0）。
+      if (collectionMode === 'guest_only' && depositOmitted && balanceOmitted) {
+        const netReceivableCents = computeSourceOrderAmounts({
+          adultGuestCount: dto.adultGuestCount,
+          childGuestCount: dto.childGuestCount,
+          adultUnitPriceCents,
+          childUnitPriceCents,
+          discountType,
+          discountCents,
+          collectionMode,
+          depositCents: 0,
+          balanceCents: 0,
+          fareAdjustments,
+        }).netReceivableCents
+        balanceCents = Math.max(netReceivableCents, 0)
+      }
     }
 
     return {
@@ -789,7 +806,8 @@ export class SourceOrderService {
       discountType,
       discountCents,
       collectionMode,
-      partnerCollectedCents,
+      depositCents,
+      balanceCents,
       fareAdjustments,
     }
   }
@@ -922,6 +940,8 @@ export class SourceOrderService {
       discountNotes: order.discountNotes,
       netReceivableCents: order.netReceivableCents,
       collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
       partnerCollectedCents: order.partnerCollectedCents,
       guestCollectCents: order.guestCollectCents,
       settlementNotes: order.settlementNotes,

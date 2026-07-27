@@ -78,7 +78,8 @@ describe('partner:write action-key enforcement (e2e)', () => {
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
         collectionMode: SourceOrderCollectionMode.split,
-        partnerCollectedCents: 120000,
+        depositCents: 120000,
+        balanceCents: 80000,
       })
       .expect(201)
 

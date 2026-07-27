@@ -87,6 +87,8 @@ describe('finance-integrity-check (integration)', () => {
         grossReceivableCents: 10000,
         netReceivableCents: 10000,
         collectionMode: SourceOrderCollectionMode.guest_only,
+        depositCents: 0,
+        balanceCents: 10000,
         partnerCollectedCents: 0,
         guestCollectCents: 10000,
       },

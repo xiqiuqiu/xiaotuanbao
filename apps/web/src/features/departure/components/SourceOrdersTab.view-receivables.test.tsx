@@ -54,6 +54,8 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     discountNotes: null,
     netReceivableCents: 1000000,
     collectionMode: 'guest_only',
+    depositCents: 0,
+    balanceCents: 1000000,
     partnerCollectedCents: 0,
     guestCollectCents: 1000000,
     settlementNotes: null,
@@ -182,6 +184,8 @@ describe('SourceOrdersTab 批量生成应收', () => {
         baseOrder({
           id: 'order-split-1',
           collectionMode: 'split',
+          depositCents: 300000,
+          balanceCents: 700000,
           partnerCollectedCents: 300000,
           guestCollectCents: 700000,
           receivableStatus: 'not_generated',
@@ -190,6 +194,8 @@ describe('SourceOrdersTab 批量生成应收', () => {
         baseOrder({
           id: 'order-split-2',
           collectionMode: 'split',
+          depositCents: 400000,
+          balanceCents: 600000,
           partnerCollectedCents: 400000,
           guestCollectCents: 600000,
           receivableStatus: 'not_generated',
@@ -229,7 +235,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
       render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
       const summary = screen.getByText('确认后将生成 4 条应收记录')
       const explanation = screen.getByText(
-        '收款方式为「客户已收 + 我方代收」的客源单会拆分为两条应收记录。',
+        '收款方式为「合作方收定金+我方收尾款」的客源单会拆分为两条应收记录。',
       )
       expect(screen.queryByRole('alert')).toBeNull()
       expect(explanation).toHaveClass('ant-typography-secondary')

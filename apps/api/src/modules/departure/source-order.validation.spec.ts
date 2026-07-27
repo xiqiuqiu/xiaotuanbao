@@ -10,7 +10,8 @@ const validBase = {
   discountType: 'none' as const,
   discountCents: 0,
   collectionMode: 'guest_only' as const,
-  partnerCollectedCents: 0,
+  depositCents: 100000,
+  balanceCents: 220000,
   fareAdjustments: [],
 }
 
@@ -160,14 +161,73 @@ describe('validateSourceOrderInput', () => {
     ).toThrow(new BadRequestException('结算金额不能为负数'))
   })
 
-  it('rejects partner collected greater than net from adult/child gross', () => {
+  it('allows partner collected (deposit) greater than settlement amount', () => {
     expect(() =>
       validateSourceOrderInput({
         ...validBase,
         collectionMode: 'split',
-        partnerCollectedCents: 320001,
+        depositCents: 320001,
+        balanceCents: 10000,
       }),
-    ).toThrow(new BadRequestException('客户已收金额不能大于结算金额'))
+    ).not.toThrow()
+  })
+
+  it('allows split where deposit + balance does not equal settlement', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        collectionMode: 'split',
+        depositCents: 20000,
+        balanceCents: 600000,
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects collection modes when G约定 is zero', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        collectionMode: 'guest_only',
+        depositCents: 0,
+        balanceCents: 0,
+      }),
+    ).toThrow(new BadRequestException('代收场景的 G约定 必须大于0'))
+
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        collectionMode: 'split',
+        depositCents: 100000,
+        balanceCents: 0,
+      }),
+    ).toThrow(new BadRequestException('代收场景的 G约定 必须大于0'))
+  })
+
+  it('rejects negative deposit or balance', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        depositCents: -1,
+      }),
+    ).toThrow(new BadRequestException('定金不能为负数'))
+
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        balanceCents: -1,
+      }),
+    ).toThrow(new BadRequestException('尾款不能为负数'))
+  })
+
+  it('accepts partner_settled without deposit/balance', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+      }),
+    ).not.toThrow()
   })
 
   it('rejects duplicate fixed fare-adjustment kinds', () => {

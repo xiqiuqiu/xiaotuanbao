@@ -17,7 +17,10 @@ export interface SourceOrderAmountInput {
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
-  partnerCollectedCents: number
+  /** 定金（分）；代收场景录入，全部客户结算忽略。 */
+  depositCents: number
+  /** 尾款（分）；代收场景录入，全部客户结算忽略。 */
+  balanceCents: number
   /** Omitted / empty → adjustment net 0 (historical orders). */
   fareAdjustments?: SourceOrderFareAdjustmentInput[]
 }
@@ -27,8 +30,19 @@ export interface SourceOrderAmounts {
   fareAdjustmentNetCents: number
   discountCents: number
   netReceivableCents: number
+  depositCents: number
+  balanceCents: number
+  /** 客户已收 P（由收款方式与定金/尾款派生）。 */
   partnerCollectedCents: number
+  /** 我方代收 G约定（由收款方式与定金/尾款派生）。 */
   guestCollectCents: number
+}
+
+export interface CollectionSettlementPreview {
+  /** 预估客户补款 = max(0, S − G约定)；P 不进公式。 */
+  estimatedCustomerTopUpCents: number
+  /** 预计返利 = max(0, G约定 − S)；P 不进公式。 */
+  estimatedRebateCents: number
 }
 
 /** Stored amount snapshot used to detect locked-field edits vs unit-price heal. */
@@ -40,6 +54,8 @@ export interface SourceOrderStoredAmounts {
   discountType: SourceOrderDiscountType
   discountCents: number
   collectionMode: SourceOrderCollectionMode
+  depositCents: number
+  balanceCents: number
   partnerCollectedCents: number
   guestCollectCents: number
   grossReceivableCents: number
@@ -102,6 +118,16 @@ export function computeFareAdjustmentNetCents(
   return net
 }
 
+export function computeCollectionSettlementPreview(
+  netReceivableCents: number,
+  guestCollectCents: number,
+): CollectionSettlementPreview {
+  return {
+    estimatedCustomerTopUpCents: Math.max(0, netReceivableCents - guestCollectCents),
+    estimatedRebateCents: Math.max(0, guestCollectCents - netReceivableCents),
+  }
+}
+
 export function computeSourceOrderAmounts(input: SourceOrderAmountInput): SourceOrderAmounts {
   const adultUnitPriceCents = effectiveUnitPriceCents(
     input.adultGuestCount,
@@ -118,18 +144,28 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
     input.discountType === 'lump_sum' ? Math.max(input.discountCents, 0) : 0
   const netReceivableCents = grossReceivableCents + fareAdjustmentNetCents - discountCents
 
+  const depositCents = Math.max(input.depositCents, 0)
+  const balanceCents = Math.max(input.balanceCents, 0)
+
+  let persistedDepositCents = depositCents
+  let persistedBalanceCents = balanceCents
   let partnerCollectedCents = 0
-  let guestCollectCents = netReceivableCents
+  let guestCollectCents = 0
 
   if (input.collectionMode === 'guest_only') {
+    // 全部我方代收：P=0，G约定=定金+尾款（可不等于 S）
     partnerCollectedCents = 0
-    guestCollectCents = netReceivableCents
+    guestCollectCents = depositCents + balanceCents
   } else if (input.collectionMode === 'partner_settled') {
+    // 全部客户结算：无代收期次；P 展示为 S，G约定=0
+    persistedDepositCents = 0
+    persistedBalanceCents = 0
     partnerCollectedCents = netReceivableCents
     guestCollectCents = 0
   } else {
-    partnerCollectedCents = input.partnerCollectedCents
-    guestCollectCents = netReceivableCents - partnerCollectedCents
+    // 合作方收定金 + 我方收尾款：P=定金，G约定=尾款
+    partnerCollectedCents = depositCents
+    guestCollectCents = balanceCents
   }
 
   return {
@@ -137,6 +173,8 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
     fareAdjustmentNetCents,
     discountCents,
     netReceivableCents,
+    depositCents: persistedDepositCents,
+    balanceCents: persistedBalanceCents,
     partnerCollectedCents,
     guestCollectCents,
   }
@@ -211,7 +249,8 @@ export function resolveSourceOrderAmountChange(
     order.discountType !== next.discountType ||
     order.discountCents !== nextDiscountCents ||
     order.collectionMode !== next.collectionMode ||
-    order.partnerCollectedCents !== next.partnerCollectedCents ||
+    order.depositCents !== next.depositCents ||
+    order.balanceCents !== next.balanceCents ||
     !fareAdjustmentsEqual(order.fareAdjustments, next.fareAdjustments)
 
   if (!amountInputsChanged) {
@@ -224,6 +263,8 @@ export function resolveSourceOrderAmountChange(
     order.fareAdjustmentNetCents === nextComputed.fareAdjustmentNetCents &&
     order.discountCents === nextComputed.discountCents &&
     order.netReceivableCents === nextComputed.netReceivableCents &&
+    order.depositCents === nextComputed.depositCents &&
+    order.balanceCents === nextComputed.balanceCents &&
     order.partnerCollectedCents === nextComputed.partnerCollectedCents &&
     order.guestCollectCents === nextComputed.guestCollectCents
 
