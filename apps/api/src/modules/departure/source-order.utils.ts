@@ -180,6 +180,107 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
   }
 }
 
+export type SourceOrderCollectionPeriodInput = {
+  collectionMode: SourceOrderCollectionMode
+  depositCents?: number
+  balanceCents?: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
+  discountType: SourceOrderDiscountType
+  discountCents: number
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
+}
+
+/**
+ * Resolve deposit/balance for create and update.
+ * When guest_only and both periods are omitted, default balance to net receivable
+ * (covers create and update when collectionMode changes without re-sending periods).
+ * Explicit 0 is preserved for validation (代收场景要求 G约定>0).
+ */
+export function resolveSourceOrderCollectionPeriods(
+  input: SourceOrderCollectionPeriodInput,
+): { depositCents: number; balanceCents: number } {
+  if (input.collectionMode !== 'guest_only' && input.collectionMode !== 'split') {
+    return { depositCents: 0, balanceCents: 0 }
+  }
+
+  const depositOmitted = input.depositCents === undefined
+  const balanceOmitted = input.balanceCents === undefined
+  let depositCents = Math.max(input.depositCents ?? 0, 0)
+  let balanceCents = Math.max(input.balanceCents ?? 0, 0)
+
+  // 未传期次时：全部我方代收默认把结算金额记到尾款，避免旧调用方立刻因 G约定=0 失败。
+  // 显式传 0 仍按录入校验（代收场景要求 G约定>0）。
+  if (input.collectionMode === 'guest_only' && depositOmitted && balanceOmitted) {
+    const netReceivableCents = computeSourceOrderAmounts({
+      adultGuestCount: input.adultGuestCount,
+      childGuestCount: input.childGuestCount,
+      adultUnitPriceCents: input.adultUnitPriceCents,
+      childUnitPriceCents: input.childUnitPriceCents,
+      discountType: input.discountType,
+      discountCents: input.discountCents,
+      collectionMode: input.collectionMode,
+      depositCents: 0,
+      balanceCents: 0,
+      fareAdjustments: input.fareAdjustments,
+    }).netReceivableCents
+    balanceCents = Math.max(netReceivableCents, 0)
+  }
+
+  return { depositCents, balanceCents }
+}
+
+export type UpdateCollectionPeriodInput = {
+  dtoDepositCents?: number
+  dtoBalanceCents?: number
+  dtoCollectionMode?: SourceOrderCollectionMode
+  stored: {
+    collectionMode: SourceOrderCollectionMode
+    depositCents: number
+    balanceCents: number
+    guestCollectCents: number
+    netReceivableCents: number
+  }
+}
+
+/**
+ * Decide deposit/balance inputs for update() before normalizeInput.
+ * - Explicit dto period fields win (missing side falls back to stored).
+ * - collectionMode actually changing without periods → omit (guest_only defaults balance=net).
+ * - guest_only still tracking G===S and periods omitted → omit so balance re-defaults to new S
+ *   (covers API callers that only patch unit price / fare adjustments).
+ * - Otherwise keep stored periods (preserves intentional G≠S).
+ */
+export function resolveUpdateCollectionPeriodInputs(
+  input: UpdateCollectionPeriodInput,
+): { depositCents?: number; balanceCents?: number } {
+  if (input.dtoDepositCents !== undefined || input.dtoBalanceCents !== undefined) {
+    return {
+      depositCents: input.dtoDepositCents ?? input.stored.depositCents,
+      balanceCents: input.dtoBalanceCents ?? input.stored.balanceCents,
+    }
+  }
+
+  const nextMode = input.dtoCollectionMode ?? input.stored.collectionMode
+  const collectionModeChanging =
+    input.dtoCollectionMode !== undefined &&
+    input.dtoCollectionMode !== input.stored.collectionMode
+  const guestOnlyTrackingS =
+    nextMode === 'guest_only' &&
+    input.stored.guestCollectCents === input.stored.netReceivableCents
+
+  if (collectionModeChanging || guestOnlyTrackingS) {
+    return { depositCents: undefined, balanceCents: undefined }
+  }
+
+  return {
+    depositCents: input.stored.depositCents,
+    balanceCents: input.stored.balanceCents,
+  }
+}
+
 /**
  * Reconcile dominant unit price so count × price matches authoritative gross.
  * Used after receivable path sync updates gross without rewriting unit prices.

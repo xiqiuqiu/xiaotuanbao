@@ -46,6 +46,8 @@ import {
   buildSourceOrderDisplayName,
   computeSourceOrderAmounts,
   resolveSourceOrderAmountChange,
+  resolveSourceOrderCollectionPeriods,
+  resolveUpdateCollectionPeriodInputs,
   type SourceOrderFareAdjustmentInput,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
@@ -469,31 +471,36 @@ export class SourceOrderService {
       dto.fareAdjustments !== undefined
         ? toFareAdjustmentInputs(dto.fareAdjustments)
         : existingFareAdjustments
-    const normalized = this.normalizeInput(
-      {
-        adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
-        childGuestCount: dto.childGuestCount ?? order.childGuestCount,
-        adultUnitPriceCents:
-          dto.adultUnitPriceCents !== undefined
-            ? dto.adultUnitPriceCents
-            : order.adultUnitPriceCents,
-        childUnitPriceCents:
-          dto.childUnitPriceCents !== undefined
-            ? dto.childUnitPriceCents
-            : order.childUnitPriceCents,
-        discountType: dto.discountType ?? order.discountType,
-        discountCents: dto.discountCents ?? order.discountCents,
-        collectionMode: dto.collectionMode ?? order.collectionMode,
-        depositCents:
-          dto.depositCents ??
-          (dto.collectionMode !== undefined ? undefined : order.depositCents),
-        balanceCents:
-          dto.balanceCents ??
-          (dto.collectionMode !== undefined ? undefined : order.balanceCents),
-        fareAdjustments,
+    const periodInputs = resolveUpdateCollectionPeriodInputs({
+      dtoDepositCents: dto.depositCents,
+      dtoBalanceCents: dto.balanceCents,
+      dtoCollectionMode: dto.collectionMode,
+      stored: {
+        collectionMode: order.collectionMode,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
+        guestCollectCents: order.guestCollectCents,
+        netReceivableCents: order.netReceivableCents,
       },
-      order,
-    )
+    })
+    const normalized = this.normalizeInput({
+      adultGuestCount: dto.adultGuestCount ?? order.adultGuestCount,
+      childGuestCount: dto.childGuestCount ?? order.childGuestCount,
+      adultUnitPriceCents:
+        dto.adultUnitPriceCents !== undefined
+          ? dto.adultUnitPriceCents
+          : order.adultUnitPriceCents,
+      childUnitPriceCents:
+        dto.childUnitPriceCents !== undefined
+          ? dto.childUnitPriceCents
+          : order.childUnitPriceCents,
+      discountType: dto.discountType ?? order.discountType,
+      discountCents: dto.discountCents ?? order.discountCents,
+      collectionMode: dto.collectionMode ?? order.collectionMode,
+      depositCents: periodInputs.depositCents,
+      balanceCents: periodInputs.balanceCents,
+      fareAdjustments,
+    })
 
     validateSourceOrderInput({
       partnerId: partner.id,
@@ -746,21 +753,18 @@ export class SourceOrderService {
     await this.prisma.sourceOrderGuest.delete({ where: { id: guest.id } })
   }
 
-  private normalizeInput(
-    dto: {
-      adultGuestCount: number
-      childGuestCount: number
-      adultUnitPriceCents?: number | null
-      childUnitPriceCents?: number | null
-      discountType: CreateSourceOrderDto['discountType']
-      discountCents?: number
-      collectionMode: CreateSourceOrderDto['collectionMode']
-      depositCents?: number
-      balanceCents?: number
-      fareAdjustments?: SourceOrderFareAdjustmentInput[]
-    },
-    existing?: SourceOrder,
-  ) {
+  private normalizeInput(dto: {
+    adultGuestCount: number
+    childGuestCount: number
+    adultUnitPriceCents?: number | null
+    childUnitPriceCents?: number | null
+    discountType: CreateSourceOrderDto['discountType']
+    discountCents?: number
+    collectionMode: CreateSourceOrderDto['collectionMode']
+    depositCents?: number
+    balanceCents?: number
+    fareAdjustments?: SourceOrderFareAdjustmentInput[]
+  }) {
     const discountType = dto.discountType
     const discountCents =
       discountType === 'lump_sum' ? Math.max(dto.discountCents ?? 0, 0) : 0
@@ -770,33 +774,18 @@ export class SourceOrderService {
     const childUnitPriceCents =
       dto.childGuestCount === 0 ? (dto.childUnitPriceCents ?? 0) : dto.childUnitPriceCents
     const fareAdjustments = toFareAdjustmentInputs(dto.fareAdjustments)
-
-    let depositCents = 0
-    let balanceCents = 0
-    if (collectionMode === 'guest_only' || collectionMode === 'split') {
-      const depositOmitted = dto.depositCents === undefined && existing === undefined
-      const balanceOmitted = dto.balanceCents === undefined && existing === undefined
-      depositCents = Math.max(dto.depositCents ?? existing?.depositCents ?? 0, 0)
-      balanceCents = Math.max(dto.balanceCents ?? existing?.balanceCents ?? 0, 0)
-
-      // 新建且未传期次时：全部我方代收默认把结算金额记到尾款，避免旧调用方立刻因 G约定=0 失败。
-      // 显式传 0 仍按录入校验（代收场景要求 G约定>0）。
-      if (collectionMode === 'guest_only' && depositOmitted && balanceOmitted) {
-        const netReceivableCents = computeSourceOrderAmounts({
-          adultGuestCount: dto.adultGuestCount,
-          childGuestCount: dto.childGuestCount,
-          adultUnitPriceCents,
-          childUnitPriceCents,
-          discountType,
-          discountCents,
-          collectionMode,
-          depositCents: 0,
-          balanceCents: 0,
-          fareAdjustments,
-        }).netReceivableCents
-        balanceCents = Math.max(netReceivableCents, 0)
-      }
-    }
+    const { depositCents, balanceCents } = resolveSourceOrderCollectionPeriods({
+      collectionMode,
+      depositCents: dto.depositCents,
+      balanceCents: dto.balanceCents,
+      adultGuestCount: dto.adultGuestCount,
+      childGuestCount: dto.childGuestCount,
+      adultUnitPriceCents,
+      childUnitPriceCents,
+      discountType,
+      discountCents,
+      fareAdjustments,
+    })
 
     return {
       adultGuestCount: dto.adultGuestCount,
