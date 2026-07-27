@@ -91,13 +91,13 @@ export function buildTransactionColumns(
       ),
     },
     {
-      title: '流水金额',
+      title: '交易金额',
       dataIndex: 'amountCents',
       align: 'right',
       render: (value: number) => formatCents(value),
     },
     {
-      title: '已核销',
+      title: '已核销金额',
       dataIndex: 'allocatedAmountCents',
       align: 'right',
       render: (value: number) => formatCents(value),

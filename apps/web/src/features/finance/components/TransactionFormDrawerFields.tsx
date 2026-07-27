@@ -59,8 +59,8 @@ export function TransactionFormDrawerFields({
       </Form.Item>
       <Form.Item
         name="direction"
-        label="收支方向"
-        rules={[{ required: true, message: '请选择收支方向' }]}
+        label="流水方向"
+        rules={[{ required: true, message: '请选择流水方向' }]}
       >
         <Radio.Group
           block
@@ -74,15 +74,15 @@ export function TransactionFormDrawerFields({
       </Form.Item>
       <Form.Item
         name="paymentChannel"
-        label="收付款通道"
-        rules={[{ required: true, message: '请选择收付款通道' }]}
+        label="收付款方式"
+        rules={[{ required: true, message: '请选择收付款方式' }]}
       >
         <Select options={[...PAYMENT_CHANNEL_OPTIONS]} />
       </Form.Item>
       <Form.Item
         name="amountYuan"
-        label="金额（元）"
-        rules={[{ required: true, message: '请输入金额' }]}
+        label="交易金额（元）"
+        rules={[{ required: true, message: '请输入交易金额' }]}
         extra={amountExtra}
       >
         <InputNumber min={0.01} precision={2} style={{ width: '100%' }} />

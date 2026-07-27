@@ -204,13 +204,13 @@ function TransactionSelectionSection({
       <div className={styles.selectionContent}>
         {selectedTransaction ? (
           <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-            <Descriptions.Item label="关联流水号">
+            <Descriptions.Item label="关联流水单号">
               {selectedTransaction.transactionNo}
             </Descriptions.Item>
             <Descriptions.Item label="交易日期">
               {selectedTransaction.transactionDate}
             </Descriptions.Item>
-            <Descriptions.Item label="收支方向">
+            <Descriptions.Item label="流水方向">
               <Tag
                 color={
                   TRANSACTION_DIRECTION_COLORS[selectedTransaction.direction]
@@ -222,7 +222,7 @@ function TransactionSelectionSection({
                 )}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="收付款渠道">
+            <Descriptions.Item label="收付款方式">
               {catalogLabel(
                 PAYMENT_CHANNEL_LABELS,
                 selectedTransaction.paymentChannel,
@@ -240,10 +240,10 @@ function TransactionSelectionSection({
                 ? `${selectedTransaction.departureNo} · ${selectedTransaction.departureName}`
                 : '-'}
             </Descriptions.Item>
-            <Descriptions.Item label="流水金额">
+            <Descriptions.Item label="交易金额">
               {formatCents(selectedTransaction.amountCents)}
             </Descriptions.Item>
-            <Descriptions.Item label="已核销">
+            <Descriptions.Item label="已核销金额">
               {formatCents(selectedTransaction.allocatedAmountCents)}
             </Descriptions.Item>
             <Descriptions.Item label="可核销余额">
@@ -268,7 +268,7 @@ function TransactionSelectionSection({
             <Input.Search
               allowClear
               aria-label="搜索资金流水"
-              placeholder="搜索关联流水号、往来对象或发团"
+              placeholder="搜索关联流水单号、往来对象或发团"
               value={searchKeyword}
               onChange={(event) => onSearchKeywordChange(event.target.value)}
               onSearch={(value) => onSearchKeywordChange(value)}
@@ -720,10 +720,10 @@ function VerificationPreview({
             </Typography.Text>
             <div className={styles.previewAmounts}>
               <Typography.Text>
-                流水金额 {formatCents(transaction.amountCents)}
+                交易金额 {formatCents(transaction.amountCents)}
               </Typography.Text>
               <Typography.Text>
-                已核销 {formatCents(transaction.allocatedAmountCents)}
+                已核销金额 {formatCents(transaction.allocatedAmountCents)}
               </Typography.Text>
               <Typography.Text strong>
                 可核销余额 {formatCents(transaction.unallocatedAmountCents)}

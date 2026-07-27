@@ -186,7 +186,7 @@ export function RegisterSettlementDrawer({
             <Form.Item
               name="paymentChannel"
               label={copy.channelLabel}
-              rules={[{ required: true, message: '请选择收付款通道' }]}
+              rules={[{ required: true, message: `请选择${copy.channelLabel}` }]}
             >
               <Select options={[...PAYMENT_CHANNEL_OPTIONS]} />
             </Form.Item>

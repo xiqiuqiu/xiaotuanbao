@@ -280,10 +280,10 @@ export function TransactionDetailDrawer({
               />
             ) : null}
             <Descriptions column={{ xs: 1, sm: 2 }} size="small">
-              <Descriptions.Item label="流水号">
+              <Descriptions.Item label="流水单号">
                 <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
               </Descriptions.Item>
-              <Descriptions.Item label="收支方向">
+              <Descriptions.Item label="流水方向">
                 <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
                   {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
                 </Tag>
@@ -291,7 +291,7 @@ export function TransactionDetailDrawer({
               <Descriptions.Item label="交易日期">
                 {transaction.transactionDate}
               </Descriptions.Item>
-              <Descriptions.Item label="收付款通道">
+              <Descriptions.Item label="收付款方式">
                 {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
               </Descriptions.Item>
               <Descriptions.Item label="收款方式">
@@ -324,7 +324,7 @@ export function TransactionDetailDrawer({
             <AmountStrip
               items={[
                 {
-                  label: '流水金额',
+                  label: '交易金额',
                   value: formatCents(transaction.amountCents),
                   emphasis: true,
                 },
@@ -333,7 +333,7 @@ export function TransactionDetailDrawer({
                   value: formatCents(transaction.allocatedAmountCents),
                 },
                 {
-                  label: '未核销金额',
+                  label: '待核销金额',
                   value: formatCents(transaction.unallocatedAmountCents),
                 },
               ]}

@@ -42,10 +42,10 @@ export function VoidTransactionModal({
     >
       {transaction ? (
         <Form form={form} layout="vertical" onFinish={onSubmit}>
-          <Form.Item label="流水号">
+          <Form.Item label="流水单号">
             <Input value={transaction.transactionNo} disabled />
           </Form.Item>
-          <Form.Item label="流水金额">
+          <Form.Item label="交易金额">
             <Input value={formatCents(transaction.amountCents)} disabled />
           </Form.Item>
           <Form.Item label="收款方式">

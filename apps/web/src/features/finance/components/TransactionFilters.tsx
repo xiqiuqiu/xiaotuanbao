@@ -98,8 +98,8 @@ export function TransactionFilters({
           />
           <Select
             allowClear
-            aria-label="收支方向"
-            placeholder="收支方向"
+            aria-label="流水方向"
+            placeholder="流水方向"
             style={{ width: 120 }}
             value={direction}
             onChange={onDirectionChange}
@@ -125,8 +125,8 @@ export function TransactionFilters({
           />
           <Input.Search
             allowClear
-            aria-label="流水号"
-            placeholder="流水号"
+            aria-label="流水单号"
+            placeholder="流水单号"
             style={{ width: 180 }}
             value={transactionNo}
             onChange={(event) => onTransactionNoChange(event.target.value)}

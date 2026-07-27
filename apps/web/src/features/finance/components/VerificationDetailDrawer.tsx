@@ -383,19 +383,19 @@ export function VerificationDetailDrawer({
                 <DetailColumns
                   left={
                     <>
-                      <Descriptions.Item label="关联流水号">
+                      <Descriptions.Item label="关联流水单号">
                         <Typography.Text copyable>{transaction.transactionNo}</Typography.Text>
                       </Descriptions.Item>
-                      <Descriptions.Item label="流水金额">
+                      <Descriptions.Item label="交易金额">
                         <AmountValue>{formatCents(transaction.amountCents)}</AmountValue>
                       </Descriptions.Item>
-                      <Descriptions.Item label="已核销">
+                      <Descriptions.Item label="已核销金额">
                         <AmountValue>{formatCents(transaction.allocatedAmountCents)}</AmountValue>
                       </Descriptions.Item>
-                      <Descriptions.Item label="未核销">
+                      <Descriptions.Item label="待核销金额">
                         <AmountValue>{formatCents(transaction.unallocatedAmountCents)}</AmountValue>
                       </Descriptions.Item>
-                      <Descriptions.Item label="收支方向">
+                      <Descriptions.Item label="流水方向">
                         <Tag color={TRANSACTION_DIRECTION_COLORS[transaction.direction]}>
                           {catalogLabel(TRANSACTION_DIRECTION_LABELS, transaction.direction)}
                         </Tag>
@@ -407,7 +407,7 @@ export function VerificationDetailDrawer({
                   }
                   right={
                     <>
-                      <Descriptions.Item label="收付款通道">
+                      <Descriptions.Item label="收付款方式">
                         {catalogLabel(PAYMENT_CHANNEL_LABELS, transaction.paymentChannel)}
                       </Descriptions.Item>
                       <Descriptions.Item label="收款方式">

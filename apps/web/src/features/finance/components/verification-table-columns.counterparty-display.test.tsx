@@ -85,7 +85,7 @@ describe('buildVerificationColumns counterparty display', () => {
 
     for (const name of [
       '核销类型',
-      '关联流水号',
+      '关联流水单号',
       '关联账款单号',
       '账款剩余未结金额',
       '核销状态',

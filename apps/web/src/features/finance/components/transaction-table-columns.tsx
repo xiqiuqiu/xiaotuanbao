@@ -39,7 +39,7 @@ export function buildTransactionColumns({
 }): ColumnsType<FinanceTransactionSummary> {
   const columns: ColumnsType<FinanceTransactionSummary> = [
     {
-      title: '流水号',
+      title: '流水单号',
       dataIndex: 'transactionNo',
       render: (value: string, record) => (
         <Button type="link" style={{ padding: 0, height: 'auto' }} onClick={() => onOpenDetail(record.id)}>
@@ -48,7 +48,7 @@ export function buildTransactionColumns({
       ),
     },
     {
-      title: '收支方向',
+      title: '流水方向',
       dataIndex: 'direction',
       render: (value: string) => (
         <Tag color={TRANSACTION_DIRECTION_COLORS[value]}>
@@ -57,17 +57,17 @@ export function buildTransactionColumns({
       ),
     },
     {
-      title: '流水金额',
+      title: '交易金额',
       dataIndex: 'amountCents',
       render: (value: number) => formatCents(value),
     },
     {
-      title: '已核销',
+      title: '已核销金额',
       dataIndex: 'allocatedAmountCents',
       render: (value: number) => formatCents(value),
     },
     {
-      title: '未核销',
+      title: '待核销金额',
       dataIndex: 'unallocatedAmountCents',
       render: (value: number) => formatCents(value),
     },
@@ -113,7 +113,7 @@ export function buildTransactionColumns({
 
   columns.push(
     {
-      title: '收付款通道',
+      title: '收付款方式',
       dataIndex: 'paymentChannel',
       render: (value: string) => catalogLabel(PAYMENT_CHANNEL_LABELS, value),
     },

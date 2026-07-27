@@ -94,8 +94,8 @@ export function VerificationFilters({
           />
           <Input.Search
             allowClear
-            aria-label="关联流水号"
-            placeholder="关联流水号"
+            aria-label="关联流水单号"
+            placeholder="关联流水单号"
             style={{ width: 180 }}
             value={transactionNo}
             onChange={(event) => onTransactionNoChange(event.target.value)}

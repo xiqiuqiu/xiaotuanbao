@@ -245,7 +245,7 @@ export const pendingColumns: ColumnsType<DepartureOperationsSheetPendingTransact
     render: (value: number) => formatCents(value),
   },
   {
-    title: '收付款通道',
+    title: '收付款方式',
     dataIndex: 'paymentChannel',
     width: 110,
     render: (value: string) => catalogLabel(PAYMENT_CHANNEL_LABELS, value),
