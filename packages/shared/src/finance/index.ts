@@ -15,6 +15,12 @@ export {
   type SourceAmountPath,
   type SourceAmountChangeMarkEligibilityInput,
 } from './source-amount-change'
+export {
+  buildSourceOrderReceivablePaths,
+  countSourceOrderReceivablePaths,
+  type SourceOrderReceivablePathInput,
+  type SourceOrderReceivablePathSpec,
+} from './source-order-receivable-paths'
 export { formatDepartureNo } from './format-departure-no'
 export { formatScheduleNo } from './format-schedule-no'
 export { formatTransactionNo } from './format-transaction-no'

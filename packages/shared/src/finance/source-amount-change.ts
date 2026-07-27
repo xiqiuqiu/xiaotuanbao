@@ -1,6 +1,9 @@
 export interface SourceAmountPath {
   guestCollectCents: number
   partnerCollectedCents: number
+  /** Guest installment split; required so guest_only deposit↔balance reallocation is detected. */
+  depositCents: number
+  balanceCents: number
 }
 
 export function didSourceAmountPathChange(
@@ -9,7 +12,9 @@ export function didSourceAmountPathChange(
 ): boolean {
   return (
     previous.guestCollectCents !== next.guestCollectCents ||
-    previous.partnerCollectedCents !== next.partnerCollectedCents
+    previous.partnerCollectedCents !== next.partnerCollectedCents ||
+    previous.depositCents !== next.depositCents ||
+    previous.balanceCents !== next.balanceCents
   )
 }
 

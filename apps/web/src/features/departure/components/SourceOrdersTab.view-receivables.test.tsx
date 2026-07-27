@@ -177,22 +177,22 @@ describe('SourceOrdersTab 批量生成应收', () => {
     expect(screen.queryByRole('button', { name: '批量生成应收' })).toBeNull()
   })
 
-  it('counts both receivable paths for split source orders in batch confirmation', async () => {
+  it('counts deposit+balance paths for guest_only and only balance for split in batch confirmation', async () => {
     const user = userEvent.setup()
     listSourceOrders.mockResolvedValue({
       items: [
         baseOrder({
-          id: 'order-split-1',
-          collectionMode: 'split',
-          depositCents: 300000,
-          balanceCents: 700000,
-          partnerCollectedCents: 300000,
+          id: 'order-guest-only',
+          collectionMode: 'guest_only',
+          depositCents: 100000,
+          balanceCents: 600000,
+          partnerCollectedCents: 0,
           guestCollectCents: 700000,
           receivableStatus: 'not_generated',
           hasPaymentSchedule: false,
         }),
         baseOrder({
-          id: 'order-split-2',
+          id: 'order-split',
           collectionMode: 'split',
           depositCents: 400000,
           balanceCents: 600000,
@@ -233,9 +233,10 @@ describe('SourceOrdersTab 批量生成应收', () => {
       expect(confirmConfig).toMatchObject({ title: '批量生成应收', okText: '生成' })
 
       render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
-      const summary = screen.getByText('确认后将生成 4 条应收记录')
+      // guest_only → 2 paths; split → 1 path (balance only)
+      const summary = screen.getByText('确认后将生成 3 条应收记录')
       const explanation = screen.getByText(
-        '收款方式为「合作方收定金+我方收尾款」的客源单会拆分为两条应收记录。',
+        '「全部我方代收」按定金/尾款分别生成游客应收；「合作方收定金+我方收尾款」仅生成尾款代收。',
       )
       expect(screen.queryByRole('alert')).toBeNull()
       expect(explanation).toHaveClass('ant-typography-secondary')

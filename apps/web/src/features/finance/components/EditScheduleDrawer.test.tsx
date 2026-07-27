@@ -22,13 +22,13 @@ function baseSchedule(
     departureStatus: 'editing',
     direction: 'receivable',
     scheduleNo: 'ARXTB202607000482',
-    title: '游客代收',
+    title: '尾款代收',
     amountCents: 738000,
     dueDate: '2026-08-10',
     counterpartyType: CounterpartyType.GUEST,
     counterpartyId: 'so-1',
     counterpartyName: '黄山徽行天下地接',
-    sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     sourceId: 'so-1',
     sourceOrderName: '黄山徽行天下地接',
     status: 'pending',
@@ -101,7 +101,7 @@ describe('EditScheduleDrawer receivable identity', () => {
 
     expect(within(formItemContent('应收单号')).getByDisplayValue('ARXTB202607000482')).toBeTruthy()
     expect(within(formItemContent('来源客源单')).getByDisplayValue('黄山徽行天下地接')).toBeTruthy()
-    expect(within(formItemContent('收款方式')).getByDisplayValue('游客代收')).toBeTruthy()
+    expect(within(formItemContent('收款方式')).getByDisplayValue('尾款代收')).toBeTruthy()
     expect(within(formItemContent('收款对象名称')).getByDisplayValue('游客')).toBeTruthy()
   })
 })

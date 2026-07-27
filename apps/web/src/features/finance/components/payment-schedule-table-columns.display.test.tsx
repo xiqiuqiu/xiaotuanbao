@@ -158,8 +158,8 @@ describe('receivable list columns', () => {
       schedule({
         direction: 'receivable',
         scheduleNo: 'AR-NO-TITLE-COL',
-        title: '游客代收',
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        title: '尾款代收',
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
         sourceId: 'so-2',
         counterpartyType: 'guest',
         counterpartyName: '苏州水乡地接社 7月15日发客',
@@ -174,7 +174,7 @@ describe('receivable list columns', () => {
       schedule({
         direction: 'receivable',
         scheduleNo: 'AR-GUEST',
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
         sourceId: 'so-2',
         counterpartyType: 'guest',
         counterpartyName: '苏州水乡地接社 7月15日发客',
@@ -182,7 +182,7 @@ describe('receivable list columns', () => {
       }),
     ])
     const row = rowOf('AR-GUEST')
-    expect(within(row).getByText('游客代收')).toBeTruthy()
+    expect(within(row).getByText('尾款代收')).toBeTruthy()
     expect(within(row).getByText('游客')).toBeTruthy()
   })
 

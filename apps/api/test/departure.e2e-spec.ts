@@ -2291,9 +2291,12 @@ describe('Departure API (e2e)', () => {
     it('preserves a signed ungenerated source-path amount from legacy-corrupt data', async () => {
       const departure = await createReadModelDeparture('-overview-negative-source')
       const seeded = await seedDepartureData(departure.id)
+      // guest_only 未生成口径按定金/尾款路径；模拟路径金额与 S 一同腐坏。
       await prisma.sourceOrder.update({
         where: { id: seeded.sourceOrderId },
         data: {
+          depositCents: 0,
+          balanceCents: -100000,
           guestCollectCents: -100000,
           netReceivableCents: -100000,
           grossReceivableCents: -100000,
@@ -2654,8 +2657,8 @@ describe('Departure API (e2e)', () => {
         guestRepresentative: null,
         receivablePaths: [
           {
-            pathType: 'source_order_guest_collection',
-            pathLabel: '游客代收',
+            pathType: 'source_order_guest_balance_collection',
+            pathLabel: '尾款代收',
             agreedReceivableCents: 280000,
             scheduleReceivableCents: null,
             receivedCents: null,
@@ -3086,7 +3089,7 @@ describe('Departure API (e2e)', () => {
     it('wires source-order receivable path progress from finance facade (#97)', async () => {
       const departure = await createOpsDeparture({ name: `${testPrefix}-ops-receivable-progress` })
 
-      // Split: customer settlement + guest collection — generate both, partial on customer.
+      // Split: only balance Guest receivable — generate and partial collect.
       const splitOrder = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/source-orders`)
         .send({
@@ -3176,24 +3179,21 @@ describe('Departure API (e2e)', () => {
         sourceType: string
         amountCents: number
       }>
-      const customerSchedule = splitSchedules.find(
-        (s) => s.sourceType === 'source_order_customer_settlement',
-      )
+      expect(splitSchedules).toHaveLength(1)
       const guestSchedule = splitSchedules.find(
-        (s) => s.sourceType === 'source_order_guest_collection',
+        (s) => s.sourceType === 'source_order_guest_balance_collection',
       )
-      expect(customerSchedule).toBeTruthy()
       expect(guestSchedule).toBeTruthy()
 
       await authRequest(app, financeToken)
-        .post(`/api/finance/receivables/${customerSchedule!.id}/confirm-collection`)
+        .post(`/api/finance/receivables/${guestSchedule!.id}/confirm-collection`)
         .send({
           amountCents: 40000,
           transactionDate: '2026-09-01',
           paymentChannel: PaymentChannel.BANK_TRANSFER,
-          counterpartyType: CounterpartyType.partner,
-          counterpartyId: opsPartnerId,
-          counterpartyName: `${testPrefix}-ops-partner`,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: splitOrder.body.data.id,
+          counterpartyName: splitOrder.body.data.displayName,
         })
         .expect(201)
 
@@ -3290,8 +3290,8 @@ describe('Departure API (e2e)', () => {
         agreedReceivableCents: 30000,
         receivablePaths: [
           {
-            pathType: 'source_order_guest_collection',
-            pathLabel: '游客代收',
+            pathType: 'source_order_guest_balance_collection',
+            pathLabel: '尾款代收',
             agreedReceivableCents: 30000,
             scheduleReceivableCents: null,
             receivedCents: null,
@@ -3305,24 +3305,13 @@ describe('Departure API (e2e)', () => {
 
       expect(byId[splitOrder.body.data.id].receivablePaths).toEqual([
         expect.objectContaining({
-          pathType: 'source_order_customer_settlement',
-          pathLabel: '客户结算',
-          agreedReceivableCents: 120000,
-          scheduleReceivableCents: 120000,
-          receivedCents: 40000,
-          unreceivedCents: 80000,
-          receivableStatus: 'partial',
-          needsReview: false,
-          excludeFromProgressTotals: false,
-        }),
-        expect.objectContaining({
-          pathType: 'source_order_guest_collection',
-          pathLabel: '游客代收',
+          pathType: 'source_order_guest_balance_collection',
+          pathLabel: '尾款代收',
           agreedReceivableCents: 80000,
           scheduleReceivableCents: 80000,
-          receivedCents: 0,
-          unreceivedCents: 80000,
-          receivableStatus: 'pending',
+          receivedCents: 40000,
+          unreceivedCents: 40000,
+          receivableStatus: 'partial',
           needsReview: false,
           excludeFromProgressTotals: false,
         }),
@@ -3330,8 +3319,8 @@ describe('Departure API (e2e)', () => {
 
       expect(byId[collectedOrder.body.data.id].receivablePaths).toEqual([
         expect.objectContaining({
-          pathType: 'source_order_guest_collection',
-          pathLabel: '游客代收',
+          pathType: 'source_order_guest_balance_collection',
+          pathLabel: '尾款代收',
           agreedReceivableCents: 50000,
           scheduleReceivableCents: 50000,
           receivedCents: 50000,
@@ -3359,8 +3348,8 @@ describe('Departure API (e2e)', () => {
 
       expect(byId[mismatchOrder.body.data.id].receivablePaths).toEqual([
         expect.objectContaining({
-          pathType: 'source_order_guest_collection',
-          pathLabel: '游客代收',
+          pathType: 'source_order_guest_balance_collection',
+          pathLabel: '尾款代收',
           agreedReceivableCents: 120000,
           scheduleReceivableCents: 90000,
           receivedCents: 10000,

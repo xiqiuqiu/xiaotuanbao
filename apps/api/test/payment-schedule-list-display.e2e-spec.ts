@@ -317,10 +317,10 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
   })
 
   describe('应收客源节点', () => {
-    it('split 客源单：客户补款/游客代收两行携带客源单名与正确往来对象', async () => {
+    it('guest_only 客源单：定金代收/尾款代收两行携带客源单名与正确往来对象', async () => {
       const departure = await createDeparture()
       const sourceOrder = await createSourceOrder(departure.id, {
-        collectionMode: SourceOrderCollectionMode.split,
+        collectionMode: SourceOrderCollectionMode.guest_only,
         depositCents: 300000,
         balanceCents: 700000,
       })
@@ -330,42 +330,40 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
         .expect(201)
 
       const items = await listDepartureReceivables(departure.id)
-      const customerRow = items.find(
-        (item) => item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      const depositRow = items.find(
+        (item) =>
+          item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
       )!
-      const guestRow = items.find(
-        (item) => item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      const balanceRow = items.find(
+        (item) =>
+          item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
       )!
 
-      // 客户补款：客源单列=displayName，往来对象=发客 Partner。
-      expect(customerRow).toMatchObject({
+      expect(depositRow).toMatchObject({
         sourceOrderName: sourceOrder.displayName,
-        counterpartyType: CounterpartyType.partner,
-        counterpartyName: partnerName,
+        counterpartyType: CounterpartyType.guest,
         resourceKind: null,
         resourceTitle: null,
       })
-      // 游客代收：客源单列=displayName，往来对象类型=guest（前端展示层显示「游客」）。
-      expect(guestRow).toMatchObject({
+      expect(balanceRow).toMatchObject({
         sourceOrderName: sourceOrder.displayName,
         counterpartyType: CounterpartyType.guest,
       })
 
-      // 部分收款客户补款路径：客源单列稳定。
       await authRequest(app, financeToken)
-        .post(`/api/finance/receivables/${customerRow.id}/confirm-collection`)
+        .post(`/api/finance/receivables/${depositRow.id}/confirm-collection`)
         .send({
           amountCents: 100000,
           transactionDate: '2026-07-02',
           paymentChannel: PaymentChannel.BANK_TRANSFER,
-          counterpartyType: CounterpartyType.partner,
-          counterpartyId: partnerId,
-          counterpartyName: partnerName,
+          counterpartyType: CounterpartyType.guest,
+          counterpartyId: sourceOrder.id,
+          counterpartyName: sourceOrder.displayName,
         })
         .expect(201)
 
       const afterPartial = (await listDepartureReceivables(departure.id)).find(
-        (item) => item.id === customerRow.id,
+        (item) => item.id === depositRow.id,
       )!
       expect(afterPartial).toMatchObject({
         sourceOrderName: sourceOrder.displayName,
@@ -374,14 +372,13 @@ describe('Payment schedule list display fields across lifecycle (e2e)', () => {
         financeTouched: true,
       })
 
-      // 关闭游客代收路径：客源单列仍在，状态已关闭。
       await authRequest(app, financeToken)
-        .post(`/api/finance/payment-schedules/${guestRow.id}/cancel`)
+        .post(`/api/finance/payment-schedules/${balanceRow.id}/cancel`)
         .send({ closeDisposition: 'other', cancelReason: '游客改由组团社代收' })
         .expect(201)
 
       const afterClose = (await listDepartureReceivables(departure.id)).find(
-        (item) => item.id === guestRow.id,
+        (item) => item.id === balanceRow.id,
       )!
       expect(afterClose).toMatchObject({
         sourceOrderName: sourceOrder.displayName,

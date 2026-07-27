@@ -44,13 +44,13 @@ describe('PaymentScheduleDetailDrawer identity', () => {
       departureStatus: 'editing',
       direction: 'receivable',
       scheduleNo: 'ARXTB202607000482',
-      title: '游客代收',
+      title: '尾款代收',
       amountCents: 738000,
       dueDate: '2026-08-10',
       counterpartyType: 'guest',
       counterpartyId: 'so-1',
       counterpartyName: '黄山徽行天下地接',
-      sourceType: 'source_order_guest_collection',
+      sourceType: 'source_order_guest_balance_collection',
       sourceId: 'so-1',
       sourceOrderName: '黄山徽行天下地接',
       status: 'pending',
@@ -80,7 +80,7 @@ describe('PaymentScheduleDetailDrawer identity', () => {
     expect(screen.getByText('来源客源单')).toBeTruthy()
     expect(screen.getByText('收款方式')).toBeTruthy()
     expect(screen.getByText('收款对象')).toBeTruthy()
-    expect(screen.getByText('游客代收')).toBeTruthy()
+    expect(screen.getByText('尾款代收')).toBeTruthy()
     expect(screen.getByText('游客')).toBeTruthy()
     expect(screen.getByText('黄山徽行天下地接')).toBeTruthy()
     expect(screen.getByText('到期日')).toBeTruthy()

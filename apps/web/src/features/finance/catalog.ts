@@ -55,6 +55,8 @@ export const PAYABLE_SCHEDULE_FILTER_OPTIONS = [
 export const RECEIVABLE_COLLECTION_METHOD_LABELS: Record<string, string> = {
   [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户补款',
   [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '游客代收',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION]: '定金代收',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION]: '尾款代收',
 }
 
 export const PAYMENT_SCHEDULE_STATUS_LABELS = Object.fromEntries(

@@ -9,6 +9,7 @@ import {
 import {
   assertCounterpartyMatch,
   CounterpartyMismatchError,
+  isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
 } from '@xiaotuanbao/shared'
 
@@ -263,7 +264,8 @@ export async function collectFinanceIntegrityViolations(
         !sourceOrder ||
         sourceOrder.departure.organizationId !== item.organizationId ||
         (item.departureId !== null && sourceOrder.departureId !== item.departureId) ||
-        (item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION &&
+        (item.sourceType != null &&
+          isSourceOrderGuestCollectionSourceType(item.sourceType) &&
           item.sourceId !== item.counterpartyId)
       ) {
         add('COUNTERPARTY_REFERENCE_BROKEN', 'P0', '游客代收往来对象缺失、串团或跨 Organization', refs)
@@ -304,7 +306,7 @@ export async function collectFinanceIntegrityViolations(
       }
     } else if (
       schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-      schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
+      isSourceOrderGuestCollectionSourceType(schedule.sourceType)
     ) {
       const sourceOrder = schedule.sourceId
         ? sourceOrderById.get(schedule.sourceId)
