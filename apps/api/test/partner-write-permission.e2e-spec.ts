@@ -68,6 +68,7 @@ describe('partner:write action-key enforcement (e2e)', () => {
       })
       .expect(201)
 
+    // 往来账款登记收款需要「客户补款」路径：全部客户结算才生成该节点。
     const sourceOrder = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.body.data.id as string}/source-orders`)
       .send({
@@ -77,9 +78,7 @@ describe('partner:write action-key enforcement (e2e)', () => {
         adultUnitPriceCents: 100000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
-        depositCents: 120000,
-        balanceCents: 80000,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
       })
       .expect(201)
 

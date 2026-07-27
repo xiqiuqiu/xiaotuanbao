@@ -214,7 +214,8 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(response.body.data).toMatchObject({
       attempted: 2,
       succeeded: 1,
-      generated: 2,
+      // split 只生成尾款 Guest 节点（定金归客户已收，不开应收）
+      generated: 1,
       skipped: 1,
       failed: 0,
     })

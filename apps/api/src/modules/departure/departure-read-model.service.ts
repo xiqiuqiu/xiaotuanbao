@@ -158,14 +158,14 @@ export class DepartureReadModelService {
         }
 
         // 代收场景：未生成只计缺失的定金/尾款 Guest 期次；P 不开客户补款应收。
-        if (
-          fact.collectionMode === 'guest_only' &&
-          fact.depositCents > 0 &&
-          !depositState?.hasSchedule
-        ) {
+        // 不加 >0 门槛，以保全 legacy-corrupt 负金额（与 partner_settled 的 net 口径一致）。
+        if (fact.collectionMode === 'guest_only' && !depositState?.hasSchedule) {
           sourceFacts.sourceReceivableUngeneratedCents += fact.depositCents
         }
-        if (fact.balanceCents > 0 && !balanceState?.hasSchedule) {
+        if (
+          (fact.collectionMode === 'guest_only' || fact.collectionMode === 'split') &&
+          !balanceState?.hasSchedule
+        ) {
           sourceFacts.sourceReceivableUngeneratedCents += fact.balanceCents
         }
       }
