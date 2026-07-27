@@ -48,7 +48,9 @@ jobs:
 
   build-push:
     needs: resolve
-    runs-on: ubuntu-latest
+    # Native arm64 — avoids QEMU. Emulated linux/arm64 previously SIGILL'd
+    # during `pnpm deploy` (exit 132) and hung on a second prod install.
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: true
       matrix:
@@ -65,9 +67,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.resolve.outputs.git_ref }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

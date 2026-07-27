@@ -1,13 +1,13 @@
 # 家庭服务器构建与部署（armbian）
 
-GitHub Actions **只构建** `linux/arm64` 镜像并推到 GHCR；**不**经 Tailscale SSH 自动部署。公网入口：Cloudflare Tunnel → `127.0.0.1:8088`。
+GitHub Actions 在 **原生 `ubuntu-24.04-arm` runner** 上构建 `linux/arm64` 镜像并推到 GHCR（不用 amd64+QEMU，避免 `pnpm deploy` 下 SIGILL / 二次 install 卡住）；**不**经 Tailscale SSH 自动部署。公网入口：Cloudflare Tunnel → `127.0.0.1:8088`。
 
 ## 架构
 
 ```txt
 手动 Run workflow / git tag v*
         ↓
-GitHub Actions（buildx arm64）→ GHCR
+GitHub Actions（ubuntu-24.04-arm + buildx）→ GHCR
         ↓
 你在 Mac 拉镜像（或服务器直拉）→ 传到 armbian → compose up
         ↓
