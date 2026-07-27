@@ -5,6 +5,7 @@ import { DownOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   DepartureStatus,
+  isSourceOrderGuestCollectionSourceType,
   PaymentScheduleDirection,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
@@ -81,7 +82,7 @@ export function canAdjustScheduleAmount(
   if (
     schedule.direction === PaymentScheduleDirection.RECEIVABLE &&
     (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-      schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION)
+      isSourceOrderGuestCollectionSourceType(schedule.sourceType))
   ) {
     return true
   }

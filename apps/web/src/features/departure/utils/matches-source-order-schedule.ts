@@ -5,7 +5,8 @@ import {
 
 const SOURCE_ORDER_SCHEDULE_TYPES = new Set<string>([
   PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
 ])
 
 /** Whether a receivable schedule belongs to the given source order. */

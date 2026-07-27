@@ -13,13 +13,13 @@ function schedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentSched
     departureStatus: 'editing',
     direction: 'receivable',
     scheduleNo: 'AR-1',
-    title: '游客代收',
+    title: '尾款代收',
     amountCents: 10000,
     dueDate: '2026-08-10',
     counterpartyType: CounterpartyType.GUEST,
     counterpartyId: 'so-1',
     counterpartyName: '某客源单展示名',
-    sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     sourceId: 'so-1',
     status: 'pending',
     financeTouched: false,
@@ -50,7 +50,7 @@ describe('edit schedule form payload', () => {
       amountYuan: 200,
     })
 
-    expect(payload.title).toBe('游客代收')
+    expect(payload.title).toBe('尾款代收')
     expect(payload.amountCents).toBe(20000)
     expect(payload.counterpartyName).toBeUndefined()
   })

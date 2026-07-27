@@ -26,6 +26,10 @@ interface SegmentRollup {
 interface SourceOrderPathFact {
   id: string
   departureId: string
+  collectionMode: string
+  depositCents: number
+  balanceCents: number
+  netReceivableCents: number
   partnerCollectedCents: number
   guestCollectCents: number
 }
@@ -104,6 +108,10 @@ export class DepartureReadModelService {
             sourceOrderPathFacts.map((fact) => [
               fact.id,
               {
+                collectionMode: fact.collectionMode,
+                depositCents: fact.depositCents,
+                balanceCents: fact.balanceCents,
+                netReceivableCents: fact.netReceivableCents,
                 partnerCollectedCents: fact.partnerCollectedCents,
                 guestCollectCents: fact.guestCollectCents,
               },
@@ -131,15 +139,34 @@ export class DepartureReadModelService {
             state.pathType ===
             PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
         )
-        const guestState = states.find(
+        const depositState = states.find(
           (state) =>
-            state.pathType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+            state.pathType ===
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
         )
-        if (!customerState?.hasSchedule) {
-          sourceFacts.sourceReceivableUngeneratedCents += fact.partnerCollectedCents
+        const balanceState = states.find(
+          (state) =>
+            state.pathType ===
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+        )
+
+        if (fact.collectionMode === 'partner_settled') {
+          if (!customerState?.hasSchedule) {
+            sourceFacts.sourceReceivableUngeneratedCents += fact.netReceivableCents
+          }
+          continue
         }
-        if (!guestState?.hasSchedule) {
-          sourceFacts.sourceReceivableUngeneratedCents += fact.guestCollectCents
+
+        // 代收场景：未生成只计缺失的定金/尾款 Guest 期次；P 不开客户补款应收。
+        if (
+          fact.collectionMode === 'guest_only' &&
+          fact.depositCents > 0 &&
+          !depositState?.hasSchedule
+        ) {
+          sourceFacts.sourceReceivableUngeneratedCents += fact.depositCents
+        }
+        if (fact.balanceCents > 0 && !balanceState?.hasSchedule) {
+          sourceFacts.sourceReceivableUngeneratedCents += fact.balanceCents
         }
       }
       for (const [departureId, rollup] of segmentRollupMap) {
@@ -260,6 +287,10 @@ export class DepartureReadModelService {
       select: {
         id: true,
         departureId: true,
+        collectionMode: true,
+        depositCents: true,
+        balanceCents: true,
+        netReceivableCents: true,
         partnerCollectedCents: true,
         guestCollectCents: true,
       },

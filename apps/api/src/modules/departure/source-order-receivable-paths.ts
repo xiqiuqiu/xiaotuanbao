@@ -1,6 +1,7 @@
 import {
   CounterpartyType,
   PaymentScheduleSourceType,
+  SourceOrderCollectionMode,
 } from '@xiaotuanbao/shared'
 
 export interface SourceOrderReceivablePathInput {
@@ -8,8 +9,10 @@ export interface SourceOrderReceivablePathInput {
   partnerId: string
   partnerName: string
   displayName: string
-  partnerCollectedCents: number
-  guestCollectCents: number
+  collectionMode: SourceOrderCollectionMode | string
+  depositCents: number
+  balanceCents: number
+  netReceivableCents: number
 }
 
 export interface SourceOrderReceivablePathSpec {
@@ -21,28 +24,43 @@ export interface SourceOrderReceivablePathSpec {
   counterpartyName?: string
 }
 
-/** Build receivable schedule specs for a source order's collection split. */
+/** Build receivable schedule specs for a source order's collection split (ADR-0033). */
 export function buildSourceOrderReceivablePaths(
   order: SourceOrderReceivablePathInput,
 ): SourceOrderReceivablePathSpec[] {
   const paths: SourceOrderReceivablePathSpec[] = []
 
-  if (order.partnerCollectedCents > 0) {
+  if (order.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    if (order.netReceivableCents > 0) {
+      paths.push({
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        amountCents: order.netReceivableCents,
+        title: '客户补款',
+        counterpartyType: CounterpartyType.PARTNER,
+        counterpartyId: order.partnerId,
+        counterpartyName: order.partnerName,
+      })
+    }
+    return paths
+  }
+
+  // 代收场景：只建适用的定金/尾款 Guest 节点；不建客户补款与返利。
+  if (order.collectionMode === SourceOrderCollectionMode.GUEST_ONLY && order.depositCents > 0) {
     paths.push({
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-      amountCents: order.partnerCollectedCents,
-      title: '客户补款',
-      counterpartyType: CounterpartyType.PARTNER,
-      counterpartyId: order.partnerId,
-      counterpartyName: order.partnerName,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+      amountCents: order.depositCents,
+      title: '定金代收',
+      counterpartyType: CounterpartyType.GUEST,
+      counterpartyId: order.sourceOrderId,
+      counterpartyName: order.displayName,
     })
   }
 
-  if (order.guestCollectCents > 0) {
+  if (order.balanceCents > 0) {
     paths.push({
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-      amountCents: order.guestCollectCents,
-      title: '游客代收',
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+      amountCents: order.balanceCents,
+      title: '尾款代收',
       counterpartyType: CounterpartyType.GUEST,
       counterpartyId: order.sourceOrderId,
       counterpartyName: order.displayName,

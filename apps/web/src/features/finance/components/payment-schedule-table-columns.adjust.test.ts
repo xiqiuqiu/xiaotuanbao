@@ -60,7 +60,7 @@ describe('canAdjustScheduleAmount', () => {
       canAdjustScheduleAmount(
         schedule({
           direction: PaymentScheduleDirection.RECEIVABLE,
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           scheduleNo: 'AR2026070001',
         }),
         false,
@@ -89,7 +89,7 @@ describe('canAdjustScheduleAmount', () => {
       canAdjustScheduleAmount(
         schedule({
           direction: PaymentScheduleDirection.RECEIVABLE,
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           settledAmountCents: 100,
         }),
         false,

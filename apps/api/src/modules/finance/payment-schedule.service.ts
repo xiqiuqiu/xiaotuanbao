@@ -15,6 +15,7 @@ import type {
 import {
   deriveScheduleState,
   isFinanceTouched,
+  isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
 } from '@xiaotuanbao/shared'
 import {
@@ -82,7 +83,8 @@ const EMPTY_SCHEDULE_SOURCE_META: ScheduleSourceMeta = {
 
 const SOURCE_ORDER_SCHEDULE_SOURCE_TYPES = new Set<string>([
   PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
 ])
 
 @Injectable()
@@ -829,7 +831,7 @@ export class PaymentScheduleService {
       const isReceivableSourcePath =
         schedule.direction === PaymentScheduleDirection.receivable &&
         (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-          schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
+          isSourceOrderGuestCollectionSourceType(schedule.sourceType)) &&
         Boolean(schedule.sourceId)
 
       if (!isPayableResource && !isReceivableSourcePath) {
@@ -1063,7 +1065,7 @@ export class PaymentScheduleService {
     const isReceivableSourcePath =
       schedule.direction === PaymentScheduleDirection.receivable &&
       (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) &&
+        isSourceOrderGuestCollectionSourceType(schedule.sourceType)) &&
       Boolean(schedule.sourceId)
 
     if (isPayableResource) {

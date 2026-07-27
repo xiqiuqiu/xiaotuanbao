@@ -17,9 +17,11 @@ import {
 import {
   deriveScheduleState,
   isFinanceTouched,
+  isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
   SegmentPayableStatus,
+  SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
   SourceOrderReceivableStatus,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -60,10 +62,13 @@ export interface SegmentResourceFinanceState {
  * One Source Order receivable path finance state owned by Finance (#97).
  * Received/unreceived use effective verification allocation only — never unallocated inflows.
  */
+export type SourceOrderReceivablePathType =
+  | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
+  | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION
+  | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION
+
 export interface SourceOrderPathFinanceState {
-  pathType:
-    | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
-    | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
+  pathType: SourceOrderReceivablePathType
   hasSchedule: boolean
   receivableStatus: SourceOrderReceivableStatus
   hasSourceAmountMismatch: boolean
@@ -97,6 +102,10 @@ export interface DeparturePendingTransactionState {
 }
 
 export interface SourceOrderPathAmountInput {
+  collectionMode: string
+  depositCents: number
+  balanceCents: number
+  netReceivableCents: number
   partnerCollectedCents: number
   guestCollectCents: number
 }
@@ -225,7 +234,7 @@ export class DepartureFinanceFacade {
         const isSourceReceivable =
           schedule.sourceType ===
             PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT ||
-          schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION
+          isSourceOrderGuestCollectionSourceType(schedule.sourceType)
         if (isSourceReceivable) {
           snapshot.sourceReceivableReceivedCents += receivedOrPaidCents
           if (schedule.cancelledAt) {
@@ -638,8 +647,12 @@ export class DepartureFinanceFacade {
       where: { id: params.sourceOrderId },
       select: {
         id: true,
+        collectionMode: true,
+        depositCents: true,
+        balanceCents: true,
         partnerCollectedCents: true,
         guestCollectCents: true,
+        netReceivableCents: true,
         discountCents: true,
         adultGuestCount: true,
         childGuestCount: true,
@@ -651,40 +664,74 @@ export class DepartureFinanceFacade {
       throw new BadRequestException('关联客源单不存在，无法调整约定金额')
     }
 
+    let depositCents = order.depositCents
+    let balanceCents = order.balanceCents
     let partnerCollectedCents = order.partnerCollectedCents
     let guestCollectCents = order.guestCollectCents
+    let netReceivableCents = order.netReceivableCents
+    let rewriteGross = false
 
     if (params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT) {
       partnerCollectedCents = params.amountCents
-    } else if (params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) {
-      guestCollectCents = params.amountCents
+      if (order.collectionMode === 'partner_settled') {
+        // 全部客户结算：客户路径金额即 S。
+        netReceivableCents = params.amountCents
+        rewriteGross = true
+      }
+      // 代收场景的客户补款（#192）只回写 P 展示字段，不强制 net=P+G。
+    } else if (
+      params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION
+    ) {
+      depositCents = params.amountCents
+      guestCollectCents =
+        order.collectionMode === 'guest_only' ? depositCents + balanceCents : balanceCents
+    } else if (
+      params.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION
+    ) {
+      balanceCents = params.amountCents
+      guestCollectCents =
+        order.collectionMode === 'guest_only' ? depositCents + balanceCents : balanceCents
+      if (order.collectionMode === 'split') {
+        partnerCollectedCents = depositCents
+      }
     } else {
       throw new BadRequestException('仅客源应收路径可调整约定金额')
     }
 
-    const netReceivableCents = partnerCollectedCents + guestCollectCents
-    // Keep gross − discount = net after path-level agreed-amount correction.
-    const grossReceivableCents = netReceivableCents + order.discountCents
-    // Also rewrite dominant unit price so count × price stays consistent with gross.
-    // Otherwise drawer reconcile + notes-only save looks like a locked amount change.
-    const unitPrices = reconcileUnitPricesToGross({
-      adultGuestCount: order.adultGuestCount,
-      childGuestCount: order.childGuestCount,
-      adultUnitPriceCents: order.adultUnitPriceCents,
-      childUnitPriceCents: order.childUnitPriceCents,
-      grossReceivableCents,
-    })
+    const data: {
+      depositCents: number
+      balanceCents: number
+      partnerCollectedCents: number
+      guestCollectCents: number
+      netReceivableCents?: number
+      grossReceivableCents?: number
+      adultUnitPriceCents?: number
+      childUnitPriceCents?: number
+    } = {
+      depositCents,
+      balanceCents,
+      partnerCollectedCents,
+      guestCollectCents,
+    }
+
+    if (rewriteGross) {
+      const grossReceivableCents = netReceivableCents + order.discountCents
+      const unitPrices = reconcileUnitPricesToGross({
+        adultGuestCount: order.adultGuestCount,
+        childGuestCount: order.childGuestCount,
+        adultUnitPriceCents: order.adultUnitPriceCents,
+        childUnitPriceCents: order.childUnitPriceCents,
+        grossReceivableCents,
+      })
+      data.netReceivableCents = netReceivableCents
+      data.grossReceivableCents = grossReceivableCents
+      data.adultUnitPriceCents = unitPrices.adultUnitPriceCents
+      data.childUnitPriceCents = unitPrices.childUnitPriceCents
+    }
 
     await tx.sourceOrder.update({
       where: { id: order.id },
-      data: {
-        partnerCollectedCents,
-        guestCollectCents,
-        netReceivableCents,
-        grossReceivableCents,
-        adultUnitPriceCents: unitPrices.adultUnitPriceCents,
-        childUnitPriceCents: unitPrices.childUnitPriceCents,
-      },
+      data,
     })
   }
 
@@ -811,7 +858,7 @@ export class DepartureFinanceFacade {
         sourceType: {
           in: [
             PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+            ...SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
           ],
         },
       },
@@ -851,20 +898,33 @@ export class DepartureFinanceFacade {
 
     for (const sourceOrderId of uniqueIds) {
       const amounts = amountMap.get(sourceOrderId) ?? {
+        collectionMode: 'partner_settled',
+        depositCents: 0,
+        balanceCents: 0,
+        netReceivableCents: 0,
         partnerCollectedCents: 0,
         guestCollectCents: 0,
       }
       const paths: SourceOrderPathFinanceState[] = []
       const customerKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
-      const guestKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION}`
+      const depositKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION}`
+      const balanceKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION}`
       const customerSchedule = scheduleByKey.get(customerKey) ?? null
-      const guestSchedule = scheduleByKey.get(guestKey) ?? null
+      const depositSchedule = scheduleByKey.get(depositKey) ?? null
+      const balanceSchedule = scheduleByKey.get(balanceKey) ?? null
 
-      if (amounts.partnerCollectedCents > 0 || customerSchedule) {
+      const expectCustomer =
+        amounts.collectionMode === 'partner_settled' &&
+        (amounts.netReceivableCents > 0 || customerSchedule != null)
+      if (expectCustomer || customerSchedule) {
+        const agreedAmountCents =
+          amounts.collectionMode === 'partner_settled'
+            ? amounts.netReceivableCents
+            : amounts.partnerCollectedCents
         paths.push(
           this.toPathFinanceState(
             PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-            amounts.partnerCollectedCents,
+            agreedAmountCents,
             customerSchedule,
             customerSchedule ? (settledMap.get(customerSchedule.id) ?? 0) : 0,
             customerSchedule ? (historyMap.get(customerSchedule.id) ?? false) : false,
@@ -872,14 +932,32 @@ export class DepartureFinanceFacade {
         )
       }
 
-      if (amounts.guestCollectCents > 0 || guestSchedule) {
+      const expectDeposit =
+        amounts.collectionMode === 'guest_only' &&
+        (amounts.depositCents > 0 || depositSchedule != null)
+      if (expectDeposit || depositSchedule) {
         paths.push(
           this.toPathFinanceState(
-            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-            amounts.guestCollectCents,
-            guestSchedule,
-            guestSchedule ? (settledMap.get(guestSchedule.id) ?? 0) : 0,
-            guestSchedule ? (historyMap.get(guestSchedule.id) ?? false) : false,
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+            amounts.depositCents,
+            depositSchedule,
+            depositSchedule ? (settledMap.get(depositSchedule.id) ?? 0) : 0,
+            depositSchedule ? (historyMap.get(depositSchedule.id) ?? false) : false,
+          ),
+        )
+      }
+
+      const expectBalance =
+        (amounts.collectionMode === 'guest_only' || amounts.collectionMode === 'split') &&
+        (amounts.balanceCents > 0 || balanceSchedule != null)
+      if (expectBalance || balanceSchedule) {
+        paths.push(
+          this.toPathFinanceState(
+            PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+            amounts.balanceCents,
+            balanceSchedule,
+            balanceSchedule ? (settledMap.get(balanceSchedule.id) ?? 0) : 0,
+            balanceSchedule ? (historyMap.get(balanceSchedule.id) ?? false) : false,
           ),
         )
       }
@@ -960,12 +1038,24 @@ export class DepartureFinanceFacade {
   ): Promise<Map<string, SourceOrderPathAmountInput>> {
     const rows = await this.prisma.sourceOrder.findMany({
       where: { id: { in: sourceOrderIds } },
-      select: { id: true, partnerCollectedCents: true, guestCollectCents: true },
+      select: {
+        id: true,
+        collectionMode: true,
+        depositCents: true,
+        balanceCents: true,
+        netReceivableCents: true,
+        partnerCollectedCents: true,
+        guestCollectCents: true,
+      },
     })
     return new Map(
       rows.map((row) => [
         row.id,
         {
+          collectionMode: row.collectionMode,
+          depositCents: row.depositCents,
+          balanceCents: row.balanceCents,
+          netReceivableCents: row.netReceivableCents,
           partnerCollectedCents: row.partnerCollectedCents,
           guestCollectCents: row.guestCollectCents,
         },
@@ -974,9 +1064,7 @@ export class DepartureFinanceFacade {
   }
 
   private toPathFinanceState(
-    pathType:
-      | typeof PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT
-      | typeof PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    pathType: SourceOrderReceivablePathType,
     agreedAmountCents: number,
     schedule: PaymentSchedule | null,
     settledAmountCents: number,

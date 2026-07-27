@@ -148,7 +148,7 @@ describe('Source order generate receivables (e2e)', () => {
     }
   }
 
-  it('creates dual-path receivables for split collection mode', async () => {
+  it('creates only balance Guest receivable for split collection mode', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
@@ -160,50 +160,22 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
 
-    expect(response.body.data.schedules).toHaveLength(2)
+    expect(response.body.data.schedules).toHaveLength(1)
     expect(response.body.data.sourceAmountMismatch).toBe(false)
 
-    const sourceTypes = response.body.data.schedules.map(
-      (item: { sourceType: string }) => item.sourceType,
-    )
-    expect(sourceTypes).toEqual(
-      expect.arrayContaining([
-        PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-        PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-      ]),
-    )
-
-    for (const schedule of response.body.data.schedules) {
-      expect(schedule.departureId).toBe(departure.id)
-      expect(schedule.sourceId).toBe(sourceOrder.id)
-      expect(schedule.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
-      // 出团 2026-07-01 → 应收到期日下月 10 日
-      expect(schedule.dueDate).toBe('2026-08-10')
-    }
-
-    const customerSchedule = response.body.data.schedules.find(
-      (item: { sourceType: string }) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-    )
-    const guestSchedule = response.body.data.schedules.find(
-      (item: { sourceType: string }) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-    )
-
-    expect(customerSchedule).toMatchObject({
-      title: '客户补款',
-      amountCents: 300000,
-      counterpartyType: CounterpartyType.partner,
-      counterpartyId: partnerId,
-      counterpartyName: partnerName,
-    })
-    expect(guestSchedule).toMatchObject({
-      title: '游客代收',
+    const schedule = response.body.data.schedules[0]
+    expect(schedule).toMatchObject({
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+      title: '尾款代收',
       amountCents: 700000,
       counterpartyType: CounterpartyType.guest,
       counterpartyId: sourceOrder.id,
       counterpartyName: sourceOrder.displayName,
+      departureId: departure.id,
+      sourceId: sourceOrder.id,
+      dueDate: '2026-08-10',
     })
+    expect(schedule.scheduleNo).toMatch(AR_AP_SCHEDULE_NO_REGEX)
 
     expect(response.body.data.sourceOrder).toMatchObject({
       hasPaymentSchedule: true,
@@ -211,7 +183,44 @@ describe('Source order generate receivables (e2e)', () => {
     })
   })
 
-  it('creates only guest collection schedule for guest_only mode', async () => {
+  it('creates deposit + balance Guest receivables for guest_only mode', async () => {
+    const departure = await createDeparture()
+    const sourceOrder = await createSourceOrder(departure.id, {
+      collectionMode: SourceOrderCollectionMode.guest_only,
+      depositCents: 200000,
+      balanceCents: 800000,
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
+      .expect(201)
+
+    expect(response.body.data.schedules).toHaveLength(2)
+    const byType = Object.fromEntries(
+      response.body.data.schedules.map((item: { sourceType: string }) => [
+        item.sourceType,
+        item,
+      ]),
+    )
+    expect(byType[PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION]).toMatchObject({
+      title: '定金代收',
+      amountCents: 200000,
+      counterpartyType: CounterpartyType.guest,
+    })
+    expect(byType[PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION]).toMatchObject({
+      title: '尾款代收',
+      amountCents: 800000,
+      counterpartyType: CounterpartyType.guest,
+    })
+    expect(
+      response.body.data.schedules.some(
+        (item: { sourceType: string }) =>
+          item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      ),
+    ).toBe(false)
+  })
+
+  it('skips zero-amount guest_only period when generating receivables', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.guest_only,
@@ -223,9 +232,9 @@ describe('Source order generate receivables (e2e)', () => {
 
     expect(response.body.data.schedules).toHaveLength(1)
     expect(response.body.data.schedules[0]).toMatchObject({
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
       amountCents: 1000000,
-      title: '游客代收',
+      title: '尾款代收',
     })
   })
 
@@ -275,7 +284,7 @@ describe('Source order generate receivables (e2e)', () => {
         cancelledAt: null,
       },
     })
-    expect(count).toBe(2)
+    expect(count).toBe(1)
   })
 
   it('creates each receivable source path only once under concurrent generation requests', async () => {
@@ -305,15 +314,12 @@ describe('Source order generate receivables (e2e)', () => {
       ),
     }).toEqual({
       successCount: 1,
-      scheduleCount: 2,
-      sourceTypes: expect.arrayContaining([
-        PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-        PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-      ]),
+      scheduleCount: 1,
+      sourceTypes: [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION],
     })
   })
 
-  it('syncs schedule amounts when source order is patched before finance touch', async () => {
+  it('syncs balance schedule amount when source order is patched before finance touch', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.split,
@@ -346,15 +352,14 @@ describe('Source order generate receivables (e2e)', () => {
       where: {
         organizationId,
         sourceId: sourceOrder.id,
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
         cancelledAt: null,
       },
     })
 
-    expect(customerSchedule?.amountCents).toBe(400000)
+    expect(customerSchedule).toBeNull()
     expect(guestSchedule?.amountCents).toBe(600000)
     // Source→schedule sync must not stamp amountAdjustedAt / financeTouched.
-    expect(customerSchedule?.amountAdjustedAt).toBeNull()
     expect(guestSchedule?.amountAdjustedAt).toBeNull()
   })
 
@@ -392,6 +397,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${created.id}/generate-receivables`)
       .expect(201)
 
+    // 团款调整改变 S；代收约定需显式改定金/尾款才会同步 Guest 节点。
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/source-orders/${created.id}`)
       .send({
@@ -407,6 +413,8 @@ describe('Source order generate receivables (e2e)', () => {
             amountCents: 10000,
           },
         ],
+        depositCents: 0,
+        balanceCents: 1040000,
       })
       .expect(200)
 
@@ -421,7 +429,7 @@ describe('Source order generate receivables (e2e)', () => {
       where: {
         organizationId,
         sourceId: created.id,
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
         cancelledAt: null,
       },
     })
@@ -512,20 +520,19 @@ describe('Source order generate receivables (e2e)', () => {
     expect(blocked.body.message).toBe('当前客源单已发生收款，不允许修改金额')
   })
 
-  it('creates missing receivable path on save when not finance-touched', async () => {
+  it('syncs Guest paths when collection mode changes before finance touch', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       collectionMode: SourceOrderCollectionMode.guest_only,
+      depositCents: 300000,
+      balanceCents: 700000,
     })
 
     const generated = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
 
-    expect(generated.body.data.schedules).toHaveLength(1)
-    expect(generated.body.data.schedules[0].sourceType).toBe(
-      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-    )
+    expect(generated.body.data.schedules).toHaveLength(2)
 
     const patched = await authRequest(app, coordinatorToken)
       .patch(`/api/source-orders/${sourceOrder.id}`)
@@ -544,37 +551,30 @@ describe('Source order generate receivables (e2e)', () => {
       hasSourceAmountMismatch: false,
     })
 
-    const schedules = await prisma.paymentSchedule.findMany({
+    const activeSchedules = await prisma.paymentSchedule.findMany({
       where: {
         organizationId,
         sourceId: sourceOrder.id,
         direction: PaymentScheduleDirection.receivable,
         cancelledAt: null,
       },
-      orderBy: { sourceType: 'asc' },
     })
-
-    expect(schedules).toHaveLength(2)
-
-    const customerSchedule = schedules.find(
-      (item) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-    )
-    const guestSchedule = schedules.find(
-      (item) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-    )
-
-    expect(customerSchedule).toMatchObject({
-      amountCents: 300000,
-      title: '客户补款',
-      counterpartyType: CounterpartyType.partner,
-      counterpartyId: partnerId,
-    })
-    expect(guestSchedule).toMatchObject({
+    expect(activeSchedules).toHaveLength(1)
+    expect(activeSchedules[0]).toMatchObject({
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
       amountCents: 700000,
-      title: '游客代收',
+      title: '尾款代收',
     })
+
+    const cancelledDeposit = await prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: sourceOrder.id,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+        cancelledAt: { not: null },
+      },
+    })
+    expect(cancelledDeposit).not.toBeNull()
 
     const rejected = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
@@ -636,7 +636,7 @@ describe('Source order generate receivables (e2e)', () => {
     expect(schedules).toHaveLength(1)
     expect(schedules[0]).toMatchObject({
       id: scheduleId,
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
       amountCents: 1000000,
     })
   })
@@ -809,7 +809,7 @@ describe('Source order generate receivables (e2e)', () => {
   it('keeps receivable status from remaining active schedules when only one path is cancelled', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
-      collectionMode: SourceOrderCollectionMode.split,
+      collectionMode: SourceOrderCollectionMode.guest_only,
       depositCents: 300000,
       balanceCents: 700000,
     })
@@ -818,17 +818,17 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
 
-    const customerSchedule = (
+    const depositSchedule = (
       generated.body.data.schedules as Array<{ id: string; sourceType: string }>
     ).find(
       (item) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
     )
-    expect(customerSchedule).toBeDefined()
+    expect(depositSchedule).toBeDefined()
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/payment-schedules/${customerSchedule!.id}/cancel`)
-      .send({ closeDisposition: 'business_dispute_stop', cancelReason: '仅关闭客户补款路径' })
+      .post(`/api/finance/payment-schedules/${depositSchedule!.id}/cancel`)
+      .send({ closeDisposition: 'business_dispute_stop', cancelReason: '仅关闭定金代收路径' })
       .expect(201)
 
     const fetched = await authRequest(app, coordinatorToken)

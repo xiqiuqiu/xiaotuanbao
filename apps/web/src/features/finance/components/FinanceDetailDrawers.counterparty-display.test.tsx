@@ -86,7 +86,7 @@ describe('finance detail drawers counterparty display', () => {
     )
 
     expect(await screen.findByText('TXXTB20260722000003')).toBeInTheDocument()
-    expect(within(descriptionsItemValues('收款方式')[0]).getByText('游客代收')).toBeTruthy()
+    expect(within(descriptionsItemValues('收款方式')[0]).getByText('尾款代收')).toBeTruthy()
     expect(
       within(descriptionsItemValues('往来对象')[0]).getByText(
         '福建土楼专线地接 7月25日发客',
@@ -158,7 +158,7 @@ describe('finance detail drawers counterparty display', () => {
         counterpartyType: 'guest',
         counterpartyId: 'so-1',
         counterpartyName: '福建土楼专线地接 7月25日发客',
-        sourceType: 'source_order_guest_collection',
+        sourceType: 'source_order_guest_balance_collection',
         sourceId: 'so-1',
         resourceKind: null,
         resourceTitle: null,
@@ -192,7 +192,7 @@ describe('finance detail drawers counterparty display', () => {
     const methodItems = descriptionsItemValues('收款方式')
     expect(methodItems).toHaveLength(2)
     for (const item of methodItems) {
-      expect(within(item).getByText('游客代收')).toBeTruthy()
+      expect(within(item).getByText('尾款代收')).toBeTruthy()
     }
 
     const counterpartyItems = descriptionsItemValues('往来对象')

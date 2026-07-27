@@ -28,7 +28,8 @@ import type { DepartureOperationsSheetExcelFile } from './departure-operations-s
 
 const RECEIVABLE_PATH_LABELS: Record<string, string> = {
   [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户结算',
-  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '游客代收',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION]: '定金代收',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION]: '尾款代收',
 }
 
 @Injectable()
@@ -107,6 +108,10 @@ export class DepartureOperationsSheetService {
             departure.sourceOrders.map((order) => [
               order.id,
               {
+                collectionMode: order.collectionMode,
+                depositCents: order.depositCents,
+                balanceCents: order.balanceCents,
+                netReceivableCents: order.netReceivableCents,
                 partnerCollectedCents: order.partnerCollectedCents,
                 guestCollectCents: order.guestCollectCents,
               },

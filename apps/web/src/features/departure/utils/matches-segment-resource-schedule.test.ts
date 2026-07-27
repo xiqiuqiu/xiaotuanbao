@@ -19,7 +19,7 @@ describe('matchesSegmentResourceSchedule', () => {
     expect(
       matchesSegmentResourceSchedule(
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           sourceId: 'resource-1',
         },
         'resource-1',

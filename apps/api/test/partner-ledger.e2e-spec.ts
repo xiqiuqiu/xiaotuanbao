@@ -77,23 +77,39 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(201)
     departureId = departureResponse.body.data.id as string
 
-    // P1 客源单：split 模式 → 生成「客户补款」(counterparty=partner) + 「游客代收」(counterparty=guest) 两个应收节点
+    // P1 客户结算应收（partner）+ 另开全代收客源单产生 Guest 节点（验证账本排除游客代收）
     const order1Response = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId,
-        adultGuestCount: 2,
+        adultGuestCount: 1,
         childGuestCount: 0,
-        adultUnitPriceCents: 100000,
+        adultUnitPriceCents: 120000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
-        depositCents: 120000,
-        balanceCents: 80000,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
       })
       .expect(201)
     await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${order1Response.body.data.id}/generate-receivables`)
+      .expect(201)
+
+    const guestOnlyOrder = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departureId}/source-orders`)
+      .send({
+        partnerId,
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceCents: 80000,
+        childUnitPriceCents: 0,
+        discountType: SourceOrderDiscountType.none,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+        depositCents: 0,
+        balanceCents: 80000,
+      })
+      .expect(201)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${guestOnlyOrder.body.data.id}/generate-receivables`)
       .expect(201)
 
     // P2（同名前缀干扰）客源单：partner_settled → 生成 counterparty=P2 的应收节点
@@ -178,19 +194,17 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(201)
     julyDepartureId = julyDepartureResponse.body.data.id as string
 
-    // 6 月客源单：客户补款 120000
+    // 6 月客源单：客户结算 120000
     const juneOrder = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
         partnerId: summaryPartnerId,
-        adultGuestCount: 2,
+        adultGuestCount: 1,
         childGuestCount: 0,
-        adultUnitPriceCents: 100000,
+        adultUnitPriceCents: 120000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
-        depositCents: 120000,
-        balanceCents: 80000,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
       })
       .expect(201)
     const juneGenerated = await authRequest(app, coordinatorToken)
@@ -252,19 +266,17 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       })
       .expect(201)
 
-    // 7 月客源单：客户补款 90000
+    // 7 月客源单：客户结算 90000
     const julyOrder = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${julyDepartureId}/source-orders`)
       .send({
         partnerId: summaryPartnerId,
         adultGuestCount: 1,
         childGuestCount: 0,
-        adultUnitPriceCents: 150000,
+        adultUnitPriceCents: 90000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
-        depositCents: 90000,
-        balanceCents: 60000,
+        collectionMode: SourceOrderCollectionMode.partner_settled,
       })
       .expect(201)
     await authRequest(app, coordinatorToken)
@@ -462,7 +474,7 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       .expect(200)
 
     const data = response.body.data
-    // P1 split 客源单只产生 1 个 partner 应收（客户补款 1200）；游客代收节点（counterparty=guest）不出现
+    // P1 客户结算只产生 1 个 partner 应收；同发团 Guest 节点不进入 Partner 账本
     expect(data.total).toBe(1)
     expect(data.items).toHaveLength(1)
     expect(data.items[0]).toMatchObject({
@@ -471,7 +483,6 @@ describe('Partner ledger receivables/payables API (e2e)', () => {
       amountCents: 120000,
     })
 
-    // 该客源单确实生成了游客代收节点，只是被精确过滤排除
     const guestSchedules = await prisma.paymentSchedule.findMany({
       where: {
         organizationId,

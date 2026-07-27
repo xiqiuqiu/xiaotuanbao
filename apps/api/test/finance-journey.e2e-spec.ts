@@ -774,7 +774,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     })
   })
 
-  it('settles split receivables and keeps coordinator departure tabs in sync', async () => {
+  it('settles guest deposit/balance receivables and keeps coordinator departure tabs in sync', async () => {
     const departure = await createDeparture('split-tabs')
 
     const sourceOrder = await authRequest(app, coordinatorToken)
@@ -786,7 +786,7 @@ describe('Finance journeys (cross-module e2e)', () => {
         adultUnitPriceCents: 100000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
+        collectionMode: SourceOrderCollectionMode.guest_only,
         depositCents: 400000,
         balanceCents: 600000,
       })
@@ -798,16 +798,16 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     expect(generated.body.data.schedules).toHaveLength(2)
 
-    const customerSchedule = generated.body.data.schedules.find(
-      (item: { counterpartyType: string }) =>
-        item.counterpartyType === CounterpartyType.partner,
+    const depositSchedule = generated.body.data.schedules.find(
+      (item: { sourceType: string }) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
     )
-    const guestSchedule = generated.body.data.schedules.find(
-      (item: { counterpartyType: string }) =>
-        item.counterpartyType === CounterpartyType.guest,
+    const balanceSchedule = generated.body.data.schedules.find(
+      (item: { sourceType: string }) =>
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     )
-    expect(customerSchedule.amountCents).toBe(400000)
-    expect(guestSchedule.amountCents).toBe(600000)
+    expect(depositSchedule.amountCents).toBe(400000)
+    expect(balanceSchedule.amountCents).toBe(600000)
 
     const tabsBefore = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}/receivables`)
@@ -820,24 +820,25 @@ describe('Finance journeys (cross-module e2e)', () => {
     ).toBe(true)
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/receivables/${customerSchedule.id}/confirm-collection`)
+      .post(`/api/finance/receivables/${depositSchedule.id}/confirm-collection`)
       .send({
         amountCents: 400000,
         transactionDate: '2026-08-04',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
-        counterpartyType: CounterpartyType.partner,
-        counterpartyId: partnerId,
-        counterpartyName: `${testPrefix}-partner`,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyId: sourceOrder.body.data.id,
+        counterpartyName: sourceOrder.body.data.displayName,
       })
       .expect(201)
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/receivables/${guestSchedule.id}/confirm-collection`)
+      .post(`/api/finance/receivables/${balanceSchedule.id}/confirm-collection`)
       .send({
         amountCents: 600000,
         transactionDate: '2026-08-04',
         paymentChannel: PaymentChannel.CASH,
         counterpartyType: CounterpartyType.guest,
+        counterpartyId: sourceOrder.body.data.id,
         counterpartyName: sourceOrder.body.data.displayName,
       })
       .expect(201)
@@ -861,7 +862,7 @@ describe('Finance journeys (cross-module e2e)', () => {
 
     // ADR-0023: finance owns collection; a settled schedule still rejects further collection.
     const rejected = await authRequest(app, financeToken)
-      .post(`/api/finance/receivables/${guestSchedule.id}/confirm-collection`)
+      .post(`/api/finance/receivables/${balanceSchedule.id}/confirm-collection`)
       .send({
         amountCents: 1,
         transactionDate: '2026-08-04',
@@ -2920,7 +2921,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(201)
     expect(generated.body.data.schedules).toHaveLength(1)
     expect(generated.body.data.schedules[0].sourceType).toBe(
-      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     )
 
     const scheduleId = generated.body.data.schedules[0].id as string
@@ -3022,7 +3023,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       financeTouched: true,
       status: PaymentScheduleStatus.PENDING,
       amountAdjustedAt: expect.any(String),
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     })
 
     const scheduleCountAfter = await prisma.paymentSchedule.count({
@@ -3038,10 +3039,12 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/source-orders/${sourceOrderId}`)
       .expect(200)
     expect(sourceAfter.body.data).toMatchObject({
+      depositCents: 0,
+      balanceCents: adjustedCents,
       guestCollectCents: adjustedCents,
       partnerCollectedCents: 0,
-      netReceivableCents: adjustedCents,
-      grossReceivableCents: adjustedCents,
+      // 调整 Guest 路径不改写结算金额 S。
+      netReceivableCents: obligationCents,
       receivableStatus: 'pending',
       amountFieldsLocked: true,
       hasSourceAmountMismatch: false,
@@ -3248,11 +3251,11 @@ describe('Finance journeys (cross-module e2e)', () => {
     expect(departureSummary.body.data.openUnsettledReceivableCents).toBe(adjustedCents)
   })
 
-  it('adjusts one split receivable path without mutating the sibling path (#93)', async () => {
+  it('adjusts one guest deposit path without mutating the sibling balance path (#93)', async () => {
     const netCents = 1_000_000
-    const partnerPathCents = 400_000
-    const guestPathCents = 600_000
-    const adjustedPartnerCents = 350_000
+    const depositPathCents = 400_000
+    const balancePathCents = 600_000
+    const adjustedDepositCents = 350_000
 
     const departure = await createDeparture('explicit-recv-split')
     const sourceOrder = await authRequest(app, coordinatorToken)
@@ -3264,15 +3267,15 @@ describe('Finance journeys (cross-module e2e)', () => {
         adultUnitPriceCents: 100_000,
         childUnitPriceCents: 0,
         discountType: SourceOrderDiscountType.none,
-        collectionMode: SourceOrderCollectionMode.split,
-        depositCents: partnerPathCents,
-        balanceCents: guestPathCents,
+        collectionMode: SourceOrderCollectionMode.guest_only,
+        depositCents: depositPathCents,
+        balanceCents: balancePathCents,
       })
       .expect(201)
     const sourceOrderId = sourceOrder.body.data.id as string
     expect(sourceOrder.body.data).toMatchObject({
-      partnerCollectedCents: partnerPathCents,
-      guestCollectCents: guestPathCents,
+      partnerCollectedCents: 0,
+      guestCollectCents: depositPathCents + balancePathCents,
       netReceivableCents: netCents,
     })
 
@@ -3281,40 +3284,40 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(201)
     expect(generated.body.data.schedules).toHaveLength(2)
 
-    const customerSchedule = generated.body.data.schedules.find(
+    const depositSchedule = generated.body.data.schedules.find(
       (item: { sourceType: string }) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
     )
-    const guestSchedule = generated.body.data.schedules.find(
+    const balanceSchedule = generated.body.data.schedules.find(
       (item: { sourceType: string }) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
     )
-    expect(customerSchedule.amountCents).toBe(partnerPathCents)
-    expect(guestSchedule.amountCents).toBe(guestPathCents)
+    expect(depositSchedule.amountCents).toBe(depositPathCents)
+    expect(balanceSchedule.amountCents).toBe(balancePathCents)
 
     await authRequest(app, financeToken)
-      .post(`/api/finance/receivables/${customerSchedule.id}/confirm-collection`)
+      .post(`/api/finance/receivables/${depositSchedule.id}/confirm-collection`)
       .send({
         amountCents: 100_000,
         transactionDate: '2026-08-04',
         paymentChannel: PaymentChannel.BANK_TRANSFER,
-        counterpartyType: CounterpartyType.partner,
-        counterpartyId: partnerId,
-        counterpartyName: `${testPrefix}-partner`,
+        counterpartyType: CounterpartyType.guest,
+        counterpartyId: sourceOrderId,
+        counterpartyName: sourceOrder.body.data.displayName,
       })
       .expect(201)
 
     const verifications = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
       .query({
-        scheduleNo: customerSchedule.scheduleNo,
+        scheduleNo: depositSchedule.scheduleNo,
         scheduleNoMatch: 'exact',
         pageSize: 10,
       })
       .expect(200)
     await authRequest(app, financeToken)
       .post(`/api/finance/verifications/${verifications.body.data.items[0].id}/cancel`)
-      .send({ cancelReason: '撤销后仅调整客户补款路径' })
+      .send({ cancelReason: '撤销后仅调整定金代收路径' })
       .expect(201)
 
     const scheduleCountBefore = await prisma.paymentSchedule.count({
@@ -3326,16 +3329,16 @@ describe('Finance journeys (cross-module e2e)', () => {
     })
 
     const adjusted = await authRequest(app, financeToken)
-      .post(`/api/finance/payment-schedules/${customerSchedule.id}/adjust-amount`)
+      .post(`/api/finance/payment-schedules/${depositSchedule.id}/adjust-amount`)
       .send({
-        amountCents: adjustedPartnerCents,
-        adjustReason: '拆分模式下仅修正客户补款',
+        amountCents: adjustedDepositCents,
+        adjustReason: '全代收下仅修正定金代收',
       })
       .expect(201)
     expect(adjusted.body.data).toMatchObject({
-      id: customerSchedule.id,
-      amountCents: adjustedPartnerCents,
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      id: depositSchedule.id,
+      amountCents: adjustedDepositCents,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
     })
 
     const scheduleCountAfter = await prisma.paymentSchedule.count({
@@ -3347,13 +3350,13 @@ describe('Finance journeys (cross-module e2e)', () => {
     })
     expect(scheduleCountAfter).toBe(scheduleCountBefore)
 
-    const guestAfter = await authRequest(app, financeToken)
-      .get(`/api/finance/receivables/${guestSchedule.id}`)
+    const balanceAfter = await authRequest(app, financeToken)
+      .get(`/api/finance/receivables/${balanceSchedule.id}`)
       .expect(200)
-    expect(guestAfter.body.data).toMatchObject({
-      id: guestSchedule.id,
-      amountCents: guestPathCents,
-      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    expect(balanceAfter.body.data).toMatchObject({
+      id: balanceSchedule.id,
+      amountCents: balancePathCents,
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
       settledAmountCents: 0,
     })
 
@@ -3361,35 +3364,32 @@ describe('Finance journeys (cross-module e2e)', () => {
       .get(`/api/source-orders/${sourceOrderId}`)
       .expect(200)
     expect(sourceAfter.body.data).toMatchObject({
-      partnerCollectedCents: adjustedPartnerCents,
-      guestCollectCents: guestPathCents,
-      netReceivableCents: adjustedPartnerCents + guestPathCents,
-      grossReceivableCents: adjustedPartnerCents + guestPathCents,
-      collectionMode: SourceOrderCollectionMode.split,
+      depositCents: adjustedDepositCents,
+      balanceCents: balancePathCents,
+      guestCollectCents: adjustedDepositCents + balancePathCents,
+      netReceivableCents: netCents,
+      collectionMode: SourceOrderCollectionMode.guest_only,
       hasSourceAmountMismatch: false,
     })
-    expect(
-      sourceAfter.body.data.grossReceivableCents - sourceAfter.body.data.discountCents,
-    ).toBe(sourceAfter.body.data.netReceivableCents)
 
     const tabs = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}/receivables`)
       .expect(200)
     expect(tabs.body.data.total).toBe(2)
-    const tabCustomer = tabs.body.data.items.find(
-      (item: { id: string }) => item.id === customerSchedule.id,
+    const tabDeposit = tabs.body.data.items.find(
+      (item: { id: string }) => item.id === depositSchedule.id,
     )
     const tabGuest = tabs.body.data.items.find(
-      (item: { id: string }) => item.id === guestSchedule.id,
+      (item: { id: string }) => item.id === balanceSchedule.id,
     )
-    expect(tabCustomer.amountCents).toBe(adjustedPartnerCents)
-    expect(tabGuest.amountCents).toBe(guestPathCents)
+    expect(tabDeposit.amountCents).toBe(adjustedDepositCents)
+    expect(tabGuest.amountCents).toBe(balancePathCents)
 
     const departureSummary = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
       .expect(200)
     expect(departureSummary.body.data.openUnsettledReceivableCents).toBe(
-      adjustedPartnerCents + guestPathCents,
+      adjustedDepositCents + balancePathCents,
     )
   })
 })

@@ -143,7 +143,7 @@ const CUSTOMER_IDENTITY: Partial<PaymentScheduleSummary> = {
 }
 
 const GUEST_IDENTITY: Partial<PaymentScheduleSummary> = {
-  sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+  sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
   sourceId: 'so-2',
   counterpartyType: 'guest',
   counterpartyName: '苏州水乡地接社 7月15日发客',
@@ -342,7 +342,7 @@ describe('应收客源节点状态流转的列表显示', () => {
     renderList(true, [guestPending, guestClosed])
 
     const guestRow = row('AR-GUEST')
-    expect(within(guestRow).getByText('游客代收')).toBeTruthy()
+    expect(within(guestRow).getByText('尾款代收')).toBeTruthy()
     expect(within(guestRow).getByText('游客')).toBeTruthy()
     expect(within(guestRow).getByText('苏州水乡地接社 7月15日发客')).toBeTruthy()
     expect(within(guestRow).getByText('待收款')).toBeTruthy()

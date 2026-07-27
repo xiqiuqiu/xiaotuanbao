@@ -7,7 +7,7 @@ describe('matchesSourceOrderSchedule', () => {
     expect(
       matchesSourceOrderSchedule(
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           sourceId: 'order-1',
         },
         'order-1',
@@ -39,7 +39,7 @@ describe('matchesSourceOrderSchedule', () => {
     expect(
       matchesSourceOrderSchedule(
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           sourceId: 'order-2',
         },
         'order-1',

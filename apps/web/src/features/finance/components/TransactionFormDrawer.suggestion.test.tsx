@@ -103,7 +103,7 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
       items: [
         {
           id: 'sch-1',
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 500_00,
           unsettledAmountCents: 300_00,
           cancelledAt: null,
@@ -195,7 +195,7 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
       items: [
         {
           id: 'sch-2',
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 800_00,
           unsettledAmountCents: 800_00,
           cancelledAt: null,
@@ -335,7 +335,7 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
       items: [
         {
           id: 'sch-2',
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 800_00,
           unsettledAmountCents: 800_00,
           cancelledAt: null,

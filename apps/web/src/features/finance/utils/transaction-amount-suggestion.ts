@@ -1,4 +1,4 @@
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import { isSourceOrderGuestCollectionSourceType } from '@xiaotuanbao/shared'
 
 export type GuestCollectionSettledHint = 'open' | 'settled' | 'no_schedule' | 'covered'
 
@@ -20,7 +20,7 @@ export interface GuestCollectionAmountSuggestion {
 }
 
 /**
- * 游客代收流水金额建议：以节点未结清（或路径金额）为上限，再扣减同路径已有未核销流水。
+ * 游客代收流水金额建议：以未结清 Guest 节点（定金/尾款）未结清合计为上限，再扣减同路径已有未核销流水。
  * 仅为录入参考，不构成后端硬拦；资金层仍允许超额收款。
  */
 export function resolveGuestCollectionAmountSuggestion(params: {
@@ -29,13 +29,12 @@ export function resolveGuestCollectionAmountSuggestion(params: {
   existingUnallocatedGuestCents?: number
 }): GuestCollectionAmountSuggestion {
   const existingUnallocatedCents = Math.max(0, params.existingUnallocatedGuestCents ?? 0)
-  const guestSchedules = params.schedules.filter(
-    (schedule) => schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+  const guestSchedules = params.schedules.filter((schedule) =>
+    isSourceOrderGuestCollectionSourceType(schedule.sourceType),
   )
-  const openSchedule =
-    guestSchedules.find((schedule) => schedule.cancelledAt == null) ?? guestSchedules[0]
+  const openSchedules = guestSchedules.filter((schedule) => schedule.cancelledAt == null)
 
-  if (!openSchedule) {
+  if (openSchedules.length === 0 && guestSchedules.length === 0) {
     const remaining = Math.max(0, params.guestCollectCents - existingUnallocatedCents)
     return {
       suggestedAmountCents: remaining,
@@ -46,23 +45,33 @@ export function resolveGuestCollectionAmountSuggestion(params: {
     }
   }
 
-  const unsettled = openSchedule.unsettledAmountCents
-  if (unsettled === 0) {
+  const openUnsettled = openSchedules.reduce(
+    (sum, schedule) => sum + Math.max(0, schedule.unsettledAmountCents),
+    0,
+  )
+  const openPathAmount = openSchedules.reduce(
+    (sum, schedule) => sum + Math.max(0, schedule.amountCents),
+    0,
+  )
+
+  if (openSchedules.length > 0 && openUnsettled === 0) {
     return {
       suggestedAmountCents: 0,
       hasSchedule: true,
-      pathAmountCents: openSchedule.amountCents,
+      pathAmountCents: openPathAmount,
       agreedAmountCents: params.guestCollectCents,
       existingUnallocatedCents,
       settledHint: 'settled',
     }
   }
 
-  const remaining = Math.max(0, unsettled - existingUnallocatedCents)
+  const unsettledBase =
+    openSchedules.length > 0 ? openUnsettled : Math.max(0, params.guestCollectCents)
+  const remaining = Math.max(0, unsettledBase - existingUnallocatedCents)
   return {
     suggestedAmountCents: remaining,
-    hasSchedule: true,
-    pathAmountCents: openSchedule.amountCents,
+    hasSchedule: openSchedules.length > 0 || guestSchedules.length > 0,
+    pathAmountCents: openSchedules.length > 0 ? openPathAmount : undefined,
     agreedAmountCents: params.guestCollectCents,
     existingUnallocatedCents,
     settledHint: remaining === 0 ? 'covered' : 'open',

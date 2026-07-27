@@ -1557,7 +1557,7 @@ export interface DepartureOperationsSheetGuestRepresentative {
  * Progress is path-scoped — never merge payers (#97).
  */
 export interface DepartureOperationsSheetReceivablePathRow {
-  /** PaymentScheduleSourceType: source_order_customer_settlement | source_order_guest_collection */
+  /** PaymentScheduleSourceType: customer_settlement | guest_deposit_collection | guest_balance_collection */
   pathType: string
   pathLabel: string
   /** Business agreed receivable for this path. */

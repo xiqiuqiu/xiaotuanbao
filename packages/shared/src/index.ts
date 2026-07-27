@@ -216,7 +216,12 @@ export { PaymentScheduleStatus } from './enums/payment-schedule-status.enum'
 export { PaymentScheduleCloseDisposition } from './enums/payment-schedule-close-disposition.enum'
 export { PaymentScheduleActivityType } from './enums/payment-schedule-activity-type.enum'
 export { CounterpartyType } from './enums/counterparty-type.enum'
-export { PaymentScheduleSourceType } from './enums/payment-schedule-source-type.enum'
+export {
+  PaymentScheduleSourceType,
+  SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
+  isSourceOrderGuestCollectionSourceType,
+} from './enums/payment-schedule-source-type.enum'
+export type { SourceOrderGuestCollectionSourceType } from './enums/payment-schedule-source-type.enum'
 export { TransactionDirection } from './enums/transaction-direction.enum'
 export { TransactionWriteoffStatus } from './enums/transaction-writeoff-status.enum'
 export { PaymentChannel } from './enums/payment-channel.enum'

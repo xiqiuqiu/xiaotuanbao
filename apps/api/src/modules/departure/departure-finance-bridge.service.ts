@@ -19,6 +19,7 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
+  PaymentScheduleCloseDisposition,
   PaymentScheduleDirection,
   type FareAdjustmentDirection,
   type FareAdjustmentKind,
@@ -190,59 +191,71 @@ export class DepartureFinanceBridgeService {
     }
 
     const activeSchedules = allSchedules.filter((schedule) => schedule.cancelledAt == null)
-    let anyTouched = false
 
-    for (const schedule of activeSchedules) {
-      const expectedAmount = this.getExpectedAmountForSchedule(schedule.sourceType, order)
-      const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-        this.verificationService.getSettledAmountCents(schedule.id),
-        this.verificationService.hasVerificationHistory(schedule.id),
-      ])
-      const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
-      if (touched) {
-        anyTouched = true
-      }
+    const touchResults = await Promise.all(
+      activeSchedules.map(async (schedule) => {
+        const [settledAmountCents, hasVerificationHistory] = await Promise.all([
+          this.verificationService.getSettledAmountCents(schedule.id),
+          this.verificationService.hasVerificationHistory(schedule.id),
+        ])
+        return {
+          schedule,
+          touched: isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory),
+        }
+      }),
+    )
+    const anyTouched = touchResults.some((item) => item.touched)
 
-      if (touched || expectedAmount <= 0 || schedule.amountCents === expectedAmount) {
+    if (anyTouched) {
+      // 任一节点已 finance-touch：锁定约定同步（不改金额、不增删路径）。
+      return this.evaluateFinanceMeta(organizationId, order.id, order)
+    }
+
+    // 未核销：按约定全量同步——改金额、关闭多余/零金额、补建缺失。
+    const expectedPaths = this.buildReceivablePaths(order)
+    const expectedByType = new Map(expectedPaths.map((path) => [path.sourceType, path]))
+    const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
+    const remainingActiveSourceTypes = new Set<string>()
+
+    for (const { schedule } of touchResults) {
+      const expected = expectedByType.get(schedule.sourceType as PaymentScheduleSourceType)
+      if (!expected || expected.amountCents <= 0) {
+        await this.cancelScheduleForConventionSync(schedule.id)
         continue
       }
 
+      remainingActiveSourceTypes.add(schedule.sourceType)
+      if (schedule.amountCents === expected.amountCents && schedule.title === expected.title) {
+        continue
+      }
       await this.paymentScheduleService.update(
         organizationId,
         PaymentScheduleDirection.receivable,
         schedule.id,
-        { amountCents: expectedAmount },
+        { amountCents: expected.amountCents, title: expected.title },
       )
     }
 
-    if (activeSchedules.length > 0 && !anyTouched) {
-      const existingActiveSourceTypes = new Set(
-        activeSchedules.map((schedule) => schedule.sourceType),
-      )
-      const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
-
-      for (const path of this.buildReceivablePaths(order)) {
-        if (path.amountCents <= 0 || existingActiveSourceTypes.has(path.sourceType)) {
-          continue
-        }
-
-        await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.receivable,
-          {
-            departureId: order.departureId,
-            title: path.title,
-            amountCents: path.amountCents,
-            dueDate,
-            counterpartyType: path.counterpartyType,
-            counterpartyId: path.counterpartyId,
-            counterpartyName: path.counterpartyName,
-            sourceType: path.sourceType,
-            sourceId: order.id,
-          },
-        )
-        existingActiveSourceTypes.add(path.sourceType)
+    for (const path of expectedPaths) {
+      if (path.amountCents <= 0 || remainingActiveSourceTypes.has(path.sourceType)) {
+        continue
       }
+      await this.paymentScheduleService.create(
+        organizationId,
+        PaymentScheduleDirection.receivable,
+        {
+          departureId: order.departureId,
+          title: path.title,
+          amountCents: path.amountCents,
+          dueDate,
+          counterpartyType: path.counterpartyType,
+          counterpartyId: path.counterpartyId,
+          counterpartyName: path.counterpartyName,
+          sourceType: path.sourceType,
+          sourceId: order.id,
+        },
+      )
+      remainingActiveSourceTypes.add(path.sourceType)
     }
 
     return this.evaluateFinanceMeta(organizationId, order.id, order)
@@ -251,13 +264,28 @@ export class DepartureFinanceBridgeService {
   async evaluateFinanceMeta(
     organizationId: string,
     sourceOrderId: string,
-    order?: Pick<SourceOrder, 'partnerCollectedCents' | 'guestCollectCents'>,
+    order?: Pick<
+      SourceOrder,
+      | 'collectionMode'
+      | 'depositCents'
+      | 'balanceCents'
+      | 'netReceivableCents'
+      | 'partnerCollectedCents'
+      | 'guestCollectCents'
+    >,
   ): Promise<SourceOrderFinanceMeta> {
     const amounts =
       order ??
       (await this.prisma.sourceOrder.findFirstOrThrow({
         where: { id: sourceOrderId },
-        select: { partnerCollectedCents: true, guestCollectCents: true },
+        select: {
+          collectionMode: true,
+          depositCents: true,
+          balanceCents: true,
+          netReceivableCents: true,
+          partnerCollectedCents: true,
+          guestCollectCents: true,
+        },
       }))
 
     const schedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
@@ -624,22 +652,50 @@ export class DepartureFinanceBridgeService {
       partnerId: order.partnerId,
       partnerName: order.partner.name,
       displayName: order.displayName,
-      partnerCollectedCents: order.partnerCollectedCents,
-      guestCollectCents: order.guestCollectCents,
+      collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
+      netReceivableCents: order.netReceivableCents,
     })
   }
 
   private getExpectedAmountForSchedule(
     sourceType: string,
-    order: Pick<SourceOrder, 'partnerCollectedCents' | 'guestCollectCents'>,
+    order: Pick<
+      SourceOrder,
+      | 'collectionMode'
+      | 'depositCents'
+      | 'balanceCents'
+      | 'netReceivableCents'
+      | 'partnerCollectedCents'
+      | 'guestCollectCents'
+    > &
+      Partial<Pick<SourceOrderWithRelations, 'partner' | 'displayName' | 'id' | 'partnerId'>>,
   ): number {
-    if (sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT) {
-      return order.partnerCollectedCents
-    }
-    if (sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION) {
-      return order.guestCollectCents
-    }
-    return 0
+    // evaluateFinanceMeta 可能只带金额字段；用路径构建需要的最小元数据兜底。
+    const paths = buildSourceOrderReceivablePaths({
+      sourceOrderId: order.id ?? 'source-order',
+      partnerId: order.partnerId ?? 'partner',
+      partnerName: order.partner?.name ?? '',
+      displayName: order.displayName ?? '',
+      collectionMode: order.collectionMode,
+      depositCents: order.depositCents,
+      balanceCents: order.balanceCents,
+      netReceivableCents: order.netReceivableCents,
+    })
+    return paths.find((path) => path.sourceType === sourceType)?.amountCents ?? 0
+  }
+
+  /** 约定变更同步：关闭不再适用且未 finance-touch 的节点（不走用户关闭 API）。 */
+  private async cancelScheduleForConventionSync(scheduleId: string): Promise<void> {
+    await this.prisma.paymentSchedule.update({
+      where: { id: scheduleId },
+      data: {
+        cancelledAt: new Date(),
+        closeDisposition: PaymentScheduleCloseDisposition.other,
+        cancelReason: '约定变更同步：路径不再适用',
+      },
+    })
   }
 
   private async loadReceivableSchedules(

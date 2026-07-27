@@ -16,7 +16,7 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
     const result = resolveGuestCollectionAmountSuggestion({
       schedules: [
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 500_00,
           unsettledAmountCents: 300_00,
           cancelledAt: null,
@@ -39,13 +39,13 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
     const result = resolveGuestCollectionAmountSuggestion({
       schedules: [
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 500_00,
           unsettledAmountCents: 500_00,
           cancelledAt: '2026-01-01T00:00:00.000Z',
         },
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 400_00,
           unsettledAmountCents: 100_00,
           cancelledAt: null,
@@ -63,7 +63,7 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
     const result = resolveGuestCollectionAmountSuggestion({
       schedules: [
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 500_00,
           unsettledAmountCents: 0,
           cancelledAt: null,
@@ -124,7 +124,7 @@ describe('resolveGuestCollectionAmountSuggestion', () => {
     const result = resolveGuestCollectionAmountSuggestion({
       schedules: [
         {
-          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
           amountCents: 500_00,
           unsettledAmountCents: 300_00,
           cancelledAt: null,
