@@ -54,6 +54,7 @@ export const PAYABLE_SCHEDULE_FILTER_OPTIONS = [
 /** 应收「收款方式」列：由客源单来源类型派生；手工其他应收回落「其他」。 */
 export const RECEIVABLE_COLLECTION_METHOD_LABELS: Record<string, string> = {
   [PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT]: '客户补款',
+  [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION]: '游客代收',
   [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION]: '定金代收',
   [PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION]: '尾款代收',
 }

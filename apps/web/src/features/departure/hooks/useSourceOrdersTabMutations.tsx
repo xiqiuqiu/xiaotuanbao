@@ -2,6 +2,7 @@ import { Modal, Space, Typography, message } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, type MutableRefObject } from 'react'
 import {
+  countSourceOrderReceivablePaths,
   didSourceAmountPathChange,
   SourceOrderReceivableStatus,
 } from '@xiaotuanbao/shared'
@@ -262,6 +263,10 @@ export function useSourceOrderSubmit({
               {pathBaseline.partnerCollectedCents !== nextPath.partnerCollectedCents
                 ? `；客户已收 ${formatCents(pathBaseline.partnerCollectedCents)} → ${formatCents(nextPath.partnerCollectedCents)}`
                 : ''}
+              {pathBaseline.depositCents !== nextPath.depositCents ||
+              pathBaseline.balanceCents !== nextPath.balanceCents
+                ? `；定金 ${formatCents(pathBaseline.depositCents)} → ${formatCents(nextPath.depositCents)}；尾款 ${formatCents(pathBaseline.balanceCents)} → ${formatCents(nextPath.balanceCents)}`
+                : ''}
             </span>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               本单有 {impact.affectedTransactionCount}{' '}
@@ -302,7 +307,7 @@ export function confirmBatchGenerateReceivables(
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          收款方式为「合作方收定金+我方收尾款」的客源单会拆分为两条应收记录。
+          「全部我方代收」按定金/尾款分别生成游客应收；「合作方收定金+我方收尾款」仅生成尾款代收。
         </Typography.Text>
       </Space>
     ),
@@ -368,8 +373,12 @@ export function countPendingReceivables(
     }
     return (
       count +
-      Number(order.partnerCollectedCents > 0) +
-      Number(order.guestCollectCents > 0)
+      countSourceOrderReceivablePaths({
+        collectionMode: order.collectionMode,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
+        netReceivableCents: order.netReceivableCents,
+      })
     )
   }, 0)
 }

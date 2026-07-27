@@ -7,8 +7,18 @@ describe('didSourceAmountPathChange', () => {
   it('is false when both path amounts are unchanged', () => {
     expect(
       didSourceAmountPathChange(
-        { guestCollectCents: 50000, partnerCollectedCents: 0 },
-        { guestCollectCents: 50000, partnerCollectedCents: 0 },
+        {
+          guestCollectCents: 50000,
+          partnerCollectedCents: 0,
+          depositCents: 0,
+          balanceCents: 50000,
+        },
+        {
+          guestCollectCents: 50000,
+          partnerCollectedCents: 0,
+          depositCents: 0,
+          balanceCents: 50000,
+        },
       ),
     ).toBe(false)
   })
@@ -16,8 +26,18 @@ describe('didSourceAmountPathChange', () => {
   it('is true when guestCollect changes', () => {
     expect(
       didSourceAmountPathChange(
-        { guestCollectCents: 50000, partnerCollectedCents: 0 },
-        { guestCollectCents: 30000, partnerCollectedCents: 0 },
+        {
+          guestCollectCents: 50000,
+          partnerCollectedCents: 0,
+          depositCents: 0,
+          balanceCents: 50000,
+        },
+        {
+          guestCollectCents: 30000,
+          partnerCollectedCents: 0,
+          depositCents: 0,
+          balanceCents: 30000,
+        },
       ),
     ).toBe(true)
   })
@@ -25,8 +45,37 @@ describe('didSourceAmountPathChange', () => {
   it('is true when partnerCollected changes', () => {
     expect(
       didSourceAmountPathChange(
-        { guestCollectCents: 20000, partnerCollectedCents: 30000 },
-        { guestCollectCents: 20000, partnerCollectedCents: 25000 },
+        {
+          guestCollectCents: 20000,
+          partnerCollectedCents: 30000,
+          depositCents: 30000,
+          balanceCents: 20000,
+        },
+        {
+          guestCollectCents: 20000,
+          partnerCollectedCents: 25000,
+          depositCents: 25000,
+          balanceCents: 20000,
+        },
+      ),
+    ).toBe(true)
+  })
+
+  it('is true when guest_only reallocates deposit/balance with unchanged guestCollect total', () => {
+    expect(
+      didSourceAmountPathChange(
+        {
+          guestCollectCents: 100000,
+          partnerCollectedCents: 0,
+          depositCents: 40000,
+          balanceCents: 60000,
+        },
+        {
+          guestCollectCents: 100000,
+          partnerCollectedCents: 0,
+          depositCents: 30000,
+          balanceCents: 70000,
+        },
       ),
     ).toBe(true)
   })

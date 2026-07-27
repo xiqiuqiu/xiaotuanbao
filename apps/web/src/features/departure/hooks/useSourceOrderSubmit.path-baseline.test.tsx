@@ -115,6 +115,8 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
             void submit(payload, {
               guestCollectCents: detailOrder.guestCollectCents,
               partnerCollectedCents: detailOrder.partnerCollectedCents,
+              depositCents: detailOrder.depositCents,
+              balanceCents: detailOrder.balanceCents,
             })
           }}
         >
@@ -193,6 +195,8 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
               {
                 guestCollectCents: detailOrder.guestCollectCents,
                 partnerCollectedCents: detailOrder.partnerCollectedCents,
+                depositCents: detailOrder.depositCents,
+                balanceCents: detailOrder.balanceCents,
               },
             )
           }}
@@ -219,6 +223,107 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
       )
       expect(saveMutate).not.toHaveBeenCalled()
       expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
+    } finally {
+      confirmSpy.mockRestore()
+    }
+  })
+
+  it('confirms when guest_only reallocates deposit/balance with unchanged guestCollect total', async () => {
+    const user = userEvent.setup()
+    getGuestCollectionChangeImpact.mockResolvedValue({ affectedTransactionCount: 1 })
+    const saveMutate = vi.fn()
+
+    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
+    let confirmConfig: ConfirmConfig | undefined
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
+      confirmConfig = config
+      return {
+        destroy: vi.fn(),
+        update: vi.fn(),
+        then: undefined,
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    const guestOnlyOrder: SourceOrderSummary = {
+      ...staleListOrder(),
+      collectionMode: 'guest_only',
+      depositCents: 400000,
+      balanceCents: 600000,
+      partnerCollectedCents: 0,
+      guestCollectCents: 1000000,
+      netReceivableCents: 1000000,
+      grossReceivableCents: 1000000,
+    }
+
+    function Harness() {
+      const impactAbortRef = useRef<AbortController | null>(null)
+      const latestEditingOrderIdRef = useRef<string | undefined>('order-1')
+      const saveMutation = {
+        mutate: saveMutate,
+        mutateAsync: vi.fn(),
+      } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveMutation']
+      const saveAndGenerateMutation = {
+        mutate: vi.fn(),
+        mutateAsync: vi.fn(),
+      } as unknown as Parameters<typeof useSourceOrderSubmit>[0]['saveAndGenerateMutation']
+
+      const submit = useSourceOrderSubmit({
+        editingOrder: guestOnlyOrder,
+        saveMutation,
+        saveAndGenerateMutation,
+        impactAbortRef,
+        latestEditingOrderIdRef,
+      })
+
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            const payload = formValuesToPayload(sourceOrderToFormValues(guestOnlyOrder))
+            void submit(
+              {
+                ...payload,
+                depositCents: 300000,
+                balanceCents: 700000,
+              },
+              {
+                guestCollectCents: guestOnlyOrder.guestCollectCents,
+                partnerCollectedCents: guestOnlyOrder.partnerCollectedCents,
+                depositCents: guestOnlyOrder.depositCents,
+                balanceCents: guestOnlyOrder.balanceCents,
+              },
+            )
+          }}
+        >
+          保存重分配
+        </button>
+      )
+    }
+
+    try {
+      render(
+        <ConfigProvider>
+          <Harness />
+        </ConfigProvider>,
+      )
+
+      await user.click(screen.getByRole('button', { name: '保存重分配' }))
+
+      await waitFor(() =>
+        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+          'order-1',
+          expect.any(AbortSignal),
+        ),
+      )
+      expect(saveMutate).not.toHaveBeenCalled()
+      expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
+
+      const { unmount: unmountConfirm } = render(
+        <ConfigProvider>{confirmConfig?.content}</ConfigProvider>,
+      )
+      expect(screen.getByText(/定金 ¥4,000\.00 → ¥3,000\.00/)).toBeInTheDocument()
+      expect(screen.getByText(/尾款 ¥6,000\.00 → ¥7,000\.00/)).toBeInTheDocument()
+      unmountConfirm()
     } finally {
       confirmSpy.mockRestore()
     }

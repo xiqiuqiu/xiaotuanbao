@@ -890,6 +890,8 @@ export function SourceOrderDrawer({
               ? {
                   guestCollectCents: resolvedOrder.guestCollectCents,
                   partnerCollectedCents: resolvedOrder.partnerCollectedCents,
+                  depositCents: resolvedOrder.depositCents,
+                  balanceCents: resolvedOrder.balanceCents,
                 }
               : null
             const generateReceivable = submitIntentRef.current === 'saveAndGenerate'

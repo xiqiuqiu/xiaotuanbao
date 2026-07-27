@@ -18,6 +18,7 @@ import {
   deriveScheduleState,
   computeReceivableDueDate,
   PaymentScheduleStatus,
+  shouldCancelSourceOrderScheduleOnConventionSync,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -410,14 +411,19 @@ export class DepartureFinanceBridgeService {
       }),
     )
     const anyTouched = touchResults.some((item) => item.touched)
+    const hasLegacyGuestCollection = touchResults.some(
+      (item) =>
+        item.schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    )
 
-    if (anyTouched) {
-      // 任一节点已 finance-touch：锁定约定同步（不改金额、不增删路径）。
+    if (anyTouched || hasLegacyGuestCollection) {
+      // 任一节点已 finance-touch，或仍存在 pre-split legacy 游客代收：
+      // 锁定约定同步（不改金额、不增删路径，避免误取消 legacy）。
+      // 按实收结算产生的补款/返利若尚未 touch，约定变更时关闭，待再次按实收结算。
       return this.evaluateFinanceMeta(organizationId, order.id, order)
     }
 
-    // 未核销：按约定全量同步 Guest（及全部客户结算路径）——改金额、关闭多余/零金额、补建缺失。
-    // 按实收结算产生的补款/返利若尚未 touch，约定变更时关闭，待再次按实收结算。
+    // 未核销：按约定全量同步——改金额、关闭多余/零金额、补建缺失。
     const expectedPaths = this.buildReceivablePaths(order)
     const expectedByType = new Map(expectedPaths.map((path) => [path.sourceType, path]))
     const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
@@ -430,8 +436,17 @@ export class DepartureFinanceBridgeService {
       }
 
       const expected = expectedByType.get(schedule.sourceType as PaymentScheduleSourceType)
-      if (!expected || expected.amountCents <= 0) {
+      if (
+        shouldCancelSourceOrderScheduleOnConventionSync({
+          scheduleSourceType: schedule.sourceType,
+          expectedAmountCents: expected?.amountCents,
+        })
+      ) {
         await this.cancelScheduleForConventionSync(schedule.id)
+        continue
+      }
+      if (!expected || expected.amountCents <= 0) {
+        // 非约定管理类型（如 legacy）：保留，不参与补建去重。
         continue
       }
 

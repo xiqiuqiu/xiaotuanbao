@@ -314,6 +314,8 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
 export type SourceOrderPathBaseline = {
   guestCollectCents: number
   partnerCollectedCents: number
+  depositCents: number
+  balanceCents: number
 }
 
 /** Path amounts implied by an update payload (mirrors server computeSourceOrderAmounts). */
@@ -341,16 +343,22 @@ export function resolvePathAmountsFromPayload(
     return {
       partnerCollectedCents: netReceivableCents,
       guestCollectCents: 0,
+      depositCents: 0,
+      balanceCents: 0,
     }
   }
   if (payload.collectionMode === SourceOrderCollectionMode.SPLIT) {
     return {
       partnerCollectedCents: depositCents,
       guestCollectCents: balanceCents,
+      depositCents,
+      balanceCents,
     }
   }
   return {
     partnerCollectedCents: 0,
     guestCollectCents: depositCents + balanceCents,
+    depositCents,
+    balanceCents,
   }
 }
