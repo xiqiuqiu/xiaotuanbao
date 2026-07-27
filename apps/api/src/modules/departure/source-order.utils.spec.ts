@@ -4,6 +4,7 @@ import {
   buildSourceOrderDisplayName,
   reconcileUnitPricesToGross,
   resolveSourceOrderAmountChange,
+  resolveSourceOrderCollectionPeriods,
 } from './source-order.utils'
 
 describe('computeSourceOrderAmounts', () => {
@@ -495,6 +496,84 @@ describe('resolveSourceOrderAmountChange', () => {
     ).toEqual({
       amountInputsChanged: true,
       amountOutcomeChanged: true,
+    })
+  })
+})
+
+describe('resolveSourceOrderCollectionPeriods', () => {
+  const basePricing = {
+    adultGuestCount: 2,
+    childGuestCount: 0,
+    adultUnitPriceCents: 500000,
+    childUnitPriceCents: 0,
+    discountType: 'none' as const,
+    discountCents: 0,
+  }
+
+  it('defaults guest_only omitted periods to balance=net (create or update mode switch)', () => {
+    // update() 切换 collectionMode 且未重传期次时会传 undefined；不能因「有 existing」而跳过默认。
+    expect(
+      resolveSourceOrderCollectionPeriods({
+        ...basePricing,
+        collectionMode: 'guest_only',
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 1000000,
+    })
+  })
+
+  it('keeps explicit zeros for guest_only (validation still rejects G约定=0)', () => {
+    expect(
+      resolveSourceOrderCollectionPeriods({
+        ...basePricing,
+        collectionMode: 'guest_only',
+        depositCents: 0,
+        balanceCents: 0,
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 0,
+    })
+  })
+
+  it('does not default omitted periods for split', () => {
+    expect(
+      resolveSourceOrderCollectionPeriods({
+        ...basePricing,
+        collectionMode: 'split',
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 0,
+    })
+  })
+
+  it('zeros periods for partner_settled', () => {
+    expect(
+      resolveSourceOrderCollectionPeriods({
+        ...basePricing,
+        collectionMode: 'partner_settled',
+        depositCents: 300000,
+        balanceCents: 700000,
+      }),
+    ).toEqual({
+      depositCents: 0,
+      balanceCents: 0,
+    })
+  })
+
+  it('preserves provided split periods without falling back to stale values', () => {
+    expect(
+      resolveSourceOrderCollectionPeriods({
+        ...basePricing,
+        collectionMode: 'split',
+        depositCents: 300000,
+        balanceCents: 700000,
+      }),
+    ).toEqual({
+      depositCents: 300000,
+      balanceCents: 700000,
     })
   })
 })

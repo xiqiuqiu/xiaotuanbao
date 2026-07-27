@@ -180,6 +180,58 @@ export function computeSourceOrderAmounts(input: SourceOrderAmountInput): Source
   }
 }
 
+export type SourceOrderCollectionPeriodInput = {
+  collectionMode: SourceOrderCollectionMode
+  depositCents?: number
+  balanceCents?: number
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents?: number | null
+  childUnitPriceCents?: number | null
+  discountType: SourceOrderDiscountType
+  discountCents: number
+  fareAdjustments?: SourceOrderFareAdjustmentInput[]
+}
+
+/**
+ * Resolve deposit/balance for create and update.
+ * When guest_only and both periods are omitted, default balance to net receivable
+ * (covers create and update when collectionMode changes without re-sending periods).
+ * Explicit 0 is preserved for validation (代收场景要求 G约定>0).
+ */
+export function resolveSourceOrderCollectionPeriods(
+  input: SourceOrderCollectionPeriodInput,
+): { depositCents: number; balanceCents: number } {
+  if (input.collectionMode !== 'guest_only' && input.collectionMode !== 'split') {
+    return { depositCents: 0, balanceCents: 0 }
+  }
+
+  const depositOmitted = input.depositCents === undefined
+  const balanceOmitted = input.balanceCents === undefined
+  let depositCents = Math.max(input.depositCents ?? 0, 0)
+  let balanceCents = Math.max(input.balanceCents ?? 0, 0)
+
+  // 未传期次时：全部我方代收默认把结算金额记到尾款，避免旧调用方立刻因 G约定=0 失败。
+  // 显式传 0 仍按录入校验（代收场景要求 G约定>0）。
+  if (input.collectionMode === 'guest_only' && depositOmitted && balanceOmitted) {
+    const netReceivableCents = computeSourceOrderAmounts({
+      adultGuestCount: input.adultGuestCount,
+      childGuestCount: input.childGuestCount,
+      adultUnitPriceCents: input.adultUnitPriceCents,
+      childUnitPriceCents: input.childUnitPriceCents,
+      discountType: input.discountType,
+      discountCents: input.discountCents,
+      collectionMode: input.collectionMode,
+      depositCents: 0,
+      balanceCents: 0,
+      fareAdjustments: input.fareAdjustments,
+    }).netReceivableCents
+    balanceCents = Math.max(netReceivableCents, 0)
+  }
+
+  return { depositCents, balanceCents }
+}
+
 /**
  * Reconcile dominant unit price so count × price matches authoritative gross.
  * Used after receivable path sync updates gross without rewriting unit prices.
