@@ -211,10 +211,11 @@ describe('Departure batch finance generation (e2e)', () => {
       .post(`/api/departures/${departure.id}/generate-receivables`)
       .expect(201)
 
+    // split 只建尾款代收 1 张；generated 按节点数累计
     expect(response.body.data).toMatchObject({
       attempted: 2,
       succeeded: 1,
-      generated: 2,
+      generated: 1,
       skipped: 1,
       failed: 0,
     })

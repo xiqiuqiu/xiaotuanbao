@@ -2033,6 +2033,9 @@ describe('Finance journeys (cross-module e2e)', () => {
         adultUnitPriceCents: 90000,
         grossReceivableCents: 900000,
         netReceivableCents: 900000,
+        // guest_only 路径期望按 deposit/balance；须同步改尾款约定才会标 mismatch
+        depositCents: 0,
+        balanceCents: 900000,
         guestCollectCents: 900000,
       },
     })

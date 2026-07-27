@@ -51,6 +51,15 @@ async function fillValidCreateForm(user: ReturnType<typeof userEvent.setup>) {
   const adultPrice = screen.getByLabelText('成人团款单价（元）')
   await user.clear(adultPrice)
   await user.type(adultPrice, '1000')
+
+  // 默认全部我方代收：定金/尾款必填，且 G约定>0
+  const deposit = screen.getByLabelText('定金（元）')
+  await user.clear(deposit)
+  await user.type(deposit, '0')
+
+  const balance = screen.getByLabelText('尾款（元）')
+  await user.clear(balance)
+  await user.type(balance, '1000')
 }
 
 describe('SourceOrderDrawer save and generate', () => {
