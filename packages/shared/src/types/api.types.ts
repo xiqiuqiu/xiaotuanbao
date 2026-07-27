@@ -1307,7 +1307,7 @@ export interface PartnerOutsourceOrderListResult {
 /**
  * 《往来账确认单》明细行（对外单据，客户习惯名映射见 CONTEXT.md
  * 「Partner Reconciliation Statement」词条）。字段仍用系统规范语义命名，
- * 客户习惯名（原始应收/实际应收/客户已收押金）只出现在渲染层文案。
+ * 客户习惯名（原始应收/实际应收/客户已收押金/客户补款）只出现在渲染层文案。
  */
 export interface PartnerReconciliationStatementRow {
   sourceOrderId: string
@@ -1334,9 +1334,11 @@ export interface PartnerReconciliationStatementRow {
   discountCents: number
   /** 实际应收＝结算金额＝原始应收＋调整净额−优惠 */
   actualReceivableCents: number
-  /** 客户已收押金＝客户补款 */
+  /** 客户已收押金＝客户已收（定金）P；习惯名仅限确认单渲染层 */
   customerDepositCents: number
-  /** 游客代收＝实际应收−客户已收押金 */
+  /** 客户补款＝max(0, 实际应收−游客代收)；轧差口径，无补款时为 0 */
+  customerTopUpCents: number
+  /** 游客代收＝G约定（业务事实字段，不由押金反推） */
   guestCollectCents: number
   notes: string | null
 }
@@ -1352,6 +1354,7 @@ export interface PartnerReconciliationStatementTotals {
   discountCents: number
   actualReceivableCents: number
   customerDepositCents: number
+  customerTopUpCents: number
   guestCollectCents: number
 }
 
