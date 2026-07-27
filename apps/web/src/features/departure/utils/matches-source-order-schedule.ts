@@ -1,12 +1,11 @@
 import {
   PaymentScheduleSourceType,
+  SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
 
 const SOURCE_ORDER_SCHEDULE_TYPES = new Set<string>([
-  PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
-  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+  ...SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES,
   PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
 ])
 

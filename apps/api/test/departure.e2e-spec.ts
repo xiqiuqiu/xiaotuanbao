@@ -2372,6 +2372,7 @@ describe('Departure API (e2e)', () => {
     it('preserves a signed ungenerated source-path amount from legacy-corrupt data', async () => {
       const departure = await createReadModelDeparture('-overview-negative-source')
       const seeded = await seedDepartureData(departure.id)
+      // guest_only 未生成口径按定金/尾款路径；模拟路径金额与 S 一同腐坏。
       await prisma.sourceOrder.update({
         where: { id: seeded.sourceOrderId },
         data: {

@@ -83,6 +83,7 @@ const EMPTY_SCHEDULE_SOURCE_META: ScheduleSourceMeta = {
 
 const SOURCE_ORDER_SCHEDULE_SOURCE_TYPES = new Set<string>([
   PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+  PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
   PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
   PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
   PaymentScheduleSourceType.SOURCE_ORDER_REBATE,

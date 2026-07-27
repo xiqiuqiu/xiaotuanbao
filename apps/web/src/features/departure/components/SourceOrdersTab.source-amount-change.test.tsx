@@ -47,6 +47,8 @@ vi.mock('./SourceOrderDrawer', () => ({
       pathBaseline: {
         guestCollectCents: number
         partnerCollectedCents: number
+        depositCents: number
+        balanceCents: number
       } | null,
     ) => void
     onClose: () => void
@@ -75,6 +77,8 @@ vi.mock('./SourceOrderDrawer', () => ({
               {
                 guestCollectCents: editing.guestCollectCents,
                 partnerCollectedCents: editing.partnerCollectedCents,
+                depositCents: editing.depositCents,
+                balanceCents: editing.balanceCents,
               },
             )
           }
