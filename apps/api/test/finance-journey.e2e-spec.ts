@@ -2897,7 +2897,7 @@ describe('Finance journeys (cross-module e2e)', () => {
    * #93 explicit receivable amount adjustment after finance history.
    * Seam: HTTP APIs across source-order / receivable schedule / departure read model.
    * Locks guest-collection, customer-settlement, and split-path success + rejection
-   * matrix; path-local source sync; activity timeline; no regenerate / sibling mutation.
+   * matrix; path-local source sync; activity timeline；调低 G 后可补全客户补款，齐全后再生成 409。
    */
   it('adjusts guest-collection receivable agreed amount with reason while keeping original node (#93)', async () => {
     const obligationCents = 1_000_000
@@ -3086,6 +3086,16 @@ describe('Finance journeys (cross-module e2e)', () => {
       verifiedReceivableCents: 0,
     })
 
+    // 调低 G约定 后 S−G约定>0，补全应收应补建客户补款；路径齐全后再生成则 409。
+    const topUpGenerated = await authRequest(app, coordinatorToken)
+      .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
+      .expect(201)
+    expect(topUpGenerated.body.data.schedules).toHaveLength(1)
+    expect(topUpGenerated.body.data.schedules[0]).toMatchObject({
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      title: '客户补款',
+      amountCents: obligationCents - adjustedCents,
+    })
     await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrderId}/generate-receivables`)
       .expect(409)
