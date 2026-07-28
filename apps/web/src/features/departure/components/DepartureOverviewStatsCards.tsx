@@ -18,6 +18,7 @@ import { TransactionDirection } from '@xiaotuanbao/shared'
 import type { DepartureDetail, DepartureOverviewAnomaly } from '@xiaotuanbao/shared'
 import { formatCents as formatUnsignedCents } from '../catalog'
 import { DepartureTransactionsLink } from '../utils/departure-transactions-link'
+import { formatReceivableBalanceAnomalyCopy } from '../utils/format-receivable-balance-anomaly'
 import styles from './DepartureOverviewStatsCards.module.css'
 
 const { Text } = Typography
@@ -226,12 +227,13 @@ function SummaryCard({
 }
 
 function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly }) {
+  const copy = formatReceivableBalanceAnomalyCopy(anomaly)
   return (
     <Alert
       type="error"
       showIcon
-      title="收款守恒异常"
-      description={`组成合计 ${formatCents(anomaly.actualCents)}，应为 ${formatCents(anomaly.expectedCents)}，差额 ${formatCents(anomaly.differenceCents)}`}
+      title={copy.title}
+      description={copy.description}
       style={{ marginTop: 12 }}
     />
   )

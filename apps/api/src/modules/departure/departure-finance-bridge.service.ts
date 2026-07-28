@@ -86,8 +86,12 @@ export interface SourceOrderFinanceMeta {
   receivableStatus: SourceOrderReceivableStatus
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
+  /** 约定应收路径尚有缺失（如旧规则只建了尾款、未建客户补款） */
+  hasIncompleteReceivablePaths: boolean
   rebateCents: number
   rebateStatus: SegmentPayableStatus
+  /** 当前有效返利应付 scheduleNo；无有效返利时为 null */
+  rebateScheduleNo: string | null
 }
 
 type SegmentResourceWithRelations = SegmentResource & {
@@ -161,18 +165,29 @@ export class DepartureFinanceBridgeService {
           sourceOrderId,
           tx,
         )
-        if (existingSchedules.length > 0) {
+        const activeExisting = existingSchedules.filter((schedule) => schedule.cancelledAt == null)
+        const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
+        const expectedPaths = this.buildReceivablePaths(lockedOrder).filter(
+          (path) => path.amountCents > 0,
+        )
+        const activeByType = new Map(
+          activeExisting.map((schedule) => [schedule.sourceType, schedule]),
+        )
+        const missingPaths = expectedPaths.filter((path) => !activeByType.has(path.sourceType))
+
+        // 有效路径齐全 → 拒绝；有效路径为空但曾有过应收（含已关闭）→ 拒绝；仅缺路径 → 补建。
+        if (activeExisting.length > 0 && missingPaths.length === 0) {
+          throw new ConflictException('当前客源单已生成应收，不能再次生成')
+        }
+        if (activeExisting.length === 0 && existingSchedules.length > 0) {
           throw new ConflictException('当前客源单已生成应收，不能再次生成')
         }
 
         const createdSchedules: PaymentScheduleSummary[] = []
-        const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
+        const pathsToCreate =
+          activeExisting.length === 0 ? expectedPaths : missingPaths
 
-        for (const path of this.buildReceivablePaths(lockedOrder)) {
-          if (path.amountCents <= 0) {
-            continue
-          }
-
+        for (const path of pathsToCreate) {
           const created = await this.paymentScheduleService.create(
             organizationId,
             PaymentScheduleDirection.receivable,
@@ -616,8 +631,10 @@ export class DepartureFinanceBridgeService {
         receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
         hasSourceAmountMismatch: false,
         amountFieldsLocked: false,
+        hasIncompleteReceivablePaths: false,
         rebateCents: 0,
         rebateStatus: SegmentPayableStatus.NOT_GENERATED,
+        rebateScheduleNo: null,
       }
     }
 
@@ -629,11 +646,13 @@ export class DepartureFinanceBridgeService {
         receivableStatus: SourceOrderReceivableStatus.CLOSED,
         hasSourceAmountMismatch: false,
         amountFieldsLocked: true,
+        hasIncompleteReceivablePaths: false,
         rebateCents: 0,
         rebateStatus:
           rebateSchedules.length > 0
             ? SegmentPayableStatus.CLOSED
             : SegmentPayableStatus.NOT_GENERATED,
+        rebateScheduleNo: null,
       }
     }
 
@@ -696,10 +715,25 @@ export class DepartureFinanceBridgeService {
       }
     }
 
-    const { rebateCents, rebateStatus } = deriveSourceOrderRebateMeta(
+    const { rebateCents, rebateStatus, rebateScheduleNo } = deriveSourceOrderRebateMeta(
       activeRebates,
       rebateSchedules.length > 0,
       settledMap,
+    )
+
+    const expectedPaths = buildSourceOrderReceivablePaths({
+      sourceOrderId,
+      partnerId: 'partner',
+      partnerName: '',
+      displayName: '',
+      collectionMode: amounts.collectionMode,
+      depositCents: amounts.depositCents,
+      balanceCents: amounts.balanceCents,
+      netReceivableCents: amounts.netReceivableCents,
+    }).filter((path) => path.amountCents > 0)
+    const activeSourceTypes = new Set(activeSchedules.map((schedule) => schedule.sourceType))
+    const hasIncompleteReceivablePaths = expectedPaths.some(
+      (path) => !activeSourceTypes.has(path.sourceType),
     )
 
     return {
@@ -707,8 +741,10 @@ export class DepartureFinanceBridgeService {
       receivableStatus,
       hasSourceAmountMismatch,
       amountFieldsLocked,
+      hasIncompleteReceivablePaths,
       rebateCents,
       rebateStatus,
+      rebateScheduleNo,
     }
   }
 
@@ -1397,13 +1433,18 @@ function deriveSourceOrderRebateMeta(
   activeRebates: PaymentSchedule[],
   hadRebateSchedule: boolean,
   settledMap: Map<string, number>,
-): { rebateCents: number; rebateStatus: SegmentPayableStatus } {
+): {
+  rebateCents: number
+  rebateStatus: SegmentPayableStatus
+  rebateScheduleNo: string | null
+} {
   if (activeRebates.length === 0) {
     return {
       rebateCents: 0,
       rebateStatus: hadRebateSchedule
         ? SegmentPayableStatus.CLOSED
         : SegmentPayableStatus.NOT_GENERATED,
+      rebateScheduleNo: null,
     }
   }
 
@@ -1431,11 +1472,13 @@ function deriveSourceOrderRebateMeta(
     }
   }
 
+  const rebateScheduleNo = activeRebates[0]?.scheduleNo ?? null
+
   if (allPaid) {
-    return { rebateCents, rebateStatus: SegmentPayableStatus.PAID }
+    return { rebateCents, rebateStatus: SegmentPayableStatus.PAID, rebateScheduleNo }
   }
   if (anyPartial) {
-    return { rebateCents, rebateStatus: SegmentPayableStatus.PARTIAL }
+    return { rebateCents, rebateStatus: SegmentPayableStatus.PARTIAL, rebateScheduleNo }
   }
-  return { rebateCents, rebateStatus: SegmentPayableStatus.PENDING }
+  return { rebateCents, rebateStatus: SegmentPayableStatus.PENDING, rebateScheduleNo }
 }

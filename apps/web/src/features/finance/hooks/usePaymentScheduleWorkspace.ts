@@ -46,6 +46,8 @@ export type UsePaymentScheduleWorkspaceOptions = {
   initialCounterpartyKeyword?: string
   /** 精确单号（scheduleNo）；服务端筛选，计入列表 total。 */
   scheduleNo?: string
+  /** 客源管理「查看应收」：按客源单 sourceId 客户端过滤（高亮清除后仍保留）。 */
+  filterSourceOrderId?: string
   /** 工作台应收跟进窗口；服务端筛选，计入列表 total。 */
   receivableFollowUp?:
     | 'overdue'
@@ -76,6 +78,7 @@ export function usePaymentScheduleWorkspace({
   highlightSegmentResourceId,
   initialCounterpartyKeyword = '',
   scheduleNo,
+  filterSourceOrderId,
   receivableFollowUp,
   payableBalance,
   onHighlightConsumed,
@@ -139,21 +142,21 @@ export function usePaymentScheduleWorkspace({
   const hasClientFilters = Boolean(
     debouncedKeyword ||
     (statusFilter && statusFilter !== 'voided') ||
-    dueDateRange,
+    dueDateRange ||
+    filterSourceOrderId,
   )
   const locatingFinanceRow =
     isDepartureScope &&
-    ((isReceivable && Boolean(highlightSourceOrderId)) ||
-      (!isReceivable && Boolean(highlightSegmentResourceId)))
+    (Boolean(highlightSourceOrderId) || Boolean(highlightSegmentResourceId))
   // Latch expanded fetch for the rest of this mount once locate runs. Clearing the
   // one-shot highlight must not shrink pageSize (100→10) and refetch the same list.
   const locateExpandedLatchRef = useRef(false)
 
   useEffect(() => {
-    if (locatingFinanceRow) {
+    if (locatingFinanceRow || filterSourceOrderId) {
       locateExpandedLatchRef.current = true
     }
-  }, [locatingFinanceRow])
+  }, [locatingFinanceRow, filterSourceOrderId])
 
   const useExpandedFetch =
     hasClientFilters || locatingFinanceRow || locateExpandedLatchRef.current
@@ -300,7 +303,6 @@ export function usePaymentScheduleWorkspace({
 
   const { locateSourceOrderId, locateSegmentResourceId, locateFlashActive, pendingPage } =
     usePaymentScheduleLocate({
-      isReceivable,
       highlightSourceOrderId,
       highlightSegmentResourceId,
       onHighlightConsumed,
@@ -311,6 +313,7 @@ export function usePaymentScheduleWorkspace({
       statusFilter,
       dueDateRange,
       pageSize,
+      filterSourceOrderId,
       applyClientFilters: applyPaymentScheduleClientFilters,
     })
 
@@ -356,8 +359,15 @@ export function usePaymentScheduleWorkspace({
         debouncedKeyword,
         statusFilter,
         dueDateRange,
+        filterSourceOrderId,
       ),
-    [schedulesResult?.items, debouncedKeyword, statusFilter, dueDateRange],
+    [
+      schedulesResult?.items,
+      debouncedKeyword,
+      statusFilter,
+      dueDateRange,
+      filterSourceOrderId,
+    ],
   )
 
   const tableItems = useExpandedFetch

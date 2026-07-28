@@ -64,9 +64,11 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    hasIncompleteReceivablePaths: false,
     estimatedRebateCents: 0,
     rebateCents: 0,
     rebateStatus: 'not_generated',
+    rebateScheduleNo: null,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -123,6 +125,57 @@ describe('SourceOrdersTab 查看应收 navigation', () => {
       params: { departureId: 'departure-1' },
       search: {
         tab: 'receivables',
+        highlightSourceOrderId: 'order-1',
+        sourceId: 'order-1',
+      },
+    })
+  })
+})
+
+describe('SourceOrdersTab 查看返利 navigation', () => {
+  afterEach(() => {
+    cleanup()
+    navigate.mockReset()
+    listSourceOrders.mockReset()
+  })
+
+  it('switches to payables tab with scheduleNo filter for that rebate only', async () => {
+    const user = userEvent.setup()
+    listSourceOrders.mockResolvedValue({
+      items: [
+        baseOrder({
+          rebateCents: 100000,
+          rebateStatus: 'pending',
+          rebateScheduleNo: 'AP2026070099',
+        }),
+      ],
+      summary: {
+        orderCount: 1,
+        totalGuests: 10,
+        partnerCount: 1,
+        totalGrossReceivableCents: 0,
+        totalFareAdjustmentNetCents: 0,
+        totalDiscountCents: 0,
+        totalNetReceivableCents: 1000000,
+        totalGuestCollectCents: 1000000,
+      },
+      total: 1,
+    })
+
+    renderTab()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '查看返利' })).toBeTruthy()
+    })
+
+    await user.click(screen.getByRole('button', { name: '查看返利' }))
+
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure/$departureId',
+      params: { departureId: 'departure-1' },
+      search: {
+        tab: 'payables',
+        scheduleNo: 'AP2026070099',
         highlightSourceOrderId: 'order-1',
         counterpartyKeyword: '杭州同行',
       },
@@ -191,6 +244,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
           balanceCents: 600000,
           partnerCollectedCents: 0,
           guestCollectCents: 700000,
+          netReceivableCents: 700000,
           receivableStatus: 'not_generated',
           hasPaymentSchedule: false,
         }),
@@ -201,6 +255,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
           balanceCents: 600000,
           partnerCollectedCents: 400000,
           guestCollectCents: 600000,
+          netReceivableCents: 600000,
           receivableStatus: 'not_generated',
           hasPaymentSchedule: false,
         }),
@@ -212,7 +267,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
         totalGrossReceivableCents: 0,
         totalFareAdjustmentNetCents: 0,
         totalDiscountCents: 0,
-        totalNetReceivableCents: 2000000,
+        totalNetReceivableCents: 1300000,
         totalGuestCollectCents: 1300000,
       },
       total: 2,
@@ -236,10 +291,10 @@ describe('SourceOrdersTab 批量生成应收', () => {
       expect(confirmConfig).toMatchObject({ title: '批量生成应收', okText: '生成' })
 
       render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
-      // guest_only → 2 paths; split → 1 path (balance only)
+      // guest_only G=S → 2 paths; split G=S → 1 path (balance only)
       const summary = screen.getByText('确认后将生成 3 条应收记录')
       const explanation = screen.getByText(
-        '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收。',
+        '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收；当代收不足以覆盖结算金额时同批生成客户补款。',
       )
       expect(screen.queryByRole('alert')).toBeNull()
       expect(explanation).toHaveClass('ant-typography-secondary')

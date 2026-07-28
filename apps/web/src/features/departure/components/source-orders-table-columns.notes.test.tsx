@@ -13,7 +13,7 @@ function stubMutation(): UseMutationResult<unknown, Error, string, unknown> {
 }
 
 /** 与 SourceOrdersTab Table scroll.x 对齐；备注列无 width 时剩余空间会挤扁表头「备注」。 */
-const SOURCE_ORDERS_TABLE_SCROLL_X = 2020
+const SOURCE_ORDERS_TABLE_SCROLL_X = 2280
 
 describe('source orders notes column', () => {
   it('备注列有明确宽度，且全部列宽之和不超过表格横向滚动宽度', () => {
@@ -25,6 +25,7 @@ describe('source orders notes column', () => {
       onOpen: noop,
       onOpenGuests: noop,
       onViewReceivables: noop,
+      onViewRebate: noop,
     })
 
     const notesColumn = columns.find((column) => column.title === '备注')

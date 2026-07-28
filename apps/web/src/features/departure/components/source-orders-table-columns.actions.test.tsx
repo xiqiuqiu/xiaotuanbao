@@ -36,6 +36,7 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     hasPaymentSchedule: false,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    hasIncompleteReceivablePaths: false,
     estimatedRebateCents: 0,
     rebateCents: 0,
     rebateStatus: 'not_generated',
@@ -64,9 +65,11 @@ function renderActions(
     canEdit?: boolean
     canGenerate?: boolean
     onViewReceivables?: (record: SourceOrderSummary) => void
+    onViewRebate?: (record: SourceOrderSummary) => void
   } = {},
 ) {
   const onViewReceivables = options.onViewReceivables ?? vi.fn()
+  const onViewRebate = options.onViewRebate ?? vi.fn()
   const columns = buildSourceOrdersColumns({
     canEdit: options.canEdit ?? true,
     canGenerate: options.canGenerate ?? true,
@@ -75,6 +78,7 @@ function renderActions(
     onOpen: vi.fn(),
     onOpenGuests: vi.fn(),
     onViewReceivables,
+    onViewRebate,
   })
 
   render(
@@ -83,7 +87,7 @@ function renderActions(
     </ConfigProvider>,
   )
 
-  return { onViewReceivables }
+  return { onViewReceivables, onViewRebate }
 }
 
 describe('source orders action column', () => {
@@ -117,6 +121,20 @@ describe('source orders action column', () => {
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
+  })
+
+  it('shows 补全应收 and 查看应收 when receivable paths are incomplete', () => {
+    renderActions(
+      baseOrder({
+        receivableStatus: 'pending',
+        hasPaymentSchedule: true,
+        hasIncompleteReceivablePaths: true,
+      }),
+    )
+
+    expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '补全应收' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
   })
 
   it('shows 查看应收 for closed receivable status and keeps 编辑 when writable', () => {
@@ -165,6 +183,7 @@ describe('source orders action column', () => {
       onOpen,
       onOpenGuests: vi.fn(),
       onViewReceivables: vi.fn(),
+      onViewRebate: vi.fn(),
     })
 
     render(
@@ -188,5 +207,46 @@ describe('source orders action column', () => {
     await user.click(screen.getByRole('button', { name: '查看应收' }))
 
     expect(onViewReceivables).toHaveBeenCalledWith(order)
+  })
+
+  it('shows 查看返利 when rebate status is 待付', () => {
+    renderActions(
+      baseOrder({
+        receivableStatus: 'settled',
+        hasPaymentSchedule: true,
+        rebateCents: 100000,
+        rebateStatus: 'pending',
+      }),
+    )
+
+    expect(screen.getByRole('button', { name: '查看返利' })).toBeTruthy()
+  })
+
+  it('hides 查看返利 when rebate is not yet generated', () => {
+    renderActions(
+      baseOrder({
+        receivableStatus: 'settled',
+        hasPaymentSchedule: true,
+        estimatedRebateCents: 100000,
+        rebateStatus: 'not_generated',
+      }),
+    )
+
+    expect(screen.queryByRole('button', { name: '查看返利' })).toBeNull()
+  })
+
+  it('calls onViewRebate when 查看返利 is clicked', async () => {
+    const user = userEvent.setup()
+    const order = baseOrder({
+      receivableStatus: 'settled',
+      hasPaymentSchedule: true,
+      rebateCents: 100000,
+      rebateStatus: 'pending',
+    })
+    const { onViewRebate } = renderActions(order)
+
+    await user.click(screen.getByRole('button', { name: '查看返利' }))
+
+    expect(onViewRebate).toHaveBeenCalledWith(order)
   })
 })

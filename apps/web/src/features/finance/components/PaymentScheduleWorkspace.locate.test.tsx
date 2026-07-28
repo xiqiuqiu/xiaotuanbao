@@ -87,7 +87,10 @@ function renderReceivableWorkspace(highlightSourceOrderId?: string) {
   return { onHighlightConsumed }
 }
 
-function renderPayableWorkspace(highlightSegmentResourceId?: string) {
+function renderPayableWorkspace(options?: {
+  highlightSegmentResourceId?: string
+  highlightSourceOrderId?: string
+}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -100,7 +103,8 @@ function renderPayableWorkspace(highlightSegmentResourceId?: string) {
           scope="departure"
           direction="payable"
           departureId="departure-1"
-          highlightSegmentResourceId={highlightSegmentResourceId}
+          highlightSegmentResourceId={options?.highlightSegmentResourceId}
+          highlightSourceOrderId={options?.highlightSourceOrderId}
           onHighlightConsumed={onHighlightConsumed}
         />
       </ConfigProvider>
@@ -202,7 +206,7 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
       pageSize: 10,
     })
 
-    renderPayableWorkspace('resource-1')
+    renderPayableWorkspace({ highlightSegmentResourceId: 'resource-1' })
 
     await waitFor(() => {
       expect(screen.getByText('AP2026070001')).toBeTruthy()
@@ -214,6 +218,50 @@ describe('PaymentScheduleWorkspace locate highlight', () => {
 
     expect(matched?.className).toContain(styles.locateFlash)
     expect(closed?.className).toContain(styles.locateFlash)
+    expect(other?.className).not.toContain(styles.locateFlash)
+  })
+
+  it('marks matching source-order rebate payable rows with locate flash class', async () => {
+    listDeparturePayables.mockResolvedValue({
+      items: [
+        schedule({
+          id: 'rebate-1',
+          direction: 'payable',
+          scheduleNo: 'AP2026070091',
+          title: '客源返利',
+          counterpartyType: 'partner',
+          counterpartyId: 'partner-1',
+          counterpartyName: '杭州同行',
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+          sourceId: 'order-1',
+        }),
+        schedule({
+          id: 'rebate-2',
+          direction: 'payable',
+          scheduleNo: 'AP2026070092',
+          title: '客源返利',
+          counterpartyType: 'partner',
+          counterpartyId: 'partner-2',
+          counterpartyName: '上海同行',
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+          sourceId: 'order-2',
+        }),
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 10,
+    })
+
+    renderPayableWorkspace({ highlightSourceOrderId: 'order-1' })
+
+    await waitFor(() => {
+      expect(screen.getByText('AP2026070091')).toBeTruthy()
+    })
+
+    const matched = screen.getByText('AP2026070091').closest('tr')
+    const other = screen.getByText('AP2026070092').closest('tr')
+
+    expect(matched?.className).toContain(styles.locateFlash)
     expect(other?.className).not.toContain(styles.locateFlash)
   })
 })

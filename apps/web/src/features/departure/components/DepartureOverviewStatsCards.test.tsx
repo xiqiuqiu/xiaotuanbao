@@ -519,7 +519,7 @@ describe('DepartureOverviewStatsCards', () => {
     expect(tooltip).not.toHaveTextContent(equation)
   })
 
-  it('守恒异常不阻止读取，并在对应卡片展示原始差额', () => {
+  it('应收金额不一致时不阻止读取，并用白话展示少了/多出', () => {
     renderCards(
       makeDeparture({
         overviewStats: {
@@ -537,9 +537,11 @@ describe('DepartureOverviewStatsCards', () => {
     )
 
     const receiptCard = screen.getByRole('region', { name: '团款收款进度（数据异常）' })
-    expect(within(receiptCard).getByText('收款守恒异常')).toBeInTheDocument()
+    expect(within(receiptCard).getByText('应收与结算金额不一致')).toBeInTheDocument()
     expect(
-      within(receiptCard).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00'),
+      within(receiptCard).getByText(
+        '已生成应收合计 ¥11,000.00，结算金额合计 ¥10,000.00，多出 ¥1,000.00',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByText('资金情况')).toBeInTheDocument()
   })

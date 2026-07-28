@@ -201,7 +201,7 @@ export class DepartureReadModelService {
           continue
         }
 
-        // 代收场景：未生成只计缺失的定金/尾款 Guest 期次；P 不开客户补款应收。
+        // 代收场景：未生成计缺失的定金/尾款 Guest 期次；S−G约定>0 时另计客户补款。
         // 不加 >0 门槛，以保全 legacy-corrupt 负金额（与 partner_settled 的 net 口径一致）。
         if (fact.collectionMode === 'guest_only' && !depositState?.hasSchedule) {
           sourceFacts.sourceReceivableUngeneratedCents += fact.depositCents
@@ -211,6 +211,10 @@ export class DepartureReadModelService {
           !balanceState?.hasSchedule
         ) {
           sourceFacts.sourceReceivableUngeneratedCents += fact.balanceCents
+        }
+        const agreedTopUpCents = Math.max(0, fact.netReceivableCents - fact.guestCollectCents)
+        if (agreedTopUpCents > 0 && !customerState?.hasSchedule) {
+          sourceFacts.sourceReceivableUngeneratedCents += agreedTopUpCents
         }
       }
       for (const [departureId, orders] of collectionInputsByDeparture) {

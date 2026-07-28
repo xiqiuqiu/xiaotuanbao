@@ -132,6 +132,7 @@ describe('renderSourceOrdersTableSummary', () => {
       onOpen: () => undefined,
       onOpenGuests: () => undefined,
       onViewReceivables: () => undefined,
+      onViewRebate: () => undefined,
     })
 
     render(

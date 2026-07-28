@@ -140,6 +140,7 @@ const departureDetailRoute = createRoute({
     highlightSegmentResourceId?: string
     highlightDepartureResourceId?: string
     counterpartyKeyword?: string
+    sourceId?: string
     direction?: string
     transactionNo?: string
     scheduleNo?: string
@@ -151,6 +152,7 @@ const departureDetailRoute = createRoute({
     const scheduleNo = typeof search.scheduleNo === 'string' ? search.scheduleNo.trim() : ''
     const counterpartyKeyword =
       typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword.trim() : ''
+    const sourceId = typeof search.sourceId === 'string' ? search.sourceId.trim() : ''
     const listReturn =
       typeof search.listReturn === 'string' && search.listReturn.trim()
         ? search.listReturn.trim()
@@ -171,6 +173,7 @@ const departureDetailRoute = createRoute({
           ? search.highlightDepartureResourceId
           : undefined,
       ...(counterpartyKeyword ? { counterpartyKeyword } : {}),
+      ...(sourceId ? { sourceId } : {}),
       ...(direction ? { direction } : {}),
       ...(transactionNo ? { transactionNo } : {}),
       ...(scheduleNo ? { scheduleNo } : {}),

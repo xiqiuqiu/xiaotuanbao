@@ -77,7 +77,7 @@ describe('resolveDepartureNextAction', () => {
                 code: 'receivable_balance',
                 expectedCents: 100_000,
                 actualCents: 80_000,
-                differenceCents: 20_000,
+                differenceCents: -20_000,
               },
             ],
           }),
@@ -87,10 +87,10 @@ describe('resolveDepartureNextAction', () => {
 
       expect(result).toMatchObject({
         type: 'warning',
+        title: '应收与结算金额不一致',
+        description: '已生成应收合计 ¥800.00，结算金额合计 ¥1,000.00，少了 ¥200.00',
         action: { tab: 'receivables' },
       })
-      expect(result?.title).toMatch(/异常/)
-      expect(result?.description).toMatch(/¥/)
     })
   })
 

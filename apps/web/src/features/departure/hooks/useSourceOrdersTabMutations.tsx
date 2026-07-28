@@ -288,7 +288,7 @@ export function confirmBatchGenerateReceivables(
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收。
+          「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收；当代收不足以覆盖结算金额时同批生成客户补款。
         </Typography.Text>
       </Space>
     ),
@@ -302,7 +302,10 @@ export function countPendingReceivables(
   orders: SourceOrderSummary[] | undefined,
 ): number {
   return (orders ?? []).reduce((count, order) => {
-    if (order.receivableStatus !== SourceOrderReceivableStatus.NOT_GENERATED) {
+    const needsGeneration =
+      order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
+      order.hasIncompleteReceivablePaths
+    if (!needsGeneration) {
       return count
     }
     return (

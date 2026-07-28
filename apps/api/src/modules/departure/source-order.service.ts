@@ -353,8 +353,10 @@ export class SourceOrderService {
       receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: false,
       amountFieldsLocked: false,
+      hasIncompleteReceivablePaths: false,
       rebateCents: 0,
       rebateStatus: SegmentPayableStatus.NOT_GENERATED,
+      rebateScheduleNo: null,
     })
   }
 
@@ -393,29 +395,10 @@ export class SourceOrderService {
       orderBy: { createdAt: 'asc' },
     })
 
-    const existingScheduleSourceIds = new Set(
-      (
-        await this.prisma.paymentSchedule.findMany({
-          where: {
-            organizationId,
-            departureId,
-            direction: PaymentScheduleDirection.receivable,
-            sourceId: { in: orders.map((order) => order.id) },
-          },
-          select: { sourceId: true },
-          distinct: ['sourceId'],
-        })
-      ).map((row) => row.sourceId),
-    )
-
     const items: BatchFinanceGenerationItem[] = []
 
     for (const order of orders) {
       const sourceLabel = order.partner.name
-
-      if (existingScheduleSourceIds.has(order.id)) {
-        continue
-      }
 
       if (order.partnerCollectedCents <= 0 && order.guestCollectCents <= 0) {
         items.push({
@@ -428,6 +411,7 @@ export class SourceOrderService {
       }
 
       try {
+        // generateReceivables 会补建缺失约定路径；路径齐全时 409 → skipped。
         const generated = await this.generateReceivables(organizationId, order.id)
         items.push({
           sourceId: order.id,
@@ -955,9 +939,11 @@ export class SourceOrderService {
       hasPaymentSchedule: scheduleMeta?.hasSchedule ?? false,
       hasSourceAmountMismatch: scheduleMeta?.hasSourceAmountMismatch ?? false,
       amountFieldsLocked: scheduleMeta?.amountFieldsLocked ?? false,
+      hasIncompleteReceivablePaths: scheduleMeta?.hasIncompleteReceivablePaths ?? false,
       estimatedRebateCents: Math.max(0, order.guestCollectCents - order.netReceivableCents),
       rebateCents: scheduleMeta?.rebateCents ?? 0,
       rebateStatus: scheduleMeta?.rebateStatus ?? SegmentPayableStatus.NOT_GENERATED,
+      rebateScheduleNo: scheduleMeta?.rebateScheduleNo ?? null,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
     }

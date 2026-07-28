@@ -180,26 +180,27 @@ export type SourceOrderAmountPreviewModel = {
   estimatedRebateCents: number
 }
 
-/** Footer / preview copy：团款 / 代收约定 / 往来结果分区（仅事实行，不放计划期说明以免干扰操作）。 */
+/** Footer / preview copy：客户结算 / 代收约定 / 预计结算差额（仅事实行）。 */
 export function formatSourceOrderAmountSummary(
   amounts: SourceOrderAmountPreviewModel,
   formatCents: (cents: number) => string,
 ): string {
-  const lines = [`【团款】结算金额 ${formatCents(amounts.netReceivableCents)}`]
+  const lines = [`【客户结算】结算金额 ${formatCents(amounts.netReceivableCents)}`]
 
   if (amounts.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
     lines.push(
       `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)}（全部客户结算）`,
     )
-    lines.push('【往来结果】无代收轧差')
+    lines.push('【预计结算差额】无代收轧差')
     return lines.join('\n')
   }
 
+  // 成对指标与分区标签同行，避免无【】续行看起来左偏错位。
   lines.push(
     `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)} · 我方代收 ${formatCents(amounts.guestCollectCents)}`,
   )
   lines.push(
-    `【往来结果】预估客户补款 ${formatCents(amounts.estimatedCustomerTopUpCents)} · 预计返利 ${formatCents(amounts.estimatedRebateCents)}`,
+    `【预计结算差额】客户补款 ${formatCents(amounts.estimatedCustomerTopUpCents)} · 预计返利 ${formatCents(amounts.estimatedRebateCents)}`,
   )
 
   return lines.join('\n')
