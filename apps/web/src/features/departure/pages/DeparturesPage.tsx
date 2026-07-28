@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { Alert, Button, Card, Segmented, Space, Table, message } from 'antd'
+import { Alert, App, Button, Card, Segmented, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -132,6 +132,7 @@ function departuresPageReducer(
 }
 
 export function DeparturesPage() {
+  const { message } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const search = useSearch({ strict: false }) as DepartureListSearch

@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
-import { message } from 'antd'
+import { App } from 'antd'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   adjustScheduleAmount,
@@ -81,6 +81,7 @@ export function usePaymentScheduleMutations({
   onAdjustSuccess,
   onEditSuccess,
 }: UsePaymentScheduleMutationsOptions) {
+  const { message } = App.useApp()
   const confirmMutation = useMutation({
     mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
       if (!activeSchedule) {

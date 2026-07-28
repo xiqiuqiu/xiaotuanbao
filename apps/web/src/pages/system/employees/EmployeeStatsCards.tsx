@@ -21,7 +21,7 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
           <Statistic
             title="启用"
             value={stats?.enabled ?? 0}
-            valueStyle={{ color: token.colorSuccess }}
+            styles={{ content: { color: token.colorSuccess } }}
           />
         </Card>
       </Col>
@@ -30,7 +30,7 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
           <Statistic
             title="停用"
             value={stats?.disabled ?? 0}
-            valueStyle={{ color: token.colorError }}
+            styles={{ content: { color: token.colorError } }}
           />
         </Card>
       </Col>

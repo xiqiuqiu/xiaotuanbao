@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { message } from 'antd'
+import { App } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
@@ -41,6 +41,7 @@ export function useTransactionWorkspaceMutations({
   onVoidSuccess,
   onVerifySuccess,
 }: UseTransactionWorkspaceMutationsOptions) {
+  const { message } = App.useApp()
   const queryClient = useQueryClient()
 
   const invalidateLists = useCallback(() => {

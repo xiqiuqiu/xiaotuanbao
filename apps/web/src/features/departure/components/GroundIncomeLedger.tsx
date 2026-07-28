@@ -204,7 +204,7 @@ export function GroundIncomeLedger({
       <Drawer
         title={editing ? '编辑团上收入' : '添加团上收入'}
         open={drawerOpen}
-        width={480}
+        size={480}
         destroyOnHidden
         onClose={closeDrawer}
         extra={

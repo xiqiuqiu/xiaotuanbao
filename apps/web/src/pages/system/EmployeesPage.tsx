@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Table, message } from 'antd'
+import { App, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EmployeeSummary } from '@/types/api'
@@ -25,6 +25,7 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { buildEmployeeColumns } from './employees/employee-columns'
 
 export function EmployeesPage() {
+  const { message, modal } = App.useApp()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<EmployeeFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -160,7 +161,7 @@ export function EmployeesPage() {
 
   const handleDisable = useCallback(
     (employee: EmployeeSummary) => {
-      Modal.confirm({
+      modal.confirm({
         title: '确认停用员工？',
         content: `停用后「${employee.name}」将无法登录，可在编辑中重新启用。`,
         okText: '停用',
@@ -169,7 +170,7 @@ export function EmployeesPage() {
         onOk: () => disableMutation.mutateAsync(employee.id),
       })
     },
-    [disableMutation],
+    [disableMutation, modal],
   )
 
   const columns = useMemo(

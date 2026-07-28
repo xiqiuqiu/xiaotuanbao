@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Button, DatePicker, Drawer, Form, Input, Select, Space, message } from 'antd'
+import { Alert, App, Button, DatePicker, Drawer, Form, Input, Select, Space } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -37,6 +37,7 @@ export function DepartureOverviewDrawer({
   onClose,
   onUpdated,
 }: DepartureOverviewDrawerProps) {
+  const { message } = App.useApp()
   const queryClient = useQueryClient()
   const [driverSearch, setDriverSearch] = useState('')
   const [guideSearch, setGuideSearch] = useState('')
@@ -153,7 +154,7 @@ export function DepartureOverviewDrawer({
     <Drawer
       title="编辑基础信息"
       open={open}
-      width="min(520px, 100vw)"
+      size="min(520px, 100vw)"
       onClose={handleClose}
       destroyOnHidden
       footer={
@@ -265,7 +266,7 @@ export function DepartureOverviewDrawer({
           label="发团负责人"
           rules={[{ required: true, message: '请选择负责人' }]}
         >
-          <Select options={employeeOptions} showSearch optionFilterProp="label" />
+          <Select options={employeeOptions} showSearch={{ optionFilterProp: 'label' }} />
         </Form.Item>
 
         <Form.Item
@@ -275,9 +276,7 @@ export function DepartureOverviewDrawer({
         >
           <Select
             allowClear
-            showSearch
-            filterOption={false}
-            onSearch={setDriverSearch}
+            showSearch={{ filterOption: false, onSearch: setDriverSearch }}
             loading={isDriverSuppliersLoading}
             placeholder="选择含「用车」类别的供应商"
             options={driverOptions}
@@ -288,9 +287,7 @@ export function DepartureOverviewDrawer({
         <Form.Item name="guideSupplierId" label="导游">
           <Select
             allowClear
-            showSearch
-            filterOption={false}
-            onSearch={setGuideSearch}
+            showSearch={{ filterOption: false, onSearch: setGuideSearch }}
             loading={isGuideSuppliersLoading}
             placeholder="选择含「导游」类别的供应商"
             options={guideOptions}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Dropdown, Form, Input, Modal, Space, Table, Tag, Upload, message } from 'antd'
+import { App, Button, Card, Dropdown, Form, Input, Modal, Space, Table, Tag, Upload } from 'antd'
 import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
@@ -126,6 +126,7 @@ function buildProductColumns({
 }
 
 export function ProductsPage() {
+  const { message } = App.useApp()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const listSearch = useSearch({ strict: false }) as ProductListSearch
@@ -343,12 +344,14 @@ export function ProductsPage() {
           columns={columns}
           dataSource={productsResult?.items ?? []}
           loading={hardLoading}
+          scroll={{ x: 'max-content' }}
           className={listSoftFetchingClassName(softFetching)}
           pagination={{
             current: page,
             pageSize,
             total: productsResult?.total ?? 0,
             showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 条`,
             onChange: (nextPage, nextPageSize) => {
               setPage(nextPage)
               setPageSize(nextPageSize)

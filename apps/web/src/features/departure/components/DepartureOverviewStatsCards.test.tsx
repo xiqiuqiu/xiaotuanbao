@@ -201,6 +201,9 @@ describe('DepartureOverviewStatsCards', () => {
     renderCards()
 
     const supplementRow = screen.getByRole('group', { name: '经营补充' })
+    const summaryRowsStack = supplementRow.closest('.ant-space')
+    expect(summaryRowsStack).toHaveClass('ant-space-vertical')
+    expect(summaryRowsStack).toHaveStyle({ rowGap: '16px' })
     expect(within(supplementRow).getByText('原始团款')).toBeInTheDocument()
     expect(within(supplementRow).getByText('优惠合计')).toBeInTheDocument()
     expect(within(supplementRow).getByText('毛利率')).toBeInTheDocument()

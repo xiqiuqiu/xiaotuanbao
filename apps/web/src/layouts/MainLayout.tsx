@@ -1,4 +1,4 @@
-import { Layout, Menu, Breadcrumb, Button, Dropdown, Tooltip, message, theme } from 'antd'
+import { App, Layout, Menu, Breadcrumb, Button, Dropdown, Tooltip, theme } from 'antd'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -20,6 +20,7 @@ import styles from './MainLayout.module.css'
 const { Header, Sider } = Layout
 
 export function MainLayout({ children }: PropsWithChildren) {
+  const { message } = App.useApp()
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const routerState = useRouterState()

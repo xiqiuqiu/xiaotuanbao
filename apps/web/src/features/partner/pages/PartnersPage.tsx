@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import { Button, Card, Form, Modal, Table, message } from 'antd'
+import { App, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PartnerSummary } from '@/types/api'
@@ -93,6 +93,7 @@ function partnersPageReducer(
 }
 
 export function PartnersPage() {
+  const { message, modal } = App.useApp()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<PartnerFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -221,7 +222,7 @@ export function PartnersPage() {
 
   const handleArchive = useCallback(
     (partner: PartnerSummary) => {
-      Modal.confirm({
+      modal.confirm({
         title: '确认删除合作伙伴？',
         content: `删除后「${partner.name}」将从默认列表中隐藏，可在「显示已归档」中恢复。`,
         okText: '删除',
@@ -230,7 +231,7 @@ export function PartnersPage() {
         onOk: () => archiveMutation.mutateAsync(partner.id),
       })
     },
-    [archiveMutation],
+    [archiveMutation, modal],
   )
 
   const handleRestore = useCallback(

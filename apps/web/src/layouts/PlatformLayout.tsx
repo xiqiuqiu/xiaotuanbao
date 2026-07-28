@@ -1,4 +1,4 @@
-import { Button, Dropdown, Layout, Menu, message, theme } from 'antd'
+import { App, Button, Dropdown, Layout, Menu, theme } from 'antd'
 import { LogoutOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties } from 'react'
@@ -12,6 +12,7 @@ import styles from './PlatformLayout.module.css'
 const { Header } = Layout
 
 export function PlatformLayout() {
+  const { message } = App.useApp()
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (state) => state.location.pathname })

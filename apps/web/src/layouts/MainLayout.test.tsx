@@ -1,4 +1,4 @@
-import { ConfigProvider, message } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -116,7 +116,10 @@ describe('MainLayout 侧栏开关', () => {
 
   it('服务端退出失败仍清空本地会话并提示风险', async () => {
     vi.mocked(logout).mockRejectedValue(new Error('network error'))
-    const warning = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never)
+    const warning = vi.fn()
+    const useApp = vi.spyOn(App, 'useApp').mockReturnValue({
+      message: { warning },
+    } as never)
     const user = userEvent.setup()
     render(
       <ConfigProvider>
@@ -130,6 +133,7 @@ describe('MainLayout 侧栏开关', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/login' }))
     expect(useAuthStore.getState().isAuthenticated()).toBe(false)
     expect(warning).toHaveBeenCalledWith('服务器会话可能未清除，请勿在公共设备上继续使用')
+    useApp.mockRestore()
   })
 
   it.each([

@@ -220,7 +220,7 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Space wrap>
         <Select
-          showSearch
+          showSearch={{ optionFilterProp: 'label' }}
           allowClear
           virtual={false}
           placeholder="选择路线名称"
@@ -229,7 +229,6 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
           loading={routeNamesLoading}
           options={options}
           value={routeName}
-          optionFilterProp="label"
           onChange={(value) => setRouteName(value)}
         />
         <DatePicker.RangePicker
@@ -275,7 +274,7 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
         <Alert
           type="error"
           showIcon
-          message="线路视图加载失败"
+          title="线路视图加载失败"
           action={
             <Typography.Link onClick={() => void refetchLedger()}>重试</Typography.Link>
           }

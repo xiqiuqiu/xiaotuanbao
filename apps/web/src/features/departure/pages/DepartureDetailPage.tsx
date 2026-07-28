@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
-import { Tabs, Typography } from 'antd'
+import { Button, Result, Tabs } from 'antd'
 import type { TabsProps } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
@@ -17,6 +17,7 @@ import { VerificationsWorkspace } from '@/features/finance/components/Verificati
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { canEditDeparture } from '../utils/departure-permission'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
+import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureOverview } from '../components/DepartureOverview'
 import { SourceOrdersTab } from '../components/SourceOrdersTab'
@@ -67,6 +68,7 @@ export function DepartureDetailPage() {
     isLoading,
     isError,
     isFetching,
+    error,
     refetch,
   } = useQuery({
     queryKey: ['departure', departureId],
@@ -142,12 +144,16 @@ export function DepartureDetailPage() {
 
   if (!departureId) {
     return (
-      <div>
-        <Typography.Title level={4} style={{ marginTop: 0 }}>
-          发团不存在
-        </Typography.Title>
-        <Link to="/departure">返回发团列表</Link>
-      </div>
+      <Result
+        status="404"
+        title="发团不存在"
+        subTitle="缺少有效的发团编号。"
+        extra={
+          <Link to="/departure">
+            <Button type="primary">返回发团列表</Button>
+          </Link>
+        }
+      />
     )
   }
 
@@ -155,16 +161,34 @@ export function DepartureDetailPage() {
     if (isLoading) {
       return <DepartureDetailShellSkeleton activeTab={activeTab} />
     }
+    if (isError && !(error instanceof ApiError && error.code === 404)) {
+      return (
+        <Result
+          status="error"
+          title="发团详情加载失败"
+          subTitle={error instanceof Error ? error.message : '请稍后重试'}
+          extra={[
+            <Button key="retry" type="primary" onClick={() => void refetch()}>
+              重新加载
+            </Button>,
+            <Link key="back" to="/departure">
+              <Button>返回发团列表</Button>
+            </Link>,
+          ]}
+        />
+      )
+    }
     return (
-      <div>
-        <Typography.Title level={4} style={{ marginTop: 0 }}>
-          发团不存在
-        </Typography.Title>
-        <Typography.Paragraph type="secondary">
-          该发团可能已被删除或您无权访问。
-        </Typography.Paragraph>
-        <Link to="/departure">返回发团列表</Link>
-      </div>
+      <Result
+        status="404"
+        title="发团不存在"
+        subTitle="该发团可能已被删除或您无权访问。"
+        extra={
+          <Link to="/departure">
+            <Button type="primary">返回发团列表</Button>
+          </Link>
+        }
+      />
     )
   }
 
@@ -306,6 +330,7 @@ export function DepartureDetailPage() {
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
 
       <Tabs
+        aria-label="发团详情功能"
         activeKey={activeTab}
         onChange={handleTabChange}
         items={tabItems}

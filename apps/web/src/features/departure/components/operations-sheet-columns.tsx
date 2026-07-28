@@ -115,7 +115,7 @@ export const receivablePathColumns: ColumnsType<DepartureOperationsSheetReceivab
         row.scheduleReceivableCents !== row.agreedReceivableCents
       ) {
         return (
-          <Space direction="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
+          <Space orientation="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
             <Typography.Text>业务 {formatCents(row.agreedReceivableCents)}</Typography.Text>
             <Typography.Text type="secondary">
               财务 {formatCents(row.scheduleReceivableCents)}
@@ -187,7 +187,7 @@ export const resourceColumns: ColumnsType<DepartureOperationsSheetResourceRow> =
         row.schedulePayableCents !== row.agreedPayableCents
       ) {
         return (
-          <Space direction="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
+          <Space orientation="vertical" size={0} style={{ width: '100%', alignItems: 'flex-end' }}>
             <Typography.Text>业务 {formatCents(row.agreedPayableCents)}</Typography.Text>
             <Typography.Text type="secondary">
               财务 {formatCents(row.schedulePayableCents)}

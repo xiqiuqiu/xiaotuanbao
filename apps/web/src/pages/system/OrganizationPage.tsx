@@ -1,52 +1,69 @@
-import { Card, Descriptions, Spin, Typography } from 'antd'
+import { Alert, Button, Card, Descriptions, Space } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { getOrganization } from '@/services/organization.service'
+import { PageHeader } from '@/layouts/PageHeader'
 import { BookingNoticeTemplatesCard } from './BookingNoticeTemplatesCard'
 
 export function OrganizationPage() {
-  const { data: organization, isLoading } = useQuery({
+  const {
+    data: organization,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['organization'],
     queryFn: getOrganization,
   })
-
-  if (isLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
-        <Spin />
-      </div>
-    )
-  }
 
   const examples = organization?.numberingExamples
 
   return (
     <div>
-      <Typography.Title level={4} style={{ marginTop: 0 }}>
-        组织管理
-      </Typography.Title>
+      <PageHeader title="组织管理" />
 
-      <Card title="组织信息" style={{ marginBottom: 16 }}>
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="Organization ID">{organization?.id}</Descriptions.Item>
-          <Descriptions.Item label="Organization 名称">{organization?.name}</Descriptions.Item>
-        </Descriptions>
-      </Card>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        {isError ? (
+          <Alert
+            type="error"
+            showIcon
+            title="组织信息加载失败"
+            description={error instanceof Error ? error.message : '请稍后重试'}
+            action={
+              <Button size="small" onClick={() => void refetch()}>
+                重新加载
+              </Button>
+            }
+          />
+        ) : null}
 
-      <Card title="编号设置">
-        <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="组织业务前缀">
-            {organization?.businessPrefix ?? '-'}
-          </Descriptions.Item>
-          <Descriptions.Item label="设置状态">已设置，不可修改</Descriptions.Item>
-          <Descriptions.Item label="发团编号示例">{examples?.departure ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label="应收编号示例">{examples?.receivable ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label="应付编号示例">{examples?.payable ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label="流水编号示例">{examples?.transaction ?? '-'}</Descriptions.Item>
-          <Descriptions.Item label="核销编号示例">{examples?.verification ?? '-'}</Descriptions.Item>
-        </Descriptions>
-      </Card>
+        {isLoading || organization ? (
+          <>
+            <Card title="组织信息" loading={isLoading}>
+              <Descriptions column={1} bordered size="small">
+                <Descriptions.Item label="组织 ID">{organization?.id ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="组织名称">{organization?.name ?? '-'}</Descriptions.Item>
+              </Descriptions>
+            </Card>
 
-      <BookingNoticeTemplatesCard />
+            <Card title="编号设置" loading={isLoading}>
+              <Descriptions column={1} bordered size="small">
+                <Descriptions.Item label="组织业务前缀">
+                  {organization?.businessPrefix ?? '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="设置状态">已设置，不可修改</Descriptions.Item>
+                <Descriptions.Item label="发团编号示例">{examples?.departure ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="应收编号示例">{examples?.receivable ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="应付编号示例">{examples?.payable ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="流水编号示例">{examples?.transaction ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="核销编号示例">{examples?.verification ?? '-'}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </>
+        ) : null}
+
+        <BookingNoticeTemplatesCard />
+      </Space>
     </div>
   )
 }

@@ -37,8 +37,7 @@ export function SourceOrdersFilters({
             aria-label="客户"
             placeholder="客户"
             style={{ width: 180 }}
-            showSearch
-            optionFilterProp="label"
+            showSearch={{ optionFilterProp: 'label' }}
             value={draft.partnerId}
             onChange={(value) => onDraftChange({ ...draft, partnerId: value })}
             options={partnerOptions}

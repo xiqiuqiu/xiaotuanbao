@@ -114,7 +114,7 @@ export function OperationsSheetSegmentsSection({
       {sheet.segments.length === 0 ? (
         <Empty description="暂无行程段" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           {sheet.segments.map((segment) => {
             const segmentNotes = nonEmptyNote(segment.notes)
             const dateLabel =

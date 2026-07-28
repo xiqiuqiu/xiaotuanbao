@@ -252,7 +252,7 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
   const marginRateLabel = formatPercent(departure.estimatedMarginCents, departure.netReceivableCents)
 
   return (
-    <>
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <Row gutter={[16, 16]} className={styles.firstRow}>
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
@@ -347,7 +347,7 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
           />
         </Col>
       </Row>
-    </>
+    </Space>
   )
 }
 

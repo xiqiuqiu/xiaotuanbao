@@ -118,7 +118,7 @@ export function DepartureTransitionModal({
           style={{ marginBottom: 16 }}
           title="存在归属本发团的未核销资金"
           description={
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               {departure.unverifiedIncomeCents > 0 ? (
                 <Typography.Text>
                   未核销收入 {formatCents(departure.unverifiedIncomeCents)}

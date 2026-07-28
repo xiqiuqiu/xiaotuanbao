@@ -50,7 +50,7 @@ export function DepartureOperationsSheetDrawer({
     <Drawer
       title="发团运营表"
       placement="right"
-      width="min(960px, 100vw)"
+      size="min(960px, 100vw)"
       open={open}
       onClose={onClose}
       destroyOnHidden
@@ -79,7 +79,7 @@ export function DepartureOperationsSheetDrawer({
 
 function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnapshot }) {
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <OperationsSheetMetaSection sheet={sheet} />
       <OperationsSheetSourceOrdersSection sheet={sheet} />
       <OperationsSheetSegmentsSection sheet={sheet} />

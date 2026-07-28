@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, Card, Form, Modal, Table, message } from 'antd'
+import { App, Button, Card, Form, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SupplierSummary } from '@/types/api'
@@ -37,6 +37,7 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { buildSupplierColumns } from './supplier-columns'
 
 export function SuppliersPage() {
+  const { message, modal } = App.useApp()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<SupplierFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -120,7 +121,7 @@ export function SuppliersPage() {
         message.error(error instanceof Error ? error.message : '加载供应商失败')
       }
     },
-    [form],
+    [form, message],
   )
 
   const saveMutation = useMutation({
@@ -171,7 +172,7 @@ export function SuppliersPage() {
 
   const handleArchive = useCallback(
     (supplier: SupplierSummary) => {
-      Modal.confirm({
+      modal.confirm({
         title: '确认删除供应商？',
         content: `删除后「${supplier.name}」将从默认列表中隐藏，可在「显示已归档」中恢复。`,
         okText: '删除',
@@ -180,7 +181,7 @@ export function SuppliersPage() {
         onOk: () => archiveMutation.mutateAsync(supplier.id),
       })
     },
-    [archiveMutation],
+    [archiveMutation, modal],
   )
 
   const handleRestore = useCallback(

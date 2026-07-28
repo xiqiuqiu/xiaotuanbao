@@ -1,5 +1,17 @@
 import { useState } from 'react'
-import { Button, Card, Form, Input, Modal, Popconfirm, Space, Table, Typography, message } from 'antd'
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Popconfirm,
+  Space,
+  Table,
+  Typography,
+} from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { BookingNoticeTemplateSummary } from '@xiaotuanbao/shared'
 import {
@@ -15,6 +27,7 @@ type TemplateForm = {
 }
 
 export function BookingNoticeTemplatesCard() {
+  const { message } = App.useApp()
   // 本页仅挂在 /system/organization；能进入组织管理 ⟺ 可维护模板（企业管理员）。
   const canEdit = true
   const queryClient = useQueryClient()
@@ -22,7 +35,13 @@ export function BookingNoticeTemplatesCard() {
   const [editing, setEditing] = useState<BookingNoticeTemplateSummary | null>(null)
   const [form] = Form.useForm<TemplateForm>()
 
-  const { data: templates = [], isLoading } = useQuery({
+  const {
+    data: templates = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['booking-notice-templates'],
     queryFn: ({ signal }) => listBookingNoticeTemplates(signal),
   })
@@ -87,11 +106,24 @@ export function BookingNoticeTemplatesCard() {
           </Button>
         ) : null
       }
-      style={{ marginTop: 16 }}
     >
       <Typography.Paragraph type="secondary">
         企业管理员维护组织级常用须知。产品引用后复制正文，产品侧改写不会回写本模板。
       </Typography.Paragraph>
+      {isError ? (
+        <Alert
+          type="error"
+          showIcon
+          title="报名须知模板加载失败"
+          description={error instanceof Error ? error.message : '请稍后重试'}
+          action={
+            <Button size="small" onClick={() => void refetch()}>
+              重新加载
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      ) : null}
       <Table<BookingNoticeTemplateSummary>
         rowKey="id"
         loading={isLoading}

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { message } from 'antd'
+import { App } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { FinanceVerificationListItem } from '@xiaotuanbao/shared'
@@ -23,6 +23,7 @@ export function useVerificationWorkspaceMutations({
   onCreateSuccess,
   onCancelSuccess,
 }: UseVerificationWorkspaceMutationsOptions) {
+  const { message } = App.useApp()
   const queryClient = useQueryClient()
   const [cancellingVerification, setCancellingVerification] =
     useState<FinanceVerificationListItem | null>(null)
