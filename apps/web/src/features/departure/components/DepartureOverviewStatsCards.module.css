@@ -2,6 +2,16 @@
   animation: metric-card-enter 180ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
 }
 
+/* ⓘ 与相邻标题同色（Statistic description / Title heading） */
+.calcInfoButton {
+  color: inherit;
+}
+
+.calcInfoButton:global(.ant-btn-text):not(:disabled):not(:global(.ant-btn-disabled)):hover,
+.calcInfoButton:global(.ant-btn-text):not(:disabled):not(:global(.ant-btn-disabled)):active {
+  color: inherit;
+}
+
 .cashBreakdown {
   min-width: 144px;
   margin-left: auto;
