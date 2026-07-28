@@ -22,6 +22,7 @@ import { DepartureFinanceReadController } from './departure-finance-read.control
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 import { DepartureOperationsSheetExcelRenderer } from './departure-operations-sheet-excel.types'
 import { ExcelJsDepartureOperationsSheetRenderer } from './departure-operations-sheet-exceljs.renderer'
+import { GroundIncomeService } from './ground-income.service'
 import { DepartureDataGapService } from './departure-data-gap.service'
 import { DepartureSettlementReadinessService } from './departure-settlement-readiness.service'
 import { SourceOrderReceivableGapService } from './source-order-receivable-gap.service'
@@ -62,6 +63,7 @@ import { AccountGenerationGapController } from './account-generation-gap.control
       useClass: ExcelJsDepartureOperationsSheetRenderer,
     },
     DepartureOperationsSheetService,
+    GroundIncomeService,
   ],
   exports: [
     DepartureDataGapService,

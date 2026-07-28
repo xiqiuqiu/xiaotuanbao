@@ -2,6 +2,7 @@ import { Space, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type {
   DepartureOperationsSheetAnomaly,
+  DepartureOperationsSheetGroundIncomeRow,
   DepartureOperationsSheetPendingTransaction,
   DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetResourceRow,
@@ -25,6 +26,20 @@ function nonEmptyNote(value: string | null | undefined): string | null {
 }
 
 export { nonEmptyNote }
+
+export const groundIncomeColumns: ColumnsType<DepartureOperationsSheetGroundIncomeRow> = [
+  {
+    title: '收入标题',
+    dataIndex: 'title',
+  },
+  {
+    title: '金额',
+    dataIndex: 'amountCents',
+    width: 160,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+]
 
 export const sourceColumns: ColumnsType<DepartureOperationsSheetSourceOrderRow> = [
   {

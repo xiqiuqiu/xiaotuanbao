@@ -83,6 +83,9 @@ export class DepartureOperationsSheetService {
             },
           },
         },
+        groundIncomes: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
         departureResources: {
           include: {
             partner: { select: { name: true } },
@@ -271,6 +274,11 @@ export class DepartureOperationsSheetService {
       paymentChannel: transaction.paymentChannel,
       notes: transaction.notes,
     }))
+    const groundIncomes = departure.groundIncomes.map((item) => ({
+      id: item.id,
+      title: item.title,
+      amountCents: item.amountCents,
+    }))
 
     const pendingCollectionCents = pendingRows
       .filter((row) => row.direction === 'inflow')
@@ -305,6 +313,11 @@ export class DepartureOperationsSheetService {
       },
       sourceOrders,
       segments,
+      groundIncomes,
+      groundIncomeTotalCents: groundIncomes.reduce(
+        (sum, item) => sum + item.amountCents,
+        0,
+      ),
       departureResources,
       pendingTransactions: pendingRows,
       pendingSummary:

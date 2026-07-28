@@ -16,6 +16,8 @@ import type {
   DepartureListResult,
   DepartureOperationsSheetSnapshot,
   DepartureSummary,
+  GroundIncomeListResult,
+  GroundIncomeSummary,
 } from '@xiaotuanbao/shared'
 import type { Response } from 'express'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
@@ -33,6 +35,11 @@ import {
 import { DepartureService } from './departure.service'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 import { buildOperationsSheetContentDisposition } from './departure-operations-sheet-excel.types'
+import {
+  CreateGroundIncomeDto,
+  UpdateGroundIncomeDto,
+} from './dto/ground-income.dto'
+import { GroundIncomeService } from './ground-income.service'
 
 @Controller('departures')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
@@ -40,6 +47,7 @@ export class DepartureController {
   constructor(
     private readonly departureService: DepartureService,
     private readonly operationsSheetService: DepartureOperationsSheetService,
+    private readonly groundIncomeService: GroundIncomeService,
   ) {}
 
   @Get()
@@ -76,6 +84,56 @@ export class DepartureController {
     @Body() dto: CopyDepartureDto,
   ): Promise<DepartureSummary> {
     return this.departureService.copy(request.user.organizationId, id, dto)
+  }
+
+  @Get(':id/ground-incomes')
+  @RequireMenu('/departure')
+  listGroundIncomes(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<GroundIncomeListResult> {
+    return this.groundIncomeService.list(request.user.organizationId, id)
+  }
+
+  @Post(':id/ground-incomes')
+  @RequireMenu('departure:write')
+  createGroundIncome(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Body() dto: CreateGroundIncomeDto,
+  ): Promise<GroundIncomeSummary> {
+    return this.groundIncomeService.create(request.user.organizationId, id, dto)
+  }
+
+  @Patch(':id/ground-incomes/:groundIncomeId')
+  @RequireMenu('departure:write')
+  updateGroundIncome(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Param('groundIncomeId') groundIncomeId: string,
+    @Body() dto: UpdateGroundIncomeDto,
+  ): Promise<GroundIncomeSummary> {
+    return this.groundIncomeService.update(
+      request.user.organizationId,
+      id,
+      groundIncomeId,
+      dto,
+    )
+  }
+
+  @Delete(':id/ground-incomes/:groundIncomeId')
+  @RequireMenu('departure:write')
+  async deleteGroundIncome(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Param('groundIncomeId') groundIncomeId: string,
+  ): Promise<{ success: true }> {
+    await this.groundIncomeService.delete(
+      request.user.organizationId,
+      id,
+      groundIncomeId,
+    )
+    return { success: true }
   }
 
   @Get(':id/operations-sheet')

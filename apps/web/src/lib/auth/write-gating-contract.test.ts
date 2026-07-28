@@ -44,6 +44,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   transitionDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   closeDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   unarchiveDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  purgeDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   createSegment: { gating: 'departureWrite', endpointKey: 'departure:write' },
   generateDailySegments: { gating: 'departureWrite', endpointKey: 'departure:write' },
   updateSegment: { gating: 'departureWrite', endpointKey: 'departure:write' },
@@ -51,6 +52,12 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   createSegmentResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
   updateSegmentResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
   deleteSegmentResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  createDepartureResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  updateDepartureResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  deleteDepartureResource: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  createGroundIncome: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  updateGroundIncome: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  deleteGroundIncome: { gating: 'departureWrite', endpointKey: 'departure:write' },
   createSourceOrder: { gating: 'departureWrite', endpointKey: 'departure:write' },
   updateSourceOrder: { gating: 'departureWrite', endpointKey: 'departure:write' },
   deleteSourceOrder: { gating: 'departureWrite', endpointKey: 'departure:write' },
@@ -108,9 +115,11 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
 
   // ---- 菜单级：生成应收/应付挂 /departure（发团可见者皆可）----
   generatePayable: { gating: 'menuGated', endpointKey: '/departure' },
+  generateDeparturePayable: { gating: 'menuGated', endpointKey: '/departure' },
   generatePayablesForSegment: { gating: 'menuGated', endpointKey: '/departure' },
   generateReceivables: { gating: 'menuGated', endpointKey: '/departure' },
   generateReceivablesForDeparture: { gating: 'menuGated', endpointKey: '/departure' },
+  settleByActualCollection: { gating: 'menuGated', endpointKey: '/departure' },
   // 员工管理挂 /system/users（能进入系统页 ⟺ 可调）。
   createEmployee: { gating: 'menuGated', endpointKey: '/system/users' },
   updateEmployee: { gating: 'menuGated', endpointKey: '/system/users' },

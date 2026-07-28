@@ -138,7 +138,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       sheet,
       row,
       '分区',
-      '发团与数据阶段｜客源及应收｜行程段资源及应付｜发团级资源及应付｜待确认款项｜财务汇总与异常｜发团级备注',
+      '发团与数据阶段｜客源及应收｜行程段资源及应付｜发团级资源及应付｜团上收入｜待确认款项｜财务汇总与异常｜发团级备注',
     )
     const identityEndRow = row - 1
     sheet.pageSetup.printTitlesRow = `${identityStartRow}:${identityEndRow}`
@@ -251,6 +251,24 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       }
     }
     row += 1
+
+    if (snapshot.groundIncomes.length > 0) {
+      row = writeSectionHeader(sheet, row, '团上收入')
+      row = writeHeaderRow(sheet, row, ['收入标题', '金额'])
+      for (const income of snapshot.groundIncomes) {
+        sheet.getCell(row, 1).value = income.title
+        writeMoney(sheet.getCell(row, 2), income.amountCents)
+        styleDataCells(sheet, row, 2)
+        row += 1
+      }
+      row = writeMoneyKeyValue(
+        sheet,
+        row,
+        '其他收入合计',
+        snapshot.groundIncomeTotalCents,
+      )
+      row += 1
+    }
 
     if (snapshot.pendingSummary) {
       row = writeSectionHeader(sheet, row, '待确认款项')
