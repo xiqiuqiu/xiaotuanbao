@@ -538,7 +538,7 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText(equation)).not.toBeInTheDocument()
   })
 
-  it('守恒异常不阻止读取，并在对应卡片展示原始差额', () => {
+  it('应收金额不一致时不阻止读取，并用白话展示少了/多出', () => {
     renderCards(
       makeDeparture({
         overviewStats: {

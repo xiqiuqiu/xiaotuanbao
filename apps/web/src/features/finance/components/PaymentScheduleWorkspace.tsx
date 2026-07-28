@@ -28,6 +28,8 @@ export type PaymentScheduleWorkspaceProps = {
   initialCounterpartyKeyword?: string
   /** 精确单号 scheduleNo（工作台队列单项下钻，服务端筛选）。 */
   scheduleNo?: string
+  /** 客源管理「查看应收」：按客源单过滤应收列表（高亮清除后仍保留，重置筛选清除）。 */
+  filterSourceOrderId?: string
   /** 工作台应收跟进 / 账龄下钻窗口。 */
   receivableFollowUp?:
     | 'overdue'

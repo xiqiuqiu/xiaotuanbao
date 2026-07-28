@@ -1300,12 +1300,19 @@ export interface SourceOrderSummary {
   hasPaymentSchedule: boolean
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
+  /**
+   * 已生成应收但约定路径仍有缺失（如旧规则只建尾款、未建客户补款）。
+   * 列表可显示「补全应收」并再次调用生成接口补建。
+   */
+  hasIncompleteReceivablePaths: boolean
   /** 按公式预估：max(0, 我方代收 − 结算金额)；未落返利应付时列表可展示为预计 */
   estimatedRebateCents: number
   /** 已落账返利应付金额；未生成时为 0 */
   rebateCents: number
   /** 返利应付状态：SegmentPayableStatus（not_generated / pending / partial / paid / closed） */
   rebateStatus: string
+  /** 当前有效返利应付单号；未生成时为 null（客源列表「查看返利」精确筛选） */
+  rebateScheduleNo: string | null
   createdAt: string
   updatedAt: string
 }

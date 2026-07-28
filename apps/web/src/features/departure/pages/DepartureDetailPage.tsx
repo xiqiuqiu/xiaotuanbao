@@ -110,6 +110,8 @@ export function DepartureDetailPage() {
         ...(search.counterpartyKeyword
           ? { counterpartyKeyword: search.counterpartyKeyword }
           : {}),
+        ...(search.sourceId ? { sourceId: search.sourceId } : {}),
+        ...(search.scheduleNo ? { scheduleNo: search.scheduleNo } : {}),
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
       },
       replace: true,
@@ -122,6 +124,8 @@ export function DepartureDetailPage() {
     search.listReturn,
     search.highlightSegmentResourceId,
     search.highlightSourceOrderId,
+    search.scheduleNo,
+    search.sourceId,
     search.segmentId,
   ])
 
@@ -202,6 +206,8 @@ export function DepartureDetailPage() {
   const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
   const counterpartyKeyword =
     typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword : undefined
+  const filterSourceOrderId =
+    typeof search.sourceId === 'string' ? search.sourceId : undefined
 
   const visibleTabs = DEPARTURE_DETAIL_TABS.filter((tab) =>
     isDepartureDetailTabVisible(tab.key, menuKeys),
@@ -266,6 +272,7 @@ export function DepartureDetailPage() {
             readOnly={financeReadOnly}
             highlightSourceOrderId={search.highlightSourceOrderId}
             initialCounterpartyKeyword={counterpartyKeyword}
+            filterSourceOrderId={filterSourceOrderId}
             onHighlightConsumed={clearFinanceHighlight}
           />,
         ),
@@ -282,8 +289,10 @@ export function DepartureDetailPage() {
             direction="payable"
             departureId={departure.id}
             readOnly={financeReadOnly}
+            highlightSourceOrderId={search.highlightSourceOrderId}
             highlightSegmentResourceId={search.highlightSegmentResourceId}
             initialCounterpartyKeyword={counterpartyKeyword}
+            scheduleNo={search.scheduleNo}
             onHighlightConsumed={clearFinanceHighlight}
           />,
         ),

@@ -156,12 +156,28 @@ export function SourceOrdersTab({
 
   const onViewReceivables = useCallback(
     (order: SourceOrderSummary) => {
-      const counterparty = counterpartyFilterFromSourceOrder(order)
       void navigate({
         to: '/departure/$departureId',
         params: { departureId: departure.id },
         search: {
           tab: 'receivables',
+          highlightSourceOrderId: order.id,
+          sourceId: order.id,
+        },
+      })
+    },
+    [departure.id, navigate],
+  )
+
+  const onViewRebate = useCallback(
+    (order: SourceOrderSummary) => {
+      const counterparty = counterpartyFilterFromSourceOrder(order)
+      void navigate({
+        to: '/departure/$departureId',
+        params: { departureId: departure.id },
+        search: {
+          tab: 'payables',
+          ...(order.rebateScheduleNo ? { scheduleNo: order.rebateScheduleNo } : {}),
           highlightSourceOrderId: order.id,
           ...(counterparty ? { counterpartyKeyword: counterparty.counterpartyKeyword } : {}),
         },
@@ -180,6 +196,7 @@ export function SourceOrdersTab({
         onOpen,
         onOpenGuests,
         onViewReceivables,
+        onViewRebate,
       }),
     [
       deleteMutation,
@@ -188,6 +205,7 @@ export function SourceOrdersTab({
       onOpen,
       onOpenGuests,
       onViewReceivables,
+      onViewRebate,
       readOnly,
     ],
   )
@@ -255,7 +273,7 @@ export function SourceOrdersTab({
           loading={isLoading}
           columns={columns}
           dataSource={listResult?.items ?? []}
-          scroll={{ x: 2020 }}
+          scroll={{ x: 2280 }}
           pagination={false}
           summary={renderSourceOrdersTableSummary}
         />

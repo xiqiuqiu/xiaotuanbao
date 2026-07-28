@@ -212,11 +212,12 @@ describe('Departure batch finance generation (e2e)', () => {
       .expect(201)
 
     expect(response.body.data).toMatchObject({
-      attempted: 2,
+      // pending / already / zeroAmount 都会尝试；已齐全走 409 → skipped
+      attempted: 3,
       succeeded: 1,
-      // split 只生成尾款 Guest 节点（定金归客户已收，不开应收）
-      generated: 1,
-      skipped: 1,
+      // split：S>G约定 → 尾款代收 + 客户补款
+      generated: 2,
+      skipped: 2,
       failed: 0,
     })
 
@@ -228,27 +229,41 @@ describe('Departure batch finance generation (e2e)', () => {
         ],
       ),
     )
-    expect(byId[pending.id]).toMatchObject({ outcome: 'succeeded' })
+    expect(byId[pending.id]).toMatchObject({ outcome: 'succeeded', generatedCount: 2 })
     expect(byId[zeroAmount.id]).toMatchObject({
       outcome: 'skipped',
       reason: '无可生成金额',
     })
-    expect(byId[already.id]).toBeUndefined()
+    expect(byId[already.id]).toMatchObject({
+      outcome: 'skipped',
+      reason: expect.stringMatching(/不能再次生成|已生成/),
+    })
 
     const second = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/generate-receivables`)
       .expect(201)
 
     expect(second.body.data).toMatchObject({
-      attempted: 1,
+      attempted: 3,
       succeeded: 0,
       generated: 0,
-      skipped: 1,
+      skipped: 3,
       failed: 0,
     })
-    expect(second.body.data.items[0]).toMatchObject({
+    const secondById = Object.fromEntries(
+      second.body.data.items.map(
+        (item: { sourceId: string; outcome: string; reason?: string }) => [
+          item.sourceId,
+          item,
+        ],
+      ),
+    )
+    expect(secondById[pending.id]).toMatchObject({ outcome: 'skipped' })
+    expect(secondById[already.id]).toMatchObject({ outcome: 'skipped' })
+    expect(secondById[zeroAmount.id]).toMatchObject({
       sourceId: zeroAmount.id,
       outcome: 'skipped',
+      reason: '无可生成金额',
     })
   })
 

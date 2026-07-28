@@ -28,10 +28,23 @@ interface BuildSourceOrdersColumnsOptions {
   onOpen: (record: SourceOrderSummary, viewOnly: boolean) => void
   onOpenGuests: (record: SourceOrderSummary) => void
   onViewReceivables: (record: SourceOrderSummary) => void
+  /** 跳转到发团应付并定位该客源单返利。 */
+  onViewRebate: (record: SourceOrderSummary) => void
 }
 
 function canGenerateReceivable(record: SourceOrderSummary): boolean {
-  return record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED
+  return (
+    record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
+    record.hasIncompleteReceivablePaths
+  )
+}
+
+/** 返利已落账且仍待付/部分付时，操作列追加跳转入口。 */
+export function canViewRebatePayable(record: SourceOrderSummary): boolean {
+  return (
+    record.rebateStatus === SegmentPayableStatus.PENDING ||
+    record.rebateStatus === SegmentPayableStatus.PARTIAL
+  )
 }
 
 function renderCents(value: number) {
@@ -45,8 +58,19 @@ export function sourceOrderRebateDisplayCents(order: SourceOrderSummary): number
     : order.rebateCents
 }
 
-/** 返利状态文案：有预计金额但未落账时用「待生成」，其余走应付状态字典。 */
+/** 是否有返利轨迹（已落账，或按公式预计 > 0）。无返利时列表用「-」，不展示 0 / 未生成。 */
+export function sourceOrderHasRebateTrack(order: SourceOrderSummary): boolean {
+  if (order.rebateStatus !== SegmentPayableStatus.NOT_GENERATED) {
+    return true
+  }
+  return order.estimatedRebateCents > 0
+}
+
+/** 返利状态文案：有预计金额但未落账时用「待生成」；无返利轨迹用「-」。 */
 export function sourceOrderRebateStatusLabel(order: SourceOrderSummary): string {
+  if (!sourceOrderHasRebateTrack(order)) {
+    return '-'
+  }
   if (
     order.rebateStatus === SegmentPayableStatus.NOT_GENERATED &&
     order.estimatedRebateCents > 0
@@ -58,6 +82,9 @@ export function sourceOrderRebateStatusLabel(order: SourceOrderSummary): string 
 }
 
 function renderRebateStatus(order: SourceOrderSummary) {
+  if (!sourceOrderHasRebateTrack(order)) {
+    return <span>-</span>
+  }
   return <Tag>{sourceOrderRebateStatusLabel(order)}</Tag>
 }
 
@@ -77,6 +104,37 @@ export function formatGuestCollectBreakdown(
   return `定金 ${formatCents(order.depositCents)} · 尾款 ${formatCents(order.balanceCents)}`
 }
 
+/** 单元格内定金/尾款分行右对齐，金额右缘与合计列对齐，避免单行长文案「看起来偏左」。 */
+export function renderGuestCollectBreakdown(
+  order: Pick<
+    SourceOrderSummary,
+    'collectionMode' | 'depositCents' | 'balanceCents' | 'guestCollectCents'
+  >,
+) {
+  if (order.collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED) {
+    return (
+      <span style={{ display: 'block', textAlign: 'right', width: '100%', whiteSpace: 'nowrap' }}>
+        {formatCents(order.guestCollectCents)}
+      </span>
+    )
+  }
+
+  if (order.collectionMode === SourceOrderCollectionMode.SPLIT) {
+    return (
+      <div data-guest-collect="stacked" style={{ textAlign: 'right', width: '100%', lineHeight: 1.45 }}>
+        <div>尾款 {formatCents(order.balanceCents)}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div data-guest-collect="stacked" style={{ textAlign: 'right', width: '100%', lineHeight: 1.45 }}>
+      <div>定金 {formatCents(order.depositCents)}</div>
+      <div>尾款 {formatCents(order.balanceCents)}</div>
+    </div>
+  )
+}
+
 export function buildSourceOrdersColumns({
   canEdit,
   canGenerate,
@@ -85,6 +143,7 @@ export function buildSourceOrdersColumns({
   onOpen,
   onOpenGuests,
   onViewReceivables,
+  onViewRebate,
 }: BuildSourceOrdersColumnsOptions): ColumnsType<SourceOrderSummary> {
   return [
     { title: '客户', dataIndex: 'partnerName', width: 140 },
@@ -135,9 +194,7 @@ export function buildSourceOrdersColumns({
       key: 'guestCollectBreakdown',
       width: 200,
       align: 'right',
-      render: (_: unknown, record: SourceOrderSummary) => (
-        <span style={{ whiteSpace: 'nowrap' }}>{formatGuestCollectBreakdown(record)}</span>
-      ),
+      render: (_: unknown, record: SourceOrderSummary) => renderGuestCollectBreakdown(record),
     },
     {
       title: '应收状态',
@@ -153,7 +210,11 @@ export function buildSourceOrdersColumns({
       width: 120,
       align: 'right',
       render: (_: unknown, record: SourceOrderSummary) =>
-        renderCents(sourceOrderRebateDisplayCents(record)),
+        sourceOrderHasRebateTrack(record) ? (
+          renderCents(sourceOrderRebateDisplayCents(record))
+        ) : (
+          <span>-</span>
+        ),
     },
     {
       title: '返利状态',
@@ -173,19 +234,26 @@ export function buildSourceOrdersColumns({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 260,
+      width: 320,
       render: (_: unknown, record: SourceOrderSummary) => {
         const allowGenerate = canGenerateReceivable(record)
         const viewOnly = !canEdit
+        const showViewReceivables =
+          record.receivableStatus !== SourceOrderReceivableStatus.NOT_GENERATED
 
         return (
           <Space size="small" wrap>
             <Button type="link" size="small" onClick={() => onOpen(record, viewOnly)}>
               {viewOnly ? '查看' : '编辑'}
             </Button>
-            {!allowGenerate ? (
+            {showViewReceivables ? (
               <Button type="link" size="small" onClick={() => onViewReceivables(record)}>
                 查看应收
+              </Button>
+            ) : null}
+            {canViewRebatePayable(record) ? (
+              <Button type="link" size="small" onClick={() => onViewRebate(record)}>
+                查看返利
               </Button>
             ) : null}
             {canEdit ? (
@@ -202,7 +270,7 @@ export function buildSourceOrdersColumns({
                 }
                 onClick={() => generateMutation.mutate(record.id)}
               >
-                生成应收
+                {record.hasIncompleteReceivablePaths ? '补全应收' : '生成应收'}
               </Button>
             ) : null}
             {canEdit && allowGenerate ? (

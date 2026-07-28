@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
-import { sourceOrderRebateStatusLabel } from './source-orders-table-columns'
+import {
+  sourceOrderHasRebateTrack,
+  sourceOrderRebateStatusLabel,
+} from './source-orders-table-columns'
 
 function order(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSummary {
   return {
@@ -33,9 +36,11 @@ function order(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSummary 
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    hasIncompleteReceivablePaths: false,
     estimatedRebateCents: 50000,
     rebateCents: 0,
     rebateStatus: SegmentPayableStatus.NOT_GENERATED,
+    rebateScheduleNo: null,
     createdAt: '2026-07-28T00:00:00.000Z',
     updatedAt: '2026-07-28T00:00:00.000Z',
     ...overrides,
@@ -58,5 +63,18 @@ describe('sourceOrderRebateStatusLabel', () => {
         }),
       ),
     ).toBe('待付')
+  })
+
+  it('uses - when no rebate is expected and none is booked (S>=G)', () => {
+    const noRebate = order({
+      estimatedRebateCents: 0,
+      rebateCents: 0,
+      rebateStatus: SegmentPayableStatus.NOT_GENERATED,
+      guestCollectCents: 20000,
+      netReceivableCents: 500000,
+    })
+    expect(sourceOrderHasRebateTrack(noRebate)).toBe(false)
+    expect(sourceOrderRebateStatusLabel(noRebate)).toBe('-')
+    expect(sourceOrderRebateStatusLabel(noRebate)).not.toBe('未生成')
   })
 })

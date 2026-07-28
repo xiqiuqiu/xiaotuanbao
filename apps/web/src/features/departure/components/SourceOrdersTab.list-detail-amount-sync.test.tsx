@@ -127,7 +127,7 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
     const listRow = (await screen.findByText('福建土楼专线地接')).closest('tr')
     expect(listRow).toBeTruthy()
     expect(within(listRow as HTMLElement).getAllByText('¥7,200.00').length).toBeGreaterThanOrEqual(1)
-    expect(within(listRow as HTMLElement).getByText('¥6,200.00')).toBeTruthy()
+    expect(within(listRow as HTMLElement).getByText(/¥6,200\.00/)).toBeTruthy()
 
     await user.click(within(listRow as HTMLElement).getByRole('button', { name: '编辑' }))
 
@@ -141,12 +141,12 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
 
     expect(
       screen.getByText(
-        /【团款】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,200\.00/,
+        /【客户结算】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,200\.00/,
       ),
     ).toBeTruthy()
     expect(
       screen.queryByText(
-        /【团款】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,000\.00/,
+        /【客户结算】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,000\.00/,
       ),
     ).toBeNull()
     expect(screen.queryByText(/G约定/)).toBeNull()

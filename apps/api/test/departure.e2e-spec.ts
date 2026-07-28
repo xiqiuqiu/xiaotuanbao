@@ -3318,7 +3318,7 @@ describe('Departure API (e2e)', () => {
     it('wires source-order receivable path progress from finance facade (#97)', async () => {
       const departure = await createOpsDeparture({ name: `${testPrefix}-ops-receivable-progress` })
 
-      // Split: only balance Guest receivable — generate and partial collect.
+      // Split: S>G约定 → 尾款代收 + 客户补款；对尾款做部分收款。
       const splitOrder = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/source-orders`)
         .send({
@@ -3408,11 +3408,16 @@ describe('Departure API (e2e)', () => {
         sourceType: string
         amountCents: number
       }>
-      expect(splitSchedules).toHaveLength(1)
+      // S=200000、G约定=80000 → 尾款代收 80000 + 客户补款 120000
+      expect(splitSchedules).toHaveLength(2)
       const guestSchedule = splitSchedules.find(
         (s) => s.sourceType === 'source_order_guest_balance_collection',
       )
-      expect(guestSchedule).toBeTruthy()
+      const customerTopUp = splitSchedules.find(
+        (s) => s.sourceType === 'source_order_customer_settlement',
+      )
+      expect(guestSchedule).toMatchObject({ amountCents: 80000 })
+      expect(customerTopUp).toMatchObject({ amountCents: 120000 })
 
       await authRequest(app, financeToken)
         .post(`/api/finance/receivables/${guestSchedule!.id}/confirm-collection`)
@@ -3533,6 +3538,17 @@ describe('Departure API (e2e)', () => {
       })
 
       expect(byId[splitOrder.body.data.id].receivablePaths).toEqual([
+        expect.objectContaining({
+          pathType: 'source_order_customer_settlement',
+          pathLabel: '客户结算',
+          agreedReceivableCents: 120000,
+          scheduleReceivableCents: 120000,
+          receivedCents: 0,
+          unreceivedCents: 120000,
+          receivableStatus: 'pending',
+          needsReview: false,
+          excludeFromProgressTotals: false,
+        }),
         expect.objectContaining({
           pathType: 'source_order_guest_balance_collection',
           pathLabel: '尾款代收',

@@ -14,7 +14,7 @@ describe('buildSourceOrderReceivablePaths', () => {
     displayName: '华东国旅 (上海) 7月14日发客',
   }
 
-  it('guest_only: creates deposit + balance Guest paths and no customer/rebate', () => {
+  it('guest_only with G>S: creates deposit + balance Guest paths and no top-up/rebate', () => {
     const paths = buildSourceOrderReceivablePaths({
       ...base,
       collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
@@ -60,13 +60,50 @@ describe('buildSourceOrderReceivablePaths', () => {
     })
   })
 
-  it('split: creates only balance Guest path; no deposit and no customer top-up', () => {
+  it('guest_only with S>G: adds customer top-up at generate time', () => {
+    const paths = buildSourceOrderReceivablePaths({
+      ...base,
+      collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+      depositCents: 100000,
+      balanceCents: 200000,
+      netReceivableCents: 500000,
+    })
+
+    expect(paths).toEqual([
+      {
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+        amountCents: 100000,
+        title: '定金代收',
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: 'source-order-1',
+        counterpartyName: '华东国旅 (上海) 7月14日发客',
+      },
+      {
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+        amountCents: 200000,
+        title: '尾款代收',
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: 'source-order-1',
+        counterpartyName: '华东国旅 (上海) 7月14日发客',
+      },
+      {
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        amountCents: 200000,
+        title: '客户补款',
+        counterpartyType: CounterpartyType.PARTNER,
+        counterpartyId: 'partner-1',
+        counterpartyName: '华东国旅 (上海)',
+      },
+    ])
+  })
+
+  it('split with G>=S: creates only balance Guest path (no top-up)', () => {
     const paths = buildSourceOrderReceivablePaths({
       ...base,
       collectionMode: SourceOrderCollectionMode.SPLIT,
       depositCents: 300000,
       balanceCents: 700000,
-      netReceivableCents: 1000000,
+      netReceivableCents: 700000,
     })
 
     expect(paths).toEqual([
@@ -102,25 +139,33 @@ describe('buildSourceOrderReceivablePaths', () => {
     ])
   })
 
-  it('guest_only with G>S still creates only Guest paths (no rebate payable)', () => {
+  it('split with S>G: creates balance Guest + customer top-up (ADR-0033 2026-07-28)', () => {
     const paths = buildSourceOrderReceivablePaths({
       ...base,
-      collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-      depositCents: 200000,
-      balanceCents: 5800000,
-      netReceivableCents: 500000,
+      collectionMode: SourceOrderCollectionMode.SPLIT,
+      depositCents: 3_300_000,
+      balanceCents: 20_000,
+      netReceivableCents: 1_970_000,
     })
 
-    expect(paths.map((path) => path.sourceType)).toEqual([
-      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
-      PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+    expect(paths).toEqual([
+      {
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+        amountCents: 20_000,
+        title: '尾款代收',
+        counterpartyType: CounterpartyType.GUEST,
+        counterpartyId: 'source-order-1',
+        counterpartyName: '华东国旅 (上海) 7月14日发客',
+      },
+      {
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+        amountCents: 1_950_000,
+        title: '客户补款',
+        counterpartyType: CounterpartyType.PARTNER,
+        counterpartyId: 'partner-1',
+        counterpartyName: '华东国旅 (上海)',
+      },
     ])
-    expect(
-      paths.some(
-        (path) =>
-          path.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-      ),
-    ).toBe(false)
   })
 })
 
@@ -142,7 +187,7 @@ describe('countSourceOrderReceivablePaths', () => {
         balanceCents: 700000,
         netReceivableCents: 1000000,
       }),
-    ).toBe(1)
+    ).toBe(2)
 
     expect(
       countSourceOrderReceivablePaths({

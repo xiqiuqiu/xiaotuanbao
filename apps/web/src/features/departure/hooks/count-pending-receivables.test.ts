@@ -40,6 +40,7 @@ function order(
     receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    hasIncompleteReceivablePaths: false,
     estimatedRebateCents: 0,
     rebateCents: 0,
     rebateStatus: 'not_generated',
@@ -64,13 +65,27 @@ describe('countPendingReceivables', () => {
     expect(count).toBe(2)
   })
 
-  it('split: counts only balance Guest path (P does not open a receivable)', () => {
+  it('split: counts balance Guest + top-up when S>G', () => {
     const count = countPendingReceivables([
       order({
         collectionMode: SourceOrderCollectionMode.SPLIT,
         depositCents: 300000,
         balanceCents: 700000,
         netReceivableCents: 1000000,
+        partnerCollectedCents: 300000,
+        guestCollectCents: 700000,
+      }),
+    ])
+    expect(count).toBe(2)
+  })
+
+  it('split: counts only balance when G already covers S', () => {
+    const count = countPendingReceivables([
+      order({
+        collectionMode: SourceOrderCollectionMode.SPLIT,
+        depositCents: 300000,
+        balanceCents: 700000,
+        netReceivableCents: 700000,
         partnerCollectedCents: 300000,
         guestCollectCents: 700000,
       }),
@@ -92,7 +107,7 @@ describe('countPendingReceivables', () => {
     expect(count).toBe(1)
   })
 
-  it('skips orders that already have receivables', () => {
+  it('skips orders that already have complete receivables', () => {
     const count = countPendingReceivables([
       order({
         collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
@@ -105,5 +120,22 @@ describe('countPendingReceivables', () => {
       }),
     ])
     expect(count).toBe(0)
+  })
+
+  it('counts incomplete orders that still need path backfill', () => {
+    const count = countPendingReceivables([
+      order({
+        collectionMode: SourceOrderCollectionMode.SPLIT,
+        depositCents: 600000,
+        balanceCents: 20000,
+        netReceivableCents: 500000,
+        partnerCollectedCents: 600000,
+        guestCollectCents: 20000,
+        receivableStatus: SourceOrderReceivableStatus.PENDING,
+        hasIncompleteReceivablePaths: true,
+        hasPaymentSchedule: true,
+      }),
+    ])
+    expect(count).toBe(2)
   })
 })

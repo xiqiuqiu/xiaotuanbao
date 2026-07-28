@@ -29,10 +29,10 @@ type ApplyClientFilters = (
   keyword: string,
   statusFilter?: PaymentScheduleStatusFilter,
   dueDateRange?: DueDateRange,
+  sourceOrderId?: string,
 ) => PaymentScheduleSummary[]
 
 type UsePaymentScheduleLocateOptions = {
-  isReceivable: boolean
   highlightSourceOrderId?: string
   highlightSegmentResourceId?: string
   onHighlightConsumed?: () => void
@@ -43,6 +43,7 @@ type UsePaymentScheduleLocateOptions = {
   statusFilter?: PaymentScheduleStatusFilter
   dueDateRange?: DueDateRange
   pageSize: number
+  filterSourceOrderId?: string
   applyClientFilters: ApplyClientFilters
 }
 
@@ -52,7 +53,6 @@ type UsePaymentScheduleLocateOptions = {
  * with its own setState during render.
  */
 export function usePaymentScheduleLocate({
-  isReceivable,
   highlightSourceOrderId,
   highlightSegmentResourceId,
   onHighlightConsumed,
@@ -63,11 +63,16 @@ export function usePaymentScheduleLocate({
   statusFilter,
   dueDateRange,
   pageSize,
+  filterSourceOrderId,
   applyClientFilters,
 }: UsePaymentScheduleLocateOptions) {
-  const highlightId = isReceivable ? highlightSourceOrderId : highlightSegmentResourceId
-  const locateSourceOrderId = isReceivable ? highlightId : undefined
-  const locateSegmentResourceId = !isReceivable ? highlightId : undefined
+  // Receivable locate is always by source order; payable may be segment resource
+  // (供应商资源) or source order (客源返利). Prefer source-order when both set.
+  const locateSourceOrderId = highlightSourceOrderId
+  const locateSegmentResourceId = highlightSourceOrderId
+    ? undefined
+    : highlightSegmentResourceId
+  const highlightId = locateSourceOrderId ?? locateSegmentResourceId
 
   const [locateFlashActive, setLocateFlashActive] = useState(false)
   const [locateStartedFor, setLocateStartedFor] = useState<string | null>(null)
@@ -92,6 +97,7 @@ export function usePaymentScheduleLocate({
       keyword,
       statusFilter,
       dueDateRange,
+      filterSourceOrderId,
     )
     const firstMatchIndex = items.findIndex((item) =>
       matchesLocateTarget(item, locateSourceOrderId, locateSegmentResourceId),

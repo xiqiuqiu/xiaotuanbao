@@ -2,6 +2,7 @@ import { DepartureStatus } from '@xiaotuanbao/shared'
 import type { DepartureDetail } from '@/types/api'
 import { formatCents } from '../catalog'
 import { isCompletionTagIncomplete } from './departure-transition'
+import { formatReceivableBalanceAnomalyCopy } from './format-receivable-balance-anomaly'
 
 export type DepartureNextAction = {
   type: 'info' | 'warning' | 'success'
@@ -54,10 +55,11 @@ function resolveAnomalyAction(
   const anomalyCount = anomalies.length
 
   if (receivableAnomaly) {
+    const copy = formatReceivableBalanceAnomalyCopy(receivableAnomaly)
     return {
       type: 'warning',
-      title: anomalyCount > 1 ? `发现 ${anomalyCount} 项财务异常` : '收款守恒异常',
-      description: `组成合计 ${formatCents(receivableAnomaly.actualCents)}，应为 ${formatCents(receivableAnomaly.expectedCents)}，差额 ${formatCents(receivableAnomaly.differenceCents)}`,
+      title: anomalyCount > 1 ? `发现 ${anomalyCount} 项财务异常` : copy.title,
+      description: copy.description,
       action: {
         label: '查看应收',
         tab: 'receivables',

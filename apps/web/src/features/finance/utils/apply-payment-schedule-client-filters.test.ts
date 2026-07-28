@@ -50,3 +50,37 @@ describe('applyPaymentScheduleClientFilters keyword', () => {
     expect(applyPaymentScheduleClientFilters(items, '不存在')).toHaveLength(0)
   })
 })
+
+describe('applyPaymentScheduleClientFilters sourceOrderId', () => {
+  it('keeps only schedules belonging to that source order', () => {
+    const items = [
+      schedule({
+        id: 'ar-1',
+        direction: 'receivable',
+        scheduleNo: 'AR-1',
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+        sourceId: 'order-target',
+        counterpartyType: 'guest',
+        counterpartyName: '备用合作伙伴',
+      }),
+      schedule({
+        id: 'ar-2',
+        direction: 'receivable',
+        scheduleNo: 'AR-2',
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+        sourceId: 'order-other',
+        counterpartyType: 'guest',
+        counterpartyName: '备用合作伙伴',
+      }),
+    ]
+
+    const filtered = applyPaymentScheduleClientFilters(
+      items,
+      '',
+      undefined,
+      null,
+      'order-target',
+    )
+    expect(filtered.map((item) => item.id)).toEqual(['ar-1'])
+  })
+})

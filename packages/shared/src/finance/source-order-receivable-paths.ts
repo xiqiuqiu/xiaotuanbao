@@ -22,6 +22,17 @@ export interface SourceOrderReceivablePathSpec {
   counterpartyName?: string
 }
 
+/** G约定：全部我方代收=定金+尾款；分拆=尾款。 */
+function guestAgreedCents(order: SourceOrderReceivablePathInput): number {
+  if (order.collectionMode === SourceOrderCollectionMode.GUEST_ONLY) {
+    return order.depositCents + order.balanceCents
+  }
+  if (order.collectionMode === SourceOrderCollectionMode.SPLIT) {
+    return order.balanceCents
+  }
+  return 0
+}
+
 /** Build receivable schedule specs for a source order's collection split (ADR-0033). */
 export function buildSourceOrderReceivablePaths(
   order: SourceOrderReceivablePathInput,
@@ -42,7 +53,7 @@ export function buildSourceOrderReceivablePaths(
     return paths
   }
 
-  // 代收场景：只建适用的定金/尾款 Guest 节点；不建客户补款与返利。
+  // 代收场景：建适用 Guest 期次；S−G约定>0 时同批建客户补款；不建返利。
   if (order.collectionMode === SourceOrderCollectionMode.GUEST_ONLY && order.depositCents > 0) {
     paths.push({
       sourceType: PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
@@ -62,6 +73,18 @@ export function buildSourceOrderReceivablePaths(
       counterpartyType: CounterpartyType.GUEST,
       counterpartyId: order.sourceOrderId,
       counterpartyName: order.displayName,
+    })
+  }
+
+  const topUpCents = Math.max(0, order.netReceivableCents - guestAgreedCents(order))
+  if (topUpCents > 0) {
+    paths.push({
+      sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+      amountCents: topUpCents,
+      title: '客户补款',
+      counterpartyType: CounterpartyType.PARTNER,
+      counterpartyId: order.partnerId,
+      counterpartyName: order.partnerName,
     })
   }
 
