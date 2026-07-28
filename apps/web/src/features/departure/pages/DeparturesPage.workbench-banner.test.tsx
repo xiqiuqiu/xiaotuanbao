@@ -125,6 +125,10 @@ describe('DeparturesPage workbench filter banner', () => {
 
     await user.click(screen.getByRole('button', { name: '重置' }))
 
-    expect(navigate).toHaveBeenCalledWith({ to: '/departure', search: {} })
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure',
+      search: {},
+      replace: true,
+    })
   })
 })

@@ -1,6 +1,8 @@
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { DepartureDetail } from '@/types/api'
-import { DepartureHeaderAlerts } from './DepartureHeaderAlerts'
+import type { DepartureNextAction } from '../utils/departure-next-action'
 import { DepartureHeaderCard } from './DepartureHeaderCard'
+import { DepartureNextActionAlert } from './DepartureNextActionAlert'
 import { DepartureOperationsSheetDrawer } from './DepartureOperationsSheetDrawer'
 import { DepartureOverviewDrawer } from './DepartureOverviewDrawer'
 import { DepartureTransitionModal } from './DepartureTransitionModal'
@@ -15,6 +17,8 @@ interface DepartureHeaderProps {
 }
 
 export function DepartureHeader({ departure, canEdit, onUpdated }: DepartureHeaderProps) {
+  const navigate = useNavigate()
+  const search = useSearch({ strict: false })
   const {
     overviewForm,
     closeForm,
@@ -27,27 +31,72 @@ export function DepartureHeader({ departure, canEdit, onUpdated }: DepartureHead
     setOperationsSheetOpen,
     unarchiveModalOpen,
     setUnarchiveModalOpen,
+    historyOpen,
+    setHistoryOpen,
     transitionAction,
     setTransitionAction,
-    canTransitionToSettled,
-    canUnarchive,
     actionLoading,
     unarchivePending,
     menuItems,
+    primaryAction,
+    handleActionKey,
     handleTransitionConfirm,
     handleCloseSubmit,
     handleUnarchiveSubmit,
   } = useDepartureHeaderActions(departure, canEdit, onUpdated)
 
+  const handleNextAction = (action: NonNullable<DepartureNextAction['action']>) => {
+    if (action.intent === 'edit') {
+      handleActionKey('edit')
+      return
+    }
+    if (action.intent === 'pending_settlement') {
+      handleActionKey('pending_settlement')
+      return
+    }
+    if (action.intent === 'mark_settled') {
+      handleActionKey('settled')
+      return
+    }
+    if (action.intent === 'close') {
+      handleActionKey('close')
+      return
+    }
+    if (action.intent === 'unarchive') {
+      handleActionKey('unarchive')
+      return
+    }
+    if (action.intent === 'open_history') {
+      setHistoryOpen(true)
+      return
+    }
+    if (action.tab) {
+      void navigate({
+        to: '/departure/$departureId',
+        params: { departureId: departure.id },
+        search: {
+          ...search,
+          tab: action.tab,
+          ...(search.listReturn ? { listReturn: search.listReturn } : {}),
+        },
+      })
+    }
+  }
+
   return (
     <>
-      <DepartureHeaderCard departure={departure} menuItems={menuItems} />
+      <DepartureHeaderCard
+        departure={departure}
+        menuItems={menuItems}
+        primaryAction={primaryAction}
+        historyOpen={historyOpen}
+        onHistoryOpenChange={setHistoryOpen}
+      />
 
-      <DepartureHeaderAlerts
-        canUnarchive={canUnarchive}
-        canTransitionToSettled={canTransitionToSettled}
-        onUnarchive={() => setUnarchiveModalOpen(true)}
-        onMarkSettled={() => setTransitionAction('settled')}
+      <DepartureNextActionAlert
+        departure={departure}
+        canWrite={canEdit}
+        onAction={handleNextAction}
       />
 
       <SaveAsRouteTemplateModal

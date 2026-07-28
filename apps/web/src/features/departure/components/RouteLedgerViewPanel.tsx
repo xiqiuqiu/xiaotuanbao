@@ -26,10 +26,16 @@ import {
   listDepartureRouteNames,
 } from '@/services/departure.service'
 import { formatCents } from '../catalog'
+import {
+  encodeDepartureListReturn,
+  toDepartureListReturnState,
+  type DepartureListSearch,
+} from '../utils/departure-list-search'
 import { formatRouteLedgerInboundPriceFormula } from '../utils/route-ledger-inbound-price-formula'
 
 type RouteLedgerViewPanelProps = {
   onSwitchToDepartureList: () => void
+  listReturnSearch?: DepartureListSearch
 }
 
 function formatTotalsHint(label: string, totals: RouteLedgerTotals): string {
@@ -173,7 +179,10 @@ const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
  * - 客源行含游客代表、只读拼入价算式；金额列规范名 + tooltip 习惯称；
  * - 点击团号/客源行跳转既有发团详情与客源管理路径，视图内不可改价改人数。
  */
-export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerViewPanelProps) {
+export function RouteLedgerViewPanel({
+  onSwitchToDepartureList,
+  listReturnSearch,
+}: RouteLedgerViewPanelProps) {
   const navigate = useNavigate()
   const [routeName, setRouteName] = useState<string | undefined>()
   const [startDateRange, setStartDateRange] = useState<
@@ -351,7 +360,15 @@ export function RouteLedgerViewPanel({ onSwitchToDepartureList }: RouteLedgerVie
                         void navigate({
                           to: '/departure/$departureId',
                           params: { departureId: record.departureId },
-                          search: { tab: 'sourceOrders' },
+                          search: {
+                            tab: 'sourceOrders',
+                            ...(listReturnSearch
+                              ? { listReturn: encodeDepartureListReturn(listReturnSearch) }
+                              : {}),
+                          },
+                          state: listReturnSearch
+                            ? (toDepartureListReturnState(listReturnSearch) as never)
+                            : undefined,
                         })
                       },
                     })}
