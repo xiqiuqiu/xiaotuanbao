@@ -127,15 +127,17 @@ describe('DepartureOverviewStatsCards', () => {
 
     expect(screen.getByText('其他收入')).toBeInTheDocument()
     expect(screen.getByText('¥300.00')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '查看其他收入说明' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看其他收入说明' })).toBeInTheDocument()
   })
 
   afterEach(cleanup)
 
-  it('概览结构包含计算口径入口、经营构成单组与资金进度三卡', () => {
+  it('概览结构包含标题旁说明入口、经营构成单组与资金进度三卡', () => {
     renderCards()
 
-    expect(screen.getByRole('button', { name: '查看计算口径' })).toBeInTheDocument()
+    expect(screen.getByLabelText('查看结算应收说明')).toBeInTheDocument()
+    expect(screen.getByLabelText('查看现金净流入说明')).toBeInTheDocument()
+    expect(screen.queryByLabelText('查看计算口径')).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: '经营构成' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '收款' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: '付款' })).toBeInTheDocument()
@@ -234,7 +236,7 @@ describe('DepartureOverviewStatsCards', () => {
     const user = userEvent.setup()
     renderCards()
 
-    await user.click(screen.getByRole('button', { name: '查看计算口径' }))
+    await user.hover(screen.getByLabelText('查看结算应收说明'))
     expect(
       await screen.findByText(/原始团款合计 \+ 调整净额 − 优惠合计/),
     ).toBeInTheDocument()
@@ -528,12 +530,11 @@ describe('DepartureOverviewStatsCards', () => {
     const equation = '有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00'
     expect(screen.queryByText(equation)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '查看计算口径' }))
-    const guidePopover = await screen.findByRole('tooltip')
-    expect(guidePopover).toHaveTextContent(
+    await user.hover(screen.getByLabelText('查看现金净流入说明'))
+    const guideTooltip = await screen.findByRole('tooltip')
+    expect(guideTooltip).toHaveTextContent(
       /本团当前实际发生的资金收支情况。计算：现金净流入 = 有效收入 − 有效支出。根据已关联本团的未作废收支流水实时统计。/,
     )
-    expect(within(guidePopover).getByText('现金净流入')).toBeInTheDocument()
     expect(screen.queryByText(equation)).not.toBeInTheDocument()
   })
 
