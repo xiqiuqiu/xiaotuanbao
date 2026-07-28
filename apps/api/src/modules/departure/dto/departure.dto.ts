@@ -150,6 +150,18 @@ export class UpdateDepartureDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+
+  @IsOptional()
+  @IsString()
+  driverSupplierId?: string | null
+
+  @IsOptional()
+  @IsString()
+  guideSupplierId?: string | null
+
+  @IsOptional()
+  @IsString()
+  vehiclePlate?: string | null
 }
 
 export class TransitionDepartureDto {

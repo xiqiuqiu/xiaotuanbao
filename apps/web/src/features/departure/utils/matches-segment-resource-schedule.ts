@@ -1,15 +1,17 @@
 import {
-  PaymentScheduleSourceType,
+  isResourcePayableSourceType,
   type PaymentScheduleSummary,
 } from '@xiaotuanbao/shared'
 
-/** Whether a payable schedule belongs to the given segment resource. */
+/**
+ * Whether a payable schedule belongs to the given resource (段资源 ∪ 发团级资源).
+ * Search param still named highlightSegmentResourceId for historical links.
+ */
 export function matchesSegmentResourceSchedule(
   schedule: Pick<PaymentScheduleSummary, 'sourceType' | 'sourceId'>,
-  segmentResourceId: string,
+  resourceId: string,
 ): boolean {
   return (
-    schedule.sourceId === segmentResourceId &&
-    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE
+    schedule.sourceId === resourceId && isResourcePayableSourceType(schedule.sourceType)
   )
 }

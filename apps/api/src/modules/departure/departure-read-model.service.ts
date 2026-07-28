@@ -26,7 +26,11 @@ interface SegmentRollup {
   segmentCount: number
   resourceCount: number
   payableCents: number
-  resources: Array<{ id: string; amountCents: number }>
+  resources: Array<{
+    id: string
+    amountCents: number
+    anchor: 'segment' | 'departure'
+  }>
 }
 
 interface SourceOrderPathFact {
@@ -110,7 +114,10 @@ export class DepartureReadModelService {
     const overviewSourceFactsMap = new Map<string, DepartureOverviewSourceFacts>()
     if (options.includeOverviewStats) {
       const resources = [...segmentRollupMap.values()].flatMap((rollup) => rollup.resources)
-      const [sourceOrderStates, resourceStates] = await Promise.all([
+      const segmentResources = resources.filter((resource) => resource.anchor === 'segment')
+      const departureResources = resources.filter((resource) => resource.anchor === 'departure')
+      const [sourceOrderStates, segmentResourceStates, departureResourceStates] =
+        await Promise.all([
         this.departureFinanceFacade.getSourceOrderPathFinanceStates(
           organizationId,
           sourceOrderPathFacts.map((fact) => fact.id),
@@ -130,9 +137,18 @@ export class DepartureReadModelService {
         ),
         this.departureFinanceFacade.getSegmentResourceFinanceStates(
           organizationId,
-          resources.map((resource) => resource.id),
-          new Map(resources.map((resource) => [resource.id, resource.amountCents])),
+          segmentResources.map((resource) => resource.id),
+          new Map(segmentResources.map((resource) => [resource.id, resource.amountCents])),
         ),
+        this.departureFinanceFacade.getDepartureResourceFinanceStates(
+          organizationId,
+          departureResources.map((resource) => resource.id),
+          new Map(departureResources.map((resource) => [resource.id, resource.amountCents])),
+        ),
+      ])
+      const resourceStates = new Map([
+        ...segmentResourceStates,
+        ...departureResourceStates,
       ])
 
       const collectionInputsByDeparture = new Map<
@@ -347,16 +363,22 @@ export class DepartureReadModelService {
   }
 
   private async batchSegmentRollups(departureIds: string[]): Promise<Map<string, SegmentRollup>> {
-    const segments = await this.prisma.itinerarySegment.findMany({
-      where: { departureId: { in: departureIds } },
-      select: {
-        id: true,
-        departureId: true,
-        resources: {
-          select: { id: true, amountCents: true },
+    const [segments, departureResources] = await Promise.all([
+      this.prisma.itinerarySegment.findMany({
+        where: { departureId: { in: departureIds } },
+        select: {
+          id: true,
+          departureId: true,
+          resources: {
+            select: { id: true, amountCents: true },
+          },
         },
-      },
-    })
+      }),
+      this.prisma.departureResource.findMany({
+        where: { departureId: { in: departureIds } },
+        select: { id: true, departureId: true, amountCents: true },
+      }),
+    ])
 
     const map = new Map<string, SegmentRollup>()
     for (const departureId of departureIds) {
@@ -372,8 +394,27 @@ export class DepartureReadModelService {
       const rollup = map.get(segment.departureId)!
       rollup.segmentCount += 1
       rollup.resourceCount += segment.resources.length
-      rollup.payableCents += segment.resources.reduce((sum, resource) => sum + resource.amountCents, 0)
-      rollup.resources.push(...segment.resources)
+      rollup.payableCents += segment.resources.reduce(
+        (sum, resource) => sum + resource.amountCents,
+        0,
+      )
+      rollup.resources.push(
+        ...segment.resources.map((resource) => ({
+          ...resource,
+          anchor: 'segment' as const,
+        })),
+      )
+    }
+
+    for (const resource of departureResources) {
+      const rollup = map.get(resource.departureId)!
+      rollup.resourceCount += 1
+      rollup.payableCents += resource.amountCents
+      rollup.resources.push({
+        id: resource.id,
+        amountCents: resource.amountCents,
+        anchor: 'departure',
+      })
     }
 
     return map

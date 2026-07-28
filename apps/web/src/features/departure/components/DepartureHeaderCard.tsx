@@ -75,6 +75,9 @@ export function DepartureHeaderCard({ departure, menuItems }: DepartureHeaderCar
           { label: '结束日期', children: departure.endDate },
           { label: '团期天数', children: `${departure.dayCount} 天` },
           { label: '发团负责人', children: ownerLabel },
+          { label: '司机', children: departure.driverSupplierName || '-' },
+          { label: '导游', children: departure.guideSupplierName || '-' },
+          { label: '车牌', children: departure.vehiclePlate || '-' },
           { label: '创建时间', children: formatBusinessDateTime(departure.createdAt) },
           { label: '更新时间', children: formatBusinessDateTime(departure.updatedAt) },
         ]}

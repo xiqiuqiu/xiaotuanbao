@@ -1,20 +1,23 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  PendingPayableSegmentResourceItem,
   WorkbenchCoordinatorPayablePendingItem,
   WorkbenchCoordinatorReceivablePendingItem,
   WorkbenchModule,
 } from '@xiaotuanbao/shared'
-import {
-  SegmentResourcePayableGapService,
-  type PendingPayableSegmentResourceRow,
-} from '../departure/segment-resource-payable-gap.service'
+import { SegmentResourcePayableGapService } from '../departure/segment-resource-payable-gap.service'
 import {
   SourceOrderReceivableGapService,
   type PendingReceivableSourceOrderRow,
 } from '../departure/source-order-receivable-gap.service'
 
+type PendingPayableItem = PendingPayableSegmentResourceItem & {
+  segmentName: string
+  resourceKind: string
+}
+
 export interface CoordinatorSettlementSnapshot {
-  payableRows: PendingPayableSegmentResourceRow[]
+  payableRows: PendingPayableItem[]
   pendingRows: PendingReceivableSourceOrderRow[]
   pendingCountByDepartureId: ReadonlyMap<string, number>
 }
@@ -49,9 +52,9 @@ export class CoordinatorSettlementWorkbenchService {
         kind: 'coordinator-payable-pending',
         id: row.id,
         title: row.title,
-        href: `/departure/${row.segment.departure.id}?tab=execution&highlightSegmentResourceId=${encodeURIComponent(row.id)}`,
-        departureName: row.segment.departure.name,
-        segmentName: row.segment.name,
+        href: row.href,
+        departureName: row.departureName,
+        segmentName: row.segmentName,
         resourceKind: row.resourceKind,
       }))
     const pendingItems: WorkbenchCoordinatorReceivablePendingItem[] = snapshot.pendingRows

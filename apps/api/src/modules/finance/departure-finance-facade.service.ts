@@ -635,8 +635,11 @@ export class DepartureFinanceFacade {
       return
     }
     if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-      // #205 wires DepartureResource update; keep the dispatch seam here.
-      throw new BadRequestException('关联资源不存在，无法调整约定金额')
+      await this.syncDepartureResourceAmountOnPayableAdjust(tx, {
+        resourceId: params.sourceId,
+        amountCents: params.amountCents,
+      })
+      return
     }
     throw new BadRequestException('仅资源应付节点可调整约定金额')
   }
@@ -663,6 +666,24 @@ export class DepartureFinanceFacade {
     })
   }
 
+  async syncDepartureResourceAmountOnPayableAdjust(
+    tx: TxClient,
+    params: { resourceId: string; amountCents: number },
+  ): Promise<void> {
+    const resource = await tx.departureResource.findFirst({
+      where: { id: params.resourceId },
+      select: { id: true },
+    })
+    if (!resource) {
+      throw new BadRequestException('关联资源不存在，无法调整约定金额')
+    }
+
+    await tx.departureResource.update({
+      where: { id: resource.id },
+      data: { amountCents: params.amountCents },
+    })
+  }
+
   /**
    * Row-lock the resource source before voiding its payable (concurrency with regenerate).
    * Dispatches by resource payable sourceType (segment ∪ departure).
@@ -684,7 +705,14 @@ export class DepartureFinanceFacade {
       return
     }
     if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-      // #205 locks departure_resources here once the entity exists.
+      await tx.$queryRaw`
+        SELECT dr.id
+        FROM departure_resources dr
+        JOIN departures departure ON departure.id = dr.departure_id
+        WHERE dr.id = ${params.sourceId}
+          AND departure.organization_id = ${params.organizationId}
+        FOR UPDATE OF dr
+      `
       return
     }
     throw new BadRequestException('仅资源应付节点可作废')
@@ -880,6 +908,97 @@ export class DepartureFinanceFacade {
       ? new Map([[resourceId, resource.amountCents]])
       : undefined
     const map = await this.getSegmentResourceFinanceStates(
+      organizationId,
+      [resourceId],
+      agreedAmountByResourceId,
+    )
+    return (
+      map.get(resourceId) ??
+      this.toResourceFinanceState(resource?.amountCents ?? 0, null, 0, false)
+    )
+  }
+
+  async getDepartureResourceFinanceStates(
+    organizationId: string,
+    resourceIds: string[],
+    agreedAmountByResourceId?: Map<string, number>,
+  ): Promise<Map<string, SegmentResourceFinanceState>> {
+    const uniqueIds = [...new Set(resourceIds)]
+    const result = new Map<string, SegmentResourceFinanceState>()
+    if (uniqueIds.length === 0) {
+      return result
+    }
+
+    const amountMap =
+      agreedAmountByResourceId ?? (await this.loadDepartureAgreedAmounts(uniqueIds))
+
+    const schedules = await this.prisma.paymentSchedule.findMany({
+      where: {
+        organizationId,
+        sourceId: { in: uniqueIds },
+        sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+        direction: PaymentScheduleDirection.payable,
+        voidedAt: null,
+      },
+    })
+
+    const schedulesByResourceId = new Map<string, PaymentSchedule[]>()
+    for (const schedule of schedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      const list = schedulesByResourceId.get(schedule.sourceId) ?? []
+      list.push(schedule)
+      schedulesByResourceId.set(schedule.sourceId, list)
+    }
+
+    const scheduleByResourceId = new Map<string, PaymentSchedule>()
+    for (const [resourceId, list] of schedulesByResourceId) {
+      const active = list.find((schedule) => schedule.cancelledAt == null)
+      if (active) {
+        scheduleByResourceId.set(resourceId, active)
+        continue
+      }
+      const latestCancelled = [...list].sort(
+        (a, b) => (b.cancelledAt?.getTime() ?? 0) - (a.cancelledAt?.getTime() ?? 0),
+      )[0]
+      if (latestCancelled) {
+        scheduleByResourceId.set(resourceId, latestCancelled)
+      }
+    }
+
+    const scheduleIds = [...scheduleByResourceId.values()].map((schedule) => schedule.id)
+    const [settledMap, historyMap] = await Promise.all([
+      this.batchGetSettledAmounts(scheduleIds),
+      this.batchHasVerificationHistory(scheduleIds),
+    ])
+
+    for (const resourceId of uniqueIds) {
+      const agreedAmountCents = amountMap.get(resourceId) ?? 0
+      const schedule = scheduleByResourceId.get(resourceId)
+      result.set(
+        resourceId,
+        this.toResourceFinanceState(
+          agreedAmountCents,
+          schedule ?? null,
+          schedule ? (settledMap.get(schedule.id) ?? 0) : 0,
+          schedule ? (historyMap.get(schedule.id) ?? false) : false,
+        ),
+      )
+    }
+
+    return result
+  }
+
+  async getDepartureResourceFinanceState(
+    organizationId: string,
+    resourceId: string,
+    resource?: Pick<{ amountCents: number }, 'amountCents'>,
+  ): Promise<SegmentResourceFinanceState> {
+    const agreedAmountByResourceId = resource
+      ? new Map([[resourceId, resource.amountCents]])
+      : undefined
+    const map = await this.getDepartureResourceFinanceStates(
       organizationId,
       [resourceId],
       agreedAmountByResourceId,
@@ -1095,6 +1214,16 @@ export class DepartureFinanceFacade {
     }
 
     return pending
+  }
+
+  private async loadDepartureAgreedAmounts(
+    resourceIds: string[],
+  ): Promise<Map<string, number>> {
+    const resources = await this.prisma.departureResource.findMany({
+      where: { id: { in: resourceIds } },
+      select: { id: true, amountCents: true },
+    })
+    return new Map(resources.map((resource) => [resource.id, resource.amountCents]))
   }
 
   private async loadAgreedAmounts(resourceIds: string[]): Promise<Map<string, number>> {

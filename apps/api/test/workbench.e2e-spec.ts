@@ -416,7 +416,7 @@ describe('Workbench contract (e2e)', () => {
       })
       expect(coordinatorModule.items[4]).toMatchObject({
         timeHint: '7 天后出发',
-        dataGaps: [{ code: 'no_segment_resources', label: '无行程资源' }],
+        dataGaps: [{ code: 'no_segment_resources', label: '无任何资源' }],
       })
 
       for (const metric of coordinatorModule.metrics) {

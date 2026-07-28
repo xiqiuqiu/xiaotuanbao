@@ -682,6 +682,9 @@ export interface UpdateDepartureDto {
   endDate?: string
   ownerUserId?: string
   notes?: string | null
+  driverSupplierId?: string | null
+  guideSupplierId?: string | null
+  vehiclePlate?: string | null
 }
 
 export interface TransitionDepartureDto {
@@ -800,6 +803,11 @@ export interface UpdateGroundIncomeDto {
 
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
+  driverSupplierId: string | null
+  driverSupplierName: string | null
+  guideSupplierId: string | null
+  guideSupplierName: string | null
+  vehiclePlate: string | null
   grossReceivableCents: number
   /** 本团全部客源单的团款调整净额合计（增项 − 减项）。 */
   fareAdjustmentNetCents: number
@@ -1650,6 +1658,61 @@ export interface UpdateSegmentResourceDto {
   notes?: string | null
 }
 
+/** 发团级资源行（全程用车/保险/导游等）；字段与段资源对称，锚点为发团。 */
+export interface DepartureResourceSummary {
+  id: string
+  departureId: string
+  resourceKind: string
+  counterpartyType: string
+  partnerId: string | null
+  partnerName: string | null
+  supplierId: string | null
+  supplierName: string | null
+  counterpartyName: string
+  title: string
+  amountCents: number
+  notes: string | null
+  pendingCheck: boolean
+  hasPaymentSchedule: boolean
+  payableStatus: string
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+  paymentScheduleId: string | null
+  financeTouched: boolean
+  unsettledAmountCents: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DepartureResourceListResult {
+  items: DepartureResourceSummary[]
+  total: number
+}
+
+export interface GenerateDeparturePayableResult {
+  schedule: PaymentScheduleSummary
+  resource: DepartureResourceSummary
+  sourceAmountMismatch: boolean
+}
+
+export interface CreateDepartureResourceDto {
+  resourceKind: string
+  partnerId?: string
+  supplierId?: string
+  title?: string
+  amountCents: number
+  notes?: string
+}
+
+export interface UpdateDepartureResourceDto {
+  resourceKind?: string
+  partnerId?: string
+  supplierId?: string
+  title?: string
+  amountCents?: number
+  notes?: string | null
+}
+
 /** Null progress means finance tracking has not started for that row — UI renders as `—`. */
 export interface DepartureOperationsSheetGuestRepresentative {
   name: string
@@ -1758,6 +1821,9 @@ export interface DepartureOperationsSheetDepartureInfo {
   endDate: string
   dayCount: number
   ownerName: string
+  driverSupplierName: string | null
+  guideSupplierName: string | null
+  vehiclePlate: string | null
   status: string
   departureProgress: string
   notes: string | null
@@ -1835,6 +1901,8 @@ export interface DepartureOperationsSheetSnapshot {
   segments: DepartureOperationsSheetSegmentRow[]
   groundIncomes: DepartureOperationsSheetGroundIncomeRow[]
   groundIncomeTotalCents: number
+  /** 发团级资源（全程用车/保险/导游等），与段资源一并进入运营表汇总。 */
+  departureResources: DepartureOperationsSheetResourceRow[]
   /** Non-voided departure transactions with remaining unverified balance. */
   pendingTransactions: DepartureOperationsSheetPendingTransaction[]
   /** Null when there are no pending transactions (avoid misleading zeros). */

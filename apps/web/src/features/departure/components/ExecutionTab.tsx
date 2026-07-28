@@ -35,6 +35,7 @@ import {
 } from '../utils/execution-segment-selection'
 import { formValuesToPayload } from '../utils/segment-form'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
+import { DepartureResourcePane } from './DepartureResourcePane'
 import { ExecutionSegmentListPane } from './ExecutionSegmentListPane'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
@@ -42,6 +43,7 @@ import styles from './ExecutionTab.module.css'
 interface ExecutionTabProps {
   departure: DepartureDetail
   segmentId?: string
+  highlightDepartureResourceId?: string
   /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
   /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应付。 */
@@ -58,6 +60,7 @@ function sortSegmentsBySortOrder(
 export function ExecutionTab({
   departure,
   segmentId,
+  highlightDepartureResourceId,
   readOnly,
   canEdit,
   amountReadOnly = false,
@@ -337,6 +340,13 @@ export function ExecutionTab({
             className={styles.paneCard}
             classNames={{ body: styles.paneCardBody }}
           >
+            <DepartureResourcePane
+              departure={departure}
+              readOnly={readOnly}
+              canEdit={canEdit}
+              amountReadOnly={amountReadOnly}
+              highlightDepartureResourceId={highlightDepartureResourceId}
+            />
             {segments.length === 0 ? (
               <Empty
                 description="可按出团～回团一键生成一日一段骨架，或手工添加"

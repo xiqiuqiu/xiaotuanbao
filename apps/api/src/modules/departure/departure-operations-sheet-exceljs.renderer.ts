@@ -138,7 +138,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       sheet,
       row,
       '分区',
-      '发团与数据阶段｜客源及应收｜行程段资源及应付｜团上收入｜待确认款项｜财务汇总与异常｜发团级备注',
+      '发团与数据阶段｜客源及应收｜行程段资源及应付｜发团级资源及应付｜团上收入｜待确认款项｜财务汇总与异常｜发团级备注',
     )
     const identityEndRow = row - 1
     sheet.pageSetup.printTitlesRow = `${identityStartRow}:${identityEndRow}`
@@ -157,6 +157,9 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       `${snapshot.departure.startDate} ~ ${snapshot.departure.endDate}（${snapshot.departure.dayCount} 天）`,
     )
     row = writeKeyValue(sheet, row, '负责人', snapshot.departure.ownerName)
+    row = writeKeyValue(sheet, row, '司机', snapshot.departure.driverSupplierName ?? '-')
+    row = writeKeyValue(sheet, row, '导游', snapshot.departure.guideSupplierName ?? '-')
+    row = writeKeyValue(sheet, row, '车牌', snapshot.departure.vehiclePlate ?? '-')
     row = writeKeyValue(
       sheet,
       row,
@@ -227,6 +230,27 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       }
       row += 1
     }
+
+    row = writeSectionHeader(sheet, row, '发团级资源及应付')
+    row = writeHeaderRow(sheet, row, [
+      '资源种类',
+      '供应商',
+      '名称',
+      '约定应付',
+      '财务金额',
+      '已付',
+      '未付',
+      '进度',
+      '备注',
+    ])
+    if (snapshot.departureResources.length === 0) {
+      row = writeKeyValue(sheet, row, '说明', '暂无发团级资源')
+    } else {
+      for (const resource of snapshot.departureResources) {
+        row = writeResourceRow(sheet, row, resource)
+      }
+    }
+    row += 1
 
     if (snapshot.groundIncomes.length > 0) {
       row = writeSectionHeader(sheet, row, '团上收入')
