@@ -205,6 +205,16 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/departure",
+    "route": "GET /api/departures/route-ledger",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/departure",
+    "route": "GET /api/departures/route-names",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "/departure",
     "route": "GET /api/finance/departure-options",
   },
   {
@@ -808,6 +818,8 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/departures/:id/transition [departure:write]",
     "POST /api/departures/:id/unarchive [departure:write]",
     "GET /api/departures/next-no [/departure]",
+    "GET /api/departures/route-ledger [/departure]",
+    "GET /api/departures/route-names [/departure]",
     "GET /api/finance/departure-options [/departure]",
     "GET /api/finance/partner-options [/partner]",
     "GET /api/finance/payables [/finance/payable]",
@@ -952,6 +964,8 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/departures/:id/transition [departure:write]",
     "POST /api/departures/:id/unarchive [departure:write]",
     "GET /api/departures/next-no [/departure]",
+    "GET /api/departures/route-ledger [/departure]",
+    "GET /api/departures/route-names [/departure]",
     "GET /api/finance/departure-options [/departure]",
     "GET /api/finance/partner-options [/partner]",
     "GET /api/finance/payables/:id [/departure]",
@@ -1051,6 +1065,8 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/departures/:id/operations-sheet [/departure]",
     "GET /api/departures/:id/operations-sheet.xlsx [/departure]",
     "GET /api/departures/next-no [/departure]",
+    "GET /api/departures/route-ledger [/departure]",
+    "GET /api/departures/route-names [/departure]",
     "GET /api/finance/departure-options [/departure]",
     "GET /api/finance/partner-options [/partner]",
     "GET /api/finance/payables [/finance/payable]",

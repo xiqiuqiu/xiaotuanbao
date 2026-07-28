@@ -654,6 +654,101 @@ export interface DepartureListResult {
   pageSize: number
 }
 
+/** Distinct `routeName` values present on the org's departures (exact match keys). */
+export interface DepartureRouteNamesResult {
+  items: string[]
+}
+
+/** 线路视图客源行金额/人数合计（日块与发团组共用）。 */
+export interface RouteLedgerTotals {
+  orderCount: number
+  guestCount: number
+  grossReceivableCents: number
+  netReceivableCents: number
+  partnerCollectedCents: number
+  guestCollectCents: number
+}
+
+/**
+ * 线路视图拼出行（#184）：挂在日/发团汇总，不进客源行，也不表示客源分配关系。
+ * 仅 Resource Kind = 拼出；自营资源不计入。供应商名含新写 Supplier 与历史 Partner 承接方。
+ */
+export interface RouteLedgerOutsourceLine {
+  id: string
+  /** 供应商（新写）或历史 Partner 承接方展示名 */
+  supplierName: string
+  amountCents: number
+  title: string
+}
+
+/** 日块 / 发团组的拼出汇总。 */
+export interface RouteLedgerOutsourceSummary {
+  totalAmountCents: number
+  items: RouteLedgerOutsourceLine[]
+}
+
+/**
+ * 线路视图客源明细行（#183/#185）：约定口径字段，不含核销已收/未收与行级实收业务。
+ * 拼出汇总挂在日/发团，不进本行。拼入单价供前端拼只读算式，不参与服务端合计权威计算。
+ */
+export interface RouteLedgerSourceOrderRow {
+  id: string
+  departureId: string
+  partnerId: string
+  /** 发客客户 */
+  partnerName: string
+  displayName: string
+  /** 游客代表：客人名单最早一条姓名；名单空则 null */
+  guestRepresentativeName: string | null
+  /** 游客代表联系电话；名单空则 null */
+  guestRepresentativePhone: string | null
+  adultGuestCount: number
+  childGuestCount: number
+  guestCount: number
+  /** 拼入单价（成人），供只读算式；权威金额仍以 gross/net 字段为准 */
+  adultUnitPriceCents: number
+  /** 拼入单价（儿童），供只读算式 */
+  childUnitPriceCents: number
+  /** 原始团款 */
+  grossReceivableCents: number
+  /** 结算金额 */
+  netReceivableCents: number
+  /** 客户已收（客户补款） */
+  partnerCollectedCents: number
+  /** 我方代收（游客代收） */
+  guestCollectCents: number
+  notes: string | null
+}
+
+export interface RouteLedgerDepartureGroup {
+  departureId: string
+  departureNo: string
+  departureName: string
+  /** 出团日期（YYYY-MM-DD） */
+  startDate: string
+  totals: RouteLedgerTotals
+  /** 本发团拼出资源汇总（#184） */
+  outsource: RouteLedgerOutsourceSummary
+  sourceOrders: RouteLedgerSourceOrderRow[]
+}
+
+export interface RouteLedgerDateBlock {
+  /** 出团日期（YYYY-MM-DD） */
+  startDate: string
+  totals: RouteLedgerTotals
+  /** 当日各发团拼出合并汇总（#184） */
+  outsource: RouteLedgerOutsourceSummary
+  departures: RouteLedgerDepartureGroup[]
+}
+
+/** GET /departures/route-ledger 读模型：日期块 → 发团组 → 客源行。 */
+export interface RouteLedgerResult {
+  routeName: string
+  startDateFrom: string | null
+  startDateTo: string | null
+  dateBlocks: RouteLedgerDateBlock[]
+}
+
 export interface CreateDepartureDto {
   name: string
   routeName: string
