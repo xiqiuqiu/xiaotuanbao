@@ -223,15 +223,20 @@ export { PaymentScheduleActivityType } from './enums/payment-schedule-activity-t
 export { CounterpartyType } from './enums/counterparty-type.enum'
 export {
   PaymentScheduleSourceType,
+  RESOURCE_PAYABLE_SOURCE_TYPES,
   SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
   SOURCE_ORDER_CONVENTION_RECEIVABLE_SOURCE_TYPES,
   SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES,
+  isResourcePayableSourceType,
   isSourceOrderGuestCollectionSourceType,
   isSourceOrderConventionReceivableSourceType,
   isSourceOrderReceivableSourceType,
   shouldCancelSourceOrderScheduleOnConventionSync,
 } from './enums/payment-schedule-source-type.enum'
-export type { SourceOrderGuestCollectionSourceType } from './enums/payment-schedule-source-type.enum'
+export type {
+  ResourcePayableSourceType,
+  SourceOrderGuestCollectionSourceType,
+} from './enums/payment-schedule-source-type.enum'
 export { TransactionDirection } from './enums/transaction-direction.enum'
 export { TransactionWriteoffStatus } from './enums/transaction-writeoff-status.enum'
 export { PaymentChannel } from './enums/payment-channel.enum'

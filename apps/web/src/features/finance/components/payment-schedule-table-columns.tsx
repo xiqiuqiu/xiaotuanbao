@@ -5,6 +5,7 @@ import { DownOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   DepartureStatus,
+  isResourcePayableSourceType,
   isSourceOrderGuestCollectionSourceType,
   PaymentScheduleDirection,
   PaymentScheduleSourceType,
@@ -37,7 +38,7 @@ function canSettle(schedule: PaymentScheduleSummary): boolean {
 export function canCloseSchedule(schedule: PaymentScheduleSummary): boolean {
   if (
     schedule.direction === PaymentScheduleDirection.PAYABLE &&
-    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+    isResourcePayableSourceType(schedule.sourceType) &&
     !schedule.financeTouched
   ) {
     return false
@@ -74,7 +75,7 @@ export function canAdjustScheduleAmount(
 
   if (
     schedule.direction === PaymentScheduleDirection.PAYABLE &&
-    schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE
+    isResourcePayableSourceType(schedule.sourceType)
   ) {
     return true
   }

@@ -17,6 +17,7 @@ import {
 import {
   deriveScheduleState,
   isFinanceTouched,
+  isResourcePayableSourceType,
   isSourceOrderReceivableSourceType,
   PaymentScheduleSourceType,
   PaymentScheduleStatus,
@@ -260,10 +261,7 @@ export class DepartureFinanceFacade {
         } else {
           snapshot.openUnpaidCents += remainingCents
         }
-        if (
-          schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
-          schedule.sourceId
-        ) {
+        if (isResourcePayableSourceType(schedule.sourceType) && schedule.sourceId) {
           snapshot.resourcePayableCents += schedule.amountCents
           snapshot.resourcePaidCents += receivedOrPaidCents
         } else {
@@ -621,6 +619,29 @@ export class DepartureFinanceFacade {
   }
 
   /**
+   * Sync resource agreed amount with an explicit payable adjustment
+   * inside the caller's transaction (ADR-0010 / ADR-0004).
+   * Dispatches by resource payable sourceType (segment ∪ departure).
+   */
+  async syncResourceAmountOnPayableAdjust(
+    tx: TxClient,
+    params: { sourceType: string; sourceId: string; amountCents: number },
+  ): Promise<void> {
+    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      await this.syncSegmentResourceAmountOnPayableAdjust(tx, {
+        resourceId: params.sourceId,
+        amountCents: params.amountCents,
+      })
+      return
+    }
+    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+      // #205 wires DepartureResource update; keep the dispatch seam here.
+      throw new BadRequestException('关联资源不存在，无法调整约定金额')
+    }
+    throw new BadRequestException('仅资源应付节点可调整约定金额')
+  }
+
+  /**
    * Sync segment-resource agreed amount with an explicit payable adjustment
    * inside the caller's transaction (ADR-0010 / ADR-0004).
    */
@@ -640,6 +661,33 @@ export class DepartureFinanceFacade {
       where: { id: resource.id },
       data: { amountCents: params.amountCents },
     })
+  }
+
+  /**
+   * Row-lock the resource source before voiding its payable (concurrency with regenerate).
+   * Dispatches by resource payable sourceType (segment ∪ departure).
+   */
+  async lockResourceSourceForVoid(
+    tx: TxClient,
+    params: { organizationId: string; sourceType: string; sourceId: string },
+  ): Promise<void> {
+    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      await tx.$queryRaw`
+        SELECT sr.id
+        FROM segment_resources sr
+        JOIN itinerary_segments segment ON segment.id = sr.segment_id
+        JOIN departures departure ON departure.id = segment.departure_id
+        WHERE sr.id = ${params.sourceId}
+          AND departure.organization_id = ${params.organizationId}
+        FOR UPDATE OF sr
+      `
+      return
+    }
+    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+      // #205 locks departure_resources here once the entity exists.
+      return
+    }
+    throw new BadRequestException('仅资源应付节点可作废')
   }
 
   /**

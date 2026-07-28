@@ -53,6 +53,15 @@ describe('canAdjustScheduleAmount', () => {
       canAdjustScheduleAmount(schedule({ departureStatus: DepartureStatus.CLOSED }), false),
     ).toBe(false)
     expect(canAdjustScheduleAmount(schedule(), true)).toBe(false)
+    expect(
+      canAdjustScheduleAmount(
+        schedule({
+          sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+          sourceId: 'departure-resource-1',
+        }),
+        false,
+      ),
+    ).toBe(true)
   })
 
   it('shows adjust for open finance-touched source-order receivable paths (#93)', () => {

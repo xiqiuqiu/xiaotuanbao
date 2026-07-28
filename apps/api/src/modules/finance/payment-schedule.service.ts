@@ -15,6 +15,7 @@ import type {
 import {
   deriveScheduleState,
   isFinanceTouched,
+  isResourcePayableSourceType,
   isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
 } from '@xiaotuanbao/shared'
@@ -244,6 +245,8 @@ export class PaymentScheduleService {
       }
       if (schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
         resourceIds.add(schedule.sourceId)
+      } else if (schedule.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+        // #205: batch-load DepartureResource labels once the entity exists.
       } else if (SOURCE_ORDER_SCHEDULE_SOURCE_TYPES.has(schedule.sourceType)) {
         sourceOrderIds.add(schedule.sourceId)
       }
@@ -618,7 +621,7 @@ export class PaymentScheduleService {
       ])
       const isResourcePayable =
         schedule.direction === PaymentScheduleDirection.payable &&
-        schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+        isResourcePayableSourceType(schedule.sourceType) &&
         Boolean(schedule.sourceId)
       if (
         isResourcePayable &&
@@ -828,7 +831,7 @@ export class PaymentScheduleService {
 
       const isPayableResource =
         schedule.direction === PaymentScheduleDirection.payable &&
-        schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+        isResourcePayableSourceType(schedule.sourceType) &&
         Boolean(schedule.sourceId)
       const isReceivableSourcePath =
         schedule.direction === PaymentScheduleDirection.receivable &&
@@ -876,8 +879,9 @@ export class PaymentScheduleService {
       const unsettledAmountCents = dto.amountCents - settledAmountCents
 
       if (isPayableResource) {
-        await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
-          resourceId: schedule.sourceId!,
+        await this.departureFinanceFacade.syncResourceAmountOnPayableAdjust(tx, {
+          sourceType: schedule.sourceType,
+          sourceId: schedule.sourceId!,
           amountCents: dto.amountCents,
         })
       } else {
@@ -964,7 +968,7 @@ export class PaymentScheduleService {
       }
       if (
         schedule.direction !== PaymentScheduleDirection.payable ||
-        schedule.sourceType !== PaymentScheduleSourceType.SEGMENT_RESOURCE ||
+        !isResourcePayableSourceType(schedule.sourceType) ||
         !schedule.sourceId
       ) {
         throw new BadRequestException('仅资源应付节点可作废')
@@ -977,15 +981,11 @@ export class PaymentScheduleService {
         throw new BadRequestException('节点已作废')
       }
 
-      await tx.$queryRaw`
-        SELECT sr.id
-        FROM segment_resources sr
-        JOIN itinerary_segments segment ON segment.id = sr.segment_id
-        JOIN departures departure ON departure.id = segment.departure_id
-        WHERE sr.id = ${schedule.sourceId}
-          AND departure.organization_id = ${organizationId}
-        FOR UPDATE OF sr
-      `
+      await this.departureFinanceFacade.lockResourceSourceForVoid(tx, {
+        organizationId,
+        sourceType: schedule.sourceType,
+        sourceId: schedule.sourceId,
+      })
 
       await this.departureFinanceFacade.lockMutableById(
         tx,
@@ -1062,7 +1062,7 @@ export class PaymentScheduleService {
   ): Promise<void> {
     const isPayableResource =
       schedule.direction === PaymentScheduleDirection.payable &&
-      schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE &&
+      isResourcePayableSourceType(schedule.sourceType) &&
       Boolean(schedule.sourceId)
     const isReceivableSourcePath =
       schedule.direction === PaymentScheduleDirection.receivable &&
@@ -1071,8 +1071,9 @@ export class PaymentScheduleService {
       Boolean(schedule.sourceId)
 
     if (isPayableResource) {
-      await this.departureFinanceFacade.syncSegmentResourceAmountOnPayableAdjust(tx, {
-        resourceId: schedule.sourceId!,
+      await this.departureFinanceFacade.syncResourceAmountOnPayableAdjust(tx, {
+        sourceType: schedule.sourceType,
+        sourceId: schedule.sourceId!,
         amountCents,
       })
       return
