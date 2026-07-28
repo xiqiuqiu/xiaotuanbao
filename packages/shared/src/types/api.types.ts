@@ -732,6 +732,8 @@ export interface DepartureOverviewStats {
   closedUnreceivedCents: number
   ungeneratedReceivableCents: number
   otherReceivableCents: number
+  /** 团上收入台账合计；不并入应收、收款进度或当前毛利。 */
+  otherIncomeCents: number
   /**
    * 团款收款进度分子：各单 min(Guest已收,S)+客户补款已收（单笔不超过 S）。
    * 不含代收溢价与返利（ADR-0033 / #193）。
@@ -770,6 +772,30 @@ export interface DepartureOverviewStats {
   verifiedFromExternalCents: number
   verifiedToOtherDeparturesCents: number
   anomalies: DepartureOverviewAnomaly[]
+}
+
+export interface GroundIncomeSummary {
+  id: string
+  departureId: string
+  title: string
+  amountCents: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GroundIncomeListResult {
+  items: GroundIncomeSummary[]
+  totalCents: number
+}
+
+export interface CreateGroundIncomeDto {
+  title: string
+  amountCents: number
+}
+
+export interface UpdateGroundIncomeDto {
+  title?: string
+  amountCents?: number
 }
 
 /** Detail response extends summary with full financial Read Model aggregates. */
@@ -1705,6 +1731,12 @@ export interface DepartureOperationsSheetResourceRow {
   notes: string | null
 }
 
+export interface DepartureOperationsSheetGroundIncomeRow {
+  id: string
+  title: string
+  amountCents: number
+}
+
 export interface DepartureOperationsSheetSegmentRow {
   id: string
   sortOrder: number
@@ -1801,6 +1833,8 @@ export interface DepartureOperationsSheetSnapshot {
   departure: DepartureOperationsSheetDepartureInfo
   sourceOrders: DepartureOperationsSheetSourceOrderRow[]
   segments: DepartureOperationsSheetSegmentRow[]
+  groundIncomes: DepartureOperationsSheetGroundIncomeRow[]
+  groundIncomeTotalCents: number
   /** Non-voided departure transactions with remaining unverified balance. */
   pendingTransactions: DepartureOperationsSheetPendingTransaction[]
   /** Null when there are no pending transactions (avoid misleading zeros). */

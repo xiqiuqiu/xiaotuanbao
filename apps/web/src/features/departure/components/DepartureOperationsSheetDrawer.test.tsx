@@ -36,6 +36,8 @@ const snapshot: DepartureOperationsSheetSnapshot = {
   },
   sourceOrders: [],
   segments: [],
+  groundIncomes: [{ id: 'income-1', title: '车销', amountCents: 12_000 }],
+  groundIncomeTotalCents: 12_000,
   pendingTransactions: [],
   pendingSummary: null,
   financeSummary: { receivable: null, payable: null },
@@ -76,6 +78,9 @@ describe('DepartureOperationsSheetDrawer', () => {
     })
     expect(getDepartureOperationsSheet).toHaveBeenCalledWith('dep-1')
     expect(screen.getByText('XTB2026070001')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '团上收入' })).toBeInTheDocument()
+    expect(screen.getByText('车销')).toBeInTheDocument()
+    expect(screen.getAllByText('¥120.00')).toHaveLength(2)
 
     await user.click(screen.getByRole('button', { name: '导出 Excel' }))
     await waitFor(() => {

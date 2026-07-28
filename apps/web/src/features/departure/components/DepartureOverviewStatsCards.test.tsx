@@ -79,6 +79,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       closedUnreceivedCents: 100_000,
       ungeneratedReceivableCents: 200_000,
       otherReceivableCents: 50_000,
+      otherIncomeCents: 30_000,
       settlementCollectionReceivedCents: 400_000,
       settlementCollectionReceivableCents: 1_000_000,
       guestCollectionReceivedCents: 400_000,
@@ -121,6 +122,14 @@ function renderCards(departure = makeDeparture(), animateEnter = false) {
 }
 
 describe('DepartureOverviewStatsCards', () => {
+  it('shows ground income as an independent Other Income card', () => {
+    render(<DepartureOverviewStatsCards departure={makeDeparture()} />)
+
+    expect(screen.getByText('其他收入')).toBeInTheDocument()
+    expect(screen.getByText('¥300.00')).toBeInTheDocument()
+    expect(screen.getByLabelText('查看其他收入说明')).toBeInTheDocument()
+  })
+
   afterEach(cleanup)
 
   it('首次进入时卡片与进度条挂载入场 class', () => {

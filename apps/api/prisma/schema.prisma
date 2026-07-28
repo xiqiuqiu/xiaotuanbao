@@ -571,11 +571,25 @@ model Departure {
   financeTransactions FinanceTransaction[]
   itinerarySegments   ItinerarySegment[]
   sourceOrders        SourceOrder[]
+  groundIncomes       GroundIncome[]
   archiveHistories    DepartureArchiveHistory[]
   settlementHistories DepartureSettlementHistory[]
 
   @@unique([organizationId, departureNo])
   @@map("departures")
+}
+
+model GroundIncome {
+  id          String    @id @default(cuid())
+  departureId String    @map("departure_id")
+  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  title       String
+  amountCents Int       @map("amount_cents")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([departureId, createdAt])
+  @@map("ground_incomes")
 }
 
 model DepartureArchiveHistory {

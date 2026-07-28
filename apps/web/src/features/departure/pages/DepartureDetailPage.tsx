@@ -189,6 +189,7 @@ export function DepartureDetailPage() {
           <DepartureOverview
             departure={departure}
             animateEnter={!animatedOverviewDepartureIds.current.has(departure.id)}
+            mutationLocked={readOnly || amountReadOnly || !canEdit}
           />,
         ),
       }

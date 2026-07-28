@@ -72,6 +72,7 @@ export const EMPTY_UNVERIFIED_CASH: UnverifiedCashAggregate = {
 export interface DepartureOverviewSourceFacts {
   sourceReceivableUngeneratedCents: number
   generatedResourceAgreedCents: number
+  groundIncomeCents: number
   collectionStats: DepartureOverviewCollectionStats
 }
 
@@ -105,6 +106,7 @@ function buildDepartureOverviewStats(input: {
     closedUnreceivedCents: finance.sourceReceivableClosedUnreceivedCents,
     ungeneratedReceivableCents: input.sourceFacts.sourceReceivableUngeneratedCents,
     otherReceivableCents: finance.otherReceivableCents,
+    otherIncomeCents: input.sourceFacts.groundIncomeCents,
     settlementCollectionReceivedCents: collection.settlementCollectionReceivedCents,
     settlementCollectionReceivableCents: collection.settlementCollectionReceivableCents,
     guestCollectionReceivedCents: collection.guestCollectionReceivedCents,
@@ -329,6 +331,7 @@ export function buildDepartureReadModelAggregate(input: {
   const overviewSourceFacts = input.overviewSourceFacts ?? {
     sourceReceivableUngeneratedCents: sourceOrders.netReceivableCents,
     generatedResourceAgreedCents: 0,
+    groundIncomeCents: 0,
     collectionStats: {
       ...EMPTY_OVERVIEW_COLLECTION_STATS,
       settlementCollectionReceivableCents: sourceOrders.netReceivableCents,

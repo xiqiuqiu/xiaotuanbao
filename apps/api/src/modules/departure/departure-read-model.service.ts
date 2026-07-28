@@ -78,6 +78,7 @@ export class DepartureReadModelService {
       unverifiedCashByDeparture,
       financeSnapshotMap,
       sourceOrderPathFacts,
+      groundIncomeTotals,
     ] =
       await Promise.all([
         this.batchSourceOrderAggregates(uniqueIds),
@@ -101,6 +102,9 @@ export class DepartureReadModelService {
         options.includeOverviewStats
           ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
           : Promise.resolve([]),
+        options.includeOverviewStats
+          ? this.batchGroundIncomeTotals(organizationId, uniqueIds)
+          : Promise.resolve(new Map<string, number>()),
       ])
 
     const overviewSourceFactsMap = new Map<string, DepartureOverviewSourceFacts>()
@@ -139,6 +143,7 @@ export class DepartureReadModelService {
         overviewSourceFactsMap.set(departureId, {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
+          groundIncomeCents: groundIncomeTotals.get(departureId) ?? 0,
           collectionStats: { ...EMPTY_OVERVIEW_COLLECTION_STATS },
         })
         collectionInputsByDeparture.set(departureId, [])
@@ -322,6 +327,23 @@ export class DepartureReadModelService {
         guestCollectCents: true,
       },
     })
+  }
+
+  private async batchGroundIncomeTotals(
+    organizationId: string,
+    departureIds: string[],
+  ): Promise<Map<string, number>> {
+    const rows = await this.prisma.groundIncome.groupBy({
+      by: ['departureId'],
+      where: {
+        departureId: { in: departureIds },
+        departure: { organizationId },
+      },
+      _sum: { amountCents: true },
+    })
+    return new Map(
+      rows.map((row) => [row.departureId, row._sum.amountCents ?? 0]),
+    )
   }
 
   private async batchSegmentRollups(departureIds: string[]): Promise<Map<string, SegmentRollup>> {

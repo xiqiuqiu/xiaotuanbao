@@ -340,27 +340,35 @@ export function DepartureOverviewStatsCards({
       </Row>
 
       <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="原始团款"
             value={formatCents(departure.grossReceivableCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="优惠合计"
             value={formatCents(departure.discountCents)}
             animateEnter={animateEnter}
           />
         </Col>
-        <Col xs={24} sm={12} xl={8}>
+        <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="毛利率"
             value={marginRateLabel ?? '暂无数据'}
             equationDescription="本团当前毛利占结算应收的比例。
 计算：当前毛利 ÷ 结算应收 × 100%。
 根据当前毛利和结算应收实时统计；"
+            animateEnter={animateEnter}
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={6}>
+          <SummaryCard
+            title="其他收入"
+            value={formatCents(stats.otherIncomeCents)}
+            equationDescription="本团团上收入台账合计。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导。"
             animateEnter={animateEnter}
           />
         </Col>
