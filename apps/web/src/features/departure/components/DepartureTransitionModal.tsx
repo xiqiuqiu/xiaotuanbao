@@ -53,6 +53,7 @@ export function DepartureTransitionModal({
     <Modal
       title={meta.title}
       open={open}
+      width={720}
       onCancel={onClose}
       onOk={() => {
         if (requiresReason) {
