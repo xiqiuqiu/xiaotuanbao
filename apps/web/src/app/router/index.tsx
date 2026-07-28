@@ -143,6 +143,7 @@ const departureDetailRoute = createRoute({
     direction?: string
     transactionNo?: string
     scheduleNo?: string
+    listReturn?: string
   } => {
     const direction = typeof search.direction === 'string' ? search.direction.trim() : ''
     const transactionNo =
@@ -150,6 +151,10 @@ const departureDetailRoute = createRoute({
     const scheduleNo = typeof search.scheduleNo === 'string' ? search.scheduleNo.trim() : ''
     const counterpartyKeyword =
       typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword.trim() : ''
+    const listReturn =
+      typeof search.listReturn === 'string' && search.listReturn.trim()
+        ? search.listReturn.trim()
+        : undefined
     return {
       tab: typeof search.tab === 'string' ? search.tab : undefined,
       segmentId: typeof search.segmentId === 'string' ? search.segmentId : undefined,
@@ -169,6 +174,7 @@ const departureDetailRoute = createRoute({
       ...(direction ? { direction } : {}),
       ...(transactionNo ? { transactionNo } : {}),
       ...(scheduleNo ? { scheduleNo } : {}),
+      ...(listReturn ? { listReturn } : {}),
     }
   },
   component: lazyRouteComponent(

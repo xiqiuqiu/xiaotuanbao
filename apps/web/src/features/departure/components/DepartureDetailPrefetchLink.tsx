@@ -6,16 +6,24 @@ import type { DepartureSummary } from '@/types/api'
 import { getDeparture } from '@/services/departure.service'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
+import {
+  encodeDepartureListReturn,
+  toDepartureListReturnState,
+  type DepartureListSearch,
+} from '../utils/departure-list-search'
 
 /** Exported for tests — list hover prefetches detail data, not route beforeLoad. */
 export function DepartureDetailPrefetchLink({
   record,
   children,
   strong = false,
+  listSearch,
 }: {
   record: DepartureSummary
   children: ReactNode
   strong?: boolean
+  /** When opening detail from the list, preserve filters for the back link. */
+  listSearch?: DepartureListSearch
 }) {
   const queryClient = useQueryClient()
 
@@ -34,7 +42,17 @@ export function DepartureDetailPrefetchLink({
       className={nameLinkStyles.nameLink}
       to="/departure/$departureId"
       params={{ departureId: record.id }}
-      search={{ tab: 'overview' }}
+      search={{
+        tab: 'overview',
+        ...(listSearch
+          ? { listReturn: encodeDepartureListReturn(listSearch) }
+          : {}),
+      }}
+      state={
+        listSearch
+          ? (toDepartureListReturnState(listSearch) as never)
+          : undefined
+      }
       preload={false}
       onMouseEnter={prefetchDetail}
       onFocus={prefetchDetail}

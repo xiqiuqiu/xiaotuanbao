@@ -88,6 +88,7 @@ export function DepartureDetailPage() {
       search: {
         tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+        ...(search.listReturn ? { listReturn: search.listReturn } : {}),
       },
     })
   }
@@ -109,6 +110,7 @@ export function DepartureDetailPage() {
         ...(search.counterpartyKeyword
           ? { counterpartyKeyword: search.counterpartyKeyword }
           : {}),
+        ...(search.listReturn ? { listReturn: search.listReturn } : {}),
       },
       replace: true,
     })
@@ -117,6 +119,7 @@ export function DepartureDetailPage() {
     departureId,
     navigate,
     search.counterpartyKeyword,
+    search.listReturn,
     search.highlightSegmentResourceId,
     search.highlightSourceOrderId,
     search.segmentId,
@@ -334,7 +337,6 @@ export function DepartureDetailPage() {
         activeKey={activeTab}
         onChange={handleTabChange}
         items={tabItems}
-        destroyOnHidden
       />
     </div>
   )

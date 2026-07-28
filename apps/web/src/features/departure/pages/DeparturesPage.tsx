@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { Alert, App, Button, Card, Segmented, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -23,12 +23,11 @@ import { DepartureFilters } from '../components/DepartureFilters'
 import { RouteLedgerViewPanel } from '../components/RouteLedgerViewPanel'
 import { buildDepartureColumns, DEPARTURE_LIST_TABLE_SCROLL_X } from './departure-columns'
 import {
-  hasWorkbenchDepartureListSearch,
   resolveWorkbenchDepartureFilterBanner,
+  serializeDepartureListSearch,
   type DepartureListSearch,
+  type DepartureManagementView,
 } from '../utils/departure-list-search'
-
-type DepartureManagementView = 'departure-list' | 'route-ledger'
 
 type DeparturesPageState = {
   keyword: string
@@ -42,12 +41,16 @@ type DeparturesPageState = {
   filtersKey: number
   page: number
   pageSize: number
+  view: DepartureManagementView
   operationalWindow?: DepartureListSearch['operationalWindow']
   departureDataGap?: DepartureListSearch['departureDataGap']
   settlementReadiness?: DepartureListSearch['settlementReadiness']
   accountGenerationGap?: DepartureListSearch['accountGenerationGap']
   excludeClosed?: DepartureListSearch['excludeClosed']
 }
+
+const DEFAULT_PAGE = 1
+const DEFAULT_PAGE_SIZE = 10
 
 const initialDeparturesPageState: DeparturesPageState = {
   keyword: '',
@@ -59,8 +62,9 @@ const initialDeparturesPageState: DeparturesPageState = {
   partnerId: undefined,
   startDateRange: null,
   filtersKey: 0,
-  page: 1,
-  pageSize: 10,
+  page: DEFAULT_PAGE,
+  pageSize: DEFAULT_PAGE_SIZE,
+  view: 'departure-list',
   operationalWindow: undefined,
   departureDataGap: undefined,
   settlementReadiness: undefined,
@@ -74,13 +78,22 @@ function createInitialState(search: DepartureListSearch): DeparturesPageState {
     : null
   return {
     ...initialDeparturesPageState,
+    keyword: search.keyword ?? '',
+    routeName: search.routeName,
+    departureType: search.departureType,
     departureProgress: search.departureProgress,
+    statusFilter: search.status,
+    ownerUserId: search.ownerUserId,
+    partnerId: search.partnerId,
+    startDateRange,
+    page: search.page ?? DEFAULT_PAGE,
+    pageSize: search.pageSize ?? DEFAULT_PAGE_SIZE,
+    view: search.view ?? 'departure-list',
     operationalWindow: search.operationalWindow,
     departureDataGap: search.departureDataGap,
     settlementReadiness: search.settlementReadiness,
     accountGenerationGap: search.accountGenerationGap,
     excludeClosed: search.excludeClosed,
-    startDateRange,
   }
 }
 
@@ -94,7 +107,9 @@ type DeparturesPageAction =
   | { type: 'SET_PARTNER'; value?: string }
   | { type: 'SET_START_DATE_RANGE'; value: [string | undefined, string | undefined] | null }
   | { type: 'SET_PAGE'; page: number; pageSize?: number }
+  | { type: 'SET_VIEW'; value: DepartureManagementView }
   | { type: 'RESET_FILTERS' }
+  | { type: 'HYDRATE_FROM_SEARCH'; search: DepartureListSearch }
 
 function departuresPageReducer(
   state: DeparturesPageState,
@@ -123,12 +138,42 @@ function departuresPageReducer(
         page: action.page,
         pageSize: action.pageSize ?? state.pageSize,
       }
+    case 'SET_VIEW':
+      return { ...state, view: action.value }
     case 'RESET_FILTERS':
       return {
         ...initialDeparturesPageState,
+        view: state.view,
+        filtersKey: state.filtersKey + 1,
+      }
+    case 'HYDRATE_FROM_SEARCH':
+      return {
+        ...createInitialState(action.search),
         filtersKey: state.filtersKey + 1,
       }
   }
+}
+
+function toSerializableSearch(state: DeparturesPageState): DepartureListSearch {
+  return serializeDepartureListSearch({
+    keyword: state.keyword,
+    routeName: state.routeName,
+    departureType: state.departureType,
+    departureProgress: state.departureProgress,
+    status: state.statusFilter,
+    ownerUserId: state.ownerUserId,
+    partnerId: state.partnerId,
+    startDateFrom: state.startDateRange?.[0],
+    startDateTo: state.startDateRange?.[1],
+    page: state.page,
+    pageSize: state.pageSize,
+    view: state.view,
+    operationalWindow: state.operationalWindow,
+    departureDataGap: state.departureDataGap,
+    settlementReadiness: state.settlementReadiness,
+    accountGenerationGap: state.accountGenerationGap,
+    excludeClosed: state.excludeClosed,
+  })
 }
 
 export function DeparturesPage() {
@@ -137,14 +182,40 @@ export function DeparturesPage() {
   const queryClient = useQueryClient()
   const search = useSearch({ strict: false }) as DepartureListSearch
   const canEdit = canEditDeparture(useAuthStore((s) => s.actionKeys))
-  const [view, setView] = useState<DepartureManagementView>('departure-list')
   const [state, dispatch] = useReducer(departuresPageReducer, search, createInitialState)
-  const isListView = view === 'departure-list'
+  const isListView = state.view === 'departure-list'
+  const lastSyncedSearchRef = useRef<string | null>(null)
 
   const startDateFrom = state.startDateRange?.[0]
   const startDateTo = state.startDateRange?.[1]
   const workbenchFilterBanner = resolveWorkbenchDepartureFilterBanner(search)
   const debouncedRouteName = useDebouncedValue(state.routeName)
+  const listReturnSearch = useMemo(() => toSerializableSearch(state), [state])
+
+  useEffect(() => {
+    const searchKey = JSON.stringify(search)
+    const stateKey = JSON.stringify(listReturnSearch)
+    const lastSynced = lastSyncedSearchRef.current ?? searchKey
+
+    if (searchKey === stateKey) {
+      lastSyncedSearchRef.current = searchKey
+      return
+    }
+
+    // Inbound URL change (browser back/forward or workbench deep link).
+    if (searchKey !== lastSynced) {
+      dispatch({ type: 'HYDRATE_FROM_SEARCH', search })
+      lastSyncedSearchRef.current = searchKey
+      return
+    }
+
+    void navigate({
+      to: '/departure',
+      search: listReturnSearch,
+      replace: true,
+    })
+    lastSyncedSearchRef.current = stateKey
+  }, [listReturnSearch, navigate, search])
 
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'departure-filters'],
@@ -247,11 +318,7 @@ export function DeparturesPage() {
 
   const resetFilters = useCallback(() => {
     dispatch({ type: 'RESET_FILTERS' })
-    // 本地筛选不写 URL；若仍带着工作台深链，重置时一并清掉，避免提示残留。
-    if (hasWorkbenchDepartureListSearch(search)) {
-      void navigate({ to: '/departure', search: {} })
-    }
-  }, [navigate, search])
+  }, [])
 
   const handleCopy = useCallback(
     (departureId: string) => {
@@ -287,8 +354,16 @@ export function DeparturesPage() {
           purgePendingId: purgeMutation.isPending ? purgeMutation.variables?.id : null,
         },
         canEdit,
+        listReturnSearch,
       ),
-    [canEdit, handleCopy, handlePurge, purgeMutation.isPending, purgeMutation.variables?.id],
+    [
+      canEdit,
+      handleCopy,
+      handlePurge,
+      listReturnSearch,
+      purgeMutation.isPending,
+      purgeMutation.variables?.id,
+    ],
   )
 
   const ownerOptions =
@@ -322,12 +397,12 @@ export function DeparturesPage() {
 
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Segmented<DepartureManagementView>
-          value={view}
+          value={state.view}
           options={[
             { label: '发团视图', value: 'departure-list' },
             { label: '线路视图', value: 'route-ledger' },
           ]}
-          onChange={setView}
+          onChange={(value) => dispatch({ type: 'SET_VIEW', value })}
         />
 
         {isListView ? (
@@ -342,7 +417,6 @@ export function DeparturesPage() {
                     size="small"
                     onClick={() => {
                       dispatch({ type: 'RESET_FILTERS' })
-                      void navigate({ to: '/departure', search: {} })
                     }}
                   >
                     清除工作台筛选
@@ -406,7 +480,12 @@ export function DeparturesPage() {
             </Card>
           </>
         ) : (
-          <RouteLedgerViewPanel onSwitchToDepartureList={() => setView('departure-list')} />
+          <RouteLedgerViewPanel
+            onSwitchToDepartureList={() =>
+              dispatch({ type: 'SET_VIEW', value: 'departure-list' })
+            }
+            listReturnSearch={listReturnSearch}
+          />
         )}
       </Space>
     </div>

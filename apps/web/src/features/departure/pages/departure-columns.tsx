@@ -16,6 +16,7 @@ import {
   formatCents,
   renderCompletionTags,
 } from '../catalog'
+import type { DepartureListSearch } from '../utils/departure-list-search'
 
 type DepartureColumnsActions = {
   onCopy: (departureId: string) => void
@@ -32,6 +33,7 @@ export const DEPARTURE_LIST_TABLE_SCROLL_X = 2300
 export function buildDepartureColumns(
   actions: DepartureColumnsActions,
   canEdit: boolean,
+  listSearch?: DepartureListSearch,
 ): ColumnsType<DepartureSummary> {
   const columns: ColumnsType<DepartureSummary> = [
     {
@@ -40,7 +42,7 @@ export function buildDepartureColumns(
       fixed: 'left',
       width: 150,
       render: (_value: string, record) => (
-        <DepartureDetailPrefetchLink record={record} strong>
+        <DepartureDetailPrefetchLink record={record} strong listSearch={listSearch}>
           <span style={{ whiteSpace: 'nowrap' }}>{record.departureNo}</span>
         </DepartureDetailPrefetchLink>
       ),
@@ -51,7 +53,7 @@ export function buildDepartureColumns(
       width: 200,
       ellipsis: { showTitle: false },
       render: (name: string, record) => (
-        <DepartureDetailPrefetchLink record={record}>
+        <DepartureDetailPrefetchLink record={record} listSearch={listSearch}>
           <EllipsisTooltipText empty="">{name}</EllipsisTooltipText>
         </DepartureDetailPrefetchLink>
       ),

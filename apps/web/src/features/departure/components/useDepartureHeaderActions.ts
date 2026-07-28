@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Form, Modal, message } from 'antd'
 import type { MenuProps } from 'antd'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
@@ -13,8 +13,41 @@ import {
 } from '@/services/departure.service'
 import { departureToFormValues, type DepartureOverviewFormValues } from '../utils/departure-overview-form'
 import type { DepartureTransitionAction } from '../utils/departure-transition'
+import {
+  resolveDepartureHeaderActions,
+  type DepartureHeaderActionKey,
+} from '../utils/departure-header-actions'
+import { resolveDepartureListReturnSearch } from '../utils/departure-list-search'
 import type { CloseDepartureFormValues } from './DepartureTransitionModal'
 import type { UnarchiveDepartureFormValues } from './DepartureUnarchiveModal'
+
+function insertMenuDividers(
+  items: Array<{
+    key: DepartureHeaderActionKey
+    label: string
+    danger?: boolean
+    group: 'primary' | 'secondary' | 'status' | 'danger'
+  }>,
+  onAction: (key: DepartureHeaderActionKey) => void,
+): NonNullable<MenuProps['items']> {
+  const result: NonNullable<MenuProps['items']> = []
+  let previousGroup: string | null = null
+
+  for (const item of items) {
+    if (previousGroup && previousGroup !== item.group) {
+      result.push({ type: 'divider' })
+    }
+    result.push({
+      key: item.key,
+      label: item.label,
+      danger: item.danger,
+      onClick: () => onAction(item.key),
+    })
+    previousGroup = item.group
+  }
+
+  return result
+}
 
 export function useDepartureHeaderActions(
   departure: DepartureDetail,
@@ -22,6 +55,8 @@ export function useDepartureHeaderActions(
   onUpdated: () => void,
 ) {
   const navigate = useNavigate()
+  const locationState = useRouterState({ select: (state) => state.location.state })
+  const search = useSearch({ strict: false }) as { listReturn?: string }
   const queryClient = useQueryClient()
   const [overviewForm] = Form.useForm<DepartureOverviewFormValues>()
   const [closeForm] = Form.useForm<CloseDepartureFormValues>()
@@ -30,21 +65,19 @@ export function useDepartureHeaderActions(
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
   const [operationsSheetOpen, setOperationsSheetOpen] = useState(false)
   const [unarchiveModalOpen, setUnarchiveModalOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [transitionAction, setTransitionAction] = useState<DepartureTransitionAction | null>(null)
 
-  const overviewReadOnly =
-    departure.status === DepartureStatus.SETTLED ||
-    departure.status === DepartureStatus.CLOSED
-
-  const canEdit = canWrite && !overviewReadOnly
-  const canTransitionToPending = canEdit && departure.status === DepartureStatus.EDITING
-  const canTransitionToSettled =
-    canEdit &&
-    departure.status === DepartureStatus.PENDING_SETTLEMENT &&
-    departure.isFinanciallySettled
-  const canClose = canWrite && departure.status !== DepartureStatus.CLOSED
-  const canUnarchive = canWrite && departure.status === DepartureStatus.CLOSED
-  const canPurge = canWrite && departure.canPurge
+  const resolved = useMemo(
+    () =>
+      resolveDepartureHeaderActions({
+        status: departure.status,
+        canWrite,
+        isFinanciallySettled: departure.isFinanciallySettled,
+        canPurge: departure.canPurge,
+      }),
+    [canWrite, departure.canPurge, departure.isFinanciallySettled, departure.status],
+  )
 
   const invalidateDeparture = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
@@ -96,7 +129,8 @@ export function useDepartureHeaderActions(
     onSuccess: () => {
       message.success('发团已删除')
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
-      void navigate({ to: '/departure' })
+      const listSearch = resolveDepartureListReturnSearch(locationState, search.listReturn)
+      void navigate({ to: '/departure', search: listSearch })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '删除发团失败')
@@ -114,16 +148,48 @@ export function useDepartureHeaderActions(
     })
   }, [departure.departureNo, departure.name, purgeMutation])
 
+  const openEditDrawer = useCallback(() => {
+    overviewForm.setFieldsValue(departureToFormValues(departure))
+    setEditDrawerOpen(true)
+  }, [departure, overviewForm])
+
+  const handleActionKey = useCallback(
+    (key: DepartureHeaderActionKey) => {
+      switch (key) {
+        case 'edit':
+          openEditDrawer()
+          break
+        case 'operations_sheet':
+          setOperationsSheetOpen(true)
+          break
+        case 'save_template':
+          setSaveModalOpen(true)
+          break
+        case 'pending_settlement':
+          setTransitionAction('pending_settlement')
+          break
+        case 'settled':
+          setTransitionAction('settled')
+          break
+        case 'close':
+          setTransitionAction('close')
+          break
+        case 'unarchive':
+          setUnarchiveModalOpen(true)
+          break
+        case 'purge':
+          confirmPurge()
+          break
+      }
+    },
+    [confirmPurge, openEditDrawer],
+  )
+
   const actionLoading =
     transitionMutation.isPending ||
     closeMutation.isPending ||
     unarchiveMutation.isPending ||
     purgeMutation.isPending
-
-  const openEditDrawer = useCallback(() => {
-    overviewForm.setFieldsValue(departureToFormValues(departure))
-    setEditDrawerOpen(true)
-  }, [departure, overviewForm])
 
   const handleTransitionConfirm = () => {
     if (!transitionAction || transitionAction === 'close') {
@@ -146,91 +212,17 @@ export function useDepartureHeaderActions(
     unarchiveMutation.mutate(values.reason.trim())
   }
 
-  const menuItems = useMemo(() => {
-    const items: NonNullable<MenuProps['items']> = []
+  const menuItems = useMemo(
+    () => insertMenuDividers(resolved.menuItems, handleActionKey),
+    [handleActionKey, resolved.menuItems],
+  )
 
-    if (canEdit) {
-      items.push({
-        key: 'edit',
-        label: '编辑',
-        onClick: openEditDrawer,
-      })
-    }
-
-    items.push({
-      key: 'operations-sheet',
-      label: '发团运营表',
-      onClick: () => setOperationsSheetOpen(true),
-    })
-
-    if (canWrite) {
-      items.push({
-        key: 'save-template',
-        label: '保存为常用路线',
-        onClick: () => setSaveModalOpen(true),
-      })
-    }
-
-    const statusItems: NonNullable<MenuProps['items']> = []
-
-    if (canTransitionToPending) {
-      statusItems.push({
-        key: 'pending-settlement',
-        label: '切换为待结算',
-        onClick: () => setTransitionAction('pending_settlement'),
-      })
-    }
-
-    if (canTransitionToSettled) {
-      statusItems.push({
-        key: 'settled',
-        label: '标记为已结清',
-        onClick: () => setTransitionAction('settled'),
-      })
-    }
-
-    if (canClose) {
-      statusItems.push({
-        key: 'close',
-        label: '关闭发团',
-        danger: true,
-        onClick: () => setTransitionAction('close'),
-      })
-    }
-
-    if (canUnarchive) {
-      statusItems.push({
-        key: 'unarchive',
-        label: '解除归档',
-        onClick: () => setUnarchiveModalOpen(true),
-      })
-    }
-
-    if (canPurge) {
-      statusItems.push({
-        key: 'purge',
-        label: '删除',
-        danger: true,
-        onClick: confirmPurge,
-      })
-    }
-
-    if (statusItems.length > 0) {
-      items.push({ type: 'divider' }, ...statusItems)
-    }
-
-    return items
-  }, [
-    canClose,
-    canEdit,
-    canPurge,
-    canTransitionToPending,
-    canTransitionToSettled,
-    canUnarchive,
-    canWrite,
-    confirmPurge,
-    openEditDrawer,
-  ])
+  const primaryAction = resolved.primaryAction
+    ? {
+        label: resolved.primaryAction.label,
+        onClick: () => handleActionKey('edit'),
+      }
+    : null
 
   return {
     overviewForm,
@@ -244,15 +236,18 @@ export function useDepartureHeaderActions(
     setOperationsSheetOpen,
     unarchiveModalOpen,
     setUnarchiveModalOpen,
+    historyOpen,
+    setHistoryOpen,
     transitionAction,
     setTransitionAction,
-    canTransitionToSettled,
-    canUnarchive,
     actionLoading,
     unarchivePending: unarchiveMutation.isPending,
     menuItems,
+    primaryAction,
+    handleActionKey,
     handleTransitionConfirm,
     handleCloseSubmit,
     handleUnarchiveSubmit,
+    openEditDrawer,
   }
 }
