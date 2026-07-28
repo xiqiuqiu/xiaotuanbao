@@ -11,18 +11,24 @@ type ExecutionSegmentListPaneProps = {
   segments: ItinerarySegmentSummary[]
   selectedSegmentId?: string
   mutationLocked: boolean
+  generatingDaily?: boolean
   onSelect: (segmentId: string) => void
   onEdit: (segment: ItinerarySegmentSummary) => void
   onCreate: () => void
+  onGenerateDaily: () => void
+  onRebuildEmpty: () => void
 }
 
 export function ExecutionSegmentListPane({
   segments,
   selectedSegmentId,
   mutationLocked,
+  generatingDaily = false,
   onSelect,
   onEdit,
   onCreate,
+  onGenerateDaily,
+  onRebuildEmpty,
 }: ExecutionSegmentListPaneProps) {
   const { token } = theme.useToken()
   const segmentListRef = useRef<HTMLDivElement>(null)
@@ -91,9 +97,27 @@ export function ExecutionSegmentListPane({
               <>
                 <div className={styles.segmentListGrow} aria-hidden />
                 <div className={styles.segmentListFooter}>
-                  <Button block icon={<PlusOutlined />} aria-label="添加" onClick={onCreate}>
-                    添加
-                  </Button>
+                  <div className={styles.segmentListFooterActions}>
+                    <Button
+                      block
+                      loading={generatingDaily}
+                      aria-label="一键生成一日段"
+                      onClick={onGenerateDaily}
+                    >
+                      一键生成一日段
+                    </Button>
+                    <Button
+                      block
+                      disabled={generatingDaily || segments.length === 0}
+                      aria-label="重建空段"
+                      onClick={onRebuildEmpty}
+                    >
+                      重建空段
+                    </Button>
+                    <Button block icon={<PlusOutlined />} aria-label="添加" onClick={onCreate}>
+                      添加
+                    </Button>
+                  </div>
                 </div>
               </>
             ) : null}

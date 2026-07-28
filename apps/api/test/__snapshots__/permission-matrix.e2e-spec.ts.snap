@@ -84,6 +84,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   },
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
+    "route": "POST /api/departures/:departureId/segments/generate-daily",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "/departure",
     "route": "GET /api/departures/:departureId/source-orders",
   },
@@ -729,6 +734,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/departures/:departureId/receivables [/departure]",
     "GET /api/departures/:departureId/segments [/departure]",
     "POST /api/departures/:departureId/segments [departure:write]",
+    "POST /api/departures/:departureId/segments/generate-daily [departure:write]",
     "GET /api/departures/:departureId/source-orders [/departure]",
     "POST /api/departures/:departureId/source-orders [departure:write]",
     "GET /api/departures/:departureId/verifications [/departure]",
@@ -862,6 +868,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/departures/:departureId/receivables [/departure]",
     "GET /api/departures/:departureId/segments [/departure]",
     "POST /api/departures/:departureId/segments [departure:write]",
+    "POST /api/departures/:departureId/segments/generate-daily [departure:write]",
     "GET /api/departures/:departureId/source-orders [/departure]",
     "POST /api/departures/:departureId/source-orders [departure:write]",
     "GET /api/departures/:departureId/verifications [/departure]",

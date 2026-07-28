@@ -1523,6 +1523,26 @@ export interface UpdateItinerarySegmentDto {
   notes?: string | null
 }
 
+/** 一键生成出团～回团每日行程段骨架的模式。 */
+export type GenerateDailySegmentsMode = 'fill_missing' | 'rebuild_empty'
+
+export interface GenerateDailySegmentsDto {
+  /** 默认 fill_missing：仅补缺失日；rebuild_empty：删除无资源空段后再按日铺段。 */
+  mode?: GenerateDailySegmentsMode
+}
+
+/** 一键生成每日行程段的汇总结果；资源段始终保留。 */
+export interface GenerateDailySegmentsResult {
+  mode: GenerateDailySegmentsMode
+  /** 发团出团～回团天数 N。 */
+  dayCount: number
+  createdCount: number
+  /** rebuild_empty 时删除的无资源空段数；fill_missing 恒为 0。 */
+  removedCount: number
+  /** 操作前后仍保留的、已挂资源的行程段数。 */
+  preservedWithResources: number
+}
+
 export interface SegmentResourceSummary {
   id: string
   segmentId: string

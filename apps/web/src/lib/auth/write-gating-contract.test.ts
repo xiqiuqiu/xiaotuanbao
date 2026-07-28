@@ -45,6 +45,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   closeDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   unarchiveDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   createSegment: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  generateDailySegments: { gating: 'departureWrite', endpointKey: 'departure:write' },
   updateSegment: { gating: 'departureWrite', endpointKey: 'departure:write' },
   deleteSegment: { gating: 'departureWrite', endpointKey: 'departure:write' },
   createSegmentResource: { gating: 'departureWrite', endpointKey: 'departure:write' },

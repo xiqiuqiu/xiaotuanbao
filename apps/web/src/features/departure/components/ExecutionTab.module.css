@@ -79,6 +79,18 @@
   border-top: 1px solid var(--execution-border);
 }
 
+.segmentListFooterActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.emptyActions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
 .segmentItem {
   position: relative;
   width: 100%;

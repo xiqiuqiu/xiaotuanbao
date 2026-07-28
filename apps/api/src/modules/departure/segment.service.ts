@@ -4,19 +4,27 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import type {
+  GenerateDailySegmentsDto,
+  GenerateDailySegmentsMode,
+  GenerateDailySegmentsResult,
   ItinerarySegmentListResult,
   ItinerarySegmentSummary,
 } from '@xiaotuanbao/shared'
 import { ResourceKind, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import {
+  Prisma,
   type Departure,
   type ItinerarySegment,
   type SegmentResource,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
+import {
+  enumerateDateOnlyDays,
+  segmentCoversDay,
+} from './daily-segment-skeleton.utils'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
-import { formatDateOnly } from './departure-date.utils'
+import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import { aggregatePayableOverview, countPayableGenerated } from './segment-payable-overview.utils'
 import {
   normalizeOptionalText,
@@ -221,6 +229,116 @@ export class SegmentService {
     }
 
     await this.prisma.itinerarySegment.delete({ where: { id: segment.id } })
+  }
+
+  /**
+   * 按发团出团日～回团日一键生成一日一段骨架。
+   * fill_missing：仅补未被任何已有段覆盖的日期；rebuild_empty：先删无资源空段再补日。
+   * 已有资源的段始终保留，不静默覆盖。
+   */
+  async generateDaily(
+    organizationId: string,
+    departureId: string,
+    dto: GenerateDailySegmentsDto = {},
+  ): Promise<GenerateDailySegmentsResult> {
+    const mode: GenerateDailySegmentsMode = dto.mode ?? 'fill_missing'
+    const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    this.ensureDepartureEditable(departure)
+
+    const days = enumerateDateOnlyDays(departure.startDate, departure.endDate)
+
+    return this.prisma.$transaction(async (tx) => {
+      const segments = await tx.itinerarySegment.findMany({
+        where: { departureId: departure.id },
+        include: {
+          resources: { select: { id: true } },
+        },
+      })
+
+      const preservedWithResources = segments.filter((segment) => segment.resources.length > 0).length
+      let working = segments
+      let removedCount = 0
+
+      if (mode === 'rebuild_empty') {
+        const emptyIds = segments
+          .filter((segment) => segment.resources.length === 0)
+          .map((segment) => segment.id)
+        if (emptyIds.length > 0) {
+          await tx.itinerarySegment.deleteMany({ where: { id: { in: emptyIds } } })
+          removedCount = emptyIds.length
+        }
+        working = segments.filter((segment) => segment.resources.length > 0)
+      }
+
+      const missingDays = days.filter(
+        (day) => !working.some((segment) => segmentCoversDay(segment, day)),
+      )
+
+      if (missingDays.length > 0) {
+        await tx.itinerarySegment.createMany({
+          data: missingDays.map((day) => {
+            const dayIndex = days.indexOf(day)
+            return {
+              departureId: departure.id,
+              name: `第${dayIndex + 1}天`,
+              startDate: parseDateOnly(day),
+              endDate: parseDateOnly(day),
+              dayCount: 1,
+              sortOrder: dayIndex,
+              destination: null,
+              notes: null,
+            }
+          }),
+        })
+      }
+
+      await this.normalizeSegmentSortOrder(tx, departure.id)
+
+      return {
+        mode,
+        dayCount: days.length,
+        createdCount: missingDays.length,
+        removedCount,
+        preservedWithResources,
+      }
+    })
+  }
+
+  private async normalizeSegmentSortOrder(
+    tx: Prisma.TransactionClient,
+    departureId: string,
+  ): Promise<void> {
+    const all = await tx.itinerarySegment.findMany({
+      where: { departureId },
+      select: { id: true, startDate: true, sortOrder: true },
+    })
+
+    const sorted = [...all].sort((left, right) => {
+      if (!left.startDate && !right.startDate) {
+        return left.sortOrder - right.sortOrder
+      }
+      if (!left.startDate) {
+        return 1
+      }
+      if (!right.startDate) {
+        return -1
+      }
+      const byDate = formatDateOnly(left.startDate).localeCompare(formatDateOnly(right.startDate))
+      if (byDate !== 0) {
+        return byDate
+      }
+      return left.sortOrder - right.sortOrder
+    })
+
+    for (let index = 0; index < sorted.length; index += 1) {
+      const segment = sorted[index]!
+      if (segment.sortOrder !== index) {
+        await tx.itinerarySegment.update({
+          where: { id: segment.id },
+          data: { sortOrder: index },
+        })
+      }
+    }
   }
 
   private async findDepartureOrThrow(organizationId: string, departureId: string) {
