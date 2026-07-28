@@ -9,19 +9,71 @@ import {
   Row,
   Space,
   Statistic,
-  Tooltip,
   Typography,
   theme,
 } from 'antd'
-import { EllipsisOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import { EllipsisOutlined } from '@ant-design/icons'
 import { TransactionDirection } from '@xiaotuanbao/shared'
 import type { DepartureDetail, DepartureOverviewAnomaly } from '@xiaotuanbao/shared'
 import { formatCents as formatUnsignedCents } from '../catalog'
 import { DepartureTransactionsLink } from '../utils/departure-transactions-link'
 import styles from './DepartureOverviewStatsCards.module.css'
 
-const { Text } = Typography
+const { Text, Title } = Typography
 const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
+
+const CALCULATION_GUIDE_ITEMS = [
+  {
+    label: '结算应收',
+    description:
+      '本团当前应向客户收取的金额。计算：原始团款合计 + 调整净额 − 优惠合计。根据客源单实时统计，无需生成应收。',
+  },
+  {
+    label: '成本合计',
+    description:
+      '本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需生成应付。',
+  },
+  {
+    label: '当前毛利',
+    description:
+      '本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。',
+  },
+  {
+    label: '毛利率',
+    description:
+      '本团当前毛利占结算应收的比例。计算：当前毛利 ÷ 结算应收 × 100%。根据当前毛利和结算应收实时统计；',
+  },
+  {
+    label: '其他收入',
+    description:
+      '本团团上收入台账合计。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导。',
+  },
+  {
+    label: '团款收款进度',
+    description:
+      '本团结算金额的收回进度。计算：团款已收 ÷ 各单结算金额合计 × 100%。单笔团款已收 = min(游客代收已收, 结算金额) + 客户补款已收；代收溢价与返利不计入。',
+  },
+  {
+    label: '游客代收进度',
+    description:
+      '本团游客代收账单的收回进度。计算：游客代收已收 ÷ 各单 G约定（定金+尾款）× 100%。已收仅统计定金代收/尾款代收节点的有效核销。',
+  },
+  {
+    label: '返利',
+    description:
+      '本团应付给发客合作方的返利。预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自按实收结算后的返利应付节点。返利不计入团款收款进度。',
+  },
+  {
+    label: '资源付款',
+    description:
+      '本团资源成本的实际支付进度。计算：已付金额 ÷ 成本合计 × 100%。已付仅统计资源应付的有效核销；手工应付与返利应付等不计入本进度。',
+  },
+  {
+    label: '现金净流入',
+    description:
+      '本团当前实际发生的资金收支情况。计算：现金净流入 = 有效收入 − 有效支出。根据已关联本团的未作废收支流水实时统计。',
+  },
+] as const
 
 function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
@@ -109,6 +161,32 @@ function OverviewDetailsPopover({
   )
 }
 
+function CalculationGuideButton() {
+  return (
+    <Popover
+      trigger="click"
+      placement="bottomRight"
+      title="计算口径"
+      content={
+        <Space orientation="vertical" size={12} style={{ maxWidth: 420 }}>
+          {CALCULATION_GUIDE_ITEMS.map(({ label, description }) => (
+            <div key={label}>
+              <Text strong>{label}</Text>
+              <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
+                {description}
+              </Text>
+            </div>
+          ))}
+        </Space>
+      }
+    >
+      <Button type="link" aria-label="查看计算口径">
+        查看计算口径
+      </Button>
+    </Popover>
+  )
+}
+
 function ProgressValue({
   numerator,
   denominator,
@@ -157,51 +235,20 @@ function ProgressBreakdown({
   )
 }
 
-function CalculationTitle({
-  label,
-  description,
-}: {
-  label: string
-  description: string
-}) {
-  return (
-    <Flex component="span" align="center" gap={2}>
-      <span>{label}</span>
-      <Tooltip title={description} styles={{ root: { maxWidth: 420 } }}>
-        <Button
-          type="text"
-          size="small"
-          icon={<InfoCircleOutlined />}
-          aria-label={`查看${label}说明`}
-          style={{ width: 24, minWidth: 24, height: 24, padding: 0 }}
-        />
-      </Tooltip>
-    </Flex>
-  )
-}
-
 function SummaryCard({
   title,
   value,
   suffix,
-  equationDescription,
   entry,
   animateEnter = false,
 }: {
   title: string
   value: string | number
   suffix?: string
-  equationDescription?: string
   /** 卡片右上角的明细入口图标按钮 */
   entry?: React.ReactNode
   animateEnter?: boolean
 }) {
-  const titleNode = equationDescription ? (
-    <CalculationTitle label={title} description={equationDescription} />
-  ) : (
-    <span>{title}</span>
-  )
-
   return (
     <Card
       className={animateEnter ? styles.metricCardEnter : undefined}
@@ -211,11 +258,11 @@ function SummaryCard({
         title={
           entry ? (
             <Flex component="span" align="center" justify="space-between" style={{ width: '100%' }}>
-              {titleNode}
+              <span>{title}</span>
               {entry}
             </Flex>
           ) : (
-            titleNode
+            <span>{title}</span>
           )
         }
         value={value}
@@ -253,6 +300,10 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <Flex justify="flex-end" style={{ width: '100%' }}>
+        <CalculationGuideButton />
+      </Flex>
+
       <Row gutter={[16, 16]} className={styles.firstRow}>
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
@@ -266,9 +317,6 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
           <SummaryCard
             title="结算应收"
             value={formatCents(departure.netReceivableCents)}
-            equationDescription="本团当前应向客户收取的金额。
-计算：原始团款合计 + 调整净额 − 优惠合计。
-根据客源单实时统计，无需生成应收。"
             animateEnter={animateEnter}
           />
         </Col>
@@ -276,7 +324,6 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
           <SummaryCard
             title="成本合计"
             value={formatCents(departure.payableCents)}
-            equationDescription="本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需生成应付。"
             animateEnter={animateEnter}
             entry={
               hasCostDetails ? (
@@ -297,7 +344,6 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
           <SummaryCard
             title="当前毛利"
             value={formatCents(departure.estimatedMarginCents)}
-            equationDescription="本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。"
             animateEnter={animateEnter}
             entry={
               stats.confirmedPayableCents !== 0 ? (
@@ -313,45 +359,36 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} className={styles.secondRow} role="group" aria-label="经营补充">
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="原始团款"
-            value={formatCents(departure.grossReceivableCents)}
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="优惠合计"
-            value={formatCents(departure.discountCents)}
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="毛利率"
-            value={marginRateLabel ?? '暂无数据'}
-            equationDescription="本团当前毛利占结算应收的比例。
-计算：当前毛利 ÷ 结算应收 × 100%。
-根据当前毛利和结算应收实时统计；"
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="其他收入"
-            value={formatCents(stats.otherIncomeCents)}
-            equationDescription="本团团上收入台账合计。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导。"
-            animateEnter={animateEnter}
-          />
+      <Row gutter={[16, 16]} className={styles.secondRow}>
+        <Col xs={24}>
+          <Card
+            title="经营构成"
+            role="group"
+            aria-label="经营构成"
+            className={animateEnter ? styles.metricCardEnter : undefined}
+          >
+            <Row gutter={[16, 16]}>
+              <Col xs={12} sm={6}>
+                <Statistic title="原始团款" value={formatCents(departure.grossReceivableCents)} />
+              </Col>
+              <Col xs={12} sm={6}>
+                <Statistic title="优惠合计" value={formatCents(departure.discountCents)} />
+              </Col>
+              <Col xs={12} sm={6}>
+                <Statistic title="毛利率" value={marginRateLabel ?? '暂无数据'} />
+              </Col>
+              <Col xs={12} sm={6}>
+                <Statistic title="其他收入" value={formatCents(stats.otherIncomeCents)} />
+              </Col>
+            </Row>
+          </Card>
         </Col>
       </Row>
     </Space>
   )
 }
 
-function CollectionProgressRow({ departure, animateEnter }: OverviewSectionProps) {
+function FundsProgressRow({ departure, animateEnter }: OverviewSectionProps) {
   const { token } = theme.useToken()
   const stats = departure.overviewStats
   const settlementReceivableCents = stats.settlementCollectionReceivableCents
@@ -368,123 +405,6 @@ function CollectionProgressRow({ departure, animateEnter }: OverviewSectionProps
     stats.ungeneratedReceivableCents !== 0 ||
     stats.closedUnreceivedCents !== 0 ||
     stats.otherReceivableCents !== 0
-  const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
-  const anomalyCardStyle = receivableAnomaly
-    ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
-    : EQUAL_HEIGHT_CARD_STYLE
-
-  return (
-      <Row gutter={[16, 16]} className={styles.thirdRow}>
-        <Col xs={24} lg={8}>
-          <Card
-            className={animateEnter ? styles.metricCardEnter : undefined}
-            title={
-              <CalculationTitle
-                label="团款收款进度"
-                description="本团结算金额的收回进度。
-计算：团款已收 ÷ 各单结算金额合计 × 100%。
-单笔团款已收 = min(游客代收已收, 结算金额) + 客户补款已收；代收溢价与返利不计入。"
-              />
-            }
-            extra={
-              hasReceivableDetails ? (
-                <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
-                  <AmountDetail
-                    label="尚未生成应收"
-                    amountCents={stats.ungeneratedReceivableCents}
-                  />
-                  <AmountDetail
-                    label="其中已关闭未收"
-                    amountCents={stats.closedUnreceivedCents}
-                    danger
-                  />
-                  <AmountDetail label="其他应收" amountCents={stats.otherReceivableCents} />
-                </OverviewDetailsPopover>
-              ) : null
-            }
-            role="region"
-            aria-label={receivableAnomaly ? '团款收款进度（数据异常）' : '团款收款进度'}
-            style={anomalyCardStyle}
-          >
-            <ProgressValue
-              numerator={settlementReceivedCents}
-              denominator={settlementReceivableCents}
-              animate={animateEnter}
-            />
-            <ProgressBreakdown
-              items={[
-                { label: '已收', amountCents: settlementReceivedCents },
-                { label: '未收', amountCents: settlementUnreceivedCents },
-              ]}
-            />
-            {receivableAnomaly ? <ReceivableAnomalyAlert anomaly={receivableAnomaly} /> : null}
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={8}>
-          <Card
-            className={animateEnter ? styles.metricCardEnter : undefined}
-            title={
-              <CalculationTitle
-                label="游客代收进度"
-                description="本团游客代收账单的收回进度。
-计算：游客代收已收 ÷ 各单 G约定（定金+尾款）× 100%。
-已收仅统计定金代收/尾款代收节点的有效核销。"
-              />
-            }
-            role="region"
-            aria-label="游客代收进度"
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            <ProgressValue
-              numerator={stats.guestCollectionReceivedCents}
-              denominator={stats.guestCollectionAgreedCents}
-              animate={animateEnter}
-            />
-            <ProgressBreakdown
-              items={[
-                { label: '已收', amountCents: stats.guestCollectionReceivedCents },
-                { label: '未收', amountCents: guestCollectionUnreceivedCents },
-              ]}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={8}>
-          <Card
-            className={animateEnter ? styles.metricCardEnter : undefined}
-            title={
-              <CalculationTitle
-                label="返利"
-                description="本团应付给发客合作方的返利。
-预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自按实收结算后的返利应付节点。
-返利不计入团款收款进度。"
-              />
-            }
-            role="region"
-            aria-label="返利"
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            {hasRebateDetails ? (
-              <ProgressBreakdown
-                items={[
-                  { label: '预估', amountCents: stats.estimatedRebateCents },
-                  { label: '已确认', amountCents: stats.confirmedRebateCents },
-                  { label: '已付', amountCents: stats.rebatePaidCents },
-                  { label: '未付', amountCents: stats.rebateUnpaidCents },
-                ]}
-              />
-            ) : (
-              <Text strong>暂无数据</Text>
-            )}
-          </Card>
-        </Col>
-      </Row>
-  )
-}
-
-function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
-  const stats = departure.overviewStats
   const hasPaymentDetails =
     stats.confirmedPayableCents !== 0 || stats.closedUnpaidCents !== 0
   const hasCashHints =
@@ -493,123 +413,205 @@ function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
     stats.verifiedFromExternalCents !== 0 ||
     stats.verifiedToOtherDeparturesCents !== 0
   const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
+  const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
+  const collectionCardStyle = receivableAnomaly
+    ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
+    : EQUAL_HEIGHT_CARD_STYLE
 
   return (
-      <Row gutter={[16, 16]} className={styles.fourthRow}>
-        <Col xs={24} lg={12}>
-          <Card
-            className={animateEnter ? styles.metricCardEnter : undefined}
-            title={
-              <CalculationTitle
-                label="付款进度"
-                description="本团资源成本的实际支付进度。
-计算：已付金额 ÷ 成本合计 × 100%。
-已付仅统计资源应付的有效核销；手工应付与返利应付等不计入本进度。"
+    <Row gutter={[16, 16]} className={styles.thirdRow}>
+      <Col xs={24} lg={8}>
+        <Card
+          title="收款"
+          role="region"
+          aria-label="收款"
+          className={animateEnter ? styles.metricCardEnter : undefined}
+          style={collectionCardStyle}
+        >
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <div
+              className={styles.progressSection}
+              role="group"
+              aria-label={receivableAnomaly ? '团款收款进度（数据异常）' : '团款收款进度'}
+            >
+              <Flex align="center" justify="space-between" gap={8}>
+                <Title level={5} style={{ margin: 0 }}>
+                  团款收款进度
+                </Title>
+                {hasReceivableDetails ? (
+                  <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
+                    <AmountDetail
+                      label="尚未生成应收"
+                      amountCents={stats.ungeneratedReceivableCents}
+                    />
+                    <AmountDetail
+                      label="其中已关闭未收"
+                      amountCents={stats.closedUnreceivedCents}
+                      danger
+                    />
+                    <AmountDetail label="其他应收" amountCents={stats.otherReceivableCents} />
+                  </OverviewDetailsPopover>
+                ) : null}
+              </Flex>
+              <ProgressValue
+                numerator={settlementReceivedCents}
+                denominator={settlementReceivableCents}
+                animate={animateEnter}
               />
-            }
-            extra={
-              hasPaymentDetails ? (
-                <OverviewDetailsPopover title="付款组成" buttonLabel="查看付款组成">
-                  {allPayableProgressLabel != null ? (
-                    <Text type="secondary">
-                      全部应付核销进度 {allPayableProgressLabel}（全部已付{' '}
-                      {formatCents(stats.paidCents)} ÷ 确认应付{' '}
-                      {formatCents(stats.confirmedPayableCents)}）
-                    </Text>
-                  ) : null}
-                  <AmountDetail
-                    label="其中已关闭未付"
-                    amountCents={stats.closedUnpaidCents}
-                    danger
-                  />
-                </OverviewDetailsPopover>
-              ) : null
-            }
-            role="region"
-            aria-label="付款进度"
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            <ProgressValue
-              numerator={stats.resourcePaidCents}
-              denominator={departure.payableCents}
-              animate={animateEnter}
-            />
-            <ProgressBreakdown
-              items={[
-                { label: '已付', amountCents: stats.resourcePaidCents },
-                { label: '未付', amountCents: departure.payableCents - stats.resourcePaidCents },
-              ]}
-            />
-          </Card>
-        </Col>
+              <ProgressBreakdown
+                items={[
+                  { label: '已收', amountCents: settlementReceivedCents },
+                  { label: '未收', amountCents: settlementUnreceivedCents },
+                ]}
+              />
+              {receivableAnomaly ? <ReceivableAnomalyAlert anomaly={receivableAnomaly} /> : null}
+            </div>
 
-        <Col xs={24} lg={12}>
-          <Card
-            className={animateEnter ? styles.metricCardEnter : undefined}
-            title={
-              <CalculationTitle
-                label="资金情况"
-                description="本团当前实际发生的资金收支情况。
-计算：现金净流入 = 有效收入 − 有效支出。
-根据已关联本团的未作废收支流水实时统计。"
+            <div className={styles.progressSection} role="group" aria-label="游客代收进度">
+              <Title level={5} style={{ margin: 0 }}>
+                游客代收进度
+              </Title>
+              <ProgressValue
+                numerator={stats.guestCollectionReceivedCents}
+                denominator={stats.guestCollectionAgreedCents}
+                animate={animateEnter}
               />
-            }
-            extra={
-              hasCashHints ? (
-                <OverviewDetailsPopover title="资金提示" buttonLabel="查看资金提示">
-                  <AmountDetail
-                    label="未核销收入"
-                    amountCents={stats.unverifiedIncomeCents}
-                    transactionLink={{
-                      departureId: departure.id,
-                      direction: TransactionDirection.INFLOW,
-                    }}
-                  />
-                  <AmountDetail
-                    label="未核销支出"
-                    amountCents={stats.unverifiedExpenseCents}
-                    transactionLink={{
-                      departureId: departure.id,
-                      direction: TransactionDirection.OUTFLOW,
-                    }}
-                  />
-                  <AmountDetail
-                    label="核销自外部流水"
-                    amountCents={stats.verifiedFromExternalCents}
-                  />
-                  <AmountDetail
-                    label="本团流水核销至他团"
-                    amountCents={stats.verifiedToOtherDeparturesCents}
-                  />
-                </OverviewDetailsPopover>
-              ) : null
-            }
-            role="region"
-            aria-label="资金情况"
-            style={EQUAL_HEIGHT_CARD_STYLE}
-          >
-            <Flex align="center" justify="space-between" gap={16} wrap>
-              <Statistic title="现金净流入" value={formatCents(stats.cashNetInflowCents)} />
-              <Flex
-                vertical
-                gap={4}
-                role="group"
-                aria-label="资金收支明细"
-                className={styles.cashBreakdown}
-              >
-                <Flex justify="space-between" gap={12}>
-                  <Text type="secondary">有效收入</Text>
-                  <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
-                </Flex>
-                <Flex justify="space-between" gap={12}>
-                  <Text type="secondary">有效支出</Text>
-                  <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
-                </Flex>
+              <ProgressBreakdown
+                items={[
+                  { label: '已收', amountCents: stats.guestCollectionReceivedCents },
+                  { label: '未收', amountCents: guestCollectionUnreceivedCents },
+                ]}
+              />
+            </div>
+          </Space>
+        </Card>
+      </Col>
+
+      <Col xs={24} lg={8}>
+        <Card
+          title="付款"
+          role="region"
+          aria-label="付款"
+          className={animateEnter ? styles.metricCardEnter : undefined}
+          style={EQUAL_HEIGHT_CARD_STYLE}
+        >
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <div className={styles.progressSection} role="group" aria-label="资源付款">
+              <Flex align="center" justify="space-between" gap={8}>
+                <Title level={5} style={{ margin: 0 }}>
+                  资源付款
+                </Title>
+                {hasPaymentDetails ? (
+                  <OverviewDetailsPopover title="付款组成" buttonLabel="查看付款组成">
+                    {allPayableProgressLabel != null ? (
+                      <Text type="secondary">
+                        全部应付核销进度 {allPayableProgressLabel}（全部已付{' '}
+                        {formatCents(stats.paidCents)} ÷ 确认应付{' '}
+                        {formatCents(stats.confirmedPayableCents)}）
+                      </Text>
+                    ) : null}
+                    <AmountDetail
+                      label="其中已关闭未付"
+                      amountCents={stats.closedUnpaidCents}
+                      danger
+                    />
+                  </OverviewDetailsPopover>
+                ) : null}
+              </Flex>
+              <ProgressValue
+                numerator={stats.resourcePaidCents}
+                denominator={departure.payableCents}
+                animate={animateEnter}
+              />
+              <ProgressBreakdown
+                items={[
+                  { label: '已付', amountCents: stats.resourcePaidCents },
+                  { label: '未付', amountCents: departure.payableCents - stats.resourcePaidCents },
+                ]}
+              />
+            </div>
+
+            <div className={styles.progressSection} role="group" aria-label="返利">
+              <Title level={5} style={{ margin: 0 }}>
+                返利
+              </Title>
+              {hasRebateDetails ? (
+                <ProgressBreakdown
+                  items={[
+                    { label: '预估', amountCents: stats.estimatedRebateCents },
+                    { label: '已确认', amountCents: stats.confirmedRebateCents },
+                    { label: '已付', amountCents: stats.rebatePaidCents },
+                    { label: '未付', amountCents: stats.rebateUnpaidCents },
+                  ]}
+                />
+              ) : (
+                <Text strong>暂无数据</Text>
+              )}
+            </div>
+          </Space>
+        </Card>
+      </Col>
+
+      <Col xs={24} lg={8}>
+        <Card
+          title="现金"
+          role="region"
+          aria-label="现金"
+          className={animateEnter ? styles.metricCardEnter : undefined}
+          style={EQUAL_HEIGHT_CARD_STYLE}
+          extra={
+            hasCashHints ? (
+              <OverviewDetailsPopover title="资金提示" buttonLabel="查看资金提示">
+                <AmountDetail
+                  label="未核销收入"
+                  amountCents={stats.unverifiedIncomeCents}
+                  transactionLink={{
+                    departureId: departure.id,
+                    direction: TransactionDirection.INFLOW,
+                  }}
+                />
+                <AmountDetail
+                  label="未核销支出"
+                  amountCents={stats.unverifiedExpenseCents}
+                  transactionLink={{
+                    departureId: departure.id,
+                    direction: TransactionDirection.OUTFLOW,
+                  }}
+                />
+                <AmountDetail
+                  label="核销自外部流水"
+                  amountCents={stats.verifiedFromExternalCents}
+                />
+                <AmountDetail
+                  label="本团流水核销至他团"
+                  amountCents={stats.verifiedToOtherDeparturesCents}
+                />
+              </OverviewDetailsPopover>
+            ) : null
+          }
+        >
+          <Flex align="center" justify="space-between" gap={16} wrap>
+            <Statistic title="现金净流入" value={formatCents(stats.cashNetInflowCents)} />
+            <Flex
+              vertical
+              gap={4}
+              role="group"
+              aria-label="资金收支明细"
+              className={styles.cashBreakdown}
+            >
+              <Flex justify="space-between" gap={12}>
+                <Text type="secondary">有效收入</Text>
+                <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
+              </Flex>
+              <Flex justify="space-between" gap={12}>
+                <Text type="secondary">有效支出</Text>
+                <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
               </Flex>
             </Flex>
-          </Card>
-        </Col>
-      </Row>
+          </Flex>
+        </Card>
+      </Col>
+    </Row>
   )
 }
 
@@ -620,8 +622,7 @@ export function DepartureOverviewStatsCards({
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <OverviewSummaryRows departure={departure} animateEnter={animateEnter} />
-      <CollectionProgressRow departure={departure} animateEnter={animateEnter} />
-      <PaymentAndCashRow departure={departure} animateEnter={animateEnter} />
+      <FundsProgressRow departure={departure} animateEnter={animateEnter} />
     </Space>
   )
 }
