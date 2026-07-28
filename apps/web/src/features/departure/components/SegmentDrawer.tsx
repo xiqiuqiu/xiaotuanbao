@@ -1,14 +1,19 @@
 import { useEffect, useMemo } from 'react'
 import {
+  Alert,
   Button,
+  Col,
   DatePicker,
   Drawer,
   Form,
   Input,
+  InputNumber,
   Popconfirm,
+  Row,
   Space,
   Typography,
   message,
+  theme,
 } from 'antd'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
@@ -20,6 +25,10 @@ import {
   segmentToFormValues,
   type SegmentFormValues,
 } from '../utils/segment-form'
+import {
+  formatTicketHeadcountMismatchMessage,
+  hasTicketHeadcountMismatch,
+} from '../utils/ticket-type-headcount'
 
 interface SegmentDrawerProps {
   open: boolean
@@ -37,6 +46,34 @@ function toDayjs(value?: string): Dayjs | null {
   return value ? dayjs(value) : null
 }
 
+function TicketCountField({
+  name,
+  label,
+}: {
+  name: keyof Pick<
+    SegmentFormValues,
+    'fullTicketCount' | 'halfTicketCount' | 'studentTicketCount' | 'freeTicketCount'
+  >
+  label: string
+}) {
+  return (
+    <Form.Item
+      label={label}
+      name={name}
+      rules={[
+        {
+          type: 'number',
+          min: 0,
+          message: '须为非负整数',
+          transform: (value) => value,
+        },
+      ]}
+    >
+      <InputNumber min={0} precision={0} step={1} style={{ width: '100%' }} placeholder="0" />
+    </Form.Item>
+  )
+}
+
 export function SegmentDrawer({
   open,
   departure,
@@ -48,6 +85,7 @@ export function SegmentDrawer({
   onSubmit,
   onDelete,
 }: SegmentDrawerProps) {
+  const { token } = theme.useToken()
   const [form] = Form.useForm<SegmentFormValues>()
   const showDelete = Boolean(editing) && !readOnly && Boolean(onDelete)
   const canDelete = showDelete && (editing?.resourceCount ?? 0) === 0
@@ -56,6 +94,24 @@ export function SegmentDrawer({
     () => (editing ? segmentToFormValues(editing) : createDefaultSegmentFormValues()),
     [editing],
   )
+
+  const watchedTicketCounts = Form.useWatch(
+    ['fullTicketCount', 'halfTicketCount', 'studentTicketCount', 'freeTicketCount'],
+    form,
+  )
+
+  const ticketCounts = useMemo(() => {
+    const values = Array.isArray(watchedTicketCounts) ? watchedTicketCounts : []
+    return {
+      fullTicketCount: Number(values[0] ?? initialValues.fullTicketCount ?? 0),
+      halfTicketCount: Number(values[1] ?? initialValues.halfTicketCount ?? 0),
+      studentTicketCount: Number(values[2] ?? initialValues.studentTicketCount ?? 0),
+      freeTicketCount: Number(values[3] ?? initialValues.freeTicketCount ?? 0),
+    }
+  }, [initialValues, watchedTicketCounts])
+
+  const sourceGuestTotal = departure.totalGuests
+  const showMismatch = hasTicketHeadcountMismatch(ticketCounts, sourceGuestTotal)
 
   useEffect(() => {
     if (!open) {
@@ -93,10 +149,11 @@ export function SegmentDrawer({
   return (
     <Drawer
       title={readOnly ? '查看行程段' : editing ? '编辑行程段' : '添加行程段'}
-      width="min(480px, 100vw)"
+      size="min(480px, 100vw)"
       open={open}
       onClose={handleClose}
       destroyOnHidden
+      styles={{ footer: { paddingBlock: token.paddingMD } }}
       footer={
         readOnly ? (
           <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
@@ -138,6 +195,16 @@ export function SegmentDrawer({
         )
       }
     >
+      {showMismatch ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="票型人数与客源人数不一致"
+          description={formatTicketHeadcountMismatchMessage(ticketCounts, sourceGuestTotal)}
+          style={{ marginBottom: token.marginMD }}
+        />
+      ) : null}
+
       <Form
         key={editing?.id ?? 'new'}
         form={form}
@@ -188,6 +255,24 @@ export function SegmentDrawer({
             }
           />
         </Form.Item>
+
+        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: token.marginXS }}>
+          票型人数
+        </Typography.Text>
+        <Row gutter={token.marginSM}>
+          <Col span={6}>
+            <TicketCountField name="fullTicketCount" label="全" />
+          </Col>
+          <Col span={6}>
+            <TicketCountField name="halfTicketCount" label="半" />
+          </Col>
+          <Col span={6}>
+            <TicketCountField name="studentTicketCount" label="学" />
+          </Col>
+          <Col span={6}>
+            <TicketCountField name="freeTicketCount" label="免" />
+          </Col>
+        </Row>
 
         <Form.Item label="备注" name="notes">
           <Input.TextArea rows={3} placeholder="特殊说明" />

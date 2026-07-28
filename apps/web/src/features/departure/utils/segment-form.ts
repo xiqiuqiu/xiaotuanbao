@@ -7,6 +7,10 @@ export interface SegmentFormValues {
   startDate?: string
   endDate?: string
   notes?: string
+  fullTicketCount: number
+  halfTicketCount: number
+  studentTicketCount: number
+  freeTicketCount: number
 }
 
 export function segmentToFormValues(segment: ItinerarySegmentSummary): SegmentFormValues {
@@ -15,6 +19,10 @@ export function segmentToFormValues(segment: ItinerarySegmentSummary): SegmentFo
     startDate: segment.startDate ?? undefined,
     endDate: segment.endDate ?? undefined,
     notes: segment.notes ?? undefined,
+    fullTicketCount: segment.fullTicketCount,
+    halfTicketCount: segment.halfTicketCount,
+    studentTicketCount: segment.studentTicketCount,
+    freeTicketCount: segment.freeTicketCount,
   }
 }
 
@@ -23,6 +31,10 @@ export function createDefaultSegmentFormValues(): SegmentFormValues {
     name: '',
     startDate: undefined,
     endDate: undefined,
+    fullTicketCount: 0,
+    halfTicketCount: 0,
+    studentTicketCount: 0,
+    freeTicketCount: 0,
   }
 }
 
@@ -37,6 +49,10 @@ export function formValuesToPayload(
     startDate,
     endDate,
     notes: values.notes?.trim() || undefined,
+    fullTicketCount: values.fullTicketCount ?? 0,
+    halfTicketCount: values.halfTicketCount ?? 0,
+    studentTicketCount: values.studentTicketCount ?? 0,
+    freeTicketCount: values.freeTicketCount ?? 0,
   }
 }
 
