@@ -1,5 +1,14 @@
 import { ResourceKind } from '@xiaotuanbao/shared'
-import type { CreateSegmentResourceDto, SegmentResourceSummary } from '@/types/api'
+import type {
+  CreateDepartureResourceDto,
+  CreateSegmentResourceDto,
+  DepartureResourceSummary,
+  SegmentResourceSummary,
+} from '@/types/api'
+
+export type ResourceSummaryForForm = SegmentResourceSummary | DepartureResourceSummary
+
+export type ResourceFormPayload = CreateSegmentResourceDto | CreateDepartureResourceDto
 
 export interface ResourceFormValues {
   resourceKind: ResourceKind
@@ -17,7 +26,7 @@ export function createEmptyResourceFormValues(): ResourceFormValues {
   }
 }
 
-export function resourceToFormValues(resource: SegmentResourceSummary): ResourceFormValues {
+export function resourceToFormValues(resource: ResourceSummaryForForm): ResourceFormValues {
   return {
     resourceKind: resource.resourceKind as ResourceKind,
     partnerId: resource.partnerId ?? undefined,
@@ -28,7 +37,7 @@ export function resourceToFormValues(resource: SegmentResourceSummary): Resource
   }
 }
 
-export function formValuesToPayload(values: ResourceFormValues): CreateSegmentResourceDto {
+export function formValuesToPayload(values: ResourceFormValues): ResourceFormPayload {
   const amountCents = Math.round(values.amountYuan * 100)
   return {
     resourceKind: values.resourceKind,

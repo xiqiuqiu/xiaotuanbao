@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common'
 import {
   DepartureStatus,
   PaymentScheduleDirection,
-  type Prisma,
 } from '@prisma/client'
 import type {
   PendingPayableSegmentResourceItem,
@@ -12,71 +11,81 @@ import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { formatDateOnly } from './departure-date.utils'
 
-export type PendingPayableSegmentResourceRow = Prisma.SegmentResourceGetPayload<{
-  include: {
-    partner: { select: { name: true } }
-    supplier: { select: { name: true } }
-    segment: {
-      select: {
-        name: true
-        departure: {
-          select: {
-            id: true
-            departureNo: true
-            name: true
-            startDate: true
-            status: true
-          }
-        }
-      }
-    }
-  }
-}>
-
 @Injectable()
 export class SegmentResourcePayableGapService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 待生成应付：金额 > 0 且尚无有效（未作废）资源应付节点的行程资源。
-   * 已关闭节点仍视为已生成；已关闭发团不排除。
+   * 待生成应付：金额 > 0 且尚无有效（未作废）资源应付节点的段资源 ∪ 发团级资源。
+   * 已关闭节点仍视为已生成；已关闭发团不排除；已结清发团排除。
    */
-  async findPendingRows(organizationId: string): Promise<PendingPayableSegmentResourceRow[]> {
-    const rows = await this.prisma.segmentResource.findMany({
-      where: {
-        amountCents: { gt: 0 },
-        segment: {
-          departure: {
-            organizationId,
-            // 已结清发团不可再生成应付（CONTEXT Departure Status）。
-            status: { not: DepartureStatus.settled },
+  async findPendingItems(
+    organizationId: string,
+  ): Promise<PendingPayableSegmentResourceItem[]> {
+    const [segmentRows, departureRows] = await Promise.all([
+      this.prisma.segmentResource.findMany({
+        where: {
+          amountCents: { gt: 0 },
+          segment: {
+            departure: {
+              organizationId,
+              status: { not: DepartureStatus.settled },
+            },
           },
         },
-      },
-      include: {
-        partner: { select: { name: true } },
-        supplier: { select: { name: true } },
-        segment: {
-          select: {
-            name: true,
-            departure: {
-              select: {
-                id: true,
-                departureNo: true,
-                name: true,
-                startDate: true,
-                status: true,
+        include: {
+          partner: { select: { name: true } },
+          supplier: { select: { name: true } },
+          segment: {
+            select: {
+              name: true,
+              departure: {
+                select: {
+                  id: true,
+                  departureNo: true,
+                  name: true,
+                  startDate: true,
+                  status: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: [
-        { segment: { departure: { startDate: 'asc' } } },
-        { createdAt: 'asc' },
-      ],
-    })
-    if (rows.length === 0) {
+        orderBy: [
+          { segment: { departure: { startDate: 'asc' } } },
+          { createdAt: 'asc' },
+        ],
+      }),
+      this.prisma.departureResource.findMany({
+        where: {
+          amountCents: { gt: 0 },
+          departure: {
+            organizationId,
+            status: { not: DepartureStatus.settled },
+          },
+        },
+        include: {
+          partner: { select: { name: true } },
+          supplier: { select: { name: true } },
+          departure: {
+            select: {
+              id: true,
+              departureNo: true,
+              name: true,
+              startDate: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: [{ departure: { startDate: 'asc' } }, { createdAt: 'asc' }],
+      }),
+    ])
+
+    const sourceIds = [
+      ...segmentRows.map(({ id }) => id),
+      ...departureRows.map(({ id }) => id),
+    ]
+    if (sourceIds.length === 0) {
       return []
     }
 
@@ -86,8 +95,13 @@ export class SegmentResourcePayableGapService {
           where: {
             organizationId,
             direction: PaymentScheduleDirection.payable,
-            sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-            sourceId: { in: rows.map(({ id }) => id) },
+            sourceType: {
+              in: [
+                PaymentScheduleSourceType.SEGMENT_RESOURCE,
+                PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+              ],
+            },
+            sourceId: { in: sourceIds },
             voidedAt: null,
           },
           select: { sourceId: true },
@@ -96,7 +110,68 @@ export class SegmentResourcePayableGapService {
       ).flatMap(({ sourceId }) => (sourceId ? [sourceId] : [])),
     )
 
-    return rows.filter(({ id }) => !generatedSourceIds.has(id))
+    const segmentItems = segmentRows
+      .filter(({ id }) => !generatedSourceIds.has(id))
+      .map((row) => {
+        const departure = row.segment.departure
+        return {
+          id: row.id,
+          title: row.title,
+          counterpartyName: row.partner?.name ?? row.supplier?.name ?? null,
+          amountCents: row.amountCents,
+          departureId: departure.id,
+          departureNo: departure.departureNo,
+          departureName: departure.name,
+          departureStartDate: formatDateOnly(departure.startDate),
+          departureClosed: departure.status === DepartureStatus.closed,
+          href: `/departure/${departure.id}?tab=execution&highlightSegmentResourceId=${encodeURIComponent(row.id)}`,
+          segmentName: row.segment.name,
+          resourceKind: row.resourceKind,
+        } satisfies PendingPayableSegmentResourceItem & {
+          segmentName: string
+          resourceKind: string
+        }
+      })
+
+    const departureItems = departureRows
+      .filter(({ id }) => !generatedSourceIds.has(id))
+      .map((row) => {
+        const departure = row.departure
+        return {
+          id: row.id,
+          title: row.title,
+          counterpartyName: row.partner?.name ?? row.supplier?.name ?? null,
+          amountCents: row.amountCents,
+          departureId: departure.id,
+          departureNo: departure.departureNo,
+          departureName: departure.name,
+          departureStartDate: formatDateOnly(departure.startDate),
+          departureClosed: departure.status === DepartureStatus.closed,
+          href: `/departure/${departure.id}?tab=execution&highlightDepartureResourceId=${encodeURIComponent(row.id)}`,
+          segmentName: '发团级',
+          resourceKind: row.resourceKind,
+        } satisfies PendingPayableSegmentResourceItem & {
+          segmentName: string
+          resourceKind: string
+        }
+      })
+
+    return [...segmentItems, ...departureItems].sort((left, right) => {
+      if (left.departureStartDate !== right.departureStartDate) {
+        return left.departureStartDate.localeCompare(right.departureStartDate)
+      }
+      return left.id.localeCompare(right.id)
+    })
+  }
+
+  /** @deprecated Prefer findPendingItems — kept for callers migrating in #205. */
+  async findPendingRows(
+    organizationId: string,
+  ): Promise<Array<PendingPayableSegmentResourceItem & { segmentName: string; resourceKind: string }>> {
+    const items = await this.findPendingItems(organizationId)
+    return items as Array<
+      PendingPayableSegmentResourceItem & { segmentName: string; resourceKind: string }
+    >
   }
 
   async listPending(
@@ -106,30 +181,14 @@ export class SegmentResourcePayableGapService {
   ): Promise<PendingPayableSegmentResourceListResult> {
     const page = Math.max(Number(pageInput) || 1, 1)
     const pageSize = Math.min(Math.max(Number(pageSizeInput) || 10, 1), 100)
-    const rows = await this.findPendingRows(organizationId)
+    const items = await this.findPendingItems(organizationId)
     const start = (page - 1) * pageSize
 
     return {
-      items: rows.slice(start, start + pageSize).map(toItem),
-      total: rows.length,
+      items: items.slice(start, start + pageSize),
+      total: items.length,
       page,
       pageSize,
     }
-  }
-}
-
-function toItem(row: PendingPayableSegmentResourceRow): PendingPayableSegmentResourceItem {
-  const departure = row.segment.departure
-  return {
-    id: row.id,
-    title: row.title,
-    counterpartyName: row.partner?.name ?? row.supplier?.name ?? null,
-    amountCents: row.amountCents,
-    departureId: departure.id,
-    departureNo: departure.departureNo,
-    departureName: departure.name,
-    departureStartDate: formatDateOnly(departure.startDate),
-    departureClosed: departure.status === DepartureStatus.closed,
-    href: `/departure/${departure.id}?tab=execution&highlightSegmentResourceId=${encodeURIComponent(row.id)}`,
   }
 }

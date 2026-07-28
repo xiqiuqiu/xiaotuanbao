@@ -15,6 +15,18 @@ describe('matchesSegmentResourceSchedule', () => {
     ).toBe(true)
   })
 
+  it('matches departure_resource rows for the resource id', () => {
+    expect(
+      matchesSegmentResourceSchedule(
+        {
+          sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+          sourceId: 'dep-res-1',
+        },
+        'dep-res-1',
+      ),
+    ).toBe(true)
+  })
+
   it('rejects other source types or different source ids', () => {
     expect(
       matchesSegmentResourceSchedule(

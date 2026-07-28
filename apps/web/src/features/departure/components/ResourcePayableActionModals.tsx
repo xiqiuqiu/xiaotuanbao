@@ -1,7 +1,7 @@
 import { Alert, Form, Input, Modal, Select } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { PaymentScheduleCloseDisposition } from '@xiaotuanbao/shared'
-import type { SegmentResourceSummary } from '@/types/api'
+import type { DepartureResourceSummary, SegmentResourceSummary } from '@/types/api'
 import { CLOSE_DISPOSITION_OPTIONS, formatCents } from '@/features/finance/catalog'
 
 export interface VoidResourcePayableFormValues {
@@ -14,7 +14,7 @@ export interface CloseResourcePayableFormValues {
 }
 
 interface VoidModalProps {
-  resource: SegmentResourceSummary | null
+  resource: SegmentResourceSummary | DepartureResourceSummary | null
   form: FormInstance<VoidResourcePayableFormValues>
   loading: boolean
   onClose: () => void
@@ -60,7 +60,7 @@ export function VoidResourcePayableModal({ resource, form, loading, onClose, onS
 }
 
 interface CloseModalProps {
-  resource: SegmentResourceSummary | null
+  resource: SegmentResourceSummary | DepartureResourceSummary | null
   form: FormInstance<CloseResourcePayableFormValues>
   loading: boolean
   onClose: () => void

@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common'
-import { DepartureStatus } from '@prisma/client'
 import type {
   AccountGenerationGapItem,
   AccountGenerationGapListResult,
+  PendingPayableSegmentResourceItem,
 } from '@xiaotuanbao/shared'
 import {
   SourceOrderReceivableGapService,
   type PendingReceivableSourceOrderRow,
 } from './source-order-receivable-gap.service'
-import {
-  SegmentResourcePayableGapService,
-  type PendingPayableSegmentResourceRow,
-} from './segment-resource-payable-gap.service'
+import { SegmentResourcePayableGapService } from './segment-resource-payable-gap.service'
+import { DepartureStatus } from '@prisma/client'
 
 @Injectable()
 export class AccountGenerationGapService {
@@ -23,7 +21,7 @@ export class AccountGenerationGapService {
   async findPendingItems(organizationId: string): Promise<AccountGenerationGapItem[]> {
     const [receivableRows, payableRows] = await Promise.all([
       this.sourceOrderReceivableGapService.findPendingRows(organizationId),
-      this.segmentResourcePayableGapService.findPendingRows(organizationId),
+      this.segmentResourcePayableGapService.findPendingItems(organizationId),
     ])
 
     const items = [
@@ -82,18 +80,17 @@ function toReceivableItem(row: PendingReceivableSourceOrderRow): AccountGenerati
   }
 }
 
-function toPayableItem(row: PendingPayableSegmentResourceRow): AccountGenerationGapItem {
-  const departure = row.segment.departure
+function toPayableItem(row: PendingPayableSegmentResourceItem): AccountGenerationGapItem {
   return {
     id: `payable:${row.id}`,
     generationKind: 'payable',
     title: row.title,
     estimatedAmountCents: row.amountCents,
-    departureId: departure.id,
-    departureNo: departure.departureNo,
-    departureName: departure.name,
-    departureClosed: departure.status === DepartureStatus.closed,
-    href: `/departure/${departure.id}?tab=execution&highlightSegmentResourceId=${encodeURIComponent(row.id)}`,
+    departureId: row.departureId,
+    departureNo: row.departureNo,
+    departureName: row.departureName,
+    departureClosed: row.departureClosed,
+    href: row.href,
   }
 }
 

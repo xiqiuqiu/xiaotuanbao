@@ -13,7 +13,7 @@ import {
 } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { CounterpartyType, DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
-import type { ItinerarySegmentSummary, SegmentResourceSummary } from '@/types/api'
+import type { ItinerarySegmentSummary } from '@/types/api'
 import { getSupplier, listSuppliers } from '@/services/supplier.service'
 import { RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
@@ -21,7 +21,9 @@ import {
   createEmptyResourceFormValues,
   formValuesToPayload,
   resourceToFormValues,
+  type ResourceFormPayload,
   type ResourceFormValues,
+  type ResourceSummaryForForm,
 } from '../utils/resource-form'
 import {
   resolveSupplierFilterKind,
@@ -31,7 +33,7 @@ import {
 interface ResourceDrawerProps {
   open: boolean
   segment?: ItinerarySegmentSummary
-  editing: SegmentResourceSummary | null
+  editing: ResourceSummaryForForm | null
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
@@ -40,7 +42,7 @@ interface ResourceDrawerProps {
   saveAndGenerateLoading?: boolean
   onClose: () => void
   onSubmit: (
-    values: ReturnType<typeof formValuesToPayload>,
+    values: ResourceFormPayload,
     options?: { generatePayable?: boolean },
   ) => void
 }
@@ -86,7 +88,7 @@ export function ResourceDrawer({
     ? [segment.name, formatSegmentDateRange(segment.startDate, segment.endDate)]
         .filter(Boolean)
         .join('｜')
-    : null
+    : '发团级资源'
 
   const resetSubmitIntent = () => {
     submitIntentRef.current = 'save'
@@ -145,16 +147,12 @@ export function ResourceDrawer({
   return (
     <Drawer
       title={
-        segmentContext ? (
-          <Space orientation="vertical" size={token.marginXXS}>
-            <span>{drawerTitle}</span>
-            <Typography.Text type="secondary" style={{ fontWeight: 'normal' }}>
-              {segmentContext}
-            </Typography.Text>
-          </Space>
-        ) : (
-          drawerTitle
-        )
+        <Space orientation="vertical" size={token.marginXXS}>
+          <span>{drawerTitle}</span>
+          <Typography.Text type="secondary" style={{ fontWeight: 'normal' }}>
+            {segmentContext}
+          </Typography.Text>
+        </Space>
       }
       open={open}
       size="min(480px, 100vw)"
