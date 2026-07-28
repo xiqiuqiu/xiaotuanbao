@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react'
 import { App } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { FinanceVerificationListItem } from '@xiaotuanbao/shared'
+import { useNavigate } from '@tanstack/react-router'
+import type { FinanceVerificationListItem, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { cancelVerification, createVerification } from '@/services/finance.service'
 import type { CancelVerificationFormValues } from '../components/CancelVerificationModal'
+import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -25,8 +27,19 @@ export function useVerificationWorkspaceMutations({
 }: UseVerificationWorkspaceMutationsOptions) {
   const { message } = App.useApp()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [cancellingVerification, setCancellingVerification] =
     useState<FinanceVerificationListItem | null>(null)
+
+  const goProcessRebatePayable = useCallback(
+    (rebate: PaymentScheduleSummary) => {
+      void navigate({
+        to: '/finance/payable',
+        search: { scheduleNo: rebate.scheduleNo },
+      })
+    },
+    [navigate],
+  )
 
   const invalidateVerificationQueries = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
@@ -41,11 +54,12 @@ export function useVerificationWorkspaceMutations({
   const createMutation = useMutation({
     mutationFn: (values: CreateVerificationFormValues) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: () => {
+    onSuccess: (data) => {
       message.success('核销已创建')
       form.resetFields()
       onCreateSuccess()
       invalidateVerificationQueries()
+      promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '创建失败')

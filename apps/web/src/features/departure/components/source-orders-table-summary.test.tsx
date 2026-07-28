@@ -39,6 +39,9 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    estimatedRebateCents: 0,
+    rebateCents: 0,
+    rebateStatus: 'not_generated',
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -77,6 +80,7 @@ describe('aggregateSourceOrdersTableTotals', () => {
       netReceivableCents: 5380000,
       partnerCollectedCents: 50000,
       guestCollectCents: 5330000,
+      rebateDisplayCents: 0,
     })
   })
 
@@ -89,6 +93,7 @@ describe('aggregateSourceOrdersTableTotals', () => {
       netReceivableCents: 0,
       partnerCollectedCents: 0,
       guestCollectCents: 0,
+      rebateDisplayCents: 0,
     })
   })
 })
@@ -120,11 +125,6 @@ describe('renderSourceOrdersTableSummary', () => {
         mutate: () => undefined,
       } as never,
       generateMutation: {
-        isPending: false,
-        variables: undefined,
-        mutate: () => undefined,
-      } as never,
-      settleMutation: {
         isPending: false,
         variables: undefined,
         mutate: () => undefined,

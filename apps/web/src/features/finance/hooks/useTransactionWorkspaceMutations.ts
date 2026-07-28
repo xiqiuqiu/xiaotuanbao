@@ -2,7 +2,8 @@ import { useCallback } from 'react'
 import { App } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { FinanceTransactionSummary } from '@xiaotuanbao/shared'
+import { useNavigate } from '@tanstack/react-router'
+import type { FinanceTransactionSummary, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   createTransaction,
   createVerification,
@@ -15,6 +16,7 @@ import {
   buildUpdateTransactionPayload,
   type TransactionFormValues,
 } from '../utils/transaction-form'
+import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -43,6 +45,17 @@ export function useTransactionWorkspaceMutations({
 }: UseTransactionWorkspaceMutationsOptions) {
   const { message } = App.useApp()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  const goProcessRebatePayable = useCallback(
+    (rebate: PaymentScheduleSummary) => {
+      void navigate({
+        to: '/finance/payable',
+        search: { scheduleNo: rebate.scheduleNo },
+      })
+    },
+    [navigate],
+  )
 
   const invalidateLists = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
@@ -107,11 +120,12 @@ export function useTransactionWorkspaceMutations({
   const verifyMutation = useMutation({
     mutationFn: (values: CreateVerificationFormValues) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: () => {
+    onSuccess: (data) => {
       message.success('核销已创建')
       verifyForm.resetFields()
       onVerifySuccess()
       invalidateLists()
+      promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '核销失败')

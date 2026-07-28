@@ -131,11 +131,9 @@ export async function generateReceivables(sourceOrderId: string): Promise<Genera
 
 export async function settleByActualCollection(
   sourceOrderId: string,
-  payload: { earlySettle?: boolean } = {},
 ): Promise<SettleByActualCollectionResult> {
   return request.post<SettleByActualCollectionResult>(
     `/source-orders/${sourceOrderId}/settle-by-actual-collection`,
-    payload,
   )
 }
 

@@ -120,7 +120,6 @@ export function SourceOrdersTab({
     saveAndGenerateMutation,
     deleteMutation,
     generateMutation,
-    settleMutation,
     batchGenerateMutation,
   } = useSourceOrdersTabMutations({
     departure,
@@ -178,7 +177,6 @@ export function SourceOrdersTab({
         canGenerate: !readOnly,
         deleteMutation,
         generateMutation,
-        settleMutation,
         onOpen,
         onOpenGuests,
         onViewReceivables,
@@ -187,7 +185,6 @@ export function SourceOrdersTab({
       deleteMutation,
       editable,
       generateMutation,
-      settleMutation,
       onOpen,
       onOpenGuests,
       onViewReceivables,

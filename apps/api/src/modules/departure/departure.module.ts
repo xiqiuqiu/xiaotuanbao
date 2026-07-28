@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
 import { FinanceModule } from '../finance/finance.module'
 import { NumberAllocationModule } from '../number-allocation/number-allocation.module'
@@ -31,7 +31,7 @@ import { AccountGenerationGapService } from './account-generation-gap.service'
 import { AccountGenerationGapController } from './account-generation-gap.controller'
 
 @Module({
-  imports: [AuthModule, FinanceModule, NumberAllocationModule],
+  imports: [AuthModule, forwardRef(() => FinanceModule), NumberAllocationModule],
   controllers: [
     DepartureController,
     DepartureFinanceReadController,
@@ -71,6 +71,7 @@ import { AccountGenerationGapController } from './account-generation-gap.control
     SourceOrderReceivableGapService,
     SegmentResourcePayableGapService,
     AccountGenerationGapService,
+    DepartureFinanceBridgeService,
   ],
 })
 export class DepartureModule {}

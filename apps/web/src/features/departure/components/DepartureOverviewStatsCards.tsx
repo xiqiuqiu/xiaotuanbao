@@ -457,7 +457,7 @@ function CollectionProgressRow({ departure, animateEnter }: OverviewSectionProps
               <CalculationTitle
                 label="返利"
                 description="本团应付给发客合作方的返利。
-预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自按实收结算后的返利应付节点。
+预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自游客代收齐账后自动落账的返利应付节点。
 返利不计入团款收款进度。"
               />
             }

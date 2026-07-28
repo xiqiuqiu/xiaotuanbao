@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { App } from 'antd'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
@@ -29,6 +30,7 @@ import {
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
 import { yuanToCents } from '../utils/finance-form'
+import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -82,6 +84,15 @@ export function usePaymentScheduleMutations({
   onEditSuccess,
 }: UsePaymentScheduleMutationsOptions) {
   const { message } = App.useApp()
+  const navigate = useNavigate()
+
+  const goProcessRebatePayable = (rebate: PaymentScheduleSummary) => {
+    void navigate({
+      to: '/finance/payable',
+      search: { scheduleNo: rebate.scheduleNo },
+    })
+  }
+
   const confirmMutation = useMutation({
     mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
       if (!activeSchedule) {
@@ -92,7 +103,7 @@ export function usePaymentScheduleMutations({
       }
       return confirmPayment(activeSchedule.id, buildConfirmPaymentPayload(values))
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       message.success(isReceivable ? '收款已登记' : '付款已登记')
       confirmForm.resetFields()
       onConfirmSuccess()
@@ -105,6 +116,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '操作失败')
@@ -114,7 +128,7 @@ export function usePaymentScheduleMutations({
   const verifyCreateMutation = useMutation({
     mutationFn: (values: CreateVerificationFormValues) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: () => {
+    onSuccess: (data) => {
       message.success('核销已完成')
       verifyForm.resetFields()
       onVerifySuccess()
@@ -127,6 +141,9 @@ export function usePaymentScheduleMutations({
       void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
       void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
+      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '核销失败')

@@ -22,7 +22,6 @@ describe('source orders notes column', () => {
       canGenerate: true,
       deleteMutation: stubMutation(),
       generateMutation: stubMutation(),
-      settleMutation: stubMutation() as never,
       onOpen: noop,
       onOpenGuests: noop,
       onViewReceivables: noop,

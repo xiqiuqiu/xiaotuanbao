@@ -30,7 +30,6 @@ import {
   ListPartnerSourceOrdersQueryDto,
   ListPendingReceivableSourceOrdersQueryDto,
   ListSourceOrdersQueryDto,
-  SettleByActualCollectionDto,
   UpdateSourceOrderDto,
   UpdateSourceOrderGuestDto,
 } from './dto/source-order.dto'
@@ -210,12 +209,7 @@ export class SourceOrderController {
   settleByActualCollection(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-    @Body() dto: SettleByActualCollectionDto,
   ): Promise<SettleByActualCollectionResult> {
-    return this.sourceOrderService.settleByActualCollection(
-      request.user.organizationId,
-      id,
-      dto,
-    )
+    return this.sourceOrderService.settleByActualCollection(request.user.organizationId, id)
   }
 }

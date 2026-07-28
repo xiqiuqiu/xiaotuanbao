@@ -1,4 +1,8 @@
 export { deriveScheduleState, type DeriveScheduleStateInput } from './derive-schedule-state'
+export {
+  deriveSourceOrderReceivableStatus,
+  type SourceOrderReceivableScheduleProgress,
+} from './derive-source-order-receivable-status'
 export { computeReceivableDueDate } from './compute-receivable-due-date'
 export {
   deriveSettlementLabel,

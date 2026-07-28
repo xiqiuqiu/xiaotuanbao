@@ -266,17 +266,7 @@ describe('Source order settle by actual collection (e2e) #192', () => {
         })
       }
 
-      const settled = await authRequest(app, coordinatorToken)
-        .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
-        .send({})
-        .expect(201)
-
-      expect(settled.body.data).toMatchObject({
-        actualGuestCollectedCents: verifyDeposit + verifyBalance,
-        customerTopUpCents: topUp,
-        rebateCents: rebate,
-      })
-
+      // 游客代收齐账后自动落补款/返利，无需再点「按实收结算」
       const topUpSchedule = await prisma.paymentSchedule.findFirst({
         where: {
           organizationId,
@@ -319,10 +309,22 @@ describe('Source order settle by actual collection (e2e) #192', () => {
       } else {
         expect(rebateSchedule).toBeNull()
       }
+
+      // API 仍可幂等重跑
+      const settled = await authRequest(app, coordinatorToken)
+        .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
+        .send({})
+        .expect(201)
+
+      expect(settled.body.data).toMatchObject({
+        actualGuestCollectedCents: verifyDeposit + verifyBalance,
+        customerTopUpCents: topUp,
+        rebateCents: rebate,
+      })
     },
   )
 
-  it('G实收 ignores unverified income transactions', async () => {
+  it('G实收 ignores unverified income transactions and does not early-settle', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       depositCents: 0,
@@ -358,21 +360,37 @@ describe('Source order settle by actual collection (e2e) #192', () => {
       counterpartyName: sourceOrder.displayName,
     })
 
-    const early = await authRequest(app, coordinatorToken)
-      .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
-      .send({ earlySettle: true })
-      .expect(201)
+    // 未齐账：不提前落补款
+    expect(
+      await prisma.paymentSchedule.findFirst({
+        where: {
+          organizationId,
+          sourceId: sourceOrder.id,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+          cancelledAt: null,
+        },
+      }),
+    ).toBeNull()
 
-    expect(early.body.data).toMatchObject({
-      actualGuestCollectedCents: 200000,
-      customerTopUpCents: 300000,
-      rebateCents: 0,
-    })
+    // G实收=S → 无补款无返利
+    expect(
+      await prisma.paymentSchedule.findFirst({
+        where: {
+          organizationId,
+          sourceId: sourceOrder.id,
+          sourceType: {
+            in: [
+              PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
+              PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+            ],
+          },
+          cancelledAt: null,
+        },
+      }),
+    ).toBeNull()
   })
 
-  it('early settle then re-settle to rebate leaves no closed top-up unreceived / receivable_balance', async () => {
-    // 浏览器回测同构：G实收=0 提前结算出补款 → Guest 收齐后二次结算翻转为返利。
-    // 期望：作废路径金额为 0，概览不出现收款守恒异常。
+  it('auto-settles to rebate when guest nodes become fully collected', async () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id, {
       depositCents: 20000,
@@ -381,46 +399,50 @@ describe('Source order settle by actual collection (e2e) #192', () => {
     expect(sourceOrder.netReceivableCents).toBe(500000)
 
     const guestSchedules = await generateReceivables(sourceOrder.id)
+    const deposit = guestSchedules.find(
+      (s) =>
+        s.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION,
+    )!
+    const balance = guestSchedules.find(
+      (s) =>
+        s.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_BALANCE_COLLECTION,
+    )!
 
-    const early = await authRequest(app, coordinatorToken)
-      .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
-      .send({ earlySettle: true })
-      .expect(201)
-    expect(early.body.data).toMatchObject({
-      actualGuestCollectedCents: 0,
-      customerTopUpCents: 500000,
-      rebateCents: 0,
+    // 未齐：无返利
+    await confirmCollection({
+      scheduleId: deposit.id,
+      amountCents: deposit.amountCents,
+      counterpartyName: sourceOrder.displayName,
+    })
+    expect(
+      await prisma.paymentSchedule.findFirst({
+        where: {
+          organizationId,
+          sourceId: sourceOrder.id,
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+          cancelledAt: null,
+        },
+      }),
+    ).toBeNull()
+
+    await confirmCollection({
+      scheduleId: balance.id,
+      amountCents: balance.amountCents,
+      counterpartyName: sourceOrder.displayName,
     })
 
-    const topUpId = early.body.data.schedules.find(
-      (item: { sourceType: string }) =>
-        item.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT,
-    ).id as string
-
-    await settleFullyCollectedGuestNodes(sourceOrder, guestSchedules)
-
-    const second = await authRequest(app, coordinatorToken)
-      .post(`/api/source-orders/${sourceOrder.id}/settle-by-actual-collection`)
-      .send({})
-      .expect(201)
-    expect(second.body.data).toMatchObject({
-      actualGuestCollectedCents: 620000,
-      customerTopUpCents: 0,
-      rebateCents: 120000,
+    const rebateSchedule = await prisma.paymentSchedule.findFirst({
+      where: {
+        organizationId,
+        sourceId: sourceOrder.id,
+        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+        cancelledAt: null,
+      },
     })
-
-    const closedTopUp = await prisma.paymentSchedule.findFirstOrThrow({
-      where: { id: topUpId },
+    expect(rebateSchedule).toMatchObject({
+      amountCents: 120000,
+      title: '返利',
     })
-    expect(closedTopUp.cancelledAt).not.toBeNull()
-    // 取消原因写明「金额为 0」：关闭后未收必须为 0，否则概览 closedUnreceived 虚增 S。
-    expect(closedTopUp.amountCents).toBe(0)
-
-    const detail = await authRequest(app, coordinatorToken)
-      .get(`/api/departures/${departure.id}`)
-      .expect(200)
-    expect(detail.body.data.overviewStats.closedUnreceivedCents).toBe(0)
-    expect(detail.body.data.overviewStats.anomalies).toEqual([])
   })
 
   it('rejects silent recalculation after top-up is finance-touched', async () => {

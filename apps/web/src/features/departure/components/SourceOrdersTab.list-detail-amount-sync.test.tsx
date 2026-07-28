@@ -91,6 +91,9 @@ function postReceivableSyncOrder(
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    estimatedRebateCents: 0,
+    rebateCents: 0,
+    rebateStatus: 'not_generated',
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -138,13 +141,14 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
 
     expect(
       screen.getByText(
-        /【团款】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · G约定 ¥6,200\.00/,
+        /【团款】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,200\.00/,
       ),
     ).toBeTruthy()
     expect(
       screen.queryByText(
-        /【团款】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · G约定 ¥6,000\.00/,
+        /【团款】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,000\.00/,
       ),
     ).toBeNull()
+    expect(screen.queryByText(/G约定/)).toBeNull()
   })
 })

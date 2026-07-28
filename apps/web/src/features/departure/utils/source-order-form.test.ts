@@ -407,30 +407,28 @@ describe('formatSourceOrderAmountSummary', () => {
   const formatCents = (cents: number) => `¥${(cents / 100).toFixed(2)}`
 
   it('shows partitioned preview for 全部我方代收 including top-up/rebate', () => {
-    expect(
-      formatSourceOrderAmountSummary(
-        {
-          collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
-          netReceivableCents: 500000,
-          partnerCollectedCents: 0,
-          guestCollectCents: 600000,
-          estimatedCustomerTopUpCents: 0,
-          estimatedRebateCents: 100000,
-        },
-        formatCents,
-      ),
-    ).toBe(
+    const summary = formatSourceOrderAmountSummary(
+      {
+        collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        netReceivableCents: 500000,
+        partnerCollectedCents: 0,
+        guestCollectCents: 600000,
+        estimatedCustomerTopUpCents: 0,
+        estimatedRebateCents: 100000,
+      },
+      formatCents,
+    )
+    expect(summary).not.toContain('G约定')
+    expect(summary).toBe(
       [
         '【团款】结算金额 ¥5000.00',
-        '【代收约定】客户已收 ¥0.00 · G约定 ¥6000.00',
+        '【代收约定】客户已收 ¥0.00 · 我方代收 ¥6000.00',
         '【往来结果】预估客户补款 ¥0.00 · 预计返利 ¥1000.00',
-        '计划期不生成客户补款应收（G约定已覆盖结算金额）',
-        '客户已收（定金）不计入客户补款金额',
       ].join('\n'),
     )
   })
 
-  it('shows partitioned preview for 合作方收定金+我方收尾款', () => {
+  it('shows partitioned preview for 客户收定金+我方收尾款', () => {
     expect(
       formatSourceOrderAmountSummary(
         {
@@ -446,9 +444,8 @@ describe('formatSourceOrderAmountSummary', () => {
     ).toBe(
       [
         '【团款】结算金额 ¥5000.00',
-        '【代收约定】客户已收 ¥4500.00 · G约定 ¥1000.00',
+        '【代收约定】客户已收 ¥4500.00 · 我方代收 ¥1000.00',
         '【往来结果】预估客户补款 ¥4000.00 · 预计返利 ¥0.00',
-        '客户已收（定金）不计入客户补款金额',
       ].join('\n'),
     )
   })
@@ -469,9 +466,8 @@ describe('formatSourceOrderAmountSummary', () => {
     ).toBe(
       [
         '【团款】结算金额 ¥5000.00',
-        '【代收约定】客户已收 ¥4500.00 · G约定 ¥200.00',
+        '【代收约定】客户已收 ¥4500.00 · 我方代收 ¥200.00',
         '【往来结果】预估客户补款 ¥4800.00 · 预计返利 ¥0.00',
-        '客户已收（定金）不计入客户补款金额',
       ].join('\n'),
     )
   })

@@ -999,6 +999,11 @@ export interface PaymentScheduleSummary {
   amountAdjustedAt: string | null
   createdAt: string
   updatedAt: string
+  /**
+   * 确认收款/关联核销时：游客代收齐账后自动落账的返利应付；未生成则为 null。
+   * 列表接口不含此字段。
+   */
+  generatedRebatePayable?: PaymentScheduleSummary | null
 }
 
 export interface PaymentScheduleActivityItem {
@@ -1176,6 +1181,11 @@ export interface FinanceVerificationSummary {
   cancelledAt: string | null
   createdAt: string
   updatedAt: string
+  /**
+   * 创建核销时：游客代收齐账后自动落账的返利应付；未生成则为 null。
+   * 列表/详情接口不含此字段。
+   */
+  generatedRebatePayable?: PaymentScheduleSummary | null
 }
 
 export interface FinanceVerificationListItem extends FinanceVerificationSummary {
@@ -1290,6 +1300,12 @@ export interface SourceOrderSummary {
   hasPaymentSchedule: boolean
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
+  /** 按公式预估：max(0, 我方代收 − 结算金额)；未落返利应付时列表可展示为预计 */
+  estimatedRebateCents: number
+  /** 已落账返利应付金额；未生成时为 0 */
+  rebateCents: number
+  /** 返利应付状态：SegmentPayableStatus（not_generated / pending / partial / paid / closed） */
+  rebateStatus: string
   createdAt: string
   updatedAt: string
 }
@@ -1300,10 +1316,8 @@ export interface GenerateReceivablesResult {
   sourceAmountMismatch: boolean
 }
 
-/** 按实收结算请求：默认要求游客代收节点结清；earlySettle 允许提前办理。 */
-export interface SettleByActualCollectionDto {
-  earlySettle?: boolean
-}
+/** 按实收结算：游客代收齐账后落补款/返利（通常由核销自动触发；API 可幂等重跑）。 */
+export type SettleByActualCollectionDto = Record<string, never>
 
 export interface SettleByActualCollectionResult {
   /** 本次生成或更新后的客户补款应收与返利应付（不含游客代收节点）。 */
