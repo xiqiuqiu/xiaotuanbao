@@ -57,11 +57,19 @@ function formatDepartureLabel(
 export function filterCandidateTransactions(params: {
   transactions: FinanceTransactionSummary[]
   direction: VerificationDirection
+  selectedSchedule?: PaymentScheduleSummary
   departureId?: string
   searchKeyword?: string
   departureMap: Map<string, { departureNo: string; name: string }>
 }): FinanceTransactionSummary[] {
-  const { transactions, direction, departureId, searchKeyword, departureMap } = params
+  const {
+    transactions,
+    direction,
+    selectedSchedule,
+    departureId,
+    searchKeyword,
+    departureMap,
+  } = params
 
   const expectedDirection = expectedTransactionDirection(direction)
   const normalizedSearchKeyword = searchKeyword?.trim().toLowerCase() ?? ''
@@ -76,6 +84,10 @@ export function filterCandidateTransactions(params: {
     }
 
     if (departureId && transaction.departureId !== departureId) {
+      return false
+    }
+
+    if (selectedSchedule && !matchesCounterparty(transaction, selectedSchedule)) {
       return false
     }
 

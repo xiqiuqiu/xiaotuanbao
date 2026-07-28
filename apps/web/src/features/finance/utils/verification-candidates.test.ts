@@ -113,6 +113,33 @@ describe('filterCandidateTransactions', () => {
     expect(result[0]?.id).toBe('tx-1')
   })
 
+  it('excludes transactions that do not match a locked guest-collection schedule', () => {
+    const lockedSchedule = {
+      counterpartyType: 'guest',
+      counterpartyId: 'source-order-1',
+      counterpartyName: '游客代收',
+    } as PaymentScheduleSummary
+    const matchingGuestTransaction = makeTransaction({
+      id: 'tx-guest',
+      counterpartyType: 'guest',
+      counterpartyId: 'source-order-1',
+    })
+    const partnerTransaction = makeTransaction({
+      id: 'tx-partner',
+      counterpartyType: 'partner',
+      counterpartyId: 'partner-1',
+    })
+
+    const result = filterCandidateTransactions({
+      transactions: [matchingGuestTransaction, partnerTransaction],
+      direction: 'receivable',
+      selectedSchedule: lockedSchedule,
+      departureMap,
+    })
+
+    expect(result.map((transaction) => transaction.id)).toEqual(['tx-guest'])
+  })
+
   it('search text keeps method and name without middle-dot concat', () => {
     expect(formatCounterpartySearchText('guest', '福建土楼专线地接 7月25日发客')).toBe(
       '游客代收 福建土楼专线地接 7月25日发客',
