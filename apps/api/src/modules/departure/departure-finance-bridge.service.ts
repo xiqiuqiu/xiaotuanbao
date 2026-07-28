@@ -631,6 +631,27 @@ export class DepartureFinanceBridgeService {
     }
   }
 
+  /**
+   * Generate a resource payable by anchor sourceType (segment ∪ departure).
+   * Segment path is live; departure_resource is wired in #205.
+   */
+  async generateResourcePayable(
+    organizationId: string,
+    params: { sourceType: string; sourceId: string },
+  ): Promise<{
+    schedule: PaymentScheduleSummary
+    sourceAmountMismatch: boolean
+  }> {
+    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      return this.generatePayable(organizationId, params.sourceId)
+    }
+    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+      // #205 wires DepartureResource generation here.
+      throw new BadRequestException('发团级资源应付生成尚未接入')
+    }
+    throw new BadRequestException('仅资源可生成应付')
+  }
+
   async generatePayable(
     organizationId: string,
     resourceId: string,

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
+import {
+  PaymentScheduleSourceType,
+  type PaymentScheduleSummary,
+} from '@xiaotuanbao/shared'
 import { canCloseSchedule } from './payment-schedule-table-columns'
 
 function schedule(overrides: Partial<PaymentScheduleSummary> = {}): PaymentScheduleSummary {
@@ -47,5 +50,25 @@ describe('resource payable close action', () => {
 
   it('keeps manual payables eligible without the resource-void rule', () => {
     expect(canCloseSchedule(schedule({ sourceType: 'manual', sourceId: null }))).toBe(true)
+  })
+
+  it('applies the same resource-void rule to departure_resource payables', () => {
+    expect(
+      canCloseSchedule(
+        schedule({
+          sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+          sourceId: 'departure-resource-1',
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      canCloseSchedule(
+        schedule({
+          sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+          sourceId: 'departure-resource-1',
+          financeTouched: true,
+        }),
+      ),
+    ).toBe(true)
   })
 })

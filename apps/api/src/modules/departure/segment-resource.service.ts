@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  PaymentScheduleSourceType,
   RESOURCE_KIND_LABELS,
   SegmentPayableStatus,
   type BatchFinanceGenerationItem,
@@ -510,9 +511,12 @@ export class SegmentResourceService {
     organizationId: string,
     resourceId: string,
   ): Promise<GeneratePayableResult> {
-    const { schedule, sourceAmountMismatch } = await this.financeBridge.generatePayable(
+    const { schedule, sourceAmountMismatch } = await this.financeBridge.generateResourcePayable(
       organizationId,
-      resourceId,
+      {
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        sourceId: resourceId,
+      },
     )
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
     const meta = await this.departureFinanceFacade.getSegmentResourceFinanceState(

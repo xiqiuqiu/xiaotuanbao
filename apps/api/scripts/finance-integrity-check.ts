@@ -327,6 +327,8 @@ export async function collectFinanceIntegrityViolations(
       ) {
         add('SCHEDULE_SOURCE_BROKEN', 'P0', '应付节点的 Segment Resource 来源缺失、串团或跨 Organization', refs)
       }
+    } else if (schedule.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
+      // Known resource-payable type (ADR-0034 / #204). Entity integrity lands with #205.
     } else {
       add('UNKNOWN_SCHEDULE_SOURCE_TYPE', 'P1', '收付款节点来源类型不在领域目录中', refs)
     }

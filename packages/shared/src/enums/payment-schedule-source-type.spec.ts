@@ -1,10 +1,31 @@
 import {
+  isResourcePayableSourceType,
   isSourceOrderConventionReceivableSourceType,
   isSourceOrderReceivableSourceType,
   PaymentScheduleSourceType,
+  RESOURCE_PAYABLE_SOURCE_TYPES,
   SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES,
   shouldCancelSourceOrderScheduleOnConventionSync,
 } from './payment-schedule-source-type.enum'
+
+describe('resource payable source types', () => {
+  it('recognizes segment_resource and departure_resource as resource payables', () => {
+    expect(isResourcePayableSourceType(PaymentScheduleSourceType.SEGMENT_RESOURCE)).toBe(true)
+    expect(isResourcePayableSourceType(PaymentScheduleSourceType.DEPARTURE_RESOURCE)).toBe(true)
+    expect(RESOURCE_PAYABLE_SOURCE_TYPES).toEqual([
+      PaymentScheduleSourceType.SEGMENT_RESOURCE,
+      PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+    ])
+  })
+
+  it('excludes manual and source-order schedule types', () => {
+    expect(isResourcePayableSourceType(PaymentScheduleSourceType.MANUAL)).toBe(false)
+    expect(
+      isResourcePayableSourceType(PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT),
+    ).toBe(false)
+    expect(isResourcePayableSourceType(PaymentScheduleSourceType.SOURCE_ORDER_REBATE)).toBe(false)
+  })
+})
 
 describe('source-order receivable source types', () => {
   it('recognizes legacy guest_collection as already-generated receivable', () => {

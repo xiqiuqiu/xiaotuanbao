@@ -13,6 +13,22 @@ export enum PaymentScheduleSourceType {
   /** 客源返利应付（发给发客 Partner；按实收结算后落账）。 */
   SOURCE_ORDER_REBATE = 'source_order_rebate',
   SEGMENT_RESOURCE = 'segment_resource',
+  /** 发团级资源应付（全程用车/保险/导游等；与段资源同一套应付规则）。 */
+  DEPARTURE_RESOURCE = 'departure_resource',
+}
+
+/** 资源应付来源（段资源 ∪ 发团级资源）。 */
+export const RESOURCE_PAYABLE_SOURCE_TYPES = [
+  PaymentScheduleSourceType.SEGMENT_RESOURCE,
+  PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+] as const
+
+export type ResourcePayableSourceType = (typeof RESOURCE_PAYABLE_SOURCE_TYPES)[number]
+
+export function isResourcePayableSourceType(
+  sourceType: string,
+): sourceType is ResourcePayableSourceType {
+  return (RESOURCE_PAYABLE_SOURCE_TYPES as readonly string[]).includes(sourceType)
 }
 
 /** 定金代收 + 尾款代收（不含客户结算、不含 legacy 单节点）。 */
