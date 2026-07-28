@@ -263,17 +263,28 @@ describe('CreateVerificationDrawer schedule-first selection', () => {
       ...makeTransaction(),
       unallocatedAmountCents: 90000,
     }
+    const mismatchedTransaction: FinanceTransactionSummary = {
+      ...makeTransaction(),
+      id: 'tx-mismatch',
+      transactionNo: 'TX202607000002',
+      counterpartyType: 'guest',
+      counterpartyId: 'source-order-1',
+      counterpartyName: '游客代收',
+    }
 
     listFinanceDepartureOptions.mockResolvedValue([
       { id: 'dep-1', departureNo: 'XTB2026070001', name: '乌镇一团' },
     ])
-    listTransactions.mockResolvedValue({ items: [transaction] })
+    listTransactions.mockResolvedValue({ items: [transaction, mismatchedTransaction] })
     listReceivables.mockResolvedValue({ items: [makeSchedule('dep-1')] })
 
     render(
       <ScheduleFirstHarness schedule={makeSchedule('dep-1')} onSubmit={onSubmit} />,
     )
 
+    await waitFor(() =>
+      expect(screen.queryByText('TX202607000002')).not.toBeInTheDocument(),
+    )
     await userEvent.click(await screen.findByText('TX202607000001'))
 
     await waitFor(() =>

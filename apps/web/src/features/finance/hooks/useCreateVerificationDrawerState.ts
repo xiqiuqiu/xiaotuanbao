@@ -131,6 +131,7 @@ export function useCreateVerificationDrawerState({
     return filterCandidateTransactions({
       transactions: transactionsResult?.items ?? [],
       direction,
+      selectedSchedule: initialSchedule,
       departureId: effectiveDepartureId,
       searchKeyword: transactionSearchKeyword,
       departureMap,
@@ -139,6 +140,7 @@ export function useCreateVerificationDrawerState({
     departureMap,
     departureId,
     direction,
+    initialSchedule,
     lockedDepartureId,
     transactionSearchKeyword,
     transactionsResult?.items,
