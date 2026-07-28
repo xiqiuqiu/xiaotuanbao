@@ -1,9 +1,15 @@
+import { useState } from 'react'
 import { Alert, Button } from 'antd'
 import type { DepartureDetail } from '@/types/api'
 import {
   resolveDepartureNextAction,
   type DepartureNextAction,
 } from '../utils/departure-next-action'
+import {
+  buildNextActionFingerprint,
+  dismissNextAction,
+  isNextActionDismissed,
+} from '../utils/departure-next-action-dismiss'
 
 type DepartureNextActionAlertProps = {
   departure: DepartureDetail
@@ -17,7 +23,21 @@ export function DepartureNextActionAlert({
   onAction,
 }: DepartureNextActionAlertProps) {
   const nextAction = resolveDepartureNextAction({ departure, canWrite })
-  if (!nextAction) {
+  const fingerprint = nextAction ? buildNextActionFingerprint(nextAction) : null
+  const [closed, setClosed] = useState<{
+    departureId: string
+    fingerprint: string
+  } | null>(null)
+
+  if (!nextAction || !fingerprint) {
+    return null
+  }
+
+  const dismissed =
+    (closed?.departureId === departure.id && closed.fingerprint === fingerprint) ||
+    isNextActionDismissed(departure.id, fingerprint)
+
+  if (dismissed) {
     return null
   }
 
@@ -25,9 +45,14 @@ export function DepartureNextActionAlert({
     <Alert
       type={nextAction.type}
       showIcon
+      closable
       style={{ marginBottom: 16 }}
       title={nextAction.title}
       description={nextAction.description}
+      onClose={() => {
+        dismissNextAction(departure.id, fingerprint)
+        setClosed({ departureId: departure.id, fingerprint })
+      }}
       action={
         nextAction.action ? (
           <Button size="small" onClick={() => onAction(nextAction.action!)}>
