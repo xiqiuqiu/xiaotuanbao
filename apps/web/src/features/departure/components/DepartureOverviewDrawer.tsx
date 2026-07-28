@@ -49,10 +49,18 @@ export function DepartureOverviewDrawer({
         ownerUserId: values.ownerUserId,
         notes: values.notes ?? null,
       }),
-    onSuccess: () => {
+    onSuccess: (_data, values) => {
+      const datesChanged =
+        values.startDate !== departure.startDate || values.endDate !== departure.endDate
       message.success('发团信息已保存')
+      if (datesChanged) {
+        message.info(
+          '出团/回团日期已变更：已有行程段（含资源）不会自动删除。延期可在执行安排「一键生成一日段」补缺失日；缩期后多余空段需「重建空段」清理，或手工删除。',
+        )
+      }
       void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
       void queryClient.invalidateQueries({ queryKey: ['departures'] })
+      void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
       onUpdated()
       onClose()
     },

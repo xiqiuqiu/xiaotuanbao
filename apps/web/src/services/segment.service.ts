@@ -1,6 +1,8 @@
 import { request } from '@/lib/request'
 import type {
   CreateItinerarySegmentDto,
+  GenerateDailySegmentsDto,
+  GenerateDailySegmentsResult,
   ItinerarySegmentListResult,
   ItinerarySegmentSummary,
   UpdateItinerarySegmentDto,
@@ -15,6 +17,16 @@ export async function createSegment(
   payload: CreateItinerarySegmentDto,
 ): Promise<ItinerarySegmentSummary> {
   return request.post<ItinerarySegmentSummary>(`/departures/${departureId}/segments`, payload)
+}
+
+export async function generateDailySegments(
+  departureId: string,
+  payload: GenerateDailySegmentsDto = {},
+): Promise<GenerateDailySegmentsResult> {
+  return request.post<GenerateDailySegmentsResult>(
+    `/departures/${departureId}/segments/generate-daily`,
+    payload,
+  )
 }
 
 export async function getSegment(id: string): Promise<ItinerarySegmentSummary> {

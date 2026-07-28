@@ -9,10 +9,15 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common'
-import type { ItinerarySegmentListResult, ItinerarySegmentSummary } from '@xiaotuanbao/shared'
+import type {
+  GenerateDailySegmentsResult,
+  ItinerarySegmentListResult,
+  ItinerarySegmentSummary,
+} from '@xiaotuanbao/shared'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { GenerateDailySegmentsDto } from './dto/generate-daily-segments.dto'
 import { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
 import { SegmentService } from './segment.service'
 
@@ -28,6 +33,16 @@ export class SegmentController {
     @Param('departureId') departureId: string,
   ): Promise<ItinerarySegmentListResult> {
     return this.segmentService.listByDeparture(request.user.organizationId, departureId)
+  }
+
+  @Post('departures/:departureId/segments/generate-daily')
+  @RequireMenu('departure:write')
+  generateDaily(
+    @Req() request: { user: { organizationId: string } },
+    @Param('departureId') departureId: string,
+    @Body() dto: GenerateDailySegmentsDto,
+  ): Promise<GenerateDailySegmentsResult> {
+    return this.segmentService.generateDaily(request.user.organizationId, departureId, dto)
   }
 
   @Post('departures/:departureId/segments')

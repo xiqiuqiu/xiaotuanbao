@@ -51,6 +51,7 @@ vi.mock('@/services/segment.service', () => ({
     total: 1,
   })),
   createSegment: vi.fn(),
+  generateDailySegments: vi.fn(),
   updateSegment: vi.fn(),
   deleteSegment: vi.fn(),
 }))

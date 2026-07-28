@@ -5,6 +5,7 @@ import {
   Card,
   Col,
   Empty,
+  Modal,
   Row,
   Spin,
   message,
@@ -14,6 +15,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import type {
   DepartureDetail,
+  GenerateDailySegmentsMode,
+  GenerateDailySegmentsResult,
   ItinerarySegmentListResult,
   ItinerarySegmentSummary,
 } from '@/types/api'
@@ -21,6 +24,7 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import {
   createSegment,
   deleteSegment,
+  generateDailySegments,
   listSegments,
   updateSegment,
 } from '@/services/segment.service'
@@ -246,6 +250,45 @@ export function ExecutionTab({
     },
   })
 
+  const generateDailyMutation = useMutation({
+    mutationFn: (mode: GenerateDailySegmentsMode) =>
+      generateDailySegments(departure.id, { mode }),
+    onSuccess: (result: GenerateDailySegmentsResult) => {
+      if (result.mode === 'rebuild_empty') {
+        message.success(
+          `已重建空段：新增 ${result.createdCount} 段，清除无资源空段 ${result.removedCount} 个`,
+        )
+      } else if (result.createdCount > 0) {
+        message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程段`)
+      } else {
+        message.info('出团～回团各日均已有行程段覆盖，未新增；若要重铺空段请用「重建空段」')
+      }
+      if (result.preservedWithResources > 0) {
+        message.info(`已保留 ${result.preservedWithResources} 个含资源的行程段`)
+      }
+      invalidateSegments()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '生成每日行程段失败')
+    },
+  })
+
+  const handleGenerateDaily = () => {
+    generateDailyMutation.mutate('fill_missing')
+  }
+
+  const handleRebuildEmpty = () => {
+    Modal.confirm({
+      title: '重建无资源空段？',
+      content:
+        '将删除本团全部无资源的行程段，再按出团日～回团日补齐一日一段骨架。已有资源的行程段不会被删除或覆盖。',
+      okText: '重建空段',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: () => generateDailyMutation.mutateAsync('rebuild_empty'),
+    })
+  }
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}>
@@ -277,9 +320,12 @@ export function ExecutionTab({
           segments={segments}
           selectedSegmentId={selectedSegmentId}
           mutationLocked={mutationLocked}
+          generatingDaily={generateDailyMutation.isPending}
           onSelect={(id) => navigateExecution(id)}
           onEdit={openEdit}
           onCreate={openCreate}
+          onGenerateDaily={handleGenerateDaily}
+          onRebuildEmpty={handleRebuildEmpty}
         />
 
         <Col
@@ -292,11 +338,23 @@ export function ExecutionTab({
             classNames={{ body: styles.paneCardBody }}
           >
             {segments.length === 0 ? (
-              <Empty description="请先添加行程段" style={{ padding: '48px 0' }}>
+              <Empty
+                description="可按出团～回团一键生成一日一段骨架，或手工添加"
+                style={{ padding: '48px 0' }}
+              >
                 {!mutationLocked ? (
-                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-                    添加行程段
-                  </Button>
+                  <div className={styles.emptyActions}>
+                    <Button
+                      type="primary"
+                      loading={generateDailyMutation.isPending}
+                      onClick={handleGenerateDaily}
+                    >
+                      一键生成一日段
+                    </Button>
+                    <Button icon={<PlusOutlined />} onClick={openCreate}>
+                      添加行程段
+                    </Button>
+                  </div>
                 ) : null}
               </Empty>
             ) : selectedSegment ? (

@@ -53,6 +53,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'PATCH', path: '/api/source-orders/:id' },
     { method: 'DELETE', path: '/api/source-orders/:id' },
     { method: 'POST', path: '/api/departures/:id/segments' },
+    { method: 'POST', path: '/api/departures/:id/segments/generate-daily' },
     { method: 'PATCH', path: '/api/segments/:id' },
     { method: 'POST', path: '/api/segments/:id/resources' },
     { method: 'PATCH', path: '/api/segment-resources/:id' },
