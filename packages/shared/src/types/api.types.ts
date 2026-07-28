@@ -682,6 +682,9 @@ export interface UpdateDepartureDto {
   endDate?: string
   ownerUserId?: string
   notes?: string | null
+  driverSupplierId?: string | null
+  guideSupplierId?: string | null
+  vehiclePlate?: string | null
 }
 
 export interface TransitionDepartureDto {
@@ -774,6 +777,11 @@ export interface DepartureOverviewStats {
 
 /** Detail response extends summary with full financial Read Model aggregates. */
 export interface DepartureDetail extends DepartureSummary {
+  driverSupplierId: string | null
+  driverSupplierName: string | null
+  guideSupplierId: string | null
+  guideSupplierName: string | null
+  vehiclePlate: string | null
   grossReceivableCents: number
   /** 本团全部客源单的团款调整净额合计（增项 − 减项）。 */
   fareAdjustmentNetCents: number
@@ -1781,6 +1789,9 @@ export interface DepartureOperationsSheetDepartureInfo {
   endDate: string
   dayCount: number
   ownerName: string
+  driverSupplierName: string | null
+  guideSupplierName: string | null
+  vehiclePlate: string | null
   status: string
   departureProgress: string
   notes: string | null

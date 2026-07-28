@@ -9,7 +9,7 @@ import {
   normalizeSupplierCategories,
   InvalidSupplierCategoriesError,
   RESOURCE_KIND_LABELS,
-  type ResourceKind,
+  ResourceKind,
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
@@ -180,24 +180,43 @@ export class SupplierService {
       return
     }
 
-    const inUse = await this.prisma.segmentResource.findMany({
-      where: {
-        supplierId,
-        resourceKind: { in: removed as ResourceKind[] },
-      },
-      select: { resourceKind: true },
-      distinct: ['resourceKind'],
-    })
+    const [inUse, driverUseCount, guideUseCount] = await Promise.all([
+      this.prisma.segmentResource.findMany({
+        where: {
+          supplierId,
+          resourceKind: { in: removed as ResourceKind[] },
+        },
+        select: { resourceKind: true },
+        distinct: ['resourceKind'],
+      }),
+      removed.includes(ResourceKind.TRANSPORT)
+        ? this.prisma.departure.count({ where: { driverSupplierId: supplierId } })
+        : Promise.resolve(0),
+      removed.includes(ResourceKind.GUIDE)
+        ? this.prisma.departure.count({ where: { guideSupplierId: supplierId } })
+        : Promise.resolve(0),
+    ])
 
-    if (inUse.length === 0) {
+    if (inUse.length === 0 && driverUseCount === 0 && guideUseCount === 0) {
       return
     }
 
-    const labels = inUse.map(
-      (row) => RESOURCE_KIND_LABELS[row.resourceKind as ResourceKind] ?? row.resourceKind,
-    )
+    const usedKinds = new Set(inUse.map((row) => row.resourceKind as ResourceKind))
+    if (driverUseCount > 0) {
+      usedKinds.add(ResourceKind.TRANSPORT)
+    }
+    if (guideUseCount > 0) {
+      usedKinds.add(ResourceKind.GUIDE)
+    }
+    const labels = [...usedKinds].map((kind) => RESOURCE_KIND_LABELS[kind] ?? kind)
+    const usage =
+      driverUseCount > 0 || guideUseCount > 0
+        ? inUse.length > 0
+          ? '行程段资源或发团执行班组'
+          : '发团执行班组'
+        : '行程段资源'
     throw new BadRequestException(
-      `供应商类别「${labels.join('、')}」仍被关联行程段资源使用，无法移除`,
+      `供应商类别「${labels.join('、')}」仍被关联${usage}使用，无法移除`,
     )
   }
 

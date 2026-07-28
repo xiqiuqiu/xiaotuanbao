@@ -1,14 +1,19 @@
-import { Button, DatePicker, Drawer, Form, Input, Select, Space, message } from 'antd'
+import { useState } from 'react'
+import { Alert, Button, DatePicker, Drawer, Form, Input, Select, Space, message } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DepartureDetail } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
+import { listSuppliers } from '@/services/supplier.service'
 import { updateDeparture } from '@/services/departure.service'
+import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import { computeDayCount } from '../utils/departure-wizard-form'
 import {
+  buildUpdateDeparturePayload,
   departureToFormValues,
   type DepartureOverviewFormValues,
 } from '../utils/departure-overview-form'
@@ -33,22 +38,50 @@ export function DepartureOverviewDrawer({
   onUpdated,
 }: DepartureOverviewDrawerProps) {
   const queryClient = useQueryClient()
+  const [driverSearch, setDriverSearch] = useState('')
+  const [guideSearch, setGuideSearch] = useState('')
+  const debouncedDriverSearch = useDebouncedValue(driverSearch.trim())
+  const debouncedGuideSearch = useDebouncedValue(guideSearch.trim())
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'departure-overview'],
     queryFn: () => listEmployeeOptions(),
   })
+  const {
+    data: driverSuppliersResult,
+    isLoading: isDriverSuppliersLoading,
+    isError: isDriverSuppliersError,
+    refetch: refetchDriverSuppliers,
+  } = useQuery({
+    queryKey: ['suppliers', 'departure-crew', ResourceKind.TRANSPORT, debouncedDriverSearch],
+    queryFn: () =>
+      listSuppliers({
+        search: debouncedDriverSearch || undefined,
+        category: ResourceKind.TRANSPORT,
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
+    enabled: open,
+  })
+  const {
+    data: guideSuppliersResult,
+    isLoading: isGuideSuppliersLoading,
+    isError: isGuideSuppliersError,
+    refetch: refetchGuideSuppliers,
+  } = useQuery({
+    queryKey: ['suppliers', 'departure-crew', ResourceKind.GUIDE, debouncedGuideSearch],
+    queryFn: () =>
+      listSuppliers({
+        search: debouncedGuideSearch || undefined,
+        category: ResourceKind.GUIDE,
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
+    enabled: open,
+  })
 
   const saveMutation = useMutation({
     mutationFn: (values: DepartureOverviewFormValues) =>
-      updateDeparture(departure.id, {
-        name: values.name,
-        routeName: values.routeName,
-        departureType: values.departureType,
-        startDate: values.startDate,
-        endDate: values.endDate,
-        ownerUserId: values.ownerUserId,
-        notes: values.notes ?? null,
-      }),
+      updateDeparture(departure.id, buildUpdateDeparturePayload(values)),
     onSuccess: (_data, values) => {
       const datesChanged =
         values.startDate !== departure.startDate || values.endDate !== departure.endDate
@@ -100,6 +133,16 @@ export function DepartureOverviewDrawer({
       value: employee.id,
       label: employee.name,
     })) ?? []
+  const driverOptions = withCurrentSupplierOption(
+    driverSuppliersResult?.items ?? [],
+    departure.driverSupplierId,
+    departure.driverSupplierName,
+  )
+  const guideOptions = withCurrentSupplierOption(
+    guideSuppliersResult?.items ?? [],
+    departure.guideSupplierId,
+    departure.guideSupplierName,
+  )
 
   const handleClose = () => {
     form.resetFields()
@@ -133,6 +176,26 @@ export function DepartureOverviewDrawer({
         initialValues={departureToFormValues(departure)}
         onFinish={(values) => saveMutation.mutate(values)}
       >
+        {isDriverSuppliersError || isGuideSuppliersError ? (
+          <Alert
+            type="error"
+            showIcon
+            title="执行班组供应商加载失败"
+            description="请检查网络后重试"
+            action={
+              <Button
+                size="small"
+                onClick={() => {
+                  void Promise.all([refetchDriverSuppliers(), refetchGuideSuppliers()])
+                }}
+              >
+                重试
+              </Button>
+            }
+            style={{ marginBottom: 16 }}
+          />
+        ) : null}
+
         <Form.Item
           name="name"
           label="团名"
@@ -205,10 +268,59 @@ export function DepartureOverviewDrawer({
           <Select options={employeeOptions} showSearch optionFilterProp="label" />
         </Form.Item>
 
+        <Form.Item
+          name="driverSupplierId"
+          label="司机"
+          extra="选择执行班组不会自动生成应付"
+        >
+          <Select
+            allowClear
+            showSearch
+            filterOption={false}
+            onSearch={setDriverSearch}
+            loading={isDriverSuppliersLoading}
+            placeholder="选择含「用车」类别的供应商"
+            options={driverOptions}
+            notFoundContent="暂无匹配供应商，请先到供应商名录维护「用车」类别"
+          />
+        </Form.Item>
+
+        <Form.Item name="guideSupplierId" label="导游">
+          <Select
+            allowClear
+            showSearch
+            filterOption={false}
+            onSearch={setGuideSearch}
+            loading={isGuideSuppliersLoading}
+            placeholder="选择含「导游」类别的供应商"
+            options={guideOptions}
+            notFoundContent="暂无匹配供应商，请先到供应商名录维护「导游」类别"
+          />
+        </Form.Item>
+
+        <Form.Item name="vehiclePlate" label="车牌">
+          <Input placeholder="可选，自由填写" maxLength={32} />
+        </Form.Item>
+
         <Form.Item name="notes" label="备注">
           <Input.TextArea rows={3} />
         </Form.Item>
       </Form>
     </Drawer>
   )
+}
+
+function withCurrentSupplierOption(
+  suppliers: Array<{ id: string; name: string }>,
+  currentId: string | null,
+  currentName: string | null,
+) {
+  const options = suppliers.map((supplier) => ({
+    value: supplier.id,
+    label: supplier.name,
+  }))
+  if (currentId && currentName && !options.some((option) => option.value === currentId)) {
+    options.unshift({ value: currentId, label: currentName })
+  }
+  return options
 }
