@@ -127,26 +127,41 @@ describe('DepartureOverviewStatsCards', () => {
 
     expect(screen.getByText('其他收入')).toBeInTheDocument()
     expect(screen.getByText('¥300.00')).toBeInTheDocument()
-    expect(screen.getByLabelText('查看其他收入说明')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '查看其他收入说明' })).not.toBeInTheDocument()
   })
 
   afterEach(cleanup)
 
-  it('首次进入时卡片与进度条挂载入场 class', () => {
+  it('概览结构包含计算口径入口、经营构成单组与资金进度三卡', () => {
+    renderCards()
+
+    expect(screen.getByRole('button', { name: '查看计算口径' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '经营构成' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '收款' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '付款' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '现金' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '经营补充' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '资金情况' })).not.toBeInTheDocument()
+  })
+
+  it('首次进入时核心结论卡、资金分组卡与进度条挂载入场 class', () => {
     renderCards(makeDeparture(), true)
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(receiptCard.className).toContain('metricCardEnter')
-    expect(guestCard.className).toContain('metricCardEnter')
+    const collectionCard = screen.getByRole('region', { name: '收款' })
+    const paymentCard = screen.getByRole('region', { name: '付款' })
+    const cashCard = screen.getByRole('region', { name: '现金' })
+    expect(collectionCard.className).toContain('metricCardEnter')
     expect(paymentCard.className).toContain('metricCardEnter')
+    expect(cashCard.className).toContain('metricCardEnter')
     expect(screen.getByText('总人数').closest('.ant-card')?.className).toContain(
       'metricCardEnter',
     )
+    expect(screen.getByRole('group', { name: '经营构成' }).className).toContain('metricCardEnter')
 
-    const receiptProgress = within(receiptCard).getByRole('progressbar')
-    const paymentProgress = within(paymentCard).getByRole('progressbar')
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    const receiptProgress = within(receiptSection).getByRole('progressbar')
+    const paymentProgress = within(paymentSection).getByRole('progressbar')
     expect(receiptProgress.className).toContain('progressLoad')
     expect(paymentProgress.className).toContain('progressLoad')
   })
@@ -154,26 +169,28 @@ describe('DepartureOverviewStatsCards', () => {
   it('非首次进入时不挂载卡片入场与进度条揭示 class', () => {
     renderCards(makeDeparture(), false)
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(receiptCard.className).not.toContain('metricCardEnter')
+    const collectionCard = screen.getByRole('region', { name: '收款' })
+    const paymentCard = screen.getByRole('region', { name: '付款' })
+    expect(collectionCard.className).not.toContain('metricCardEnter')
     expect(paymentCard.className).not.toContain('metricCardEnter')
     expect(screen.getByText('总人数').closest('.ant-card')?.className).not.toContain(
       'metricCardEnter',
     )
-    expect(within(receiptCard).getByRole('progressbar').className).not.toContain('progressLoad')
-    expect(within(paymentCard).getByRole('progressbar').className).not.toContain('progressLoad')
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(receiptSection).getByRole('progressbar').className).not.toContain('progressLoad')
+    expect(within(paymentSection).getByRole('progressbar').className).not.toContain('progressLoad')
   })
 
   it('初始化加载动效不延迟进度条语义值与百分比文字', () => {
     renderCards(makeDeparture(), true)
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(receiptCard).getByText('40.0%')).toBeInTheDocument()
-    expect(within(paymentCard).getByText('30.0%')).toBeInTheDocument()
-    const receiptProgress = within(receiptCard).getByRole('progressbar')
-    const paymentProgress = within(paymentCard).getByRole('progressbar')
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(receiptSection).getByText('40.0%')).toBeInTheDocument()
+    expect(within(paymentSection).getByText('30.0%')).toBeInTheDocument()
+    const receiptProgress = within(receiptSection).getByRole('progressbar')
+    const paymentProgress = within(paymentSection).getByRole('progressbar')
     expect(receiptProgress).toHaveAttribute('aria-valuenow', '40')
     expect(paymentProgress).toHaveAttribute('aria-valuenow', '30')
     expect(receiptProgress.className).toContain('progressLoad')
@@ -197,27 +214,27 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText('应付合计')).not.toBeInTheDocument()
   })
 
-  it('经营补充展示原始团款、优惠合计与 1 位小数毛利率，不单独展示调整净额', () => {
+  it('经营构成展示原始团款、优惠合计与 1 位小数毛利率，不单独展示调整净额', () => {
     renderCards()
 
-    const supplementRow = screen.getByRole('group', { name: '经营补充' })
-    const summaryRowsStack = supplementRow.closest('.ant-space')
+    const compositionGroup = screen.getByRole('group', { name: '经营构成' })
+    const summaryRowsStack = compositionGroup.closest('.ant-space')
     expect(summaryRowsStack).toHaveClass('ant-space-vertical')
     expect(summaryRowsStack).toHaveStyle({ rowGap: '16px' })
-    expect(within(supplementRow).getByText('原始团款')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('优惠合计')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('毛利率')).toBeInTheDocument()
-    expect(within(supplementRow).queryByText('调整净额')).not.toBeInTheDocument()
-    expect(within(supplementRow).getByText('¥12,000.00')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('¥2,000.00')).toBeInTheDocument()
-    expect(within(supplementRow).getByText('30.0%')).toBeInTheDocument()
+    expect(within(compositionGroup).getByText('原始团款')).toBeInTheDocument()
+    expect(within(compositionGroup).getByText('优惠合计')).toBeInTheDocument()
+    expect(within(compositionGroup).getByText('毛利率')).toBeInTheDocument()
+    expect(within(compositionGroup).queryByText('调整净额')).not.toBeInTheDocument()
+    expect(within(compositionGroup).getByText('¥12,000.00')).toBeInTheDocument()
+    expect(within(compositionGroup).getByText('¥2,000.00')).toBeInTheDocument()
+    expect(within(compositionGroup).getByText('30.0%')).toBeInTheDocument()
   })
 
   it('结算应收说明公式含调整净额', async () => {
     const user = userEvent.setup()
     renderCards()
 
-    await user.hover(screen.getByRole('button', { name: '查看结算应收说明' }))
+    await user.click(screen.getByRole('button', { name: '查看计算口径' }))
     expect(
       await screen.findByText(/原始团款合计 \+ 调整净额 − 优惠合计/),
     ).toBeInTheDocument()
@@ -303,21 +320,21 @@ describe('DepartureOverviewStatsCards', () => {
     renderCards()
 
     // 团款已收 400000 + 未收 600000 = 结算金额 1000000
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    expect(within(receiptCard).getByText('已收')).toBeInTheDocument()
-    expect(within(receiptCard).getByText('¥4,000.00')).toBeInTheDocument()
-    expect(within(receiptCard).getByText('未收')).toBeInTheDocument()
-    expect(within(receiptCard).getByText('¥6,000.00')).toBeInTheDocument()
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    expect(within(receiptSection).getByText('已收')).toBeInTheDocument()
+    expect(within(receiptSection).getByText('¥4,000.00')).toBeInTheDocument()
+    expect(within(receiptSection).getByText('未收')).toBeInTheDocument()
+    expect(within(receiptSection).getByText('¥6,000.00')).toBeInTheDocument()
 
-    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
-    expect(within(guestCard).getByText('40.0%')).toBeInTheDocument()
+    const guestSection = screen.getByRole('group', { name: '游客代收进度' })
+    expect(within(guestSection).getByText('40.0%')).toBeInTheDocument()
 
     // 已付（资源应付已核销）210000 + 未付 490000 = 成本合计 700000
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(paymentCard).getByText('已付')).toBeInTheDocument()
-    expect(within(paymentCard).getByText('¥2,100.00')).toBeInTheDocument()
-    expect(within(paymentCard).getByText('未付')).toBeInTheDocument()
-    expect(within(paymentCard).getByText('¥4,900.00')).toBeInTheDocument()
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(paymentSection).getByText('已付')).toBeInTheDocument()
+    expect(within(paymentSection).getByText('¥2,100.00')).toBeInTheDocument()
+    expect(within(paymentSection).getByText('未付')).toBeInTheDocument()
+    expect(within(paymentSection).getByText('¥4,900.00')).toBeInTheDocument()
   })
 
   it('付款进度超过 100% 时未付展示真实负数金额，不归零', () => {
@@ -331,19 +348,19 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(paymentCard).getByText('-¥500.00')).toBeInTheDocument()
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(paymentSection).getByText('-¥500.00')).toBeInTheDocument()
   })
 
   it('团款收款进度按团款已收÷结算金额，并保留收款组成入口', async () => {
     const user = userEvent.setup()
     renderCards()
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    expect(within(receiptCard).getByText('40.0%')).toBeInTheDocument()
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    expect(within(receiptSection).getByText('40.0%')).toBeInTheDocument()
 
     await user.click(
-      within(receiptCard).getByRole('button', { name: '查看收款组成' }),
+      within(receiptSection).getByRole('button', { name: '查看收款组成' }),
     )
     expect(screen.getByText('尚未生成应收 ¥2,000.00')).toBeInTheDocument()
     expect(screen.getByText('其中已关闭未收 ¥1,000.00')).toBeInTheDocument()
@@ -363,27 +380,27 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const rebateCard = screen.getByRole('region', { name: '返利' })
-    expect(within(rebateCard).getByText('预估')).toBeInTheDocument()
-    expect(within(rebateCard).getByText('已确认')).toBeInTheDocument()
-    expect(within(rebateCard).getByText('已付')).toBeInTheDocument()
-    expect(within(rebateCard).getByText('未付')).toBeInTheDocument()
-    expect(within(rebateCard).getAllByText('¥1,000.00')).toHaveLength(2)
-    expect(within(rebateCard).getByText('¥400.00')).toBeInTheDocument()
-    expect(within(rebateCard).getByText('¥600.00')).toBeInTheDocument()
+    const rebateSection = screen.getByRole('group', { name: '返利' })
+    expect(within(rebateSection).getByText('预估')).toBeInTheDocument()
+    expect(within(rebateSection).getByText('已确认')).toBeInTheDocument()
+    expect(within(rebateSection).getByText('已付')).toBeInTheDocument()
+    expect(within(rebateSection).getByText('未付')).toBeInTheDocument()
+    expect(within(rebateSection).getAllByText('¥1,000.00')).toHaveLength(2)
+    expect(within(rebateSection).getByText('¥400.00')).toBeInTheDocument()
+    expect(within(rebateSection).getByText('¥600.00')).toBeInTheDocument()
   })
 
   it('付款进度按资源应付已核销÷成本合计，明细保留全部应付核销进度与已关闭未付', async () => {
     const user = userEvent.setup()
     renderCards()
 
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
     // 资源应付已核销 210000 ÷ 成本合计 700000，而非全部已付 300000 ÷ 确认应付 750000。
-    expect(within(paymentCard).getByText('30.0%')).toBeInTheDocument()
-    expect(within(paymentCard).queryByText('40.0%')).not.toBeInTheDocument()
+    expect(within(paymentSection).getByText('30.0%')).toBeInTheDocument()
+    expect(within(paymentSection).queryByText('40.0%')).not.toBeInTheDocument()
 
     await user.click(
-      within(paymentCard).getByRole('button', { name: '查看付款组成' }),
+      within(paymentSection).getByRole('button', { name: '查看付款组成' }),
     )
     expect(
       screen.getByText('全部应付核销进度 40.0%（全部已付 ¥3,000.00 ÷ 确认应付 ¥7,500.00）'),
@@ -402,9 +419,9 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(paymentCard).getByText('125.0%')).toBeInTheDocument()
-    expect(within(paymentCard).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100')
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(paymentSection).getByText('125.0%')).toBeInTheDocument()
+    expect(within(paymentSection).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100')
   })
 
   it('存在尚未生成应付时付款进度以成本合计为分母而系统性偏低', () => {
@@ -420,9 +437,9 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(paymentCard).getByText('57.1%')).toBeInTheDocument()
-    expect(within(paymentCard).queryByText('100.0%')).not.toBeInTheDocument()
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(paymentSection).getByText('57.1%')).toBeInTheDocument()
+    expect(within(paymentSection).queryByText('100.0%')).not.toBeInTheDocument()
   })
 
   it('进度分母为零时显示暂无数据，不显示 0% 或短横', () => {
@@ -446,14 +463,14 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
-    const paymentCard = screen.getByRole('region', { name: '付款进度' })
-    expect(within(receiptCard).getByText('暂无数据')).toBeInTheDocument()
-    expect(within(guestCard).getByText('暂无数据')).toBeInTheDocument()
-    expect(within(paymentCard).getByText('暂无数据')).toBeInTheDocument()
-    expect(within(receiptCard).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
-    expect(within(paymentCard).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    const guestSection = screen.getByRole('group', { name: '游客代收进度' })
+    const paymentSection = screen.getByRole('group', { name: '资源付款' })
+    expect(within(receiptSection).getByText('暂无数据')).toBeInTheDocument()
+    expect(within(guestSection).getByText('暂无数据')).toBeInTheDocument()
+    expect(within(paymentSection).getByText('暂无数据')).toBeInTheDocument()
+    expect(within(receiptSection).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
+    expect(within(paymentSection).queryByText(/0\.0%|—/)).not.toBeInTheDocument()
   })
 
   it('代收溢价不抬高团款进度：Guest 已收≥S 时团款为 100%', () => {
@@ -471,17 +488,17 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度' })
-    const guestCard = screen.getByRole('region', { name: '游客代收进度' })
-    expect(within(receiptCard).getByText('100.0%')).toBeInTheDocument()
-    expect(within(guestCard).getByText('100.0%')).toBeInTheDocument()
-    expect(within(receiptCard).queryByText('120.0%')).not.toBeInTheDocument()
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度' })
+    const guestSection = screen.getByRole('group', { name: '游客代收进度' })
+    expect(within(receiptSection).getByText('100.0%')).toBeInTheDocument()
+    expect(within(guestSection).getByText('100.0%')).toBeInTheDocument()
+    expect(within(receiptSection).queryByText('120.0%')).not.toBeInTheDocument()
   })
 
-  it('资金情况突出现金净流入，并将收入支出降为辅助信息', () => {
+  it('现金区域突出现金净流入，并将收入支出降为辅助信息', () => {
     renderCards()
 
-    const cashCard = screen.getByRole('region', { name: '资金情况' })
+    const cashCard = screen.getByRole('region', { name: '现金' })
     const cashNetStatistic = within(cashCard).getByText('现金净流入').closest('.ant-statistic')
     const breakdown = within(cashCard).getByRole('group', { name: '资金收支明细' })
 
@@ -494,7 +511,7 @@ describe('DepartureOverviewStatsCards', () => {
     const user = userEvent.setup()
     renderCards()
 
-    const cashCard = screen.getByRole('region', { name: '资金情况' })
+    const cashCard = screen.getByRole('region', { name: '现金' })
     await user.click(within(cashCard).getByRole('button', { name: '查看资金提示' }))
 
     expect(screen.getByText('未核销收入 ¥1,000.00')).toBeInTheDocument()
@@ -511,12 +528,13 @@ describe('DepartureOverviewStatsCards', () => {
     const equation = '有效收入 ¥5,000.00 − 有效支出 ¥3,200.00 = 现金净流入 ¥1,800.00'
     expect(screen.queryByText(equation)).not.toBeInTheDocument()
 
-    await user.hover(screen.getByRole('button', { name: '查看资金情况说明' }))
-    const tooltip = await screen.findByRole('tooltip')
-    expect(tooltip).toHaveTextContent(
-      '本团当前实际发生的资金收支情况。 计算：现金净流入 = 有效收入 − 有效支出。 根据已关联本团的未作废收支流水实时统计。',
+    await user.click(screen.getByRole('button', { name: '查看计算口径' }))
+    const guidePopover = await screen.findByRole('tooltip')
+    expect(guidePopover).toHaveTextContent(
+      /本团当前实际发生的资金收支情况。计算：现金净流入 = 有效收入 − 有效支出。根据已关联本团的未作废收支流水实时统计。/,
     )
-    expect(tooltip).not.toHaveTextContent(equation)
+    expect(within(guidePopover).getByText('现金净流入')).toBeInTheDocument()
+    expect(screen.queryByText(equation)).not.toBeInTheDocument()
   })
 
   it('守恒异常不阻止读取，并在对应卡片展示原始差额', () => {
@@ -536,11 +554,11 @@ describe('DepartureOverviewStatsCards', () => {
       }),
     )
 
-    const receiptCard = screen.getByRole('region', { name: '团款收款进度（数据异常）' })
-    expect(within(receiptCard).getByText('收款守恒异常')).toBeInTheDocument()
+    const receiptSection = screen.getByRole('group', { name: '团款收款进度（数据异常）' })
+    expect(within(receiptSection).getByText('收款守恒异常')).toBeInTheDocument()
     expect(
-      within(receiptCard).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00'),
+      within(receiptSection).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00'),
     ).toBeInTheDocument()
-    expect(screen.getByText('资金情况')).toBeInTheDocument()
+    expect(screen.getByText('现金')).toBeInTheDocument()
   })
 })

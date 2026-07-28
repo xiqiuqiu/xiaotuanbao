@@ -11,6 +11,11 @@
   margin-top: 8px;
 }
 
+.progressSection + .progressSection {
+  padding-top: 16px;
+  border-top: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
+}
+
 .progressLoad :global(.ant-progress-track) {
   transform-origin: left center;
   animation: progress-load 240ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
@@ -38,48 +43,32 @@
   animation-delay: 90ms;
 }
 
-.secondRow > :global(.ant-col):nth-child(1) .metricCardEnter {
-  animation-delay: 45ms;
-}
-
-.secondRow > :global(.ant-col):nth-child(2) .metricCardEnter {
-  animation-delay: 75ms;
-}
-
-.secondRow > :global(.ant-col):nth-child(3) .metricCardEnter {
+.secondRow .metricCardEnter {
   animation-delay: 105ms;
 }
 
 .thirdRow > :global(.ant-col):nth-child(1) .metricCardEnter {
-  animation-delay: 60ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(1) .progressLoad :global(.ant-progress-track) {
   animation-delay: 120ms;
 }
 
-.thirdRow > :global(.ant-col):nth-child(2) .metricCardEnter {
-  animation-delay: 90ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(2) .progressLoad :global(.ant-progress-track) {
-  animation-delay: 150ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(3) .metricCardEnter {
-  animation-delay: 120ms;
-}
-
-.fourthRow > :global(.ant-col):nth-child(1) .metricCardEnter {
-  animation-delay: 135ms;
-}
-
-.fourthRow > :global(.ant-col):nth-child(1) .progressLoad :global(.ant-progress-track) {
+.thirdRow > :global(.ant-col):nth-child(1) .progressSection:nth-child(1) .progressLoad :global(.ant-progress-track) {
   animation-delay: 180ms;
 }
 
-.fourthRow > :global(.ant-col):nth-child(2) .metricCardEnter {
+.thirdRow > :global(.ant-col):nth-child(1) .progressSection:nth-child(2) .progressLoad :global(.ant-progress-track) {
+  animation-delay: 210ms;
+}
+
+.thirdRow > :global(.ant-col):nth-child(2) .metricCardEnter {
   animation-delay: 150ms;
+}
+
+.thirdRow > :global(.ant-col):nth-child(2) .progressLoad :global(.ant-progress-track) {
+  animation-delay: 240ms;
+}
+
+.thirdRow > :global(.ant-col):nth-child(3) .metricCardEnter {
+  animation-delay: 180ms;
 }
 
 @keyframes metric-card-enter {
