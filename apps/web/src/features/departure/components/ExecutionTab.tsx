@@ -57,6 +57,105 @@ function sortSegmentsBySortOrder(
   return [...segments].sort((a, b) => a.sortOrder - b.sortOrder)
 }
 
+interface ExecutionWorkspaceProps {
+  departure: DepartureDetail
+  segments: ItinerarySegmentSummary[]
+  selectedSegmentId?: string
+  selectedSegment: ItinerarySegmentSummary | null
+  mutationLocked: boolean
+  generatingDaily: boolean
+  readOnly: boolean
+  canEdit: boolean
+  amountReadOnly: boolean
+  highlightDepartureResourceId?: string
+  onSelect: (segmentId: string) => void
+  onEdit: (segment: ItinerarySegmentSummary) => void
+  onCreate: () => void
+  onGenerateDaily: () => void
+  onRebuildEmpty: () => void
+}
+
+function ExecutionWorkspace({
+  departure,
+  segments,
+  selectedSegmentId,
+  selectedSegment,
+  mutationLocked,
+  generatingDaily,
+  readOnly,
+  canEdit,
+  amountReadOnly,
+  highlightDepartureResourceId,
+  onSelect,
+  onEdit,
+  onCreate,
+  onGenerateDaily,
+  onRebuildEmpty,
+}: ExecutionWorkspaceProps) {
+  return (
+    <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
+      <ExecutionSegmentListPane
+        segments={segments}
+        selectedSegmentId={selectedSegmentId}
+        mutationLocked={mutationLocked}
+        generatingDaily={generatingDaily}
+        onSelect={onSelect}
+        onEdit={onEdit}
+        onCreate={onCreate}
+        onGenerateDaily={onGenerateDaily}
+        onRebuildEmpty={onRebuildEmpty}
+      />
+
+      <Col
+        className={`${styles.paneCol} ${styles.resourcePaneCol}`}
+        flex="auto"
+        style={{ minWidth: 0 }}
+      >
+        <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
+          <DepartureResourcePane
+            departure={departure}
+            readOnly={readOnly}
+            canEdit={canEdit}
+            amountReadOnly={amountReadOnly}
+            highlightDepartureResourceId={highlightDepartureResourceId}
+          />
+          {segments.length === 0 ? (
+            <Empty
+              description="可按出团～回团一键生成一日一段骨架，或手工添加"
+              style={{ padding: '48px 0' }}
+            >
+              {!mutationLocked ? (
+                <div className={styles.emptyActions}>
+                  <Button
+                    type="primary"
+                    loading={generatingDaily}
+                    onClick={onGenerateDaily}
+                  >
+                    一键生成一日段
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={onCreate}>
+                    添加行程段
+                  </Button>
+                </div>
+              ) : null}
+            </Empty>
+          ) : selectedSegment ? (
+            <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+              <ExecutionResourcePane
+                departure={departure}
+                segment={selectedSegment}
+                readOnly={readOnly}
+                canEdit={canEdit}
+                amountReadOnly={amountReadOnly}
+              />
+            </div>
+          ) : null}
+        </Card>
+      </Col>
+    </Row>
+  )
+}
+
 export function ExecutionTab({
   departure,
   segmentId,
@@ -318,69 +417,23 @@ export function ExecutionTab({
 
   return (
     <div className={styles.workspace} ref={workspaceRef}>
-      <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
-        <ExecutionSegmentListPane
-          segments={segments}
-          selectedSegmentId={selectedSegmentId}
-          mutationLocked={mutationLocked}
-          generatingDaily={generateDailyMutation.isPending}
-          onSelect={(id) => navigateExecution(id)}
-          onEdit={openEdit}
-          onCreate={openCreate}
-          onGenerateDaily={handleGenerateDaily}
-          onRebuildEmpty={handleRebuildEmpty}
-        />
-
-        <Col
-          className={`${styles.paneCol} ${styles.resourcePaneCol}`}
-          flex="auto"
-          style={{ minWidth: 0 }}
-        >
-          <Card
-            className={styles.paneCard}
-            classNames={{ body: styles.paneCardBody }}
-          >
-            <DepartureResourcePane
-              departure={departure}
-              readOnly={readOnly}
-              canEdit={canEdit}
-              amountReadOnly={amountReadOnly}
-              highlightDepartureResourceId={highlightDepartureResourceId}
-            />
-            {segments.length === 0 ? (
-              <Empty
-                description="可按出团～回团一键生成一日一段骨架，或手工添加"
-                style={{ padding: '48px 0' }}
-              >
-                {!mutationLocked ? (
-                  <div className={styles.emptyActions}>
-                    <Button
-                      type="primary"
-                      loading={generateDailyMutation.isPending}
-                      onClick={handleGenerateDaily}
-                    >
-                      一键生成一日段
-                    </Button>
-                    <Button icon={<PlusOutlined />} onClick={openCreate}>
-                      添加行程段
-                    </Button>
-                  </div>
-                ) : null}
-              </Empty>
-            ) : selectedSegment ? (
-              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-                <ExecutionResourcePane
-                  departure={departure}
-                  segment={selectedSegment}
-                  readOnly={readOnly}
-                  canEdit={canEdit}
-                  amountReadOnly={amountReadOnly}
-                />
-              </div>
-            ) : null}
-          </Card>
-        </Col>
-      </Row>
+      <ExecutionWorkspace
+        departure={departure}
+        segments={segments}
+        selectedSegmentId={selectedSegmentId}
+        selectedSegment={selectedSegment}
+        mutationLocked={mutationLocked}
+        generatingDaily={generateDailyMutation.isPending}
+        readOnly={readOnly}
+        canEdit={canEdit}
+        amountReadOnly={amountReadOnly}
+        highlightDepartureResourceId={highlightDepartureResourceId}
+        onSelect={(id) => navigateExecution(id)}
+        onEdit={openEdit}
+        onCreate={openCreate}
+        onGenerateDaily={handleGenerateDaily}
+        onRebuildEmpty={handleRebuildEmpty}
+      />
 
       <SegmentDrawer
         open={drawerOpen}

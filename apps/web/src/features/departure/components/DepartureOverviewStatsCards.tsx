@@ -237,48 +237,22 @@ function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly
   )
 }
 
-export function DepartureOverviewStatsCards({
-  departure,
-  animateEnter = false,
-}: DepartureOverviewStatsCardsProps) {
-  const { token } = theme.useToken()
+interface OverviewSectionProps {
+  departure: DepartureDetail
+  animateEnter: boolean
+}
+
+function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) {
   const stats = departure.overviewStats
-  const settlementReceivableCents = stats.settlementCollectionReceivableCents
-  const settlementReceivedCents = stats.settlementCollectionReceivedCents
-  const settlementUnreceivedCents = settlementReceivableCents - settlementReceivedCents
-  const guestCollectionUnreceivedCents =
-    stats.guestCollectionAgreedCents - stats.guestCollectionReceivedCents
-  const hasRebateDetails =
-    stats.estimatedRebateCents !== 0 ||
-    stats.confirmedRebateCents !== 0 ||
-    stats.rebatePaidCents !== 0 ||
-    stats.rebateUnpaidCents !== 0
   const hasCostDetails =
     stats.confirmedPayableCents !== 0 ||
     stats.ungeneratedPayableCents !== 0 ||
     stats.otherPayableCents !== 0 ||
     stats.resourcePayableDifferenceCents !== 0
-  const hasReceivableDetails =
-    stats.ungeneratedReceivableCents !== 0 ||
-    stats.closedUnreceivedCents !== 0 ||
-    stats.otherReceivableCents !== 0
-  const hasPaymentDetails =
-    stats.confirmedPayableCents !== 0 || stats.closedUnpaidCents !== 0
-  const hasCashHints =
-    stats.unverifiedIncomeCents !== 0 ||
-    stats.unverifiedExpenseCents !== 0 ||
-    stats.verifiedFromExternalCents !== 0 ||
-    stats.verifiedToOtherDeparturesCents !== 0
-  const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
-  const anomalyCardStyle = receivableAnomaly
-    ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
-    : EQUAL_HEIGHT_CARD_STYLE
-
   const marginRateLabel = formatPercent(departure.estimatedMarginCents, departure.netReceivableCents)
-  const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
 
   return (
-    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+    <>
       <Row gutter={[16, 16]} className={styles.firstRow}>
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
@@ -373,7 +347,33 @@ export function DepartureOverviewStatsCards({
           />
         </Col>
       </Row>
+    </>
+  )
+}
 
+function CollectionProgressRow({ departure, animateEnter }: OverviewSectionProps) {
+  const { token } = theme.useToken()
+  const stats = departure.overviewStats
+  const settlementReceivableCents = stats.settlementCollectionReceivableCents
+  const settlementReceivedCents = stats.settlementCollectionReceivedCents
+  const settlementUnreceivedCents = settlementReceivableCents - settlementReceivedCents
+  const guestCollectionUnreceivedCents =
+    stats.guestCollectionAgreedCents - stats.guestCollectionReceivedCents
+  const hasRebateDetails =
+    stats.estimatedRebateCents !== 0 ||
+    stats.confirmedRebateCents !== 0 ||
+    stats.rebatePaidCents !== 0 ||
+    stats.rebateUnpaidCents !== 0
+  const hasReceivableDetails =
+    stats.ungeneratedReceivableCents !== 0 ||
+    stats.closedUnreceivedCents !== 0 ||
+    stats.otherReceivableCents !== 0
+  const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
+  const anomalyCardStyle = receivableAnomaly
+    ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
+    : EQUAL_HEIGHT_CARD_STYLE
+
+  return (
       <Row gutter={[16, 16]} className={styles.thirdRow}>
         <Col xs={24} lg={8}>
           <Card
@@ -480,7 +480,21 @@ export function DepartureOverviewStatsCards({
           </Card>
         </Col>
       </Row>
+  )
+}
 
+function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
+  const stats = departure.overviewStats
+  const hasPaymentDetails =
+    stats.confirmedPayableCents !== 0 || stats.closedUnpaidCents !== 0
+  const hasCashHints =
+    stats.unverifiedIncomeCents !== 0 ||
+    stats.unverifiedExpenseCents !== 0 ||
+    stats.verifiedFromExternalCents !== 0 ||
+    stats.verifiedToOtherDeparturesCents !== 0
+  const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
+
+  return (
       <Row gutter={[16, 16]} className={styles.fourthRow}>
         <Col xs={24} lg={12}>
           <Card
@@ -596,6 +610,18 @@ export function DepartureOverviewStatsCards({
           </Card>
         </Col>
       </Row>
+  )
+}
+
+export function DepartureOverviewStatsCards({
+  departure,
+  animateEnter = false,
+}: DepartureOverviewStatsCardsProps) {
+  return (
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <OverviewSummaryRows departure={departure} animateEnter={animateEnter} />
+      <CollectionProgressRow departure={departure} animateEnter={animateEnter} />
+      <PaymentAndCashRow departure={departure} animateEnter={animateEnter} />
     </Space>
   )
 }
