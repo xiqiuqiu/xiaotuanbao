@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Button,
   Empty,
   Flex,
   Form,
-  Modal,
   Space,
   Spin,
   Table,
@@ -18,30 +17,17 @@ import type { ColumnsType } from 'antd/es/table'
 import { useNavigate } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DepartureStatus, SegmentPayableStatus } from '@xiaotuanbao/shared'
-import type {
-  DepartureDetail,
-  ItinerarySegmentSummary,
-  SegmentResourceSummary,
-} from '@/types/api'
+import type { DepartureDetail, DepartureResourceSummary } from '@/types/api'
 import { formatCents } from '../catalog'
+import { summarizeSegmentResourceAmounts } from '../utils/segment-resource-amount-summary'
 import {
-  summarizeSegmentResourceAmounts,
-  type SegmentResourceAmountSummary,
-} from '../utils/segment-resource-amount-summary'
-import {
-  createSegmentResource,
-  deleteSegmentResource,
-  generatePayable,
-  generatePayablesForSegment,
-  listSegmentResources,
-  updateSegmentResource,
-} from '@/services/segment-resource.service'
+  createDepartureResource,
+  deleteDepartureResource,
+  generateDeparturePayable,
+  listDepartureResources,
+  updateDepartureResource,
+} from '@/services/departure-resource.service'
 import { formValuesToPayload } from '../utils/resource-form'
-import {
-  formatBatchFinanceGenerationConfirmContent,
-  formatBatchFinanceGenerationMessage,
-} from '../utils/batch-finance-generation-message'
-import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
 import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
@@ -54,46 +40,46 @@ import {
   type CloseResourcePayableFormValues,
   type VoidResourcePayableFormValues,
 } from './ResourcePayableActionModals'
+import styles from './DepartureResourcePane.module.css'
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
-interface ExecutionResourcePaneProps {
+interface DepartureResourcePaneProps {
   departure: DepartureDetail
-  segment: ItinerarySegmentSummary
   readOnly: boolean
   /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响生成应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
+  highlightDepartureResourceId?: string
 }
 
-interface ExecutionResourceHeaderProps {
-  amountSummary: SegmentResourceAmountSummary
-  showBatchGenerate: boolean
-  batchGenerating: boolean
+interface DepartureResourceHeaderProps {
+  amountSummary: ReturnType<typeof summarizeSegmentResourceAmounts>
   showAddResource: boolean
-  onBatchGenerate: () => void
   onAddResource: () => void
 }
 
-function ExecutionResourceHeader({
+function DepartureResourceHeader({
   amountSummary,
-  showBatchGenerate,
-  batchGenerating,
   showAddResource,
-  onBatchGenerate,
   onAddResource,
-}: ExecutionResourceHeaderProps) {
+}: DepartureResourceHeaderProps) {
   const { token } = theme.useToken()
   const showAmountMeta = amountSummary.resourceCount > 0
 
   return (
     <Flex align="center" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 16 }}>
       <Flex align="baseline" gap={16} wrap="wrap">
-        <Typography.Text strong>资源安排</Typography.Text>
+        <Flex vertical gap={2}>
+          <Typography.Text strong>发团级资源</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            全程用车、保险、导游等覆盖整团的服务
+          </Typography.Text>
+        </Flex>
         {showAmountMeta ? (
-          <Typography.Text type="secondary" aria-label="本段资源金额汇总">
+          <Typography.Text type="secondary" aria-label="发团级资源金额汇总">
             资源 {amountSummary.resourceCount} 项 ｜ 资源金额{' '}
             <Typography.Text strong>
               {formatCents(amountSummary.resourceAmountCents)}
@@ -110,11 +96,6 @@ function ExecutionResourceHeader({
         ) : null}
       </Flex>
       <Space>
-        {showBatchGenerate ? (
-          <Button onClick={onBatchGenerate} loading={batchGenerating}>
-            批量生成应付
-          </Button>
-        ) : null}
         {showAddResource ? (
           <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
@@ -125,25 +106,39 @@ function ExecutionResourceHeader({
   )
 }
 
-interface ExecutionResourceListProps {
+interface DepartureResourceListProps {
   isError: boolean
   isLoading: boolean
-  resources: SegmentResourceSummary[]
+  resources: DepartureResourceSummary[]
   resourceEditable: boolean
-  columns: ColumnsType<SegmentResourceSummary>
+  columns: ColumnsType<DepartureResourceSummary>
+  highlightResourceId?: string
   onRetry: () => void
   onAddResource: () => void
 }
 
-function ExecutionResourceList({
+function DepartureResourceList({
   isError,
   isLoading,
   resources,
   resourceEditable,
   columns,
+  highlightResourceId,
   onRetry,
   onAddResource,
-}: ExecutionResourceListProps) {
+}: DepartureResourceListProps) {
+  const [highlightActive, setHighlightActive] = useState(false)
+
+  useEffect(() => {
+    if (!highlightResourceId || !resources.some((item) => item.id === highlightResourceId)) {
+      setHighlightActive(false)
+      return
+    }
+    setHighlightActive(true)
+    const timer = window.setTimeout(() => setHighlightActive(false), 2400)
+    return () => window.clearTimeout(timer)
+  }, [highlightResourceId, resources])
+
   if (isError) {
     return (
       <Alert
@@ -170,7 +165,7 @@ function ExecutionResourceList({
 
   if (resources.length === 0) {
     return (
-      <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
+      <Empty description="暂无发团级资源" style={{ padding: '32px 0' }}>
         {resourceEditable ? (
           <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
@@ -187,13 +182,16 @@ function ExecutionResourceList({
       dataSource={resources}
       pagination={false}
       scroll={{ x: 1300 }}
+      rowClassName={(record) =>
+        highlightActive && record.id === highlightResourceId ? styles.locateFlash : ''
+      }
     />
   )
 }
 
 interface SaveResourceMutationsOptions {
-  editingResource: SegmentResourceSummary | null
-  segmentId: string
+  editingResource: DepartureResourceSummary | null
+  departureId: string
   closeDrawer: () => void
   invalidateResourceQueries: () => void
   invalidatePayableQueries: () => void
@@ -201,7 +199,7 @@ interface SaveResourceMutationsOptions {
 
 function useSaveResourceMutations({
   editingResource,
-  segmentId,
+  departureId,
   closeDrawer,
   invalidateResourceQueries,
   invalidatePayableQueries,
@@ -210,8 +208,8 @@ function useSaveResourceMutations({
     mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
       const editingId = editingResource?.id ?? null
       const saved = editingId
-        ? await updateSegmentResource(editingId, payload)
-        : await createSegmentResource(segmentId, payload)
+        ? await updateDepartureResource(editingId, payload)
+        : await createDepartureResource(departureId, payload)
       return { saved, editingId }
     },
     onSuccess: ({ editingId }) => {
@@ -231,10 +229,10 @@ function useSaveResourceMutations({
     mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
       const editingId = editingResource?.id ?? null
       const saved = editingId
-        ? await updateSegmentResource(editingId, payload)
-        : await createSegmentResource(segmentId, payload)
+        ? await updateDepartureResource(editingId, payload)
+        : await createDepartureResource(departureId, payload)
       try {
-        const generateResult = await generatePayable(saved.id)
+        const generateResult = await generateDeparturePayable(saved.id)
         return { saved, editingId, generateOk: true as const, generateResult }
       } catch (error) {
         return { saved, editingId, generateOk: false as const, generateError: error }
@@ -271,32 +269,30 @@ function useSaveResourceMutations({
   return { saveMutation, saveAndGenerateMutation }
 }
 
-export function ExecutionResourcePane({
+export function DepartureResourcePane({
   departure,
-  segment,
   readOnly,
   canEdit,
   amountReadOnly = false,
-}: ExecutionResourcePaneProps) {
+  highlightDepartureResourceId,
+}: DepartureResourcePaneProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const menuKeys = useAuthStore((state) => state.menuKeys)
-  // 关闭节点属财务动作（POST …/cancel 要 /finance/receivable）：计调无此权限，须 gating。
   const canCloseFinance = canMutateFinance(menuKeys)
   const mutationLocked = readOnly || amountReadOnly
-  // 资源增删改与作废应付属 departure:write：财务只读，但生成应付不受此限。
   const resourceEditable = !mutationLocked && canEdit
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
+  const [editingResource, setEditingResource] = useState<DepartureResourceSummary | null>(null)
   const [viewOnly, setViewOnly] = useState(false)
-  const [voidingResource, setVoidingResource] = useState<SegmentResourceSummary | null>(null)
-  const [closingResource, setClosingResource] = useState<SegmentResourceSummary | null>(null)
+  const [voidingResource, setVoidingResource] = useState<DepartureResourceSummary | null>(null)
+  const [closingResource, setClosingResource] = useState<DepartureResourceSummary | null>(null)
   const [voidForm] = Form.useForm<VoidResourcePayableFormValues>()
   const [closeForm] = Form.useForm<CloseResourcePayableFormValues>()
 
   const { data: listResult, isLoading, isError, refetch } = useQuery({
-    queryKey: ['segment-resources', segment.id],
-    queryFn: ({ signal }) => listSegmentResources(segment.id, {}, signal),
+    queryKey: ['departure-resources', departure.id],
+    queryFn: ({ signal }) => listDepartureResources(departure.id, {}, signal),
   })
 
   const resources = listResult?.items ?? []
@@ -307,15 +303,9 @@ export function ExecutionResourcePane({
       }),
     [departure.status, listResult?.items],
   )
-  const payableGap = segmentPayableGenerationGap(
-    segment.payableGeneratedCount,
-    segment.resourceCount,
-  )
-  const showBatchGenerate = !mutationLocked && payableGap.hasGap
 
   const invalidateResourceQueries = () => {
-    void queryClient.invalidateQueries({ queryKey: ['segment-resources', segment.id] })
-    void queryClient.invalidateQueries({ queryKey: ['segments', departure.id] })
+    void queryClient.invalidateQueries({ queryKey: ['departure-resources', departure.id] })
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
   }
 
@@ -331,14 +321,11 @@ export function ExecutionResourcePane({
     setDrawerOpen(true)
   }
 
-  const openEdit = useCallback(
-    (resource: SegmentResourceSummary, view = false) => {
-      setEditingResource(() => resource)
-      setViewOnly(view || resource.amountFieldsLocked)
-      setDrawerOpen(true)
-    },
-    [],
-  )
+  const openEdit = useCallback((resource: DepartureResourceSummary, view = false) => {
+    setEditingResource(() => resource)
+    setViewOnly(view || resource.amountFieldsLocked)
+    setDrawerOpen(true)
+  }, [])
 
   const invalidatePayableQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
@@ -347,14 +334,14 @@ export function ExecutionResourcePane({
 
   const { saveMutation, saveAndGenerateMutation } = useSaveResourceMutations({
     editingResource,
-    segmentId: segment.id,
+    departureId: departure.id,
     closeDrawer,
     invalidateResourceQueries,
     invalidatePayableQueries,
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteSegmentResource(id),
+    mutationFn: (id: string) => deleteDepartureResource(id),
     onSuccess: () => {
       message.success('资源已删除')
       invalidateResourceQueries()
@@ -365,7 +352,7 @@ export function ExecutionResourcePane({
   })
 
   const generateMutation = useMutation({
-    mutationFn: (id: string) => generatePayable(id),
+    mutationFn: (id: string) => generateDeparturePayable(id),
     onSuccess: (result) => {
       message.success(
         result.sourceAmountMismatch
@@ -377,25 +364,6 @@ export function ExecutionResourcePane({
     },
     onError: (error) => {
       message.error(mutationErrorMessage(error, '生成应付失败'))
-    },
-  })
-
-  const batchGenerateMutation = useMutation({
-    mutationFn: () => generatePayablesForSegment(segment.id),
-    onSuccess: (result) => {
-      const text = formatBatchFinanceGenerationMessage(result, '应付')
-      if (result.failed > 0) {
-        message.warning(text)
-      } else if (result.succeeded > 0) {
-        message.success(text)
-      } else {
-        message.info(text)
-      }
-      invalidateResourceQueries()
-      invalidatePayableQueries()
-    },
-    onError: (error) => {
-      message.error(mutationErrorMessage(error, '批量生成应付失败'))
     },
   })
 
@@ -434,19 +402,8 @@ export function ExecutionResourcePane({
     onError: (error) => message.error(mutationErrorMessage(error, '关闭节点失败')),
   })
 
-  const confirmBatchGenerate = () => {
-    if (!payableGap.hasGap) return
-    Modal.confirm({
-      title: '批量生成应付',
-      content: formatBatchFinanceGenerationConfirmContent(payableGap.ungenerated, '应付'),
-      okText: '生成',
-      cancelText: '取消',
-      onOk: () => batchGenerateMutation.mutateAsync(),
-    })
-  }
-
   const onViewPayables = useCallback(
-    (resource: SegmentResourceSummary) => {
+    (resource: DepartureResourceSummary) => {
       const counterparty = counterpartyFilterFromSegmentResource(resource)
       void navigate({
         to: '/departure/$departureId',
@@ -454,25 +411,22 @@ export function ExecutionResourcePane({
         search: {
           tab: 'payables',
           highlightSegmentResourceId: resource.id,
-          ...(segment.id ? { segmentId: segment.id } : {}),
           ...(counterparty
             ? { counterpartyKeyword: counterparty.counterpartyKeyword }
             : {}),
         },
       })
     },
-    [departure.id, navigate, segment.id],
+    [departure.id, navigate],
   )
 
-  const generatingId = generateMutation.isPending
-    ? generateMutation.variables
-    : undefined
+  const generatingId = generateMutation.isPending ? generateMutation.variables : undefined
   const generateResource = generateMutation.mutate
   const deleteResource = deleteMutation.mutate
 
   const columns = useMemo(
     () =>
-      buildExecutionResourceColumns<SegmentResourceSummary>({
+      buildExecutionResourceColumns<DepartureResourceSummary>({
         mutationLocked,
         canEdit,
         canMutateFinance: canCloseFinance,
@@ -497,31 +451,28 @@ export function ExecutionResourcePane({
   )
 
   return (
-    <div>
-      <ExecutionResourceHeader
+    <div className={styles.pane}>
+      <DepartureResourceHeader
         amountSummary={amountSummary}
-        showBatchGenerate={showBatchGenerate}
-        batchGenerating={batchGenerateMutation.isPending}
         showAddResource={
           resourceEditable && !isLoading && !isError && resources.length > 0
         }
-        onBatchGenerate={confirmBatchGenerate}
         onAddResource={openCreate}
       />
 
-      <ExecutionResourceList
+      <DepartureResourceList
         isError={isError}
         isLoading={isLoading}
         resources={resources}
         resourceEditable={resourceEditable}
         columns={columns}
+        highlightResourceId={highlightDepartureResourceId}
         onRetry={() => void refetch()}
         onAddResource={openCreate}
       />
 
       <ResourceDrawer
         open={drawerOpen}
-        segment={segment}
         editing={editingResource}
         readOnly={mutationLocked || viewOnly || !canEdit}
         amountReadOnly={amountReadOnly}

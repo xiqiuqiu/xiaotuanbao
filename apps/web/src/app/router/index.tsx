@@ -138,6 +138,7 @@ const departureDetailRoute = createRoute({
     segmentId?: string
     highlightSourceOrderId?: string
     highlightSegmentResourceId?: string
+    highlightDepartureResourceId?: string
     counterpartyKeyword?: string
     direction?: string
     transactionNo?: string
@@ -159,6 +160,10 @@ const departureDetailRoute = createRoute({
       highlightSegmentResourceId:
         typeof search.highlightSegmentResourceId === 'string'
           ? search.highlightSegmentResourceId
+          : undefined,
+      highlightDepartureResourceId:
+        typeof search.highlightDepartureResourceId === 'string'
+          ? search.highlightDepartureResourceId
           : undefined,
       ...(counterpartyKeyword ? { counterpartyKeyword } : {}),
       ...(direction ? { direction } : {}),

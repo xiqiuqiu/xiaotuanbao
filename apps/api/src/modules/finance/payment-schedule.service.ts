@@ -237,27 +237,37 @@ export class PaymentScheduleService {
     organizationId: string,
     schedules: Pick<PaymentSchedule, 'id' | 'sourceType' | 'sourceId'>[],
   ): Promise<Map<string, ScheduleSourceMeta>> {
-    const resourceIds = new Set<string>()
+    const segmentResourceIds = new Set<string>()
+    const departureResourceIds = new Set<string>()
     const sourceOrderIds = new Set<string>()
     for (const schedule of schedules) {
       if (!schedule.sourceId) {
         continue
       }
       if (schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
-        resourceIds.add(schedule.sourceId)
+        segmentResourceIds.add(schedule.sourceId)
       } else if (schedule.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-        // #205: batch-load DepartureResource labels once the entity exists.
+        departureResourceIds.add(schedule.sourceId)
       } else if (SOURCE_ORDER_SCHEDULE_SOURCE_TYPES.has(schedule.sourceType)) {
         sourceOrderIds.add(schedule.sourceId)
       }
     }
 
-    const [resources, sourceOrders] = await Promise.all([
-      resourceIds.size > 0
+    const [segmentResources, departureResources, sourceOrders] = await Promise.all([
+      segmentResourceIds.size > 0
         ? this.prisma.segmentResource.findMany({
             where: {
-              id: { in: [...resourceIds] },
+              id: { in: [...segmentResourceIds] },
               segment: { departure: { organizationId } },
+            },
+            select: { id: true, resourceKind: true, title: true },
+          })
+        : Promise.resolve([]),
+      departureResourceIds.size > 0
+        ? this.prisma.departureResource.findMany({
+            where: {
+              id: { in: [...departureResourceIds] },
+              departure: { organizationId },
             },
             select: { id: true, resourceKind: true, title: true },
           })
@@ -273,7 +283,9 @@ export class PaymentScheduleService {
         : Promise.resolve([]),
     ])
 
-    const resourceMap = new Map(resources.map((resource) => [resource.id, resource]))
+    const resourceMap = new Map(
+      [...segmentResources, ...departureResources].map((resource) => [resource.id, resource]),
+    )
     const sourceOrderMap = new Map(sourceOrders.map((order) => [order.id, order]))
 
     const metaMap = new Map<string, ScheduleSourceMeta>()
@@ -281,7 +293,10 @@ export class PaymentScheduleService {
       if (!schedule.sourceId) {
         continue
       }
-      if (schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
+      if (
+        schedule.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE ||
+        schedule.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE
+      ) {
         const resource = resourceMap.get(schedule.sourceId)
         if (resource) {
           metaMap.set(schedule.id, {

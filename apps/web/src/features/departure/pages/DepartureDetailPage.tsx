@@ -217,6 +217,7 @@ export function DepartureDetailPage() {
           <ExecutionTab
             departure={departure}
             segmentId={search.segmentId}
+            highlightDepartureResourceId={search.highlightDepartureResourceId}
             readOnly={readOnly}
             canEdit={canEdit}
             amountReadOnly={amountReadOnly}

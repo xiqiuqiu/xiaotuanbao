@@ -101,7 +101,7 @@ const coordinatorDeliverySnapshot = {
           dataGaps: [
             { code: 'no_source_orders' as const, label: '无客源单' },
             { code: 'no_itinerary_segments' as const, label: '无行程段' },
-            { code: 'no_segment_resources' as const, label: '无行程资源' },
+            { code: 'no_segment_resources' as const, label: '无任何资源' },
           ],
         },
         {
@@ -317,7 +317,7 @@ const organizationAdminSnapshot = {
           kind: 'organization-risk' as const,
           id: 'departure_data_gap_imminent:1',
           title: '西藏林芝小团',
-          description: '无行程资源',
+          description: '无任何资源',
           href: '/departure/dep-risk-1',
           code: 'departure_data_gap_imminent' as const,
           severity: 'high' as const,
@@ -811,7 +811,7 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('无行程段')).toBeInTheDocument()
     expect(screen.getByText('另有 1 项')).toBeInTheDocument()
     expect(screen.getByText('待生成应收 2 个')).toBeInTheDocument()
-    expect(screen.queryByText('无行程资源')).not.toBeInTheDocument()
+    expect(screen.queryByText('无任何资源')).not.toBeInTheDocument()
     expect(screen.queryByText('存在执行风险')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '待生成应收' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '待生成应付' })).toBeInTheDocument()

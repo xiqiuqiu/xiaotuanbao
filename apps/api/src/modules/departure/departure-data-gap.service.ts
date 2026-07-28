@@ -9,7 +9,7 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 const DATA_GAP_LABELS: Record<DepartureDataGapCode, string> = {
   no_source_orders: '无客源单',
   no_itinerary_segments: '无行程段',
-  no_segment_resources: '无行程资源',
+  no_segment_resources: '无任何资源',
   incomplete_guest_roster: '客人名单待补充',
 }
 
@@ -53,6 +53,11 @@ export class DepartureDataGapService {
             FROM segment_resources resource
             JOIN itinerary_segments segment ON segment.id = resource.segment_id
             WHERE segment.departure_id = d.id
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM departure_resources resource
+            WHERE resource.departure_id = d.id
           )
         ) AS "noSegmentResources",
         EXISTS (

@@ -11,6 +11,7 @@ export const DEPARTURE_DETAIL_QUERY_KEYS = [
   'segments',
   'source-orders',
   'segment-resources',
+  'departure-resources',
   'departure-receivables',
   'departure-payables',
   'departure-transactions',
@@ -23,7 +24,7 @@ export function invalidateDepartureDetailQueries(
   departureId: string,
 ): void {
   for (const key of DEPARTURE_DETAIL_QUERY_KEYS) {
-    if (key === 'departure' || key === 'segments' || key === 'source-orders') {
+    if (key === 'departure' || key === 'segments' || key === 'source-orders' || key === 'departure-resources') {
       void queryClient.invalidateQueries({ queryKey: [key, departureId] })
       continue
     }

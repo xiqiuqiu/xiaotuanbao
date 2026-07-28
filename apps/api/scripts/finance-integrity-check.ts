@@ -73,6 +73,7 @@ export async function collectFinanceIntegrityViolations(
     departures,
     sourceOrders,
     segmentResources,
+    departureResources,
     partners,
     suppliers,
     idempotencyRecords,
@@ -149,6 +150,13 @@ export async function collectFinanceIntegrityViolations(
         },
       },
     }),
+    prisma.departureResource.findMany({
+      select: {
+        id: true,
+        departureId: true,
+        departure: { select: { organizationId: true } },
+      },
+    }),
     prisma.partner.findMany({ select: { id: true, organizationId: true } }),
     prisma.supplier.findMany({ select: { id: true, organizationId: true } }),
     prisma.financeIdempotencyRecord.findMany({
@@ -175,6 +183,7 @@ export async function collectFinanceIntegrityViolations(
   const departureById = new Map(departures.map((item) => [item.id, item]))
   const sourceOrderById = new Map(sourceOrders.map((item) => [item.id, item]))
   const resourceById = new Map(segmentResources.map((item) => [item.id, item]))
+  const departureResourceById = new Map(departureResources.map((item) => [item.id, item]))
   const partnerById = new Map(partners.map((item) => [item.id, item]))
   const supplierById = new Map(suppliers.map((item) => [item.id, item]))
   const scheduleAllocated = new Map<string, number>()
@@ -328,7 +337,21 @@ export async function collectFinanceIntegrityViolations(
         add('SCHEDULE_SOURCE_BROKEN', 'P0', '应付节点的 Segment Resource 来源缺失、串团或跨 Organization', refs)
       }
     } else if (schedule.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-      // Known resource-payable type (ADR-0034 / #204). Entity integrity lands with #205.
+      const resource = schedule.sourceId
+        ? departureResourceById.get(schedule.sourceId)
+        : undefined
+      if (
+        !resource ||
+        resource.departureId !== schedule.departureId ||
+        resource.departure.organizationId !== schedule.organizationId
+      ) {
+        add(
+          'SCHEDULE_SOURCE_BROKEN',
+          'P0',
+          '应付节点的 Departure Resource 来源缺失、串团或跨 Organization',
+          refs,
+        )
+      }
     } else {
       add('UNKNOWN_SCHEDULE_SOURCE_TYPE', 'P1', '收付款节点来源类型不在领域目录中', refs)
     }
