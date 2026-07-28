@@ -1,0 +1,32 @@
+.pane {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--execution-border, rgba(5, 5, 5, 0.06));
+}
+
+.locateFlash > td:not(:global(.ant-table-cell-fix)) {
+  animation: departure-resource-locate-flash 2.4s ease-out both;
+}
+
+.locateFlash > td:global(.ant-table-cell-fix) {
+  animation: departure-resource-locate-flash 2.4s ease-out both;
+}
+
+@keyframes departure-resource-locate-flash {
+  0%,
+  12% {
+    background-color: var(--schedule-locate-bg, rgba(250, 173, 20, 0.18));
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locateFlash > td:not(:global(.ant-table-cell-fix)),
+  .locateFlash > td:global(.ant-table-cell-fix) {
+    animation: none;
+    background-color: var(--schedule-locate-bg, rgba(250, 173, 20, 0.18));
+  }
+}

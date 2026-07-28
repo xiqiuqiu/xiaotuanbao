@@ -16,12 +16,13 @@ describe('invalidateDepartureDetailQueries', () => {
       ['segments', 'dep-1'],
       ['source-orders', 'dep-1'],
       ['segment-resources'],
+      ['departure-resources', 'dep-1'],
       ['departure-receivables'],
       ['departure-payables'],
       ['departure-transactions'],
       ['departure-verifications'],
       ['payment-schedule-detail'],
     ])
-    expect(DEPARTURE_DETAIL_QUERY_KEYS).toHaveLength(9)
+    expect(DEPARTURE_DETAIL_QUERY_KEYS).toHaveLength(10)
   })
 })

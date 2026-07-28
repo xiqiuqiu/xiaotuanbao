@@ -472,6 +472,7 @@ model Supplier {
   updatedAt           DateTime               @updatedAt @map("updated_at")
   routeTemplateResources RouteTemplateResource[]
   segmentResources    SegmentResource[]
+  departureResources  DepartureResource[]
   departuresAsDriver  Departure[]             @relation("DepartureDriverSupplier")
   departuresAsGuide   Departure[]             @relation("DepartureGuideSupplier")
 
@@ -497,6 +498,7 @@ model Partner {
   updatedAt        DateTime               @updatedAt @map("updated_at")
   routeTemplateResources RouteTemplateResource[]
   segmentResources    SegmentResource[]
+  departureResources  DepartureResource[]
   sourceOrders        SourceOrder[]
 
   @@unique([organizationId, name])
@@ -577,6 +579,7 @@ model Departure {
   paymentSchedules PaymentSchedule[]
   financeTransactions FinanceTransaction[]
   itinerarySegments   ItinerarySegment[]
+  departureResources  DepartureResource[]
   sourceOrders        SourceOrder[]
   archiveHistories    DepartureArchiveHistory[]
   settlementHistories DepartureSettlementHistory[]
@@ -732,6 +735,27 @@ model SegmentResource {
   updatedAt        DateTime         @updatedAt @map("updated_at")
 
   @@map("segment_resources")
+}
+
+/// 发团级成本费用行（全程用车/保险/导游等）；规则与 SegmentResource 同一套。
+model DepartureResource {
+  id               String           @id @default(cuid())
+  departureId      String           @map("departure_id")
+  departure        Departure        @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  resourceKind     ResourceKind     @map("resource_kind")
+  counterpartyType CounterpartyType @map("counterparty_type")
+  partnerId        String?          @map("partner_id")
+  partner          Partner?         @relation(fields: [partnerId], references: [id])
+  supplierId       String?          @map("supplier_id")
+  supplier         Supplier?        @relation(fields: [supplierId], references: [id])
+  title            String
+  amountCents      Int              @map("amount_cents")
+  notes            String?
+  pendingCheck     Boolean          @default(false) @map("pending_check")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@map("departure_resources")
 }
 
 model PaymentSchedule {

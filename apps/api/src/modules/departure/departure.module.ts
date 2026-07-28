@@ -15,6 +15,8 @@ import { SegmentController } from './segment.controller'
 import { SegmentService } from './segment.service'
 import { SegmentResourceController } from './segment-resource.controller'
 import { SegmentResourceService } from './segment-resource.service'
+import { DepartureResourceController } from './departure-resource.controller'
+import { DepartureResourceService } from './departure-resource.service'
 import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import { DepartureFinanceReadController } from './departure-finance-read.controller'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
@@ -36,6 +38,7 @@ import { AccountGenerationGapController } from './account-generation-gap.control
     SourceOrderController,
     SegmentController,
     SegmentResourceController,
+    DepartureResourceController,
     AccountGenerationGapController,
   ],
   providers: [
@@ -52,6 +55,7 @@ import { AccountGenerationGapController } from './account-generation-gap.control
     SourceOrderService,
     SegmentService,
     SegmentResourceService,
+    DepartureResourceService,
     DepartureFinanceBridgeService,
     {
       provide: DepartureOperationsSheetExcelRenderer,

@@ -1,7 +1,7 @@
 import { Button, Popconfirm, Space, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { SegmentPayableStatus } from '@xiaotuanbao/shared'
-import type { SegmentResourceSummary } from '@/types/api'
+import type { DepartureResourceSummary, SegmentResourceSummary } from '@/types/api'
 import { buildBusinessTimestampColumns } from '@/components/businessTimestampColumns'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import {
@@ -11,7 +11,9 @@ import {
   formatCents,
 } from '../catalog'
 
-function canGeneratePayable(record: SegmentResourceSummary): boolean {
+export type ExecutionResourceRow = SegmentResourceSummary | DepartureResourceSummary
+
+function canGeneratePayable(record: ExecutionResourceRow): boolean {
   return record.payableStatus === SegmentPayableStatus.NOT_GENERATED
 }
 
@@ -28,7 +30,7 @@ function payableStatusTagColor(status: string): string | undefined {
   }
 }
 
-export type BuildExecutionResourceColumnsOptions = {
+export type BuildExecutionResourceColumnsOptions<T extends ExecutionResourceRow = ExecutionResourceRow> = {
   mutationLocked: boolean
   /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读。生成应付不受此限。 */
   canEdit: boolean
@@ -39,15 +41,15 @@ export type BuildExecutionResourceColumnsOptions = {
    */
   canMutateFinance: boolean
   generatingId?: string
-  onEdit: (resource: SegmentResourceSummary, viewOnly: boolean) => void
-  onViewPayables: (resource: SegmentResourceSummary) => void
+  onEdit: (resource: T, viewOnly: boolean) => void
+  onViewPayables: (resource: T) => void
   onGenerate: (resourceId: string) => void
   onDelete: (resourceId: string) => void
-  onVoidPayable: (resource: SegmentResourceSummary) => void
-  onClosePayable: (resource: SegmentResourceSummary) => void
+  onVoidPayable: (resource: T) => void
+  onClosePayable: (resource: T) => void
 }
 
-export function buildExecutionResourceColumns({
+export function buildExecutionResourceColumns<T extends ExecutionResourceRow>({
   mutationLocked,
   canEdit,
   canMutateFinance,
@@ -58,7 +60,7 @@ export function buildExecutionResourceColumns({
   onDelete,
   onVoidPayable,
   onClosePayable,
-}: BuildExecutionResourceColumnsOptions): ColumnsType<SegmentResourceSummary> {
+}: BuildExecutionResourceColumnsOptions<T>): ColumnsType<T> {
   return [
     {
       title: '资源种类',
@@ -105,7 +107,7 @@ export function buildExecutionResourceColumns({
       ellipsis: { showTitle: false },
       render: (value: string | null) => <EllipsisTooltipText>{value || null}</EllipsisTooltipText>,
     },
-    ...buildBusinessTimestampColumns<SegmentResourceSummary>(),
+    ...buildBusinessTimestampColumns<ExecutionResourceRow>(),
     {
       title: '操作',
       width: 260,
@@ -174,5 +176,5 @@ export function buildExecutionResourceColumns({
         )
       },
     },
-  ]
+  ] as ColumnsType<T>
 }

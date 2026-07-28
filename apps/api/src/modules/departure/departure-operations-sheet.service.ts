@@ -83,6 +83,13 @@ export class DepartureOperationsSheetService {
             },
           },
         },
+        departureResources: {
+          include: {
+            partner: { select: { name: true } },
+            supplier: { select: { name: true } },
+          },
+          orderBy: { id: 'asc' },
+        },
       },
     })
 
@@ -95,13 +102,29 @@ export class DepartureOperationsSheetService {
       select: { name: true },
     })
 
-    const allResources = departure.itinerarySegments.flatMap((segment) => segment.resources)
-    const [resourceFinanceStates, sourceOrderPathStates, pendingTransactions] =
-      await Promise.all([
+    const allSegmentResources = departure.itinerarySegments.flatMap(
+      (segment) => segment.resources,
+    )
+    const [
+      segmentResourceFinanceStates,
+      departureResourceFinanceStates,
+      sourceOrderPathStates,
+      pendingTransactions,
+    ] = await Promise.all([
         this.departureFinanceFacade.getSegmentResourceFinanceStates(
           organizationId,
-          allResources.map((resource) => resource.id),
-          new Map(allResources.map((resource) => [resource.id, resource.amountCents])),
+          allSegmentResources.map((resource) => resource.id),
+          new Map(allSegmentResources.map((resource) => [resource.id, resource.amountCents])),
+        ),
+        this.departureFinanceFacade.getDepartureResourceFinanceStates(
+          organizationId,
+          departure.departureResources.map((resource) => resource.id),
+          new Map(
+            departure.departureResources.map((resource) => [
+              resource.id,
+              resource.amountCents,
+            ]),
+          ),
         ),
         this.departureFinanceFacade.getSourceOrderPathFinanceStates(
           organizationId,
@@ -125,7 +148,10 @@ export class DepartureOperationsSheetService {
 
     const pathStates = [...sourceOrderPathStates.values()].flat()
     const dataStage = deriveDataStage({
-      resourceStates: [...resourceFinanceStates.values()],
+      resourceStates: [
+        ...segmentResourceFinanceStates.values(),
+        ...departureResourceFinanceStates.values(),
+      ],
       pathStates,
     })
 
@@ -165,43 +191,56 @@ export class DepartureOperationsSheetService {
       },
     )
 
+    const toResourceRow = (
+      resource: {
+        id: string
+        resourceKind: PrismaResourceKind
+        title: string
+        amountCents: number
+        notes: string | null
+        partner: { name: string } | null
+        supplier: { name: string } | null
+      },
+      financeState: SegmentResourceFinanceState | undefined,
+    ): DepartureOperationsSheetResourceRow => {
+      const finance =
+        financeState ??
+        ({
+          hasSchedule: false,
+          paymentScheduleId: null,
+          financeTouched: false,
+          payableStatus: SegmentPayableStatus.NOT_GENERATED,
+          hasSourceAmountMismatch: false,
+          amountFieldsLocked: false,
+          agreedAmountCents: resource.amountCents,
+          scheduleAmountCents: null,
+          paidCents: null,
+          unpaidCents: null,
+          needsReview: false,
+        } satisfies SegmentResourceFinanceState)
+
+      return {
+        id: resource.id,
+        resourceKind: resource.resourceKind,
+        resourceKindLabel: resourceKindLabel(resource.resourceKind),
+        counterpartyName: resource.partner?.name ?? resource.supplier?.name ?? '',
+        title: resource.title,
+        agreedPayableCents: resource.amountCents,
+        schedulePayableCents: finance.scheduleAmountCents,
+        paidCents: finance.paidCents,
+        unpaidCents: finance.unpaidCents,
+        payableStatus: finance.payableStatus,
+        needsReview: finance.needsReview,
+        excludeFromProgressTotals: finance.hasSourceAmountMismatch,
+        notes: resource.notes,
+      }
+    }
+
     const segments = departure.itinerarySegments.map((segment) => {
       const resources = segment.resources
-        .map((resource) => {
-          const counterpartyName =
-            resource.partner?.name ?? resource.supplier?.name ?? ''
-          const finance =
-            resourceFinanceStates.get(resource.id) ??
-            ({
-              hasSchedule: false,
-              paymentScheduleId: null,
-              financeTouched: false,
-              payableStatus: SegmentPayableStatus.NOT_GENERATED,
-              hasSourceAmountMismatch: false,
-              amountFieldsLocked: false,
-              agreedAmountCents: resource.amountCents,
-              scheduleAmountCents: null,
-              paidCents: null,
-              unpaidCents: null,
-              needsReview: false,
-            } satisfies SegmentResourceFinanceState)
-
-          return {
-            id: resource.id,
-            resourceKind: resource.resourceKind,
-            resourceKindLabel: resourceKindLabel(resource.resourceKind),
-            counterpartyName,
-            title: resource.title,
-            agreedPayableCents: resource.amountCents,
-            schedulePayableCents: finance.scheduleAmountCents,
-            paidCents: finance.paidCents,
-            unpaidCents: finance.unpaidCents,
-            payableStatus: finance.payableStatus,
-            needsReview: finance.needsReview,
-            excludeFromProgressTotals: finance.hasSourceAmountMismatch,
-            notes: resource.notes,
-          }
-        })
+        .map((resource) =>
+          toResourceRow(resource, segmentResourceFinanceStates.get(resource.id)),
+        )
         .sort(compareSegmentResourcesForOperationsSheet)
 
       return {
@@ -216,6 +255,12 @@ export class DepartureOperationsSheetService {
         resources,
       }
     })
+
+    const departureResources = departure.departureResources
+      .map((resource) =>
+        toResourceRow(resource, departureResourceFinanceStates.get(resource.id)),
+      )
+      .sort(compareSegmentResourcesForOperationsSheet)
 
     const pendingRows = pendingTransactions.map((transaction) => ({
       id: transaction.id,
@@ -234,8 +279,8 @@ export class DepartureOperationsSheetService {
       .filter((row) => row.direction === 'outflow')
       .reduce((sum, row) => sum + row.remainingUnverifiedCents, 0)
 
-    const financeSummary = buildFinanceSummary(sourceOrders, segments)
-    const anomalies = buildAnomalies(sourceOrders, segments)
+    const financeSummary = buildFinanceSummary(sourceOrders, segments, departureResources)
+    const anomalies = buildAnomalies(sourceOrders, segments, departureResources)
 
     return {
       organizationName: departure.organization.name,
@@ -260,6 +305,7 @@ export class DepartureOperationsSheetService {
       },
       sourceOrders,
       segments,
+      departureResources,
       pendingTransactions: pendingRows,
       pendingSummary:
         pendingRows.length > 0
@@ -298,6 +344,7 @@ function deriveDataStage(input: {
 function buildFinanceSummary(
   sourceOrders: DepartureOperationsSheetSourceOrderRow[],
   segments: Array<{ resources: DepartureOperationsSheetResourceRow[] }>,
+  departureResources: DepartureOperationsSheetResourceRow[],
 ): DepartureOperationsSheetFinanceSummary {
   return {
     receivable: sumProgressTotals(
@@ -314,7 +361,10 @@ function buildFinanceSummary(
       }),
     ),
     payable: sumProgressTotals(
-      segments.flatMap((segment) => segment.resources),
+      [
+        ...segments.flatMap((segment) => segment.resources),
+        ...departureResources,
+      ],
       (resource) =>
         resource.payableStatus !== 'not_generated' &&
         !resource.excludeFromProgressTotals &&
@@ -356,6 +406,7 @@ function sumProgressTotals<T>(
 function buildAnomalies(
   sourceOrders: DepartureOperationsSheetSourceOrderRow[],
   segments: Array<{ resources: DepartureOperationsSheetResourceRow[] }>,
+  departureResources: DepartureOperationsSheetResourceRow[],
 ): DepartureOperationsSheetAnomaly[] {
   const anomalies: DepartureOperationsSheetAnomaly[] = []
 
@@ -376,21 +427,22 @@ function buildAnomalies(
     }
   }
 
-  for (const segment of segments) {
-    for (const resource of segment.resources) {
-      const subjectLabel = `${resource.resourceKindLabel} · ${resource.title}`
-      pushAnomalyIfNeeded(anomalies, {
-        side: 'payable',
-        subjectLabel,
-        agreedAmountCents: resource.agreedPayableCents,
-        scheduleAmountCents: resource.schedulePayableCents,
-        settledCents: resource.paidCents ?? 0,
-        remainingCents: resource.unpaidCents ?? 0,
-        isClosedWithBalance:
-          resource.payableStatus === 'closed' && (resource.unpaidCents ?? 0) > 0,
-        isAmountMismatch: resource.excludeFromProgressTotals,
-      })
-    }
+  for (const resource of [
+    ...segments.flatMap((segment) => segment.resources),
+    ...departureResources,
+  ]) {
+    const subjectLabel = `${resource.resourceKindLabel} · ${resource.title}`
+    pushAnomalyIfNeeded(anomalies, {
+      side: 'payable',
+      subjectLabel,
+      agreedAmountCents: resource.agreedPayableCents,
+      scheduleAmountCents: resource.schedulePayableCents,
+      settledCents: resource.paidCents ?? 0,
+      remainingCents: resource.unpaidCents ?? 0,
+      isClosedWithBalance:
+        resource.payableStatus === 'closed' && (resource.unpaidCents ?? 0) > 0,
+      isAmountMismatch: resource.excludeFromProgressTotals,
+    })
   }
 
   return anomalies
