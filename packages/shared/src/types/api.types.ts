@@ -1480,6 +1480,19 @@ export interface ItinerarySegmentSummary {
   dayCount: number | null
   destination: string | null
   notes: string | null
+  /** 票型人数：全（非负整数） */
+  fullTicketCount: number
+  /** 票型人数：半 */
+  halfTicketCount: number
+  /** 票型人数：学 */
+  studentTicketCount: number
+  /** 票型人数：免 */
+  freeTicketCount: number
+  /**
+   * Soft check: 本段票型合计 ≠ 本团客源单人数合计。
+   * 不一致时仍可保存；仅供 UI 醒目提示。
+   */
+  hasTicketHeadcountMismatch: boolean
   /**
    * True when this segment was created from copy/template and has not been
    * saved via the segment drawer yet. Named pendingCheck (not needsReview) to
@@ -1513,6 +1526,10 @@ export interface CreateItinerarySegmentDto {
   endDate?: string | null
   destination?: string | null
   notes?: string
+  fullTicketCount?: number
+  halfTicketCount?: number
+  studentTicketCount?: number
+  freeTicketCount?: number
 }
 
 export interface UpdateItinerarySegmentDto {
@@ -1521,6 +1538,10 @@ export interface UpdateItinerarySegmentDto {
   endDate?: string | null
   destination?: string | null
   notes?: string | null
+  fullTicketCount?: number
+  halfTicketCount?: number
+  studentTicketCount?: number
+  freeTicketCount?: number
 }
 
 /** 一键生成出团～回团每日行程段骨架的模式。 */

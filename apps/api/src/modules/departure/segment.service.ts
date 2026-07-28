@@ -31,6 +31,7 @@ import {
   resolveSegmentDatePair,
   validateSegmentFields,
 } from './segment.validation'
+import { hasTicketHeadcountMismatch } from './ticket-type-headcount.utils'
 
 type SegmentWithResources = ItinerarySegment & {
   resources: Pick<SegmentResource, 'id' | 'amountCents' | 'resourceKind'>[]
@@ -48,6 +49,7 @@ export class SegmentService {
     departureId: string,
   ): Promise<ItinerarySegmentListResult> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
+    const sourceGuestTotal = await this.sumSourceGuestTotal(departure.id)
 
     const segments = await this.prisma.itinerarySegment.findMany({
       where: { departureId: departure.id },
@@ -72,7 +74,7 @@ export class SegmentService {
     )
 
     const items = segments.map((segment) =>
-      this.toSegmentSummary(segment, payableStatusByResourceId),
+      this.toSegmentSummary(segment, payableStatusByResourceId, sourceGuestTotal),
     )
 
     return {
@@ -123,6 +125,12 @@ export class SegmentService {
     const sortOrder = (maxSort._max.sortOrder ?? -1) + 1
 
     const destination = normalizeOptionalText(dto.destination) ?? null
+    const ticketCounts = {
+      fullTicketCount: dto.fullTicketCount ?? 0,
+      halfTicketCount: dto.halfTicketCount ?? 0,
+      studentTicketCount: dto.studentTicketCount ?? 0,
+      freeTicketCount: dto.freeTicketCount ?? 0,
+    }
 
     const created = await this.prisma.itinerarySegment.create({
       data: {
@@ -134,6 +142,7 @@ export class SegmentService {
         dayCount: dates.dayCount,
         destination,
         notes: dto.notes?.trim() || null,
+        ...ticketCounts,
       },
       include: {
         resources: {
@@ -146,7 +155,8 @@ export class SegmentService {
       },
     })
 
-    return this.toSegmentSummary(created, new Map())
+    const sourceGuestTotal = await this.sumSourceGuestTotal(departure.id)
+    return this.toSegmentSummary(created, new Map(), sourceGuestTotal)
   }
 
   async getById(organizationId: string, segmentId: string): Promise<ItinerarySegmentSummary> {
@@ -155,7 +165,8 @@ export class SegmentService {
       organizationId,
       segment.resources.map((resource) => resource.id),
     )
-    return this.toSegmentSummary(segment, payableStatusByResourceId)
+    const sourceGuestTotal = await this.sumSourceGuestTotal(segment.departureId)
+    return this.toSegmentSummary(segment, payableStatusByResourceId, sourceGuestTotal)
   }
 
   async update(
@@ -200,6 +211,18 @@ export class SegmentService {
             : {}),
         ...(destination !== undefined ? { destination } : {}),
         ...(dto.notes !== undefined ? { notes: dto.notes?.trim() || null } : {}),
+        ...(dto.fullTicketCount !== undefined
+          ? { fullTicketCount: dto.fullTicketCount }
+          : {}),
+        ...(dto.halfTicketCount !== undefined
+          ? { halfTicketCount: dto.halfTicketCount }
+          : {}),
+        ...(dto.studentTicketCount !== undefined
+          ? { studentTicketCount: dto.studentTicketCount }
+          : {}),
+        ...(dto.freeTicketCount !== undefined
+          ? { freeTicketCount: dto.freeTicketCount }
+          : {}),
         pendingCheck: false,
       },
       include: {
@@ -217,7 +240,8 @@ export class SegmentService {
       organizationId,
       updated.resources.map((resource) => resource.id),
     )
-    return this.toSegmentSummary(updated, payableStatusByResourceId)
+    const sourceGuestTotal = await this.sumSourceGuestTotal(updated.departureId)
+    return this.toSegmentSummary(updated, payableStatusByResourceId, sourceGuestTotal)
   }
 
   async remove(organizationId: string, segmentId: string): Promise<void> {
@@ -397,9 +421,18 @@ export class SegmentService {
     return map
   }
 
+  private async sumSourceGuestTotal(departureId: string): Promise<number> {
+    const aggregate = await this.prisma.sourceOrder.aggregate({
+      where: { departureId },
+      _sum: { guestCount: true },
+    })
+    return aggregate._sum.guestCount ?? 0
+  }
+
   private toSegmentSummary(
     segment: SegmentWithResources,
     payableStatusByResourceId: Map<string, SegmentPayableStatus>,
+    sourceGuestTotal: number,
   ): ItinerarySegmentSummary {
     const resourceCount = segment.resources.length
     const outsourceCount = segment.resources.filter(
@@ -413,6 +446,12 @@ export class SegmentService {
       (resource) =>
         payableStatusByResourceId.get(resource.id) ?? SegmentPayableStatus.NOT_GENERATED,
     )
+    const ticketCounts = {
+      fullTicketCount: segment.fullTicketCount,
+      halfTicketCount: segment.halfTicketCount,
+      studentTicketCount: segment.studentTicketCount,
+      freeTicketCount: segment.freeTicketCount,
+    }
 
     return {
       id: segment.id,
@@ -424,6 +463,8 @@ export class SegmentService {
       dayCount: segment.dayCount,
       destination: segment.destination,
       notes: segment.notes,
+      ...ticketCounts,
+      hasTicketHeadcountMismatch: hasTicketHeadcountMismatch(ticketCounts, sourceGuestTotal),
       pendingCheck: segment.pendingCheck,
       resourceCount,
       outsourceCount,

@@ -694,6 +694,11 @@ model ItinerarySegment {
   dayCount             Int?              @map("day_count")
   destination  String?
   notes        String?
+  /// Ticket type headcount: 全/半/学/免（非负整数）。
+  fullTicketCount      Int               @default(0) @map("full_ticket_count")
+  halfTicketCount      Int               @default(0) @map("half_ticket_count")
+  studentTicketCount   Int               @default(0) @map("student_ticket_count")
+  freeTicketCount      Int               @default(0) @map("free_ticket_count")
   /// Copy/template skeleton awaiting coordinator review; cleared on segment drawer save.
   pendingCheck Boolean @default(false) @map("pending_check")
   resources            SegmentResource[]

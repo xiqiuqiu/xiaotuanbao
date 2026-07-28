@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import { Type } from 'class-transformer'
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
 
 export class CreateItinerarySegmentDto {
   @IsString()
@@ -22,6 +23,30 @@ export class CreateItinerarySegmentDto {
   @IsOptional()
   @IsString()
   notes?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  fullTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  halfTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  studentTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  freeTicketCount?: number
 }
 
 export class UpdateItinerarySegmentDto {
@@ -47,4 +72,28 @@ export class UpdateItinerarySegmentDto {
   @IsOptional()
   @IsString()
   notes?: string | null
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  fullTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  halfTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  studentTicketCount?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: '票型人数须为非负整数' })
+  @Min(0, { message: '票型人数须为非负整数' })
+  freeTicketCount?: number
 }
