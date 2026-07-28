@@ -558,6 +558,96 @@ describe('Departure API (e2e)', () => {
     expect(response.body.data.notes).toBe('更新备注')
   })
 
+  describe('Departure execution crew (issue #206)', () => {
+    let transportSupplierId: string
+    let guideSupplierId: string
+    let hotelSupplierId: string
+
+    beforeAll(async () => {
+      const [transportSupplier, guideSupplier, hotelSupplier] = await Promise.all([
+        prisma.supplier.create({
+          data: {
+            organizationId,
+            name: `${testPrefix}-crew-transport`,
+            categories: [ResourceKind.transport],
+          },
+        }),
+        prisma.supplier.create({
+          data: {
+            organizationId,
+            name: `${testPrefix}-crew-guide`,
+            categories: [ResourceKind.guide],
+          },
+        }),
+        prisma.supplier.create({
+          data: {
+            organizationId,
+            name: `${testPrefix}-crew-hotel`,
+            categories: [ResourceKind.hotel],
+          },
+        }),
+      ])
+      transportSupplierId = transportSupplier.id
+      guideSupplierId = guideSupplier.id
+      hotelSupplierId = hotelSupplier.id
+    })
+
+    it('saves and displays crew without creating payables', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-crew-valid` })
+      const payableCountBefore = await prisma.paymentSchedule.count({
+        where: { organizationId, departureId: departure.id },
+      })
+
+      const response = await authRequest(app, coordinatorToken)
+        .patch(`/api/departures/${departure.id}`)
+        .send({
+          driverSupplierId: transportSupplierId,
+          guideSupplierId,
+          vehiclePlate: '新A·20601',
+        })
+        .expect(200)
+
+      expect(response.body.data).toMatchObject({
+        driverSupplierId: transportSupplierId,
+        driverSupplierName: `${testPrefix}-crew-transport`,
+        guideSupplierId,
+        guideSupplierName: `${testPrefix}-crew-guide`,
+        vehiclePlate: '新A·20601',
+      })
+
+      const operationsSheet = await authRequest(app, coordinatorToken)
+        .get(`/api/departures/${departure.id}/operations-sheet`)
+        .expect(200)
+
+      expect(operationsSheet.body.data.departure).toMatchObject({
+        driverSupplierName: `${testPrefix}-crew-transport`,
+        guideSupplierName: `${testPrefix}-crew-guide`,
+        vehiclePlate: '新A·20601',
+      })
+      expect(
+        await prisma.paymentSchedule.count({
+          where: { organizationId, departureId: departure.id },
+        }),
+      ).toBe(payableCountBefore)
+    })
+
+    it('rejects suppliers outside the required crew category', async () => {
+      const departure = await createTestDeparture({ name: `${testPrefix}-crew-invalid` })
+
+      const invalidDriver = await authRequest(app, coordinatorToken)
+        .patch(`/api/departures/${departure.id}`)
+        .send({ driverSupplierId: hotelSupplierId })
+        .expect(400)
+      expect(invalidDriver.body.message).toBe('司机必须选择含「用车」类别的供应商')
+
+      const invalidGuide = await authRequest(app, coordinatorToken)
+        .patch(`/api/departures/${departure.id}`)
+        .send({ guideSupplierId: transportSupplierId })
+        .expect(400)
+      expect(invalidGuide.body.message).toBe('导游必须选择含「导游」类别的供应商')
+    })
+  })
+
   it('transitions editing to pending_settlement', async () => {
     const departure = await createTestDeparture()
 

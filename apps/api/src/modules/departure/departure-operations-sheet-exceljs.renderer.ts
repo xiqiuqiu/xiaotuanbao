@@ -157,6 +157,9 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       `${snapshot.departure.startDate} ~ ${snapshot.departure.endDate}（${snapshot.departure.dayCount} 天）`,
     )
     row = writeKeyValue(sheet, row, '负责人', snapshot.departure.ownerName)
+    row = writeKeyValue(sheet, row, '司机', snapshot.departure.driverSupplierName ?? '-')
+    row = writeKeyValue(sheet, row, '导游', snapshot.departure.guideSupplierName ?? '-')
+    row = writeKeyValue(sheet, row, '车牌', snapshot.departure.vehiclePlate ?? '-')
     row = writeKeyValue(
       sheet,
       row,

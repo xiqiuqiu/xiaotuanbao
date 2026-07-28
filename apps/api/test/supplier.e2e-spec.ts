@@ -417,6 +417,43 @@ describe('Supplier API (e2e)', () => {
     )
   })
 
+  it('rejects removing a category still used by a departure execution crew', async () => {
+    const createResponse = await authRequest(app, coordinatorToken)
+      .post('/api/suppliers')
+      .send({
+        name: `${testSupplierPrefix}-crew-category`,
+        categories: [ResourceKind.transport, ResourceKind.hotel],
+      })
+      .expect(201)
+
+    const supplierId = createResponse.body.data.id as string
+    await prisma.departure.create({
+      data: {
+        organizationId,
+        departureNo: `TC${Date.now().toString().slice(-10)}`,
+        name: `${testSupplierPrefix}-crew-departure`,
+        routeName: '测试线',
+        startDate: new Date('2026-08-01'),
+        endDate: new Date('2026-08-05'),
+        dayCount: 5,
+        ownerUserId,
+        driverSupplierId: supplierId,
+      },
+    })
+
+    const response = await authRequest(app, coordinatorToken)
+      .patch(`/api/suppliers/${supplierId}`)
+      .send({
+        name: `${testSupplierPrefix}-crew-category`,
+        categories: [ResourceKind.hotel],
+        status: DirectoryProfileStatus.active,
+      })
+      .expect(400)
+
+    expect(response.body.message).toContain('用车')
+    expect(response.body.message).toContain('发团执行班组')
+  })
+
   it('allows removing a category not used by segment resources', async () => {
     const createResponse = await authRequest(app, coordinatorToken)
       .post('/api/suppliers')

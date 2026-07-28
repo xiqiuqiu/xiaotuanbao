@@ -16,6 +16,8 @@ import {
   DepartureRouteSource,
   DepartureStatus,
   DepartureType,
+  DirectoryProfileStatus,
+  ResourceKind,
   type Departure,
   type DepartureArchiveHistory,
   type DepartureSettlementHistory,
@@ -63,6 +65,9 @@ const UPDATE_DEPARTURE_FIELDS = [
   'endDate',
   'ownerUserId',
   'notes',
+  'driverSupplierId',
+  'guideSupplierId',
+  'vehiclePlate',
 ] as const
 
 const TRANSITION_TARGETS: Partial<Record<DepartureStatus, DepartureStatus[]>> = {
@@ -395,6 +400,42 @@ export class DepartureService {
       data.notes = dto.notes?.trim() || null
     }
 
+    if (dto.driverSupplierId !== undefined) {
+      if (dto.driverSupplierId) {
+        if (dto.driverSupplierId !== departure.driverSupplierId) {
+          await this.ensureCrewSupplier(
+            organizationId,
+            dto.driverSupplierId,
+            ResourceKind.transport,
+            '司机必须选择含「用车」类别的供应商',
+          )
+        }
+        data.driverSupplier = { connect: { id: dto.driverSupplierId } }
+      } else {
+        data.driverSupplier = { disconnect: true }
+      }
+    }
+
+    if (dto.guideSupplierId !== undefined) {
+      if (dto.guideSupplierId) {
+        if (dto.guideSupplierId !== departure.guideSupplierId) {
+          await this.ensureCrewSupplier(
+            organizationId,
+            dto.guideSupplierId,
+            ResourceKind.guide,
+            '导游必须选择含「导游」类别的供应商',
+          )
+        }
+        data.guideSupplier = { connect: { id: dto.guideSupplierId } }
+      } else {
+        data.guideSupplier = { disconnect: true }
+      }
+    }
+
+    if (dto.vehiclePlate !== undefined) {
+      data.vehiclePlate = dto.vehiclePlate?.trim() || null
+    }
+
     let startDate = departure.startDate
     let endDate = departure.endDate
 
@@ -600,13 +641,21 @@ export class DepartureService {
   }
 
   private async toDepartureDetailAsync(departure: Departure): Promise<DepartureDetail> {
-    const [readModel, ownerNameMap, archiveHistory, settlementHistory, financeTouchedIds] =
+    const [
+      readModel,
+      ownerNameMap,
+      archiveHistory,
+      settlementHistory,
+      financeTouchedIds,
+      crewSupplierNameMap,
+    ] =
       await Promise.all([
         this.departureReadModelService.getForDeparture(departure.organizationId, departure.id),
         this.departureReadModelService.batchGetOwnerNames([departure.ownerUserId]),
         this.loadArchiveHistory(departure.id),
         this.loadSettlementHistory(departure.id),
         this.batchGetFinanceTouchedDepartureIds(departure.organizationId, [departure.id]),
+        this.batchGetCrewSupplierNames(departure.organizationId, [departure]),
       ])
     return this.toDepartureDetail(
       departure,
@@ -619,7 +668,32 @@ export class DepartureService {
         readModel.sourceOrderCount,
         financeTouchedIds.has(departure.id),
       ),
+      crewSupplierNameMap,
     )
+  }
+
+  private async batchGetCrewSupplierNames(
+    organizationId: string,
+    departures: Departure[],
+  ): Promise<Map<string, string>> {
+    const supplierIds = [
+      ...new Set(
+        departures.flatMap((departure) =>
+          [departure.driverSupplierId, departure.guideSupplierId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ),
+    ]
+    if (supplierIds.length === 0) {
+      return new Map()
+    }
+
+    const suppliers = await this.prisma.supplier.findMany({
+      where: { organizationId, id: { in: supplierIds } },
+      select: { id: true, name: true },
+    })
+    return new Map(suppliers.map((supplier) => [supplier.id, supplier.name]))
   }
 
   private async batchGetFinanceTouchedDepartureIds(
@@ -782,6 +856,27 @@ export class DepartureService {
     }
   }
 
+  private async ensureCrewSupplier(
+    organizationId: string,
+    supplierId: string,
+    requiredCategory: ResourceKind,
+    categoryError: string,
+  ) {
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: supplierId, organizationId },
+    })
+
+    if (!supplier) {
+      throw new BadRequestException('供应商不存在')
+    }
+    if (supplier.status !== DirectoryProfileStatus.active) {
+      throw new BadRequestException('供应商不可用，请选择有效供应商')
+    }
+    if (!supplier.categories.includes(requiredCategory)) {
+      throw new BadRequestException(categoryError)
+    }
+  }
+
   private toDepartureDetail(
     departure: Departure,
     readModel: DepartureReadModelAggregate,
@@ -789,9 +884,19 @@ export class DepartureService {
     archiveHistory: DepartureArchiveHistoryItem[],
     settlementHistory: DepartureSettlementHistoryItem[],
     canPurge: boolean,
+    crewSupplierNameMap: Map<string, string>,
   ): DepartureDetail {
     return {
       ...this.toDepartureSummary(departure, readModel, ownerName, canPurge),
+      driverSupplierId: departure.driverSupplierId,
+      driverSupplierName: departure.driverSupplierId
+        ? crewSupplierNameMap.get(departure.driverSupplierId) ?? null
+        : null,
+      guideSupplierId: departure.guideSupplierId,
+      guideSupplierName: departure.guideSupplierId
+        ? crewSupplierNameMap.get(departure.guideSupplierId) ?? null
+        : null,
+      vehiclePlate: departure.vehiclePlate,
       grossReceivableCents: readModel.grossReceivableCents,
       fareAdjustmentNetCents: readModel.fareAdjustmentNetCents,
       discountCents: readModel.discountCents,

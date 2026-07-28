@@ -472,6 +472,8 @@ model Supplier {
   updatedAt           DateTime               @updatedAt @map("updated_at")
   routeTemplateResources RouteTemplateResource[]
   segmentResources    SegmentResource[]
+  departuresAsDriver  Departure[]             @relation("DepartureDriverSupplier")
+  departuresAsGuide   Departure[]             @relation("DepartureGuideSupplier")
 
   @@unique([organizationId, name])
   @@map("suppliers")
@@ -563,6 +565,11 @@ model Departure {
   dayCount         Int                  @map("day_count")
   ownerUserId      String               @map("owner_user_id")
   owner            User                 @relation("DepartureOwner", fields: [ownerUserId], references: [id])
+  driverSupplierId String?              @map("driver_supplier_id")
+  driverSupplier   Supplier?            @relation("DepartureDriverSupplier", fields: [driverSupplierId], references: [id], onDelete: SetNull)
+  guideSupplierId  String?              @map("guide_supplier_id")
+  guideSupplier    Supplier?            @relation("DepartureGuideSupplier", fields: [guideSupplierId], references: [id], onDelete: SetNull)
+  vehiclePlate     String?              @map("vehicle_plate")
   status           DepartureStatus      @default(editing)
   notes            String?
   createdAt        DateTime             @default(now()) @map("created_at")

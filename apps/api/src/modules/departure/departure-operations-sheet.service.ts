@@ -59,6 +59,8 @@ export class DepartureOperationsSheetService {
       include: {
         organization: { select: { name: true } },
         owner: { select: { name: true } },
+        driverSupplier: { select: { name: true } },
+        guideSupplier: { select: { name: true } },
         sourceOrders: {
           orderBy: { createdAt: 'asc' },
           include: {
@@ -249,6 +251,9 @@ export class DepartureOperationsSheetService {
         endDate: formatDateOnly(departure.endDate),
         dayCount: departure.dayCount,
         ownerName: departure.owner.name,
+        driverSupplierName: departure.driverSupplier?.name ?? null,
+        guideSupplierName: departure.guideSupplier?.name ?? null,
+        vehiclePlate: departure.vehiclePlate,
         status: departure.status,
         departureProgress: deriveDepartureProgress(departure.startDate, departure.endDate),
         notes: departure.notes,

@@ -44,6 +44,9 @@ export function OperationsSheetMetaSection({ sheet }: { sheet: DepartureOperatio
             children: `${sheet.departure.startDate} ~ ${sheet.departure.endDate}（${sheet.departure.dayCount} 天）`,
           },
           { label: '负责人', children: sheet.departure.ownerName },
+          { label: '司机', children: sheet.departure.driverSupplierName || '-' },
+          { label: '导游', children: sheet.departure.guideSupplierName || '-' },
+          { label: '车牌', children: sheet.departure.vehiclePlate || '-' },
           {
             label: '发团状态',
             children: catalogLabel(DEPARTURE_STATUS_LABELS, sheet.departure.status),
