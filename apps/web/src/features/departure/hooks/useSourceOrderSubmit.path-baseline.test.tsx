@@ -50,6 +50,9 @@ function staleListOrder(): SourceOrderSummary {
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: true,
+    estimatedRebateCents: 0,
+    rebateCents: 0,
+    rebateStatus: 'not_generated',
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
   }

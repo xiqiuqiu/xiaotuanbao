@@ -180,7 +180,7 @@ export type SourceOrderAmountPreviewModel = {
   estimatedRebateCents: number
 }
 
-/** Footer / preview copy：团款 / 代收约定 / 往来结果分区。 */
+/** Footer / preview copy：团款 / 代收约定 / 往来结果分区（仅事实行，不放计划期说明以免干扰操作）。 */
 export function formatSourceOrderAmountSummary(
   amounts: SourceOrderAmountPreviewModel,
   formatCents: (cents: number) => string,
@@ -196,15 +196,11 @@ export function formatSourceOrderAmountSummary(
   }
 
   lines.push(
-    `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)} · G约定 ${formatCents(amounts.guestCollectCents)}`,
+    `【代收约定】客户已收 ${formatCents(amounts.partnerCollectedCents)} · 我方代收 ${formatCents(amounts.guestCollectCents)}`,
   )
   lines.push(
     `【往来结果】预估客户补款 ${formatCents(amounts.estimatedCustomerTopUpCents)} · 预计返利 ${formatCents(amounts.estimatedRebateCents)}`,
   )
-  if (amounts.guestCollectCents >= amounts.netReceivableCents) {
-    lines.push('计划期不生成客户补款应收（G约定已覆盖结算金额）')
-  }
-  lines.push('客户已收（定金）不计入客户补款金额')
 
   return lines.join('\n')
 }

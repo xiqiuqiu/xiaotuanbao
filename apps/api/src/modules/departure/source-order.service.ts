@@ -16,6 +16,7 @@ import type {
 } from '@xiaotuanbao/shared'
 import {
   didSourceAmountPathChange,
+  SegmentPayableStatus,
   SourceOrderReceivableStatus,
   type GuestCollectionChangeImpact,
 } from '@xiaotuanbao/shared'
@@ -352,6 +353,8 @@ export class SourceOrderService {
       receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
       hasSourceAmountMismatch: false,
       amountFieldsLocked: false,
+      rebateCents: 0,
+      rebateStatus: SegmentPayableStatus.NOT_GENERATED,
     })
   }
 
@@ -366,15 +369,10 @@ export class SourceOrderService {
     )
   }
 
-  async settleByActualCollection(
-    organizationId: string,
-    sourceOrderId: string,
-    dto: { earlySettle?: boolean },
-  ) {
+  async settleByActualCollection(organizationId: string, sourceOrderId: string) {
     return this.financeBridge.settleByActualCollection(
       organizationId,
       sourceOrderId,
-      { earlySettle: dto.earlySettle === true },
       (order, meta) => this.toSourceOrderSummary(order, meta),
     )
   }
@@ -957,6 +955,9 @@ export class SourceOrderService {
       hasPaymentSchedule: scheduleMeta?.hasSchedule ?? false,
       hasSourceAmountMismatch: scheduleMeta?.hasSourceAmountMismatch ?? false,
       amountFieldsLocked: scheduleMeta?.amountFieldsLocked ?? false,
+      estimatedRebateCents: Math.max(0, order.guestCollectCents - order.netReceivableCents),
+      rebateCents: scheduleMeta?.rebateCents ?? 0,
+      rebateStatus: scheduleMeta?.rebateStatus ?? SegmentPayableStatus.NOT_GENERATED,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
     }

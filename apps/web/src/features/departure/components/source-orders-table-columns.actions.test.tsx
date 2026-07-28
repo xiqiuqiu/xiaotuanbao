@@ -36,6 +36,9 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     hasPaymentSchedule: false,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    estimatedRebateCents: 0,
+    rebateCents: 0,
+    rebateStatus: 'not_generated',
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -69,7 +72,6 @@ function renderActions(
     canGenerate: options.canGenerate ?? true,
     deleteMutation: stubMutation(),
     generateMutation: stubMutation(),
-    settleMutation: stubMutation<{ id: string; earlySettle?: boolean }>(),
     onOpen: vi.fn(),
     onOpenGuests: vi.fn(),
     onViewReceivables,
@@ -111,22 +113,10 @@ describe('source orders action column', () => {
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '按实收结算' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '按实收结算' })).toBeNull()
     expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
-  })
-
-  it('hides 按实收结算 for partner_settled collection mode', () => {
-    renderActions(
-      baseOrder({
-        collectionMode: 'partner_settled',
-        receivableStatus: 'pending',
-        hasPaymentSchedule: true,
-      }),
-    )
-
-    expect(screen.queryByRole('button', { name: '按实收结算' })).toBeNull()
   })
 
   it('shows 查看应收 for closed receivable status and keeps 编辑 when writable', () => {
@@ -172,7 +162,6 @@ describe('source orders action column', () => {
       canGenerate: true,
       deleteMutation: stubMutation(),
       generateMutation: stubMutation(),
-      settleMutation: stubMutation<{ id: string; earlySettle?: boolean }>(),
       onOpen,
       onOpenGuests: vi.fn(),
       onViewReceivables: vi.fn(),

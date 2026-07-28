@@ -293,6 +293,7 @@ export { SourceOrderReceivableStatus } from './enums/source-order-receivable-sta
 export { SegmentPayableStatus } from './enums/segment-payable-status.enum'
 export {
   deriveScheduleState,
+  deriveSourceOrderReceivableStatus,
   computeReceivableDueDate,
   deriveSettlementLabel,
   deriveTransactionWriteoffStatus,
@@ -310,6 +311,7 @@ export {
   assertDirectionMatch,
   DirectionMismatchError,
   type DeriveScheduleStateInput,
+  type SourceOrderReceivableScheduleProgress,
   type SettlementLabelResult,
   type TransactionWriteoffStatusResult,
   type FinanceTouchedScheduleInput,

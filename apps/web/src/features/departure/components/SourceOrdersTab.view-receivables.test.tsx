@@ -64,6 +64,9 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
     amountFieldsLocked: false,
+    estimatedRebateCents: 0,
+    rebateCents: 0,
+    rebateStatus: 'not_generated',
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',
     ...overrides,
@@ -236,7 +239,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
       // guest_only → 2 paths; split → 1 path (balance only)
       const summary = screen.getByText('确认后将生成 3 条应收记录')
       const explanation = screen.getByText(
-        '「全部我方代收」按定金/尾款分别生成游客应收；「合作方收定金+我方收尾款」仅生成尾款代收。',
+        '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收。',
       )
       expect(screen.queryByRole('alert')).toBeNull()
       expect(explanation).toHaveClass('ant-typography-secondary')

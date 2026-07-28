@@ -46,7 +46,6 @@ describe('业务列表时间列', () => {
           canGenerate: true,
           deleteMutation: stubMutation(),
           generateMutation: stubMutation(),
-          settleMutation: stubMutation() as never,
           onOpen: noop,
           onOpenGuests: noop,
           onViewReceivables: noop,

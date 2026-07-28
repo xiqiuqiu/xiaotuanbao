@@ -106,24 +106,15 @@ describe('assertGuestNodesReadyForSettlement', () => {
           { amountCents: 100000, settledAmountCents: 100000 },
           { amountCents: 400000, settledAmountCents: 400000 },
         ],
-        earlySettle: false,
       }),
     ).not.toThrow()
   })
 
-  it('rejects unsettled guest nodes unless earlySettle', () => {
+  it('rejects unsettled guest nodes', () => {
     expect(() =>
       assertGuestNodesReadyForSettlement({
         guestNodes: [{ amountCents: 100000, settledAmountCents: 50000 }],
-        earlySettle: false,
       }),
-    ).toThrow('相关游客代收节点尚未结清，如需办理请选择提前按实收结算')
-
-    expect(() =>
-      assertGuestNodesReadyForSettlement({
-        guestNodes: [{ amountCents: 100000, settledAmountCents: 50000 }],
-        earlySettle: true,
-      }),
-    ).not.toThrow()
+    ).toThrow('相关游客代收节点尚未结清，收齐后再落客户补款与返利')
   })
 })

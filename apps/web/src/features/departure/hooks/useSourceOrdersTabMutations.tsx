@@ -14,7 +14,6 @@ import {
   generateReceivables,
   generateReceivablesForDeparture,
   getGuestCollectionChangeImpact,
-  settleByActualCollection,
   updateSourceOrder,
 } from '@/services/source-order.service'
 import {
@@ -135,23 +134,6 @@ export function useSourceOrdersTabMutations({
     },
   })
 
-  const settleMutation = useMutation({
-    mutationFn: (input: { id: string; earlySettle?: boolean }) =>
-      settleByActualCollection(input.id, { earlySettle: input.earlySettle }),
-    onSuccess: (result) => {
-      const parts = [
-        `G实收 ${formatCents(result.actualGuestCollectedCents)}`,
-        result.customerTopUpCents > 0
-          ? `客户补款 ${formatCents(result.customerTopUpCents)}`
-          : null,
-        result.rebateCents > 0 ? `返利 ${formatCents(result.rebateCents)}` : null,
-      ].filter(Boolean)
-      message.success(`按实收结算完成：${parts.join(' · ')}`)
-      invalidateSourceOrders()
-      invalidateFinance()
-    },
-  })
-
   const batchGenerateMutation = useMutation({
     mutationFn: () => generateReceivablesForDeparture(departure.id),
     onSuccess: (result) => {
@@ -176,7 +158,6 @@ export function useSourceOrdersTabMutations({
     saveAndGenerateMutation,
     deleteMutation,
     generateMutation,
-    settleMutation,
     batchGenerateMutation,
   }
 }
@@ -307,60 +288,13 @@ export function confirmBatchGenerateReceivables(
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          「全部我方代收」按定金/尾款分别生成游客应收；「合作方收定金+我方收尾款」仅生成尾款代收。
+          「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收。
         </Typography.Text>
       </Space>
     ),
     okText: '生成',
     cancelText: '取消',
     onOk: () => batchGenerateMutation.mutateAsync(),
-  })
-}
-
-export function confirmSettleByActualCollection(
-  order: SourceOrderSummary,
-  settleMutation: ReturnType<typeof useSourceOrdersTabMutations>['settleMutation'],
-) {
-  const run = async (earlySettle: boolean) => {
-    try {
-      await settleMutation.mutateAsync({ id: order.id, earlySettle })
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : ''
-      if (!earlySettle && messageText.includes('尚未结清')) {
-        Modal.confirm({
-          title: '提前按实收结算？',
-          content:
-            '相关游客代收节点尚未结清。确认按当前已核销合计提前办理客户补款与返利？',
-          okText: '提前结算',
-          cancelText: '取消',
-          onOk: () =>
-            settleMutation.mutateAsync({ id: order.id, earlySettle: true }).catch((earlyError) => {
-              message.error(
-                earlyError instanceof Error ? earlyError.message : '按实收结算失败',
-              )
-            }),
-        })
-        return
-      }
-      message.error(messageText || '按实收结算失败')
-    }
-  }
-
-  Modal.confirm({
-    title: '按实收结算',
-    content: (
-      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
-        <span>
-          将按定金/尾款节点已核销合计（G实收）生成或更新客户补款应收与返利应付。
-        </span>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          默认要求相关游客代收节点已结清；未结清时可在提示后选择提前结算。已有核销的补款/返利不会静默重算。
-        </Typography.Text>
-      </Space>
-    ),
-    okText: '结算',
-    cancelText: '取消',
-    onOk: () => run(false),
   })
 }
 

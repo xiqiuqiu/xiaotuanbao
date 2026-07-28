@@ -1,6 +1,7 @@
 import { Table, Typography, theme } from 'antd'
 import type { SourceOrderSummary } from '@/types/api'
 import { formatCents } from '../catalog'
+import { sourceOrderRebateDisplayCents } from './source-orders-table-columns'
 
 /** Numeric totals for the source-orders table footer (current filtered page). */
 export interface SourceOrdersTableTotals {
@@ -11,6 +12,7 @@ export interface SourceOrdersTableTotals {
   netReceivableCents: number
   partnerCollectedCents: number
   guestCollectCents: number
+  rebateDisplayCents: number
 }
 
 export function aggregateSourceOrdersTableTotals(
@@ -25,6 +27,7 @@ export function aggregateSourceOrdersTableTotals(
       netReceivableCents: totals.netReceivableCents + order.netReceivableCents,
       partnerCollectedCents: totals.partnerCollectedCents + order.partnerCollectedCents,
       guestCollectCents: totals.guestCollectCents + order.guestCollectCents,
+      rebateDisplayCents: totals.rebateDisplayCents + sourceOrderRebateDisplayCents(order),
     }),
     {
       guestCount: 0,
@@ -34,6 +37,7 @@ export function aggregateSourceOrdersTableTotals(
       netReceivableCents: 0,
       partnerCollectedCents: 0,
       guestCollectCents: 0,
+      rebateDisplayCents: 0,
     },
   )
 }
@@ -71,15 +75,22 @@ function SourceOrdersTableSummaryRow({ pageData }: { pageData: readonly SourceOr
         <Table.Summary.Cell index={5} align="right">
           <SummaryAmount value={totals.netReceivableCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={6} align="right">
+        {/* 收款方式 */}
+        <Table.Summary.Cell index={6} />
+        <Table.Summary.Cell index={7} align="right">
           <SummaryAmount value={totals.partnerCollectedCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={7} align="right">
+        <Table.Summary.Cell index={8} align="right">
           <SummaryAmount value={totals.guestCollectCents} />
         </Table.Summary.Cell>
-        {/* 收款方式～更新时间：无合计语义，合并占位；操作列单独占位以对齐 fixed 列 */}
-        <Table.Summary.Cell index={8} colSpan={5} />
-        <Table.Summary.Cell index={13} />
+        {/* 应收状态 */}
+        <Table.Summary.Cell index={9} />
+        <Table.Summary.Cell index={10} align="right">
+          <SummaryAmount value={totals.rebateDisplayCents} />
+        </Table.Summary.Cell>
+        {/* 返利状态～更新时间：无合计语义；操作列单独占位以对齐 fixed 列 */}
+        <Table.Summary.Cell index={11} colSpan={4} />
+        <Table.Summary.Cell index={15} />
       </Table.Summary.Row>
     </Table.Summary>
   )

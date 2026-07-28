@@ -488,7 +488,7 @@ function SourceOrderFormFields({
           />
         </Form.Item>
         <Row gutter={token.marginMD}>
-          <Col span={12}>
+          <Col span={8}>
             <Form.Item
               name="adultGuestCount"
               label="成人人数"
@@ -513,7 +513,7 @@ function SourceOrderFormFields({
               />
             </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col span={8}>
             <Form.Item
               name="childGuestCount"
               label="儿童人数"
@@ -537,11 +537,17 @@ function SourceOrderFormFields({
               />
             </Form.Item>
           </Col>
+          <Col span={8}>
+            <Form.Item label="总人数">
+              <Input
+                aria-label="总人数"
+                value={`${derivedTotalGuests} 人`}
+                readOnly
+                disabled
+              />
+            </Form.Item>
+          </Col>
         </Row>
-        <DerivedMetric label="总人数" value={`${derivedTotalGuests} 人`} />
-        <Form.Item name="notes" label="备注">
-          <Input.TextArea rows={2} placeholder="免票、特殊要求等" />
-        </Form.Item>
       </FormSection>
 
       <FormSection title="团款计价" description="按人数与单价计算原始团款，再叠加调整与优惠。">
@@ -630,7 +636,7 @@ function SourceOrderFormFields({
 
       <FormSection
         title="收款信息"
-        description="按定金/尾款录入代收约定；地接与合作方往来只看 G约定 与结算金额 S，客户已收不计入客户补款。"
+        description="按定金/尾款录入代收约定；地接与合作方往来只看我方代收与结算金额，客户已收不计入客户补款。"
       >
         <Form.Item
           name="collectionMode"
@@ -647,7 +653,7 @@ function SourceOrderFormFields({
                 name="depositYuan"
                 label={
                   collectionMode === SourceOrderCollectionMode.SPLIT
-                    ? '定金（客户已收，元）'
+                    ? '客户已收定金（元）'
                     : '定金（元）'
                 }
                 rules={[{ required: true, message: '请输入定金' }]}
@@ -665,7 +671,7 @@ function SourceOrderFormFields({
                 name="balanceYuan"
                 label={
                   collectionMode === SourceOrderCollectionMode.SPLIT
-                    ? '尾款（我方代收，元）'
+                    ? '我方代收尾款（元）'
                     : '尾款（元）'
                 }
                 rules={[{ required: true, message: '请输入尾款' }]}
@@ -682,6 +688,16 @@ function SourceOrderFormFields({
         ) : null}
         <Form.Item name="settlementNotes" label="结算说明">
           <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
+        </Form.Item>
+      </FormSection>
+
+      <FormSection title="备注">
+        <Form.Item name="notes">
+          <Input.TextArea
+            rows={2}
+            placeholder="免票、特殊要求等"
+            aria-label="备注"
+          />
         </Form.Item>
       </FormSection>
     </>
@@ -815,41 +831,43 @@ export function SourceOrderDrawer({
       styles={{ footer: { paddingBlock: token.paddingMD } }}
       footer={
         detailError && sourceOrderId ? null : (
-          <Flex align="center" gap={token.marginMD}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {detailReady ? <AmountPreview form={form} /> : null}
-            </div>
+          <Flex vertical gap={token.marginSM} style={{ width: '100%' }}>
+            {detailReady ? <AmountPreview form={form} /> : null}
             {readOnly ? (
-              <Button onClick={handleClose}>关闭</Button>
+              <Flex justify="flex-end">
+                <Button onClick={handleClose}>关闭</Button>
+              </Flex>
             ) : (
-              <Space>
-                <Button onClick={handleClose} disabled={actionsBusy}>
-                  取消
-                </Button>
-                {canSaveAndGenerate ? (
+              <Flex justify="flex-end">
+                <Space>
+                  <Button onClick={handleClose} disabled={actionsBusy}>
+                    取消
+                  </Button>
+                  {canSaveAndGenerate ? (
+                    <Button
+                      loading={saveAndGenerateLoading}
+                      disabled={!detailReady || actionsBusy}
+                      onClick={() => {
+                        submitIntentRef.current = 'saveAndGenerate'
+                        form.submit()
+                      }}
+                    >
+                      保存并生成应收
+                    </Button>
+                  ) : null}
                   <Button
-                    loading={saveAndGenerateLoading}
-                    disabled={!detailReady || actionsBusy}
+                    type="primary"
+                    loading={loading}
+                    disabled={!detailReady || saveAndGenerateLoading}
                     onClick={() => {
-                      submitIntentRef.current = 'saveAndGenerate'
+                      submitIntentRef.current = 'save'
                       form.submit()
                     }}
                   >
-                    保存并生成应收
+                    保存
                   </Button>
-                ) : null}
-                <Button
-                  type="primary"
-                  loading={loading}
-                  disabled={!detailReady || saveAndGenerateLoading}
-                  onClick={() => {
-                    submitIntentRef.current = 'save'
-                    form.submit()
-                  }}
-                >
-                  保存
-                </Button>
-              </Space>
+                </Space>
+              </Flex>
             )}
           </Flex>
         )

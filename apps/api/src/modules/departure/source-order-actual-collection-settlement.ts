@@ -64,17 +64,23 @@ export function buildActualCollectionSettlementPaths(
 
 export function assertGuestNodesReadyForSettlement(params: {
   guestNodes: Array<{ amountCents: number; settledAmountCents: number }>
-  earlySettle: boolean
 }): void {
-  if (params.earlySettle) {
-    return
-  }
   const unsettled = params.guestNodes.some(
     (node) => node.settledAmountCents < node.amountCents,
   )
   if (unsettled) {
-    throw new Error('相关游客代收节点尚未结清，如需办理请选择提前按实收结算')
+    throw new Error('相关游客代收节点尚未结清，收齐后再落客户补款与返利')
   }
+}
+
+/** 游客代收节点是否均已结清（自动按实收落账门槛）。 */
+export function areGuestNodesFullySettled(
+  guestNodes: Array<{ amountCents: number; settledAmountCents: number }>,
+): boolean {
+  return (
+    guestNodes.length > 0 &&
+    guestNodes.every((node) => node.settledAmountCents >= node.amountCents)
+  )
 }
 
 export const OBSOLETE_SETTLEMENT_PATH_CANCEL_REASON =

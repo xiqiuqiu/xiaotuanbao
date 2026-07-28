@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   assertCounterpartyMatch,
@@ -11,6 +11,7 @@ import {
   type PaymentSchedule,
 } from '@prisma/client'
 import { formatDateOnly } from '../departure/departure-date.utils'
+import { DepartureFinanceBridgeService } from '../departure/departure-finance-bridge.service'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   ConfirmCollectionDto,
@@ -32,6 +33,8 @@ export class FinanceOperationsService {
     private readonly verificationService: VerificationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly financeIdempotencyService: FinanceIdempotencyService,
+    @Inject(forwardRef(() => DepartureFinanceBridgeService))
+    private readonly departureFinanceBridge: DepartureFinanceBridgeService,
   ) {}
 
   async confirmCollection(
@@ -123,7 +126,18 @@ export class FinanceOperationsService {
       },
     })
 
-    return this.paymentScheduleService.getById(organizationId, direction, result.scheduleId)
+    const generatedRebatePayable =
+      await this.departureFinanceBridge.syncActualCollectionSettlementAfterGuestVerification(
+        organizationId,
+        result.scheduleId,
+      )
+
+    const scheduleSummary = await this.paymentScheduleService.getById(
+      organizationId,
+      direction,
+      result.scheduleId,
+    )
+    return { ...scheduleSummary, generatedRebatePayable }
   }
 
   private async confirmSchedule(
@@ -201,7 +215,18 @@ export class FinanceOperationsService {
       },
     })
 
-    return this.paymentScheduleService.getById(organizationId, direction, result.scheduleId)
+    const generatedRebatePayable =
+      await this.departureFinanceBridge.syncActualCollectionSettlementAfterGuestVerification(
+        organizationId,
+        result.scheduleId,
+      )
+
+    const scheduleSummary = await this.paymentScheduleService.getById(
+      organizationId,
+      direction,
+      result.scheduleId,
+    )
+    return { ...scheduleSummary, generatedRebatePayable }
   }
 
   private async findScheduleOrThrow(
