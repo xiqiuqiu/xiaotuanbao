@@ -1,3 +1,8 @@
+import type { DepartureIncomeCollectionStatus } from '../enums/departure-income-collection-status.enum'
+import type { DepartureIncomeCommissionStatus } from '../enums/departure-income-commission-status.enum'
+import type { DepartureIncomeSettlementComposite } from '../enums/departure-income-settlement-composite.enum'
+import type { DepartureIncomeType } from '../enums/departure-income-type.enum'
+
 export interface ApiResponse<T = unknown> {
   code: number
   message: string
@@ -843,8 +848,8 @@ export interface DepartureOverviewStats {
   closedUnreceivedCents: number
   ungeneratedReceivableCents: number
   otherReceivableCents: number
-  /** 团上收入台账合计；不并入应收、收款进度或当前毛利。 */
-  otherIncomeCents: number
+  /** 增收净收益（各条公司增收合计）；不并入应收、收款进度或当前毛利。 */
+  additionalIncomeNetCents: number
   /**
    * 团款收款进度分子：各单 min(Guest已收,S)+客户补款已收（单笔不超过 S）。
    * 不含代收溢价与返利（ADR-0033 / #193）。
@@ -885,28 +890,60 @@ export interface DepartureOverviewStats {
   anomalies: DepartureOverviewAnomaly[]
 }
 
-export interface GroundIncomeSummary {
+export interface DepartureIncomeRecordSummary {
   id: string
   departureId: string
-  title: string
+  type: DepartureIncomeType
+  projectName: string
+  partnerSupplierId: string | null
+  partnerSupplierName: string | null
+  occurredOn: string
   amountCents: number
+  guideSupplierId: string | null
+  guideSupplierName: string | null
+  commissionCents: number
+  /** 派生：增收金额 − 导游提成 */
+  companyIncomeCents: number
+  incomeStatus: DepartureIncomeCollectionStatus
+  commissionStatus: DepartureIncomeCommissionStatus
+  /** 派生综合结算态 */
+  settlementComposite: DepartureIncomeSettlementComposite
+  remark: string | null
   createdAt: string
   updatedAt: string
 }
 
-export interface GroundIncomeListResult {
-  items: GroundIncomeSummary[]
-  totalCents: number
+export interface DepartureIncomeRecordListResult {
+  items: DepartureIncomeRecordSummary[]
+  amountCentsTotal: number
+  commissionCentsTotal: number
+  companyIncomeCentsTotal: number
 }
 
-export interface CreateGroundIncomeDto {
-  title: string
+export interface CreateDepartureIncomeRecordDto {
+  type: DepartureIncomeType
+  projectName: string
+  partnerSupplierId?: string | null
+  occurredOn?: string
   amountCents: number
+  guideSupplierId?: string | null
+  commissionCents?: number
+  incomeStatus?: DepartureIncomeCollectionStatus
+  commissionStatus?: DepartureIncomeCommissionStatus
+  remark?: string | null
 }
 
-export interface UpdateGroundIncomeDto {
-  title?: string
+export interface UpdateDepartureIncomeRecordDto {
+  type?: DepartureIncomeType
+  projectName?: string
+  partnerSupplierId?: string | null
+  occurredOn?: string
   amountCents?: number
+  guideSupplierId?: string | null
+  commissionCents?: number
+  incomeStatus?: DepartureIncomeCollectionStatus
+  commissionStatus?: DepartureIncomeCommissionStatus
+  remark?: string | null
 }
 
 /** Detail response extends summary with full financial Read Model aggregates. */
@@ -1923,10 +1960,17 @@ export interface DepartureOperationsSheetResourceRow {
   notes: string | null
 }
 
-export interface DepartureOperationsSheetGroundIncomeRow {
+export interface DepartureOperationsSheetIncomeRecordRow {
   id: string
-  title: string
+  type: DepartureIncomeType
+  typeLabel: string
+  projectName: string
+  partnerSupplierName: string | null
   amountCents: number
+  commissionCents: number
+  companyIncomeCents: number
+  settlementComposite: DepartureIncomeSettlementComposite
+  settlementCompositeLabel: string
 }
 
 export interface DepartureOperationsSheetSegmentRow {
@@ -2028,8 +2072,9 @@ export interface DepartureOperationsSheetSnapshot {
   departure: DepartureOperationsSheetDepartureInfo
   sourceOrders: DepartureOperationsSheetSourceOrderRow[]
   segments: DepartureOperationsSheetSegmentRow[]
-  groundIncomes: DepartureOperationsSheetGroundIncomeRow[]
-  groundIncomeTotalCents: number
+  incomeRecords: DepartureOperationsSheetIncomeRecordRow[]
+  /** 增收净收益（公司增收合计） */
+  additionalIncomeNetCents: number
   /** 发团级资源（全程用车/保险/导游等），与段资源一并进入运营表汇总。 */
   departureResources: DepartureOperationsSheetResourceRow[]
   /** Non-voided departure transactions with remaining unverified balance. */

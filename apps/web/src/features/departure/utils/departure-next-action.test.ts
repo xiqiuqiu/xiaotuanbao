@@ -14,7 +14,7 @@ function makeOverviewStats(
     closedUnreceivedCents: 0,
     ungeneratedReceivableCents: 0,
     otherReceivableCents: 0,
-    otherIncomeCents: 0,
+    additionalIncomeNetCents: 0,
     settlementCollectionReceivedCents: 0,
     settlementCollectionReceivableCents: 0,
     guestCollectionReceivedCents: 0,

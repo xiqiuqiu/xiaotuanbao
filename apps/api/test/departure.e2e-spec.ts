@@ -524,61 +524,103 @@ describe('Departure API (e2e)', () => {
     expect(response.body.data.id).toBe(departure.id)
   })
 
-  it('maintains ground income rows and exposes their sum as overview other income', async () => {
-    const departure = await createTestDeparture({ name: `${testPrefix}-ground-income` })
+  it('maintains income records and exposes company-income net on overview', async () => {
+    const departure = await createTestDeparture({ name: `${testPrefix}-income-records` })
 
     const first = await authRequest(app, coordinatorToken)
-      .post(`/api/departures/${departure.id}/ground-incomes`)
-      .send({ title: '车销', amountCents: 12_000 })
+      .post(`/api/departures/${departure.id}/income-records`)
+      .send({
+        type: 'coach_sales',
+        projectName: '车销干果',
+        amountCents: 12_000,
+        commissionCents: 2_000,
+      })
       .expect(201)
+    expect(first.body.data).toMatchObject({
+      type: 'coach_sales',
+      projectName: '车销干果',
+      amountCents: 12_000,
+      commissionCents: 2_000,
+      companyIncomeCents: 10_000,
+      incomeStatus: 'uncollected',
+      commissionStatus: 'unpaid',
+      settlementComposite: 'pending_settle',
+    })
+
     const second = await authRequest(app, coordinatorToken)
-      .post(`/api/departures/${departure.id}/ground-incomes`)
-      .send({ title: '特产', amountCents: 18_000 })
+      .post(`/api/departures/${departure.id}/income-records`)
+      .send({
+        type: 'other',
+        projectName: '特产',
+        amountCents: 18_000,
+      })
       .expect(201)
 
     const list = await authRequest(app, coordinatorToken)
-      .get(`/api/departures/${departure.id}/ground-incomes`)
+      .get(`/api/departures/${departure.id}/income-records`)
       .expect(200)
     expect(list.body.data).toMatchObject({
       items: [
-        { id: first.body.data.id, title: '车销', amountCents: 12_000 },
-        { id: second.body.data.id, title: '特产', amountCents: 18_000 },
+        {
+          id: first.body.data.id,
+          projectName: '车销干果',
+          amountCents: 12_000,
+          companyIncomeCents: 10_000,
+        },
+        {
+          id: second.body.data.id,
+          projectName: '特产',
+          amountCents: 18_000,
+          companyIncomeCents: 18_000,
+        },
       ],
-      totalCents: 30_000,
+      amountCentsTotal: 30_000,
+      commissionCentsTotal: 2_000,
+      companyIncomeCentsTotal: 28_000,
     })
 
     const overview = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
       .expect(200)
-    expect(overview.body.data.overviewStats.otherIncomeCents).toBe(30_000)
+    expect(overview.body.data.overviewStats.additionalIncomeNetCents).toBe(28_000)
 
     await authRequest(app, coordinatorToken)
-      .patch(`/api/departures/${departure.id}/ground-incomes/${first.body.data.id}`)
-      .send({ title: '车销调整', amountCents: 15_000 })
+      .patch(`/api/departures/${departure.id}/income-records/${first.body.data.id}`)
+      .send({ projectName: '车销调整', amountCents: 15_000, commissionCents: 3_000 })
       .expect(200)
 
     await authRequest(app, coordinatorToken)
-      .delete(`/api/departures/${departure.id}/ground-incomes/${second.body.data.id}`)
+      .delete(`/api/departures/${departure.id}/income-records/${second.body.data.id}`)
       .expect(200)
 
     const updatedList = await authRequest(app, coordinatorToken)
-      .get(`/api/departures/${departure.id}/ground-incomes`)
+      .get(`/api/departures/${departure.id}/income-records`)
       .expect(200)
     expect(updatedList.body.data).toMatchObject({
-      items: [{ id: first.body.data.id, title: '车销调整', amountCents: 15_000 }],
-      totalCents: 15_000,
+      items: [
+        {
+          id: first.body.data.id,
+          projectName: '车销调整',
+          amountCents: 15_000,
+          commissionCents: 3_000,
+          companyIncomeCents: 12_000,
+        },
+      ],
+      amountCentsTotal: 15_000,
+      commissionCentsTotal: 3_000,
+      companyIncomeCentsTotal: 12_000,
     })
 
     const updatedOverview = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.id}`)
       .expect(200)
-    expect(updatedOverview.body.data.overviewStats.otherIncomeCents).toBe(15_000)
+    expect(updatedOverview.body.data.overviewStats.additionalIncomeNetCents).toBe(12_000)
     expect(updatedOverview.body.data.canPurge).toBe(false)
 
     const purge = await authRequest(app, coordinatorToken)
       .delete(`/api/departures/${departure.id}`)
       .expect(409)
-    expect(purge.body.message).toBe('已有团上收入，不能删除发团')
+    expect(purge.body.message).toBe('已有增收记录，不能删除发团')
   })
 
   it('returns departure detail for coordinator', async () => {
@@ -1983,7 +2025,7 @@ describe('Departure API (e2e)', () => {
         closedUnreceivedCents: 0,
         ungeneratedReceivableCents: 1000000,
         otherReceivableCents: 0,
-        otherIncomeCents: 0,
+        additionalIncomeNetCents: 0,
         settlementCollectionReceivedCents: 0,
         settlementCollectionReceivableCents: 1000000,
         guestCollectionReceivedCents: 0,
@@ -4197,8 +4239,13 @@ describe('Departure API (e2e)', () => {
         .expect(201)
 
       await authRequest(app, coordinatorToken)
-        .post(`/api/departures/${departure.id}/ground-incomes`)
-        .send({ title: 'xlsx车销', amountCents: 25_000 })
+        .post(`/api/departures/${departure.id}/income-records`)
+        .send({
+          type: 'coach_sales',
+          projectName: 'xlsx车销',
+          amountCents: 25_000,
+          commissionCents: 5_000,
+        })
         .expect(201)
 
       const preview = await authRequest(app, coordinatorToken)
@@ -4209,10 +4256,15 @@ describe('Departure API (e2e)', () => {
       expect(previewSheet.dataStage).toBe('not_started')
       expect(previewSheet.sourceOrders[0].receivablePaths[0].receivedCents).toBeNull()
       expect(previewSheet.segments[0].resources[0].paidCents).toBeNull()
-      expect(previewSheet.groundIncomes).toEqual([
-        expect.objectContaining({ title: 'xlsx车销', amountCents: 25_000 }),
+      expect(previewSheet.incomeRecords).toEqual([
+        expect.objectContaining({
+          projectName: 'xlsx车销',
+          amountCents: 25_000,
+          commissionCents: 5_000,
+          companyIncomeCents: 20_000,
+        }),
       ])
-      expect(previewSheet.groundIncomeTotalCents).toBe(25_000)
+      expect(previewSheet.additionalIncomeNetCents).toBe(20_000)
 
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
@@ -4281,7 +4333,7 @@ describe('Departure API (e2e)', () => {
         '发团与数据阶段',
         '客源及应收',
         '行程段资源及应付',
-        '团上收入',
+        '增收记录',
         '发团级备注',
       ]) {
         expect(cellTexts).toContain(section)
@@ -4296,7 +4348,7 @@ describe('Departure API (e2e)', () => {
       expect(cellTexts).toContain('客源：xlsx客源备注')
       expect(cellTexts).toContain('xlsx酒店')
       expect(cellTexts).toContain('xlsx车销')
-      expect(cellTexts).toContain('其他收入合计')
+      expect(cellTexts).toContain('增收净收益')
       expect(cellTexts).toContain('发团级备注应单独归属')
       expect(cellTexts.filter((text) => text === '—').length).toBeGreaterThanOrEqual(4)
 

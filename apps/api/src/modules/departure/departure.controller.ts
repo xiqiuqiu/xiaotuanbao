@@ -17,8 +17,8 @@ import type {
   DepartureOperationsSheetSnapshot,
   DepartureRouteNamesResult,
   DepartureSummary,
-  GroundIncomeListResult,
-  GroundIncomeSummary,
+  DepartureIncomeRecordListResult,
+  DepartureIncomeRecordSummary,
   RouteLedgerResult,
 } from '@xiaotuanbao/shared'
 import type { Response } from 'express'
@@ -39,10 +39,10 @@ import { DepartureService } from './departure.service'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 import { buildOperationsSheetContentDisposition } from './departure-operations-sheet-excel.types'
 import {
-  CreateGroundIncomeDto,
-  UpdateGroundIncomeDto,
-} from './dto/ground-income.dto'
-import { GroundIncomeService } from './ground-income.service'
+  CreateDepartureIncomeRecordDto,
+  UpdateDepartureIncomeRecordDto,
+} from './dto/departure-income-record.dto'
+import { DepartureIncomeRecordService } from './departure-income-record.service'
 
 @Controller('departures')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
@@ -50,7 +50,7 @@ export class DepartureController {
   constructor(
     private readonly departureService: DepartureService,
     private readonly operationsSheetService: DepartureOperationsSheetService,
-    private readonly groundIncomeService: GroundIncomeService,
+    private readonly departureIncomeRecordService: DepartureIncomeRecordService,
   ) {}
 
   @Get()
@@ -106,52 +106,56 @@ export class DepartureController {
     return this.departureService.copy(request.user.organizationId, id, dto)
   }
 
-  @Get(':id/ground-incomes')
+  @Get(':id/income-records')
   @RequireMenu('/departure')
-  listGroundIncomes(
+  listIncomeRecords(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-  ): Promise<GroundIncomeListResult> {
-    return this.groundIncomeService.list(request.user.organizationId, id)
+  ): Promise<DepartureIncomeRecordListResult> {
+    return this.departureIncomeRecordService.list(request.user.organizationId, id)
   }
 
-  @Post(':id/ground-incomes')
+  @Post(':id/income-records')
   @RequireMenu('departure:write')
-  createGroundIncome(
+  createIncomeRecord(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-    @Body() dto: CreateGroundIncomeDto,
-  ): Promise<GroundIncomeSummary> {
-    return this.groundIncomeService.create(request.user.organizationId, id, dto)
-  }
-
-  @Patch(':id/ground-incomes/:groundIncomeId')
-  @RequireMenu('departure:write')
-  updateGroundIncome(
-    @Req() request: { user: { organizationId: string } },
-    @Param('id') id: string,
-    @Param('groundIncomeId') groundIncomeId: string,
-    @Body() dto: UpdateGroundIncomeDto,
-  ): Promise<GroundIncomeSummary> {
-    return this.groundIncomeService.update(
+    @Body() dto: CreateDepartureIncomeRecordDto,
+  ): Promise<DepartureIncomeRecordSummary> {
+    return this.departureIncomeRecordService.create(
       request.user.organizationId,
       id,
-      groundIncomeId,
       dto,
     )
   }
 
-  @Delete(':id/ground-incomes/:groundIncomeId')
+  @Patch(':id/income-records/:incomeRecordId')
   @RequireMenu('departure:write')
-  async deleteGroundIncome(
+  updateIncomeRecord(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
-    @Param('groundIncomeId') groundIncomeId: string,
-  ): Promise<{ success: true }> {
-    await this.groundIncomeService.delete(
+    @Param('incomeRecordId') incomeRecordId: string,
+    @Body() dto: UpdateDepartureIncomeRecordDto,
+  ): Promise<DepartureIncomeRecordSummary> {
+    return this.departureIncomeRecordService.update(
       request.user.organizationId,
       id,
-      groundIncomeId,
+      incomeRecordId,
+      dto,
+    )
+  }
+
+  @Delete(':id/income-records/:incomeRecordId')
+  @RequireMenu('departure:write')
+  async deleteIncomeRecord(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+    @Param('incomeRecordId') incomeRecordId: string,
+  ): Promise<{ success: true }> {
+    await this.departureIncomeRecordService.delete(
+      request.user.organizationId,
+      id,
+      incomeRecordId,
     )
     return { success: true }
   }

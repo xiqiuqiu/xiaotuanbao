@@ -8,12 +8,19 @@ import type {
   DepartureOperationsSheetSourceOrderRow,
 } from '@xiaotuanbao/shared'
 import {
+  DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
+  DEPARTURE_INCOME_TYPE_LABELS,
+  DepartureIncomeCollectionStatus,
+  DepartureIncomeCommissionStatus,
+  DepartureIncomeType,
   DepartureOperationsSheetDataStage,
   PaymentScheduleSourceType,
   RESOURCE_KIND_LABELS,
   ResourceKind,
   SegmentPayableStatus,
+  companyIncomeCents,
   compareSegmentResourcesForOperationsSheet,
+  deriveDepartureIncomeSettlementComposite,
 } from '@xiaotuanbao/shared'
 import type { ResourceKind as PrismaResourceKind } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
@@ -83,8 +90,11 @@ export class DepartureOperationsSheetService {
             },
           },
         },
-        groundIncomes: {
+        incomeRecords: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          include: {
+            partnerSupplier: { select: { name: true } },
+          },
         },
         departureResources: {
           include: {
@@ -274,11 +284,31 @@ export class DepartureOperationsSheetService {
       paymentChannel: transaction.paymentChannel,
       notes: transaction.notes,
     }))
-    const groundIncomes = departure.groundIncomes.map((item) => ({
-      id: item.id,
-      title: item.title,
-      amountCents: item.amountCents,
-    }))
+    const incomeRecords = departure.incomeRecords.map((item) => {
+      const type = item.type as DepartureIncomeType
+      const incomeStatus = item.incomeStatus as DepartureIncomeCollectionStatus
+      const commissionStatus = item.commissionStatus as DepartureIncomeCommissionStatus
+      const settlementComposite = deriveDepartureIncomeSettlementComposite({
+        incomeStatus,
+        commissionStatus,
+      })
+      return {
+        id: item.id,
+        type,
+        typeLabel: DEPARTURE_INCOME_TYPE_LABELS[type],
+        projectName: item.projectName,
+        partnerSupplierName: item.partnerSupplier?.name ?? null,
+        amountCents: item.amountCents,
+        commissionCents: item.commissionCents,
+        companyIncomeCents: companyIncomeCents({
+          amountCents: item.amountCents,
+          commissionCents: item.commissionCents,
+        }),
+        settlementComposite,
+        settlementCompositeLabel:
+          DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS[settlementComposite],
+      }
+    })
 
     const pendingCollectionCents = pendingRows
       .filter((row) => row.direction === 'inflow')
@@ -313,9 +343,9 @@ export class DepartureOperationsSheetService {
       },
       sourceOrders,
       segments,
-      groundIncomes,
-      groundIncomeTotalCents: groundIncomes.reduce(
-        (sum, item) => sum + item.amountCents,
+      incomeRecords,
+      additionalIncomeNetCents: incomeRecords.reduce(
+        (sum, item) => sum + item.companyIncomeCents,
         0,
       ),
       departureResources,

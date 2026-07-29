@@ -2,7 +2,7 @@ import { Space, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type {
   DepartureOperationsSheetAnomaly,
-  DepartureOperationsSheetGroundIncomeRow,
+  DepartureOperationsSheetIncomeRecordRow,
   DepartureOperationsSheetPendingTransaction,
   DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetResourceRow,
@@ -27,17 +27,47 @@ function nonEmptyNote(value: string | null | undefined): string | null {
 
 export { nonEmptyNote }
 
-export const groundIncomeColumns: ColumnsType<DepartureOperationsSheetGroundIncomeRow> = [
+export const incomeRecordColumns: ColumnsType<DepartureOperationsSheetIncomeRecordRow> = [
   {
-    title: '收入标题',
-    dataIndex: 'title',
+    title: '类型',
+    dataIndex: 'typeLabel',
+    width: 120,
   },
   {
-    title: '金额',
+    title: '项目',
+    dataIndex: 'projectName',
+  },
+  {
+    title: '合作方',
+    dataIndex: 'partnerSupplierName',
+    width: 140,
+    render: (value: string | null) => value ?? '-',
+  },
+  {
+    title: '增收金额',
     dataIndex: 'amountCents',
-    width: 160,
+    width: 120,
     align: 'right',
     render: (value: number) => formatCents(value),
+  },
+  {
+    title: '导游提成',
+    dataIndex: 'commissionCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
+    title: '公司增收',
+    dataIndex: 'companyIncomeCents',
+    width: 110,
+    align: 'right',
+    render: (value: number) => formatCents(value),
+  },
+  {
+    title: '综合状态',
+    dataIndex: 'settlementCompositeLabel',
+    width: 110,
   },
 ]
 

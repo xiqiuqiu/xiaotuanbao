@@ -122,6 +122,29 @@ enum DepartureArchiveAction {
   @@map("departure_archive_action")
 }
 
+enum DepartureIncomeType {
+  shopping_rebate
+  coach_sales
+  optional_tour
+  other
+
+  @@map("departure_income_type")
+}
+
+enum DepartureIncomeCollectionStatus {
+  uncollected
+  collected
+
+  @@map("departure_income_collection_status")
+}
+
+enum DepartureIncomeCommissionStatus {
+  unpaid
+  paid
+
+  @@map("departure_income_commission_status")
+}
+
 enum PaymentScheduleDirection {
   receivable
   payable
@@ -472,6 +495,8 @@ model Supplier {
   departureResources  DepartureResource[]
   departuresAsDriver  Departure[]             @relation("DepartureDriverSupplier")
   departuresAsGuide   Departure[]             @relation("DepartureGuideSupplier")
+  incomeRecordsAsPartner DepartureIncomeRecord[] @relation("DepartureIncomePartnerSupplier")
+  incomeRecordsAsGuide   DepartureIncomeRecord[] @relation("DepartureIncomeGuideSupplier")
 
   @@unique([organizationId, name])
   @@map("suppliers")
@@ -578,7 +603,7 @@ model Departure {
   itinerarySegments   ItinerarySegment[]
   departureResources  DepartureResource[]
   sourceOrders        SourceOrder[]
-  groundIncomes       GroundIncome[]
+  incomeRecords       DepartureIncomeRecord[]
   archiveHistories    DepartureArchiveHistory[]
   settlementHistories DepartureSettlementHistory[]
 
@@ -586,17 +611,28 @@ model Departure {
   @@map("departures")
 }
 
-model GroundIncome {
-  id          String    @id @default(cuid())
-  departureId String    @map("departure_id")
-  departure   Departure @relation(fields: [departureId], references: [id], onDelete: Cascade)
-  title       String
-  amountCents Int       @map("amount_cents")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+/// 团内增收记录（取代 Ground Income Ledger；ADR-0036）
+model DepartureIncomeRecord {
+  id                 String                          @id @default(cuid())
+  departureId        String                          @map("departure_id")
+  departure          Departure                       @relation(fields: [departureId], references: [id], onDelete: Cascade)
+  type               DepartureIncomeType
+  projectName        String                          @map("project_name") @db.VarChar(50)
+  partnerSupplierId   String?                         @map("partner_supplier_id")
+  partnerSupplier     Supplier?                       @relation("DepartureIncomePartnerSupplier", fields: [partnerSupplierId], references: [id], onDelete: SetNull)
+  occurredOn         DateTime                        @map("occurred_on") @db.Date
+  amountCents        Int                             @map("amount_cents")
+  guideSupplierId    String?                         @map("guide_supplier_id")
+  guideSupplier      Supplier?                       @relation("DepartureIncomeGuideSupplier", fields: [guideSupplierId], references: [id], onDelete: SetNull)
+  commissionCents    Int                             @default(0) @map("commission_cents")
+  incomeStatus       DepartureIncomeCollectionStatus @default(uncollected) @map("income_status")
+  commissionStatus   DepartureIncomeCommissionStatus @default(unpaid) @map("commission_status")
+  remark             String?                         @db.VarChar(200)
+  createdAt          DateTime                        @default(now()) @map("created_at")
+  updatedAt          DateTime                        @updatedAt @map("updated_at")
 
   @@index([departureId, createdAt])
-  @@map("ground_incomes")
+  @@map("departure_income_records")
 }
 
 model DepartureArchiveHistory {

@@ -82,7 +82,7 @@ export class DepartureReadModelService {
       unverifiedCashByDeparture,
       financeSnapshotMap,
       sourceOrderPathFacts,
-      groundIncomeTotals,
+      additionalIncomeNetTotals,
     ] =
       await Promise.all([
         this.batchSourceOrderAggregates(uniqueIds),
@@ -107,7 +107,7 @@ export class DepartureReadModelService {
           ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
           : Promise.resolve([]),
         options.includeOverviewStats
-          ? this.batchGroundIncomeTotals(organizationId, uniqueIds)
+          ? this.batchAdditionalIncomeNetTotals(organizationId, uniqueIds)
           : Promise.resolve(new Map<string, number>()),
       ])
 
@@ -159,7 +159,7 @@ export class DepartureReadModelService {
         overviewSourceFactsMap.set(departureId, {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
-          groundIncomeCents: groundIncomeTotals.get(departureId) ?? 0,
+          additionalIncomeNetCents: additionalIncomeNetTotals.get(departureId) ?? 0,
           collectionStats: { ...EMPTY_OVERVIEW_COLLECTION_STATS },
         })
         collectionInputsByDeparture.set(departureId, [])
@@ -349,20 +349,24 @@ export class DepartureReadModelService {
     })
   }
 
-  private async batchGroundIncomeTotals(
+  /** 增收净收益 = Σ(增收金额 − 导游提成) = Σ增收 − Σ提成 */
+  private async batchAdditionalIncomeNetTotals(
     organizationId: string,
     departureIds: string[],
   ): Promise<Map<string, number>> {
-    const rows = await this.prisma.groundIncome.groupBy({
+    const rows = await this.prisma.departureIncomeRecord.groupBy({
       by: ['departureId'],
       where: {
         departureId: { in: departureIds },
         departure: { organizationId },
       },
-      _sum: { amountCents: true },
+      _sum: { amountCents: true, commissionCents: true },
     })
     return new Map(
-      rows.map((row) => [row.departureId, row._sum.amountCents ?? 0]),
+      rows.map((row) => [
+        row.departureId,
+        (row._sum.amountCents ?? 0) - (row._sum.commissionCents ?? 0),
+      ]),
     )
   }
 

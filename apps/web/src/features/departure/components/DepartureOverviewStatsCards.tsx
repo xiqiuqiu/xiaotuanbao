@@ -33,8 +33,8 @@ const CALCULATION_GUIDE = {
     '本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。',
   毛利率:
     '本团当前毛利占结算应收的比例。计算：当前毛利 ÷ 结算应收 × 100%。根据当前毛利和结算应收实时统计；',
-  其他收入:
-    '本团团上收入台账合计。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导。',
+  增收净收益:
+    '本团增收记录的公司增收合计（增收金额 − 导游提成）。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导；明细在「增收记录」页签。',
   团款收款进度:
     '本团结算金额的收回进度。计算：团款已收 ÷ 各单结算金额合计 × 100%。单笔团款已收 = min(游客代收已收, 结算金额) + 客户补款已收；代收溢价与返利不计入。',
   游客代收进度:
@@ -381,11 +381,11 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
                 <Statistic
                   title={
                     <CalculationTitle
-                      label="其他收入"
-                      description={CALCULATION_GUIDE.其他收入}
+                      label="增收净收益"
+                      description={CALCULATION_GUIDE.增收净收益}
                     />
                   }
-                  value={formatCents(stats.otherIncomeCents)}
+                  value={formatCents(stats.additionalIncomeNetCents)}
                 />
               </Col>
             </Row>

@@ -79,10 +79,10 @@ export type {
   DepartureOverviewAnomalyCode,
   DepartureOverviewAnomaly,
   DepartureOverviewStats,
-  GroundIncomeSummary,
-  GroundIncomeListResult,
-  CreateGroundIncomeDto,
-  UpdateGroundIncomeDto,
+  DepartureIncomeRecordSummary,
+  DepartureIncomeRecordListResult,
+  CreateDepartureIncomeRecordDto,
+  UpdateDepartureIncomeRecordDto,
   CreateDepartureDto,
   CopyDepartureDto,
   UpdateDepartureDto,
@@ -173,7 +173,7 @@ export type {
   DepartureOperationsSheetReceivablePathRow,
   DepartureOperationsSheetSourceOrderRow,
   DepartureOperationsSheetResourceRow,
-  DepartureOperationsSheetGroundIncomeRow,
+  DepartureOperationsSheetIncomeRecordRow,
   DepartureOperationsSheetSegmentRow,
   DepartureOperationsSheetDepartureInfo,
   DepartureOperationsSheetPendingTransaction,
@@ -274,6 +274,25 @@ export {
   type SupplierAllowedResourceKind,
 } from './enums/resource-kind.enum'
 export { DepartureOperationsSheetDataStage } from './enums/departure-operations-sheet-data-stage.enum'
+export {
+  DepartureIncomeType,
+  DEPARTURE_INCOME_TYPE_LABELS,
+  DEPARTURE_INCOME_TYPE_AMOUNT_HINTS,
+} from './enums/departure-income-type.enum'
+export {
+  DepartureIncomeCollectionStatus,
+  DEPARTURE_INCOME_COLLECTION_STATUS_LABELS,
+} from './enums/departure-income-collection-status.enum'
+export {
+  DepartureIncomeCommissionStatus,
+  DEPARTURE_INCOME_COMMISSION_STATUS_LABELS,
+} from './enums/departure-income-commission-status.enum'
+export {
+  DepartureIncomeSettlementComposite,
+  DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
+  deriveDepartureIncomeSettlementComposite,
+  companyIncomeCents,
+} from './enums/departure-income-settlement-composite.enum'
 export {
   normalizeSupplierCategories,
   InvalidSupplierCategoriesError,

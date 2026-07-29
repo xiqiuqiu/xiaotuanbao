@@ -73,7 +73,6 @@ export const DEPARTURE_DETAIL_TABS = [
   { key: 'overview', label: '概览' },
   { key: 'sourceOrders', label: '客源管理' },
   { key: 'execution', label: '执行安排' },
-  /** PROTOTYPE — 团内增收记录 UI 变体；正式落地后保留 key、去掉 DEV 门闩 */
   { key: 'incomeRecords', label: '增收记录' },
   { key: 'receivables', label: '应收管理' },
   { key: 'payables', label: '应付管理' },
@@ -90,9 +89,7 @@ export function isDepartureDetailTabKey(value: string | undefined): value is Dep
 /**
  * ADR-0023: 收支流水/核销记录 Tab 显隐由 `/finance/*` menu key 驱动，沿用既有
  * menuKeys 逻辑，不新增平行判断。计调无这两个 menu key 时自动隐藏；其余 Tab 恒显。
- *
- * `incomeRecords` 为 throwaway UI 原型入口，仅 DEV 可见（见
- * `features/departure/prototype/income-records/`）。
+ * 增收记录页签正式落地，恒显（ADR-0036）。
  */
 export const DEPARTURE_DETAIL_TAB_REQUIRED_MENU_KEY: Partial<
   Record<DepartureDetailTabKey, string>
@@ -105,9 +102,6 @@ export function isDepartureDetailTabVisible(
   tabKey: DepartureDetailTabKey,
   menuKeys: string[],
 ): boolean {
-  if (tabKey === 'incomeRecords') {
-    return import.meta.env.DEV
-  }
   const requiredMenuKey = DEPARTURE_DETAIL_TAB_REQUIRED_MENU_KEY[tabKey]
   return requiredMenuKey === undefined || menuKeys.includes(requiredMenuKey)
 }

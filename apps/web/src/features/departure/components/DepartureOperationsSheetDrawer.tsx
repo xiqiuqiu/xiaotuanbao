@@ -8,7 +8,7 @@ import {
 } from '@/services/departure.service'
 import {
   OperationsSheetFinanceSection,
-  OperationsSheetGroundIncomeSection,
+  OperationsSheetIncomeRecordsSection,
   OperationsSheetMetaSection,
   OperationsSheetNotesSection,
   OperationsSheetPendingSection,
@@ -83,7 +83,7 @@ function OperationsSheetContent({ sheet }: { sheet: DepartureOperationsSheetSnap
       <OperationsSheetMetaSection sheet={sheet} />
       <OperationsSheetSourceOrdersSection sheet={sheet} />
       <OperationsSheetSegmentsSection sheet={sheet} />
-      <OperationsSheetGroundIncomeSection sheet={sheet} />
+      <OperationsSheetIncomeRecordsSection sheet={sheet} />
       <OperationsSheetPendingSection sheet={sheet} />
       <OperationsSheetFinanceSection sheet={sheet} />
       <OperationsSheetNotesSection sheet={sheet} />
