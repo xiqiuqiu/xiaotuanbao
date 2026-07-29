@@ -732,18 +732,31 @@ export interface RouteLedgerDepartureGroup {
   sourceOrders: RouteLedgerSourceOrderRow[]
 }
 
-export interface RouteLedgerDateBlock {
-  /** 出团日期（YYYY-MM-DD） */
-  startDate: string
+/** 日块下的路线段：仅日期查询时同日多线分区；有路线时每日通常一段。 */
+export interface RouteLedgerRouteGroup {
+  routeName: string
   totals: RouteLedgerTotals
-  /** 当日各发团拼出合并汇总（#184） */
+  /** 本路线段拼出资源汇总 */
   outsource: RouteLedgerOutsourceSummary
   departures: RouteLedgerDepartureGroup[]
 }
 
-/** GET /departures/route-ledger 读模型：日期块 → 发团组 → 客源行。 */
+export interface RouteLedgerDateBlock {
+  /** 出团日期（YYYY-MM-DD） */
+  startDate: string
+  totals: RouteLedgerTotals
+  /** 当日各路线/发团拼出合并汇总（#184） */
+  outsource: RouteLedgerOutsourceSummary
+  /** 按 routeName 升序；发团组在段内按 startDate / departureNo 排序 */
+  routes: RouteLedgerRouteGroup[]
+}
+
+/**
+ * GET /departures/route-ledger 读模型（#221）：日期块 → 路线段 → 发团组 → 客源行。
+ * `routeName` 有路线筛选时为该线；仅日期查询时为 null。
+ */
 export interface RouteLedgerResult {
-  routeName: string
+  routeName: string | null
   startDateFrom: string | null
   startDateTo: string | null
   dateBlocks: RouteLedgerDateBlock[]

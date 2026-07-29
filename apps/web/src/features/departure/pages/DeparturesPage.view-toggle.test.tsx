@@ -24,16 +24,17 @@ vi.mock('@/app/store/auth.store', () => ({
 
 const listDepartures = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 })
 const listDepartureRouteNames = vi.fn().mockResolvedValue({ items: ['伊犁环线'] })
+const getDepartureRouteLedger = vi.fn().mockResolvedValue({
+  routeName: null,
+  startDateFrom: null,
+  startDateTo: null,
+  dateBlocks: [],
+})
 
 vi.mock('@/services/departure.service', () => ({
   listDepartures: (...args: unknown[]) => listDepartures(...args),
   listDepartureRouteNames: (...args: unknown[]) => listDepartureRouteNames(...args),
-  getDepartureRouteLedger: vi.fn().mockResolvedValue({
-    routeName: '',
-    startDateFrom: null,
-    startDateTo: null,
-    dateBlocks: [],
-  }),
+  getDepartureRouteLedger: (...args: unknown[]) => getDepartureRouteLedger(...args),
   purgeDeparture: vi.fn(),
 }))
 
@@ -64,6 +65,7 @@ describe('DeparturesPage view toggle', () => {
     navigate.mockReset()
     listDepartures.mockClear()
     listDepartureRouteNames.mockClear()
+    getDepartureRouteLedger.mockClear()
   })
 
   afterEach(() => {
@@ -81,17 +83,51 @@ describe('DeparturesPage view toggle', () => {
     expect(
       screen.getByText('发团视图').closest('.ant-segmented-item'),
     ).toHaveClass('ant-segmented-item-selected')
-    expect(screen.queryByText('请先选择路线名称')).not.toBeInTheDocument()
+    expect(screen.queryByText('请选择路线名称或出团日期')).not.toBeInTheDocument()
 
     await user.click(screen.getByText('线路视图'))
 
     await waitFor(() => {
-      expect(screen.getByText('请先选择路线名称')).toBeInTheDocument()
+      expect(screen.getByText('请选择路线名称或出团日期')).toBeInTheDocument()
     })
     expect(
       screen.getByText('线路视图').closest('.ant-segmented-item'),
     ).toHaveClass('ant-segmented-item-selected')
     expect(listDepartureRouteNames).toHaveBeenCalled()
+  })
+
+  it('URL 带 view=route-ledger 与筛选时直接进入线路视图并按条件查询 (#221)', async () => {
+    mockSearch = {
+      view: 'route-ledger',
+      routeName: '伊犁环线',
+      startDateFrom: '2026-07-15',
+      startDateTo: '2026-07-15',
+    }
+    getDepartureRouteLedger.mockResolvedValue({
+      routeName: '伊犁环线',
+      startDateFrom: '2026-07-15',
+      startDateTo: '2026-07-15',
+      dateBlocks: [],
+    })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('线路视图').closest('.ant-segmented-item'),
+      ).toHaveClass('ant-segmented-item-selected')
+      expect(getDepartureRouteLedger).toHaveBeenCalledWith(
+        {
+          routeName: '伊犁环线',
+          startDateFrom: '2026-07-15',
+          startDateTo: '2026-07-15',
+        },
+        expect.anything(),
+      )
+      expect(screen.getByText('「伊犁环线」暂无匹配发团')).toBeInTheDocument()
+    })
+
+    expect(listDepartures).not.toHaveBeenCalled()
   })
 })
 

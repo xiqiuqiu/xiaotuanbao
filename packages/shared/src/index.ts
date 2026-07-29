@@ -70,6 +70,7 @@ export type {
   RouteLedgerOutsourceSummary,
   RouteLedgerSourceOrderRow,
   RouteLedgerDepartureGroup,
+  RouteLedgerRouteGroup,
   RouteLedgerDateBlock,
   RouteLedgerResult,
   DepartureDetail,
