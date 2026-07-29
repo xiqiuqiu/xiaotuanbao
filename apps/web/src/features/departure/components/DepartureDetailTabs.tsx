@@ -14,7 +14,7 @@ import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureOverview } from './DepartureOverview'
 import { SourceOrdersTab } from './SourceOrdersTab'
 import { ExecutionTab } from './ExecutionTab'
-import { IncomeRecordsPrototypeHost } from '../prototype/income-records/IncomeRecordsPrototypeHost'
+import { IncomeRecordsPanel } from './IncomeRecordsPanel'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabVisible,
@@ -175,7 +175,12 @@ export function DepartureDetailTabs({
       return {
         key: tab.key,
         label: tab.label,
-        children: wrapTabPane(<IncomeRecordsPrototypeHost />),
+        children: wrapTabPane(
+          <IncomeRecordsPanel
+            departure={departure}
+            mutationLocked={readOnly || amountReadOnly || !canEdit}
+          />,
+        ),
       }
     }
 

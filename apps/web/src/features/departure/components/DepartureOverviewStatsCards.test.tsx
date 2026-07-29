@@ -79,7 +79,7 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       closedUnreceivedCents: 100_000,
       ungeneratedReceivableCents: 200_000,
       otherReceivableCents: 50_000,
-      otherIncomeCents: 30_000,
+      additionalIncomeNetCents: 30_000,
       settlementCollectionReceivedCents: 400_000,
       settlementCollectionReceivableCents: 1_000_000,
       guestCollectionReceivedCents: 400_000,
@@ -122,12 +122,12 @@ function renderCards(departure = makeDeparture(), animateEnter = false) {
 }
 
 describe('DepartureOverviewStatsCards', () => {
-  it('shows ground income as an independent Other Income card', () => {
+  it('shows additional income net as an independent overview card', () => {
     render(<DepartureOverviewStatsCards departure={makeDeparture()} />)
 
-    expect(screen.getByText('其他收入')).toBeInTheDocument()
+    expect(screen.getByText('增收净收益')).toBeInTheDocument()
     expect(screen.getByText('¥300.00')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '查看其他收入说明' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看增收净收益说明' })).toBeInTheDocument()
   })
 
   afterEach(cleanup)
@@ -556,9 +556,11 @@ describe('DepartureOverviewStatsCards', () => {
     )
 
     const receiptSection = screen.getByRole('group', { name: '团款收款进度（数据异常）' })
-    expect(within(receiptSection).getByText('收款守恒异常')).toBeInTheDocument()
+    expect(within(receiptSection).getByText('应收与结算金额不一致')).toBeInTheDocument()
     expect(
-      within(receiptSection).getByText('组成合计 ¥11,000.00，应为 ¥10,000.00，差额 ¥1,000.00'),
+      within(receiptSection).getByText(
+        '已生成应收合计 ¥11,000.00，结算金额合计 ¥10,000.00，多出 ¥1,000.00',
+      ),
     ).toBeInTheDocument()
     expect(screen.getByText('现金')).toBeInTheDocument()
   })

@@ -138,7 +138,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       sheet,
       row,
       '分区',
-      '发团与数据阶段｜客源及应收｜行程段资源及应付｜发团级资源及应付｜团上收入｜待确认款项｜财务汇总与异常｜发团级备注',
+      '发团与数据阶段｜客源及应收｜行程段资源及应付｜发团级资源及应付｜增收记录｜待确认款项｜财务汇总与异常｜发团级备注',
     )
     const identityEndRow = row - 1
     sheet.pageSetup.printTitlesRow = `${identityStartRow}:${identityEndRow}`
@@ -252,20 +252,33 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
     }
     row += 1
 
-    if (snapshot.groundIncomes.length > 0) {
-      row = writeSectionHeader(sheet, row, '团上收入')
-      row = writeHeaderRow(sheet, row, ['收入标题', '金额'])
-      for (const income of snapshot.groundIncomes) {
-        sheet.getCell(row, 1).value = income.title
-        writeMoney(sheet.getCell(row, 2), income.amountCents)
-        styleDataCells(sheet, row, 2)
+    if (snapshot.incomeRecords.length > 0) {
+      row = writeSectionHeader(sheet, row, '增收记录')
+      row = writeHeaderRow(sheet, row, [
+        '类型',
+        '项目',
+        '合作方',
+        '增收金额',
+        '导游提成',
+        '公司增收',
+        '综合状态',
+      ])
+      for (const income of snapshot.incomeRecords) {
+        sheet.getCell(row, 1).value = income.typeLabel
+        sheet.getCell(row, 2).value = income.projectName
+        sheet.getCell(row, 3).value = income.partnerSupplierName ?? '-'
+        writeMoney(sheet.getCell(row, 4), income.amountCents)
+        writeMoney(sheet.getCell(row, 5), income.commissionCents)
+        writeMoney(sheet.getCell(row, 6), income.companyIncomeCents)
+        sheet.getCell(row, 7).value = income.settlementCompositeLabel
+        styleDataCells(sheet, row, 7)
         row += 1
       }
       row = writeMoneyKeyValue(
         sheet,
         row,
-        '其他收入合计',
-        snapshot.groundIncomeTotalCents,
+        '增收净收益',
+        snapshot.additionalIncomeNetCents,
       )
       row += 1
     }

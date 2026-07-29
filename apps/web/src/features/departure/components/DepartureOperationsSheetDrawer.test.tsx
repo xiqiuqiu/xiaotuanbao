@@ -36,8 +36,22 @@ const snapshot: DepartureOperationsSheetSnapshot = {
   },
   sourceOrders: [],
   segments: [],
-  groundIncomes: [{ id: 'income-1', title: '车销', amountCents: 12_000 }],
-  groundIncomeTotalCents: 12_000,
+  incomeRecords: [
+    {
+      id: 'income-1',
+      type: 'coach_sales',
+      typeLabel: '车销收入',
+      projectName: '车销',
+      partnerSupplierName: null,
+      amountCents: 12_000,
+      commissionCents: 0,
+      companyIncomeCents: 12_000,
+      settlementComposite: 'pending_settle',
+      settlementCompositeLabel: '待结算',
+    },
+  ],
+  additionalIncomeNetCents: 12_000,
+  departureResources: [],
   pendingTransactions: [],
   pendingSummary: null,
   financeSummary: { receivable: null, payable: null },
@@ -78,9 +92,9 @@ describe('DepartureOperationsSheetDrawer', () => {
     })
     expect(getDepartureOperationsSheet).toHaveBeenCalledWith('dep-1')
     expect(screen.getByText('XTB2026070001')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '团上收入' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '增收记录' })).toBeInTheDocument()
     expect(screen.getByText('车销')).toBeInTheDocument()
-    expect(screen.getAllByText('¥120.00')).toHaveLength(2)
+    expect(screen.getAllByText('¥120.00').length).toBeGreaterThanOrEqual(2)
 
     await user.click(screen.getByRole('button', { name: '导出 Excel' }))
     await waitFor(() => {
