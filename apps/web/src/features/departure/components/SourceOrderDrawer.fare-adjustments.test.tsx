@@ -14,6 +14,7 @@ vi.mock('@/services/partner.service', () => ({
 
 vi.mock('@/services/source-order.service', () => ({
   getSourceOrder: vi.fn(),
+  listSourceOrderGuests: vi.fn(async () => []),
 }))
 
 function renderDrawer(
@@ -80,10 +81,13 @@ describe('SourceOrderDrawer fare adjustments', () => {
     expect(screen.getByRole('heading', { name: '基础信息' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: '团款优惠' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /添加调整项/ })).toBeTruthy()
-    expect(screen.getByText('调整项目')).toBeTruthy()
-    expect(screen.getByText('调整说明')).toBeTruthy()
-    expect(screen.getByText('金额')).toBeTruthy()
-    expect(screen.getByText('操作')).toBeTruthy()
+
+    const fareSection = document.getElementById('so-section-fare')
+    expect(fareSection).toBeTruthy()
+    expect(within(fareSection!).getByText('调整项目')).toBeTruthy()
+    expect(within(fareSection!).getByText('调整说明')).toBeTruthy()
+    expect(within(fareSection!).getByText('金额')).toBeTruthy()
+    expect(within(fareSection!).getByText('操作')).toBeTruthy()
   })
 
   it('adds a draft row with inline save/cancel and does not commit until save', () => {

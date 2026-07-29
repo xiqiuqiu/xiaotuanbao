@@ -14,6 +14,7 @@ vi.mock('@/services/partner.service', () => ({
 
 vi.mock('@/services/source-order.service', () => ({
   getSourceOrder: vi.fn(),
+  listSourceOrderGuests: vi.fn(async () => []),
 }))
 
 function renderDrawer() {
@@ -51,7 +52,7 @@ describe('SourceOrderDrawer basic layout', () => {
     expect(wrapper!.style.maxWidth).toBe('100vw')
   })
 
-  it('exposes sticky anchor tabs for the main sections including guests placeholder', () => {
+  it('exposes sticky anchor tabs for the main sections including guests', () => {
     renderDrawer()
     expect(screen.getByRole('tab', { name: '基础信息' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: '团款调整' })).toBeTruthy()

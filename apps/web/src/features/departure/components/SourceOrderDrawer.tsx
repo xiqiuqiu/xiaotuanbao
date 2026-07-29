@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -35,9 +36,9 @@ import {
   SourceOrderDiscountType,
   DirectoryProfileStatus,
 } from '@xiaotuanbao/shared'
-import type { SourceOrderSummary } from '@/types/api'
+import type { SourceOrderSummary, SourceOrderGuestSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
-import { getSourceOrder } from '@/services/source-order.service'
+import { getSourceOrder, listSourceOrderGuests } from '@/services/source-order.service'
 import {
   FARE_ADJUSTMENT_DIRECTION_OPTIONS,
   FARE_ADJUSTMENT_KIND_OPTIONS,
@@ -55,6 +56,10 @@ import {
   type SourceOrderFormValues,
   type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
+import {
+  type SourceOrderGuestSyncBundle,
+} from '../utils/source-order-guest-form'
+import { SourceOrderGuestRosterSection } from './SourceOrderGuestRosterSection'
 
 const DRAWER_SECTIONS = [
   { key: 'basics', label: '基础信息' },
@@ -83,7 +88,10 @@ interface SourceOrderDrawerProps {
   onSubmit: (
     values: ReturnType<typeof formValuesToPayload>,
     pathBaseline: SourceOrderPathBaseline | null,
-    options?: { generateReceivable?: boolean },
+    options?: {
+      generateReceivable?: boolean
+      guests?: SourceOrderGuestSyncBundle
+    },
   ) => void
 }
 
@@ -774,6 +782,11 @@ interface SourceOrderFormFieldsProps {
   discountType: SourceOrderDiscountType | undefined
   collectionMode: SourceOrderCollectionMode | undefined
   onFareDraftPresenceChange: (hasDraft: boolean) => void
+  guestSessionKey: string
+  guestBaseline: SourceOrderGuestSummary[]
+  guestBaselineReady: boolean
+  onGuestDraftPresenceChange: (hasDraft: boolean) => void
+  onGuestSyncBundleChange: (bundle: SourceOrderGuestSyncBundle) => void
 }
 
 function SourceOrderFormFields({
@@ -786,6 +799,11 @@ function SourceOrderFormFields({
   discountType,
   collectionMode,
   onFareDraftPresenceChange,
+  guestSessionKey,
+  guestBaseline,
+  guestBaselineReady,
+  onGuestDraftPresenceChange,
+  onGuestSyncBundleChange,
 }: SourceOrderFormFieldsProps) {
   const { token } = theme.useToken()
 
@@ -1025,11 +1043,21 @@ function SourceOrderFormFields({
       </SectionBlock>
 
       <SectionBlock id="guests">
-        <FormSection title="客人名单">
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            客人名单仍通过客源列表入口管理；本抽屉将在后续版本并入一行式名单编辑。
-          </Typography.Paragraph>
-        </FormSection>
+        {guestBaselineReady ? (
+          <SourceOrderGuestRosterSection
+            key={guestSessionKey}
+            title="客人名单"
+            initialBaseline={guestBaseline}
+            plannedCount={derivedTotalGuests}
+            readOnly={readOnly}
+            onDraftPresenceChange={onGuestDraftPresenceChange}
+            onSyncBundleChange={onGuestSyncBundleChange}
+          />
+        ) : (
+          <FormSection title="客人名单">
+            <Typography.Text type="secondary">名单加载中…</Typography.Text>
+          </FormSection>
+        )}
       </SectionBlock>
     </>
   )
@@ -1052,6 +1080,11 @@ export function SourceOrderDrawer({
   const submitIntentRef = useRef<'save' | 'saveAndGenerate'>('save')
   const scrollingByTabRef = useRef(false)
   const hasFareDraftRef = useRef(false)
+  const hasGuestDraftRef = useRef(false)
+  const guestSyncRef = useRef<SourceOrderGuestSyncBundle>({
+    baseline: [],
+    next: [],
+  })
   const [activeSection, setActiveSection] = useState<DrawerSectionKey>('basics')
   const sourceOrderId = editing?.id ?? null
   const isCreate = open && !sourceOrderId
@@ -1070,8 +1103,26 @@ export function SourceOrderDrawer({
     refetchOnMount: 'always',
   })
 
+  const {
+    data: loadedGuests = [],
+    isSuccess: guestsLoaded,
+  } = useQuery({
+    queryKey: ['source-order-guests', sourceOrderId],
+    queryFn: () => listSourceOrderGuests(sourceOrderId!),
+    enabled: open && Boolean(sourceOrderId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+
   const resolvedOrder = isCreate ? null : (detail ?? null)
   const detailReady = isCreate || Boolean(detail)
+  const guestsReady = isCreate || guestsLoaded
+  const formKey = sourceOrderId ?? 'new'
+  const guestBaseline = isCreate ? [] : loadedGuests
+  const guestSessionKey = formKey
+  const onGuestSyncBundleChange = useCallback((bundle: SourceOrderGuestSyncBundle) => {
+    guestSyncRef.current = bundle
+  }, [])
 
   const discountType = Form.useWatch('discountType', form)
   const discountYuan = Form.useWatch('discountYuan', form)
@@ -1109,7 +1160,6 @@ export function SourceOrderDrawer({
   const derivedDiscountYuan = derivedAmounts.discountCents / 100
   const derivedSettlementYuan = derivedAmounts.netReceivableCents / 100
 
-  const formKey = sourceOrderId ?? 'new'
   const initialValues = useMemo(
     () =>
       resolvedOrder
@@ -1126,6 +1176,7 @@ export function SourceOrderDrawer({
     if (!open) {
       resetSubmitIntent()
       hasFareDraftRef.current = false
+      hasGuestDraftRef.current = false
       setActiveSection('basics')
       return
     }
@@ -1140,6 +1191,8 @@ export function SourceOrderDrawer({
   const handleClose = () => {
     resetSubmitIntent()
     hasFareDraftRef.current = false
+    hasGuestDraftRef.current = false
+    guestSyncRef.current = { baseline: [], next: [] }
     form.resetFields()
     onClose()
   }
@@ -1224,6 +1277,10 @@ export function SourceOrderDrawer({
   const trySubmit = (intent: 'save' | 'saveAndGenerate') => {
     if (hasFareDraftRef.current) {
       message.warning('请先保存或取消当前调整行后再保存客源单')
+      return
+    }
+    if (hasGuestDraftRef.current) {
+      message.warning('请先保存或取消当前名单行后再保存客源单')
       return
     }
     submitIntentRef.current = intent
@@ -1343,6 +1400,11 @@ export function SourceOrderDrawer({
                 resetSubmitIntent()
                 return
               }
+              if (hasGuestDraftRef.current) {
+                message.warning('请先保存或取消当前名单行后再保存客源单')
+                resetSubmitIntent()
+                return
+              }
               const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
                 ? {
                     guestCollectCents: resolvedOrder.guestCollectCents,
@@ -1355,6 +1417,7 @@ export function SourceOrderDrawer({
               resetSubmitIntent()
               onSubmit(formValuesToPayload(values), pathBaseline, {
                 generateReceivable,
+                guests: guestSyncRef.current,
               })
             }}
             onFinishFailed={resetSubmitIntent}
@@ -1376,6 +1439,13 @@ export function SourceOrderDrawer({
               onFareDraftPresenceChange={(hasDraft) => {
                 hasFareDraftRef.current = hasDraft
               }}
+              guestSessionKey={guestSessionKey}
+              guestBaseline={guestBaseline}
+              guestBaselineReady={guestsReady}
+              onGuestDraftPresenceChange={(hasDraft) => {
+                hasGuestDraftRef.current = hasDraft
+              }}
+              onGuestSyncBundleChange={onGuestSyncBundleChange}
             />
           </Form>
         </>
