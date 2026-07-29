@@ -31,11 +31,6 @@ import {
   type SettlementComposite,
 } from './types'
 
-export const VARIANT_B_META = {
-  key: 'B',
-  label: '结算泳道推进',
-} as const
-
 type VariantBProps = {
   records: IncomeRecord[]
   onChange: (records: IncomeRecord[]) => void

@@ -8,11 +8,8 @@ import {
   Button,
   Card,
   Col,
-  DatePicker,
-  Drawer,
   Form,
   Input,
-  InputNumber,
   Popconfirm,
   Row,
   Select,
@@ -26,44 +23,21 @@ import type { TableColumnsType } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { formatCents } from '../../catalog'
-import { MOCK_GUIDES, MOCK_PARTNERS } from './mock-data'
+import { VariantADrawer, type VariantAFormValues } from './VariantADrawer'
 import {
-  COMMISSION_STATUS_LABELS,
-  INCOME_STATUS_LABELS,
-  INCOME_TYPE_AMOUNT_HINTS,
   INCOME_TYPE_LABELS,
   SETTLEMENT_COMPOSITE_LABELS,
   companyIncomeCents,
   settlementComposite,
   summarizeRecords,
-  type CommissionStatus,
   type IncomeRecord,
-  type IncomeStatus,
   type IncomeType,
   type SettlementComposite,
 } from './types'
 
-export const VARIANT_A_META = {
-  key: 'A',
-  label: '统计+表格+抽屉',
-} as const
-
 type VariantAProps = {
   records: IncomeRecord[]
   onChange: (records: IncomeRecord[]) => void
-}
-
-type FormValues = {
-  type: IncomeType
-  projectName: string
-  partnerName?: string
-  occurredOn: dayjs.Dayjs
-  amountYuan: number
-  guideName?: string
-  commissionYuan: number
-  incomeStatus: IncomeStatus
-  commissionStatus: CommissionStatus
-  remark?: string
 }
 
 const TYPE_OPTIONS = (Object.keys(INCOME_TYPE_LABELS) as IncomeType[]).map((value) => ({
@@ -80,14 +54,13 @@ const COMPOSITE_COLORS: Record<SettlementComposite, string> = {
 
 export function VariantA({ records, onChange }: VariantAProps) {
   const { message } = App.useApp()
-  const [form] = Form.useForm<FormValues>()
+  const [form] = Form.useForm<VariantAFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<IncomeRecord | null>(null)
   const [typeFilter, setTypeFilter] = useState<IncomeType | 'all'>('all')
   const [compositeFilter, setCompositeFilter] = useState<SettlementComposite | 'all'>('all')
   const [keyword, setKeyword] = useState('')
 
-  const watchedType = Form.useWatch('type', form) as IncomeType | undefined
   const summary = summarizeRecords(records)
 
   const filtered = useMemo(() => {
@@ -178,11 +151,7 @@ export function VariantA({ records, onChange }: VariantAProps) {
       width: 120,
       render: (type: IncomeType) => INCOME_TYPE_LABELS[type],
     },
-    {
-      title: '项目名称',
-      dataIndex: 'projectName',
-      ellipsis: true,
-    },
+    { title: '项目名称', dataIndex: 'projectName', ellipsis: true },
     {
       title: '合作方',
       dataIndex: 'partnerName',
@@ -348,101 +317,13 @@ export function VariantA({ records, onChange }: VariantAProps) {
         />
       </Card>
 
-      <Drawer
-        title={editing ? '编辑增收记录' : '新增增收记录'}
+      <VariantADrawer
         open={drawerOpen}
+        editing={Boolean(editing)}
+        form={form}
         onClose={() => setDrawerOpen(false)}
-        size={480}
-        destroyOnHidden
-        extra={
-          <Space>
-            <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            <Button type="primary" onClick={() => void save()}>
-              保存
-            </Button>
-          </Space>
-        }
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item name="type" label="增收类型" rules={[{ required: true }]}>
-            <Select options={TYPE_OPTIONS} />
-          </Form.Item>
-          <Form.Item
-            name="projectName"
-            label="项目名称"
-            rules={[{ required: true, max: 50, message: '必填，最多 50 字' }]}
-          >
-            <Input placeholder="如：干果销售、游船票" maxLength={50} />
-          </Form.Item>
-          <Form.Item name="partnerName" label="合作方">
-            <Select
-              allowClear
-              showSearch
-              placeholder="从供应商选择（车销可空）"
-              options={MOCK_PARTNERS.map((name) => ({ value: name, label: name }))}
-            />
-          </Form.Item>
-          <Form.Item name="occurredOn" label="发生日期">
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="amountYuan"
-            label="增收金额"
-            extra={watchedType ? INCOME_TYPE_AMOUNT_HINTS[watchedType] : undefined}
-            rules={[{ required: true, type: 'number', min: 0 }]}
-          >
-            <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
-          </Form.Item>
-          <Form.Item name="guideName" label="导游">
-            <Select
-              allowClear
-              placeholder="本团已安排导游"
-              options={MOCK_GUIDES.map((name) => ({ value: name, label: name }))}
-            />
-          </Form.Item>
-          <Form.Item
-            name="commissionYuan"
-            label="导游提成"
-            rules={[{ required: true, type: 'number', min: 0 }]}
-          >
-            <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
-          </Form.Item>
-          <Form.Item shouldUpdate={(prev, next) =>
-            prev.amountYuan !== next.amountYuan || prev.commissionYuan !== next.commissionYuan
-          }>
-            {() => {
-              const amount = Number(form.getFieldValue('amountYuan') ?? 0)
-              const commission = Number(form.getFieldValue('commissionYuan') ?? 0)
-              return (
-                <Form.Item label="公司增收">
-                  <Typography.Text>{formatCents(Math.round((amount - commission) * 100))}</Typography.Text>
-                </Form.Item>
-              )
-            }}
-          </Form.Item>
-          <Form.Item name="incomeStatus" label="收入状态" rules={[{ required: true }]}>
-            <Select
-              options={(Object.keys(INCOME_STATUS_LABELS) as IncomeStatus[]).map((value) => ({
-                value,
-                label: INCOME_STATUS_LABELS[value],
-              }))}
-            />
-          </Form.Item>
-          <Form.Item name="commissionStatus" label="提成状态" rules={[{ required: true }]}>
-            <Select
-              options={(Object.keys(COMMISSION_STATUS_LABELS) as CommissionStatus[]).map(
-                (value) => ({
-                  value,
-                  label: COMMISSION_STATUS_LABELS[value],
-                }),
-              )}
-            />
-          </Form.Item>
-          <Form.Item name="remark" label="备注" rules={[{ max: 200 }]}>
-            <Input.TextArea rows={3} maxLength={200} showCount />
-          </Form.Item>
-        </Form>
-      </Drawer>
+        onSave={() => void save()}
+      />
     </Space>
   )
 }

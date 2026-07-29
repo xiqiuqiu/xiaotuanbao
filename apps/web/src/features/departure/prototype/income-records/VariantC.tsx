@@ -36,11 +36,6 @@ import {
   type IncomeType,
 } from './types'
 
-export const VARIANT_C_META = {
-  key: 'C',
-  label: '类型优先录入台',
-} as const
-
 type VariantCProps = {
   records: IncomeRecord[]
   onChange: (records: IncomeRecord[]) => void

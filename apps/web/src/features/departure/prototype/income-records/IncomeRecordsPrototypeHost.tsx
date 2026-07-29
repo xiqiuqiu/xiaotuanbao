@@ -13,9 +13,10 @@ import { Alert, Typography } from 'antd'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { PrototypeSwitcher } from '@/components/prototype/PrototypeSwitcher'
 import { INITIAL_INCOME_RECORDS } from './mock-data'
-import { VariantA, VARIANT_A_META } from './VariantA'
-import { VariantB, VARIANT_B_META } from './VariantB'
-import { VariantC, VARIANT_C_META } from './VariantC'
+import { VariantA } from './VariantA'
+import { VariantB } from './VariantB'
+import { VariantC } from './VariantC'
+import { VARIANT_A_META, VARIANT_B_META, VARIANT_C_META } from './variant-meta'
 import type { IncomeRecord } from './types'
 
 const VARIANTS = [VARIANT_A_META, VARIANT_B_META, VARIANT_C_META] as const
