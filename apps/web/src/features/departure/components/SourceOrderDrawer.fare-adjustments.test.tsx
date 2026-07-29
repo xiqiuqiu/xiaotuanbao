@@ -1,6 +1,6 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { ConfigProvider, App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
@@ -16,24 +16,57 @@ vi.mock('@/services/source-order.service', () => ({
   getSourceOrder: vi.fn(),
 }))
 
-function renderDrawer() {
+function renderDrawer(
+  props: Partial<React.ComponentProps<typeof SourceOrderDrawer>> = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrderDrawer
-          open
-          editing={null}
-          readOnly={false}
-          loading={false}
-          onClose={vi.fn()}
-          onSubmit={vi.fn()}
-        />
+        <App>
+          <SourceOrderDrawer
+            open
+            editing={null}
+            readOnly={false}
+            loading={false}
+            onClose={vi.fn()}
+            onSubmit={vi.fn()}
+            {...props}
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
+}
+
+async function fillValidCreateForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByLabelText('客户'))
+  await user.click(await screen.findByText('杭州同行'))
+
+  const adultCount = screen.getByLabelText('成人人数')
+  await user.clear(adultCount)
+  await user.type(adultCount, '1')
+
+  const adultPrice = screen.getByLabelText('成人团款单价（元）')
+  await user.clear(adultPrice)
+  await user.type(adultPrice, '1000')
+
+  const deposit = screen.getByLabelText('定金（元）')
+  await user.clear(deposit)
+  await user.type(deposit, '0')
+
+  const balance = screen.getByLabelText('尾款（元）')
+  await user.clear(balance)
+  await user.type(balance, '1000')
+}
+
+function setAdjustmentAmount(editor: HTMLElement, yuan: string) {
+  const amount = within(editor).getByPlaceholderText('金额')
+  fireEvent.focus(amount)
+  fireEvent.change(amount, { target: { value: yuan } })
+  fireEvent.blur(amount)
 }
 
 describe('SourceOrderDrawer fare adjustments', () => {
@@ -41,45 +74,62 @@ describe('SourceOrderDrawer fare adjustments', () => {
     cleanup()
   })
 
-  it('keeps one direction select per adjustment row after add and kind change', async () => {
-    const user = userEvent.setup()
+  it('exposes fare adjustments as a dedicated section with one-line columns', () => {
     renderDrawer()
-
-    await user.click(screen.getByRole('button', { name: /添加调整项/ }))
-    await user.click(screen.getByRole('button', { name: /添加调整项/ }))
-
-    expect(screen.getAllByLabelText('删除团款调整项')).toHaveLength(2)
-
-    const directionInputs = () =>
-      document.querySelectorAll('input[id$="_direction"]')
-
-    // 两行各一个方向 Select；幽灵节点会让数量 > 2
-    expect(directionInputs().length).toBe(2)
-    expect(
-      [...directionInputs()].map((el) => (el as HTMLInputElement).id).sort(),
-    ).toEqual(['fareAdjustments_0_direction', 'fareAdjustments_1_direction'])
-
-    const kindSelect = document.querySelector('#fareAdjustments_0_kind')
-    expect(kindSelect).toBeTruthy()
-    await user.click(kindSelect!)
-    await user.click(await screen.findByText('续住费用'))
-
-    expect(directionInputs().length).toBe(2)
-
-    const rows = screen.getAllByTestId('fare-adjustment-row')
-    expect(rows.length).toBe(2)
-    for (const row of rows) {
-      const selects = within(row).getAllByRole('combobox')
-      // 非自定义行：种类 + 方向
-      expect(selects.length).toBe(2)
-    }
-  })
-
-  it('exposes fare adjustments as a dedicated section', () => {
-    renderDrawer()
-    expect(screen.getByText('团款调整')).toBeTruthy()
-    expect(screen.getByText('团款计价')).toBeTruthy()
-    expect(screen.getByText('优惠')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '团款调整' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '基础信息' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '团款优惠' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /添加调整项/ })).toBeTruthy()
+    expect(screen.getByText('调整项目')).toBeTruthy()
+    expect(screen.getByText('调整说明')).toBeTruthy()
+    expect(screen.getByText('金额')).toBeTruthy()
+    expect(screen.getByText('操作')).toBeTruthy()
   })
+
+  it('adds a draft row with inline save/cancel and does not commit until save', () => {
+    renderDrawer()
+
+    fireEvent.click(screen.getByRole('button', { name: /添加调整项/ }))
+
+    const editor = screen.getByTestId('fare-adjustment-row-editor')
+    expect(within(editor).getByRole('button', { name: '保存调整项' })).toBeTruthy()
+    expect(within(editor).getByRole('button', { name: '取消调整项' })).toBeTruthy()
+    expect(screen.queryByLabelText('编辑调整项')).toBeNull()
+
+    setAdjustmentAmount(editor, '100')
+    fireEvent.click(within(editor).getByRole('button', { name: '保存调整项' }))
+
+    expect(screen.queryByTestId('fare-adjustment-row-editor')).toBeNull()
+    expect(screen.getByLabelText('编辑调整项')).toBeTruthy()
+    expect(screen.getByLabelText('删除调整项')).toBeTruthy()
+    expect(screen.getByText('¥100.00')).toBeTruthy()
+  }, 15_000)
+
+  it('keeps direction controls only while a row is being edited', () => {
+    renderDrawer()
+
+    fireEvent.click(screen.getByRole('button', { name: /添加调整项/ }))
+    const editor = screen.getByTestId('fare-adjustment-row-editor')
+    setAdjustmentAmount(editor, '50')
+    fireEvent.click(within(editor).getByRole('button', { name: '保存调整项' }))
+
+    expect(screen.queryByTestId('fare-adjustment-row-editor')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('编辑调整项'))
+    const editing = screen.getByTestId('fare-adjustment-row-editor')
+    expect(within(editing).getAllByRole('combobox').length).toBeGreaterThanOrEqual(1)
+  }, 15_000)
+
+  it('blocks source-order save while an unsaved fare adjustment draft exists', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderDrawer({ onSubmit })
+
+    await fillValidCreateForm(user)
+    fireEvent.click(screen.getByRole('button', { name: /添加调整项/ }))
+    fireEvent.click(screen.getByRole('button', { name: /保\s*存$/ }))
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(await screen.findByText(/请先保存或取消当前调整行/)).toBeTruthy()
+  }, 20_000)
 })

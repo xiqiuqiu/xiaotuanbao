@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
 import {
   Alert,
+  App,
   Col,
   Divider,
   Drawer,
@@ -11,14 +19,18 @@ import {
   Row,
   Select,
   Space,
+  Tabs,
+  Tag,
   Typography,
   Button,
   theme,
 } from 'antd'
-import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import {
+  FareAdjustmentDirection,
   FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_CATALOG,
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
   DirectoryProfileStatus,
@@ -32,18 +44,31 @@ import {
   SOURCE_ORDER_COLLECTION_OPTIONS,
   SOURCE_ORDER_DISCOUNT_OPTIONS,
   defaultDirectionForFareAdjustmentKind,
-  formatCents,
 } from '../catalog'
 import {
   computeFormAmounts,
   createEmptySourceOrderFormValues,
   formValuesToPayload,
-  formatSourceOrderAmountSummary,
   sourceOrderToFormValues,
   totalGuestCount,
+  type SourceOrderFareAdjustmentFormRow,
   type SourceOrderFormValues,
   type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
+
+const DRAWER_SECTIONS = [
+  { key: 'basics', label: '基础信息' },
+  { key: 'fare', label: '团款调整' },
+  { key: 'discount', label: '团款优惠' },
+  { key: 'collection', label: '收款信息' },
+  { key: 'guests', label: '客人名单' },
+] as const
+
+type DrawerSectionKey = (typeof DRAWER_SECTIONS)[number]['key']
+
+function sectionDomId(key: DrawerSectionKey) {
+  return `so-section-${key}`
+}
 
 interface SourceOrderDrawerProps {
   open: boolean
@@ -64,12 +89,10 @@ interface SourceOrderDrawerProps {
 
 function FormSection({
   title,
-  description,
   children,
   first = false,
 }: {
   title: string
-  description?: string
   children: ReactNode
   first?: boolean
 }) {
@@ -77,37 +100,11 @@ function FormSection({
   return (
     <section>
       {!first ? <Divider style={{ margin: `${token.marginLG}px 0` }} /> : null}
-      <Typography.Title
-        level={5}
-        style={{
-          marginTop: 0,
-          marginBottom: description ? token.marginXXS : token.marginSM,
-        }}
-      >
+      <Typography.Title level={5} style={{ marginTop: 0, marginBottom: token.marginSM }}>
         {title}
       </Typography.Title>
-      {description ? (
-        <Typography.Paragraph
-          type="secondary"
-          style={{ marginBottom: token.marginMD, fontSize: token.fontSizeSM }}
-        >
-          {description}
-        </Typography.Paragraph>
-      ) : null}
       {children}
     </section>
-  )
-}
-
-function DerivedMetric({ label, value }: { label: string; value: string }) {
-  const { token } = theme.useToken()
-  return (
-    <Flex justify="space-between" align="baseline" style={{ marginBottom: token.marginSM }}>
-      <Typography.Text type="secondary">{label}</Typography.Text>
-      <Typography.Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {value}
-      </Typography.Text>
-    </Flex>
   )
 }
 
@@ -128,96 +125,620 @@ function formatSignedYuan(yuan: number): string {
   return formatYuan(0)
 }
 
-function AmountPipeline({
+function Dot({ size = 'sm' }: { size?: 'sm' | 'md' }) {
+  const { token } = theme.useToken()
+  return (
+    <Typography.Text
+      type="secondary"
+      style={{ fontSize: size === 'md' ? token.fontSize : token.fontSizeSM }}
+    >
+      ·
+    </Typography.Text>
+  )
+}
+
+function InlineMetric({
+  label,
+  value,
+  size = 'sm',
+}: {
+  label: string
+  value: string
+  size?: 'sm' | 'md'
+}) {
+  const { token } = theme.useToken()
+  const fontSize = size === 'md' ? token.fontSize : token.fontSizeSM
+  return (
+    <Typography.Text style={{ fontSize }}>
+      <Typography.Text type="secondary" style={{ fontSize }}>
+        {label}{' '}
+      </Typography.Text>
+      <Typography.Text style={{ fontSize, fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </Typography.Text>
+    </Typography.Text>
+  )
+}
+
+function PreviewLine({
+  title,
+  children,
+  primary = false,
+}: {
+  title: string
+  children: ReactNode
+  primary?: boolean
+}) {
+  const { token } = theme.useToken()
+  return (
+    <Flex align="baseline" gap={token.marginSM} wrap="wrap">
+      <Typography.Text
+        strong={primary}
+        style={{
+          fontSize: primary ? token.fontSize : token.fontSizeSM,
+          minWidth: 64,
+          color: primary ? token.colorText : token.colorTextSecondary,
+        }}
+      >
+        {title}
+      </Typography.Text>
+      <Flex gap={token.marginXS} wrap="wrap" align="center">
+        {children}
+      </Flex>
+    </Flex>
+  )
+}
+
+function SettlementPreviewCard({
   grossYuan,
   adjustmentNetYuan,
   discountYuan,
   settlementYuan,
+  collectionMode,
+  depositYuan,
+  balanceYuan,
+  partnerCollectedYuan,
+  guestCollectYuan,
+  customerTopUpYuan,
+  rebateYuan,
 }: {
   grossYuan: number
   adjustmentNetYuan: number
   discountYuan: number
   settlementYuan: number
+  collectionMode: SourceOrderCollectionMode
+  depositYuan: number
+  balanceYuan: number
+  partnerCollectedYuan: number
+  guestCollectYuan: number
+  customerTopUpYuan: number
+  rebateYuan: number
 }) {
   const { token } = theme.useToken()
+
+  const collectionLine =
+    collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED ? (
+      <InlineMetric
+        label="客户已收"
+        value={`${formatYuan(partnerCollectedYuan)}（全部客户结算）`}
+      />
+    ) : collectionMode === SourceOrderCollectionMode.GUEST_ONLY ? (
+      <>
+        <InlineMetric label="代收定金" value={formatYuan(depositYuan)} />
+        <Dot />
+        <InlineMetric label="代收尾款" value={formatYuan(balanceYuan)} />
+        <Dot />
+        <InlineMetric label="我方代收" value={formatYuan(guestCollectYuan)} />
+      </>
+    ) : (
+      <>
+        <InlineMetric label="客户定金" value={formatYuan(depositYuan)} />
+        <Dot />
+        <InlineMetric label="我方尾款" value={formatYuan(balanceYuan)} />
+      </>
+    )
+
+  const diffLine =
+    collectionMode === SourceOrderCollectionMode.PARTNER_SETTLED ? (
+      <Typography.Text style={{ fontSize: token.fontSizeSM }}>无补款返利</Typography.Text>
+    ) : (
+      <>
+        <InlineMetric label="客户补款" value={formatYuan(customerTopUpYuan)} />
+        <Dot />
+        <InlineMetric label="预计返利" value={formatYuan(rebateYuan)} />
+      </>
+    )
 
   return (
     <div
       style={{
-        marginTop: token.marginXS,
-        marginBottom: token.marginMD,
-        padding: `${token.paddingXS}px ${token.paddingSM}px`,
+        padding: `${token.paddingSM}px ${token.paddingMD}px`,
         background: token.colorFillAlter,
         borderRadius: token.borderRadiusLG,
       }}
     >
-      <Flex wrap="wrap" gap={token.marginXS} align="center">
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          原始 {formatYuan(grossYuan)}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          ·
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          调整 {formatSignedYuan(adjustmentNetYuan)}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          ·
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          优惠 −{formatYuan(discountYuan)}
-        </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          ·
-        </Typography.Text>
-        <Typography.Text strong style={{ fontSize: token.fontSizeSM, fontVariantNumeric: 'tabular-nums' }}>
-          结算 {formatYuan(settlementYuan)}
-        </Typography.Text>
+      <Flex justify="space-between" align="center" gap={token.marginLG} wrap="wrap">
+        <Flex vertical gap={8} style={{ flex: 1, minWidth: 280 }}>
+          <PreviewLine title="团款结算" primary>
+            <InlineMetric size="md" label="原始团款" value={formatYuan(grossYuan)} />
+            <Dot size="md" />
+            <InlineMetric size="md" label="调整净额" value={formatSignedYuan(adjustmentNetYuan)} />
+            <Dot size="md" />
+            <InlineMetric
+              size="md"
+              label="团款优惠"
+              value={`−${formatYuan(discountYuan)}`}
+            />
+          </PreviewLine>
+          <PreviewLine title="代收约定">{collectionLine}</PreviewLine>
+          <PreviewLine title="预计差额">{diffLine}</PreviewLine>
+        </Flex>
+
+        <div
+          style={{
+            flexShrink: 0,
+            padding: `${token.paddingXS}px ${token.paddingMD}px`,
+            borderRadius: token.borderRadiusLG,
+            background: token.colorPrimaryBg,
+            textAlign: 'right',
+            minWidth: 128,
+          }}
+        >
+          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+            结算金额
+          </Typography.Text>
+          <Typography.Text
+            strong
+            style={{
+              display: 'block',
+              marginTop: 2,
+              fontSize: 22,
+              lineHeight: 1.25,
+              color: token.colorPrimary,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {formatYuan(settlementYuan)}
+          </Typography.Text>
+        </div>
       </Flex>
     </div>
   )
 }
 
-function AmountPreview({ form }: { form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0] }) {
-  const watched = Form.useWatch([], form)
-  const amounts = useMemo(() => {
-    if (watched == null) {
-      return null
-    }
-    const adult = watched.adultGuestCount ?? 0
-    const child = watched.childGuestCount ?? 0
-    if (adult + child < 1) {
-      return null
-    }
-    return computeFormAmounts({
-      adultGuestCount: adult,
-      childGuestCount: child,
-      adultUnitPriceYuan: watched.adultUnitPriceYuan,
-      childUnitPriceYuan: watched.childUnitPriceYuan,
-      discountType: watched.discountType ?? SourceOrderDiscountType.NONE,
-      discountYuan: watched.discountYuan,
-      collectionMode: watched.collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
-      depositYuan: watched.depositYuan,
-      balanceYuan: watched.balanceYuan,
-      fareAdjustments: watched.fareAdjustments ?? [],
-    })
-  }, [watched])
+function FormSectionNav({
+  activeKey,
+  onChange,
+}: {
+  activeKey: DrawerSectionKey
+  onChange: (key: DrawerSectionKey) => void
+}) {
+  const { token } = theme.useToken()
+  return (
+    <div
+      style={{
+        position: 'sticky',
+        top: -token.paddingLG,
+        zIndex: 5,
+        marginTop: -token.paddingXS,
+        marginBottom: token.marginMD,
+        paddingTop: token.paddingXS,
+        background: token.colorBgContainer,
+        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+      }}
+    >
+      <Tabs
+        size="small"
+        activeKey={activeKey}
+        items={DRAWER_SECTIONS.map((item) => ({
+          key: item.key,
+          label: item.label,
+        }))}
+        onChange={(key) => onChange(key as DrawerSectionKey)}
+        tabBarStyle={{ marginBottom: 0 }}
+      />
+    </div>
+  )
+}
 
-  if (!amounts) {
-    return null
+function SectionBlock({
+  id,
+  children,
+}: {
+  id: DrawerSectionKey
+  children: ReactNode
+}) {
+  const { token } = theme.useToken()
+  return (
+    <div
+      id={sectionDomId(id)}
+      style={{
+        scrollMarginTop: token.paddingXL + token.paddingLG,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+type FareDraft = SourceOrderFareAdjustmentFormRow & {
+  editingIndex: number | null
+}
+
+function kindLabel(kind: FareAdjustmentKind): string {
+  return FARE_ADJUSTMENT_KIND_OPTIONS.find((item) => item.value === kind)?.label ?? kind
+}
+
+function notePlaceholder(kind: FareAdjustmentKind): string {
+  const entry = FARE_ADJUSTMENT_KIND_CATALOG.find((item) => item.kind === kind)
+  return entry?.noteRequired ? '必填，说明调整原因' : '选填'
+}
+
+function FareAdjustmentsEditor({
+  value,
+  onChange,
+  lockAmounts,
+  readOnly,
+  adjustmentNetYuan,
+  onDraftPresenceChange,
+}: {
+  value?: SourceOrderFareAdjustmentFormRow[]
+  onChange?: (next: SourceOrderFareAdjustmentFormRow[]) => void
+  lockAmounts: boolean
+  readOnly: boolean
+  adjustmentNetYuan: number
+  onDraftPresenceChange: (hasDraft: boolean) => void
+}) {
+  const { token } = theme.useToken()
+  const { message } = App.useApp()
+  const canEdit = !lockAmounts && !readOnly
+  const rows = value ?? []
+  const [draft, setDraftState] = useState<FareDraft | null>(null)
+
+  const setDraft = (next: FareDraft | null) => {
+    setDraftState(next)
+    onDraftPresenceChange(Boolean(next))
   }
 
-  const collectionMode =
-    (watched?.collectionMode as SourceOrderCollectionMode | undefined) ??
-    SourceOrderCollectionMode.GUEST_ONLY
+  useEffect(() => {
+    if (!canEdit && draft) {
+      setDraft(null)
+    }
+  }, [canEdit, draft])
+
+  const usedFixedKinds = new Set<FareAdjustmentKind>()
+  for (const [index, row] of rows.entries()) {
+    if (index === draft?.editingIndex) {
+      continue
+    }
+    if (row.kind && row.kind !== FareAdjustmentKind.OTHER) {
+      usedFixedKinds.add(row.kind)
+    }
+  }
+
+  const kindOptions = FARE_ADJUSTMENT_KIND_OPTIONS.map((option) => ({
+    ...option,
+    disabled:
+      option.value !== FareAdjustmentKind.OTHER &&
+      usedFixedKinds.has(option.value) &&
+      option.value !== draft?.kind,
+  }))
+
+  const commitRows = (next: SourceOrderFareAdjustmentFormRow[]) => {
+    onChange?.(next)
+  }
+
+  const startAdd = () => {
+    if (draft) {
+      message.warning('请先保存或取消当前调整行')
+      return
+    }
+    const nextFixed = FARE_ADJUSTMENT_KIND_OPTIONS.find(
+      (option) =>
+        option.value !== FareAdjustmentKind.OTHER && !usedFixedKinds.has(option.value),
+    )
+    const kind = nextFixed?.value ?? FareAdjustmentKind.OTHER
+    setDraft({
+      editingIndex: null,
+      kind,
+      direction: defaultDirectionForFareAdjustmentKind(kind),
+      amountYuan: undefined,
+      customName: undefined,
+    })
+  }
+
+  const startEdit = (index: number) => {
+    if (draft) {
+      message.warning('请先保存或取消当前调整行')
+      return
+    }
+    const row = rows[index]
+    if (!row) {
+      return
+    }
+    setDraft({
+      editingIndex: index,
+      kind: row.kind,
+      direction: row.direction,
+      amountYuan: row.amountYuan,
+      customName: row.customName,
+    })
+  }
+
+  const cancelEdit = () => {
+    setDraft(null)
+  }
+
+  const saveDraft = () => {
+    if (!draft) {
+      return
+    }
+    const amountYuan = Number(draft.amountYuan ?? 0)
+    if (!(amountYuan > 0)) {
+      message.error('调整金额必须大于 0')
+      return
+    }
+    const note = (draft.customName ?? '').trim()
+    const catalog = FARE_ADJUSTMENT_KIND_CATALOG.find((item) => item.kind === draft.kind)
+    if (catalog?.noteRequired && !note) {
+      message.error('其他费用调整须填写调整说明')
+      return
+    }
+    if (
+      draft.kind !== FareAdjustmentKind.OTHER &&
+      rows.some(
+        (item, index) => item.kind === draft.kind && index !== draft.editingIndex,
+      )
+    ) {
+      message.error('该固定调整项目已存在')
+      return
+    }
+
+    const cleaned: SourceOrderFareAdjustmentFormRow = {
+      kind: draft.kind,
+      direction:
+        draft.kind === FareAdjustmentKind.OTHER
+          ? draft.direction
+          : defaultDirectionForFareAdjustmentKind(draft.kind),
+      amountYuan,
+      customName: note || undefined,
+    }
+
+    const next =
+      draft.editingIndex == null
+        ? [...rows, cleaned]
+        : rows.map((item, index) => (index === draft.editingIndex ? cleaned : item))
+    commitRows(next)
+    setDraft(null)
+  }
+
+  const removeRow = (index: number) => {
+    commitRows(rows.filter((_, rowIndex) => rowIndex !== index))
+    if (draft?.editingIndex === index) {
+      setDraft(null)
+    }
+  }
+
+  const headerCell: CSSProperties = {
+    padding: `${token.paddingXS}px ${token.paddingSM}px`,
+    fontSize: token.fontSizeSM,
+    color: token.colorTextSecondary,
+    background: token.colorFillAlter,
+    fontWeight: 600,
+    textAlign: 'left',
+  }
+  const bodyCell: CSSProperties = {
+    padding: `${token.paddingXS}px ${token.paddingSM}px`,
+    verticalAlign: 'middle',
+  }
+
+  const renderEditorRow = (draftValue: FareDraft) => {
+    const directionLocked = draftValue.kind !== FareAdjustmentKind.OTHER
+    return (
+      <tr
+        key={`edit-${draftValue.editingIndex ?? 'new'}`}
+        data-testid="fare-adjustment-row-editor"
+        style={{ background: token.colorPrimaryBg }}
+      >
+        <td style={{ ...bodyCell, width: 160 }}>
+          <Select
+            size="small"
+            value={draftValue.kind}
+            options={kindOptions}
+            style={{ width: '100%' }}
+            disabled={!canEdit}
+            onChange={(kind: FareAdjustmentKind) => {
+              setDraft({
+                ...draftValue,
+                kind,
+                direction: defaultDirectionForFareAdjustmentKind(kind),
+                customName:
+                  kind === FareAdjustmentKind.OTHER ? draftValue.customName : undefined,
+              })
+            }}
+          />
+        </td>
+        <td style={{ ...bodyCell, width: 100 }}>
+          <Select
+            size="small"
+            value={draftValue.direction}
+            disabled={!canEdit || directionLocked}
+            options={[...FARE_ADJUSTMENT_DIRECTION_OPTIONS]}
+            style={{ width: '100%' }}
+            onChange={(direction: FareAdjustmentDirection) =>
+              setDraft({ ...draftValue, direction })
+            }
+          />
+        </td>
+        <td style={bodyCell}>
+          <Input
+            size="small"
+            maxLength={30}
+            showCount
+            placeholder={notePlaceholder(draftValue.kind)}
+            value={draftValue.customName ?? ''}
+            disabled={!canEdit}
+            onChange={(event) =>
+              setDraft({ ...draftValue, customName: event.target.value })
+            }
+          />
+        </td>
+        <td style={{ ...bodyCell, width: 120 }}>
+          <InputNumber
+            size="small"
+            min={0.01}
+            precision={2}
+            style={{ width: '100%' }}
+            value={draftValue.amountYuan ?? null}
+            placeholder="金额"
+            disabled={!canEdit}
+            onChange={(amountYuan) =>
+              setDraft({
+                ...draftValue,
+                amountYuan: amountYuan == null ? undefined : Number(amountYuan),
+              })
+            }
+          />
+        </td>
+        <td style={{ ...bodyCell, width: 120, whiteSpace: 'nowrap' }}>
+          {canEdit ? (
+            <Space size={0}>
+              <Button
+                type="link"
+                size="small"
+                aria-label="保存调整项"
+                onClick={saveDraft}
+              >
+                保存
+              </Button>
+              <Button
+                type="link"
+                size="small"
+                aria-label="取消调整项"
+                onClick={cancelEdit}
+              >
+                取消
+              </Button>
+            </Space>
+          ) : null}
+        </td>
+      </tr>
+    )
+  }
+
+  const renderViewRow = (row: SourceOrderFareAdjustmentFormRow, index: number) => (
+    <tr
+      key={`row-${index}`}
+      data-testid="fare-adjustment-row"
+      style={{
+        borderTop:
+          index === 0 && !draft ? undefined : `1px solid ${token.colorBorderSecondary}`,
+      }}
+    >
+      <td style={bodyCell}>{kindLabel(row.kind)}</td>
+      <td style={bodyCell}>
+        <Tag color={row.direction === FareAdjustmentDirection.INCREASE ? 'blue' : 'default'}>
+          {row.direction === FareAdjustmentDirection.INCREASE ? '增项' : '减项'}
+        </Tag>
+      </td>
+      <td style={bodyCell}>
+        <Typography.Text type={row.customName ? undefined : 'secondary'}>
+          {row.customName || '-'}
+        </Typography.Text>
+      </td>
+      <td style={{ ...bodyCell, fontVariantNumeric: 'tabular-nums' }}>
+        ¥{(row.amountYuan ?? 0).toFixed(2)}
+      </td>
+      <td style={{ ...bodyCell, width: 72, whiteSpace: 'nowrap' }}>
+        {canEdit ? (
+          <Space size={0}>
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              aria-label="编辑调整项"
+              onClick={() => startEdit(index)}
+            />
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label="删除调整项"
+              onClick={() => removeRow(index)}
+            />
+          </Space>
+        ) : null}
+      </td>
+    </tr>
+  )
 
   return (
-    <Typography.Text
-      type="secondary"
-      style={{ whiteSpace: 'pre-line', display: 'block', lineHeight: 1.6 }}
-    >
-      {formatSourceOrderAmountSummary({ ...amounts, collectionMode }, formatCents)}
-    </Typography.Text>
+    <div>
+      <div
+        style={{
+          border: `1px solid ${token.colorBorderSecondary}`,
+          borderRadius: token.borderRadiusLG,
+          overflow: 'hidden',
+        }}
+      >
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={headerCell}>调整项目</th>
+              <th style={headerCell}>方向</th>
+              <th style={headerCell}>调整说明</th>
+              <th style={headerCell}>金额</th>
+              <th style={headerCell}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && !draft ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  style={{
+                    ...bodyCell,
+                    color: token.colorTextSecondary,
+                    textAlign: 'center',
+                  }}
+                >
+                  暂无调整项
+                </td>
+              </tr>
+            ) : null}
+            {rows.map((row, index) =>
+              draft?.editingIndex === index && draft
+                ? renderEditorRow(draft)
+                : renderViewRow(row, index),
+            )}
+            {draft && draft.editingIndex == null ? renderEditorRow(draft) : null}
+          </tbody>
+        </table>
+      </div>
+      <Flex justify="space-between" align="center" style={{ marginTop: token.marginSM }}>
+        {canEdit ? (
+          <Button
+            type="dashed"
+            size="small"
+            icon={<PlusOutlined />}
+            onClick={startAdd}
+            disabled={Boolean(draft)}
+          >
+            添加调整项
+          </Button>
+        ) : (
+          <span />
+        )}
+        <Typography.Text type="secondary" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          调整净额{' '}
+          <Typography.Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {formatSignedYuan(adjustmentNetYuan)}
+          </Typography.Text>
+          {!canEdit && rows.length === 0 ? '（无）' : null}
+        </Typography.Text>
+      </Flex>
+    </div>
   )
 }
 
@@ -243,463 +764,273 @@ function totalGuestCountAtLeastOne(getFieldValue: (name: string) => unknown) {
   }
 }
 
-function FareAdjustmentsEditor({
-  form,
-  lockAmounts,
-  readOnly,
-  fareAdjustments,
-  usedFixedKinds,
-  adjustmentNetYuan,
-}: {
-  form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0]
-  lockAmounts: boolean
-  readOnly: boolean
-  fareAdjustments: SourceOrderFormValues['fareAdjustments']
-  usedFixedKinds: Set<FareAdjustmentKind>
-  adjustmentNetYuan: number
-}) {
-  const { token } = theme.useToken()
-  const canEdit = !lockAmounts && !readOnly
-
-  return (
-    <Form.List name="fareAdjustments">
-      {(fields, { add, remove }) => (
-        <Space orientation="vertical" size={token.marginSM} style={{ width: '100%' }}>
-          {fields.length > 0 ? (
-            <Row gutter={8} style={{ marginBottom: -token.marginXXS }}>
-              <Col span={10}>
-                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                  种类
-                </Typography.Text>
-              </Col>
-              <Col span={6}>
-                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                  方向
-                </Typography.Text>
-              </Col>
-              <Col span={6}>
-                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                  金额（元）
-                </Typography.Text>
-              </Col>
-              <Col span={2} />
-            </Row>
-          ) : null}
-
-          {fields.map(({ key, name, ...restField }) => {
-            const kind = fareAdjustments[name]?.kind
-            const isOther = kind === FareAdjustmentKind.OTHER
-            const directionLocked = Boolean(kind) && !isOther
-            return (
-              <div
-                key={key}
-                data-testid="fare-adjustment-row"
-                style={{
-                  padding: token.paddingSM,
-                  background: token.colorFillAlter,
-                  borderRadius: token.borderRadiusLG,
-                }}
-              >
-                <Row gutter={[8, 8]} align="top">
-                  <Col span={10}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'kind']}
-                      rules={[{ required: true, message: '请选择种类' }]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Select
-                        options={FARE_ADJUSTMENT_KIND_OPTIONS.filter(
-                          (option) =>
-                            option.value === FareAdjustmentKind.OTHER ||
-                            option.value === kind ||
-                            !usedFixedKinds.has(option.value),
-                        )}
-                        disabled={lockAmounts}
-                        placeholder="种类"
-                        onChange={(nextKind: FareAdjustmentKind) => {
-                          form.setFieldValue(
-                            ['fareAdjustments', name, 'direction'],
-                            defaultDirectionForFareAdjustmentKind(nextKind),
-                          )
-                          if (nextKind !== FareAdjustmentKind.OTHER) {
-                            form.setFieldValue(
-                              ['fareAdjustments', name, 'customName'],
-                              undefined,
-                            )
-                          }
-                        }}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={6}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'direction']}
-                      rules={[{ required: true, message: '请选择方向' }]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <Select
-                        options={[...FARE_ADJUSTMENT_DIRECTION_OPTIONS]}
-                        disabled={lockAmounts || directionLocked}
-                        placeholder="方向"
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={6}>
-                    <Form.Item
-                      {...restField}
-                      name={[name, 'amountYuan']}
-                      rules={[
-                        { required: true, message: '请输入金额' },
-                        {
-                          type: 'number',
-                          min: 0.01,
-                          message: '金额必须大于0',
-                        },
-                      ]}
-                      style={{ marginBottom: 0 }}
-                    >
-                      <InputNumber
-                        min={0.01}
-                        precision={2}
-                        style={{ width: '100%' }}
-                        disabled={lockAmounts}
-                        placeholder="0.00"
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col span={2}>
-                    {canEdit ? (
-                      <Button
-                        type="text"
-                        danger
-                        icon={<MinusCircleOutlined />}
-                        aria-label="删除团款调整项"
-                        onClick={() => remove(name)}
-                        style={{ marginTop: 0 }}
-                      />
-                    ) : null}
-                  </Col>
-                  {isOther ? (
-                    <Col span={22}>
-                      <Form.Item
-                        {...restField}
-                        name={[name, 'customName']}
-                        rules={[{ required: true, message: '请填写调整说明' }]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Input placeholder="调整说明" disabled={lockAmounts} />
-                      </Form.Item>
-                    </Col>
-                  ) : null}
-                </Row>
-              </div>
-            )
-          })}
-
-          <Flex justify="space-between" align="center" gap={token.marginSM} wrap="wrap">
-            {canEdit ? (
-              <Button
-                type="dashed"
-                icon={<PlusOutlined />}
-                onClick={() => {
-                  const nextFixed = FARE_ADJUSTMENT_KIND_OPTIONS.find(
-                    (option) =>
-                      option.value !== FareAdjustmentKind.OTHER &&
-                      !usedFixedKinds.has(option.value),
-                  )
-                  const kind = nextFixed?.value ?? FareAdjustmentKind.OTHER
-                  add({
-                    kind,
-                    direction: defaultDirectionForFareAdjustmentKind(kind),
-                  })
-                }}
-              >
-                添加调整项
-              </Button>
-            ) : (
-              <span />
-            )}
-            <Typography.Text
-              type="secondary"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              调整净额{' '}
-              <Typography.Text strong style={{ fontVariantNumeric: 'tabular-nums' }}>
-                ¥{adjustmentNetYuan.toFixed(2)}
-              </Typography.Text>
-              {!canEdit && fields.length === 0 ? '（无）' : null}
-            </Typography.Text>
-          </Flex>
-        </Space>
-      )}
-    </Form.List>
-  )
-}
-
 interface SourceOrderFormFieldsProps {
-  form: ReturnType<typeof Form.useForm<SourceOrderFormValues>>[0]
   partnerOptions: Array<{ value: string; label: string }>
   lockAmounts: boolean
   readOnly: boolean
   derivedTotalGuests: number
   derivedGrossYuan: number
-  fareAdjustments: SourceOrderFormValues['fareAdjustments']
-  usedFixedKinds: Set<FareAdjustmentKind>
   derivedAdjustmentNetYuan: number
   discountType: SourceOrderDiscountType | undefined
-  showAmountPipeline: boolean
-  derivedDiscountYuan: number
-  derivedSettlementYuan: number
   collectionMode: SourceOrderCollectionMode | undefined
+  onFareDraftPresenceChange: (hasDraft: boolean) => void
 }
 
 function SourceOrderFormFields({
-  form,
   partnerOptions,
   lockAmounts,
   readOnly,
   derivedTotalGuests,
   derivedGrossYuan,
-  fareAdjustments,
-  usedFixedKinds,
   derivedAdjustmentNetYuan,
   discountType,
-  showAmountPipeline,
-  derivedDiscountYuan,
-  derivedSettlementYuan,
   collectionMode,
+  onFareDraftPresenceChange,
 }: SourceOrderFormFieldsProps) {
   const { token } = theme.useToken()
 
   return (
     <>
-      <FormSection title="基础信息" first>
-        <Form.Item
-          name="partnerId"
-          label="客户"
-          rules={[{ required: true, message: '请选择客户' }]}
-        >
-          <Select
-            showSearch={{ optionFilterProp: 'label' }}
-            placeholder="选择合作伙伴"
-            options={partnerOptions}
-          />
-        </Form.Item>
-        <Row gutter={token.marginMD}>
-          <Col span={8}>
-            <Form.Item
-              name="adultGuestCount"
-              label="成人人数"
-              rules={[
-                { required: true, message: '请输入成人人数' },
-                {
-                  type: 'number',
-                  min: 0,
-                  message: '成人人数不能为负数',
-                },
-                ({ getFieldValue }) => ({
-                  validator: totalGuestCountAtLeastOne(getFieldValue),
-                }),
-              ]}
-              dependencies={['childGuestCount']}
-            >
-              <InputNumber
-                min={0}
-                precision={0}
-                style={{ width: '100%' }}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item
-              name="childGuestCount"
-              label="儿童人数"
-              rules={[
-                {
-                  type: 'number',
-                  min: 0,
-                  message: '儿童人数不能为负数',
-                },
-                ({ getFieldValue }) => ({
-                  validator: totalGuestCountAtLeastOne(getFieldValue),
-                }),
-              ]}
-              dependencies={['adultGuestCount']}
-            >
-              <InputNumber
-                min={0}
-                precision={0}
-                style={{ width: '100%' }}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item label="总人数">
-              <Input
-                aria-label="总人数"
-                value={`${derivedTotalGuests} 人`}
-                readOnly
-                disabled
-              />
-            </Form.Item>
-          </Col>
-        </Row>
-      </FormSection>
-
-      <FormSection title="团款计价" description="按人数与单价计算原始团款，再叠加调整与优惠。">
-        <Row gutter={token.marginMD}>
-          <Col span={12}>
-            <Form.Item
-              name="adultUnitPriceYuan"
-              label="成人团款单价（元）"
-              rules={[{ required: true, message: '请输入成人团款单价' }]}
-            >
-              <InputNumber
-                min={0}
-                precision={2}
-                style={{ width: '100%' }}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item
-              name="childUnitPriceYuan"
-              label="儿童团款单价（元）"
-              rules={[unitPriceRequiredWhenCountPositive('childGuestCount')]}
-              dependencies={['childGuestCount']}
-            >
-              <InputNumber
-                min={0}
-                precision={2}
-                style={{ width: '100%' }}
-                disabled={lockAmounts}
-              />
-            </Form.Item>
-          </Col>
-        </Row>
-        <DerivedMetric label="原始团款金额" value={`¥${derivedGrossYuan.toFixed(2)}`} />
-      </FormSection>
-
-      <FormSection
-        title="团款调整"
-        description="加收或扣减项；多数单据可跳过。固定种类每项最多一行，其他费用调整可多行。"
-      >
-        <FareAdjustmentsEditor
-          form={form}
-          lockAmounts={lockAmounts}
-          readOnly={readOnly}
-          fareAdjustments={fareAdjustments}
-          usedFixedKinds={usedFixedKinds}
-          adjustmentNetYuan={derivedAdjustmentNetYuan}
-        />
-      </FormSection>
-
-      <FormSection title="优惠">
-        <Form.Item
-          name="discountType"
-          label="优惠方式"
-          rules={[{ required: true, message: '请选择优惠方式' }]}
-        >
-          <Select options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]} disabled={lockAmounts} />
-        </Form.Item>
-        {discountType === SourceOrderDiscountType.LUMP_SUM ? (
+      <SectionBlock id="basics">
+        <FormSection title="基础信息" first>
           <Form.Item
-            name="discountYuan"
-            label="优惠金额（元）"
-            rules={[{ required: true, message: '请输入优惠金额' }]}
+            name="partnerId"
+            label="客户"
+            rules={[{ required: true, message: '请选择客户' }]}
           >
-            <InputNumber
-              min={0}
-              precision={2}
-              style={{ width: '100%' }}
-              disabled={lockAmounts}
+            <Select
+              showSearch={{ optionFilterProp: 'label' }}
+              placeholder="选择合作伙伴"
+              options={partnerOptions}
             />
           </Form.Item>
-        ) : null}
-        <Form.Item name="discountNotes" label="优惠备注">
-          <Input.TextArea rows={2} placeholder="请输入优惠相关备注（选填）" />
-        </Form.Item>
-        {showAmountPipeline ? (
-          <AmountPipeline
-            grossYuan={derivedGrossYuan}
-            adjustmentNetYuan={derivedAdjustmentNetYuan}
-            discountYuan={derivedDiscountYuan}
-            settlementYuan={derivedSettlementYuan}
-          />
-        ) : null}
-      </FormSection>
-
-      <FormSection
-        title="收款信息"
-        description="按定金/尾款录入代收约定；地接与合作方往来只看我方代收与结算金额，客户已收不计入客户补款。"
-      >
-        <Form.Item
-          name="collectionMode"
-          label="收款方式"
-          rules={[{ required: true, message: '请选择收款方式' }]}
-        >
-          <Select options={[...SOURCE_ORDER_COLLECTION_OPTIONS]} disabled={lockAmounts} />
-        </Form.Item>
-        {collectionMode === SourceOrderCollectionMode.GUEST_ONLY ||
-        collectionMode === SourceOrderCollectionMode.SPLIT ? (
-          <Row gutter={12}>
-            <Col span={12}>
+          <Row gutter={token.marginMD}>
+            <Col span={8}>
               <Form.Item
-                name="depositYuan"
-                label={
-                  collectionMode === SourceOrderCollectionMode.SPLIT
-                    ? '客户已收定金（元）'
-                    : '定金（元）'
-                }
-                rules={[{ required: true, message: '请输入定金' }]}
+                name="adultGuestCount"
+                label="成人人数"
+                rules={[
+                  { required: true, message: '请输入成人人数' },
+                  {
+                    type: 'number',
+                    min: 0,
+                    message: '成人人数不能为负数',
+                  },
+                  ({ getFieldValue }) => ({
+                    validator: totalGuestCountAtLeastOne(getFieldValue),
+                  }),
+                ]}
+                dependencies={['childGuestCount']}
               >
                 <InputNumber
                   min={0}
-                  precision={2}
+                  precision={0}
                   style={{ width: '100%' }}
                   disabled={lockAmounts}
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item
-                name="balanceYuan"
-                label={
-                  collectionMode === SourceOrderCollectionMode.SPLIT
-                    ? '我方代收尾款（元）'
-                    : '尾款（元）'
-                }
-                rules={[{ required: true, message: '请输入尾款' }]}
+                name="childGuestCount"
+                label="儿童人数"
+                rules={[
+                  {
+                    type: 'number',
+                    min: 0,
+                    message: '儿童人数不能为负数',
+                  },
+                  ({ getFieldValue }) => ({
+                    validator: totalGuestCountAtLeastOne(getFieldValue),
+                  }),
+                ]}
+                dependencies={['adultGuestCount']}
               >
                 <InputNumber
                   min={0}
-                  precision={2}
+                  precision={0}
                   style={{ width: '100%' }}
                   disabled={lockAmounts}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="总人数">
+                <Input
+                  aria-label="总人数"
+                  value={`${derivedTotalGuests} 人`}
+                  readOnly
+                  disabled
                 />
               </Form.Item>
             </Col>
           </Row>
-        ) : null}
-        <Form.Item name="settlementNotes" label="结算说明">
-          <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
-        </Form.Item>
-      </FormSection>
+          <Row gutter={token.marginMD}>
+            <Col span={8}>
+              <Form.Item
+                name="adultUnitPriceYuan"
+                label="成人团款单价（元）"
+                rules={[{ required: true, message: '请输入成人团款单价' }]}
+              >
+                <InputNumber
+                  min={0}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  disabled={lockAmounts}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="childUnitPriceYuan"
+                label="儿童团款单价（元）"
+                rules={[unitPriceRequiredWhenCountPositive('childGuestCount')]}
+                dependencies={['childGuestCount']}
+              >
+                <InputNumber
+                  min={0}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  disabled={lockAmounts}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="原始团款">
+                <Input
+                  aria-label="原始团款"
+                  value={formatYuan(derivedGrossYuan)}
+                  readOnly
+                  disabled
+                  styles={{
+                    input: {
+                      color: token.colorText,
+                      fontWeight: 600,
+                      fontVariantNumeric: 'tabular-nums',
+                    },
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </FormSection>
+      </SectionBlock>
 
-      <FormSection title="备注">
-        <Form.Item name="notes">
-          <Input.TextArea
-            rows={2}
-            placeholder="免票、特殊要求等"
-            aria-label="备注"
-          />
-        </Form.Item>
-      </FormSection>
+      <SectionBlock id="fare">
+        <FormSection title="团款调整">
+          <Form.Item name="fareAdjustments" noStyle>
+            <FareAdjustmentsEditor
+              lockAmounts={lockAmounts}
+              readOnly={readOnly}
+              adjustmentNetYuan={derivedAdjustmentNetYuan}
+              onDraftPresenceChange={onFareDraftPresenceChange}
+            />
+          </Form.Item>
+        </FormSection>
+      </SectionBlock>
+
+      <SectionBlock id="discount">
+        <FormSection title="团款优惠">
+          <Form.Item
+            name="discountType"
+            label="优惠方式"
+            rules={[{ required: true, message: '请选择优惠方式' }]}
+          >
+            <Select options={[...SOURCE_ORDER_DISCOUNT_OPTIONS]} disabled={lockAmounts} />
+          </Form.Item>
+          {discountType === SourceOrderDiscountType.LUMP_SUM ? (
+            <Form.Item
+              name="discountYuan"
+              label="优惠金额（元）"
+              rules={[{ required: true, message: '请输入优惠金额' }]}
+            >
+              <InputNumber
+                min={0}
+                precision={2}
+                style={{ width: '100%' }}
+                disabled={lockAmounts}
+              />
+            </Form.Item>
+          ) : null}
+          <Form.Item name="discountNotes" label="优惠备注">
+            <Input.TextArea rows={2} placeholder="请输入优惠相关备注（选填）" />
+          </Form.Item>
+        </FormSection>
+      </SectionBlock>
+
+      <SectionBlock id="collection">
+        <FormSection title="收款信息">
+          <Form.Item
+            name="collectionMode"
+            label="收款方式"
+            rules={[{ required: true, message: '请选择收款方式' }]}
+          >
+            <Select options={[...SOURCE_ORDER_COLLECTION_OPTIONS]} disabled={lockAmounts} />
+          </Form.Item>
+          {collectionMode === SourceOrderCollectionMode.GUEST_ONLY ||
+          collectionMode === SourceOrderCollectionMode.SPLIT ? (
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  name="depositYuan"
+                  label={
+                    collectionMode === SourceOrderCollectionMode.SPLIT
+                      ? '客户已收定金（元）'
+                      : '定金（元）'
+                  }
+                  rules={[{ required: true, message: '请输入定金' }]}
+                >
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    style={{ width: '100%' }}
+                    disabled={lockAmounts}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="balanceYuan"
+                  label={
+                    collectionMode === SourceOrderCollectionMode.SPLIT
+                      ? '我方代收尾款（元）'
+                      : '尾款（元）'
+                  }
+                  rules={[{ required: true, message: '请输入尾款' }]}
+                >
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    style={{ width: '100%' }}
+                    disabled={lockAmounts}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : null}
+          <Form.Item name="settlementNotes" label="结算说明">
+            <Input.TextArea rows={2} placeholder="请输入结算说明（选填）" />
+          </Form.Item>
+        </FormSection>
+
+        <FormSection title="备注">
+          <Form.Item name="notes">
+            <Input.TextArea
+              rows={2}
+              placeholder="免票、特殊要求等"
+              aria-label="备注"
+            />
+          </Form.Item>
+        </FormSection>
+      </SectionBlock>
+
+      <SectionBlock id="guests">
+        <FormSection title="客人名单">
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+            客人名单仍通过客源列表入口管理；本抽屉将在后续版本并入一行式名单编辑。
+          </Typography.Paragraph>
+        </FormSection>
+      </SectionBlock>
     </>
   )
 }
@@ -716,8 +1047,12 @@ export function SourceOrderDrawer({
   onSubmit,
 }: SourceOrderDrawerProps) {
   const { token } = theme.useToken()
+  const { message } = App.useApp()
   const [form] = Form.useForm<SourceOrderFormValues>()
   const submitIntentRef = useRef<'save' | 'saveAndGenerate'>('save')
+  const scrollingByTabRef = useRef(false)
+  const hasFareDraftRef = useRef(false)
+  const [activeSection, setActiveSection] = useState<DrawerSectionKey>('basics')
   const sourceOrderId = editing?.id ?? null
   const isCreate = open && !sourceOrderId
   const actionsBusy = loading || saveAndGenerateLoading
@@ -735,17 +1070,21 @@ export function SourceOrderDrawer({
     refetchOnMount: 'always',
   })
 
-  // View/edit always hydrate from a fresh GET; create uses empty defaults.
   const resolvedOrder = isCreate ? null : (detail ?? null)
   const detailReady = isCreate || Boolean(detail)
 
   const discountType = Form.useWatch('discountType', form)
   const discountYuan = Form.useWatch('discountYuan', form)
   const collectionMode = Form.useWatch('collectionMode', form)
+  const depositYuan = Form.useWatch('depositYuan', form)
+  const balanceYuan = Form.useWatch('balanceYuan', form)
   const adultGuestCount = Form.useWatch('adultGuestCount', form) ?? 0
   const childGuestCount = Form.useWatch('childGuestCount', form) ?? 0
   const adultUnitPriceYuan = Form.useWatch('adultUnitPriceYuan', form)
   const childUnitPriceYuan = Form.useWatch('childUnitPriceYuan', form)
+  const fareAdjustments =
+    Form.useWatch('fareAdjustments', form) ??
+    ([] as SourceOrderFormValues['fareAdjustments'])
   const amountFieldsLocked = Boolean(resolvedOrder?.amountFieldsLocked)
   const lockAmounts = readOnly || amountReadOnly || amountFieldsLocked
 
@@ -753,8 +1092,6 @@ export function SourceOrderDrawer({
     adultGuestCount,
     childGuestCount,
   })
-  const fareAdjustments =
-    Form.useWatch('fareAdjustments', form) ?? ([] as SourceOrderFormValues['fareAdjustments'])
   const derivedAmounts = computeFormAmounts({
     adultGuestCount: adultGuestCount ?? 0,
     childGuestCount: childGuestCount ?? 0,
@@ -762,19 +1099,15 @@ export function SourceOrderDrawer({
     childUnitPriceYuan,
     discountType: discountType ?? SourceOrderDiscountType.NONE,
     discountYuan,
-    collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+    collectionMode: collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY,
+    depositYuan,
+    balanceYuan,
     fareAdjustments,
   })
   const derivedGrossYuan = derivedAmounts.grossReceivableCents / 100
   const derivedAdjustmentNetYuan = derivedAmounts.fareAdjustmentNetCents / 100
   const derivedDiscountYuan = derivedAmounts.discountCents / 100
   const derivedSettlementYuan = derivedAmounts.netReceivableCents / 100
-  const usedFixedKinds = new Set(
-    fareAdjustments
-      .map((item) => item?.kind)
-      .filter((kind): kind is FareAdjustmentKind => Boolean(kind) && kind !== FareAdjustmentKind.OTHER),
-  )
-  const showAmountPipeline = derivedTotalGuests >= 1
 
   const formKey = sourceOrderId ?? 'new'
   const initialValues = useMemo(
@@ -792,6 +1125,8 @@ export function SourceOrderDrawer({
   useEffect(() => {
     if (!open) {
       resetSubmitIntent()
+      hasFareDraftRef.current = false
+      setActiveSection('basics')
       return
     }
     if (!detailReady) {
@@ -804,9 +1139,75 @@ export function SourceOrderDrawer({
 
   const handleClose = () => {
     resetSubmitIntent()
+    hasFareDraftRef.current = false
     form.resetFields()
     onClose()
   }
+
+  const scrollToSection = (key: DrawerSectionKey) => {
+    setActiveSection(key)
+    scrollingByTabRef.current = true
+    window.requestAnimationFrame(() => {
+      const node = document.getElementById(sectionDomId(key))
+      const body = node?.closest('.ant-drawer-body') as HTMLElement | null
+      if (node && body && typeof body.scrollTo === 'function') {
+        const stickyOffset = token.paddingXL + token.paddingLG
+        const nextTop =
+          body.scrollTop +
+          (node.getBoundingClientRect().top - body.getBoundingClientRect().top) -
+          stickyOffset
+        body.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+      } else {
+        node?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+      }
+      window.setTimeout(() => {
+        scrollingByTabRef.current = false
+      }, 450)
+    })
+  }
+
+  useEffect(() => {
+    if (!open || !detailReady) {
+      return
+    }
+    const root = document.querySelector('.ant-drawer-body')
+    if (!root) {
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (scrollingByTabRef.current) {
+          return
+        }
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        const top = visible[0]
+        if (!top?.target.id.startsWith('so-section-')) {
+          return
+        }
+        const key = top.target.id.replace('so-section-', '') as DrawerSectionKey
+        if (DRAWER_SECTIONS.some((item) => item.key === key)) {
+          setActiveSection((current) => (current === key ? current : key))
+        }
+      },
+      {
+        root,
+        rootMargin: '-20% 0px -55% 0px',
+        threshold: [0.1, 0.25, 0.5],
+      },
+    )
+
+    for (const item of DRAWER_SECTIONS) {
+      const node = document.getElementById(sectionDomId(item.key))
+      if (node) {
+        observer.observe(node)
+      }
+    }
+
+    return () => observer.disconnect()
+  }, [open, detailReady])
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -820,19 +1221,56 @@ export function SourceOrderDrawer({
 
   const drawerLoading = Boolean(sourceOrderId) && detailLoading && !detail
 
+  const trySubmit = (intent: 'save' | 'saveAndGenerate') => {
+    if (hasFareDraftRef.current) {
+      message.warning('请先保存或取消当前调整行后再保存客源单')
+      return
+    }
+    submitIntentRef.current = intent
+    form.submit()
+  }
+
+  const resolvedCollectionMode =
+    collectionMode ?? SourceOrderCollectionMode.GUEST_ONLY
+
   return (
     <Drawer
       title={readOnly ? '查看客源单' : sourceOrderId ? '编辑客源单' : '添加客源单'}
       open={open}
-      size={600}
+      size={960}
       onClose={handleClose}
       destroyOnHidden
       loading={drawerLoading}
-      styles={{ footer: { paddingBlock: token.paddingMD } }}
+      styles={{
+        footer: { paddingBlock: token.paddingMD },
+        wrapper: { maxWidth: '100vw' },
+      }}
       footer={
         detailError && sourceOrderId ? null : (
           <Flex vertical gap={token.marginSM} style={{ width: '100%' }}>
-            {detailReady ? <AmountPreview form={form} /> : null}
+            {detailReady ? (
+              <SettlementPreviewCard
+                grossYuan={derivedGrossYuan}
+                adjustmentNetYuan={derivedAdjustmentNetYuan}
+                discountYuan={derivedDiscountYuan}
+                settlementYuan={derivedSettlementYuan}
+                collectionMode={resolvedCollectionMode}
+                depositYuan={
+                  resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
+                    ? 0
+                    : Number(depositYuan ?? 0)
+                }
+                balanceYuan={
+                  resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
+                    ? 0
+                    : Number(balanceYuan ?? 0)
+                }
+                partnerCollectedYuan={derivedAmounts.partnerCollectedCents / 100}
+                guestCollectYuan={derivedAmounts.guestCollectCents / 100}
+                customerTopUpYuan={derivedAmounts.estimatedCustomerTopUpCents / 100}
+                rebateYuan={derivedAmounts.estimatedRebateCents / 100}
+              />
+            ) : null}
             {readOnly ? (
               <Flex justify="flex-end">
                 <Button onClick={handleClose}>关闭</Button>
@@ -847,10 +1285,7 @@ export function SourceOrderDrawer({
                     <Button
                       loading={saveAndGenerateLoading}
                       disabled={!detailReady || actionsBusy}
-                      onClick={() => {
-                        submitIntentRef.current = 'saveAndGenerate'
-                        form.submit()
-                      }}
+                      onClick={() => trySubmit('saveAndGenerate')}
                     >
                       保存并生成应收
                     </Button>
@@ -859,10 +1294,7 @@ export function SourceOrderDrawer({
                     type="primary"
                     loading={loading}
                     disabled={!detailReady || saveAndGenerateLoading}
-                    onClick={() => {
-                      submitIntentRef.current = 'save'
-                      form.submit()
-                    }}
+                    onClick={() => trySubmit('save')}
                   >
                     保存
                   </Button>
@@ -896,52 +1328,57 @@ export function SourceOrderDrawer({
         />
       ) : null}
       {detailReady && !detailError ? (
-        <Form
-          key={formKey}
-          form={form}
-          layout="vertical"
-          disabled={readOnly}
-          scrollToFirstError={{ focus: true }}
-          initialValues={initialValues}
-          onFinish={(values) => {
-            const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
-              ? {
-                  guestCollectCents: resolvedOrder.guestCollectCents,
-                  partnerCollectedCents: resolvedOrder.partnerCollectedCents,
-                  depositCents: resolvedOrder.depositCents,
-                  balanceCents: resolvedOrder.balanceCents,
-                }
-              : null
-            const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
-            resetSubmitIntent()
-            onSubmit(formValuesToPayload(values), pathBaseline, {
-              generateReceivable,
-            })
-          }}
-          onFinishFailed={resetSubmitIntent}
-        >
-          <SourceOrderFormFields
+        <>
+          <FormSectionNav activeKey={activeSection} onChange={scrollToSection} />
+          <Form
+            key={formKey}
             form={form}
-            partnerOptions={
-              partnersResult?.items.map((partner) => ({
-                value: partner.id,
-                label: partner.name,
-              })) ?? []
-            }
-            lockAmounts={lockAmounts}
-            readOnly={readOnly}
-            derivedTotalGuests={derivedTotalGuests}
-            derivedGrossYuan={derivedGrossYuan}
-            fareAdjustments={fareAdjustments}
-            usedFixedKinds={usedFixedKinds}
-            derivedAdjustmentNetYuan={derivedAdjustmentNetYuan}
-            discountType={discountType}
-            showAmountPipeline={showAmountPipeline}
-            derivedDiscountYuan={derivedDiscountYuan}
-            derivedSettlementYuan={derivedSettlementYuan}
-            collectionMode={collectionMode}
-          />
-        </Form>
+            layout="vertical"
+            disabled={readOnly}
+            scrollToFirstError={{ focus: true }}
+            initialValues={initialValues}
+            onFinish={(values) => {
+              if (hasFareDraftRef.current) {
+                message.warning('请先保存或取消当前调整行后再保存客源单')
+                resetSubmitIntent()
+                return
+              }
+              const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
+                ? {
+                    guestCollectCents: resolvedOrder.guestCollectCents,
+                    partnerCollectedCents: resolvedOrder.partnerCollectedCents,
+                    depositCents: resolvedOrder.depositCents,
+                    balanceCents: resolvedOrder.balanceCents,
+                  }
+                : null
+              const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
+              resetSubmitIntent()
+              onSubmit(formValuesToPayload(values), pathBaseline, {
+                generateReceivable,
+              })
+            }}
+            onFinishFailed={resetSubmitIntent}
+          >
+            <SourceOrderFormFields
+              partnerOptions={
+                partnersResult?.items.map((partner) => ({
+                  value: partner.id,
+                  label: partner.name,
+                })) ?? []
+              }
+              lockAmounts={lockAmounts}
+              readOnly={readOnly}
+              derivedTotalGuests={derivedTotalGuests}
+              derivedGrossYuan={derivedGrossYuan}
+              derivedAdjustmentNetYuan={derivedAdjustmentNetYuan}
+              discountType={discountType}
+              collectionMode={collectionMode}
+              onFareDraftPresenceChange={(hasDraft) => {
+                hasFareDraftRef.current = hasDraft
+              }}
+            />
+          </Form>
+        </>
       ) : null}
     </Drawer>
   )
