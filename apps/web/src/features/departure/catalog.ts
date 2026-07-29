@@ -70,16 +70,17 @@ export const DEPARTURE_PROGRESS_COLORS: Record<string, string> = {
 }
 
 export const DEPARTURE_DETAIL_TABS = [
-  { key: 'overview', label: '概览' },
-  { key: 'sourceOrders', label: '客源管理' },
-  { key: 'execution', label: '执行安排' },
-  { key: 'incomeRecords', label: '增收记录' },
-  { key: 'receivables', label: '应收管理' },
-  { key: 'payables', label: '应付管理' },
-  { key: 'transactions', label: '收支流水' },
-  { key: 'verifications', label: '核销记录' },
+  { key: 'overview', label: '概览', group: 'operations' },
+  { key: 'sourceOrders', label: '客源管理', group: 'operations' },
+  { key: 'execution', label: '执行安排', group: 'operations' },
+  { key: 'incomeRecords', label: '增收记录', group: 'operations' },
+  { key: 'receivables', label: '应收管理', group: 'finance' },
+  { key: 'payables', label: '应付管理', group: 'finance' },
+  { key: 'transactions', label: '收支流水', group: 'finance' },
+  { key: 'verifications', label: '核销记录', group: 'finance' },
 ] as const
 
+export type DepartureDetailTab = (typeof DEPARTURE_DETAIL_TABS)[number]
 export type DepartureDetailTabKey = (typeof DEPARTURE_DETAIL_TABS)[number]['key']
 
 export function isDepartureDetailTabKey(value: string | undefined): value is DepartureDetailTabKey {

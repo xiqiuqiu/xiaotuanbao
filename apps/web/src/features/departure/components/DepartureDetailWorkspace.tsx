@@ -12,6 +12,7 @@ import { TransactionsWorkspace } from '@/features/finance/components/Transaction
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureOverview } from './DepartureOverview'
+import { DepartureDetailNavigation } from './DepartureDetailNavigation'
 import { SourceOrdersTab } from './SourceOrdersTab'
 import { ExecutionTab } from './ExecutionTab'
 import { IncomeRecordsPanel } from './IncomeRecordsPanel'
@@ -35,7 +36,7 @@ type DepartureDetailSearch = {
   listReturn?: string
 }
 
-type DepartureDetailTabsProps = {
+type DepartureDetailWorkspaceProps = {
   departure: DepartureDetail
   activeTab: DepartureDetailTabKey
   menuKeys: string[]
@@ -59,14 +60,14 @@ function resolveTransactionDirection(
     : undefined
 }
 
-export function DepartureDetailTabs({
+export function DepartureDetailWorkspace({
   departure,
   activeTab,
   menuKeys,
   canEdit,
   search,
   onTabChange,
-}: DepartureDetailTabsProps) {
+}: DepartureDetailWorkspaceProps) {
   const navigate = useNavigate()
   const animatedOverviewDepartureIds = useRef(new Set<string>())
 
@@ -122,7 +123,6 @@ export function DepartureDetailTabs({
   const visibleTabs = DEPARTURE_DETAIL_TABS.filter((tab) =>
     isDepartureDetailTabVisible(tab.key, menuKeys),
   )
-
   const tabItems: NonNullable<TabsProps['items']> = visibleTabs.map((tab) => {
     if (tab.key === 'overview') {
       return {
@@ -255,11 +255,22 @@ export function DepartureDetailTabs({
   })
 
   return (
-    <Tabs
-      aria-label="发团详情功能"
-      activeKey={activeTab}
-      onChange={onTabChange}
-      items={tabItems}
-    />
+    <section className={styles.detailWorkspace} aria-label="发团详情工作区">
+      <DepartureDetailNavigation
+        activeTab={activeTab}
+        tabs={visibleTabs}
+        onChange={onTabChange}
+      />
+
+      <div className={styles.detailWorkspaceContent}>
+        <Tabs
+          aria-label="发团详情内容"
+          activeKey={activeTab}
+          onChange={onTabChange}
+          items={tabItems}
+          tabBarStyle={{ display: 'none' }}
+        />
+      </div>
+    </section>
   )
 }

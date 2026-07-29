@@ -1,3 +1,24 @@
+.detailWorkspace {
+  display: flex;
+  min-height: 520px;
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  overflow: hidden;
+}
+
+.detailWorkspaceContent {
+  min-width: 0;
+  flex: 1;
+  padding: 16px;
+}
+
+.detailWorkspaceContent :global(.ant-tabs-content-holder),
+.detailWorkspaceContent :global(.ant-tabs-content),
+.detailWorkspaceContent :global(.ant-tabs-tabpane-active) {
+  min-width: 0;
+}
+
 .tabPaneEnter {
   animation: tab-pane-fade 120ms ease both;
 }
@@ -16,4 +37,16 @@
   .tabPaneEnter {
     animation: none;
   }
+}
+
+@media (max-width: 767px) {
+  .detailWorkspace {
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .detailWorkspaceContent {
+    padding: 12px;
+  }
+
 }

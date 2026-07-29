@@ -123,4 +123,27 @@ describe('DepartureHeaderCard 返回', () => {
     expect(historyBack).not.toHaveBeenCalled()
     expect(navigate).toHaveBeenCalledWith({ to: '/departure' })
   })
+
+  it('将状态与履历收进更多菜单以保持对象栏紧凑', async () => {
+    const user = userEvent.setup()
+    const onHistoryOpenChange = vi.fn()
+
+    render(
+      <DepartureHeaderCard
+        departure={departure}
+        menuItems={[]}
+        historyOpen={false}
+        onHistoryOpenChange={onHistoryOpenChange}
+      />,
+    )
+
+    expect(
+      screen.queryByRole('button', { name: /状态与履历/ }),
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    await user.click(await screen.findByText('状态与履历'))
+
+    expect(onHistoryOpenChange).toHaveBeenCalledWith(true)
+  })
 })

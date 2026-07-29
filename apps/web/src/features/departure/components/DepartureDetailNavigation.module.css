@@ -1,0 +1,39 @@
+.taskRail {
+  flex: 0 0 168px;
+  padding: 8px;
+  border-right: 1px solid var(--ant-color-border-secondary);
+  overflow-y: auto;
+}
+
+.taskRail :global(.ant-menu) {
+  border-inline-end: 0 !important;
+}
+
+.mobileNavigation {
+  display: none;
+  padding: 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.mobileNavigation :global(.ant-select) {
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  .taskRail {
+    display: none;
+  }
+
+  .mobileNavigation {
+    display: block;
+  }
+
+  .mobileNavigation :global(.ant-select),
+  .mobileNavigation :global(.ant-select-selector) {
+    min-height: 44px;
+  }
+
+  .mobileNavigation :global(.ant-select-selector) {
+    align-items: center;
+  }
+}

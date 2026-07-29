@@ -10,7 +10,7 @@ import { canEditDeparture } from '../utils/departure-permission'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
-import { DepartureDetailTabs } from '../components/DepartureDetailTabs'
+import { DepartureDetailWorkspace } from '../components/DepartureDetailWorkspace'
 import {
   isDepartureDetailTabKey,
   isDepartureDetailTabVisible,
@@ -139,7 +139,7 @@ export function DepartureDetailPage() {
       />
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
 
-      <DepartureDetailTabs
+      <DepartureDetailWorkspace
         departure={departure}
         activeTab={activeTab}
         menuKeys={menuKeys}
