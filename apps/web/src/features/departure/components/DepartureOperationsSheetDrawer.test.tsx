@@ -93,12 +93,33 @@ describe('DepartureOperationsSheetDrawer', () => {
     expect(getDepartureOperationsSheet).toHaveBeenCalledWith('dep-1')
     expect(screen.getByText('XTB2026070001')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '增收记录' })).toBeInTheDocument()
+    expect(screen.getByText('增收净收益')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '项目名称' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '综合状态' })).toBeInTheDocument()
     expect(screen.getByText('车销')).toBeInTheDocument()
+    expect(screen.getByText('待结算')).toBeInTheDocument()
     expect(screen.getAllByText('¥120.00').length).toBeGreaterThanOrEqual(2)
 
     await user.click(screen.getByRole('button', { name: '导出 Excel' }))
     await waitFor(() => {
       expect(downloadDepartureOperationsSheet).toHaveBeenCalledWith('dep-1')
     })
+  })
+
+  it('omits income-records section when snapshot has none', async () => {
+    getDepartureOperationsSheet.mockResolvedValue({
+      ...snapshot,
+      incomeRecords: [],
+      additionalIncomeNetCents: 0,
+    })
+    renderDrawer()
+
+    await waitFor(() => {
+      expect(screen.getByText('发团与数据阶段')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('heading', { name: '增收记录' })).not.toBeInTheDocument()
+    expect(screen.queryByText('增收净收益')).not.toBeInTheDocument()
+    expect(screen.queryByText('团上收入')).not.toBeInTheDocument()
+    expect(screen.queryByText('其他收入合计')).not.toBeInTheDocument()
   })
 })

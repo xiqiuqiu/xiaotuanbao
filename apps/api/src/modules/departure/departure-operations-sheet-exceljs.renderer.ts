@@ -256,7 +256,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
       row = writeSectionHeader(sheet, row, '增收记录')
       row = writeHeaderRow(sheet, row, [
         '类型',
-        '项目',
+        '项目名称',
         '合作方',
         '增收金额',
         '导游提成',

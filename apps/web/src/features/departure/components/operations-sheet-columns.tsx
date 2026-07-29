@@ -34,7 +34,7 @@ export const incomeRecordColumns: ColumnsType<DepartureOperationsSheetIncomeReco
     width: 120,
   },
   {
-    title: '项目',
+    title: '项目名称',
     dataIndex: 'projectName',
   },
   {

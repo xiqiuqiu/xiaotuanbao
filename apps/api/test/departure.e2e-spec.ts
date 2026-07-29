@@ -3112,6 +3112,12 @@ describe('Departure API (e2e)', () => {
       expect(sheet.pendingSummary).toBeNull()
       expect(sheet.financeSummary).toEqual({ receivable: null, payable: null })
       expect(sheet.anomalies).toEqual([])
+
+      // 无增收记录：预览仍带空数组与 0 净收益，不回退团上收入字段。
+      expect(sheet.incomeRecords).toEqual([])
+      expect(sheet.additionalIncomeNetCents).toBe(0)
+      expect(sheet).not.toHaveProperty('groundIncomes')
+      expect(sheet).not.toHaveProperty('groundIncomeTotalCents')
     })
 
     it('exposes fareAdjustmentNetCents on source main row in preview and xlsx without kind detail (#178)', async () => {
@@ -4363,6 +4369,16 @@ describe('Departure API (e2e)', () => {
         })
         .expect(201)
 
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/income-records`)
+        .send({
+          type: 'other',
+          projectName: 'xlsx其他增收',
+          amountCents: 8_000,
+          commissionCents: 0,
+        })
+        .expect(201)
+
       const preview = await authRequest(app, coordinatorToken)
         .get(`/api/departures/${departure.id}/operations-sheet`)
         .expect(200)
@@ -4373,13 +4389,29 @@ describe('Departure API (e2e)', () => {
       expect(previewSheet.segments[0].resources[0].paidCents).toBeNull()
       expect(previewSheet.incomeRecords).toEqual([
         expect.objectContaining({
+          type: 'coach_sales',
+          typeLabel: '车销收入',
           projectName: 'xlsx车销',
+          partnerSupplierName: null,
           amountCents: 25_000,
           commissionCents: 5_000,
           companyIncomeCents: 20_000,
+          settlementComposite: 'pending_settle',
+          settlementCompositeLabel: '待结算',
+        }),
+        expect.objectContaining({
+          type: 'other',
+          typeLabel: '其他增收',
+          projectName: 'xlsx其他增收',
+          amountCents: 8_000,
+          commissionCents: 0,
+          companyIncomeCents: 8_000,
+          settlementComposite: 'pending_settle',
+          settlementCompositeLabel: '待结算',
         }),
       ])
-      expect(previewSheet.additionalIncomeNetCents).toBe(20_000)
+      // 增收净收益 = Σ 公司增收（20_000 + 8_000）
+      expect(previewSheet.additionalIncomeNetCents).toBe(28_000)
 
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
@@ -4463,15 +4495,39 @@ describe('Departure API (e2e)', () => {
       expect(cellTexts).toContain('客源：xlsx客源备注')
       expect(cellTexts).toContain('xlsx酒店')
       expect(cellTexts).toContain('xlsx车销')
+      expect(cellTexts).toContain('xlsx其他增收')
       expect(cellTexts).toContain('增收净收益')
       expect(cellTexts).toContain('发团级备注应单独归属')
       expect(cellTexts.filter((text) => text === '—').length).toBeGreaterThanOrEqual(4)
+
+      // 增收分区列与行口径（与预览同结构）。
+      for (const header of [
+        '类型',
+        '项目名称',
+        '合作方',
+        '增收金额',
+        '导游提成',
+        '公司增收',
+        '综合状态',
+      ]) {
+        expect(cellTexts).toContain(header)
+      }
+      expect(cellTexts).toContain('车销收入')
+      expect(cellTexts).toContain('其他增收')
+      expect(cellTexts).toContain('待结算')
+      expect(cellTexts).not.toContain('团上收入')
+      expect(cellTexts).not.toContain('其他收入合计')
 
       const agreedReceivableYuan =
         previewSheet.sourceOrders[0].agreedReceivableCents / 100
       const agreedPayableYuan = previewSheet.segments[0].resources[0].agreedPayableCents / 100
       expect(moneyCells.some((cell) => cell.value === agreedReceivableYuan)).toBe(true)
       expect(moneyCells.some((cell) => cell.value === agreedPayableYuan)).toBe(true)
+      expect(moneyCells.some((cell) => cell.value === 250)).toBe(true) // 增收金额
+      expect(moneyCells.some((cell) => cell.value === 50)).toBe(true) // 导游提成
+      expect(moneyCells.some((cell) => cell.value === 200)).toBe(true) // 公司增收（行）
+      expect(moneyCells.some((cell) => cell.value === 80)).toBe(true) // 第二条公司增收
+      expect(moneyCells.some((cell) => cell.value === 280)).toBe(true) // 增收净收益 Σ
       expect(
         moneyCells.some(
           (cell) =>
@@ -4629,6 +4685,21 @@ describe('Departure API (e2e)', () => {
       expect(identityTexts.some((text) => text.includes(departureName))).toBe(true)
       expect(identityTexts.some((text) => text.includes('客源及应收'))).toBe(true)
       expect(identityTexts.some((text) => text.includes('行程段资源及应付'))).toBe(true)
+
+      // 无增收记录：整区省略，且不回退旧文案。
+      const allCellTexts: string[] = []
+      worksheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          const text = cell.text?.trim() || String(cell.value ?? '').trim()
+          if (text) {
+            allCellTexts.push(text)
+          }
+        })
+      })
+      expect(allCellTexts).not.toContain('增收记录')
+      expect(allCellTexts).not.toContain('增收净收益')
+      expect(allCellTexts).not.toContain('团上收入')
+      expect(allCellTexts).not.toContain('其他收入合计')
 
       const wrappedNotes = worksheet
         .getSheetValues()
