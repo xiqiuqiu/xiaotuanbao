@@ -62,7 +62,7 @@ describe('SourceOrderDrawer fare adjustments', () => {
     const kindSelect = document.querySelector('#fareAdjustments_0_kind')
     expect(kindSelect).toBeTruthy()
     await user.click(kindSelect!)
-    await user.click(await screen.findByText('续住'))
+    await user.click(await screen.findByText('续住费用'))
 
     expect(directionInputs().length).toBe(2)
 

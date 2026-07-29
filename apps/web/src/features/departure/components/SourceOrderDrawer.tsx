@@ -288,8 +288,8 @@ function FareAdjustmentsEditor({
 
           {fields.map(({ key, name, ...restField }) => {
             const kind = fareAdjustments[name]?.kind
-            const isCustom = kind === FareAdjustmentKind.CUSTOM
-            const directionLocked = Boolean(kind) && !isCustom
+            const isOther = kind === FareAdjustmentKind.OTHER
+            const directionLocked = Boolean(kind) && !isOther
             return (
               <div
                 key={key}
@@ -311,7 +311,7 @@ function FareAdjustmentsEditor({
                       <Select
                         options={FARE_ADJUSTMENT_KIND_OPTIONS.filter(
                           (option) =>
-                            option.value === FareAdjustmentKind.CUSTOM ||
+                            option.value === FareAdjustmentKind.OTHER ||
                             option.value === kind ||
                             !usedFixedKinds.has(option.value),
                         )}
@@ -322,7 +322,7 @@ function FareAdjustmentsEditor({
                             ['fareAdjustments', name, 'direction'],
                             defaultDirectionForFareAdjustmentKind(nextKind),
                           )
-                          if (nextKind !== FareAdjustmentKind.CUSTOM) {
+                          if (nextKind !== FareAdjustmentKind.OTHER) {
                             form.setFieldValue(
                               ['fareAdjustments', name, 'customName'],
                               undefined,
@@ -381,15 +381,15 @@ function FareAdjustmentsEditor({
                       />
                     ) : null}
                   </Col>
-                  {isCustom ? (
+                  {isOther ? (
                     <Col span={22}>
                       <Form.Item
                         {...restField}
                         name={[name, 'customName']}
-                        rules={[{ required: true, message: '请填写名称' }]}
+                        rules={[{ required: true, message: '请填写调整说明' }]}
                         style={{ marginBottom: 0 }}
                       >
-                        <Input placeholder="自定义名称" disabled={lockAmounts} />
+                        <Input placeholder="调整说明" disabled={lockAmounts} />
                       </Form.Item>
                     </Col>
                   ) : null}
@@ -406,10 +406,10 @@ function FareAdjustmentsEditor({
                 onClick={() => {
                   const nextFixed = FARE_ADJUSTMENT_KIND_OPTIONS.find(
                     (option) =>
-                      option.value !== FareAdjustmentKind.CUSTOM &&
+                      option.value !== FareAdjustmentKind.OTHER &&
                       !usedFixedKinds.has(option.value),
                   )
-                  const kind = nextFixed?.value ?? FareAdjustmentKind.CUSTOM
+                  const kind = nextFixed?.value ?? FareAdjustmentKind.OTHER
                   add({
                     kind,
                     direction: defaultDirectionForFareAdjustmentKind(kind),
@@ -587,7 +587,7 @@ function SourceOrderFormFields({
 
       <FormSection
         title="团款调整"
-        description="加收或扣减项；多数单据可跳过。固定种类每项最多一行，自定义可多行。"
+        description="加收或扣减项；多数单据可跳过。固定种类每项最多一行，其他费用调整可多行。"
       >
         <FareAdjustmentsEditor
           form={form}
@@ -772,7 +772,7 @@ export function SourceOrderDrawer({
   const usedFixedKinds = new Set(
     fareAdjustments
       .map((item) => item?.kind)
-      .filter((kind): kind is FareAdjustmentKind => Boolean(kind) && kind !== FareAdjustmentKind.CUSTOM),
+      .filter((kind): kind is FareAdjustmentKind => Boolean(kind) && kind !== FareAdjustmentKind.OTHER),
   )
   const showAmountPipeline = derivedTotalGuests >= 1
 

@@ -1,26 +1,20 @@
 export enum FareAdjustmentKind {
-  SINGLE_ROOM_SUPPLEMENT = 'single_room_supplement',
-  CHILD_TICKET = 'child_ticket',
+  CHILD_TICKET_TOPUP = 'child_ticket_topup',
+  SINGLE_ROOM_TOPUP = 'single_room_topup',
   EXTENDED_STAY = 'extended_stay',
-  OTHER_SUPPLEMENT = 'other_supplement',
-  STUDENT_TICKET_PRE_DISCOUNTED = 'student_ticket_pre_discounted',
-  CHILD_HALF_TICKET_PRE_DISCOUNTED = 'child_half_ticket_pre_discounted',
-  SENIOR_FREE_TICKET_PRE_DISCOUNTED = 'senior_free_ticket_pre_discounted',
-  EXCLUDED_FIRST_OR_LAST_NIGHT = 'excluded_first_or_last_night',
-  CUSTOM = 'custom',
+  TICKET_DISCOUNT_REFUND = 'ticket_discount_refund',
+  LODGING_DEDUCTION = 'lodging_deduction',
+  OTHER = 'other',
 }
 
-/** Fixed kinds lock direction; custom chooses direction. */
+/** Fixed kinds lock direction; OTHER chooses direction at input time. */
 export const FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION: Record<
-  Exclude<FareAdjustmentKind, FareAdjustmentKind.CUSTOM>,
+  Exclude<FareAdjustmentKind, FareAdjustmentKind.OTHER>,
   'increase' | 'decrease'
 > = {
-  [FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT]: 'increase',
-  [FareAdjustmentKind.CHILD_TICKET]: 'increase',
+  [FareAdjustmentKind.CHILD_TICKET_TOPUP]: 'increase',
+  [FareAdjustmentKind.SINGLE_ROOM_TOPUP]: 'increase',
   [FareAdjustmentKind.EXTENDED_STAY]: 'increase',
-  [FareAdjustmentKind.OTHER_SUPPLEMENT]: 'increase',
-  [FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED]: 'decrease',
-  [FareAdjustmentKind.CHILD_HALF_TICKET_PRE_DISCOUNTED]: 'decrease',
-  [FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED]: 'decrease',
-  [FareAdjustmentKind.EXCLUDED_FIRST_OR_LAST_NIGHT]: 'decrease',
+  [FareAdjustmentKind.TICKET_DISCOUNT_REFUND]: 'decrease',
+  [FareAdjustmentKind.LODGING_DEDUCTION]: 'decrease',
 }

@@ -135,7 +135,7 @@ describe('validateSourceOrderInput', () => {
         discountCents: 340000,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 20000,
           },
@@ -152,7 +152,7 @@ describe('validateSourceOrderInput', () => {
         discountCents: 200000,
         fareAdjustments: [
           {
-            kind: 'student_ticket_pre_discounted',
+            kind: 'ticket_discount_refund',
             direction: 'decrease',
             amountCents: 130000,
           },
@@ -236,12 +236,12 @@ describe('validateSourceOrderInput', () => {
         ...validBase,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 10000,
           },
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 20000,
           },
@@ -256,7 +256,7 @@ describe('validateSourceOrderInput', () => {
         ...validBase,
         fareAdjustments: [
           {
-            kind: 'child_ticket',
+            kind: 'child_ticket_topup',
             direction: 'increase',
             amountCents: 0,
           },
@@ -265,20 +265,20 @@ describe('validateSourceOrderInput', () => {
     ).toThrow(new BadRequestException('团款调整项金额必须大于0'))
   })
 
-  it('rejects custom fare adjustments without a name', () => {
+  it('rejects other fare adjustments without a note', () => {
     expect(() =>
       validateSourceOrderInput({
         ...validBase,
         fareAdjustments: [
           {
-            kind: 'custom',
+            kind: 'other',
             direction: 'increase',
             amountCents: 10000,
             customName: '  ',
           },
         ],
       }),
-    ).toThrow(new BadRequestException('自定义团款调整项必须填写名称'))
+    ).toThrow(new BadRequestException('其他费用调整必须填写调整说明'))
   })
 
   it('rejects fixed kinds with a mismatched direction', () => {
@@ -287,7 +287,7 @@ describe('validateSourceOrderInput', () => {
         ...validBase,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'decrease',
             amountCents: 10000,
           },
@@ -296,7 +296,45 @@ describe('validateSourceOrderInput', () => {
     ).toThrow(new BadRequestException('固定种类的团款调整方向不可修改'))
   })
 
-  it('accepts multiple custom fare adjustments with names', () => {
+  it('accepts multiple other fare adjustments with notes and either direction', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'other',
+            direction: 'increase',
+            amountCents: 10000,
+            customName: '不含首晚住宿补偿',
+          },
+          {
+            kind: 'other',
+            direction: 'decrease',
+            amountCents: 5000,
+            customName: '其他协商扣减',
+          },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
+  it('accepts fixed kinds with optional notes', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'lodging_deduction',
+            direction: 'decrease',
+            amountCents: 10000,
+            customName: '不含末晚',
+          },
+        ],
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects legacy fare-adjustment kinds including custom', () => {
     expect(() =>
       validateSourceOrderInput({
         ...validBase,
@@ -305,13 +343,74 @@ describe('validateSourceOrderInput', () => {
             kind: 'custom',
             direction: 'increase',
             amountCents: 10000,
-            customName: '不含首晚住宿补偿',
+            customName: '旧自定义',
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('团款调整种类无效'))
+
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'single_room_supplement',
+            direction: 'increase',
+            amountCents: 10000,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('团款调整种类无效'))
+
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'student_ticket_pre_discounted',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+        ],
+      }),
+    ).toThrow(new BadRequestException('团款调整种类无效'))
+  })
+
+  it('accepts a mixed six-kind payload for create/update', () => {
+    expect(() =>
+      validateSourceOrderInput({
+        ...validBase,
+        fareAdjustments: [
+          {
+            kind: 'child_ticket_topup',
+            direction: 'increase',
+            amountCents: 8000,
           },
           {
-            kind: 'custom',
+            kind: 'single_room_topup',
+            direction: 'increase',
+            amountCents: 20000,
+          },
+          {
+            kind: 'extended_stay',
+            direction: 'increase',
+            amountCents: 15000,
+          },
+          {
+            kind: 'ticket_discount_refund',
             direction: 'decrease',
             amountCents: 5000,
-            customName: '其他协商扣减',
+          },
+          {
+            kind: 'lodging_deduction',
+            direction: 'decrease',
+            amountCents: 10000,
+          },
+          {
+            kind: 'other',
+            direction: 'increase',
+            amountCents: 3000,
+            customName: '保险补差',
           },
         ],
       }),

@@ -218,15 +218,12 @@ enum FareAdjustmentDirection {
 }
 
 enum FareAdjustmentKind {
-  single_room_supplement
-  child_ticket
+  child_ticket_topup
+  single_room_topup
   extended_stay
-  other_supplement
-  student_ticket_pre_discounted
-  child_half_ticket_pre_discounted
-  senior_free_ticket_pre_discounted
-  excluded_first_or_last_night
-  custom
+  ticket_discount_refund
+  lodging_deduction
+  other
 
   @@map("fare_adjustment_kind")
 }

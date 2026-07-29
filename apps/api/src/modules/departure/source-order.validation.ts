@@ -4,6 +4,7 @@ import type {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import {
+  FARE_ADJUSTMENT_KIND_CATALOG,
   FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
   FareAdjustmentKind,
 } from '@xiaotuanbao/shared'
@@ -31,10 +32,9 @@ function isMissingUnitPrice(unitPriceCents: number | null | undefined): boolean 
   return unitPriceCents === undefined || unitPriceCents === null
 }
 
-const FIXED_KIND_DIRECTIONS = FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION as Record<
-  string,
-  'increase' | 'decrease'
->
+const CATALOG_BY_KIND = Object.fromEntries(
+  FARE_ADJUSTMENT_KIND_CATALOG.map((entry) => [entry.kind, entry]),
+)
 
 function validateFareAdjustments(
   fareAdjustments: SourceOrderFareAdjustmentInput[] | undefined,
@@ -58,10 +58,12 @@ function validateFareAdjustments(
       throw new BadRequestException('团款调整项金额必须大于0')
     }
 
-    if (item.kind === FareAdjustmentKind.CUSTOM) {
-      if (!item.customName?.trim()) {
-        throw new BadRequestException('自定义团款调整项必须填写名称')
-      }
+    const catalog = CATALOG_BY_KIND[item.kind]
+    if (catalog?.noteRequired && !item.customName?.trim()) {
+      throw new BadRequestException('其他费用调整必须填写调整说明')
+    }
+
+    if (catalog?.allowMultiple) {
       continue
     }
 
@@ -70,7 +72,11 @@ function validateFareAdjustments(
     }
     seenFixedKinds.add(item.kind)
 
-    const lockedDirection = FIXED_KIND_DIRECTIONS[item.kind]
+    const lockedDirection =
+      catalog?.direction ??
+      FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
+        item.kind as Exclude<FareAdjustmentKind, FareAdjustmentKind.OTHER>
+      ]
     if (lockedDirection && item.direction !== lockedDirection) {
       throw new BadRequestException('固定种类的团款调整方向不可修改')
     }

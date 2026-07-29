@@ -117,7 +117,7 @@ describe('computeFormAmounts', () => {
   })
 
   it('includes fare adjustments in settlement without forcing G=S−P', () => {
-    // 原始 1000；单房差 +200；学生门票已优惠过 −50；优惠 50 → 结算 1100；定金 400；尾款 900
+    // 原始 1000；单房差补款 +200；门票优惠退差 −50；优惠 50 → 结算 1100；定金 400；尾款 900
     expect(
       computeFormAmounts({
         adultGuestCount: 1,
@@ -131,12 +131,12 @@ describe('computeFormAmounts', () => {
         balanceYuan: 900,
         fareAdjustments: [
           {
-            kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+            kind: FareAdjustmentKind.SINGLE_ROOM_TOPUP,
             direction: FareAdjustmentDirection.INCREASE,
             amountYuan: 200,
           },
           {
-            kind: FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED,
+            kind: FareAdjustmentKind.TICKET_DISCOUNT_REFUND,
             direction: FareAdjustmentDirection.DECREASE,
             amountYuan: 50,
           },
@@ -361,7 +361,7 @@ describe('formValuesToPayload', () => {
     })
   })
 
-  it('sends fare adjustments in cents with custom names', () => {
+  it('sends fare adjustments in cents with adjustment notes', () => {
     expect(
       formValuesToPayload({
         partnerId: 'partner-1',
@@ -374,12 +374,13 @@ describe('formValuesToPayload', () => {
         balanceYuan: 1000,
         fareAdjustments: [
           {
-            kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+            kind: FareAdjustmentKind.SINGLE_ROOM_TOPUP,
             direction: FareAdjustmentDirection.INCREASE,
             amountYuan: 200,
+            customName: '1人单住',
           },
           {
-            kind: FareAdjustmentKind.CUSTOM,
+            kind: FareAdjustmentKind.OTHER,
             direction: FareAdjustmentDirection.DECREASE,
             amountYuan: 50,
             customName: '不含首晚住宿',
@@ -388,16 +389,46 @@ describe('formValuesToPayload', () => {
       }).fareAdjustments,
     ).toEqual([
       {
-        kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
+        kind: FareAdjustmentKind.SINGLE_ROOM_TOPUP,
         direction: FareAdjustmentDirection.INCREASE,
         amountCents: 20000,
-        customName: null,
+        customName: '1人单住',
       },
       {
-        kind: FareAdjustmentKind.CUSTOM,
+        kind: FareAdjustmentKind.OTHER,
         direction: FareAdjustmentDirection.DECREASE,
         amountCents: 5000,
         customName: '不含首晚住宿',
+      },
+    ])
+  })
+
+  it('omits blank adjustment notes as null for fixed kinds', () => {
+    expect(
+      formValuesToPayload({
+        partnerId: 'partner-1',
+        adultGuestCount: 1,
+        childGuestCount: 0,
+        adultUnitPriceYuan: 1000,
+        discountType: SourceOrderDiscountType.NONE,
+        collectionMode: SourceOrderCollectionMode.GUEST_ONLY,
+        depositYuan: 0,
+        balanceYuan: 1000,
+        fareAdjustments: [
+          {
+            kind: FareAdjustmentKind.EXTENDED_STAY,
+            direction: FareAdjustmentDirection.INCREASE,
+            amountYuan: 100,
+            customName: '  ',
+          },
+        ],
+      }).fareAdjustments,
+    ).toEqual([
+      {
+        kind: FareAdjustmentKind.EXTENDED_STAY,
+        direction: FareAdjustmentDirection.INCREASE,
+        amountCents: 10000,
+        customName: null,
       },
     ])
   })

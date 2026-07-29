@@ -169,13 +169,10 @@ export const SOURCE_ORDER_DISCOUNT_OPTIONS = [
   { value: SourceOrderDiscountType.LUMP_SUM, label: '整单优惠' },
 ] as const
 
-export const FARE_ADJUSTMENT_KIND_OPTIONS = [
-  ...FARE_ADJUSTMENT_KIND_CATALOG.map((item) => ({
-    value: item.kind,
-    label: item.label,
-  })),
-  { value: FareAdjustmentKind.CUSTOM, label: '自定义' },
-] as const
+export const FARE_ADJUSTMENT_KIND_OPTIONS = FARE_ADJUSTMENT_KIND_CATALOG.map((item) => ({
+  value: item.kind,
+  label: item.label,
+}))
 
 export const FARE_ADJUSTMENT_DIRECTION_OPTIONS = [
   { value: FareAdjustmentDirection.INCREASE, label: '增项' },
@@ -185,7 +182,7 @@ export const FARE_ADJUSTMENT_DIRECTION_OPTIONS = [
 export function defaultDirectionForFareAdjustmentKind(
   kind: FareAdjustmentKind,
 ): FareAdjustmentDirection {
-  if (kind === FareAdjustmentKind.CUSTOM) {
+  if (kind === FareAdjustmentKind.OTHER) {
     return FareAdjustmentDirection.INCREASE
   }
   const locked = FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[kind]

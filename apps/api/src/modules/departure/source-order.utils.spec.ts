@@ -220,7 +220,7 @@ describe('computeSourceOrderAmounts', () => {
         balanceCents: 90000,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 20000,
           },
@@ -258,7 +258,7 @@ describe('computeSourceOrderAmounts', () => {
             amountCents: 30000,
           },
           {
-            kind: 'student_ticket_pre_discounted',
+            kind: 'ticket_discount_refund',
             direction: 'decrease',
             amountCents: 10000,
           },
@@ -447,7 +447,7 @@ describe('resolveSourceOrderAmountChange', () => {
         balanceCents: 620000,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 10000,
           },
@@ -468,7 +468,7 @@ describe('resolveSourceOrderAmountChange', () => {
       balanceCents: 640000,
       fareAdjustments: [
         {
-          kind: 'single_room_supplement',
+          kind: 'single_room_topup',
           direction: 'increase' as const,
           amountCents: 20000,
         },
