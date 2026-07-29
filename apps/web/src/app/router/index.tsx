@@ -145,8 +145,6 @@ const departureDetailRoute = createRoute({
     transactionNo?: string
     scheduleNo?: string
     listReturn?: string
-    /** DEV prototype: source-order drawer UI variants A|B|C */
-    variant?: string
   } => {
     const direction = typeof search.direction === 'string' ? search.direction.trim() : ''
     const transactionNo =
@@ -158,10 +156,6 @@ const departureDetailRoute = createRoute({
     const listReturn =
       typeof search.listReturn === 'string' && search.listReturn.trim()
         ? search.listReturn.trim()
-        : undefined
-    const variant =
-      typeof search.variant === 'string' && search.variant.trim()
-        ? search.variant.trim().toUpperCase()
         : undefined
     return {
       tab: typeof search.tab === 'string' ? search.tab : undefined,
@@ -184,7 +178,6 @@ const departureDetailRoute = createRoute({
       ...(transactionNo ? { transactionNo } : {}),
       ...(scheduleNo ? { scheduleNo } : {}),
       ...(listReturn ? { listReturn } : {}),
-      ...(variant === 'A' || variant === 'B' || variant === 'C' ? { variant } : {}),
     }
   },
   component: lazyRouteComponent(

@@ -99,18 +99,40 @@ function FormSection({
   title,
   children,
   first = false,
+  extra,
 }: {
   title: string
   children: ReactNode
   first?: boolean
+  extra?: ReactNode
 }) {
   const { token } = theme.useToken()
   return (
     <section>
       {!first ? <Divider style={{ margin: `${token.marginLG}px 0` }} /> : null}
-      <Typography.Title level={5} style={{ marginTop: 0, marginBottom: token.marginSM }}>
-        {title}
-      </Typography.Title>
+      <Flex
+        justify="space-between"
+        align="center"
+        style={{ marginBottom: token.marginSM }}
+      >
+        <Flex align="center" gap={token.marginSM}>
+          <span
+            data-testid="section-title-accent"
+            aria-hidden
+            style={{
+              width: 3,
+              height: 16,
+              borderRadius: 2,
+              background: token.colorPrimary,
+              flexShrink: 0,
+            }}
+          />
+          <Typography.Title level={5} style={{ margin: 0 }}>
+            {title}
+          </Typography.Title>
+        </Flex>
+        {extra}
+      </Flex>
       {children}
     </section>
   )
@@ -1223,43 +1245,67 @@ export function SourceOrderDrawer({
     if (!open || !detailReady) {
       return
     }
-    const root = document.querySelector('.ant-drawer-body')
-    if (!root) {
+    if (typeof IntersectionObserver === 'undefined') {
       return
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (scrollingByTabRef.current) {
-          return
-        }
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-        const top = visible[0]
-        if (!top?.target.id.startsWith('so-section-')) {
-          return
-        }
-        const key = top.target.id.replace('so-section-', '') as DrawerSectionKey
-        if (DRAWER_SECTIONS.some((item) => item.key === key)) {
-          setActiveSection((current) => (current === key ? current : key))
-        }
-      },
-      {
-        root,
-        rootMargin: '-20% 0px -55% 0px',
-        threshold: [0.1, 0.25, 0.5],
-      },
-    )
+    let cancelled = false
+    let observer: IntersectionObserver | null = null
+    let rafId = 0
 
-    for (const item of DRAWER_SECTIONS) {
-      const node = document.getElementById(sectionDomId(item.key))
-      if (node) {
-        observer.observe(node)
+    const setup = () => {
+      if (cancelled) {
+        return
+      }
+      // Prefer the drawer body that actually hosts our sections (avoid stray drawers).
+      const section = document.getElementById(sectionDomId('basics'))
+      const root =
+        (section?.closest('.ant-drawer-body') as Element | null) ??
+        document.querySelector('.ant-drawer-body')
+      if (!root || !section) {
+        rafId = window.requestAnimationFrame(setup)
+        return
+      }
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (scrollingByTabRef.current) {
+            return
+          }
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+          const top = visible[0]
+          if (!top?.target.id.startsWith('so-section-')) {
+            return
+          }
+          const key = top.target.id.replace('so-section-', '') as DrawerSectionKey
+          if (DRAWER_SECTIONS.some((item) => item.key === key)) {
+            setActiveSection((current) => (current === key ? current : key))
+          }
+        },
+        {
+          root,
+          rootMargin: '-20% 0px -55% 0px',
+          threshold: [0.1, 0.25, 0.5],
+        },
+      )
+
+      for (const item of DRAWER_SECTIONS) {
+        const node = document.getElementById(sectionDomId(item.key))
+        if (node) {
+          observer.observe(node)
+        }
       }
     }
 
-    return () => observer.disconnect()
+    setup()
+
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(rafId)
+      observer?.disconnect()
+    }
   }, [open, detailReady])
 
   const { data: partnersResult } = useQuery({

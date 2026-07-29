@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { Alert, Button, Card, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
@@ -9,14 +9,6 @@ import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { listPartners } from '@/services/partner.service'
 import { listSourceOrders } from '@/services/source-order.service'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
-import { PrototypeSwitcher } from '@/components/prototype/PrototypeSwitcher'
-import {
-  SOURCE_ORDER_DRAWER_PROTOTYPE_VARIANTS,
-  VariantA,
-  VariantB,
-  VariantC,
-  type SourceOrderDrawerPrototypeKey,
-} from '../prototype/source-order-drawer-prototype'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrderGuestDrawer } from './SourceOrderGuestDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
@@ -53,34 +45,6 @@ export function SourceOrdersTab({
   const editable = !readOnly && canEdit
   const navigate = useNavigate()
   const search = useSearch({ from: '/app/departure/$departureId' })
-  const prototypeVariant =
-    !import.meta.env.PROD &&
-    (search.variant === 'A' || search.variant === 'B' || search.variant === 'C')
-      ? (search.variant as SourceOrderDrawerPrototypeKey)
-      : null
-  const [prototypeOpen, setPrototypeOpen] = useState(Boolean(prototypeVariant))
-
-  useEffect(() => {
-    if (prototypeVariant) {
-      setPrototypeOpen(true)
-    }
-  }, [prototypeVariant])
-
-  const setPrototypeVariant = useCallback(
-    (key: string) => {
-      void navigate({
-        to: '/departure/$departureId',
-        params: { departureId: departure.id },
-        search: (prev) => ({
-          ...prev,
-          tab: 'sourceOrders',
-          variant: key,
-        }),
-        replace: true,
-      })
-    },
-    [departure.id, navigate],
-  )
 
   const [filters, dispatchFilters] = useReducer(filterReducer, {
     draft: EMPTY_SOURCE_ORDER_FILTERS,
@@ -283,13 +247,7 @@ export function SourceOrdersTab({
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
-                  onClick={() => {
-                    if (prototypeVariant) {
-                      setPrototypeOpen(true)
-                      return
-                    }
-                    dispatchDrawer({ type: 'OPEN_CREATE' })
-                  }}
+                  onClick={() => dispatchDrawer({ type: 'OPEN_CREATE' })}
                 >
                   添加客源单
                 </Button>
@@ -315,22 +273,6 @@ export function SourceOrdersTab({
             }
           />
         </Card>
-      ) : prototypeVariant === 'C' ? (
-        <VariantC
-          open={prototypeOpen}
-          onClose={() => setPrototypeOpen(false)}
-          listSlot={
-            <Table
-              rowKey="id"
-              loading={isLoading}
-              columns={columns}
-              dataSource={listResult?.items ?? []}
-              scroll={{ x: 2280 }}
-              pagination={false}
-              summary={renderSourceOrdersTableSummary}
-            />
-          }
-        />
       ) : (
         <Table
           rowKey="id"
@@ -343,23 +285,8 @@ export function SourceOrdersTab({
         />
       )}
 
-      {prototypeVariant === 'A' ? (
-        <VariantA open={prototypeOpen} onClose={() => setPrototypeOpen(false)} />
-      ) : null}
-      {prototypeVariant === 'B' ? (
-        <VariantB open={prototypeOpen} onClose={() => setPrototypeOpen(false)} />
-      ) : null}
-
-      {prototypeVariant ? (
-        <PrototypeSwitcher
-          variants={[...SOURCE_ORDER_DRAWER_PROTOTYPE_VARIANTS]}
-          current={prototypeVariant}
-          onChange={setPrototypeVariant}
-        />
-      ) : null}
-
       <SourceOrderDrawer
-        open={!prototypeVariant && drawer.drawerOpen}
+        open={drawer.drawerOpen}
         editing={drawer.editingOrder}
         readOnly={!editable || drawer.viewOnly}
         amountReadOnly={amountReadOnly}
@@ -373,7 +300,7 @@ export function SourceOrdersTab({
       />
 
       <SourceOrderGuestDrawer
-        open={!prototypeVariant && drawer.guestDrawerOpen}
+        open={drawer.guestDrawerOpen}
         sourceOrder={drawer.guestOrder}
         readOnly={!editable}
         onClose={() => dispatchDrawer({ type: 'CLOSE_GUEST_DRAWER' })}

@@ -2960,9 +2960,9 @@ describe('Departure API (e2e)', () => {
     it('exposes fareAdjustmentNetCents on source main row in preview and xlsx without kind detail (#178)', async () => {
       const ExcelJS = await import('exceljs')
       const departure = await createOpsDeparture({ name: `${testPrefix}-ops-fare-adj` })
-      const customName = '旺季加价-运营表勿展开'
+      const adjustmentNote = '旺季加价-运营表勿展开'
 
-      // 原始 1000 + 调整净额 150（单房差 200 + 自定义 50 − 老人免 100）= 约定应收 1150（元）
+      // 原始 1000 + 调整净额 150（单房差补款 200 + 其他费用调整 50 − 门票优惠退差 100）= 约定应收 1150（元）
       await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/source-orders`)
         .send({
@@ -2983,7 +2983,7 @@ describe('Departure API (e2e)', () => {
               kind: 'other',
               direction: 'increase',
               amountCents: 5000,
-              customName,
+              customName: adjustmentNote,
             },
             {
               kind: 'ticket_discount_refund',
@@ -3004,8 +3004,10 @@ describe('Departure API (e2e)', () => {
         agreedReceivableCents: 115000,
       })
       expect(preview.body.data.sourceOrders[0]).not.toHaveProperty('fareAdjustments')
-      expect(JSON.stringify(preview.body.data)).not.toContain(customName)
+      expect(JSON.stringify(preview.body.data)).not.toContain(adjustmentNote)
       expect(JSON.stringify(preview.body.data)).not.toContain('single_room_topup')
+      expect(JSON.stringify(preview.body.data)).not.toContain('ticket_discount_refund')
+      expect(JSON.stringify(preview.body.data)).not.toContain('其他费用调整')
 
       const xlsxResponse = await authRequest(app, coordinatorToken)
         .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)
@@ -3043,9 +3045,10 @@ describe('Departure API (e2e)', () => {
         })
       })
       expect(cellTexts).toContain('调整净额')
-      expect(cellTexts).not.toContain(customName)
-      expect(cellTexts).not.toContain('单房差')
-      expect(cellTexts).not.toContain('老人免票或半价已优惠过')
+      expect(cellTexts).not.toContain(adjustmentNote)
+      expect(cellTexts).not.toContain('单房差补款')
+      expect(cellTexts).not.toContain('门票优惠退差')
+      expect(cellTexts).not.toContain('其他费用调整')
     })
 
     it('wires resource payable progress from finance facade (#96)', async () => {

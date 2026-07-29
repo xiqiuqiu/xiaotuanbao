@@ -698,10 +698,10 @@ describe('Partner reconciliation statement API (e2e)', () => {
 
   describe('fare adjustment net on statement (#178)', () => {
     // 独立周期夹具：原始 1000 + 调整净额 150 − 优惠 100 = 实际 1050（元）
-    // 增项：单房差 200 + 自定义「旺季加价」50；减项：老人免票 100 → 净额 150
-    // 导出只露净额，不展开固定种类/自定义明细名
+    // 增项：单房差补款 200 + 其他费用调整「旺季加价」50；减项：门票优惠退差 100 → 净额 150
+    // 导出只露净额，不展开固定种类/调整说明
     const ADJ_PERIOD = { periodStart: '2026-08-01', periodEnd: '2026-08-31' }
-    const CUSTOM_ADJUSTMENT_NAME = '旺季加价-确认单勿展开'
+    const ADJUSTMENT_NOTE = '旺季加价-确认单勿展开'
     let adjOrderId: string
 
     beforeAll(async () => {
@@ -725,7 +725,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
             kind: 'other',
             direction: 'increase',
             amountCents: 5000,
-            customName: CUSTOM_ADJUSTMENT_NAME,
+            customName: ADJUSTMENT_NOTE,
           },
           {
             kind: 'ticket_discount_refund',
@@ -767,14 +767,16 @@ describe('Partner reconciliation statement API (e2e)', () => {
         actualReceivableCents: 105000,
         customerTopUpCents: 0,
       })
-      // 预览 JSON 不得展开调整种类/自定义明细
+      // 预览 JSON 不得展开调整种类/调整说明
       expect(row).not.toHaveProperty('fareAdjustments')
       expect(JSON.stringify(snapshot)).not.toContain('single_room_topup')
+      expect(JSON.stringify(snapshot)).not.toContain('ticket_discount_refund')
       expect(JSON.stringify(snapshot)).not.toContain('customName')
-      expect(JSON.stringify(snapshot)).not.toContain(CUSTOM_ADJUSTMENT_NAME)
+      expect(JSON.stringify(snapshot)).not.toContain(ADJUSTMENT_NOTE)
+      expect(JSON.stringify(snapshot)).not.toContain('其他费用调整')
     })
 
-    it('xlsx writes non-zero adjustment net, recomputes settlement cells, and does not expand kind/custom detail labels', async () => {
+    it('xlsx writes non-zero adjustment net, recomputes settlement cells, and does not expand kind/note detail labels', async () => {
       const ExcelJS = await import('exceljs')
       const response = await authRequest(app, coordinatorToken)
         .get(`/api/partners/${partnerId}/reconciliation-statement.xlsx`)
@@ -824,9 +826,10 @@ describe('Partner reconciliation statement API (e2e)', () => {
           }
         })
       })
-      expect(cellTexts).not.toContain('单房差')
-      expect(cellTexts).not.toContain('老人免票或半价已优惠过')
-      expect(cellTexts).not.toContain(CUSTOM_ADJUSTMENT_NAME)
+      expect(cellTexts).not.toContain('单房差补款')
+      expect(cellTexts).not.toContain('门票优惠退差')
+      expect(cellTexts).not.toContain('其他费用调整')
+      expect(cellTexts).not.toContain(ADJUSTMENT_NOTE)
     })
   })
 })

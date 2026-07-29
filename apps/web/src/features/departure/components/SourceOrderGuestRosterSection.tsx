@@ -450,9 +450,22 @@ export function SourceOrderGuestRosterSection({
         align="center"
         style={{ marginBottom: token.marginSM }}
       >
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          {title}
-        </Typography.Title>
+        <Flex align="center" gap={token.marginSM}>
+          <span
+            data-testid="section-title-accent"
+            aria-hidden
+            style={{
+              width: 3,
+              height: 16,
+              borderRadius: 2,
+              background: token.colorPrimary,
+              flexShrink: 0,
+            }}
+          />
+          <Typography.Title level={5} style={{ margin: 0 }}>
+            {title}
+          </Typography.Title>
+        </Flex>
         <Space size={8} align="center">
           <GuestCountBadge recorded={guests.length} planned={plannedCount} />
           <Button

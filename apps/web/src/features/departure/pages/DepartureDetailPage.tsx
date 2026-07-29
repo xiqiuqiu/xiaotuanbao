@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import { Button, Result } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
@@ -29,41 +29,10 @@ export function DepartureDetailPage() {
   const actionKeys = useAuthStore((state) => state.actionKeys)
   const canEdit = canEditDeparture(actionKeys)
 
-  const prototypeVariantActive =
-    !import.meta.env.PROD &&
-    (search.variant === 'A' || search.variant === 'B' || search.variant === 'C')
-
-  const requestedTab = isDepartureDetailTabKey(search.tab)
-    ? search.tab
-    : prototypeVariantActive
-      ? 'sourceOrders'
-      : DEFAULT_TAB
+  const requestedTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
   const activeTab = isDepartureDetailTabVisible(requestedTab, menuKeys)
     ? requestedTab
     : DEFAULT_TAB
-
-  useEffect(() => {
-    if (!departureId || !prototypeVariantActive || search.tab === 'sourceOrders') {
-      return
-    }
-    navigate({
-      to: '/departure/$departureId',
-      params: { departureId },
-      search: {
-        tab: 'sourceOrders',
-        ...(search.variant ? { variant: search.variant } : {}),
-        ...(search.listReturn ? { listReturn: search.listReturn } : {}),
-      },
-      replace: true,
-    })
-  }, [
-    departureId,
-    navigate,
-    prototypeVariantActive,
-    search.listReturn,
-    search.tab,
-    search.variant,
-  ])
 
   const {
     data: departure,
@@ -91,7 +60,6 @@ export function DepartureDetailPage() {
         tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
-        ...(search.variant ? { variant: search.variant } : {}),
       },
       // Keep a single detail history entry so「返回」reaches the jump source.
       replace: true,

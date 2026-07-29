@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { SourceOrdersTab } from './SourceOrdersTab'
@@ -12,10 +12,27 @@ import { SourceOrdersTab } from './SourceOrdersTab'
  * drawer must fetch the latest source order and show those stored path amounts.
  */
 
+beforeAll(() => {
+  class IntersectionObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+  }
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    writable: true,
+    configurable: true,
+    value: IntersectionObserverStub,
+  })
+})
+
 const getSourceOrder = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  useSearch: () => ({}),
 }))
 
 vi.mock('@/services/partner.service', () => ({
@@ -139,16 +156,15 @@ describe('SourceOrdersTab list vs detail amounts after receivable sync', () => {
       expect(screen.getByText('编辑客源单')).toBeTruthy()
     })
 
-    expect(
-      screen.getByText(
-        /【客户结算】结算金额 ¥7,200\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,200\.00/,
-      ),
-    ).toBeTruthy()
-    expect(
-      screen.queryByText(
-        /【客户结算】结算金额 ¥7,000\.00[\s\S]*【代收约定】客户已收 ¥1,000\.00 · 我方代收 ¥6,000\.00/,
-      ),
-    ).toBeNull()
+    // 底部结算预览须用已同步路径金额，而非单价反推的旧口径。
+    expect(screen.getAllByText('结算金额').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('¥7,200.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('客户定金').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('我方尾款').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('¥1,000.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('¥6,200.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText('¥7,000.00')).toBeNull()
+    expect(screen.queryByText('¥6,000.00')).toBeNull()
     expect(screen.queryByText(/G约定/)).toBeNull()
   })
 })
