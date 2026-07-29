@@ -481,6 +481,14 @@ export function DeparturesPage() {
           </>
         ) : (
           <RouteLedgerViewPanel
+            routeName={state.routeName}
+            startDateRange={state.startDateRange}
+            onRouteNameChange={(value) =>
+              dispatch({ type: 'SET_ROUTE_NAME', value })
+            }
+            onStartDateRangeChange={(value) =>
+              dispatch({ type: 'SET_START_DATE_RANGE', value })
+            }
             onSwitchToDepartureList={() =>
               dispatch({ type: 'SET_VIEW', value: 'departure-list' })
             }

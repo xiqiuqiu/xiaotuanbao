@@ -1,0 +1,41 @@
+/* 线路视图日块：贴近客户日报表的日期条 + 密表 */
+
+.dateBand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: calc(-1 * var(--ant-padding-sm, 12px)) calc(-1 * var(--ant-padding-sm, 12px)) 0;
+  padding: var(--ant-padding-xs, 8px) var(--ant-padding-sm, 12px);
+  background: var(--ant-color-fill-alter);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.dayBlock {
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  overflow: hidden;
+  background: var(--ant-color-bg-container);
+}
+
+.filterForm {
+  margin-bottom: 0;
+}
+
+.filterForm :global(.ant-form-item) {
+  margin-bottom: 0;
+}
+
+/* 合计行：表头同级浅底 + 强调数字，对齐 antd Table summary 惯例 */
+.dayTable :global(.ant-table-summary) > tr > td {
+  background: var(--ant-color-fill-alter);
+}
+
+.summaryLabel {
+  font-weight: 600;
+}
+
+.summaryValue {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

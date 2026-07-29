@@ -119,12 +119,18 @@ export class ListDeparturesQueryDto {
   pageSize?: number
 }
 
-/** Query for GET /departures/route-ledger (#183). */
+/** Query for GET /departures/route-ledger (#183 / #221)。业务门槛见 assertRouteLedgerQueryAxes。 */
 export class ListRouteLedgerQueryDto {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') {
+      return value
+    }
+    const trimmed = value.trim()
+    return trimmed === '' ? undefined : trimmed
+  })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  routeName!: string
+  routeName?: string
 
   @IsOptional()
   @IsDateString()
