@@ -3,6 +3,7 @@ import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
   DEPARTURE_DETAIL_TABS,
+  isDepartureDetailTabVisible,
   type DepartureDetailTabKey,
 } from '@/features/departure/catalog'
 
@@ -27,11 +28,22 @@ export function DepartureDetailShellSkeleton({
 
       <Tabs
         activeKey={activeTab}
-        items={DEPARTURE_DETAIL_TABS.map((tab) => ({
-          key: tab.key,
-          label: tab.label,
-          children: <Skeleton active paragraph={{ rows: 6 }} />,
-        }))}
+        items={DEPARTURE_DETAIL_TABS.flatMap((tab) => {
+          // Skeleton has no menuKeys; keep finance tabs, gate DEV-only prototype tab.
+          if (
+            tab.key === 'incomeRecords' &&
+            !isDepartureDetailTabVisible(tab.key, [])
+          ) {
+            return []
+          }
+          return [
+            {
+              key: tab.key,
+              label: tab.label,
+              children: <Skeleton active paragraph={{ rows: 6 }} />,
+            },
+          ]
+        })}
       />
     </div>
   )
