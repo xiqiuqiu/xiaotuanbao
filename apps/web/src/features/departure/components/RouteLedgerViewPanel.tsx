@@ -25,7 +25,6 @@ import type {
   RouteLedgerDepartureGroup,
   RouteLedgerOutsourceSummary,
   RouteLedgerSourceOrderRow,
-  RouteLedgerTotals,
 } from '@/types/api'
 import {
   getDepartureRouteLedger,
@@ -40,7 +39,12 @@ import {
 import { formatRouteLedgerUnitPriceYuan } from '../utils/route-ledger-inbound-price-formula'
 import { resolveRouteLedgerQueryGate } from '../utils/route-ledger-query'
 import {
-  flattenRouteLedgerDepartures,
+  formatRouteLedgerChineseDate,
+  formatRouteLedgerReportTitlePrefix,
+  listRouteLedgerReportStack,
+} from '../utils/route-ledger-reports'
+import {
+  flattenRouteLedgerDeparture,
   type RouteLedgerTableRow,
 } from '../utils/route-ledger-table-rows'
 import styles from './RouteLedgerViewPanel.module.css'
@@ -54,11 +58,6 @@ type RouteLedgerViewPanelProps = {
   ) => void
   onSwitchToDepartureList: () => void
   listReturnSearch?: DepartureListSearch
-}
-
-function formatDateReportTitle(startDate: string, routeName: string): string {
-  const [y, m, d] = startDate.split('-')
-  return `${y}年${Number(m)}月${Number(d)}日${routeName}日报表`
 }
 
 function MoneyColumnTitle({ label, habitAlias }: { label: string; habitAlias: string }) {
@@ -77,7 +76,7 @@ function formatGuestPhone(row: RouteLedgerSourceOrderRow): string {
   return row.guestRepresentativePhone?.trim() || '-'
 }
 
-/** 日条/发团格拼出：Tag 汇总，避免与表底金额合计抢同一视觉层级。 */
+/** 发团日报条带拼出：Tag 汇总，避免与表底金额合计抢同一视觉层级。 */
 function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
   const { token } = theme.useToken()
   if (outsource.items.length === 0) {
@@ -113,27 +112,23 @@ function SummaryMoney({ value }: { value: number }) {
   return <span className={styles.summaryValue}>{formatCents(value)}</span>
 }
 
-function DayLedgerTable({
+/** 一团一份完整日报表（#221）：表头含团号；合计/拼出仅本发团。 */
+function DepartureLedgerReport({
   startDate,
-  titleRouteName,
-  bandOutsource,
-  totals,
-  departures,
+  routeName,
+  departure,
   listReturnSearch,
 }: {
   startDate: string
-  titleRouteName: string
-  bandOutsource: RouteLedgerOutsourceSummary
-  totals: RouteLedgerTotals
-  departures: RouteLedgerDepartureGroup[]
+  routeName: string
+  departure: RouteLedgerDepartureGroup
   listReturnSearch?: DepartureListSearch
 }) {
   const navigate = useNavigate()
   const { token } = theme.useToken()
-  const { rows, emptyDepartures } = useMemo(
-    () => flattenRouteLedgerDepartures(departures),
-    [departures],
-  )
+  const rows = useMemo(() => flattenRouteLedgerDeparture(departure), [departure])
+  const totals = departure.totals
+  const titlePrefix = formatRouteLedgerReportTitlePrefix(startDate, routeName)
 
   const columns: ColumnsType<RouteLedgerTableRow> = useMemo(
     () => [
@@ -142,41 +137,6 @@ function DayLedgerTable({
         dataIndex: 'seq',
         width: 52,
         align: 'center',
-      },
-      {
-        title: '发团',
-        key: 'departure',
-        width: 168,
-        onCell: (record) => ({
-          rowSpan: record.departureRowSpan,
-        }),
-        render: (_value, record) => {
-          if (record.departureRowSpan === 0) {
-            return null
-          }
-          const group = record.departureGroup
-          return (
-            <div className={styles.departureCell}>
-              <Space size={4} wrap>
-                <Link
-                  className={nameLinkStyles.nameLink}
-                  to="/departure/$departureId"
-                  params={{ departureId: group.departureId }}
-                  search={{ tab: 'overview' }}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {group.departureNo}
-                </Link>
-              </Space>
-              {group.departureName ? (
-                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                  {group.departureName}
-                </Typography.Text>
-              ) : null}
-              <OutsourceSummaryHint outsource={group.outsource} />
-            </div>
-          )
-        },
       },
       {
         title: '发客客户',
@@ -280,7 +240,7 @@ function DayLedgerTable({
         render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
       },
     ],
-    [token.fontSizeSM],
+    [],
   )
 
   return (
@@ -293,14 +253,31 @@ function DayLedgerTable({
         rowKey="id"
         columns={columns}
         dataSource={rows}
-        scroll={{ x: 1360 }}
-        locale={{ emptyText: '该日暂无客源单' }}
+        scroll={{ x: 1200 }}
+        locale={{ emptyText: '暂无客源单' }}
         title={() => (
-          <Flex className={styles.dateBand} align="center" wrap="wrap" gap={8}>
-            <Typography.Text strong>
-              {formatDateReportTitle(startDate, titleRouteName)}
-            </Typography.Text>
-            <OutsourceSummaryHint outsource={bandOutsource} />
+          <Flex className={styles.dateBand} vertical gap={4}>
+            <Flex align="center" wrap="wrap" gap={8}>
+              <Typography.Text strong>
+                {titlePrefix}
+                {' · '}
+                <Link
+                  className={nameLinkStyles.nameLink}
+                  to="/departure/$departureId"
+                  params={{ departureId: departure.departureId }}
+                  search={{ tab: 'overview' }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {departure.departureNo}
+                </Link>
+              </Typography.Text>
+              <OutsourceSummaryHint outsource={departure.outsource} />
+            </Flex>
+            {departure.departureName ? (
+              <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                {departure.departureName}
+              </Typography.Text>
+            ) : null}
           </Flex>
         )}
         onRow={(record) => ({
@@ -322,9 +299,6 @@ function DayLedgerTable({
           },
         })}
         summary={() => {
-          if (rows.length === 0) {
-            return null
-          }
           const adultGuestTotal = rows.reduce((sum, row) => sum + row.adultGuestCount, 0)
           const childGuestTotal = rows.reduce((sum, row) => sum + row.childGuestCount, 0)
           return (
@@ -342,58 +316,38 @@ function DayLedgerTable({
                 <Table.Summary.Cell index={3} />
                 <Table.Summary.Cell index={4} />
                 <Table.Summary.Cell index={5} />
-                <Table.Summary.Cell index={6} />
-                <Table.Summary.Cell index={7} align="right">
+                <Table.Summary.Cell index={6} align="right">
                   <span className={styles.summaryValue}>{adultGuestTotal}</span>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={8} align="right">
+                <Table.Summary.Cell index={7} align="right">
                   <span className={styles.summaryValue}>{childGuestTotal}</span>
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={9} align="right">
+                <Table.Summary.Cell index={8} align="right">
                   <SummaryMoney value={totals.grossReceivableCents} />
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={10} align="right">
+                <Table.Summary.Cell index={9} align="right">
                   <SummaryMoney value={totals.guestCollectCents} />
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={11} align="right">
+                <Table.Summary.Cell index={10} align="right">
                   <SummaryMoney value={totals.partnerCollectedCents} />
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={12} align="right">
+                <Table.Summary.Cell index={11} align="right">
                   <SummaryMoney value={totals.netReceivableCents} />
                 </Table.Summary.Cell>
-                <Table.Summary.Cell index={13} />
+                <Table.Summary.Cell index={12} />
               </Table.Summary.Row>
             </Table.Summary>
           )
         }}
       />
-      {emptyDepartures.length > 0 ? (
-        <div className={styles.emptyDepartureHint}>
-          {emptyDepartures.map((group) => (
-            <Typography.Text key={group.departureId} type="secondary" style={{ display: 'block' }}>
-              <Link
-                className={nameLinkStyles.nameLink}
-                to="/departure/$departureId"
-                params={{ departureId: group.departureId }}
-                search={{ tab: 'overview' }}
-              >
-                {group.departureNo}
-              </Link>
-              {group.departureName ? ` · ${group.departureName}` : null}
-              {' · 暂无客源单'}
-            </Typography.Text>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }
 
 /**
- * 线路视图（#183 / #221 + 密表）：
+ * 线路视图（#183 / #221）：
  * - 双轴筛选（路线和/或出团日期），筛选以发团管理 URL 为真相源；
- * - 有路线：按日出密表（无路线段 chrome）；仅日期：日下按路线分密表；
- * - 同发团「发团」列 rowSpan；拼出挂日条/发团格，不进客源列。
+ * - 一团一份完整日报表；换日轻量分隔；不做日/路线跨团加总。
  */
 export function RouteLedgerViewPanel({
   routeName,
@@ -410,7 +364,6 @@ export function RouteLedgerViewPanel({
     startDateFrom,
     startDateTo,
   })
-  const showRouteChrome = queryGate.status === 'ready' && !queryGate.params.routeName
 
   const { data: routeNamesData, isLoading: routeNamesLoading } = useQuery({
     queryKey: ['departures', 'route-names'],
@@ -443,6 +396,11 @@ export function RouteLedgerViewPanel({
       value: name,
       label: name,
     })) ?? []
+
+  const reportStack = useMemo(
+    () => (ledger ? listRouteLedgerReportStack(ledger.dateBlocks) : []),
+    [ledger],
+  )
 
   const apiErrorMessage =
     ledgerQueryError && typeof ledgerQueryError === 'object' && 'message' in ledgerQueryError
@@ -500,46 +458,27 @@ export function RouteLedgerViewPanel({
         style={{ padding: '48px 0' }}
       />
     )
-  } else if (showRouteChrome) {
-    body = (
-      <Space orientation="vertical" size={20} style={{ width: '100%' }}>
-        {ledger.dateBlocks.map((block) => (
-          <Space key={block.startDate} orientation="vertical" size={12} style={{ width: '100%' }}>
-            <Typography.Title level={5} style={{ margin: 0 }}>
-              {block.startDate}
-            </Typography.Title>
-            {block.routes.map((routeGroup) => (
-              <DayLedgerTable
-                key={`${block.startDate}-${routeGroup.routeName}`}
-                startDate={block.startDate}
-                titleRouteName={routeGroup.routeName}
-                bandOutsource={routeGroup.outsource}
-                totals={routeGroup.totals}
-                departures={routeGroup.departures}
-                listReturnSearch={listReturnSearch}
-              />
-            ))}
-          </Space>
-        ))}
-      </Space>
-    )
   } else {
     body = (
       <Space orientation="vertical" size={20} style={{ width: '100%' }}>
-        {ledger.dateBlocks.map((block) => {
-          const titleRouteName =
-            ledger.routeName
-            ?? block.routes[0]?.routeName
-            ?? routeName
-            ?? ''
+        {reportStack.map((item) => {
+          if (item.type === 'date-separator') {
+            return (
+              <Typography.Title
+                key={`sep-${item.startDate}`}
+                level={5}
+                style={{ margin: 0 }}
+              >
+                {formatRouteLedgerChineseDate(item.startDate)}
+              </Typography.Title>
+            )
+          }
           return (
-            <DayLedgerTable
-              key={block.startDate}
-              startDate={block.startDate}
-              titleRouteName={titleRouteName}
-              bandOutsource={block.outsource}
-              totals={block.totals}
-              departures={block.routes.flatMap((route) => route.departures)}
+            <DepartureLedgerReport
+              key={item.departure.departureId}
+              startDate={item.startDate}
+              routeName={item.routeName}
+              departure={item.departure}
               listReturnSearch={listReturnSearch}
             />
           )

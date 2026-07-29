@@ -336,6 +336,16 @@ async function selectRoute(user: ReturnType<typeof userEvent.setup>) {
   })
 }
 
+/** 匹配日报表头 Typography（避免父级 Flex 同 textContent 重复命中）。 */
+function getReportTitle(title: string) {
+  return screen.getByText(
+    (_, el) =>
+      el instanceof HTMLElement
+      && el.classList.contains('ant-typography')
+      && el.textContent === title,
+  )
+}
+
 describe('RouteLedgerViewPanel', () => {
   beforeEach(() => {
     listDepartureRouteNames.mockReset()
@@ -363,56 +373,43 @@ describe('RouteLedgerViewPanel', () => {
     expect(getDepartureRouteLedger).not.toHaveBeenCalled()
   })
 
-  it('URL 传入路线后按日一张密表，同发团发团列合并 (#221)', async () => {
+  it('同日多发团各出一份日报表，合计互不合并 (#221)', async () => {
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getByText('2026年7月15日伊犁环线日报表')).toBeInTheDocument()
+      expect(
+        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
+      ).toBeInTheDocument()
     })
 
     expect(getDepartureRouteLedger).toHaveBeenCalledWith(
       { routeName: '伊犁环线' },
       expect.anything(),
     )
-    expect(screen.getByText(/XTB202607150001/)).toBeInTheDocument()
-    expect(screen.getByText(/XTB202607150002/)).toBeInTheDocument()
+    expect(
+      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150002'),
+    ).toBeInTheDocument()
     expect(screen.getAllByText('同日团 A').length).toBeGreaterThan(0)
     expect(screen.getAllByText('同日团 B').length).toBeGreaterThan(0)
 
     const headers = screen.getAllByRole('columnheader').map((el) => el.textContent ?? '')
-    expect(headers).toEqual([
-      '序号',
-      '发团',
-      '发客客户',
-      '游客代表',
-      '电话',
-      '拼入价',
-      '人数',
-      '原始团款',
-      '我方代收',
-      '客户已收',
-      '结算金额',
-      '备注',
-      '成人',
-      '儿童',
-      '成人',
-      '儿童',
-    ])
+    // 两张表共用列结构；取首张表头（去重前会重复，故只断言包含关键列且无「发团」列）
+    expect(headers).toContain('发客客户')
+    expect(headers).not.toContain('发团')
     expect(screen.queryByRole('columnheader', { name: /拼出/ })).not.toBeInTheDocument()
     expect(screen.queryByText('实收业务')).not.toBeInTheDocument()
 
     const tables = screen.getAllByRole('table')
-    expect(tables).toHaveLength(1)
-    expect(within(tables[0]).queryByRole('spinbutton')).not.toBeInTheDocument()
-    expect(within(tables[0]).queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: 'XTB202607150001' })).toHaveLength(1)
+    expect(tables).toHaveLength(2)
     expect(within(tables[0]).getByText('合计')).toBeInTheDocument()
-    expect(within(tables[0]).getByText('3 单')).toBeInTheDocument()
+    expect(within(tables[0]).getByText('2 单')).toBeInTheDocument()
+    expect(within(tables[1]).getByText('1 单')).toBeInTheDocument()
+    expect(screen.queryByText('3 单')).not.toBeInTheDocument()
   })
 
-  it('仅选有效出团日期时请求不含 routeName，并按路线分密表 (#221)', async () => {
+  it('仅选有效出团日期时请求不含 routeName，一团一表且无路线段加总 (#221)', async () => {
     getDepartureRouteLedger.mockResolvedValue(dateOnlyFixture)
 
     renderPanel(
@@ -429,14 +426,20 @@ describe('RouteLedgerViewPanel', () => {
         { startDateFrom: '2026-07-15', startDateTo: '2026-07-15' },
         expect.anything(),
       )
-      expect(screen.getByText('2026年7月15日阿勒泰拼车日报表')).toBeInTheDocument()
+      expect(
+        getReportTitle('2026年7月15日阿勒泰拼车日报表 · XTB202607150099'),
+      ).toBeInTheDocument()
     })
 
-    expect(screen.getByText('2026年7月15日伊犁环线日报表')).toBeInTheDocument()
-    expect(screen.getByText('2026-07-15')).toBeInTheDocument()
-    expect(screen.getByText(/XTB202607150099/)).toBeInTheDocument()
-    expect(screen.getByText(/XTB202607150001/)).toBeInTheDocument()
-    expect(screen.getAllByRole('table')).toHaveLength(2)
+    expect(
+      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
+    ).toBeInTheDocument()
+    expect(
+      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150002'),
+    ).toBeInTheDocument()
+    // 同日首日不插日期分隔；三份独立日报
+    expect(screen.queryByRole('heading', { name: '2026-07-15' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('table')).toHaveLength(3)
   })
 
   it('未选路线且日期跨度超过 7 天时提示校验错误且不请求 (#221)', async () => {
@@ -470,17 +473,17 @@ describe('RouteLedgerViewPanel', () => {
     })
   })
 
-  it('日条与发团合并格展示拼出汇总，不进客源列', async () => {
+  it('拼出挂在各发团日报条带，不进客源列、不跨团合并', async () => {
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getAllByText(/拼出 2 项/).length).toBeGreaterThan(0)
+      expect(screen.getByText(/拼出 2 项/)).toBeInTheDocument()
     })
 
-    expect(screen.getAllByText(/伊犁拼出社/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/那拉提拼出社/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/伊犁拼出社/)).toBeInTheDocument()
+    expect(screen.getByText(/那拉提拼出社/)).toBeInTheDocument()
     expect(screen.getByText(/拼出 · 独库拼出社/)).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: '拼出' })).not.toBeInTheDocument()
   })
@@ -494,13 +497,12 @@ describe('RouteLedgerViewPanel', () => {
       expect(screen.getByText('陈志明')).toBeInTheDocument()
     })
 
-    const table = screen.getByRole('table')
-    expect(within(table).getAllByText('900').length).toBeGreaterThan(0)
-    expect(within(table).getByText('13800002211')).toBeInTheDocument()
-    expect(within(table).getByText('1000')).toBeInTheDocument()
-    expect(within(table).getByText('500')).toBeInTheDocument()
-    expect(within(table).getAllByText('2').length).toBeGreaterThan(0)
-    expect(within(table).getAllByText('1').length).toBeGreaterThan(0)
+    const tables = screen.getAllByRole('table')
+    const tableB = tables[1]
+    expect(within(tableB).getByText('1000')).toBeInTheDocument()
+    expect(within(tableB).getByText('500')).toBeInTheDocument()
+    expect(within(tableB).getByText('13800002211')).toBeInTheDocument()
+    expect(within(tables[0]).getAllByText('900').length).toBeGreaterThan(0)
   })
 
   it('点击团号进入发团详情，点击客源行进入客源管理路径（#185）', async () => {
@@ -543,5 +545,119 @@ describe('RouteLedgerViewPanel', () => {
     await waitFor(() => {
       expect(screen.getByText('「伊犁环线」暂无匹配发团')).toBeInTheDocument()
     })
+  })
+
+  it('无客源发团仍出完整日报壳 (#221)', async () => {
+    getDepartureRouteLedger.mockResolvedValue({
+      routeName: '伊犁环线',
+      startDateFrom: null,
+      startDateTo: null,
+      dateBlocks: [
+        {
+          startDate: '2026-07-15',
+          totals: {
+            orderCount: 0,
+            guestCount: 0,
+            grossReceivableCents: 0,
+            netReceivableCents: 0,
+            partnerCollectedCents: 0,
+            guestCollectCents: 0,
+          },
+          outsource: { totalAmountCents: 0, items: [] },
+          routes: [
+            {
+              routeName: '伊犁环线',
+              totals: {
+                orderCount: 0,
+                guestCount: 0,
+                grossReceivableCents: 0,
+                netReceivableCents: 0,
+                partnerCollectedCents: 0,
+                guestCollectCents: 0,
+              },
+              outsource: { totalAmountCents: 0, items: [] },
+              departures: [
+                {
+                  departureId: 'dep-empty',
+                  departureNo: 'XTB202607150000',
+                  departureName: '空客源团',
+                  startDate: '2026-07-15',
+                  totals: {
+                    orderCount: 0,
+                    guestCount: 0,
+                    grossReceivableCents: 0,
+                    netReceivableCents: 0,
+                    partnerCollectedCents: 0,
+                    guestCollectCents: 0,
+                  },
+                  outsource: { totalAmountCents: 0, items: [] },
+                  sourceOrders: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    renderPanel(
+      <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
+    )
+
+    await waitFor(() => {
+      expect(
+        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150000'),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByText('暂无客源单')).toBeInTheDocument()
+    expect(screen.getByText('空客源团')).toBeInTheDocument()
+    expect(screen.getByText('0 单')).toBeInTheDocument()
+  })
+
+  it('跨多天结果在换日处显示轻量日期分隔 (#221)', async () => {
+    getDepartureRouteLedger.mockResolvedValue({
+      routeName: '伊犁环线',
+      startDateFrom: '2026-07-15',
+      startDateTo: '2026-07-16',
+      dateBlocks: [
+        ledgerFixture.dateBlocks[0],
+        {
+          startDate: '2026-07-16',
+          totals: routeGroupFixture.departures[0].totals,
+          outsource: routeGroupFixture.departures[0].outsource,
+          routes: [
+            {
+              routeName: '伊犁环线',
+              totals: routeGroupFixture.departures[0].totals,
+              outsource: routeGroupFixture.departures[0].outsource,
+              departures: [
+                {
+                  ...routeGroupFixture.departures[0],
+                  departureId: 'dep-day2',
+                  departureNo: 'XTB202607160001',
+                  departureName: '次日团',
+                  startDate: '2026-07-16',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+
+    renderPanel(
+      <StatefulPanel
+        initial={{
+          routeName: '伊犁环线',
+          startDateRange: ['2026-07-15', '2026-07-16'],
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '2026年7月16日' })).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('heading', { name: '2026年7月15日' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('table')).toHaveLength(3)
   })
 })

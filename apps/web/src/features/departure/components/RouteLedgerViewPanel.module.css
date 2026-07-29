@@ -18,17 +18,6 @@
   background: var(--ant-color-bg-container);
 }
 
-.departureCell {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 200px;
-}
-
-.emptyDepartureHint {
-  padding: 0 var(--ant-padding-sm, 12px) var(--ant-padding-xs, 8px);
-}
-
 .filterForm {
   margin-bottom: 0;
 }
