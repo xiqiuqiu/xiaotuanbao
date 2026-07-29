@@ -836,12 +836,12 @@ export class DepartureService {
     const organizationId = departures[0].organizationId
     const departureIds = departures.map((departure) => departure.id)
     const ownerUserIds = departures.map((departure) => departure.ownerUserId)
-    const [readModelMap, ownerNameMap, financeTouchedIds, groundIncomeDepartureIds] =
+    const [readModelMap, ownerNameMap, financeTouchedIds, incomeRecordDepartureIds] =
       await Promise.all([
       this.departureReadModelService.batchGetForDepartures(organizationId, departureIds),
       this.departureReadModelService.batchGetOwnerNames(ownerUserIds),
       this.batchGetFinanceTouchedDepartureIds(organizationId, departureIds),
-      this.batchGetGroundIncomeDepartureIds(organizationId, departureIds),
+      this.batchGetIncomeRecordDepartureIds(organizationId, departureIds),
     ])
 
     return departures.map((departure) => {
@@ -854,7 +854,7 @@ export class DepartureService {
           departure,
           readModel.sourceOrderCount,
           financeTouchedIds.has(departure.id),
-          groundIncomeDepartureIds.has(departure.id),
+          incomeRecordDepartureIds.has(departure.id),
         ),
       )
     })
@@ -867,7 +867,7 @@ export class DepartureService {
       archiveHistory,
       settlementHistory,
       financeTouchedIds,
-      groundIncomeDepartureIds,
+      incomeRecordDepartureIds,
       crewSupplierNameMap,
     ] =
       await Promise.all([
@@ -876,7 +876,7 @@ export class DepartureService {
         this.loadArchiveHistory(departure.id),
         this.loadSettlementHistory(departure.id),
         this.batchGetFinanceTouchedDepartureIds(departure.organizationId, [departure.id]),
-        this.batchGetGroundIncomeDepartureIds(departure.organizationId, [departure.id]),
+        this.batchGetIncomeRecordDepartureIds(departure.organizationId, [departure.id]),
         this.batchGetCrewSupplierNames(departure.organizationId, [departure]),
       ])
     return this.toDepartureDetail(
@@ -889,7 +889,7 @@ export class DepartureService {
         departure,
         readModel.sourceOrderCount,
         financeTouchedIds.has(departure.id),
-        groundIncomeDepartureIds.has(departure.id),
+        incomeRecordDepartureIds.has(departure.id),
       ),
       crewSupplierNameMap,
     )
@@ -952,14 +952,14 @@ export class DepartureService {
     return touched
   }
 
-  private async batchGetGroundIncomeDepartureIds(
+  private async batchGetIncomeRecordDepartureIds(
     organizationId: string,
     departureIds: string[],
   ): Promise<Set<string>> {
     if (departureIds.length === 0) {
       return new Set()
     }
-    const rows = await this.prisma.groundIncome.findMany({
+    const rows = await this.prisma.departureIncomeRecord.findMany({
       where: {
         departureId: { in: departureIds },
         departure: { organizationId },
@@ -974,12 +974,12 @@ export class DepartureService {
     departure: Pick<Departure, 'status'>,
     sourceOrderCount: number,
     hasFinanceTouch: boolean,
-    hasGroundIncome: boolean,
+    hasIncomeRecord: boolean,
   ): boolean {
     if (!PURGEABLE_STATUSES.includes(departure.status)) {
       return false
     }
-    return sourceOrderCount === 0 && !hasFinanceTouch && !hasGroundIncome
+    return sourceOrderCount === 0 && !hasFinanceTouch && !hasIncomeRecord
   }
 
   private async assertPurgeAllowed(organizationId: string, departure: Departure): Promise<void> {
@@ -987,7 +987,7 @@ export class DepartureService {
       throw new ConflictException('已结清或已关闭的发团不能删除，请使用关闭/解除归档')
     }
 
-    const [sourceOrderCount, scheduleCount, transactionCount, groundIncomeCount] =
+    const [sourceOrderCount, scheduleCount, transactionCount, incomeRecordCount] =
       await Promise.all([
       this.prisma.sourceOrder.count({ where: { departureId: departure.id } }),
       this.prisma.paymentSchedule.count({
@@ -996,7 +996,7 @@ export class DepartureService {
       this.prisma.financeTransaction.count({
         where: { organizationId, departureId: departure.id },
       }),
-      this.prisma.groundIncome.count({ where: { departureId: departure.id } }),
+      this.prisma.departureIncomeRecord.count({ where: { departureId: departure.id } }),
     ])
 
     if (sourceOrderCount > 0) {
@@ -1008,8 +1008,8 @@ export class DepartureService {
     if (transactionCount > 0) {
       throw new ConflictException('已有归属本团的收支流水，不能删除发团')
     }
-    if (groundIncomeCount > 0) {
-      throw new ConflictException('已有团上收入，不能删除发团')
+    if (incomeRecordCount > 0) {
+      throw new ConflictException('已有增收记录，不能删除发团')
     }
   }
 

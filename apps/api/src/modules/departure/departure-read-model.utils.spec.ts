@@ -252,7 +252,7 @@ describe('departure-read-model.utils', () => {
         overviewSourceFacts: {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
-          groundIncomeCents: 0,
+          additionalIncomeNetCents: 0,
           collectionStats: {
             settlementCollectionReceivedCents: 500_000,
             settlementCollectionReceivableCents: 500_000,
@@ -298,7 +298,7 @@ describe('departure-read-model.utils', () => {
         overviewSourceFacts: {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
-          groundIncomeCents: 0,
+          additionalIncomeNetCents: 0,
           collectionStats: {
             settlementCollectionReceivedCents: 500_000,
             settlementCollectionReceivableCents: 500_000,
@@ -343,7 +343,7 @@ describe('departure-read-model.utils', () => {
         overviewSourceFacts: {
           sourceReceivableUngeneratedCents: 1_000_000,
           generatedResourceAgreedCents: 400_000,
-          groundIncomeCents: 30_000,
+          additionalIncomeNetCents: 30_000,
           collectionStats: {
             settlementCollectionReceivedCents: 400_000,
             settlementCollectionReceivableCents: 1_000_000,
@@ -361,7 +361,7 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.overviewStats.guestCollectionAgreedCents).toBe(1_000_000)
       expect(aggregate.overviewStats.confirmedRebateCents).toBe(80_000)
       expect(aggregate.overviewStats.rebatePaidCents).toBe(30_000)
-      expect(aggregate.overviewStats.otherIncomeCents).toBe(30_000)
+      expect(aggregate.overviewStats.additionalIncomeNetCents).toBe(30_000)
       expect(aggregate.overviewStats.rebateUnpaidCents).toBe(50_000)
       // 外部核销含他团与无归属流水，合并为一个口径。
       expect(aggregate.overviewStats.verifiedFromExternalCents).toBe(70_000)

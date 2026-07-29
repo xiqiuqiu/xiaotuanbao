@@ -9,7 +9,7 @@ import {
 } from '../catalog'
 import {
   anomalyColumns,
-  groundIncomeColumns,
+  incomeRecordColumns,
   nonEmptyNote,
   pendingColumns,
   receivablePathColumns,
@@ -195,26 +195,26 @@ export function OperationsSheetPendingSection({
   )
 }
 
-export function OperationsSheetGroundIncomeSection({
+export function OperationsSheetIncomeRecordsSection({
   sheet,
 }: {
   sheet: DepartureOperationsSheetSnapshot
 }) {
-  if (sheet.groundIncomes.length === 0) {
+  if (sheet.incomeRecords.length === 0) {
     return null
   }
 
   return (
     <div>
-      <Typography.Title level={5}>团上收入</Typography.Title>
+      <Typography.Title level={5}>增收记录</Typography.Title>
       <Descriptions
         size="small"
         column={1}
         style={{ marginBottom: 12 }}
         items={[
           {
-            label: '其他收入合计',
-            children: formatCents(sheet.groundIncomeTotalCents),
+            label: '增收净收益',
+            children: formatCents(sheet.additionalIncomeNetCents),
           },
         ]}
       />
@@ -222,8 +222,9 @@ export function OperationsSheetGroundIncomeSection({
         size="small"
         rowKey="id"
         pagination={false}
-        columns={groundIncomeColumns}
-        dataSource={sheet.groundIncomes}
+        columns={incomeRecordColumns}
+        dataSource={sheet.incomeRecords}
+        scroll={{ x: 900 }}
       />
     </div>
   )
