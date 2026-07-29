@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
@@ -27,14 +27,16 @@ function renderDrawer(
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrderDrawer
-          open
-          editing={null}
-          readOnly={false}
-          loading={false}
-          onClose={vi.fn()}
-          {...props}
-        />
+        <App>
+          <SourceOrderDrawer
+            open
+            editing={null}
+            readOnly={false}
+            loading={false}
+            onClose={vi.fn()}
+            {...props}
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
