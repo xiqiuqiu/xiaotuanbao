@@ -26,7 +26,11 @@ describe('isDepartureDetailTabVisible (ADR-0023)', () => {
 
     expect(keys).not.toContain('transactions')
     expect(keys).not.toContain('verifications')
-    expect(keys).toEqual(['overview', 'sourceOrders', 'execution', 'receivables', 'payables'])
+    // DEV 下多一个 throwaway「增收记录」原型 Tab；PROD 构建中会隐藏。
+    const expected = import.meta.env.DEV
+      ? ['overview', 'sourceOrders', 'execution', 'incomeRecords', 'receivables', 'payables']
+      : ['overview', 'sourceOrders', 'execution', 'receivables', 'payables']
+    expect(keys).toEqual(expected)
   })
 
   it('keeps 应收/应付 tabs visible for 计调', () => {
@@ -34,16 +38,34 @@ describe('isDepartureDetailTabVisible (ADR-0023)', () => {
     expect(isDepartureDetailTabVisible('payables', COORDINATOR_MENU_KEYS)).toBe(true)
   })
 
-  it('shows all 7 tabs for 财务/管理员 with the finance menus', () => {
-    expect(visibleTabKeys(FINANCE_MENU_KEYS)).toEqual([
-      'overview',
-      'sourceOrders',
-      'execution',
-      'receivables',
-      'payables',
-      'transactions',
-      'verifications',
-    ])
+  it('shows finance tabs for 财务/管理员 with the finance menus', () => {
+    const expected = import.meta.env.DEV
+      ? [
+          'overview',
+          'sourceOrders',
+          'execution',
+          'incomeRecords',
+          'receivables',
+          'payables',
+          'transactions',
+          'verifications',
+        ]
+      : [
+          'overview',
+          'sourceOrders',
+          'execution',
+          'receivables',
+          'payables',
+          'transactions',
+          'verifications',
+        ]
+    expect(visibleTabKeys(FINANCE_MENU_KEYS)).toEqual(expected)
+  })
+
+  it('gates 增收记录 prototype tab to DEV only', () => {
+    expect(isDepartureDetailTabVisible('incomeRecords', COORDINATOR_MENU_KEYS)).toBe(
+      import.meta.env.DEV,
+    )
   })
 
   it('drives 收支流水 tab by /finance/transactions and 核销记录 by /finance/verification', () => {

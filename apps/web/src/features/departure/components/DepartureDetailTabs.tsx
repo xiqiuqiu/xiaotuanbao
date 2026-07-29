@@ -14,6 +14,7 @@ import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureOverview } from './DepartureOverview'
 import { SourceOrdersTab } from './SourceOrdersTab'
 import { ExecutionTab } from './ExecutionTab'
+import { IncomeRecordsPrototypeHost } from '../prototype/income-records/IncomeRecordsPrototypeHost'
 import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabVisible,
@@ -32,6 +33,7 @@ type DepartureDetailSearch = {
   direction?: string
   transactionNo?: string
   listReturn?: string
+  variant?: string
 }
 
 type DepartureDetailTabsProps = {
@@ -166,6 +168,14 @@ export function DepartureDetailTabs({
             amountReadOnly={amountReadOnly}
           />,
         ),
+      }
+    }
+
+    if (tab.key === 'incomeRecords') {
+      return {
+        key: tab.key,
+        label: tab.label,
+        children: wrapTabPane(<IncomeRecordsPrototypeHost />),
       }
     }
 
