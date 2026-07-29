@@ -14,6 +14,7 @@ vi.mock('@/services/partner.service', () => ({
 
 vi.mock('@/services/source-order.service', () => ({
   getSourceOrder: vi.fn(),
+  listSourceOrderGuests: vi.fn(async () => []),
 }))
 
 function renderDrawer(
@@ -128,7 +129,7 @@ describe('SourceOrderDrawer save and generate', () => {
           adultGuestCount: 1,
         }),
         null,
-        { generateReceivable: true },
+        expect.objectContaining({ generateReceivable: true }),
       )
     })
   })
@@ -149,7 +150,7 @@ describe('SourceOrderDrawer save and generate', () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ partnerId: 'partner-1' }),
         null,
-        { generateReceivable: false },
+        expect.objectContaining({ generateReceivable: false }),
       )
     })
   })
@@ -174,7 +175,7 @@ describe('SourceOrderDrawer save and generate', () => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ partnerId: 'partner-1' }),
         null,
-        { generateReceivable: false },
+        expect.objectContaining({ generateReceivable: false }),
       )
     })
   })

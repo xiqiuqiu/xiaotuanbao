@@ -10,11 +10,14 @@ import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { formatCents } from '../catalog'
 import {
   createSourceOrder,
+  createSourceOrderGuest,
   deleteSourceOrder,
+  deleteSourceOrderGuest,
   generateReceivables,
   generateReceivablesForDeparture,
   getGuestCollectionChangeImpact,
   updateSourceOrder,
+  updateSourceOrderGuest,
 } from '@/services/source-order.service'
 import {
   formatBatchFinanceGenerationConfirmContent,
@@ -25,12 +28,41 @@ import {
   resolvePathAmountsFromPayload,
   type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
+import {
+  planSourceOrderGuestSync,
+  type SourceOrderGuestSyncBundle,
+} from '../utils/source-order-guest-form'
 import type { DrawerState } from '../components/source-orders-tab-state'
 
 interface UseSourceOrdersTabMutationsParams {
   departure: DepartureDetail
   drawer: DrawerState
   onCloseDrawer: () => void
+}
+
+type SourceOrderSaveInput = {
+  payload: ReturnType<typeof formValuesToPayload>
+  guests?: SourceOrderGuestSyncBundle
+}
+
+async function persistGuestSync(
+  sourceOrderId: string,
+  guests: SourceOrderGuestSyncBundle,
+) {
+  const ops = planSourceOrderGuestSync(guests.baseline, guests.next)
+  const deletes = ops.filter((op) => op.type === 'delete')
+  const updates = ops.filter((op) => op.type === 'update')
+  const creates = ops.filter((op) => op.type === 'create')
+
+  await Promise.all(
+    deletes.map((op) => deleteSourceOrderGuest(sourceOrderId, op.guestId)),
+  )
+  await Promise.all(
+    updates.map((op) => updateSourceOrderGuest(sourceOrderId, op.guestId, op.payload)),
+  )
+  await Promise.all(
+    creates.map((op) => createSourceOrderGuest(sourceOrderId, op.payload)),
+  )
 }
 
 export function useSourceOrdersTabMutations({
@@ -43,6 +75,7 @@ export function useSourceOrdersTabMutations({
   const invalidateSourceOrders = () => {
     void queryClient.invalidateQueries({ queryKey: ['source-orders', departure.id] })
     void queryClient.invalidateQueries({ queryKey: ['source-order'] })
+    void queryClient.invalidateQueries({ queryKey: ['source-order-guests'] })
     void queryClient.invalidateQueries({ queryKey: ['departure', departure.id] })
   }
 
@@ -54,11 +87,14 @@ export function useSourceOrdersTabMutations({
   }
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+    mutationFn: async ({ payload, guests }: SourceOrderSaveInput) => {
       const editingId = drawer.editingOrder?.id ?? null
       const saved = editingId
         ? await updateSourceOrder(editingId, payload)
         : await createSourceOrder(departure.id, payload)
+      if (guests) {
+        await persistGuestSync(saved.id, guests)
+      }
       return { saved, editingId }
     },
     onSuccess: ({ editingId }) => {
@@ -72,11 +108,14 @@ export function useSourceOrdersTabMutations({
   })
 
   const saveAndGenerateMutation = useMutation({
-    mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
+    mutationFn: async ({ payload, guests }: SourceOrderSaveInput) => {
       const editingId = drawer.editingOrder?.id ?? null
       const saved = editingId
         ? await updateSourceOrder(editingId, payload)
         : await createSourceOrder(departure.id, payload)
+      if (guests) {
+        await persistGuestSync(saved.id, guests)
+      }
       try {
         const generateResult = await generateReceivables(saved.id)
         return { saved, editingId, generateOk: true as const, generateResult }
@@ -187,16 +226,23 @@ export function useSourceOrderSubmit({
        * detail used to hydrate the form; the list row can lag after receivable sync.
        */
       pathBaseline: SourceOrderPathBaseline | null = null,
-      options: { generateReceivable?: boolean } = {},
+      options: {
+        generateReceivable?: boolean
+        guests?: SourceOrderGuestSyncBundle
+      } = {},
     ) => {
+      const saveInput: SourceOrderSaveInput = {
+        payload,
+        guests: options.guests,
+      }
       const runSave = () =>
         options.generateReceivable
-          ? saveAndGenerateMutation.mutate(payload)
-          : saveMutation.mutate(payload)
+          ? saveAndGenerateMutation.mutate(saveInput)
+          : saveMutation.mutate(saveInput)
       const runSaveAsync = () =>
         options.generateReceivable
-          ? saveAndGenerateMutation.mutateAsync(payload)
-          : saveMutation.mutateAsync(payload)
+          ? saveAndGenerateMutation.mutateAsync(saveInput)
+          : saveMutation.mutateAsync(saveInput)
 
       if (!editingOrder || !pathBaseline) {
         runSave()

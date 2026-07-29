@@ -18,6 +18,10 @@ vi.mock('@/services/source-order.service', () => ({
   generateReceivables: (...args: unknown[]) => generateReceivables(...args),
   generateReceivablesForDeparture: vi.fn(),
   getGuestCollectionChangeImpact: vi.fn(),
+  createSourceOrderGuest: vi.fn(),
+  updateSourceOrderGuest: vi.fn(),
+  deleteSourceOrderGuest: vi.fn(),
+  listSourceOrderGuests: vi.fn(async () => []),
 }))
 
 const departure = {
@@ -100,7 +104,7 @@ describe('useSourceOrdersTabMutations save and generate', () => {
     )
 
     await waitFor(() => expect(api).toBeDefined())
-    api!.saveAndGenerateMutation.mutate(payload as never)
+    api!.saveAndGenerateMutation.mutate({ payload } as never)
 
     await waitFor(() => {
       expect(createSourceOrder).toHaveBeenCalledWith('departure-1', payload)
@@ -134,7 +138,7 @@ describe('useSourceOrdersTabMutations save and generate', () => {
     )
 
     await waitFor(() => expect(api).toBeDefined())
-    api!.saveAndGenerateMutation.mutate(payload as never)
+    api!.saveAndGenerateMutation.mutate({ payload } as never)
 
     await waitFor(() => {
       expect(createSourceOrder).toHaveBeenCalled()
