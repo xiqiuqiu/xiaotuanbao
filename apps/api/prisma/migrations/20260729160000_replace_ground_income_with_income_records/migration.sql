@@ -62,7 +62,7 @@ SELECT
   'other'::"departure_income_type",
   LEFT(gi."title", 50),
   NULL,
-  (gi."created_at" AT TIME ZONE 'UTC')::date,
+  ((gi."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Shanghai')::date,
   gi."amount_cents",
   NULL,
   0,

@@ -6,8 +6,9 @@ import { useState } from 'react'
 import {
   App,
   Button,
-  Card,
   Col,
+  Empty,
+  Flex,
   Form,
   Popconfirm,
   Row,
@@ -264,6 +265,12 @@ export function IncomeRecordsPanel({
     },
   ]
 
+  const seedGuideOption = editing?.guideSupplierId && editing.guideSupplierName
+    ? { id: editing.guideSupplierId, name: editing.guideSupplierName }
+    : departure.guideSupplierId && departure.guideSupplierName
+      ? { id: departure.guideSupplierId, name: departure.guideSupplierName }
+      : null
+
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       <StaleDataAlert
@@ -272,51 +279,63 @@ export function IncomeRecordsPanel({
         hasData={Boolean(query.data)}
         onRefresh={() => void query.refetch()}
       />
-      <Card size="small">
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={8}>
-            <Statistic title="增收金额合计" value={formatCents(amountTotal)} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="导游提成合计" value={formatCents(commissionTotal)} />
-          </Col>
-          <Col xs={24} sm={8}>
-            <Statistic title="公司增收合计" value={formatCents(companyTotal)} />
-          </Col>
-        </Row>
-      </Card>
-      <Card
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={8}>
+          <Statistic title="增收金额合计" value={formatCents(amountTotal)} />
+        </Col>
+        <Col xs={24} sm={8}>
+          <Statistic title="导游提成合计" value={formatCents(commissionTotal)} />
+        </Col>
+        <Col xs={24} sm={8}>
+          <Statistic title="公司增收合计" value={formatCents(companyTotal)} />
+        </Col>
+      </Row>
+      <Flex justify="space-between" align="center" wrap gap={8}>
+        <Typography.Title level={5} style={{ margin: 0 }}>
+          增收明细
+        </Typography.Title>
+        {mutationLocked ? null : (
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            新增
+          </Button>
+        )}
+      </Flex>
+      {mutationLocked ? (
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          当前发团不可编辑，增收记录只读。
+        </Typography.Paragraph>
+      ) : null}
+      <Table
         size="small"
-        title="增收记录"
-        extra={
-          mutationLocked ? null : (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              新增
-            </Button>
-          )
-        }
-      >
-        {mutationLocked ? (
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-            当前发团不可编辑，增收记录只读。
-          </Typography.Paragraph>
-        ) : null}
-        <Table
-          size="small"
-          rowKey="id"
-          loading={query.isLoading}
-          columns={columns}
-          dataSource={items}
-          pagination={false}
-          scroll={{ x: 1100 }}
-          locale={{ emptyText: '暂无增收记录' }}
-        />
-      </Card>
+        rowKey="id"
+        loading={query.isLoading}
+        columns={columns}
+        dataSource={items}
+        pagination={false}
+        scroll={{ x: 1100 }}
+        locale={{
+          emptyText: (
+            <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">
+              {mutationLocked ? null : (
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  新增增收记录
+                </Button>
+              )}
+            </Empty>
+          ),
+        }}
+      />
       <IncomeRecordDrawer
         open={drawerOpen}
         editing={editing != null}
         form={form}
         saving={saveMutation.isPending}
+        seedGuideOption={seedGuideOption}
+        seedPartnerOption={
+          editing?.partnerSupplierId && editing.partnerSupplierName
+            ? { id: editing.partnerSupplierId, name: editing.partnerSupplierName }
+            : null
+        }
         onClose={closeDrawer}
         onSave={() => {
           void form.validateFields().then((values) => saveMutation.mutate(values))

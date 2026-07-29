@@ -1,5 +1,4 @@
 import {
-  Alert,
   Button,
   DatePicker,
   Drawer,
@@ -62,6 +61,8 @@ const COMMISSION_STATUS_OPTIONS = (
   label: DEPARTURE_INCOME_COMMISSION_STATUS_LABELS[value],
 }))
 
+type SeedSupplierOption = { id: string; name: string }
+
 type IncomeRecordDrawerProps = {
   open: boolean
   editing: boolean
@@ -69,6 +70,8 @@ type IncomeRecordDrawerProps = {
   onClose: () => void
   onSave: () => void
   saving: boolean
+  seedGuideOption?: SeedSupplierOption | null
+  seedPartnerOption?: SeedSupplierOption | null
 }
 
 export function IncomeRecordDrawer({
@@ -78,6 +81,8 @@ export function IncomeRecordDrawer({
   onClose,
   onSave,
   saving,
+  seedGuideOption = null,
+  seedPartnerOption = null,
 }: IncomeRecordDrawerProps) {
   const watchedType = Form.useWatch('type', form) as DepartureIncomeType | undefined
   const amountYuan = Form.useWatch('amountYuan', form) ?? 0
@@ -115,6 +120,30 @@ export function IncomeRecordDrawer({
   const showPartnerHint =
     watchedType === DepartureIncomeType.SHOPPING_REBATE ||
     watchedType === DepartureIncomeType.OPTIONAL_TOUR
+
+  const partnerOptions = (() => {
+    const items = partnerQuery.data?.items ?? []
+    const mapped = items.map((item) => ({ value: item.id, label: item.name }))
+    if (
+      seedPartnerOption &&
+      !mapped.some((item) => item.value === seedPartnerOption.id)
+    ) {
+      return [
+        { value: seedPartnerOption.id, label: seedPartnerOption.name },
+        ...mapped,
+      ]
+    }
+    return mapped
+  })()
+
+  const guideOptions = (() => {
+    const items = guideQuery.data?.items ?? []
+    const mapped = items.map((item) => ({ value: item.id, label: item.name }))
+    if (seedGuideOption && !mapped.some((item) => item.value === seedGuideOption.id)) {
+      return [{ value: seedGuideOption.id, label: seedGuideOption.name }, ...mapped]
+    }
+    return mapped
+  })()
 
   return (
     <Drawer
@@ -154,10 +183,7 @@ export function IncomeRecordDrawer({
             filterOption={false}
             placeholder="从供应商选择（车销可空）"
             onSearch={setPartnerSearch}
-            options={(partnerQuery.data?.items ?? []).map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
+            options={partnerOptions}
             notFoundContent={partnerQuery.isLoading ? '加载中…' : '暂无供应商'}
           />
         </Form.Item>
@@ -179,10 +205,7 @@ export function IncomeRecordDrawer({
             filterOption={false}
             placeholder="本团执行班组导游或导游类供应商"
             onSearch={setGuideSearch}
-            options={(guideQuery.data?.items ?? []).map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
+            options={guideOptions}
             notFoundContent={guideQuery.isLoading ? '加载中…' : '暂无导游'}
           />
         </Form.Item>
@@ -217,9 +240,6 @@ export function IncomeRecordDrawer({
         <Form.Item name="remark" label="备注" rules={[{ max: 200 }]}>
           <Input.TextArea rows={3} maxLength={200} showCount placeholder="人数/商品/结算约定等" />
         </Form.Item>
-        {showPartnerHint ? (
-          <Alert type="info" showIcon message="购物店返利/自费返利建议填写合作方，可不强制" />
-        ) : null}
       </Form>
     </Drawer>
   )
