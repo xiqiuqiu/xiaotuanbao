@@ -1,6 +1,6 @@
 /**
- * 团内增收记录页签 — 方案 A：顶部合计 + 表格 + 抽屉（ADR-0036）。
- * 筛选 / 列表快捷标记见后续票；本片只做 CRUD。
+ * 团内增收记录页签 — 方案 A：顶部合计 + 筛选 + 表格 + 抽屉（ADR-0036）。
+ * 列表快捷标记已收/已付经 PATCH，不生成应收/应付。
  */
 import { useState } from 'react'
 import {
@@ -10,21 +10,16 @@ import {
   Empty,
   Flex,
   Form,
-  Popconfirm,
   Row,
   Space,
   Statistic,
   Table,
-  Tag,
   Typography,
 } from 'antd'
-import type { TableColumnsType } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
-  DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
-  DEPARTURE_INCOME_TYPE_LABELS,
   DepartureIncomeCollectionStatus,
   DepartureIncomeCommissionStatus,
   DepartureIncomeSettlementComposite,
@@ -39,8 +34,11 @@ import {
   deleteIncomeRecord,
   listIncomeRecords,
   updateIncomeRecord,
+  type ListIncomeRecordsParams,
 } from '@/services/income-record.service'
 import { formatCents } from '../catalog'
+import { buildIncomeRecordsColumns } from './income-records-columns'
+import { IncomeRecordsFilters } from './IncomeRecordsFilters'
 import {
   IncomeRecordDrawer,
   type IncomeRecordFormValues,
@@ -49,13 +47,6 @@ import {
 type IncomeRecordsPanelProps = {
   departure: DepartureDetail
   mutationLocked: boolean
-}
-
-const COMPOSITE_COLORS: Record<DepartureIncomeSettlementComposite, string> = {
-  [DepartureIncomeSettlementComposite.PENDING_SETTLE]: 'default',
-  [DepartureIncomeSettlementComposite.PENDING_COMMISSION]: 'warning',
-  [DepartureIncomeSettlementComposite.PENDING_COLLECT]: 'processing',
-  [DepartureIncomeSettlementComposite.SETTLED]: 'success',
 }
 
 export function IncomeRecordsPanel({
@@ -67,10 +58,21 @@ export function IncomeRecordsPanel({
   const [form] = Form.useForm<IncomeRecordFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<DepartureIncomeRecordSummary | null>(null)
+  const [typeFilter, setTypeFilter] = useState<DepartureIncomeType | 'all'>('all')
+  const [compositeFilter, setCompositeFilter] = useState<
+    DepartureIncomeSettlementComposite | 'all'
+  >('all')
+  const [keyword, setKeyword] = useState('')
+
+  const listParams: ListIncomeRecordsParams = {
+    ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+    ...(compositeFilter !== 'all' ? { settlementComposite: compositeFilter } : {}),
+    ...(keyword.trim() ? { keyword: keyword.trim() } : {}),
+  }
 
   const query = useQuery({
-    queryKey: ['income-records', departure.id],
-    queryFn: ({ signal }) => listIncomeRecords(departure.id, signal),
+    queryKey: ['income-records', departure.id, listParams],
+    queryFn: ({ signal }) => listIncomeRecords(departure.id, listParams, signal),
     ...operationalQueryOptions(),
   })
 
@@ -159,6 +161,28 @@ export function IncomeRecordsPanel({
     },
   })
 
+  const markMutation = useMutation({
+    mutationFn: ({
+      item,
+      payload,
+    }: {
+      item: DepartureIncomeRecordSummary
+      payload: {
+        incomeStatus?: DepartureIncomeCollectionStatus
+        commissionStatus?: DepartureIncomeCommissionStatus
+      }
+    }) => updateIncomeRecord(departure.id, item.id, payload),
+    onSuccess: (_data, variables) => {
+      message.success(
+        variables.payload.incomeStatus != null ? '已标记已收' : '已标记已付',
+      )
+      refresh()
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '标记失败')
+    },
+  })
+
   const confirmDelete = (item: DepartureIncomeRecordSummary) => {
     const settled =
       item.incomeStatus === DepartureIncomeCollectionStatus.COLLECTED ||
@@ -181,89 +205,22 @@ export function IncomeRecordsPanel({
   const commissionTotal = query.data?.commissionCentsTotal ?? 0
   const companyTotal = query.data?.companyIncomeCentsTotal ?? 0
 
-  const columns: TableColumnsType<DepartureIncomeRecordSummary> = [
-    {
-      title: '类型',
-      dataIndex: 'type',
-      width: 120,
-      render: (value: DepartureIncomeType) => DEPARTURE_INCOME_TYPE_LABELS[value],
-    },
-    { title: '项目名称', dataIndex: 'projectName', ellipsis: true },
-    {
-      title: '合作方',
-      dataIndex: 'partnerSupplierName',
-      width: 140,
-      render: (value: string | null) => value ?? '-',
-    },
-    {
-      title: '增收金额',
-      dataIndex: 'amountCents',
-      width: 120,
-      align: 'right',
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '导游',
-      dataIndex: 'guideSupplierName',
-      width: 120,
-      render: (value: string | null) => value ?? '-',
-    },
-    {
-      title: '导游提成',
-      dataIndex: 'commissionCents',
-      width: 110,
-      align: 'right',
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '公司增收',
-      dataIndex: 'companyIncomeCents',
-      width: 110,
-      align: 'right',
-      render: (value: number) => formatCents(value),
-    },
-    {
-      title: '综合状态',
-      dataIndex: 'settlementComposite',
-      width: 110,
-      render: (value: DepartureIncomeSettlementComposite) => (
-        <Tag color={COMPOSITE_COLORS[value]}>
-          {DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS[value]}
-        </Tag>
-      ),
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 140,
-      fixed: 'right',
-      render: (_value, record) =>
-        mutationLocked ? (
-          '-'
-        ) : (
-          <Space size={8}>
-            <Button type="link" size="small" onClick={() => openEdit(record)}>
-              编辑
-            </Button>
-            {record.incomeStatus === DepartureIncomeCollectionStatus.UNCOLLECTED &&
-            record.commissionStatus === DepartureIncomeCommissionStatus.UNPAID ? (
-              <Popconfirm
-                title="确认删除该增收记录？"
-                onConfirm={() => confirmDelete(record)}
-              >
-                <Button type="link" size="small" danger>
-                  删除
-                </Button>
-              </Popconfirm>
-            ) : (
-              <Button type="link" size="small" danger onClick={() => confirmDelete(record)}>
-                删除
-              </Button>
-            )}
-          </Space>
-        ),
-    },
-  ]
+  const columns = buildIncomeRecordsColumns({
+    mutationLocked,
+    markPending: markMutation.isPending,
+    onEdit: openEdit,
+    onMarkCollected: (item) =>
+      markMutation.mutate({
+        item,
+        payload: { incomeStatus: DepartureIncomeCollectionStatus.COLLECTED },
+      }),
+    onMarkPaid: (item) =>
+      markMutation.mutate({
+        item,
+        payload: { commissionStatus: DepartureIncomeCommissionStatus.PAID },
+      }),
+    onDelete: confirmDelete,
+  })
 
   const seedGuideOption = editing?.guideSupplierId && editing.guideSupplierName
     ? { id: editing.guideSupplierId, name: editing.guideSupplierName }
@@ -300,6 +257,13 @@ export function IncomeRecordsPanel({
           </Button>
         )}
       </Flex>
+      <IncomeRecordsFilters
+        typeFilter={typeFilter}
+        compositeFilter={compositeFilter}
+        onTypeChange={setTypeFilter}
+        onCompositeChange={setCompositeFilter}
+        onKeywordSearch={setKeyword}
+      />
       {mutationLocked ? (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           当前发团不可编辑，增收记录只读。
@@ -312,7 +276,7 @@ export function IncomeRecordsPanel({
         columns={columns}
         dataSource={items}
         pagination={false}
-        scroll={{ x: 1100 }}
+        scroll={{ x: 1200 }}
         locale={{
           emptyText: (
             <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">

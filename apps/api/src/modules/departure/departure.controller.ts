@@ -40,6 +40,7 @@ import { DepartureOperationsSheetService } from './departure-operations-sheet.se
 import { buildOperationsSheetContentDisposition } from './departure-operations-sheet-excel.types'
 import {
   CreateDepartureIncomeRecordDto,
+  ListDepartureIncomeRecordsQueryDto,
   UpdateDepartureIncomeRecordDto,
 } from './dto/departure-income-record.dto'
 import { DepartureIncomeRecordService } from './departure-income-record.service'
@@ -111,8 +112,13 @@ export class DepartureController {
   listIncomeRecords(
     @Req() request: { user: { organizationId: string } },
     @Param('id') id: string,
+    @Query() query: ListDepartureIncomeRecordsQueryDto,
   ): Promise<DepartureIncomeRecordListResult> {
-    return this.departureIncomeRecordService.list(request.user.organizationId, id)
+    return this.departureIncomeRecordService.list(
+      request.user.organizationId,
+      id,
+      query,
+    )
   }
 
   @Post(':id/income-records')

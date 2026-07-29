@@ -10,11 +10,13 @@ import {
   DepartureIncomeCollectionStatus,
   DepartureIncomeCommissionStatus,
   DepartureIncomeType,
+  statusesForDepartureIncomeSettlementComposite,
   type DepartureIncomeRecordListResult,
   type DepartureIncomeRecordSummary,
 } from '@xiaotuanbao/shared'
 import {
   DepartureStatus,
+  Prisma,
   ResourceKind,
   type Departure,
   type DepartureIncomeRecord,
@@ -24,6 +26,7 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import type {
   CreateDepartureIncomeRecordDto,
+  ListDepartureIncomeRecordsQueryDto,
   UpdateDepartureIncomeRecordDto,
 } from './dto/departure-income-record.dto'
 import {
@@ -48,10 +51,11 @@ export class DepartureIncomeRecordService {
   async list(
     organizationId: string,
     departureId: string,
+    query: ListDepartureIncomeRecordsQueryDto = {},
   ): Promise<DepartureIncomeRecordListResult> {
     const departure = await this.findDepartureOrThrow(organizationId, departureId)
     const items = await this.prisma.departureIncomeRecord.findMany({
-      where: { departureId: departure.id },
+      where: this.buildListWhere(departure.id, query),
       include: {
         partnerSupplier: { select: { id: true, name: true } },
         guideSupplier: { select: { id: true, name: true } },
@@ -207,6 +211,36 @@ export class DepartureIncomeRecordService {
     )
     this.ensureMutable(item.departure, '删除增收记录')
     await this.prisma.departureIncomeRecord.delete({ where: { id: item.id } })
+  }
+
+  private buildListWhere(
+    departureId: string,
+    query: ListDepartureIncomeRecordsQueryDto,
+  ): Prisma.DepartureIncomeRecordWhereInput {
+    const where: Prisma.DepartureIncomeRecordWhereInput = { departureId }
+
+    if (query.type) {
+      where.type = query.type
+    }
+
+    if (query.settlementComposite) {
+      const statusPair = statusesForDepartureIncomeSettlementComposite(
+        query.settlementComposite,
+      )
+      where.incomeStatus = statusPair.incomeStatus
+      where.commissionStatus = statusPair.commissionStatus
+    }
+
+    const keyword = query.keyword?.trim()
+    if (keyword) {
+      where.OR = [
+        { projectName: { contains: keyword, mode: 'insensitive' } },
+        { remark: { contains: keyword, mode: 'insensitive' } },
+        { partnerSupplier: { name: { contains: keyword, mode: 'insensitive' } } },
+      ]
+    }
+
+    return where
   }
 
   private async findDepartureOrThrow(

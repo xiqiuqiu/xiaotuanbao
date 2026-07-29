@@ -15,6 +15,21 @@ import {
   DepartureIncomeCommissionStatus as PrismaCommissionStatus,
   DepartureIncomeType as PrismaIncomeType,
 } from '@prisma/client'
+import { DepartureIncomeSettlementComposite } from '@xiaotuanbao/shared'
+
+export class ListDepartureIncomeRecordsQueryDto {
+  @IsOptional()
+  @IsEnum(PrismaIncomeType)
+  type?: PrismaIncomeType
+
+  @IsOptional()
+  @IsEnum(DepartureIncomeSettlementComposite)
+  settlementComposite?: DepartureIncomeSettlementComposite
+
+  @IsOptional()
+  @IsString()
+  keyword?: string
+}
 
 export class CreateDepartureIncomeRecordDto {
   @IsEnum(PrismaIncomeType)

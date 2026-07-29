@@ -291,6 +291,7 @@ export {
   DepartureIncomeSettlementComposite,
   DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
   deriveDepartureIncomeSettlementComposite,
+  statusesForDepartureIncomeSettlementComposite,
   companyIncomeCents,
 } from './enums/departure-income-settlement-composite.enum'
 export {

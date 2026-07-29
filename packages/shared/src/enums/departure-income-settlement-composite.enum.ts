@@ -44,6 +44,38 @@ export function deriveDepartureIncomeSettlementComposite(input: {
   return DepartureIncomeSettlementComposite.PENDING_SETTLE
 }
 
+/** 综合状态 → 收入/提成状态对（列表筛选用；与派生互逆）。 */
+export function statusesForDepartureIncomeSettlementComposite(
+  composite: DepartureIncomeSettlementComposite,
+): {
+  incomeStatus: DepartureIncomeCollectionStatus
+  commissionStatus: DepartureIncomeCommissionStatus
+} {
+  switch (composite) {
+    case DepartureIncomeSettlementComposite.PENDING_COMMISSION:
+      return {
+        incomeStatus: DepartureIncomeCollectionStatus.COLLECTED,
+        commissionStatus: DepartureIncomeCommissionStatus.UNPAID,
+      }
+    case DepartureIncomeSettlementComposite.PENDING_COLLECT:
+      return {
+        incomeStatus: DepartureIncomeCollectionStatus.UNCOLLECTED,
+        commissionStatus: DepartureIncomeCommissionStatus.PAID,
+      }
+    case DepartureIncomeSettlementComposite.SETTLED:
+      return {
+        incomeStatus: DepartureIncomeCollectionStatus.COLLECTED,
+        commissionStatus: DepartureIncomeCommissionStatus.PAID,
+      }
+    case DepartureIncomeSettlementComposite.PENDING_SETTLE:
+    default:
+      return {
+        incomeStatus: DepartureIncomeCollectionStatus.UNCOLLECTED,
+        commissionStatus: DepartureIncomeCommissionStatus.UNPAID,
+      }
+  }
+}
+
 export function companyIncomeCents(input: {
   amountCents: number
   commissionCents: number

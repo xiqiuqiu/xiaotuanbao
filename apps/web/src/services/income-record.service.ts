@@ -1,3 +1,7 @@
+import type {
+  DepartureIncomeSettlementComposite,
+  DepartureIncomeType,
+} from '@xiaotuanbao/shared'
 import { request } from '@/lib/request'
 import type {
   CreateDepartureIncomeRecordDto,
@@ -6,13 +10,20 @@ import type {
   UpdateDepartureIncomeRecordDto,
 } from '@/types/api'
 
+export type ListIncomeRecordsParams = {
+  type?: DepartureIncomeType
+  settlementComposite?: DepartureIncomeSettlementComposite
+  keyword?: string
+}
+
 export function listIncomeRecords(
   departureId: string,
+  params?: ListIncomeRecordsParams,
   signal?: AbortSignal,
 ): Promise<DepartureIncomeRecordListResult> {
   return request.get<DepartureIncomeRecordListResult>(
     `/departures/${departureId}/income-records`,
-    { signal },
+    { params, signal },
   )
 }
 

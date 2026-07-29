@@ -623,6 +623,121 @@ describe('Departure API (e2e)', () => {
     expect(purge.body.message).toBe('已有增收记录，不能删除发团')
   })
 
+  it('filters income records, marks collected/paid without schedules, and totals match list', async () => {
+    const departure = await createTestDeparture({
+      name: `${testPrefix}-income-settlement-ux`,
+    })
+    const partner = await prisma.supplier.create({
+      data: {
+        organizationId,
+        name: `${testPrefix}-购物店甲`,
+        categories: [ResourceKind.shop],
+      },
+    })
+
+    const shopping = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/income-records`)
+      .send({
+        type: 'shopping_rebate',
+        projectName: '玉器返利',
+        partnerSupplierId: partner.id,
+        amountCents: 20_000,
+        commissionCents: 5_000,
+        remark: '团上现结约定',
+      })
+      .expect(201)
+    const coach = await authRequest(app, coordinatorToken)
+      .post(`/api/departures/${departure.id}/income-records`)
+      .send({
+        type: 'coach_sales',
+        projectName: '车销零食',
+        amountCents: 8_000,
+        commissionCents: 0,
+      })
+      .expect(201)
+
+    const byType = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/income-records`)
+      .query({ type: 'shopping_rebate' })
+      .expect(200)
+    expect(byType.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      shopping.body.data.id,
+    ])
+    expect(byType.body.data).toMatchObject({
+      amountCentsTotal: 20_000,
+      commissionCentsTotal: 5_000,
+      companyIncomeCentsTotal: 15_000,
+    })
+
+    const byKeyword = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/income-records`)
+      .query({ keyword: '购物店甲' })
+      .expect(200)
+    expect(byKeyword.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      shopping.body.data.id,
+    ])
+    expect(byKeyword.body.data).toMatchObject({
+      amountCentsTotal: 20_000,
+      commissionCentsTotal: 5_000,
+      companyIncomeCentsTotal: 15_000,
+    })
+
+    const scheduleCountBefore = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id },
+    })
+
+    const markedCollected = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}/income-records/${shopping.body.data.id}`)
+      .send({ incomeStatus: 'collected' })
+      .expect(200)
+    expect(markedCollected.body.data).toMatchObject({
+      incomeStatus: 'collected',
+      commissionStatus: 'unpaid',
+      settlementComposite: 'pending_commission',
+    })
+
+    const markedPaid = await authRequest(app, coordinatorToken)
+      .patch(`/api/departures/${departure.id}/income-records/${shopping.body.data.id}`)
+      .send({ commissionStatus: 'paid' })
+      .expect(200)
+    expect(markedPaid.body.data).toMatchObject({
+      incomeStatus: 'collected',
+      commissionStatus: 'paid',
+      settlementComposite: 'settled',
+    })
+
+    const scheduleCountAfter = await prisma.paymentSchedule.count({
+      where: { organizationId, departureId: departure.id },
+    })
+    expect(scheduleCountAfter).toBe(scheduleCountBefore)
+
+    const byComposite = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/income-records`)
+      .query({ settlementComposite: 'settled' })
+      .expect(200)
+    expect(byComposite.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      shopping.body.data.id,
+    ])
+    expect(byComposite.body.data).toMatchObject({
+      amountCentsTotal: 20_000,
+      commissionCentsTotal: 5_000,
+      companyIncomeCentsTotal: 15_000,
+    })
+
+    const pendingSettle = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${departure.id}/income-records`)
+      .query({ settlementComposite: 'pending_settle' })
+      .expect(200)
+    expect(pendingSettle.body.data.items.map((item: { id: string }) => item.id)).toEqual([
+      coach.body.data.id,
+    ])
+    expect(pendingSettle.body.data).toMatchObject({
+      amountCentsTotal: 8_000,
+      commissionCentsTotal: 0,
+      companyIncomeCentsTotal: 8_000,
+    })
+  })
+
   it('returns departure detail for coordinator', async () => {
     const departure = await createTestDeparture({ name: `${testPrefix}-detail-get` })
 
