@@ -12,10 +12,47 @@ import {
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 /**
- * #183 线路账本主干 + #184 日/团拼出汇总 + #185 扫读抛光字段：
- * GET /departures/route-ledger — 精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
- * 拼出挂在日/发团汇总，不进客源行；客源行含游客代表与拼入单价（算式输入）。
+ * #183 线路账本主干 + #184 日/团拼出汇总 + #185 扫读抛光字段 + #221 双轴筛选：
+ * GET /departures/route-ledger — 路线和/或完整出团日区间 → 日块 → 路线段 → 发团组 → 客源行；
+ * 拼出挂在日/路线段/发团汇总，不进客源行；客源行含游客代表与拼入单价（算式输入）。
  */
+
+type LedgerSourceOrder = {
+  notes?: string
+  adultUnitPriceCents: number
+  adultGuestCount: number
+  childUnitPriceCents: number
+  childGuestCount: number
+  guestCount: number
+  grossReceivableCents: number
+  [key: string]: unknown
+}
+type LedgerDeparture = {
+  departureId: string
+  departureNo: string
+  totals: unknown
+  sourceOrders: LedgerSourceOrder[]
+  outsource: { totalAmountCents: number; items: Array<{ id: string; [key: string]: unknown }> }
+}
+type LedgerRoute = {
+  routeName: string
+  departures: LedgerDeparture[]
+  totals: unknown
+  outsource: { totalAmountCents: number; items: unknown[] }
+}
+type LedgerDateBlock = {
+  startDate: string
+  routes: LedgerRoute[]
+  totals: unknown
+  outsource: { totalAmountCents: number; items: unknown[] }
+  // 兼容断言：旧扁平字段不得再出现
+  departures?: unknown
+  sourceOrders?: unknown
+}
+
+function flatDepartures(block: LedgerDateBlock): LedgerDeparture[] {
+  return block.routes.flatMap((route) => route.departures)
+}
 describe('Departure route ledger API (e2e)', () => {
   let app: INestApplication
   let prisma: PrismaClient
@@ -283,12 +320,78 @@ describe('Departure route ledger API (e2e)', () => {
     await app.close()
   })
 
-  it('rejects missing routeName', async () => {
+  it('rejects when neither routeName nor complete date range is provided (#221)', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/departures/route-ledger')
       .expect(400)
 
-    expect(response.body.message).toEqual(expect.any(String))
+    expect(response.body.message).toBe('请选择路线名称或完整的出团日期区间')
+  })
+
+  it('rejects one-sided date filter (#221)', async () => {
+    const fromOnly = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ startDateFrom: '2026-07-15' })
+      .expect(400)
+    expect(fromOnly.body.message).toBe('出团日期须同时填写起止日期')
+
+    const toOnly = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateTo: '2026-07-15' })
+      .expect(400)
+    expect(toOnly.body.message).toBe('出团日期须同时填写起止日期')
+  })
+
+  it('rejects date-only range wider than 7 days (#221)', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ startDateFrom: '2026-07-10', startDateTo: '2026-07-17' })
+      .expect(400)
+
+    expect(response.body.message).toBe('未选路线时，出团日期跨度最多 7 天')
+  })
+
+  it('allows date-only query within 7 days and nests date → route → departure (#221)', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
+      .expect(200)
+
+    const data = response.body.data
+    expect(data.routeName).toBeNull()
+    expect(data.startDateFrom).toBe('2026-07-15')
+    expect(data.startDateTo).toBe('2026-07-15')
+    expect(data.dateBlocks).toHaveLength(1)
+
+    const block = data.dateBlocks[0] as LedgerDateBlock
+    expect(block.startDate).toBe('2026-07-15')
+    expect(block.routes.map((route) => route.routeName)).toEqual(
+      [otherRouteName, routeName].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    )
+
+    const mainRoute = block.routes.find((route) => route.routeName === routeName)
+    const otherRoute = block.routes.find((route) => route.routeName === otherRouteName)
+    expect(mainRoute?.departures).toHaveLength(2)
+    expect(mainRoute?.departures.map((d) => d.departureId).sort()).toEqual(
+      [departureSameA.id, departureSameB.id].sort(),
+    )
+    expect(otherRoute?.departures).toHaveLength(1)
+    expect(block.departures).toBeUndefined()
+  })
+
+  it('allows route-scoped query with uncapped date span (#221)', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger')
+      .query({ routeName, startDateFrom: '2026-07-10', startDateTo: '2026-08-05' })
+      .expect(200)
+
+    expect(response.body.data.routeName).toBe(routeName)
+    expect(response.body.data.dateBlocks.map((b: { startDate: string }) => b.startDate)).toEqual([
+      '2026-07-10',
+      '2026-07-15',
+      '2026-07-20',
+      '2026-08-05',
+    ])
   })
 
   it('rejects users without /departure menu permission', async () => {
@@ -322,7 +425,7 @@ describe('Departure route ledger API (e2e)', () => {
       .expect(200)
   })
 
-  it('matches exact routeName only and nests date → departure → source order', async () => {
+  it('matches exact routeName only and nests date → route → departure → source order', async () => {
     const response = await authRequest(app, coordinatorToken)
       .get('/api/departures/route-ledger')
       .query({ routeName })
@@ -337,18 +440,21 @@ describe('Departure route ledger API (e2e)', () => {
       '2026-08-05',
     ])
 
-    const sameDay = data.dateBlocks[1]
-    expect(sameDay.departures).toHaveLength(2)
-    expect(sameDay.departures.map((d: { departureId: string }) => d.departureId).sort()).toEqual(
+    const sameDay = data.dateBlocks[1] as LedgerDateBlock
+    expect(sameDay.routes).toHaveLength(1)
+    expect(sameDay.routes[0].routeName).toBe(routeName)
+    expect(sameDay.routes[0].departures).toHaveLength(2)
+    expect(sameDay.routes[0].departures.map((d) => d.departureId).sort()).toEqual(
       [departureSameA.id, departureSameB.id].sort(),
     )
-    for (const group of sameDay.departures) {
+    for (const group of sameDay.routes[0].departures) {
       expect(group.sourceOrders).toHaveLength(1)
-      expect(group.sourceOrders[0].notes).toMatch(/^同日团 /)
+      expect((group.sourceOrders[0] as { notes: string }).notes).toMatch(/^同日团 /)
     }
 
-    // 不得把客源行打平到日期块顶层；不得混入近似路线名
+    // 不得把客源行打平到日期块顶层；不得混入近似路线名；无扁平 departures
     expect(sameDay.sourceOrders).toBeUndefined()
+    expect(sameDay.departures).toBeUndefined()
     expect(JSON.stringify(data)).not.toContain(otherRouteName)
   })
 
@@ -360,13 +466,16 @@ describe('Departure route ledger API (e2e)', () => {
 
     const data = response.body.data
     expect(data.dateBlocks).toHaveLength(1)
-    const block = data.dateBlocks[0]
+    const block = data.dateBlocks[0] as LedgerDateBlock
     expect(block.startDate).toBe('2026-07-20')
-    expect(block.departures).toHaveLength(1)
-    expect(block.departures[0].departureId).toBe(departureLate.id)
-    expect(block.departures[0].departureNo).toBe(departureLate.departureNo)
+    expect(block.routes).toHaveLength(1)
+    expect(block.routes[0].departures).toHaveLength(1)
+    expect(block.routes[0].departures[0].departureId).toBe(departureLate.id)
+    expect(
+      (block.routes[0].departures[0] as { departureNo: string }).departureNo,
+    ).toBe(departureLate.departureNo)
 
-    const row = block.departures[0].sourceOrders[0]
+    const row = block.routes[0].departures[0].sourceOrders[0]
     expect(row).toMatchObject({
       id: orderLateId,
       departureId: departureLate.id,
@@ -388,9 +497,10 @@ describe('Departure route ledger API (e2e)', () => {
     // 拼入单价仅作算式输入，权威合计仍走已存 gross/net，不另造算式合计字段
     expect(row).not.toHaveProperty('inboundPriceFormula')
     expect(row).not.toHaveProperty('inboundPriceFormulaCents')
-    expect(row.adultUnitPriceCents * row.adultGuestCount + row.childUnitPriceCents * row.childGuestCount).toBe(
-      row.grossReceivableCents,
-    )
+    expect(
+      row.adultUnitPriceCents * row.adultGuestCount
+        + row.childUnitPriceCents * row.childGuestCount,
+    ).toBe(row.grossReceivableCents)
 
     // 不混核销已收/未收；无行级「实收业务」
     expect(row).not.toHaveProperty('settledAmountCents')
@@ -399,7 +509,7 @@ describe('Departure route ledger API (e2e)', () => {
     expect(row).not.toHaveProperty('businessNetCents')
     expect(JSON.stringify(row)).not.toMatch(/实收业务/)
 
-    expect(block.departures[0].totals).toMatchObject({
+    expect(block.routes[0].departures[0].totals).toMatchObject({
       orderCount: 1,
       guestCount: 3,
       grossReceivableCents: 250000,
@@ -423,11 +533,9 @@ describe('Departure route ledger API (e2e)', () => {
       .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
       .expect(200)
 
-    const block = response.body.data.dateBlocks[0]
-    const groupA = block.departures.find(
-      (d: { departureId: string }) => d.departureId === departureSameA.id,
-    )
-    const row = groupA.sourceOrders[0]
+    const block = response.body.data.dateBlocks[0] as LedgerDateBlock
+    const groupA = flatDepartures(block).find((d) => d.departureId === departureSameA.id)
+    const row = groupA!.sourceOrders[0] as Record<string, unknown>
     expect(row).toMatchObject({
       guestRepresentativeName: null,
       guestRepresentativePhone: null,
@@ -487,9 +595,8 @@ describe('Departure route ledger API (e2e)', () => {
       .query({ routeName })
       .expect(200)
 
-    const departureIds = response.body.data.dateBlocks.flatMap(
-      (block: { departures: Array<{ departureId: string }> }) =>
-        block.departures.map((d) => d.departureId),
+    const departureIds = (response.body.data.dateBlocks as LedgerDateBlock[]).flatMap((block) =>
+      flatDepartures(block).map((d) => d.departureId),
     )
     expect(departureIds).not.toContain(foreignDeparture.id)
 
@@ -504,8 +611,11 @@ describe('Departure route ledger API (e2e)', () => {
       .query({ routeName, startDateFrom: '2026-07-20', startDateTo: '2026-07-20' })
       .expect(200)
 
-    const block = response.body.data.dateBlocks[0]
-    const group = block.departures[0]
+    const block = response.body.data.dateBlocks[0] as LedgerDateBlock
+    const group = flatDepartures(block)[0] as LedgerDeparture & {
+      outsource: { totalAmountCents: number; items: unknown[] }
+      sourceOrders: unknown[]
+    }
     const expectedLine = {
       id: lateOutsourceId,
       supplierName: `${testPrefix}-伊犁拼出社`,
@@ -514,6 +624,10 @@ describe('Departure route ledger API (e2e)', () => {
     }
 
     expect(group.outsource).toMatchObject({
+      totalAmountCents: 150000,
+      items: [expectedLine],
+    })
+    expect(block.routes[0].outsource).toMatchObject({
       totalAmountCents: 150000,
       items: [expectedLine],
     })
@@ -540,8 +654,10 @@ describe('Departure route ledger API (e2e)', () => {
       .query({ routeName, startDateFrom: '2026-07-10', startDateTo: '2026-07-10' })
       .expect(200)
 
-    const block = response.body.data.dateBlocks[0]
-    const group = block.departures[0]
+    const block = response.body.data.dateBlocks[0] as LedgerDateBlock
+    const group = flatDepartures(block)[0] as LedgerDeparture & {
+      outsource: { totalAmountCents: number; items: unknown[] }
+    }
     const expectedLine = {
       id: earlyPartnerOutsourceId,
       supplierName: `${testPrefix}-华东国旅`,
@@ -565,20 +681,20 @@ describe('Departure route ledger API (e2e)', () => {
       .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
       .expect(200)
 
-    const block = response.body.data.dateBlocks[0]
-    const groupA = block.departures.find(
-      (d: { departureId: string }) => d.departureId === departureSameA.id,
-    )
-    const groupB = block.departures.find(
-      (d: { departureId: string }) => d.departureId === departureSameB.id,
-    )
+    const block = response.body.data.dateBlocks[0] as LedgerDateBlock
+    const groupA = flatDepartures(block).find((d) => d.departureId === departureSameA.id) as
+      | (LedgerDeparture & { outsource: { totalAmountCents: number; items: Array<{ id: string }> } })
+      | undefined
+    const groupB = flatDepartures(block).find((d) => d.departureId === departureSameB.id) as
+      | (LedgerDeparture & { outsource: { totalAmountCents: number; items: unknown[] } })
+      | undefined
 
-    expect(groupA.outsource.totalAmountCents).toBe(200000)
-    expect(groupA.outsource.items).toHaveLength(2)
-    expect(groupA.outsource.items.map((item: { id: string }) => item.id).sort()).toEqual(
+    expect(groupA!.outsource.totalAmountCents).toBe(200000)
+    expect(groupA!.outsource.items).toHaveLength(2)
+    expect(groupA!.outsource.items.map((item) => item.id).sort()).toEqual(
       [...sameAOutsourceIds].sort(),
     )
-    expect(groupA.outsource.items).toEqual(
+    expect(groupA!.outsource.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           supplierName: `${testPrefix}-伊犁拼出社`,
@@ -591,13 +707,14 @@ describe('Departure route ledger API (e2e)', () => {
       ]),
     )
 
-    expect(groupB.outsource).toMatchObject({ totalAmountCents: 0, items: [] })
+    expect(groupB!.outsource).toMatchObject({ totalAmountCents: 0, items: [] })
 
     // 同日汇总合并各发团拼出，不伪造客源分配
     expect(block.outsource.totalAmountCents).toBe(200000)
     expect(block.outsource.items).toHaveLength(2)
+    expect(block.routes[0].outsource.totalAmountCents).toBe(200000)
 
-    for (const group of block.departures) {
+    for (const group of flatDepartures(block)) {
       for (const row of group.sourceOrders) {
         expect(row).not.toHaveProperty('outsource')
         expect(row).not.toHaveProperty('outsourceAmountCents')

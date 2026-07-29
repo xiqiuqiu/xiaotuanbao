@@ -16,6 +16,7 @@ import type {
   RouteLedgerOutsourceLine,
   RouteLedgerOutsourceSummary,
   RouteLedgerResult,
+  RouteLedgerRouteGroup,
   RouteLedgerSourceOrderRow,
   RouteLedgerTotals,
 } from '@xiaotuanbao/shared'
@@ -53,6 +54,7 @@ import {
 } from './departure-date.utils'
 import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
+import { assertRouteLedgerQueryAxes } from './route-ledger.validation'
 import { RouteTemplateService } from './route-template.service'
 import { DepartureReadModelService } from './departure-read-model.service'
 import {
@@ -122,26 +124,25 @@ export class DepartureService {
   }
 
   /**
-   * 线路视图读模型（#183 + #184 + #185）：精确 routeName + 可选出团日区间 → 日块 → 发团组 → 客源行；
-   * 拼出（Resource Kind）汇总挂在日/发团，不进客源行。
+   * 线路视图读模型（#183 + #184 + #185 + #221）：
+   * 路线和/或完整出团日区间 → 日块 → 路线段 → 发团组 → 客源行；
+   * 拼出（Resource Kind）汇总挂在日/路线段/发团，不进客源行。
    * 客源行附游客代表（名单最早一条）与拼入单价（前端只读算式输入，不参与合计权威计算）。
    */
   async getRouteLedger(
     organizationId: string,
     query: ListRouteLedgerQueryDto,
   ): Promise<RouteLedgerResult> {
-    const routeName = query.routeName.trim()
-    const startDateFrom = query.startDateFrom?.trim() || null
-    const startDateTo = query.startDateTo?.trim() || null
+    const { routeName, startDateFrom, startDateTo } = assertRouteLedgerQueryAxes(query)
 
     const where: Prisma.DepartureWhereInput = {
       organizationId,
-      routeName,
+      ...(routeName ? { routeName } : {}),
     }
-    if (startDateFrom || startDateTo) {
+    if (startDateFrom && startDateTo) {
       where.startDate = {
-        ...(startDateFrom ? { gte: parseDateOnly(startDateFrom) } : {}),
-        ...(startDateTo ? { lte: parseDateOnly(startDateTo) } : {}),
+        gte: parseDateOnly(startDateFrom),
+        lte: parseDateOnly(startDateTo),
       }
     }
 
@@ -151,6 +152,7 @@ export class DepartureService {
         id: true,
         departureNo: true,
         name: true,
+        routeName: true,
         startDate: true,
         sourceOrders: {
           select: {
@@ -201,7 +203,13 @@ export class DepartureService {
       orderBy: [{ startDate: 'asc' }, { departureNo: 'asc' }],
     })
 
-    const blocksByDate = new Map<string, RouteLedgerDateBlock>()
+    type MutableRouteGroup = RouteLedgerRouteGroup
+    type MutableDateBlock = {
+      startDate: string
+      routesByName: Map<string, MutableRouteGroup>
+    }
+
+    const blocksByDate = new Map<string, MutableDateBlock>()
 
     for (const departure of departures) {
       const startDate = formatDateOnly(departure.startDate)
@@ -253,22 +261,44 @@ export class DepartureService {
       if (!block) {
         block = {
           startDate,
+          routesByName: new Map(),
+        }
+        blocksByDate.set(startDate, block)
+      }
+
+      let routeGroup = block.routesByName.get(departure.routeName)
+      if (!routeGroup) {
+        routeGroup = {
+          routeName: departure.routeName,
           totals: emptyRouteLedgerTotals(),
           outsource: emptyRouteLedgerOutsourceSummary(),
           departures: [],
         }
-        blocksByDate.set(startDate, block)
+        block.routesByName.set(departure.routeName, routeGroup)
       }
-      block.departures.push(group)
+      routeGroup.departures.push(group)
     }
 
-    const dateBlocks = [...blocksByDate.values()].map((block) => ({
-      ...block,
-      totals: sumRouteLedgerTotals(block.departures.map((group) => group.totals)),
-      outsource: toRouteLedgerOutsourceSummary(
-        block.departures.flatMap((group) => group.outsource.items),
-      ),
-    }))
+    const dateBlocks: RouteLedgerDateBlock[] = [...blocksByDate.values()].map((block) => {
+      const routes = [...block.routesByName.values()]
+        .sort((left, right) => left.routeName.localeCompare(right.routeName, 'zh-CN'))
+        .map((routeGroup) => ({
+          ...routeGroup,
+          totals: sumRouteLedgerTotals(routeGroup.departures.map((group) => group.totals)),
+          outsource: toRouteLedgerOutsourceSummary(
+            routeGroup.departures.flatMap((group) => group.outsource.items),
+          ),
+        }))
+
+      return {
+        startDate: block.startDate,
+        routes,
+        totals: sumRouteLedgerTotals(routes.map((routeGroup) => routeGroup.totals)),
+        outsource: toRouteLedgerOutsourceSummary(
+          routes.flatMap((routeGroup) => routeGroup.outsource.items),
+        ),
+      }
+    })
 
     return {
       routeName,

@@ -48,7 +48,7 @@ export async function listDepartureRouteNames(
 }
 
 export interface GetRouteLedgerParams {
-  routeName: string
+  routeName?: string
   startDateFrom?: string
   startDateTo?: string
 }
