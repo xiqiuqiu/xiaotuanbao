@@ -18,6 +18,35 @@ export function formatRouteLedgerInboundPriceFormula(input: {
   return parts.join('+')
 }
 
+/**
+ * 线路视图「拼入价」只读单价（元）：有儿童时「成人/儿童」，否则仅成人价。
+ * 两侧人数皆为 0 时为空串。不参与权威合计。
+ */
+export function formatRouteLedgerInboundUnitPrice(input: {
+  adultGuestCount: number
+  childGuestCount: number
+  adultUnitPriceCents: number
+  childUnitPriceCents: number
+}): string {
+  const hasAdult = input.adultGuestCount > 0
+  const hasChild = input.childGuestCount > 0
+  if (!hasAdult && !hasChild) {
+    return ''
+  }
+  if (hasAdult && hasChild) {
+    return `${formatFormulaYuan(input.adultUnitPriceCents)}/${formatFormulaYuan(input.childUnitPriceCents)}`
+  }
+  if (hasAdult) {
+    return formatFormulaYuan(input.adultUnitPriceCents)
+  }
+  return formatFormulaYuan(input.childUnitPriceCents)
+}
+
+/** 单价分→元展示（去多余小数尾零由 Number→String 自然处理）。 */
+export function formatRouteLedgerUnitPriceYuan(cents: number): string {
+  return formatFormulaYuan(cents)
+}
+
 function formatFormulaYuan(cents: number): string {
   return String(cents / 100)
 }

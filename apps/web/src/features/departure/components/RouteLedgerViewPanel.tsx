@@ -1,26 +1,29 @@
 import type { ReactNode } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Alert,
   DatePicker,
   Empty,
+  Flex,
+  Form,
   Select,
   Skeleton,
   Space,
   Table,
+  Tag,
   Tooltip,
   Typography,
+  theme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
 import type {
-  RouteLedgerDateBlock,
   RouteLedgerDepartureGroup,
   RouteLedgerOutsourceSummary,
-  RouteLedgerRouteGroup,
   RouteLedgerSourceOrderRow,
   RouteLedgerTotals,
 } from '@/types/api'
@@ -34,8 +37,13 @@ import {
   toDepartureListReturnState,
   type DepartureListSearch,
 } from '../utils/departure-list-search'
-import { formatRouteLedgerInboundPriceFormula } from '../utils/route-ledger-inbound-price-formula'
+import { formatRouteLedgerUnitPriceYuan } from '../utils/route-ledger-inbound-price-formula'
 import { resolveRouteLedgerQueryGate } from '../utils/route-ledger-query'
+import {
+  flattenRouteLedgerDepartures,
+  type RouteLedgerTableRow,
+} from '../utils/route-ledger-table-rows'
+import styles from './RouteLedgerViewPanel.module.css'
 
 type RouteLedgerViewPanelProps = {
   routeName?: string
@@ -48,45 +56,9 @@ type RouteLedgerViewPanelProps = {
   listReturnSearch?: DepartureListSearch
 }
 
-function formatTotalsHint(label: string, totals: RouteLedgerTotals): string {
-  return [
-    label,
-    `${totals.orderCount} 单`,
-    `${totals.guestCount} 人`,
-    `原始团款 ${formatCents(totals.grossReceivableCents)}`,
-    `结算金额 ${formatCents(totals.netReceivableCents)}`,
-    `客户已收 ${formatCents(totals.partnerCollectedCents)}`,
-    `我方代收 ${formatCents(totals.guestCollectCents)}`,
-  ].join(' · ')
-}
-
-/** 日/路线段/发团标题上的拼出汇总：单行写清承接方与金额；多拼出以列表呈现。 */
-function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
-  if (outsource.items.length === 0) {
-    return null
-  }
-
-  if (outsource.items.length === 1) {
-    const item = outsource.items[0]
-    return (
-      <Typography.Text type="secondary">
-        拼出 · {item.supplierName} {formatCents(item.amountCents)}
-      </Typography.Text>
-    )
-  }
-
-  return (
-    <Space orientation="vertical" size={0}>
-      <Typography.Text type="secondary">
-        拼出 {outsource.items.length} 项 · 合计 {formatCents(outsource.totalAmountCents)}
-      </Typography.Text>
-      {outsource.items.map((item) => (
-        <Typography.Text key={item.id} type="secondary">
-          · {item.supplierName} {formatCents(item.amountCents)}
-        </Typography.Text>
-      ))}
-    </Space>
-  )
+function formatDateReportTitle(startDate: string, routeName: string): string {
+  const [y, m, d] = startDate.split('-')
+  return `${y}年${Number(m)}月${Number(d)}日${routeName}日报表`
 }
 
 function MoneyColumnTitle({ label, habitAlias }: { label: string; habitAlias: string }) {
@@ -97,211 +69,331 @@ function MoneyColumnTitle({ label, habitAlias }: { label: string; habitAlias: st
   )
 }
 
-function formatGuestRepresentative(row: RouteLedgerSourceOrderRow): string {
-  const name = row.guestRepresentativeName?.trim() || ''
-  const phone = row.guestRepresentativePhone?.trim() || ''
-  if (!name && !phone) {
-    return ''
-  }
-  if (!name) {
-    return phone
-  }
-  return phone ? `${name} ${phone}` : name
+function formatGuestRepresentativeName(row: RouteLedgerSourceOrderRow): string {
+  return row.guestRepresentativeName?.trim() || '-'
 }
 
-function formatGuestCount(row: RouteLedgerSourceOrderRow): string {
-  if (row.childGuestCount > 0) {
-    return `${row.guestCount}（${row.adultGuestCount}大${row.childGuestCount}小）`
-  }
-  return String(row.guestCount)
+function formatGuestPhone(row: RouteLedgerSourceOrderRow): string {
+  return row.guestRepresentativePhone?.trim() || '-'
 }
 
-const LEDGER_COLUMNS: ColumnsType<RouteLedgerSourceOrderRow> = [
-  {
-    title: '发客客户',
-    dataIndex: 'partnerName',
-    width: 140,
-  },
-  {
-    title: '游客代表',
-    key: 'guestRepresentative',
-    width: 160,
-    render: (_value, row) => formatGuestRepresentative(row),
-  },
-  {
-    title: '人数',
-    key: 'guestCount',
-    width: 110,
-    align: 'right',
-    render: (_value, row) => formatGuestCount(row),
-  },
-  {
-    title: (
-      <Tooltip title="单价×人数，只读展示；金额以原始团款为准">
-        <span>拼入价</span>
-      </Tooltip>
-    ),
-    key: 'inboundPriceFormula',
-    width: 140,
-    render: (_value, row) => formatRouteLedgerInboundPriceFormula(row),
-  },
-  {
-    title: <MoneyColumnTitle label="原始团款" habitAlias="拼入合计" />,
-    dataIndex: 'grossReceivableCents',
-    width: 120,
-    align: 'right',
-    render: (value: number) => formatCents(value),
-  },
-  {
-    title: <MoneyColumnTitle label="结算金额" habitAlias="实际应收" />,
-    dataIndex: 'netReceivableCents',
-    width: 120,
-    align: 'right',
-    render: (value: number) => formatCents(value),
-  },
-  {
-    title: <MoneyColumnTitle label="客户已收" habitAlias="客户已收押金" />,
-    dataIndex: 'partnerCollectedCents',
-    width: 120,
-    align: 'right',
-    render: (value: number) => formatCents(value),
-  },
-  {
-    title: <MoneyColumnTitle label="我方代收" habitAlias="游客代收" />,
-    dataIndex: 'guestCollectCents',
-    width: 120,
-    align: 'right',
-    render: (value: number) => formatCents(value),
-  },
-  {
-    title: '备注',
-    dataIndex: 'notes',
-    ellipsis: { showTitle: false },
-    render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
-  },
-]
+/** 日条/发团格拼出：Tag 汇总，避免与表底金额合计抢同一视觉层级。 */
+function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
+  const { token } = theme.useToken()
+  if (outsource.items.length === 0) {
+    return null
+  }
 
-function DepartureGroupSection({
-  group,
-  onSourceOrderClick,
-}: {
-  group: RouteLedgerDepartureGroup
-  onSourceOrderClick: (departureId: string) => void
-}) {
+  if (outsource.items.length === 1) {
+    const item = outsource.items[0]
+    return (
+      <Tag style={{ marginInlineEnd: 0 }}>
+        拼出 · {item.supplierName} {formatCents(item.amountCents)}
+      </Tag>
+    )
+  }
+
+  const detail = outsource.items
+    .map((item) => `${item.supplierName} ${formatCents(item.amountCents)}`)
+    .join(' · ')
+
   return (
-    <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-      <div>
-        <Space size={4} wrap>
-          <Link
-            className={nameLinkStyles.nameLink}
-            to="/departure/$departureId"
-            params={{ departureId: group.departureId }}
-            search={{ tab: 'overview' }}
-          >
-            {group.departureNo}
-          </Link>
-          {group.departureName ? (
-            <Typography.Text strong>· {group.departureName}</Typography.Text>
-          ) : null}
-        </Space>
-        <br />
-        <Typography.Text type="secondary">
-          {formatTotalsHint('发团合计', group.totals)}
-        </Typography.Text>
-        <div>
-          <OutsourceSummaryHint outsource={group.outsource} />
-        </div>
-      </div>
-      <Table<RouteLedgerSourceOrderRow>
+    <Flex align="center" gap={token.marginXXS} wrap="wrap">
+      <Tag style={{ marginInlineEnd: 0 }}>
+        拼出 {outsource.items.length} 项 · {formatCents(outsource.totalAmountCents)}
+      </Tag>
+      <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+        {detail}
+      </Typography.Text>
+    </Flex>
+  )
+}
+
+function SummaryMoney({ value }: { value: number }) {
+  return <span className={styles.summaryValue}>{formatCents(value)}</span>
+}
+
+function DayLedgerTable({
+  startDate,
+  titleRouteName,
+  bandOutsource,
+  totals,
+  departures,
+  listReturnSearch,
+}: {
+  startDate: string
+  titleRouteName: string
+  bandOutsource: RouteLedgerOutsourceSummary
+  totals: RouteLedgerTotals
+  departures: RouteLedgerDepartureGroup[]
+  listReturnSearch?: DepartureListSearch
+}) {
+  const navigate = useNavigate()
+  const { token } = theme.useToken()
+  const { rows, emptyDepartures } = useMemo(
+    () => flattenRouteLedgerDepartures(departures),
+    [departures],
+  )
+
+  const columns: ColumnsType<RouteLedgerTableRow> = useMemo(
+    () => [
+      {
+        title: '序号',
+        dataIndex: 'seq',
+        width: 52,
+        align: 'center',
+      },
+      {
+        title: '发团',
+        key: 'departure',
+        width: 168,
+        onCell: (record) => ({
+          rowSpan: record.departureRowSpan,
+        }),
+        render: (_value, record) => {
+          if (record.departureRowSpan === 0) {
+            return null
+          }
+          const group = record.departureGroup
+          return (
+            <div className={styles.departureCell}>
+              <Space size={4} wrap>
+                <Link
+                  className={nameLinkStyles.nameLink}
+                  to="/departure/$departureId"
+                  params={{ departureId: group.departureId }}
+                  search={{ tab: 'overview' }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {group.departureNo}
+                </Link>
+              </Space>
+              {group.departureName ? (
+                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                  {group.departureName}
+                </Typography.Text>
+              ) : null}
+              <OutsourceSummaryHint outsource={group.outsource} />
+            </div>
+          )
+        },
+      },
+      {
+        title: '发客客户',
+        dataIndex: 'partnerName',
+        width: 120,
+      },
+      {
+        title: '游客代表',
+        key: 'guestName',
+        width: 96,
+        render: (_value, row) => formatGuestRepresentativeName(row),
+      },
+      {
+        title: '电话',
+        key: 'phone',
+        width: 120,
+        render: (_value, row) => formatGuestPhone(row),
+      },
+      {
+        title: (
+          <Tooltip title="拼入单价（元），只读；金额以原始团款为准">
+            <span>拼入价</span>
+          </Tooltip>
+        ),
+        key: 'inboundUnitPrice',
+        children: [
+          {
+            title: '成人',
+            key: 'adultUnitPrice',
+            width: 72,
+            align: 'right',
+            render: (_value, row) =>
+              row.adultGuestCount > 0
+                ? formatRouteLedgerUnitPriceYuan(row.adultUnitPriceCents)
+                : '-',
+          },
+          {
+            title: '儿童',
+            key: 'childUnitPrice',
+            width: 72,
+            align: 'right',
+            render: (_value, row) =>
+              row.childGuestCount > 0
+                ? formatRouteLedgerUnitPriceYuan(row.childUnitPriceCents)
+                : '-',
+          },
+        ],
+      },
+      {
+        title: '人数',
+        key: 'guestCount',
+        children: [
+          {
+            title: '成人',
+            key: 'adultGuestCount',
+            width: 64,
+            align: 'right',
+            render: (_value, row) => row.adultGuestCount,
+          },
+          {
+            title: '儿童',
+            key: 'childGuestCount',
+            width: 64,
+            align: 'right',
+            render: (_value, row) => row.childGuestCount,
+          },
+        ],
+      },
+      {
+        title: <MoneyColumnTitle label="原始团款" habitAlias="拼入合计" />,
+        dataIndex: 'grossReceivableCents',
+        width: 110,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: <MoneyColumnTitle label="我方代收" habitAlias="游客代收" />,
+        dataIndex: 'guestCollectCents',
+        width: 110,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: <MoneyColumnTitle label="客户已收" habitAlias="客户已收押金" />,
+        dataIndex: 'partnerCollectedCents',
+        width: 110,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: <MoneyColumnTitle label="结算金额" habitAlias="实际应收" />,
+        dataIndex: 'netReceivableCents',
+        width: 110,
+        align: 'right',
+        render: (value: number) => formatCents(value),
+      },
+      {
+        title: '备注',
+        dataIndex: 'notes',
+        ellipsis: { showTitle: false },
+        render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
+      },
+    ],
+    [token.fontSizeSM],
+  )
+
+  return (
+    <div className={styles.dayBlock}>
+      <Table<RouteLedgerTableRow>
+        className={styles.dayTable}
         size="small"
-        rowKey="id"
+        bordered
         pagination={false}
-        columns={LEDGER_COLUMNS}
-        dataSource={group.sourceOrders}
-        locale={{ emptyText: '该发团暂无客源单' }}
-        scroll={{ x: 1200 }}
+        rowKey="id"
+        columns={columns}
+        dataSource={rows}
+        scroll={{ x: 1360 }}
+        locale={{ emptyText: '该日暂无客源单' }}
+        title={() => (
+          <Flex className={styles.dateBand} align="center" wrap="wrap" gap={8}>
+            <Typography.Text strong>
+              {formatDateReportTitle(startDate, titleRouteName)}
+            </Typography.Text>
+            <OutsourceSummaryHint outsource={bandOutsource} />
+          </Flex>
+        )}
         onRow={(record) => ({
           style: { cursor: 'pointer' },
-          onClick: () => onSourceOrderClick(record.departureId),
+          onClick: () => {
+            void navigate({
+              to: '/departure/$departureId',
+              params: { departureId: record.departureId },
+              search: {
+                tab: 'sourceOrders',
+                ...(listReturnSearch
+                  ? { listReturn: encodeDepartureListReturn(listReturnSearch) }
+                  : {}),
+              },
+              state: listReturnSearch
+                ? (toDepartureListReturnState(listReturnSearch) as never)
+                : undefined,
+            })
+          },
         })}
+        summary={() => {
+          if (rows.length === 0) {
+            return null
+          }
+          const adultGuestTotal = rows.reduce((sum, row) => sum + row.adultGuestCount, 0)
+          const childGuestTotal = rows.reduce((sum, row) => sum + row.childGuestCount, 0)
+          return (
+            <Table.Summary fixed>
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0}>
+                  <span className={styles.summaryLabel}>合计</span>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={1}>
+                  <Typography.Text type="secondary">
+                    {totals.orderCount} 单
+                  </Typography.Text>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={2} />
+                <Table.Summary.Cell index={3} />
+                <Table.Summary.Cell index={4} />
+                <Table.Summary.Cell index={5} />
+                <Table.Summary.Cell index={6} />
+                <Table.Summary.Cell index={7} align="right">
+                  <span className={styles.summaryValue}>{adultGuestTotal}</span>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={8} align="right">
+                  <span className={styles.summaryValue}>{childGuestTotal}</span>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={9} align="right">
+                  <SummaryMoney value={totals.grossReceivableCents} />
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={10} align="right">
+                  <SummaryMoney value={totals.guestCollectCents} />
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={11} align="right">
+                  <SummaryMoney value={totals.partnerCollectedCents} />
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={12} align="right">
+                  <SummaryMoney value={totals.netReceivableCents} />
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={13} />
+              </Table.Summary.Row>
+            </Table.Summary>
+          )
+        }}
       />
-    </Space>
-  )
-}
-
-function RouteGroupSection({
-  routeGroup,
-  showRouteChrome,
-  onSourceOrderClick,
-}: {
-  routeGroup: RouteLedgerRouteGroup
-  showRouteChrome: boolean
-  onSourceOrderClick: (departureId: string) => void
-}) {
-  return (
-    <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-      {showRouteChrome ? (
-        <div>
-          <Typography.Title level={5} style={{ margin: 0 }}>
-            {routeGroup.routeName}
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            {formatTotalsHint('路线合计', routeGroup.totals)}
-          </Typography.Text>
-          <div>
-            <OutsourceSummaryHint outsource={routeGroup.outsource} />
-          </div>
+      {emptyDepartures.length > 0 ? (
+        <div className={styles.emptyDepartureHint}>
+          {emptyDepartures.map((group) => (
+            <Typography.Text key={group.departureId} type="secondary" style={{ display: 'block' }}>
+              <Link
+                className={nameLinkStyles.nameLink}
+                to="/departure/$departureId"
+                params={{ departureId: group.departureId }}
+                search={{ tab: 'overview' }}
+              >
+                {group.departureNo}
+              </Link>
+              {group.departureName ? ` · ${group.departureName}` : null}
+              {' · 暂无客源单'}
+            </Typography.Text>
+          ))}
         </div>
       ) : null}
-      {routeGroup.departures.map((group) => (
-        <DepartureGroupSection
-          key={group.departureId}
-          group={group}
-          onSourceOrderClick={onSourceOrderClick}
-        />
-      ))}
-    </Space>
-  )
-}
-
-function DateBlockSection({
-  block,
-  showRouteChrome,
-  onSourceOrderClick,
-}: {
-  block: RouteLedgerDateBlock
-  showRouteChrome: boolean
-  onSourceOrderClick: (departureId: string) => void
-}) {
-  return (
-    <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-      <div>
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          {block.startDate}
-        </Typography.Title>
-        <Typography.Text type="secondary">
-          {formatTotalsHint('日合计', block.totals)}
-        </Typography.Text>
-        <div>
-          <OutsourceSummaryHint outsource={block.outsource} />
-        </div>
-      </div>
-      {block.routes.map((routeGroup) => (
-        <RouteGroupSection
-          key={routeGroup.routeName}
-          routeGroup={routeGroup}
-          showRouteChrome={showRouteChrome}
-          onSourceOrderClick={onSourceOrderClick}
-        />
-      ))}
-    </Space>
+    </div>
   )
 }
 
 /**
- * 线路视图（#183 / #221）：双轴筛选（路线和/或出团日期），筛选以发团管理 URL 为真相源。
- * - 有路线：日 → 发团/客源（不展示路线段 chrome）
- * - 仅日期：日 → 路线段 → 发团/客源
+ * 线路视图（#183 / #221 + 密表）：
+ * - 双轴筛选（路线和/或出团日期），筛选以发团管理 URL 为真相源；
+ * - 有路线：按日出密表（无路线段 chrome）；仅日期：日下按路线分密表；
+ * - 同发团「发团」列 rowSpan；拼出挂日条/发团格，不进客源列。
  */
 export function RouteLedgerViewPanel({
   routeName,
@@ -311,7 +403,6 @@ export function RouteLedgerViewPanel({
   onSwitchToDepartureList,
   listReturnSearch,
 }: RouteLedgerViewPanelProps) {
-  const navigate = useNavigate()
   const startDateFrom = startDateRange?.[0]
   const startDateTo = startDateRange?.[1]
   const queryGate = resolveRouteLedgerQueryGate({
@@ -357,22 +448,6 @@ export function RouteLedgerViewPanel({
     ledgerQueryError && typeof ledgerQueryError === 'object' && 'message' in ledgerQueryError
       ? String((ledgerQueryError as { message?: unknown }).message ?? '')
       : ''
-
-  const openSourceOrders = (departureId: string) => {
-    void navigate({
-      to: '/departure/$departureId',
-      params: { departureId },
-      search: {
-        tab: 'sourceOrders',
-        ...(listReturnSearch
-          ? { listReturn: encodeDepartureListReturn(listReturnSearch) }
-          : {}),
-      },
-      state: listReturnSearch
-        ? (toDepartureListReturnState(listReturnSearch) as never)
-        : undefined,
-    })
-  }
 
   let body: ReactNode
   if (queryGate.status === 'empty') {
@@ -425,59 +500,96 @@ export function RouteLedgerViewPanel({
         style={{ padding: '48px 0' }}
       />
     )
+  } else if (showRouteChrome) {
+    body = (
+      <Space orientation="vertical" size={20} style={{ width: '100%' }}>
+        {ledger.dateBlocks.map((block) => (
+          <Space key={block.startDate} orientation="vertical" size={12} style={{ width: '100%' }}>
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              {block.startDate}
+            </Typography.Title>
+            {block.routes.map((routeGroup) => (
+              <DayLedgerTable
+                key={`${block.startDate}-${routeGroup.routeName}`}
+                startDate={block.startDate}
+                titleRouteName={routeGroup.routeName}
+                bandOutsource={routeGroup.outsource}
+                totals={routeGroup.totals}
+                departures={routeGroup.departures}
+                listReturnSearch={listReturnSearch}
+              />
+            ))}
+          </Space>
+        ))}
+      </Space>
+    )
   } else {
     body = (
-      <Space orientation="vertical" size={24} style={{ width: '100%' }}>
-        {ledger.dateBlocks.map((block) => (
-          <DateBlockSection
-            key={block.startDate}
-            block={block}
-            showRouteChrome={showRouteChrome}
-            onSourceOrderClick={openSourceOrders}
-          />
-        ))}
+      <Space orientation="vertical" size={20} style={{ width: '100%' }}>
+        {ledger.dateBlocks.map((block) => {
+          const titleRouteName =
+            ledger.routeName
+            ?? block.routes[0]?.routeName
+            ?? routeName
+            ?? ''
+          return (
+            <DayLedgerTable
+              key={block.startDate}
+              startDate={block.startDate}
+              titleRouteName={titleRouteName}
+              bandOutsource={block.outsource}
+              totals={block.totals}
+              departures={block.routes.flatMap((route) => route.departures)}
+              listReturnSearch={listReturnSearch}
+            />
+          )
+        })}
       </Space>
     )
   }
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <Space wrap>
-        <Select
-          showSearch={{ optionFilterProp: 'label' }}
-          allowClear
-          virtual={false}
-          placeholder="选择路线名称"
-          aria-label="路线名称"
-          style={{ width: 320 }}
-          loading={routeNamesLoading}
-          options={options}
-          value={routeName}
-          onChange={(value) => onRouteNameChange(value)}
-        />
-        <DatePicker.RangePicker
-          allowClear
-          aria-label="出团日期"
-          value={
-            startDateRange
-              ? [
-                  startDateRange[0] ? dayjs(startDateRange[0]) : null,
-                  startDateRange[1] ? dayjs(startDateRange[1]) : null,
-                ]
-              : null
-          }
-          onChange={(dates: [Dayjs | null, Dayjs | null] | null) => {
-            if (!dates?.[0] && !dates?.[1]) {
-              onStartDateRangeChange(null)
-              return
+      <Form layout="inline" className={styles.filterForm} colon={false}>
+        <Form.Item label="路线名称">
+          <Select
+            showSearch={{ optionFilterProp: 'label' }}
+            allowClear
+            virtual={false}
+            placeholder="选择路线名称"
+            aria-label="路线名称"
+            style={{ width: 280 }}
+            loading={routeNamesLoading}
+            options={options}
+            value={routeName}
+            onChange={(value) => onRouteNameChange(value)}
+          />
+        </Form.Item>
+        <Form.Item label="出团日期">
+          <DatePicker.RangePicker
+            allowClear
+            aria-label="出团日期"
+            value={
+              startDateRange
+                ? [
+                    startDateRange[0] ? dayjs(startDateRange[0]) : null,
+                    startDateRange[1] ? dayjs(startDateRange[1]) : null,
+                  ]
+                : null
             }
-            onStartDateRangeChange([
-              dates?.[0]?.format('YYYY-MM-DD'),
-              dates?.[1]?.format('YYYY-MM-DD'),
-            ])
-          }}
-        />
-      </Space>
+            onChange={(dates: [Dayjs | null, Dayjs | null] | null) => {
+              if (!dates?.[0] && !dates?.[1]) {
+                onStartDateRangeChange(null)
+                return
+              }
+              onStartDateRangeChange([
+                dates?.[0]?.format('YYYY-MM-DD'),
+                dates?.[1]?.format('YYYY-MM-DD'),
+              ])
+            }}
+          />
+        </Form.Item>
+      </Form>
       {body}
     </Space>
   )

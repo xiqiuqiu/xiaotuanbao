@@ -17,14 +17,17 @@ vi.mock('@tanstack/react-router', () => ({
     to,
     params,
     search,
+    onClick,
   }: {
     children: React.ReactNode
     to: string
     params?: { departureId: string }
     search?: { tab?: string }
+    onClick?: (event: React.MouseEvent) => void
   }) => (
     <a
       href={`${to.replace('$departureId', params?.departureId ?? '')}?tab=${search?.tab ?? ''}`}
+      onClick={onClick}
     >
       {children}
     </a>
@@ -37,20 +40,52 @@ vi.mock('@/services/departure.service', () => ({
   getDepartureRouteLedger: (...args: unknown[]) => getDepartureRouteLedger(...args),
 }))
 
-const ledgerFixture: RouteLedgerResult = {
+const routeGroupFixture = {
   routeName: '伊犁环线',
-  startDateFrom: null,
-  startDateTo: null,
-  dateBlocks: [
+  totals: {
+    orderCount: 3,
+    guestCount: 6,
+    grossReceivableCents: 520000,
+    netReceivableCents: 520000,
+    partnerCollectedCents: 430000,
+    guestCollectCents: 90000,
+  },
+  outsource: {
+    totalAmountCents: 350000,
+    items: [
+      {
+        id: 'os-a1',
+        supplierName: '伊犁拼出社',
+        amountCents: 80000,
+        title: '伊犁段拼出',
+      },
+      {
+        id: 'os-a2',
+        supplierName: '那拉提拼出社',
+        amountCents: 120000,
+        title: '那拉提段拼出',
+      },
+      {
+        id: 'os-b1',
+        supplierName: '独库拼出社',
+        amountCents: 150000,
+        title: '独库整段拼出',
+      },
+    ],
+  },
+  departures: [
     {
+      departureId: 'dep-a',
+      departureNo: 'XTB202607150001',
+      departureName: '同日团 A',
       startDate: '2026-07-15',
       totals: {
         orderCount: 2,
-        guestCount: 5,
-        grossReceivableCents: 420000,
-        netReceivableCents: 420000,
-        partnerCollectedCents: 420000,
-        guestCollectCents: 0,
+        guestCount: 3,
+        grossReceivableCents: 270000,
+        netReceivableCents: 270000,
+        partnerCollectedCents: 180000,
+        guestCollectCents: 90000,
       },
       outsource: {
         totalAmountCents: 200000,
@@ -69,136 +104,109 @@ const ledgerFixture: RouteLedgerResult = {
           },
         ],
       },
-      routes: [
+      sourceOrders: [
         {
-          routeName: '伊犁环线',
-          totals: {
-            orderCount: 2,
-            guestCount: 5,
-            grossReceivableCents: 420000,
-            netReceivableCents: 420000,
-            partnerCollectedCents: 420000,
-            guestCollectCents: 0,
-          },
-          outsource: {
-            totalAmountCents: 200000,
-            items: [
-              {
-                id: 'os-a1',
-                supplierName: '伊犁拼出社',
-                amountCents: 80000,
-                title: '伊犁段拼出',
-              },
-              {
-                id: 'os-a2',
-                supplierName: '那拉提拼出社',
-                amountCents: 120000,
-                title: '那拉提段拼出',
-              },
-            ],
-          },
-          departures: [
-            {
-              departureId: 'dep-a',
-              departureNo: 'XTB202607150001',
-              departureName: '同日团 A',
-              startDate: '2026-07-15',
-              totals: {
-                orderCount: 1,
-                guestCount: 2,
-                grossReceivableCents: 180000,
-                netReceivableCents: 180000,
-                partnerCollectedCents: 180000,
-                guestCollectCents: 0,
-              },
-              outsource: {
-                totalAmountCents: 200000,
-                items: [
-                  {
-                    id: 'os-a1',
-                    supplierName: '伊犁拼出社',
-                    amountCents: 80000,
-                    title: '伊犁段拼出',
-                  },
-                  {
-                    id: 'os-a2',
-                    supplierName: '那拉提拼出社',
-                    amountCents: 120000,
-                    title: '那拉提段拼出',
-                  },
-                ],
-              },
-              sourceOrders: [
-                {
-                  id: 'so-a',
-                  departureId: 'dep-a',
-                  partnerId: 'p1',
-                  partnerName: '华东国旅',
-                  displayName: '华东国旅',
-                  guestRepresentativeName: null,
-                  guestRepresentativePhone: null,
-                  adultGuestCount: 2,
-                  childGuestCount: 0,
-                  guestCount: 2,
-                  adultUnitPriceCents: 90000,
-                  childUnitPriceCents: 0,
-                  grossReceivableCents: 180000,
-                  netReceivableCents: 180000,
-                  partnerCollectedCents: 180000,
-                  guestCollectCents: 0,
-                  notes: '同日团 A',
-                },
-              ],
-            },
-            {
-              departureId: 'dep-b',
-              departureNo: 'XTB202607150002',
-              departureName: '同日团 B',
-              startDate: '2026-07-15',
-              totals: {
-                orderCount: 1,
-                guestCount: 3,
-                grossReceivableCents: 250000,
-                netReceivableCents: 250000,
-                partnerCollectedCents: 250000,
-                guestCollectCents: 0,
-              },
-              outsource: {
-                totalAmountCents: 150000,
-                items: [
-                  {
-                    id: 'os-b1',
-                    supplierName: '独库拼出社',
-                    amountCents: 150000,
-                    title: '独库整段拼出',
-                  },
-                ],
-              },
-              sourceOrders: [
-                {
-                  id: 'so-b',
-                  departureId: 'dep-b',
-                  partnerId: 'p1',
-                  partnerName: '华东国旅',
-                  displayName: '华东国旅',
-                  guestRepresentativeName: '陈志明',
-                  guestRepresentativePhone: '13800002211',
-                  adultGuestCount: 2,
-                  childGuestCount: 1,
-                  guestCount: 3,
-                  adultUnitPriceCents: 100000,
-                  childUnitPriceCents: 50000,
-                  grossReceivableCents: 250000,
-                  netReceivableCents: 250000,
-                  partnerCollectedCents: 250000,
-                  guestCollectCents: 0,
-                  notes: '同日团 B',
-                },
-              ],
-            },
-          ],
+          id: 'so-a',
+          departureId: 'dep-a',
+          partnerId: 'p1',
+          partnerName: '华东国旅',
+          displayName: '华东国旅',
+          guestRepresentativeName: null,
+          guestRepresentativePhone: null,
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          guestCount: 2,
+          adultUnitPriceCents: 90000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 180000,
+          netReceivableCents: 180000,
+          partnerCollectedCents: 180000,
+          guestCollectCents: 0,
+          notes: '同日团 A',
+        },
+        {
+          id: 'so-a2',
+          departureId: 'dep-a',
+          partnerId: 'p2',
+          partnerName: '华南国旅',
+          displayName: '华南国旅',
+          guestRepresentativeName: '赵六',
+          guestRepresentativePhone: '13700001111',
+          adultGuestCount: 1,
+          childGuestCount: 0,
+          guestCount: 1,
+          adultUnitPriceCents: 90000,
+          childUnitPriceCents: 0,
+          grossReceivableCents: 90000,
+          netReceivableCents: 90000,
+          partnerCollectedCents: 0,
+          guestCollectCents: 90000,
+          notes: null,
         },
       ],
+    },
+    {
+      departureId: 'dep-b',
+      departureNo: 'XTB202607150002',
+      departureName: '同日团 B',
+      startDate: '2026-07-15',
+      totals: {
+        orderCount: 1,
+        guestCount: 3,
+        grossReceivableCents: 250000,
+        netReceivableCents: 250000,
+        partnerCollectedCents: 250000,
+        guestCollectCents: 0,
+      },
+      outsource: {
+        totalAmountCents: 150000,
+        items: [
+          {
+            id: 'os-b1',
+            supplierName: '独库拼出社',
+            amountCents: 150000,
+            title: '独库整段拼出',
+          },
+        ],
+      },
+      sourceOrders: [
+        {
+          id: 'so-b',
+          departureId: 'dep-b',
+          partnerId: 'p1',
+          partnerName: '华东国旅',
+          displayName: '华东国旅',
+          guestRepresentativeName: '陈志明',
+          guestRepresentativePhone: '13800002211',
+          adultGuestCount: 2,
+          childGuestCount: 1,
+          guestCount: 3,
+          adultUnitPriceCents: 100000,
+          childUnitPriceCents: 50000,
+          grossReceivableCents: 250000,
+          netReceivableCents: 250000,
+          partnerCollectedCents: 250000,
+          guestCollectCents: 0,
+          notes: '同日团 B',
+        },
+      ],
+    },
+  ],
+}
+
+const ledgerFixture: RouteLedgerResult = {
+  routeName: '伊犁环线',
+  startDateFrom: null,
+  startDateTo: null,
+  dateBlocks: [
+    {
+      startDate: '2026-07-15',
+      totals: routeGroupFixture.totals,
+      outsource: {
+        totalAmountCents: 350000,
+        items: routeGroupFixture.outsource.items,
+      },
+      routes: [routeGroupFixture],
     },
   ],
 }
@@ -211,14 +219,14 @@ const dateOnlyFixture: RouteLedgerResult = {
     {
       startDate: '2026-07-15',
       totals: {
-        orderCount: 2,
-        guestCount: 4,
-        grossReceivableCents: 300000,
-        netReceivableCents: 300000,
-        partnerCollectedCents: 300000,
-        guestCollectCents: 0,
+        orderCount: 4,
+        guestCount: 8,
+        grossReceivableCents: 640000,
+        netReceivableCents: 640000,
+        partnerCollectedCents: 550000,
+        guestCollectCents: 90000,
       },
-      outsource: { totalAmountCents: 0, items: [] },
+      outsource: { totalAmountCents: 350000, items: routeGroupFixture.outsource.items },
       routes: [
         {
           routeName: '阿勒泰拼车',
@@ -270,12 +278,7 @@ const dateOnlyFixture: RouteLedgerResult = {
             },
           ],
         },
-        {
-          routeName: '伊犁环线',
-          totals: ledgerFixture.dateBlocks[0].routes[0].totals,
-          outsource: ledgerFixture.dateBlocks[0].routes[0].outsource,
-          departures: ledgerFixture.dateBlocks[0].routes[0].departures,
-        },
+        routeGroupFixture,
       ],
     },
   ],
@@ -360,52 +363,56 @@ describe('RouteLedgerViewPanel', () => {
     expect(getDepartureRouteLedger).not.toHaveBeenCalled()
   })
 
-  it('URL 传入路线时直接查询，按日→发团渲染且无路线段 chrome (#221)', async () => {
+  it('URL 传入路线后按日一张密表，同发团发团列合并 (#221)', async () => {
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(getDepartureRouteLedger).toHaveBeenCalledWith(
-        { routeName: '伊犁环线' },
-        expect.anything(),
-      )
-      expect(screen.getByText('2026-07-15')).toBeInTheDocument()
+      expect(screen.getByText('2026年7月15日伊犁环线日报表')).toBeInTheDocument()
     })
 
+    expect(getDepartureRouteLedger).toHaveBeenCalledWith(
+      { routeName: '伊犁环线' },
+      expect.anything(),
+    )
     expect(screen.getByText(/XTB202607150001/)).toBeInTheDocument()
     expect(screen.getByText(/XTB202607150002/)).toBeInTheDocument()
-    // 有路线：日标题下直接发团，不出现「路线合计」分段
-    expect(screen.queryByText(/路线合计/)).not.toBeInTheDocument()
-    expect(screen.queryAllByRole('heading', { name: '伊犁环线' })).toHaveLength(0)
+    expect(screen.getAllByText('同日团 A').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('同日团 B').length).toBeGreaterThan(0)
 
-    for (const title of [
+    const headers = screen.getAllByRole('columnheader').map((el) => el.textContent ?? '')
+    expect(headers).toEqual([
+      '序号',
+      '发团',
       '发客客户',
       '游客代表',
-      '人数',
+      '电话',
       '拼入价',
+      '人数',
       '原始团款',
-      '结算金额',
-      '客户已收',
       '我方代收',
+      '客户已收',
+      '结算金额',
       '备注',
-    ]) {
-      expect(screen.getAllByRole('columnheader', { name: title }).length).toBeGreaterThan(0)
-    }
+      '成人',
+      '儿童',
+      '成人',
+      '儿童',
+    ])
     expect(screen.queryByRole('columnheader', { name: /拼出/ })).not.toBeInTheDocument()
     expect(screen.queryByText('实收业务')).not.toBeInTheDocument()
 
     const tables = screen.getAllByRole('table')
-    expect(tables).toHaveLength(2)
-    for (const table of tables) {
-      expect(within(table).queryByRole('spinbutton')).not.toBeInTheDocument()
-      expect(within(table).queryByRole('textbox')).not.toBeInTheDocument()
-    }
-    expect(screen.getAllByText(/同日团 A/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/同日团 B/).length).toBeGreaterThan(0)
+    expect(tables).toHaveLength(1)
+    expect(within(tables[0]).queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(within(tables[0]).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'XTB202607150001' })).toHaveLength(1)
+    expect(within(tables[0]).getByText('合计')).toBeInTheDocument()
+    expect(within(tables[0]).getByText('3 单')).toBeInTheDocument()
   })
 
-  it('仅选有效出团日期时请求不含 routeName，并展示路线段 (#221)', async () => {
+  it('仅选有效出团日期时请求不含 routeName，并按路线分密表 (#221)', async () => {
     getDepartureRouteLedger.mockResolvedValue(dateOnlyFixture)
 
     renderPanel(
@@ -422,13 +429,14 @@ describe('RouteLedgerViewPanel', () => {
         { startDateFrom: '2026-07-15', startDateTo: '2026-07-15' },
         expect.anything(),
       )
-      expect(screen.getByRole('heading', { name: '阿勒泰拼车' })).toBeInTheDocument()
+      expect(screen.getByText('2026年7月15日阿勒泰拼车日报表')).toBeInTheDocument()
     })
 
-    expect(screen.getByRole('heading', { name: '伊犁环线' })).toBeInTheDocument()
-    expect(screen.getAllByText(/路线合计/).length).toBeGreaterThan(0)
+    expect(screen.getByText('2026年7月15日伊犁环线日报表')).toBeInTheDocument()
+    expect(screen.getByText('2026-07-15')).toBeInTheDocument()
     expect(screen.getByText(/XTB202607150099/)).toBeInTheDocument()
     expect(screen.getByText(/XTB202607150001/)).toBeInTheDocument()
+    expect(screen.getAllByRole('table')).toHaveLength(2)
   })
 
   it('未选路线且日期跨度超过 7 天时提示校验错误且不请求 (#221)', async () => {
@@ -462,13 +470,13 @@ describe('RouteLedgerViewPanel', () => {
     })
   })
 
-  it('日/发团标题展示拼出汇总：单拼出写清承接方，多拼出列表呈现，不进客源列', async () => {
+  it('日条与发团合并格展示拼出汇总，不进客源列', async () => {
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getAllByText(/拼出 2 项 · 合计/).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/拼出 2 项/).length).toBeGreaterThan(0)
     })
 
     expect(screen.getAllByText(/伊犁拼出社/).length).toBeGreaterThan(0)
@@ -477,21 +485,22 @@ describe('RouteLedgerViewPanel', () => {
     expect(screen.queryByRole('columnheader', { name: '拼出' })).not.toBeInTheDocument()
   })
 
-  it('展示游客代表与只读拼入价算式；名单空则代表留空（#185）', async () => {
+  it('展示游客代表、电话与拼入价/人数成人儿童分列；名单空则代表为 -（#185）', async () => {
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getByText('900×2')).toBeInTheDocument()
+      expect(screen.getByText('陈志明')).toBeInTheDocument()
     })
 
-    const tables = screen.getAllByRole('table')
-    expect(within(tables[0]).getByText('900×2')).toBeInTheDocument()
-    expect(within(tables[0]).queryByText('陈志明')).not.toBeInTheDocument()
-    expect(within(tables[1]).getByText('1000×2+500×1')).toBeInTheDocument()
-    expect(within(tables[1]).getByText('陈志明 13800002211')).toBeInTheDocument()
-    expect(within(tables[1]).getByText('3（2大1小）')).toBeInTheDocument()
+    const table = screen.getByRole('table')
+    expect(within(table).getAllByText('900').length).toBeGreaterThan(0)
+    expect(within(table).getByText('13800002211')).toBeInTheDocument()
+    expect(within(table).getByText('1000')).toBeInTheDocument()
+    expect(within(table).getByText('500')).toBeInTheDocument()
+    expect(within(table).getAllByText('2').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('1').length).toBeGreaterThan(0)
   })
 
   it('点击团号进入发团详情，点击客源行进入客源管理路径（#185）', async () => {
@@ -509,7 +518,7 @@ describe('RouteLedgerViewPanel', () => {
       expect.stringContaining('dep-a'),
     )
 
-    await user.click(screen.getByText('1000×2+500×1'))
+    await user.click(screen.getByText('1000'))
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
         to: '/departure/$departureId',
