@@ -33,7 +33,6 @@ type DepartureDetailSearch = {
   direction?: string
   transactionNo?: string
   listReturn?: string
-  variant?: string
 }
 
 type DepartureDetailTabsProps = {

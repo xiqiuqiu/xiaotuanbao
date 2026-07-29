@@ -128,6 +128,9 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.getByText('增收净收益')).toBeInTheDocument()
     expect(screen.getByText('¥300.00')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看增收净收益说明' })).toBeInTheDocument()
+    // ADR-0036：旧「其他收入 / 团上收入」产品文案不得回退到概览主路径
+    expect(screen.queryByText('其他收入')).not.toBeInTheDocument()
+    expect(screen.queryByText('团上收入')).not.toBeInTheDocument()
   })
 
   afterEach(cleanup)

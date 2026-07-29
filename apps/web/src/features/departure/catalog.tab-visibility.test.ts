@@ -42,6 +42,10 @@ describe('isDepartureDetailTabVisible (ADR-0023 / ADR-0036)', () => {
     expect(isDepartureDetailTabVisible('incomeRecords', COORDINATOR_MENU_KEYS)).toBe(true)
   })
 
+  it('shows 增收记录 even with empty menuKeys (not DEV-gated)', () => {
+    expect(isDepartureDetailTabVisible('incomeRecords', [])).toBe(true)
+  })
+
   it('shows finance tabs for 财务/管理员 with the finance menus', () => {
     expect(visibleTabKeys(FINANCE_MENU_KEYS)).toEqual([
       'overview',
