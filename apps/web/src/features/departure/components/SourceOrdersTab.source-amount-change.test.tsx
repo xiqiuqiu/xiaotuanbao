@@ -13,6 +13,7 @@ const getGuestCollectionChangeImpact = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
+  useSearch: () => ({}),
 }))
 
 vi.mock('@/services/partner.service', () => ({

@@ -430,6 +430,9 @@ describe('Partner source orders API (e2e)', () => {
       netReceivableCents: 120000,
       guestCollectCents: 120000,
     })
+    // 对外列表只露调整净额，不展开种类明细
+    expect(data.items[0]).not.toHaveProperty('fareAdjustments')
+    expect(JSON.stringify(data)).not.toContain('single_room_topup')
     expect(data.summary).toMatchObject({
       orderCount: 1,
       totalGrossReceivableCents: 100000,
