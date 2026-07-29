@@ -292,15 +292,14 @@ export function formValuesToPayload(values: SourceOrderFormValues) {
       if (amountYuan <= 0) {
         return []
       }
+      const note = item.customName?.trim() || null
       return [
         {
           kind: item.kind,
           direction: item.direction,
           amountCents: yuanToCents(amountYuan),
-          customName:
-            item.kind === FareAdjustmentKind.CUSTOM
-              ? item.customName?.trim() || null
-              : null,
+          // DB/API column remains customName; product semantics = 调整说明.
+          customName: note,
         },
       ]
     }),

@@ -58,10 +58,41 @@ export function DepartureDetailPage() {
   const canEdit = canEditDeparture(actionKeys)
   const animatedOverviewDepartureIds = useRef(new Set<string>())
 
-  const requestedTab = isDepartureDetailTabKey(search.tab) ? search.tab : DEFAULT_TAB
+  const prototypeVariantActive =
+    !import.meta.env.PROD &&
+    (search.variant === 'A' || search.variant === 'B' || search.variant === 'C')
+
+  const requestedTab = isDepartureDetailTabKey(search.tab)
+    ? search.tab
+    : prototypeVariantActive
+      ? 'sourceOrders'
+      : DEFAULT_TAB
   const activeTab = isDepartureDetailTabVisible(requestedTab, menuKeys)
     ? requestedTab
     : DEFAULT_TAB
+
+  useEffect(() => {
+    if (!departureId || !prototypeVariantActive || search.tab === 'sourceOrders') {
+      return
+    }
+    navigate({
+      to: '/departure/$departureId',
+      params: { departureId },
+      search: {
+        tab: 'sourceOrders',
+        ...(search.variant ? { variant: search.variant } : {}),
+        ...(search.listReturn ? { listReturn: search.listReturn } : {}),
+      },
+      replace: true,
+    })
+  }, [
+    departureId,
+    navigate,
+    prototypeVariantActive,
+    search.listReturn,
+    search.tab,
+    search.variant,
+  ])
 
   const {
     data: departure,
@@ -89,6 +120,7 @@ export function DepartureDetailPage() {
         tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
+        ...(search.variant ? { variant: search.variant } : {}),
       },
     })
   }

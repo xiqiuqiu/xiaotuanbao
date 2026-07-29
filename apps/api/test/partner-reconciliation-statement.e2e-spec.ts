@@ -717,18 +717,18 @@ describe('Partner reconciliation statement API (e2e)', () => {
         collectionMode: SourceOrderCollectionMode.guest_only,
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 20000,
           },
           {
-            kind: 'custom',
+            kind: 'other',
             direction: 'increase',
             amountCents: 5000,
             customName: CUSTOM_ADJUSTMENT_NAME,
           },
           {
-            kind: 'senior_free_ticket_pre_discounted',
+            kind: 'ticket_discount_refund',
             direction: 'decrease',
             amountCents: 10000,
           },
@@ -769,7 +769,7 @@ describe('Partner reconciliation statement API (e2e)', () => {
       })
       // 预览 JSON 不得展开调整种类/自定义明细
       expect(row).not.toHaveProperty('fareAdjustments')
-      expect(JSON.stringify(snapshot)).not.toContain('single_room_supplement')
+      expect(JSON.stringify(snapshot)).not.toContain('single_room_topup')
       expect(JSON.stringify(snapshot)).not.toContain('customName')
       expect(JSON.stringify(snapshot)).not.toContain(CUSTOM_ADJUSTMENT_NAME)
     })

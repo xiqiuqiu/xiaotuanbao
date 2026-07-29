@@ -487,7 +487,7 @@ describe('Source order generate receivables (e2e)', () => {
       collectionMode: SourceOrderCollectionMode.guest_only,
       fareAdjustments: [
         {
-          kind: 'single_room_supplement',
+          kind: 'single_room_topup',
           direction: 'increase',
           amountCents: 20000,
         },
@@ -505,7 +505,7 @@ describe('Source order generate receivables (e2e)', () => {
       .expect(200)
     expect(detail.body.data.fareAdjustments).toEqual([
       expect.objectContaining({
-        kind: 'single_room_supplement',
+        kind: 'single_room_topup',
         direction: 'increase',
         amountCents: 20000,
       }),
@@ -521,12 +521,12 @@ describe('Source order generate receivables (e2e)', () => {
       .send({
         fareAdjustments: [
           {
-            kind: 'single_room_supplement',
+            kind: 'single_room_topup',
             direction: 'increase',
             amountCents: 50000,
           },
           {
-            kind: 'student_ticket_pre_discounted',
+            kind: 'ticket_discount_refund',
             direction: 'decrease',
             amountCents: 10000,
           },
@@ -599,7 +599,7 @@ describe('Source order generate receivables (e2e)', () => {
       collectionMode: SourceOrderCollectionMode.guest_only,
       fareAdjustments: [
         {
-          kind: 'single_room_supplement',
+          kind: 'single_room_topup',
           direction: 'increase',
           amountCents: 20000,
         },

@@ -4,66 +4,59 @@ import {
 } from './fare-adjustment-kind.enum'
 
 export interface FareAdjustmentKindCatalogEntry {
-  kind: Exclude<FareAdjustmentKind, FareAdjustmentKind.CUSTOM>
-  direction: 'increase' | 'decrease'
+  kind: FareAdjustmentKind
+  /** Locked direction for fixed kinds; null means caller chooses (OTHER). */
+  direction: 'increase' | 'decrease' | null
   label: string
+  noteRequired: boolean
+  allowMultiple: boolean
 }
 
 /**
- * Fixed fare-adjustment kinds for the source-order drawer.
- * Order: increase first, then decrease — matches customer mental model
- * (加收项 → 已优惠/不含项). Custom is omitted (multi-row escape hatch).
+ * ADR-0035 fare-adjustment kinds for source orders.
+ * Order: increase fixed → decrease fixed → other escape hatch.
  */
 export const FARE_ADJUSTMENT_KIND_CATALOG: FareAdjustmentKindCatalogEntry[] = [
   {
-    kind: FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
-      FareAdjustmentKind.SINGLE_ROOM_SUPPLEMENT
-    ],
-    label: '单房差',
+    kind: FareAdjustmentKind.CHILD_TICKET_TOPUP,
+    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.CHILD_TICKET_TOPUP],
+    label: '儿童门票补款',
+    noteRequired: false,
+    allowMultiple: false,
   },
   {
-    kind: FareAdjustmentKind.CHILD_TICKET,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.CHILD_TICKET],
-    label: '儿童门票',
+    kind: FareAdjustmentKind.SINGLE_ROOM_TOPUP,
+    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.SINGLE_ROOM_TOPUP],
+    label: '单房差补款',
+    noteRequired: false,
+    allowMultiple: false,
   },
   {
     kind: FareAdjustmentKind.EXTENDED_STAY,
     direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.EXTENDED_STAY],
-    label: '续住',
+    label: '续住费用',
+    noteRequired: false,
+    allowMultiple: false,
   },
   {
-    kind: FareAdjustmentKind.OTHER_SUPPLEMENT,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.OTHER_SUPPLEMENT],
-    label: '其他补充费用',
+    kind: FareAdjustmentKind.TICKET_DISCOUNT_REFUND,
+    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.TICKET_DISCOUNT_REFUND],
+    label: '门票优惠退差',
+    noteRequired: false,
+    allowMultiple: false,
   },
   {
-    kind: FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
-      FareAdjustmentKind.STUDENT_TICKET_PRE_DISCOUNTED
-    ],
-    label: '学生门票已优惠过',
+    kind: FareAdjustmentKind.LODGING_DEDUCTION,
+    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[FareAdjustmentKind.LODGING_DEDUCTION],
+    label: '住宿费用扣减',
+    noteRequired: false,
+    allowMultiple: false,
   },
   {
-    kind: FareAdjustmentKind.CHILD_HALF_TICKET_PRE_DISCOUNTED,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
-      FareAdjustmentKind.CHILD_HALF_TICKET_PRE_DISCOUNTED
-    ],
-    label: '儿童半价门票已优惠过',
-  },
-  {
-    kind: FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
-      FareAdjustmentKind.SENIOR_FREE_TICKET_PRE_DISCOUNTED
-    ],
-    // Covers both 老免 and 老半 pre-discounted ticket adjustments.
-    label: '老人免票或半价已优惠过',
-  },
-  {
-    kind: FareAdjustmentKind.EXCLUDED_FIRST_OR_LAST_NIGHT,
-    direction: FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
-      FareAdjustmentKind.EXCLUDED_FIRST_OR_LAST_NIGHT
-    ],
-    label: '不含首晚或末晚住宿',
+    kind: FareAdjustmentKind.OTHER,
+    direction: null,
+    label: '其他费用调整',
+    noteRequired: true,
+    allowMultiple: true,
   },
 ]

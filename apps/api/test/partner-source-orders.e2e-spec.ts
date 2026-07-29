@@ -409,7 +409,7 @@ describe('Partner source orders API (e2e)', () => {
       collectionMode: SourceOrderCollectionMode.guest_only,
       fareAdjustments: [
         {
-          kind: 'single_room_supplement',
+          kind: 'single_room_topup',
           direction: 'increase',
           amountCents: 20000,
         },

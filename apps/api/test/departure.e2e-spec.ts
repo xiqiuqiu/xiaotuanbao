@@ -2975,18 +2975,18 @@ describe('Departure API (e2e)', () => {
           collectionMode: SourceOrderCollectionMode.partner_settled,
           fareAdjustments: [
             {
-              kind: 'single_room_supplement',
+              kind: 'single_room_topup',
               direction: 'increase',
               amountCents: 20000,
             },
             {
-              kind: 'custom',
+              kind: 'other',
               direction: 'increase',
               amountCents: 5000,
               customName,
             },
             {
-              kind: 'senior_free_ticket_pre_discounted',
+              kind: 'ticket_discount_refund',
               direction: 'decrease',
               amountCents: 10000,
             },
@@ -3005,7 +3005,7 @@ describe('Departure API (e2e)', () => {
       })
       expect(preview.body.data.sourceOrders[0]).not.toHaveProperty('fareAdjustments')
       expect(JSON.stringify(preview.body.data)).not.toContain(customName)
-      expect(JSON.stringify(preview.body.data)).not.toContain('single_room_supplement')
+      expect(JSON.stringify(preview.body.data)).not.toContain('single_room_topup')
 
       const xlsxResponse = await authRequest(app, coordinatorToken)
         .get(`/api/departures/${departure.id}/operations-sheet.xlsx`)

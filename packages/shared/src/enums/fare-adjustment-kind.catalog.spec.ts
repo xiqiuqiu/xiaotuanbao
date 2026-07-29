@@ -1,49 +1,58 @@
 import {
   FareAdjustmentKind,
+  FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION,
 } from './fare-adjustment-kind.enum'
 import { FARE_ADJUSTMENT_KIND_CATALOG } from './fare-adjustment-kind.catalog'
 
-/**
- * Customer-side kinds in active use. Each must appear as a fixed system kind
- * (not only as free-text custom). Labels may be refined for precision.
- */
-const CUSTOMER_REQUIRED_SYSTEM_LABELS = [
-  '单房差',
-  '儿童门票',
-  '学生门票已优惠过',
-  '儿童半价门票已优惠过',
-  '老人免票或半价已优惠过',
-  '不含首晚或末晚住宿',
-  '续住',
-  '其他补充费用',
+/** ADR-0035 six-kind catalog: labels and locked directions are the product contract. */
+const REQUIRED_CATALOG = [
+  { label: '儿童门票补款', direction: 'increase' as const },
+  { label: '单房差补款', direction: 'increase' as const },
+  { label: '续住费用', direction: 'increase' as const },
+  { label: '门票优惠退差', direction: 'decrease' as const },
+  { label: '住宿费用扣减', direction: 'decrease' as const },
+  { label: '其他费用调整', direction: null },
 ] as const
 
-describe('FARE_ADJUSTMENT_KIND_CATALOG covers customer-required kinds', () => {
-  it('includes every customer-required system label as a fixed kind', () => {
-    const labels = FARE_ADJUSTMENT_KIND_CATALOG.map((item) => item.label)
-    for (const required of CUSTOMER_REQUIRED_SYSTEM_LABELS) {
-      expect(labels).toContain(required)
+describe('FARE_ADJUSTMENT_KIND_CATALOG (ADR-0035)', () => {
+  it('covers exactly the six product kinds with labels and directions', () => {
+    expect(FARE_ADJUSTMENT_KIND_CATALOG).toHaveLength(6)
+    const byLabel = Object.fromEntries(
+      FARE_ADJUSTMENT_KIND_CATALOG.map((item) => [item.label, item]),
+    )
+    for (const required of REQUIRED_CATALOG) {
+      expect(byLabel[required.label]?.direction).toBe(required.direction)
     }
   })
 
-  it('locks ticket pre-discount kinds as decrease and room/stay kinds as increase', () => {
-    const byLabel = Object.fromEntries(
-      FARE_ADJUSTMENT_KIND_CATALOG.map((item) => [item.label, item.direction]),
-    )
-    expect(byLabel['单房差']).toBe('increase')
-    expect(byLabel['儿童门票']).toBe('increase')
-    expect(byLabel['续住']).toBe('increase')
-    expect(byLabel['其他补充费用']).toBe('increase')
-    expect(byLabel['学生门票已优惠过']).toBe('decrease')
-    expect(byLabel['儿童半价门票已优惠过']).toBe('decrease')
-    expect(byLabel['老人免票或半价已优惠过']).toBe('decrease')
-    expect(byLabel['不含首晚或末晚住宿']).toBe('decrease')
-  })
-
-  it('keeps custom as a separate multi-row escape hatch outside the fixed catalog', () => {
-    expect(FareAdjustmentKind.CUSTOM).toBe('custom')
+  it('does not expose custom as a kind', () => {
+    expect(Object.values(FareAdjustmentKind)).not.toContain('custom')
     expect(FARE_ADJUSTMENT_KIND_CATALOG.map((item) => item.kind as string)).not.toContain(
       'custom',
     )
+  })
+
+  it('marks other as note-required multi-row escape hatch; fixed kinds are single-row', () => {
+    const other = FARE_ADJUSTMENT_KIND_CATALOG.find(
+      (item) => item.kind === FareAdjustmentKind.OTHER,
+    )
+    expect(other).toMatchObject({
+      direction: null,
+      noteRequired: true,
+      allowMultiple: true,
+    })
+
+    for (const item of FARE_ADJUSTMENT_KIND_CATALOG.filter(
+      (entry) => entry.kind !== FareAdjustmentKind.OTHER,
+    )) {
+      expect(item.noteRequired).toBe(false)
+      expect(item.allowMultiple).toBe(false)
+      expect(item.direction).not.toBeNull()
+      expect(
+        FARE_ADJUSTMENT_KIND_DEFAULT_DIRECTION[
+          item.kind as Exclude<FareAdjustmentKind, FareAdjustmentKind.OTHER>
+        ],
+      ).toBe(item.direction)
+    }
   })
 })

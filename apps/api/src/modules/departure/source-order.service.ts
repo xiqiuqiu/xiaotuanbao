@@ -93,8 +93,7 @@ function toFareAdjustmentCreateRows(
     kind: item.kind as FareAdjustmentKind,
     direction: item.direction as FareAdjustmentDirection,
     amountCents: item.amountCents,
-    customName:
-      item.kind === 'custom' ? (item.customName?.trim() || null) : null,
+    customName: item.customName?.trim() || null,
     sortOrder: index,
   }))
 }
