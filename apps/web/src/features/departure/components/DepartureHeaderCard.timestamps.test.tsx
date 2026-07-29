@@ -5,6 +5,12 @@ import { DepartureHeaderCard } from './DepartureHeaderCard'
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
+  useRouter: () => ({
+    history: {
+      canGoBack: () => false,
+      back: vi.fn(),
+    },
+  }),
   useRouterState: () => undefined,
   useSearch: () => ({}),
 }))

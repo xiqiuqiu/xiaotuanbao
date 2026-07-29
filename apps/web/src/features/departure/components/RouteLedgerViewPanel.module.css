@@ -1,14 +1,22 @@
-/* 线路视图日块：贴近客户日报表的日期条 + 密表 */
+/* 线路视图：筛选工作面 + 一团一份独立日报 */
 
 .dateBand {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px 16px;
-  margin: calc(-1 * var(--ant-padding-sm, 12px)) calc(-1 * var(--ant-padding-sm, 12px)) 0;
   padding: var(--ant-padding-xs, 8px) var(--ant-padding-sm, 12px);
-  background: var(--ant-color-fill-alter);
+  background: var(--ant-color-bg-container);
   border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.reportIdentity {
+  flex: 1 1 480px;
+  min-width: 0;
+}
+
+.reportTitle {
+  font-size: var(--ant-font-size-lg, 16px);
+}
+
+.reportNumberLink {
+  display: inline;
 }
 
 .dayBlock {
@@ -18,12 +26,73 @@
   background: var(--ant-color-bg-container);
 }
 
+.filterWorkspace {
+  overflow: hidden;
+}
+
+.filterArea {
+  padding: var(--ant-padding-sm, 12px) var(--ant-padding-md, 16px)
+    var(--ant-padding-md, 16px);
+}
+
+.stateArea {
+  min-height: 160px;
+  padding: var(--ant-padding-md, 16px);
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
 .filterForm {
   margin-bottom: 0;
 }
 
 .filterForm :global(.ant-form-item) {
   margin-bottom: 0;
+}
+
+.outsourceSummary {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.outsourceDetailButton {
+  height: auto;
+  padding: 0;
+}
+
+.outsourcePopover {
+  width: min(368px, calc(100vw - 48px));
+}
+
+.outsourceItems {
+  display: grid;
+  gap: var(--ant-margin-sm, 12px);
+}
+
+.outsourceItem {
+  display: grid;
+  grid-template-columns: minmax(112px, 1fr) minmax(144px, 1.4fr) auto;
+  align-items: baseline;
+  gap: var(--ant-margin-md, 16px);
+}
+
+.outsourceSupplier,
+.outsourceTitle {
+  min-width: 0;
+}
+
+.outsourceAmount {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.outsourceFooter {
+  display: block;
+  margin-top: var(--ant-margin-sm, 12px);
+  padding-top: var(--ant-padding-xs, 8px);
+  border-top: 1px solid var(--ant-color-border-secondary);
+  text-align: right;
 }
 
 /* 合计行：表头同级浅底 + 强调数字，对齐 antd Table summary 惯例 */
@@ -38,4 +107,29 @@
 .summaryValue {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .filterForm :global(.ant-form-item) {
+    width: 100%;
+  }
+
+  .filterForm :global(.ant-select),
+  .filterForm :global(.ant-picker) {
+    width: 100% !important;
+  }
+
+  .outsourceSummary {
+    width: 100%;
+    margin-inline-start: 0;
+  }
+
+  .outsourceItem {
+    grid-template-columns: 1fr auto;
+  }
+
+  .outsourceTitle {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }

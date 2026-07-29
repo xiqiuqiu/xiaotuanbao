@@ -1,52 +1,24 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react'
-import { Button, Result, Tabs } from 'antd'
-import type { TabsProps } from 'antd'
+import { useCallback, useEffect } from 'react'
+import { Button, Result } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
-import {
-  DepartureStatus,
-  TransactionDirection,
-} from '@xiaotuanbao/shared'
 import { getDeparture } from '@/services/departure.service'
 import { useAuthStore } from '@/app/store/auth.store'
 import { DepartureDetailShellSkeleton } from '@/components/DepartureDetailShellSkeleton'
 import { StaleDataAlert } from '@/components/StaleDataAlert'
-import { PaymentScheduleWorkspace } from '@/features/finance/components/PaymentScheduleWorkspace'
-import { TransactionsWorkspace } from '@/features/finance/components/TransactionsWorkspace'
-import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
-import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { canEditDeparture } from '../utils/departure-permission'
 import { operationalQueryOptions } from '@/lib/query/stale-data-prompt'
 import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
-import { DepartureOverview } from '../components/DepartureOverview'
-import { SourceOrdersTab } from '../components/SourceOrdersTab'
-import { ExecutionTab } from '../components/ExecutionTab'
+import { DepartureDetailTabs } from '../components/DepartureDetailTabs'
 import {
-  DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
   isDepartureDetailTabVisible,
   type DepartureDetailTabKey,
 } from '../catalog'
 import { invalidateDepartureDetailQueries } from '../utils/invalidate-departure-detail-queries'
-import styles from './DepartureDetailPage.module.css'
 
 const DEFAULT_TAB: DepartureDetailTabKey = 'overview'
-
-function wrapTabPane(children: ReactNode) {
-  return <div className={styles.tabPaneEnter}>{children}</div>
-}
-
-function resolveTransactionDirection(
-  value: string | undefined,
-): TransactionDirection | undefined {
-  if (!value) {
-    return undefined
-  }
-  return Object.values(TransactionDirection).includes(value as TransactionDirection)
-    ? (value as TransactionDirection)
-    : undefined
-}
 
 export function DepartureDetailPage() {
   const { departureId } = useParams({ strict: false })
@@ -56,7 +28,6 @@ export function DepartureDetailPage() {
   const menuKeys = useAuthStore((state) => state.menuKeys)
   const actionKeys = useAuthStore((state) => state.actionKeys)
   const canEdit = canEditDeparture(actionKeys)
-  const animatedOverviewDepartureIds = useRef(new Set<string>())
 
   const prototypeVariantActive =
     !import.meta.env.PROD &&
@@ -122,44 +93,10 @@ export function DepartureDetailPage() {
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
         ...(search.variant ? { variant: search.variant } : {}),
       },
-    })
-  }
-
-  const clearFinanceHighlight = useCallback(() => {
-    if (
-      !departureId ||
-      (!search.highlightSourceOrderId && !search.highlightSegmentResourceId)
-    ) {
-      return
-    }
-
-    navigate({
-      to: '/departure/$departureId',
-      params: { departureId },
-      search: {
-        tab: activeTab,
-        ...(search.segmentId ? { segmentId: search.segmentId } : {}),
-        ...(search.counterpartyKeyword
-          ? { counterpartyKeyword: search.counterpartyKeyword }
-          : {}),
-        ...(search.sourceId ? { sourceId: search.sourceId } : {}),
-        ...(search.scheduleNo ? { scheduleNo: search.scheduleNo } : {}),
-        ...(search.listReturn ? { listReturn: search.listReturn } : {}),
-      },
+      // Keep a single detail history entry so「返回」reaches the jump source.
       replace: true,
     })
-  }, [
-    activeTab,
-    departureId,
-    navigate,
-    search.counterpartyKeyword,
-    search.listReturn,
-    search.highlightSegmentResourceId,
-    search.highlightSourceOrderId,
-    search.scheduleNo,
-    search.sourceId,
-    search.segmentId,
-  ])
+  }
 
   const handleUpdated = () => {
     queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
@@ -173,13 +110,6 @@ export function DepartureDetailPage() {
     invalidateDepartureDetailQueries(queryClient, departureId)
     void refetch()
   }, [departureId, queryClient, refetch])
-
-  const currentDepartureId = departure?.id
-  useEffect(() => {
-    if (activeTab === 'overview' && currentDepartureId) {
-      animatedOverviewDepartureIds.current.add(currentDepartureId)
-    }
-  }, [activeTab, currentDepartureId])
 
   if (!departureId) {
     return (
@@ -231,138 +161,6 @@ export function DepartureDetailPage() {
     )
   }
 
-  const readOnly = departure.status === DepartureStatus.CLOSED
-  const amountReadOnly =
-    departure.status === DepartureStatus.SETTLED ||
-    departure.status === DepartureStatus.CLOSED
-  const financeReadOnly = readOnly || !canMutateFinance(menuKeys)
-  const counterpartyKeyword =
-    typeof search.counterpartyKeyword === 'string' ? search.counterpartyKeyword : undefined
-  const filterSourceOrderId =
-    typeof search.sourceId === 'string' ? search.sourceId : undefined
-
-  const visibleTabs = DEPARTURE_DETAIL_TABS.filter((tab) =>
-    isDepartureDetailTabVisible(tab.key, menuKeys),
-  )
-
-  const tabItems: NonNullable<TabsProps['items']> = visibleTabs.map((tab) => {
-    if (tab.key === 'overview') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <DepartureOverview
-            departure={departure}
-            animateEnter={!animatedOverviewDepartureIds.current.has(departure.id)}
-            mutationLocked={readOnly || amountReadOnly || !canEdit}
-          />,
-        ),
-      }
-    }
-
-    if (tab.key === 'sourceOrders') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <SourceOrdersTab
-            departure={departure}
-            readOnly={readOnly}
-            canEdit={canEdit}
-            amountReadOnly={amountReadOnly}
-          />,
-        ),
-      }
-    }
-
-    if (tab.key === 'execution') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <ExecutionTab
-            departure={departure}
-            segmentId={search.segmentId}
-            highlightDepartureResourceId={search.highlightDepartureResourceId}
-            readOnly={readOnly}
-            canEdit={canEdit}
-            amountReadOnly={amountReadOnly}
-          />,
-        ),
-      }
-    }
-
-    if (tab.key === 'receivables') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <PaymentScheduleWorkspace
-            scope="departure"
-            direction="receivable"
-            departureId={departure.id}
-            readOnly={financeReadOnly}
-            highlightSourceOrderId={search.highlightSourceOrderId}
-            initialCounterpartyKeyword={counterpartyKeyword}
-            filterSourceOrderId={filterSourceOrderId}
-            onHighlightConsumed={clearFinanceHighlight}
-          />,
-        ),
-      }
-    }
-
-    if (tab.key === 'payables') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <PaymentScheduleWorkspace
-            scope="departure"
-            direction="payable"
-            departureId={departure.id}
-            readOnly={financeReadOnly}
-            highlightSourceOrderId={search.highlightSourceOrderId}
-            highlightSegmentResourceId={search.highlightSegmentResourceId}
-            initialCounterpartyKeyword={counterpartyKeyword}
-            scheduleNo={search.scheduleNo}
-            onHighlightConsumed={clearFinanceHighlight}
-          />,
-        ),
-      }
-    }
-
-    if (tab.key === 'transactions') {
-      return {
-        key: tab.key,
-        label: tab.label,
-        children: wrapTabPane(
-          <TransactionsWorkspace
-            scope="departure"
-            departureId={departure.id}
-            readOnly={financeReadOnly}
-            initialDirection={resolveTransactionDirection(search.direction)}
-          />,
-        ),
-      }
-    }
-
-    return {
-      key: tab.key,
-      label: tab.label,
-      children: wrapTabPane(
-        <VerificationsWorkspace
-          scope="departure"
-          departureId={departure.id}
-          readOnly={financeReadOnly}
-          deepLinkSearch={{
-            transactionNo: search.transactionNo,
-            scheduleNo: search.scheduleNo,
-          }}
-        />,
-      ),
-    }
-  })
-
   return (
     <div>
       <StaleDataAlert
@@ -373,11 +171,13 @@ export function DepartureDetailPage() {
       />
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
 
-      <Tabs
-        aria-label="发团详情功能"
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={tabItems}
+      <DepartureDetailTabs
+        departure={departure}
+        activeTab={activeTab}
+        menuKeys={menuKeys}
+        canEdit={canEdit}
+        search={search}
+        onTabChange={handleTabChange}
       />
     </div>
   )

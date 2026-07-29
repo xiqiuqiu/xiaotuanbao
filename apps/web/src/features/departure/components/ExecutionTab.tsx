@@ -194,6 +194,11 @@ export function ExecutionTab({
     })
   }, [queryClient, selectedSegmentId])
 
+  const listReturn =
+    typeof search.listReturn === 'string' && search.listReturn
+      ? search.listReturn
+      : undefined
+
   const navigateExecution = (nextSegmentId?: string, replace = false) => {
     void navigate({
       to: '/departure/$departureId',
@@ -201,6 +206,7 @@ export function ExecutionTab({
       search: {
         tab: 'execution',
         ...(nextSegmentId ? { segmentId: nextSegmentId } : {}),
+        ...(listReturn ? { listReturn } : {}),
       },
       replace,
     })
@@ -251,12 +257,14 @@ export function ExecutionTab({
       search: {
         tab: 'execution',
         ...(selectedSegmentId ? { segmentId: selectedSegmentId } : {}),
+        ...(listReturn ? { listReturn } : {}),
       },
       replace: true,
     })
   }, [
     departure.id,
     isError,
+    listReturn,
     isFetching,
     isLoading,
     navigate,

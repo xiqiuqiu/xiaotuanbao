@@ -80,9 +80,10 @@ describe('DeparturesPage view toggle', () => {
       expect(listDepartures).toHaveBeenCalled()
     })
 
-    expect(
-      screen.getByText('发团视图').closest('.ant-segmented-item'),
-    ).toHaveClass('ant-segmented-item-selected')
+    expect(screen.getByRole('tab', { name: '发团视图' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(screen.queryByText('请选择路线名称或出团日期')).not.toBeInTheDocument()
 
     await user.click(screen.getByText('线路视图'))
@@ -90,9 +91,10 @@ describe('DeparturesPage view toggle', () => {
     await waitFor(() => {
       expect(screen.getByText('请选择路线名称或出团日期')).toBeInTheDocument()
     })
-    expect(
-      screen.getByText('线路视图').closest('.ant-segmented-item'),
-    ).toHaveClass('ant-segmented-item-selected')
+    expect(screen.getByRole('tab', { name: '线路视图' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(listDepartureRouteNames).toHaveBeenCalled()
   })
 
@@ -113,9 +115,10 @@ describe('DeparturesPage view toggle', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(
-        screen.getByText('线路视图').closest('.ant-segmented-item'),
-      ).toHaveClass('ant-segmented-item-selected')
+      expect(screen.getByRole('tab', { name: '线路视图' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
       expect(getDepartureRouteLedger).toHaveBeenCalledWith(
         {
           routeName: '伊犁环线',
@@ -130,4 +133,3 @@ describe('DeparturesPage view toggle', () => {
     expect(listDepartures).not.toHaveBeenCalled()
   })
 })
-

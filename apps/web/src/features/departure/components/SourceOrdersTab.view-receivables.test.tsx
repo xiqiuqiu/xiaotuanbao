@@ -11,6 +11,7 @@ const listSourceOrders = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => navigate,
+  useSearch: () => ({}),
 }))
 
 vi.mock('@/services/partner.service', () => ({
@@ -128,6 +129,7 @@ describe('SourceOrdersTab 查看应收 navigation', () => {
         highlightSourceOrderId: 'order-1',
         sourceId: 'order-1',
       },
+      replace: true,
     })
   })
 })
@@ -179,6 +181,7 @@ describe('SourceOrdersTab 查看返利 navigation', () => {
         highlightSourceOrderId: 'order-1',
         counterpartyKeyword: '杭州同行',
       },
+      replace: true,
     })
   })
 })

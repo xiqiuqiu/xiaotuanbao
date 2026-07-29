@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Button, Card, Col, Dropdown, Row, Space, Tag, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { ArrowLeftOutlined, DownOutlined } from '@ant-design/icons'
-import { useNavigate, useRouterState, useSearch } from '@tanstack/react-router'
+import { useNavigate, useRouter, useRouterState, useSearch } from '@tanstack/react-router'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import {
@@ -12,7 +12,7 @@ import {
   DEPARTURE_STATUS_LABELS,
   catalogLabel,
 } from '../catalog'
-import { resolveDepartureListReturnSearch } from '../utils/departure-list-search'
+import { resolveDepartureDetailBackAction } from '../utils/departure-detail-back'
 import { mergeDepartureHistoryItems } from '../utils/departure-history'
 import { formatBusinessDateTime } from '@/utils/formatBusinessDateTime'
 import { DepartureHistoryDrawer } from './DepartureHistoryDrawer'
@@ -33,6 +33,7 @@ export function DepartureHeaderCard({
   onHistoryOpenChange,
 }: DepartureHeaderCardProps) {
   const navigate = useNavigate()
+  const router = useRouter()
   const locationState = useRouterState({ select: (state) => state.location.state })
   const search = useSearch({ strict: false }) as { listReturn?: string }
   const ownerLabel = departure.ownerName ?? '-'
@@ -47,10 +48,21 @@ export function DepartureHeaderCard({
   )
   const latestHistory = historyItems[0]
   const historyCount = historyItems.length
+  const backAction = resolveDepartureDetailBackAction(locationState, search.listReturn)
+  const backLabel = backAction.type === 'departure-list' ? '返回发团管理' : '返回'
 
   const handleBack = () => {
-    const listSearch = resolveDepartureListReturnSearch(locationState, search.listReturn)
-    void navigate({ to: '/departure', search: listSearch })
+    if (backAction.type === 'departure-list') {
+      void navigate({ to: '/departure', search: backAction.search })
+      return
+    }
+
+    if (router.history.canGoBack()) {
+      router.history.back()
+      return
+    }
+
+    void navigate({ to: '/departure' })
   }
 
   const metaLine = [
@@ -64,11 +76,12 @@ export function DepartureHeaderCard({
     <Card style={{ marginBottom: 16 }}>
       <Button
         type="text"
-        icon={<ArrowLeftOutlined />}
+        aria-label={backLabel}
+        icon={<ArrowLeftOutlined aria-hidden />}
         style={{ paddingLeft: 0, marginBottom: 12 }}
         onClick={handleBack}
       >
-        返回发团管理
+        {backLabel}
       </Button>
 
       <Row justify="space-between" align="top" gutter={[16, 12]}>

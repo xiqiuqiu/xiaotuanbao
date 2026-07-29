@@ -4,15 +4,17 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   Alert,
+  Button,
+  Card,
   DatePicker,
   Empty,
   Flex,
   Form,
+  Popover,
   Select,
   Skeleton,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   theme,
@@ -49,7 +51,10 @@ import {
 } from '../utils/route-ledger-table-rows'
 import styles from './RouteLedgerViewPanel.module.css'
 
+const ROUTE_LEDGER_TABLE_SCROLL_X = 1200
+
 type RouteLedgerViewPanelProps = {
+  viewNavigation?: ReactNode
   routeName?: string
   startDateRange: [string | undefined, string | undefined] | null
   onRouteNameChange: (value?: string) => void
@@ -76,34 +81,50 @@ function formatGuestPhone(row: RouteLedgerSourceOrderRow): string {
   return row.guestRepresentativePhone?.trim() || '-'
 }
 
-/** 发团日报条带拼出：Tag 汇总，避免与表底金额合计抢同一视觉层级。 */
-function OutsourceSummaryHint({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
+/** 发团日报右上角拼出汇总：只汇总当前发团，明细按需展开。 */
+function OutsourceSummary({ outsource }: { outsource: RouteLedgerOutsourceSummary }) {
   const { token } = theme.useToken()
   if (outsource.items.length === 0) {
     return null
   }
 
-  if (outsource.items.length === 1) {
-    const item = outsource.items[0]
-    return (
-      <Tag style={{ marginInlineEnd: 0 }}>
-        拼出 · {item.supplierName} {formatCents(item.amountCents)}
-      </Tag>
-    )
-  }
-
-  const detail = outsource.items
-    .map((item) => `${item.supplierName} ${formatCents(item.amountCents)}`)
-    .join(' · ')
-
   return (
-    <Flex align="center" gap={token.marginXXS} wrap="wrap">
-      <Tag style={{ marginInlineEnd: 0 }}>
-        拼出 {outsource.items.length} 项 · {formatCents(outsource.totalAmountCents)}
-      </Tag>
-      <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-        {detail}
+    <Flex className={styles.outsourceSummary} align="center" gap={token.marginXS}>
+      <Typography.Text>拼出</Typography.Text>
+      <Typography.Text>
+        {outsource.items.length} 项 · {formatCents(outsource.totalAmountCents)}
       </Typography.Text>
+      <Popover
+        placement="bottomRight"
+        trigger="click"
+        title="拼出明细"
+        content={
+          <div className={styles.outsourcePopover}>
+            <div className={styles.outsourceItems}>
+              {outsource.items.map((item) => (
+                <div className={styles.outsourceItem} key={item.id}>
+                  <Typography.Text className={styles.outsourceSupplier}>
+                    {item.supplierName}
+                  </Typography.Text>
+                  <Typography.Text type="secondary" className={styles.outsourceTitle}>
+                    {item.title || '-'}
+                  </Typography.Text>
+                  <Typography.Text className={styles.outsourceAmount}>
+                    {formatCents(item.amountCents)}
+                  </Typography.Text>
+                </div>
+              ))}
+            </div>
+            <Typography.Text type="secondary" className={styles.outsourceFooter}>
+              共 {outsource.items.length} 项
+            </Typography.Text>
+          </div>
+        }
+      >
+        <Button type="link" size="small" className={styles.outsourceDetailButton}>
+          查看明细
+        </Button>
+      </Popover>
     </Flex>
   )
 }
@@ -236,6 +257,7 @@ function DepartureLedgerReport({
       {
         title: '备注',
         dataIndex: 'notes',
+        width: 96,
         ellipsis: { showTitle: false },
         render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
       },
@@ -253,16 +275,23 @@ function DepartureLedgerReport({
         rowKey="id"
         columns={columns}
         dataSource={rows}
-        scroll={{ x: 1200 }}
+        scroll={{ x: ROUTE_LEDGER_TABLE_SCROLL_X }}
         locale={{ emptyText: '暂无客源单' }}
+        styles={{ title: { padding: 0 } }}
         title={() => (
-          <Flex className={styles.dateBand} vertical gap={4}>
-            <Flex align="center" wrap="wrap" gap={8}>
-              <Typography.Text strong>
+          <Flex
+            className={styles.dateBand}
+            align="flex-start"
+            justify="space-between"
+            gap={16}
+            wrap="wrap"
+          >
+            <Flex className={styles.reportIdentity} vertical gap={4}>
+              <Typography.Text strong className={styles.reportTitle}>
                 {titlePrefix}
                 {' · '}
                 <Link
-                  className={nameLinkStyles.nameLink}
+                  className={`${nameLinkStyles.nameLink} ${styles.reportNumberLink}`}
                   to="/departure/$departureId"
                   params={{ departureId: departure.departureId }}
                   search={{ tab: 'overview' }}
@@ -271,13 +300,13 @@ function DepartureLedgerReport({
                   {departure.departureNo}
                 </Link>
               </Typography.Text>
-              <OutsourceSummaryHint outsource={departure.outsource} />
+              {departure.departureName ? (
+                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                  {departure.departureName}
+                </Typography.Text>
+              ) : null}
             </Flex>
-            {departure.departureName ? (
-              <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                {departure.departureName}
-              </Typography.Text>
-            ) : null}
+            <OutsourceSummary outsource={departure.outsource} />
           </Flex>
         )}
         onRow={(record) => ({
@@ -350,6 +379,7 @@ function DepartureLedgerReport({
  * - 一团一份完整日报表；换日轻量分隔；不做日/路线跨团加总。
  */
 export function RouteLedgerViewPanel({
+  viewNavigation,
   routeName,
   startDateRange,
   onRouteNameChange,
@@ -408,6 +438,7 @@ export function RouteLedgerViewPanel({
       : ''
 
   let body: ReactNode
+  let hasReportResults = false
   if (queryGate.status === 'empty') {
     body = (
       <Empty
@@ -418,22 +449,20 @@ export function RouteLedgerViewPanel({
             <Typography.Text type="secondary">{queryGate.detail}</Typography.Text>
           </Space>
         }
-        style={{ padding: '48px 0' }}
+        style={{ padding: '8px 0' }}
       />
     )
   } else if (queryGate.status === 'invalid') {
-    body = (
-      <Alert type="warning" showIcon title={queryGate.message} style={{ marginTop: 8 }} />
-    )
+    body = <Alert type="warning" showIcon title={queryGate.message} />
   } else if (ledgerLoading) {
-    body = <Skeleton active paragraph={{ rows: 6 }} style={{ padding: '24px 0' }} />
+    body = <Skeleton active paragraph={{ rows: 6 }} />
   } else if (ledgerError) {
     body = (
       <Alert
         type="error"
         showIcon
         title="线路视图加载失败"
-        description={apiErrorMessage || undefined}
+        description={apiErrorMessage || '网络异常，请稍后重试'}
         action={
           <Typography.Link onClick={() => void refetchLedger()}>重试</Typography.Link>
         }
@@ -455,10 +484,11 @@ export function RouteLedgerViewPanel({
             </Typography.Text>
           </Space>
         }
-        style={{ padding: '48px 0' }}
+        style={{ padding: '8px 0' }}
       />
     )
   } else {
+    hasReportResults = true
     body = (
       <Space orientation="vertical" size={20} style={{ width: '100%' }}>
         {reportStack.map((item) => {
@@ -489,47 +519,52 @@ export function RouteLedgerViewPanel({
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <Form layout="inline" className={styles.filterForm} colon={false}>
-        <Form.Item label="路线名称">
-          <Select
-            showSearch={{ optionFilterProp: 'label' }}
-            allowClear
-            virtual={false}
-            placeholder="选择路线名称"
-            aria-label="路线名称"
-            style={{ width: 280 }}
-            loading={routeNamesLoading}
-            options={options}
-            value={routeName}
-            onChange={(value) => onRouteNameChange(value)}
-          />
-        </Form.Item>
-        <Form.Item label="出团日期">
-          <DatePicker.RangePicker
-            allowClear
-            aria-label="出团日期"
-            value={
-              startDateRange
-                ? [
-                    startDateRange[0] ? dayjs(startDateRange[0]) : null,
-                    startDateRange[1] ? dayjs(startDateRange[1]) : null,
-                  ]
-                : null
-            }
-            onChange={(dates: [Dayjs | null, Dayjs | null] | null) => {
-              if (!dates?.[0] && !dates?.[1]) {
-                onStartDateRangeChange(null)
-                return
-              }
-              onStartDateRangeChange([
-                dates?.[0]?.format('YYYY-MM-DD'),
-                dates?.[1]?.format('YYYY-MM-DD'),
-              ])
-            }}
-          />
-        </Form.Item>
-      </Form>
-      {body}
+      <Card className={styles.filterWorkspace} styles={{ body: { padding: 0 } }}>
+        {viewNavigation}
+        <div className={styles.filterArea}>
+          <Form layout="inline" className={styles.filterForm} colon={false}>
+            <Form.Item label="路线名称">
+              <Select
+                showSearch={{ optionFilterProp: 'label' }}
+                allowClear
+                placeholder="选择路线名称"
+                aria-label="路线名称"
+                style={{ width: 280 }}
+                loading={routeNamesLoading}
+                options={options}
+                value={routeName}
+                onChange={(value) => onRouteNameChange(value)}
+              />
+            </Form.Item>
+            <Form.Item label="出团日期">
+              <DatePicker.RangePicker
+                allowClear
+                aria-label="出团日期"
+                value={
+                  startDateRange
+                    ? [
+                        startDateRange[0] ? dayjs(startDateRange[0]) : null,
+                        startDateRange[1] ? dayjs(startDateRange[1]) : null,
+                      ]
+                    : null
+                }
+                onChange={(dates: [Dayjs | null, Dayjs | null] | null) => {
+                  if (!dates?.[0] && !dates?.[1]) {
+                    onStartDateRangeChange(null)
+                    return
+                  }
+                  onStartDateRangeChange([
+                    dates?.[0]?.format('YYYY-MM-DD'),
+                    dates?.[1]?.format('YYYY-MM-DD'),
+                  ])
+                }}
+              />
+            </Form.Item>
+          </Form>
+        </div>
+        {!hasReportResults ? <div className={styles.stateArea}>{body}</div> : null}
+      </Card>
+      {hasReportResults ? body : null}
     </Space>
   )
 }

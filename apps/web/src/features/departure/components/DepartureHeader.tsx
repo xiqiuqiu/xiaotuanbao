@@ -79,6 +79,7 @@ export function DepartureHeader({ departure, canEdit, onUpdated }: DepartureHead
           tab: action.tab,
           ...(search.listReturn ? { listReturn: search.listReturn } : {}),
         },
+        replace: true,
       })
     }
   }

@@ -201,10 +201,12 @@ export function SourceOrdersTab({
           tab: 'receivables',
           highlightSourceOrderId: order.id,
           sourceId: order.id,
+          ...(search.listReturn ? { listReturn: search.listReturn } : {}),
         },
+        replace: true,
       })
     },
-    [departure.id, navigate],
+    [departure.id, navigate, search.listReturn],
   )
 
   const onViewRebate = useCallback(
@@ -218,10 +220,12 @@ export function SourceOrdersTab({
           ...(order.rebateScheduleNo ? { scheduleNo: order.rebateScheduleNo } : {}),
           highlightSourceOrderId: order.id,
           ...(counterparty ? { counterpartyKeyword: counterparty.counterpartyKeyword } : {}),
+          ...(search.listReturn ? { listReturn: search.listReturn } : {}),
         },
+        replace: true,
       })
     },
-    [departure.id, navigate],
+    [departure.id, navigate, search.listReturn],
   )
 
   const columns = useMemo(

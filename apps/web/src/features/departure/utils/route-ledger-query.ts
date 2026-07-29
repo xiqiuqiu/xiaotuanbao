@@ -38,7 +38,7 @@ export function resolveRouteLedgerQueryGate(axes: RouteLedgerFilterAxes): RouteL
     return {
       status: 'empty',
       message: '请选择路线名称或出团日期',
-      detail: '线路视图可按路线扫读，也可只选出团日期查看当日/短区间有哪些团',
+      detail: '线路视图可按路线扫读，也可只选出团日期查看当日或短区间有哪些团',
     }
   }
 

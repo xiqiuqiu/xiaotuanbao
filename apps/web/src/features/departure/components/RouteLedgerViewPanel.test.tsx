@@ -330,7 +330,11 @@ function renderPanel(ui: ReactElement = <StatefulPanel />) {
 async function selectRoute(user: ReturnType<typeof userEvent.setup>) {
   const combobox = await screen.findByRole('combobox', { name: '路线名称' })
   await user.click(combobox)
-  await user.click(await screen.findByRole('option', { name: '伊犁环线' }))
+  await user.click(
+    await screen.findByText('伊犁环线', {
+      selector: '.ant-select-item-option-content',
+    }),
+  )
   await waitFor(() => {
     expect(getDepartureRouteLedger).toHaveBeenCalled()
   })
@@ -474,17 +478,25 @@ describe('RouteLedgerViewPanel', () => {
   })
 
   it('拼出挂在各发团日报条带，不进客源列、不跨团合并', async () => {
+    const user = userEvent.setup()
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getByText(/拼出 2 项/)).toBeInTheDocument()
+      expect(screen.getByText('2 项 · ¥2,000.00')).toBeInTheDocument()
     })
 
-    expect(screen.getByText(/伊犁拼出社/)).toBeInTheDocument()
-    expect(screen.getByText(/那拉提拼出社/)).toBeInTheDocument()
-    expect(screen.getByText(/拼出 · 独库拼出社/)).toBeInTheDocument()
+    expect(screen.getByText('1 项 · ¥1,500.00')).toBeInTheDocument()
+    expect(screen.queryByText('伊犁拼出社')).not.toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: '查看明细' })[0])
+
+    expect(await screen.findByText('拼出明细')).toBeInTheDocument()
+    expect(screen.getByText('伊犁拼出社')).toBeInTheDocument()
+    expect(screen.getByText('伊犁段拼出')).toBeInTheDocument()
+    expect(screen.getByText('那拉提拼出社')).toBeInTheDocument()
+    expect(screen.getByText('共 2 项')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: '拼出' })).not.toBeInTheDocument()
   })
 
