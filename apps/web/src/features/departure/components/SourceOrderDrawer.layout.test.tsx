@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 
 vi.mock('@/services/partner.service', () => ({
@@ -40,8 +40,22 @@ function renderDrawer() {
 }
 
 describe('SourceOrderDrawer basic layout', () => {
+  beforeEach(() => {
+    class NoopIntersectionObserver {
+      observe = vi.fn()
+      unobserve = vi.fn()
+      disconnect = vi.fn()
+      takeRecords = () => []
+      root = null
+      rootMargin = ''
+      thresholds: number[] = []
+    }
+    vi.stubGlobal('IntersectionObserver', NoopIntersectionObserver)
+  })
+
   afterEach(() => {
     cleanup()
+    vi.unstubAllGlobals()
   })
 
   it('uses ~960 wide drawer for create', () => {
@@ -59,6 +73,16 @@ describe('SourceOrderDrawer basic layout', () => {
     expect(screen.getByRole('tab', { name: '团款优惠' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: '收款信息' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: '客人名单' })).toBeTruthy()
+  })
+
+  it('renders a primary accent marker beside section titles (原型左侧蓝条)', () => {
+    renderDrawer()
+    for (const name of ['基础信息', '团款调整', '团款优惠', '收款信息', '客人名单'] as const) {
+      const heading = screen.getByRole('heading', { name })
+      const row = heading.parentElement
+      const accent = row?.querySelector('[data-testid="section-title-accent"]')
+      expect(accent, `missing accent beside ${name}`).toBeTruthy()
+    }
   })
 
   it('omits section long descriptions and discount AmountPipeline', () => {
@@ -115,6 +139,64 @@ describe('SourceOrderDrawer basic layout', () => {
     expect(screen.getByRole('tab', { name: '团款调整' })).toHaveAttribute(
       'aria-selected',
       'true',
+    )
+  })
+
+  it('updates the active tab when scroll spy reports a different section in view', async () => {
+    type IoCallback = (
+      entries: Array<Pick<IntersectionObserverEntry, 'isIntersecting' | 'intersectionRatio' | 'target'>>,
+      observer: IntersectionObserver,
+    ) => void
+    let ioCallback: IoCallback | null = null
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+
+    class MockIntersectionObserver {
+      constructor(callback: IoCallback) {
+        ioCallback = callback
+      }
+      observe = observe
+      unobserve = vi.fn()
+      disconnect = disconnect
+      takeRecords = () => []
+      root = null
+      rootMargin = ''
+      thresholds: number[] = []
+    }
+
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
+
+    renderDrawer()
+    // Drawer body may mount after the first effect flush; spy must still attach.
+    await waitFor(() => {
+      expect(document.querySelector('.ant-drawer-body')).toBeTruthy()
+    })
+    await waitFor(() => {
+      expect(ioCallback).toBeTruthy()
+    })
+    expect(observe.mock.calls.length).toBeGreaterThanOrEqual(5)
+
+    const guests = document.getElementById('so-section-guests')
+    expect(guests).toBeTruthy()
+
+    ioCallback!(
+      [
+        {
+          isIntersecting: true,
+          intersectionRatio: 0.6,
+          target: guests!,
+        },
+      ],
+      {} as IntersectionObserver,
+    )
+
+    expect(await screen.findByRole('tab', { name: '客人名单' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('tab', { name: '基础信息' })).toHaveAttribute(
+      'aria-selected',
+      'false',
     )
   })
 })
