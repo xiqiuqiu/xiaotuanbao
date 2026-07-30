@@ -9,14 +9,18 @@ import {
   Button,
   Card,
   Collapse,
+  Empty,
   Flex,
+  Modal,
   Segmented,
   Space,
   Table,
   Tag,
   Typography,
+  message,
 } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { CloseOutlined, PlusOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
 import {
   countResourcesForSegment,
   formatYuan,
@@ -35,11 +39,64 @@ import {
 import type {
   ProtoExecutionState,
   ProtoResource,
+  ProtoSegment,
   ProtoTabGroup,
   ProtoTabKey,
 } from './types'
 import { GROUP_LABELS, PROTO_TABS } from './types'
 import styles from './detail-layout-prototype.module.css'
+
+function renumberSegments(segments: ProtoSegment[]): ProtoSegment[] {
+  return segments.map((segment, index) => ({
+    ...segment,
+    dayIndex: index + 1,
+  }))
+}
+
+function addSegmentDay(state: ProtoExecutionState): ProtoExecutionState {
+  const last = state.segments[state.segments.length - 1]
+  const nextDate = last
+    ? dayjs(last.date).add(1, 'day').format('YYYY-MM-DD')
+    : dayjs().format('YYYY-MM-DD')
+  const id = `seg-new-${Date.now()}`
+  const segments = renumberSegments([
+    ...state.segments,
+    {
+      id,
+      dayIndex: 0,
+      date: nextDate,
+      overview: '待补充行程',
+    },
+  ])
+  return {
+    ...state,
+    segments,
+    focus: 'segment',
+    selectedSegmentId: id,
+  }
+}
+
+function removeSegmentDay(
+  state: ProtoExecutionState,
+  segmentId: string,
+): ProtoExecutionState {
+  const remaining = renumberSegments(
+    state.segments.filter((segment) => segment.id !== segmentId),
+  )
+  const selectedSegmentId =
+    state.selectedSegmentId === segmentId
+      ? (remaining[0]?.id ?? null)
+      : state.selectedSegmentId
+  return {
+    ...state,
+    segments: remaining,
+    segmentResources: state.segmentResources.filter(
+      (item) => item.segmentId !== segmentId,
+    ),
+    focus: 'segment',
+    selectedSegmentId,
+  }
+}
 
 export const VARIANT_B_META = {
   key: 'B',
@@ -288,34 +345,96 @@ export function ExecutionB({
         ]}
       />
 
-      <Card size="small" title="按日资源（酒店 / 门票）">
+      <Card
+        size="small"
+        title="按日资源（酒店 / 门票）"
+        extra={
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            可按出团日一键生成后，再人工增删天数
+          </Typography.Text>
+        }
+      >
         <div className={styles.timeline}>
           {execution.segments.map((segment) => {
             const count = countResourcesForSegment(execution, segment.id)
             const active = selectedId === segment.id
             return (
-              <button
+              <div
                 key={segment.id}
-                type="button"
-                className={`${styles.timelineChip} ${
-                  active ? styles.timelineChipActive : ''
+                className={`${styles.timelineChipWrap} ${
+                  active ? styles.timelineChipWrapActive : ''
                 }`}
-                onClick={() =>
-                  onExecutionChange({
-                    ...execution,
-                    focus: 'segment',
-                    selectedSegmentId: segment.id,
-                  })
-                }
               >
-                <div className={styles.timelineDay}>D{segment.dayIndex}</div>
-                <div className={styles.timelineDate}>{segment.date.slice(5)}</div>
-                <div className={styles.timelineCount}>
-                  {count > 0 ? `${count} 项` : '空'}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  className={`${styles.timelineChip} ${
+                    active ? styles.timelineChipActive : ''
+                  }`}
+                  onClick={() =>
+                    onExecutionChange({
+                      ...execution,
+                      focus: 'segment',
+                      selectedSegmentId: segment.id,
+                    })
+                  }
+                >
+                  <div className={styles.timelineDay}>D{segment.dayIndex}</div>
+                  <div className={styles.timelineDate}>{segment.date.slice(5)}</div>
+                  <div className={styles.timelineCount}>
+                    {count > 0 ? `${count} 项` : '空'}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={styles.timelineChipRemove}
+                  aria-label={`删除第${segment.dayIndex}天`}
+                  title="删除这一天"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    if (execution.segments.length <= 1) {
+                      message.warning('至少保留一天')
+                      return
+                    }
+                    const resourceCount = countResourcesForSegment(
+                      execution,
+                      segment.id,
+                    )
+                    Modal.confirm({
+                      title: `删除第${segment.dayIndex}天？`,
+                      content:
+                        resourceCount > 0
+                          ? `该日有 ${resourceCount} 项资源，删除后一并移除（原型内存态）。`
+                          : '删除后可再「添加一天」补回。后续天数会重新编号。',
+                      okText: '删除',
+                      okButtonProps: { danger: true },
+                      cancelText: '取消',
+                      onOk: () => {
+                        onExecutionChange(removeSegmentDay(execution, segment.id))
+                        message.success(`已删除第${segment.dayIndex}天`)
+                      },
+                    })
+                  }}
+                >
+                  <CloseOutlined />
+                </button>
+              </div>
             )
           })}
+
+          <button
+            type="button"
+            className={styles.timelineAddChip}
+            onClick={() => {
+              const next = addSegmentDay(execution)
+              onExecutionChange(next)
+              message.success(
+                `已添加第${next.segments[next.segments.length - 1]?.dayIndex}天`,
+              )
+            }}
+          >
+            <PlusOutlined />
+            <span>添加一天</span>
+          </button>
         </div>
 
         {selected?.segment ? (
@@ -332,7 +451,20 @@ export function ExecutionB({
               showSummary
             />
           </>
-        ) : null}
+        ) : (
+          <Empty
+            description="暂无行程天，可点「添加一天」手工补段"
+            style={{ padding: '24px 0' }}
+          >
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => onExecutionChange(addSegmentDay(execution))}
+            >
+              添加一天
+            </Button>
+          </Empty>
+        )}
       </Card>
 
       <ProtoResourceDrawer
