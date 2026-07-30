@@ -1,5 +1,9 @@
 .taskRail {
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
   flex: 0 0 168px;
+  max-height: calc(100dvh - 96px);
   padding: 8px;
   border-right: 1px solid var(--ant-color-border-secondary);
   overflow-y: auto;
@@ -19,13 +23,17 @@
   width: 100%;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .taskRail {
     display: none;
   }
 
   .mobileNavigation {
+    position: sticky;
+    top: 0;
+    z-index: 2;
     display: block;
+    background: var(--ant-color-bg-container);
   }
 
   .mobileNavigation :global(.ant-select),

@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureDetailWorkspace } from '../components/DepartureDetailWorkspace'
 import {
+  DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
   isDepartureDetailTabVisible,
   type DepartureDetailTabKey,
@@ -96,7 +97,14 @@ export function DepartureDetailPage() {
 
   if (!departure) {
     if (isLoading) {
-      return <DepartureDetailShellSkeleton activeTab={activeTab} />
+      return (
+        <DepartureDetailShellSkeleton
+          activeTab={activeTab}
+          tabs={DEPARTURE_DETAIL_TABS.filter((tab) =>
+            isDepartureDetailTabVisible(tab.key, menuKeys),
+          )}
+        />
+      )
     }
     if (isError && !(error instanceof ApiError && error.code === 404)) {
       return (

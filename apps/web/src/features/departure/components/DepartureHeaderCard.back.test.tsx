@@ -124,13 +124,25 @@ describe('DepartureHeaderCard 返回', () => {
     expect(navigate).toHaveBeenCalledWith({ to: '/departure' })
   })
 
-  it('将状态与履历收进更多菜单以保持对象栏紧凑', async () => {
+  it('用直接命名的状态操作菜单暴露履历入口', async () => {
     const user = userEvent.setup()
     const onHistoryOpenChange = vi.fn()
+    const departureWithHistory = {
+      ...departure,
+      archiveHistory: [
+        {
+          id: 'history-1',
+          action: 'archive',
+          operatedAt: '2026-07-29T01:00:00.000Z',
+          operatedByName: '王姐',
+          reason: '业务结束',
+        },
+      ],
+    } as unknown as DepartureDetail
 
     render(
       <DepartureHeaderCard
-        departure={departure}
+        departure={departureWithHistory}
         menuItems={[]}
         historyOpen={false}
         onHistoryOpenChange={onHistoryOpenChange}
@@ -141,9 +153,27 @@ describe('DepartureHeaderCard 返回', () => {
       screen.queryByRole('button', { name: /状态与履历/ }),
     ).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '更多' }))
-    await user.click(await screen.findByText('状态与履历'))
+    expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '状态与操作' }))
+    await user.click(await screen.findByText('状态与履历（1）'))
 
     expect(onHistoryOpenChange).toHaveBeenCalledWith(true)
+  })
+
+  it('没有履历时也显示零条，避免入口状态不明确', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <DepartureHeaderCard
+        departure={departure}
+        menuItems={[]}
+        historyOpen={false}
+        onHistoryOpenChange={vi.fn()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: '状态与操作' }))
+
+    expect(await screen.findByText('状态与履历（0）')).toBeInTheDocument()
   })
 })

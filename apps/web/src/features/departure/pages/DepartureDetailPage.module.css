@@ -4,7 +4,7 @@
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: var(--ant-border-radius-lg);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .detailWorkspaceContent {
@@ -39,14 +39,15 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .detailWorkspace {
     min-height: 0;
     flex-direction: column;
   }
+}
 
+@media (max-width: 767px) {
   .detailWorkspaceContent {
     padding: 12px;
   }
-
 }

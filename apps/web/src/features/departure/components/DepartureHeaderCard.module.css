@@ -33,6 +33,10 @@
   margin: 0;
 }
 
+.metaLine {
+  min-width: 0;
+}
+
 .timestamps {
   font-size: 12px;
 }

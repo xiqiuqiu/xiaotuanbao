@@ -10,6 +10,7 @@ import {
   dismissNextAction,
   isNextActionDismissed,
 } from '../utils/departure-next-action-dismiss'
+import styles from './DepartureNextActionAlert.module.css'
 
 type DepartureNextActionAlertProps = {
   departure: DepartureDetail
@@ -46,7 +47,7 @@ export function DepartureNextActionAlert({
       type={nextAction.type}
       showIcon
       closable
-      style={{ marginBottom: 16 }}
+      className={styles.alert}
       title={nextAction.title}
       description={nextAction.description}
       onClose={() => {

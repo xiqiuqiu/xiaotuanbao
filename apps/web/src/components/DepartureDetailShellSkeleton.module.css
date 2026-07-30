@@ -1,0 +1,32 @@
+.headerIdentity {
+  min-width: 0;
+  flex: 1;
+}
+
+.navigationGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.navigationGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.navigationItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.navigationItems :global(.ant-skeleton-button) {
+  width: 100%;
+}
+
+.mobileControl,
+.mobileControl :global(.ant-skeleton-input) {
+  width: 100%;
+  min-height: 44px;
+}
