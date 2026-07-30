@@ -22,6 +22,10 @@ import {
   formatYuan,
 } from './mock-data'
 import {
+  ProtoResourceDrawer,
+  type ProtoResourceDraft,
+} from './ProtoResourceDrawer'
+import {
   PlaceholderPane,
   ResourceTable,
   SectionTitle,
@@ -29,6 +33,7 @@ import {
 } from './shared'
 import type {
   ProtoExecutionState,
+  ProtoResource,
   ProtoTabGroup,
   ProtoTabKey,
 } from './types'
@@ -113,25 +118,109 @@ export function VariantB({
   )
 }
 
-/** Shared by Variant B / D — 发团级折叠条 + 横向日程轴 + 当日资源 */
+type DrawerState = {
+  open: boolean
+  scope: 'departure' | 'segment'
+  editing: ProtoResource | null
+}
+
+/** Shared by Variant B / D — 发团级折叠条 + 横向日程轴 + 当日资源；属性进抽屉 */
 export function ExecutionB({
   execution,
   onExecutionChange,
-  onAddDepartureResource,
-  onAddSegmentResource,
 }: {
   execution: ProtoExecutionState
   onExecutionChange: (next: ProtoExecutionState) => void
-  onAddDepartureResource: () => void
-  onAddSegmentResource: (segmentId?: string) => void
+  /** kept for host wiring compatibility; drawer owns create/edit now */
+  onAddDepartureResource?: () => void
+  onAddSegmentResource?: (segmentId?: string) => void
 }) {
   const [groupOpen, setGroupOpen] = useState(true)
+  const [drawer, setDrawer] = useState<DrawerState>({
+    open: false,
+    scope: 'departure',
+    editing: null,
+  })
   const selectedId = execution.selectedSegmentId ?? execution.segments[0]?.id
   const selected = selectedId ? segmentMeta(execution, selectedId) : null
   const depTotal = execution.departureResources.reduce(
     (sum, item) => sum + item.amountCents,
     0,
   )
+
+  const openDepartureDrawer = (editing: ProtoResource | null = null) => {
+    setDrawer({ open: true, scope: 'departure', editing })
+  }
+
+  const openSegmentDrawer = (editing: ProtoResource | null = null) => {
+    setDrawer({ open: true, scope: 'segment', editing })
+  }
+
+  const handleSave = (
+    draft: ProtoResourceDraft,
+    _options?: { generatePayable?: boolean },
+  ) => {
+    const amountCents = Math.round(draft.amountYuan * 100)
+    if (drawer.editing) {
+      const patch = (item: ProtoResource): ProtoResource =>
+        item.id === drawer.editing!.id
+          ? {
+              ...item,
+              kind: draft.kind,
+              title: draft.title,
+              supplier: draft.supplier,
+              amountCents,
+              notes: draft.notes,
+            }
+          : item
+      onExecutionChange({
+        ...execution,
+        departureResources: execution.departureResources.map(patch),
+        segmentResources: execution.segmentResources.map(patch),
+      })
+    } else if (drawer.scope === 'departure') {
+      onExecutionChange({
+        ...execution,
+        focus: 'departure',
+        departureResources: [
+          ...execution.departureResources,
+          {
+            id: `dr-new-${Date.now()}`,
+            kind: draft.kind,
+            title: draft.title,
+            supplier: draft.supplier,
+            amountCents,
+            notes: draft.notes,
+            scope: 'departure',
+          },
+        ],
+      })
+    } else if (selectedId) {
+      onExecutionChange({
+        ...execution,
+        focus: 'segment',
+        selectedSegmentId: selectedId,
+        segmentResources: [
+          ...execution.segmentResources,
+          {
+            id: `sr-new-${Date.now()}`,
+            kind: draft.kind,
+            title: draft.title,
+            supplier: draft.supplier,
+            amountCents,
+            notes: draft.notes,
+            scope: 'segment',
+            segmentId: selectedId,
+          },
+        ],
+      })
+    }
+    setDrawer({ open: false, scope: 'departure', editing: null })
+  }
+
+  const scopeLabel = selected?.segment
+    ? `第${selected.segment.dayIndex}天 · ${selected.segment.overview}`
+    : '本段资源'
 
   return (
     <div className={styles.stackLayout}>
@@ -149,7 +238,7 @@ export function ExecutionB({
                   合计 {formatYuan(depTotal)}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  用车 / 保险 / 导游 — 与按天录入分开
+                  列表扫一眼；点「添加 / 编辑」在抽屉录全量属性
                 </Typography.Text>
               </Space>
             ),
@@ -160,7 +249,7 @@ export function ExecutionB({
                 icon={<PlusOutlined />}
                 onClick={(event) => {
                   event.stopPropagation()
-                  onAddDepartureResource()
+                  openDepartureDrawer()
                 }}
               >
                 添加
@@ -172,6 +261,10 @@ export function ExecutionB({
                 size="small"
                 pagination={false}
                 dataSource={execution.departureResources}
+                onRow={(record) => ({
+                  onClick: () => openDepartureDrawer(record),
+                  style: { cursor: 'pointer' },
+                })}
                 columns={[
                   { title: '种类', dataIndex: 'kind', width: 88 },
                   { title: '项目', dataIndex: 'title' },
@@ -182,6 +275,23 @@ export function ExecutionB({
                     width: 120,
                     align: 'right',
                     render: (value: number) => formatYuan(value),
+                  },
+                  {
+                    title: '操作',
+                    key: 'actions',
+                    width: 72,
+                    render: (_: unknown, record: ProtoResource) => (
+                      <Button
+                        type="link"
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          openDepartureDrawer(record)
+                        }}
+                      >
+                        编辑
+                      </Button>
+                    ),
                   },
                 ]}
                 locale={{ emptyText: '暂无发团级资源' }}
@@ -225,16 +335,26 @@ export function ExecutionB({
           <>
             <SectionTitle
               title={`第${selected.segment.dayIndex}天 · ${selected.segment.overview}`}
-              hint={`${selected.segment.date} · 仅展示本段资源，发团级已在上方统一维护`}
+              hint={`${selected.segment.date} · 仅展示本段资源；属性同样进抽屉`}
             />
             <ResourceTable
               resources={selected.resources}
               emptyText="本段暂无酒店/门票等资源"
-              onAdd={onAddSegmentResource}
+              onAdd={() => openSegmentDrawer()}
+              onEdit={(resource) => openSegmentDrawer(resource)}
             />
           </>
         ) : null}
       </Card>
+
+      <ProtoResourceDrawer
+        open={drawer.open}
+        scope={drawer.scope}
+        scopeLabel={scopeLabel}
+        editing={drawer.editing}
+        onClose={() => setDrawer({ open: false, scope: 'departure', editing: null })}
+        onSave={handleSave}
+      />
     </div>
   )
 }

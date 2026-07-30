@@ -168,7 +168,8 @@ export function DepartureDetailLayoutPrototypeHost({
           <Typography.Paragraph style={{ marginBottom: 0 }}>
             对比「页签放哪」与「执行安排如何拆发团级 / 按日资源」。数据为内存 stub（团：
             <Typography.Text code>{departure.departureNo}</Typography.Text>
-            ），刷新重置。底部切换条或 ← → 切换 A/B/C/D（D=顶栏+横向日程轴混搭）。当前：
+            ），刷新重置。底部切换条或 ← → 切换
+            A/B/C/D。D 的发团级/按日资源列表点「添加/编辑」走抽屉录属性（与现网一致）。当前：
             <Typography.Text code>{variant}</Typography.Text> · Tab{' '}
             <Typography.Text code>{activeTab}</Typography.Text> · 焦点{' '}
             <Typography.Text code>

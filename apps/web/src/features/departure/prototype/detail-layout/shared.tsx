@@ -49,11 +49,31 @@ export function ResourceTable({
   resources,
   emptyText,
   onAdd,
+  onEdit,
 }: {
   resources: ProtoResource[]
   emptyText: string
   onAdd?: () => void
+  onEdit?: (resource: ProtoResource) => void
 }) {
+  const columns: ColumnsType<ProtoResource> = [
+    ...RESOURCE_COLUMNS,
+    ...(onEdit
+      ? [
+          {
+            title: '操作',
+            key: 'actions',
+            width: 72,
+            render: (_: unknown, record: ProtoResource) => (
+              <Button type="link" size="small" onClick={() => onEdit(record)}>
+                编辑
+              </Button>
+            ),
+          },
+        ]
+      : []),
+  ]
+
   if (resources.length === 0) {
     return (
       <Empty description={emptyText} style={{ padding: '32px 0' }}>
@@ -79,8 +99,16 @@ export function ResourceTable({
         rowKey="id"
         size="small"
         pagination={false}
-        columns={RESOURCE_COLUMNS}
+        columns={columns}
         dataSource={resources}
+        onRow={
+          onEdit
+            ? (record) => ({
+                onClick: () => onEdit(record),
+                style: { cursor: 'pointer' },
+              })
+            : undefined
+        }
       />
     </Space>
   )

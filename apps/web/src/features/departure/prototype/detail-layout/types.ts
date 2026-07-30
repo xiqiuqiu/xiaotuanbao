@@ -28,6 +28,8 @@ export type ProtoResource = {
   amountCents: number
   scope: 'departure' | 'segment'
   segmentId?: string
+  /** 备注等扩展属性 — 列表不展示，抽屉录入 */
+  notes?: string
 }
 
 export type ProtoSegment = {
