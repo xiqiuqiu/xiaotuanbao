@@ -498,12 +498,12 @@ export function ExecutionB({
                   <div className={styles.timelineOverview} title={segment.overview}>
                     {segment.overview}
                   </div>
-                  <div className={styles.timelineMetaRow}>
-                    <span className={styles.timelineCount}>
+                  <div className={styles.timelineFooter}>
+                    <div className={styles.timelineCount}>
                       {count > 0 ? `资源${count}项` : '空'}
-                    </span>
+                    </div>
                     {gap.hasGap ? (
-                      <span
+                      <div
                         className={styles.timelinePayableGap}
                         title={`还有 ${gap.ungenerated} 项未生成应付`}
                         aria-label={`生成 ${gap.generated}/${gap.total}`}
@@ -519,9 +519,11 @@ export function ExecutionB({
                           }
                           aria-hidden
                         />
-                        生成 {gap.generated}/{gap.total}
-                      </span>
-                    ) : null}
+                        <span>生成 {gap.generated}/{gap.total}</span>
+                      </div>
+                    ) : (
+                      <div className={styles.timelinePayableGapPlaceholder} aria-hidden />
+                    )}
                   </div>
                 </button>
                 <button
