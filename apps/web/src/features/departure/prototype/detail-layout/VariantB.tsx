@@ -542,18 +542,6 @@ export function ExecutionB({
                 </button>
                 <button
                   type="button"
-                  className={styles.timelineChipEdit}
-                  aria-label={`编辑第${segment.dayIndex}天名称`}
-                  title="编辑行程段名称"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    openDayEditor(segment)
-                  }}
-                >
-                  <EditOutlined />
-                </button>
-                <button
-                  type="button"
                   className={styles.timelineChipRemove}
                   aria-label={`删除第${segment.dayIndex}天`}
                   title="删除这一天"
