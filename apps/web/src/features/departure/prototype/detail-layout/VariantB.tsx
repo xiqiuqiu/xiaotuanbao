@@ -470,12 +470,7 @@ export function ExecutionB({
       />
 
       <section className={styles.dayResourcePanel} aria-label="按日资源">
-        <Flex align="center" justify="space-between" gap={12} wrap="wrap">
-          <Typography.Text strong>按日资源</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            酒店 / 门票按天录入
-          </Typography.Text>
-        </Flex>
+        <Typography.Text strong>按日资源</Typography.Text>
 
         <div className={styles.timeline}>
           {execution.segments.map((segment) => {
@@ -614,37 +609,52 @@ export function ExecutionB({
 
         {selected?.segment ? (
           <div className={styles.dayDetail}>
-            <Flex align="center" justify="space-between" gap={12} wrap="wrap">
-              <Flex align="center" gap={8} wrap="wrap">
+            <div className={styles.dayDetailToolbar}>
+              <div className={styles.dayDetailTitle}>
                 <Typography.Text strong>
-                  第{selected.segment.dayIndex}天
+                  D{selected.segment.dayIndex}
                 </Typography.Text>
-                <Typography.Text type="secondary">
-                  {selected.segment.date} · {selected.segment.overview}
+                <Typography.Text type="secondary" className={styles.dayDetailDate}>
+                  {selected.segment.date.slice(5)}
+                </Typography.Text>
+                <Typography.Text
+                  className={styles.dayDetailOverview}
+                  title={selected.segment.overview}
+                >
+                  {selected.segment.overview}
                 </Typography.Text>
                 <Button
-                  type="link"
+                  type="text"
                   size="small"
                   icon={<EditOutlined />}
+                  className={styles.dayDetailEdit}
+                  aria-label="编辑行程段"
                   title="编辑行程段"
                   onClick={() => openDayEditor(selected.segment!)}
-                >
-                  编辑
-                </Button>
-              </Flex>
-              <Flex align="center" gap={12} wrap="wrap">
-                <ResourceAmountSummary resources={selected.resources} />
-                {segmentGap?.hasGap ? (
-                  <Typography.Text
-                    type="secondary"
-                    className={styles.genProgress}
-                    title={`还有 ${segmentGap.ungenerated} 项未生成应付`}
-                  >
-                    生成 {segmentGap.generated}/{segmentGap.total}
-                  </Typography.Text>
+                />
+              </div>
+              <div className={styles.dayDetailActions}>
+                {selected.resources.length > 0 ? (
+                  <span className={styles.dayDetailMeta} aria-label="当日资源汇总">
+                    <ResourceAmountSummary resources={selected.resources} />
+                    {segmentGap?.hasGap ? (
+                      <>
+                        <span className={styles.metaSep} aria-hidden>
+                          ｜
+                        </span>
+                        <span
+                          className={styles.genProgress}
+                          title={`还有 ${segmentGap.ungenerated} 项未生成应付`}
+                        >
+                          生成 {segmentGap.generated}/{segmentGap.total}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
                 ) : null}
                 {segmentUngenerated > 0 ? (
                   <Button
+                    size="small"
                     title="批量生成应付"
                     onClick={() => confirmBatchGenerate('segment')}
                   >
@@ -652,18 +662,19 @@ export function ExecutionB({
                   </Button>
                 ) : null}
                 <Button
+                  size="small"
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={() => openSegmentDrawer()}
                 >
                   添加
                 </Button>
-              </Flex>
-            </Flex>
+              </div>
+            </div>
             <div className={styles.dayDetailTable}>
               <ResourceTable
                 resources={selected.resources}
-                emptyText="本段暂无酒店/门票等资源"
+                emptyText="本段暂无资源"
                 onEdit={(resource) => openSegmentDrawer(resource)}
               />
             </div>

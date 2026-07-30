@@ -58,7 +58,11 @@ export function buildProtoResourceColumns(options?: {
       render: (value: string, record: ProtoResource) => (
         <Space size={6} wrap>
           <span>{value || '-'}</span>
-          {record.pendingCheck ? <Tag color="warning">待检查</Tag> : null}
+          {record.pendingCheck ? (
+            <Tag color="warning" style={{ marginInlineEnd: 0, fontSize: 11, lineHeight: '16px', paddingInline: 4 }}>
+              待检查
+            </Tag>
+          ) : null}
         </Space>
       ),
     },
@@ -154,13 +158,15 @@ export function ResourceAmountSummary({ resources }: { resources: ProtoResource[
   if (resources.length === 0) return null
   const total = resources.reduce((sum, item) => sum + item.amountCents, 0)
   return (
-    <Typography.Text type="secondary" aria-label="资源金额汇总" style={{ fontSize: 13 }}>
-      {resources.length} 项
-      <span style={{ margin: '0 8px', color: 'var(--ant-color-border)' }} aria-hidden>
+    <>
+      <span>{resources.length} 项</span>
+      <span style={{ color: 'var(--ant-color-border)' }} aria-hidden>
         ｜
       </span>
-      合计 <Typography.Text strong>{formatYuan(total)}</Typography.Text>
-    </Typography.Text>
+      <span>
+        合计 <Typography.Text strong>{formatYuan(total)}</Typography.Text>
+      </span>
+    </>
   )
 }
 

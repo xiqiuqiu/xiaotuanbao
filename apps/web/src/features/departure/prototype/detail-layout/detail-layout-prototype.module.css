@@ -88,6 +88,64 @@
   padding-top: 4px;
 }
 
+.dayDetailToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.dayDetailTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dayDetailDate {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.dayDetailOverview {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayDetailEdit {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary) !important;
+}
+
+.dayDetailEdit:hover {
+  color: var(--ant-color-primary) !important;
+}
+
+.dayDetailActions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-left: auto;
+}
+
+.dayDetailMeta {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .dayDetailTable {
   margin-top: 0;
 }
