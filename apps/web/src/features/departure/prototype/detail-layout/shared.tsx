@@ -147,16 +147,19 @@ export function buildProtoResourceColumns(options?: {
 export function summarizeProtoResourceAmounts(resources: ProtoResource[]) {
   let resourceAmountCents = 0
   let ungeneratedPayableCents = 0
+  let ungeneratedPayableCount = 0
   for (const item of resources) {
     resourceAmountCents += item.amountCents
     if (item.payableStatus === 'not_generated' && item.amountCents > 0) {
       ungeneratedPayableCents += item.amountCents
+      ungeneratedPayableCount += 1
     }
   }
   return {
     resourceCount: resources.length,
     resourceAmountCents,
     ungeneratedPayableCents,
+    ungeneratedPayableCount,
   }
 }
 
@@ -196,8 +199,10 @@ export function ExecutionCostStrip({
   const segment = summarizeProtoResourceAmounts(segmentResources)
   const totalCents = departure.resourceAmountCents + segment.resourceAmountCents
   const totalCount = departure.resourceCount + segment.resourceCount
-  const ungenerated =
+  const ungeneratedCents =
     departure.ungeneratedPayableCents + segment.ungeneratedPayableCents
+  const ungeneratedCount =
+    departure.ungeneratedPayableCount + segment.ungeneratedPayableCount
   if (totalCount === 0) return null
 
   return (
@@ -223,16 +228,16 @@ export function ExecutionCostStrip({
       </div>
       <div
         className={`${styles.costStripCell} ${
-          ungenerated > 0 ? styles.costStripMetricWarn : ''
+          ungeneratedCount > 0 ? styles.costStripMetricWarn : ''
         }`}
         role="listitem"
       >
         <span className={styles.costStripLabel}>尚未生成应付</span>
         <span className={styles.costStripMetricValue}>
-          {formatYuan(ungenerated)}
+          {formatYuan(ungeneratedCents)}
         </span>
         <span className={styles.costStripCount}>
-          {ungenerated > 0 ? '待生成' : '已齐'}
+          {ungeneratedCount > 0 ? `${ungeneratedCount} 项待生成` : '已齐'}
         </span>
       </div>
     </div>
