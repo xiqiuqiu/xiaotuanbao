@@ -39,6 +39,29 @@ const loginRoute = createRoute({
   },
 })
 
+/** PROTOTYPE — throwaway layout sandbox (no auth). Hidden intent in production. */
+const departureDetailLayoutPrototypeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/prototype/departure-detail-layout',
+  validateSearch: (search: Record<string, unknown>): {
+    tab?: string
+    variant?: string
+  } => ({
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+    variant:
+      typeof search.variant === 'string' && search.variant.trim()
+        ? search.variant.trim()
+        : 'D',
+  }),
+  component: lazyRouteComponent(
+    () =>
+      import(
+        '@/features/departure/prototype/detail-layout/StandaloneDepartureDetailLayoutPrototypePage'
+      ),
+    'StandaloneDepartureDetailLayoutPrototypePage',
+  ),
+})
+
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
@@ -145,6 +168,8 @@ const departureDetailRoute = createRoute({
     transactionNo?: string
     scheduleNo?: string
     listReturn?: string
+    /** PROTOTYPE — departure detail layout A/B/C */
+    variant?: string
   } => {
     const direction = typeof search.direction === 'string' ? search.direction.trim() : ''
     const transactionNo =
@@ -156,6 +181,10 @@ const departureDetailRoute = createRoute({
     const listReturn =
       typeof search.listReturn === 'string' && search.listReturn.trim()
         ? search.listReturn.trim()
+        : undefined
+    const variant =
+      typeof search.variant === 'string' && search.variant.trim()
+        ? search.variant.trim()
         : undefined
     return {
       tab: typeof search.tab === 'string' ? search.tab : undefined,
@@ -178,6 +207,7 @@ const departureDetailRoute = createRoute({
       ...(transactionNo ? { transactionNo } : {}),
       ...(scheduleNo ? { scheduleNo } : {}),
       ...(listReturn ? { listReturn } : {}),
+      ...(variant ? { variant } : {}),
     }
   },
   component: lazyRouteComponent(
@@ -363,6 +393,7 @@ const systemUsersRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  departureDetailLayoutPrototypeRoute,
   platformLayoutRoute.addChildren([
     platformIndexRoute,
     platformOrganizationsRoute,
