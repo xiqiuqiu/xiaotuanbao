@@ -136,32 +136,30 @@ export function DepartureHeaderCard({
           <HeaderMetaItem value={`${departure.totalGuests} 人`} />
         </Space>
 
-        <div className={styles.crewLine} aria-label="执行班组">
-          <div className={styles.crewCell}>
-            <span className={styles.crewLabel}>司机</span>
-            <span className={styles.crewValue}>
-              {departure.driverSupplierName?.trim() || '-'}
-            </span>
-          </div>
-          <div className={styles.crewCell}>
-            <span className={styles.crewLabel}>导游</span>
-            <span className={styles.crewValue}>
-              {departure.guideSupplierName?.trim() || '-'}
-            </span>
-          </div>
-          <div className={styles.crewCell}>
-            <span className={styles.crewLabel}>车牌</span>
-            <span className={styles.crewValue}>
-              {departure.vehiclePlate?.trim() || '-'}
-            </span>
-          </div>
-          <div className={styles.crewCell}>
-            <span className={styles.crewLabel}>电话</span>
-            <span className={styles.crewValue}>
-              {crewContactPhone?.trim() || '-'}
-            </span>
-          </div>
-        </div>
+        <Space
+          className={styles.crewLine}
+          size={[8, 2]}
+          wrap
+          separator={<span className={styles.metaSep} aria-hidden>·</span>}
+          aria-label="执行班组"
+        >
+          <HeaderMetaItem
+            label="司机"
+            value={departure.driverSupplierName?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="导游"
+            value={departure.guideSupplierName?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="车牌"
+            value={departure.vehiclePlate?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="电话"
+            value={crewContactPhone?.trim() || '-'}
+          />
+        </Space>
 
         <Typography.Text type="secondary" className={styles.timestamps}>
           最近更新 {formatBusinessDateTime(departure.updatedAt)}
