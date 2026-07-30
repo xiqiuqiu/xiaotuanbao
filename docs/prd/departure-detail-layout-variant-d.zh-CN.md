@@ -127,5 +127,10 @@
 
 - 产品已口头确认「D 款还可以」；本 PRD 冻结布局决策，供 `/to-tickets` 拆票。  
 - 与「按日执行 / 班组 / 增收」能力 PRD 正交：本 spec **不**重做那些业务能力，只改详情壳与执行区信息架构。  
-- 建议拆票顺序（供后续 `/to-tickets`）：① 顶栏导航；② 执行区堆叠 + 成本条 + 发团级折叠；③ 横向日程轴替换纵列表；④ 页头班组文案/层次收尾；⑤ 拆除原型挂载。  
-- **Seam 待人类一眼确认**：上表「单一主 seam + 子面落点」是否可接受；若要把「发团级批量生成应付」或「联系电话字段」剔出主票，请在挂 Issue 时注明。
+- `/to-tickets` 已批准拆票（2026-07-30）：  
+  1. 顶栏 Tabs（无 blocker）  
+  2. 成本条 + 发团级折叠（无 blocker，可与 1 并行）  
+  3. 横向日程轴（blocked by 2）  
+  4. 页头班组收尾（无 blocker，可并行）  
+  5. 拆除原型挂载（blocked by 1–4）  
+- 本环境 CI token 无 `createIssue` 时，用仓库脚本发布子票：`bash scripts/publish-issue-237-tickets.sh`（需有权限的 `gh` 登录）。本地票底稿在 `.scratch/departure-detail-layout-d/issues/`（gitignore）。
