@@ -51,7 +51,7 @@ const departureDetailLayoutPrototypeRoute = createRoute({
     variant:
       typeof search.variant === 'string' && search.variant.trim()
         ? search.variant.trim()
-        : 'A',
+        : 'D',
   }),
   component: lazyRouteComponent(
     () =>

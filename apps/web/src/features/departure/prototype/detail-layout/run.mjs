@@ -19,13 +19,14 @@ console.log(`
 ║    A 顶栏页签 · 「全程」伪日段                                ║
 ║    B 两级导航 · 横向日程轴                                   ║
 ║    C 窄图标轨 · 种类×日期矩阵                                ║
+║    D 混搭：顶栏 Tabs + 横向日程轴（倾向）                      ║
 ║                                                            ║
 ║  免登录预览（推荐）：                                         ║
 ║    http://localhost:5173/prototype/departure-detail-layout ║
-║      ?tab=execution&variant=A                              ║
+║      ?tab=execution&variant=D                              ║
 ║                                                            ║
 ║  或挂到真实发团详情（需登录 + API）：                          ║
-║    /departure/<id>?tab=execution&variant=A                 ║
+║    /departure/<id>?tab=execution&variant=D                 ║
 ║                                                            ║
 ║  底部切换条 / ← → 切换方案                                   ║
 ╚════════════════════════════════════════════════════════════╝

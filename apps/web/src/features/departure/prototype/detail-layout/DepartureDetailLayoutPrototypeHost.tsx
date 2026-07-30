@@ -8,6 +8,7 @@
  * - A 顶栏页签 · 「全程」伪日段
  * - B 业务/财务两级导航 · 横向日程轴
  * - C 窄图标轨 · 种类×日期矩阵
+ * - D 混搭：A 顶栏 Tabs + B 执行安排（用户选定方向）
  *
  * Stub state is in-memory only; gated by ?variant= in DEV.
  */
@@ -20,10 +21,16 @@ import { createInitialExecutionState } from './mock-data'
 import { VariantA, VARIANT_A_META } from './VariantA'
 import { VariantB, VARIANT_B_META } from './VariantB'
 import { VariantC, VARIANT_C_META } from './VariantC'
+import { VariantD, VARIANT_D_META } from './VariantD'
 import type { ProtoExecutionState, ProtoTabKey } from './types'
 import { PROTO_TABS } from './types'
 
-const VARIANTS = [VARIANT_A_META, VARIANT_B_META, VARIANT_C_META] as const
+const VARIANTS = [
+  VARIANT_A_META,
+  VARIANT_B_META,
+  VARIANT_C_META,
+  VARIANT_D_META,
+] as const
 type VariantKey = (typeof VARIANTS)[number]['key']
 const VARIANT_KEYS: ReadonlySet<string> = new Set(VARIANTS.map((item) => item.key))
 
@@ -31,7 +38,7 @@ function resolveVariant(raw: unknown): VariantKey {
   if (typeof raw === 'string' && VARIANT_KEYS.has(raw)) {
     return raw as VariantKey
   }
-  return 'A'
+  return 'D'
 }
 
 function resolveTab(raw: unknown): ProtoTabKey {
@@ -161,7 +168,7 @@ export function DepartureDetailLayoutPrototypeHost({
           <Typography.Paragraph style={{ marginBottom: 0 }}>
             对比「页签放哪」与「执行安排如何拆发团级 / 按日资源」。数据为内存 stub（团：
             <Typography.Text code>{departure.departureNo}</Typography.Text>
-            ），刷新重置。底部切换条或 ← → 切换 A/B/C。当前：
+            ），刷新重置。底部切换条或 ← → 切换 A/B/C/D（D=顶栏+横向日程轴混搭）。当前：
             <Typography.Text code>{variant}</Typography.Text> · Tab{' '}
             <Typography.Text code>{activeTab}</Typography.Text> · 焦点{' '}
             <Typography.Text code>
@@ -199,6 +206,16 @@ export function DepartureDetailLayoutPrototypeHost({
       )}
       {variant === 'C' && (
         <VariantC
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          execution={execution}
+          onExecutionChange={setExecution}
+          onAddDepartureResource={onAddDepartureResource}
+          onAddSegmentResource={onAddSegmentResource}
+        />
+      )}
+      {variant === 'D' && (
+        <VariantD
           activeTab={activeTab}
           onTabChange={onTabChange}
           execution={execution}

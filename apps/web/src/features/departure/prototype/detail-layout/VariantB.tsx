@@ -113,7 +113,8 @@ export function VariantB({
   )
 }
 
-function ExecutionB({
+/** Shared by Variant B / D — 发团级折叠条 + 横向日程轴 + 当日资源 */
+export function ExecutionB({
   execution,
   onExecutionChange,
   onAddDepartureResource,
