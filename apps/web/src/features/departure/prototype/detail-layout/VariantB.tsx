@@ -607,9 +607,10 @@ export function ExecutionB({
                   type="link"
                   size="small"
                   icon={<EditOutlined />}
+                  title="编辑行程段"
                   onClick={() => openDayEditor(selected.segment!)}
                 >
-                  编辑行程段
+                  编辑
                 </Button>
               </Flex>
               <Flex align="center" gap={12} wrap="wrap">
