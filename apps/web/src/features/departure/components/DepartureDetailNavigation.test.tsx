@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEPARTURE_DETAIL_TABS } from '../catalog'
@@ -9,7 +9,7 @@ describe('DepartureDetailNavigation', () => {
     cleanup()
   })
 
-  it('按业务执行与财务处理分组展示可见功能，并从侧栏切换', async () => {
+  it('以顶栏 Tabs 展示可见功能，业务与财务仅细分隔、无分组标题，并支持切换', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
 
@@ -21,19 +21,26 @@ describe('DepartureDetailNavigation', () => {
       />,
     )
 
-    expect(screen.getByText('业务执行')).toBeInTheDocument()
-    expect(screen.getByText('财务处理')).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: '执行安排' })).toHaveClass(
-      'ant-menu-item-selected',
-    )
+    const nav = screen.getByRole('navigation', { name: '发团详情功能导航' })
+    expect(nav).toBeInTheDocument()
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.queryByText('业务执行')).not.toBeInTheDocument()
+    expect(screen.queryByText('财务处理')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('menuitem', { name: '应付管理' }))
+    expect(nav.querySelector('[aria-hidden="true"]')).not.toBeNull()
+
+    const executionTab = screen.getByRole('tab', { name: '执行安排' })
+    expect(executionTab).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(screen.getByRole('tab', { name: '应付管理' }))
 
     expect(onChange).toHaveBeenCalledWith('payables')
   })
 
-  it('窄屏功能选择器保留业务分组语义与当前上下文', async () => {
+  it('仅渲染可见 Tabs，且权限过滤后的项仍可点击切换', async () => {
     const user = userEvent.setup()
+    const onChange = vi.fn()
     const visibleTabs = DEPARTURE_DETAIL_TABS.filter(
       (tab) => tab.key !== 'transactions' && tab.key !== 'verifications',
     )
@@ -42,22 +49,20 @@ describe('DepartureDetailNavigation', () => {
       <DepartureDetailNavigation
         activeTab="execution"
         tabs={visibleTabs}
-        onChange={vi.fn()}
+        onChange={onChange}
       />,
     )
 
-    const selector = screen.getByRole('combobox', { name: '切换发团详情功能' })
-    expect(selector.closest('.ant-select')).toHaveTextContent('业务执行 · 执行安排')
+    expect(screen.getByRole('tab', { name: '执行安排' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '应付管理' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '收支流水' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '核销记录' })).not.toBeInTheDocument()
 
-    await user.click(selector)
-
-    expect(await screen.findAllByText('业务执行')).toHaveLength(2)
-    expect(screen.getAllByText('财务处理')).toHaveLength(2)
-    expect(screen.queryByRole('menuitem', { name: '收支流水' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: '核销记录' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: '客源管理' }))
+    expect(onChange).toHaveBeenCalledWith('sourceOrders')
   })
 
-  it('不展示没有可见功能的空分组', () => {
+  it('只有一组可见时不渲染业务财务分隔', () => {
     render(
       <DepartureDetailNavigation
         activeTab="overview"
@@ -66,7 +71,9 @@ describe('DepartureDetailNavigation', () => {
       />,
     )
 
-    expect(screen.getAllByText('业务执行')).toHaveLength(1)
-    expect(screen.queryByText('财务处理')).not.toBeInTheDocument()
+    const nav = screen.getByRole('navigation', { name: '发团详情功能导航' })
+    expect(within(nav).getByRole('tab', { name: '概览' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '应收管理' })).not.toBeInTheDocument()
+    expect(nav.querySelector('[aria-hidden="true"]')).toBeNull()
   })
 })

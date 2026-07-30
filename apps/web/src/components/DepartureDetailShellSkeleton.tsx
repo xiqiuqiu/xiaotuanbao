@@ -1,4 +1,4 @@
-import { Button, Card, Skeleton, Typography } from 'antd'
+import { Button, Card, Skeleton } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
@@ -18,12 +18,11 @@ type DepartureDetailShellSkeletonProps = {
 
 /** Progressive shell for departure detail while the header query is in flight. */
 export function DepartureDetailShellSkeleton({
-  activeTab = 'overview',
   tabs = DEPARTURE_DETAIL_TABS,
 }: DepartureDetailShellSkeletonProps) {
-  const operationsCount = tabs.filter((tab) => tab.group === 'operations').length
-  const financeCount = tabs.filter((tab) => tab.group === 'finance').length
-  const activeTabLabel = tabs.find((tab) => tab.key === activeTab)?.label
+  const operations = tabs.filter((tab) => tab.group === 'operations')
+  const finance = tabs.filter((tab) => tab.group === 'finance')
+  const showDivider = operations.length > 0 && finance.length > 0
 
   return (
     <div role="status" aria-label="发团详情加载中">
@@ -46,47 +45,37 @@ export function DepartureDetailShellSkeleton({
       </Card>
 
       <section className={pageStyles.detailWorkspace} aria-label="发团详情工作区加载中">
-        <aside
-          className={navigationStyles.taskRail}
+        <nav
+          className={navigationStyles.topTabBar}
           aria-label="发团详情功能导航加载中"
         >
-          <div className={styles.navigationGroups}>
-            {operationsCount > 0 ? (
-              <div className={styles.navigationGroup}>
-                <Typography.Text type="secondary">业务执行</Typography.Text>
-                <div className={styles.navigationItems}>
-                  {Array.from({ length: operationsCount }, (_, index) => (
-                    <Skeleton.Button key={`operations-${index}`} active block />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {financeCount > 0 ? (
-              <div className={styles.navigationGroup}>
-                <Typography.Text type="secondary">财务处理</Typography.Text>
-                <div className={styles.navigationItems}>
-                  {Array.from({ length: financeCount }, (_, index) => (
-                    <Skeleton.Button key={`finance-${index}`} active block />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </aside>
-
-        <div className={navigationStyles.mobileNavigation}>
           <div
-            aria-label="发团详情紧凑导航加载中"
-            data-active-tab={activeTab}
-            title={activeTabLabel}
+            className={`${navigationStyles.topTabList} ${styles.topTabSkeletonList}`}
+            role="tablist"
           >
-            <Skeleton.Input
-              active
-              block
-              className={styles.mobileControl}
-            />
+            {operations.map((tab) => (
+              <Skeleton.Button
+                key={tab.key}
+                active
+                size="small"
+                className={styles.topTabSkeleton}
+              />
+            ))}
+
+            {showDivider ? (
+              <div className={navigationStyles.topTabDivider} aria-hidden="true" />
+            ) : null}
+
+            {finance.map((tab) => (
+              <Skeleton.Button
+                key={tab.key}
+                active
+                size="small"
+                className={styles.topTabSkeleton}
+              />
+            ))}
           </div>
-        </div>
+        </nav>
 
         <div className={pageStyles.detailWorkspaceContent}>
           <Skeleton active paragraph={{ rows: 8 }} />
