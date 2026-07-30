@@ -7,7 +7,8 @@ import type { DepartureDetail } from '@/types/api'
 import { SourceOrdersTab } from './SourceOrdersTab'
 
 /**
- * #227 护栏：客源管理不再挂载方案 A/B/C 原型；?variant= 不得劫持正式抽屉。
+ * #227 / #252 护栏：客源管理正式 Tab 不挂载方案 A/B/C 原型与 PrototypeSwitcher；
+ * ?variant= 不得劫持正式抽屉或一览（方案 A 已落地，无运行时切换）。
  */
 
 vi.mock('@tanstack/react-router', () => ({
@@ -74,7 +75,7 @@ afterEach(() => {
   cleanup()
 })
 
-describe('SourceOrdersTab prototype removal (#227)', () => {
+describe('SourceOrdersTab prototype removal (#227 / #252)', () => {
   it('does not show PrototypeSwitcher and opens the real drawer even when ?variant=A', async () => {
     const user = userEvent.setup()
     renderTab()
@@ -83,6 +84,8 @@ describe('SourceOrdersTab prototype removal (#227)', () => {
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
     expect(screen.queryByText(/加宽纵排/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/主从分栏/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/状态分组/)).not.toBeInTheDocument()
 
     await user.click(addButton)
 

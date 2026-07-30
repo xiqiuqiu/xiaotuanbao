@@ -42,6 +42,7 @@ function buildDeparture(
     driverSupplierName: '王师傅车队',
     guideSupplierName: '李导游',
     vehiclePlate: '新A·20601',
+    contactPhone: '13800138000',
     createdAt: '2026-07-21T03:09:00.000Z',
     updatedAt: '2026-07-21T03:09:00.000Z',
     archiveHistory: [],
@@ -155,7 +156,7 @@ describe('CollapsibleDepartureHeader 折叠', () => {
     expect(within(crew).getByText('王师傅车队')).toBeInTheDocument()
     expect(within(crew).getByText('李导游')).toBeInTheDocument()
     expect(within(crew).getByText('新A·20601')).toBeInTheDocument()
-    expect(within(crew).getByText('电话').parentElement).toHaveTextContent('电话-')
+    expect(within(crew).getByText('13800138000')).toBeInTheDocument()
   })
 
   it('可展开为完整发团头，并可再次收起', async () => {

@@ -57,7 +57,7 @@ export function CreateDepartureWizard() {
 
       setInitializingStep2(true)
       try {
-        const startDate = getShanghaiTodayString()
+        const startDate = nextRouteValues.startDate ?? getShanghaiTodayString()
         const initialValues = createInfoFormValues(
           nextRouteValues,
           user.id,

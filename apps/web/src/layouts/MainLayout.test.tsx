@@ -25,10 +25,10 @@ vi.mock('@/services/auth.service', () => ({
 describe('MainLayout 侧栏开关', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    pathname = '/departure'
+    pathname = '/'
     useAuthStore.setState({
       user: { id: 'user-1', name: '张三' },
-      menuKeys: ['/departure'],
+      menuKeys: ['/', '/departure'],
       sessionStatus: 'authenticated',
     })
     useUiStore.setState({ sidebarCollapsed: false })
@@ -36,6 +36,32 @@ describe('MainLayout 侧栏开关', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  it('进入发团管理时默认收起侧栏', async () => {
+    const { rerender } = render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: '折叠侧边栏' })).toBeInTheDocument()
+
+    pathname = '/departure'
+    rerender(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    await waitFor(() => {
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true)
+    })
+    expect(screen.getByRole('button', { name: '展开侧边栏' })).toBeInTheDocument()
   })
 
   it('Tooltip 与可访问名称随折叠状态同步', async () => {

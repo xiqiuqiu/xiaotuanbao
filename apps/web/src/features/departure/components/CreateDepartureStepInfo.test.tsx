@@ -12,6 +12,10 @@ vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: 'user-1', name: '阿财' }]),
 }))
 
+vi.mock('@/services/supplier.service', () => ({
+  listSuppliers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}))
+
 const route: RouteStepValues = {
   mode: 'copy',
   routeName: 'A线：天吐喀伊10日',
@@ -61,5 +65,14 @@ describe('CreateDepartureStepInfo', () => {
 
     expect(screen.getByLabelText('团号')).toBeDisabled()
     expect(screen.getByLabelText('天数')).toBeDisabled()
+  })
+
+  it('填写步展示执行班组字段：司机、车牌、导游、联系电话', () => {
+    renderStep()
+
+    expect(screen.getByLabelText('司机')).toBeInTheDocument()
+    expect(screen.getByLabelText('车牌')).toBeInTheDocument()
+    expect(screen.getByLabelText('导游')).toBeInTheDocument()
+    expect(screen.getByLabelText('联系电话')).toBeInTheDocument()
   })
 })

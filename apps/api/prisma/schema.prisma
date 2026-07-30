@@ -594,6 +594,7 @@ model Departure {
   guideSupplierId  String?              @map("guide_supplier_id")
   guideSupplier    Supplier?            @relation("DepartureGuideSupplier", fields: [guideSupplierId], references: [id], onDelete: SetNull)
   vehiclePlate     String?              @map("vehicle_plate")
+  contactPhone     String?              @map("contact_phone")
   status           DepartureStatus      @default(editing)
   notes            String?
   createdAt        DateTime             @default(now()) @map("created_at")

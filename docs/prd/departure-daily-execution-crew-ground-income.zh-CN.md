@@ -69,7 +69,7 @@
 - **按日资源与拼出**：段内 Segment Resource 规则不变；拼出与酒店/门票一样按日挂段。
 - **发团级资源**：新锚点（资源行归属 Departure，而非仅 Itinerary Segment）。Resource Kind、供应商类别校验、生成应付、finance-touched / 作废重开等与段资源同规则。计入 Cost Total（成本合计）与付款进度分母，与段资源一并汇总。
 - **票型人数**：每段（日）存全/半/学/免非负整数；校验对象为各段合计（或产品选定的「执行人头」口径）与本团客源单成人+儿童（及既有人数口径）合计；不一致 → 醒目提示，**允许保存**。
-- **执行班组（发团级）**：`driverSupplierId`（供应商类别须含用车）、`guideSupplierId`（类别须含导游）、`vehiclePlate`（自由文本，可空策略由实现定默认：建议可空）。不写供应商档案车牌字段。与 Segment Resource 无自动联动。
+- **执行班组（发团级）**：`driverSupplierId`（供应商类别须含用车）、`guideSupplierId`（类别须含导游）、`vehiclePlate`（自由文本，可空策略由实现定默认：建议可空）、`contactPhone`（联系电话，自由文本，可空）。不写供应商档案车牌字段。与 Segment Resource 无自动联动。
 - **团上收入**：发团下多行 `{ title, amountCents, … }`；无品类枚举。概览 `其他收入 = Σ 台账金额`。不生成 Payment Schedule，不要求 Cash Flow。
 - **概览**：在 Departure Financial Summary / overviewStats 增加其他收入展示；不并入结算应收或团款收款进度。
 - **运营表**：司机/导游/车牌纳入发团头或班组区展示；团上收入是否进运营表导出本迭代建议 **列入**（有则分区展示），若排期紧可标为同 PR 跟随项。

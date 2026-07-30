@@ -7,6 +7,8 @@ export interface RouteStepValues {
   mode: RouteStepMode
   routeName: string
   defaultDayCount?: number
+  /** 手动输入路线时必填；进入填写步后写入出团日期。 */
+  startDate?: string
   templateId?: string
   copyFromDepartureId?: string
   sourceDepartureNo?: string
@@ -22,6 +24,10 @@ export interface InfoStepValues {
   endDate: string
   ownerUserId: string
   notes?: string
+  driverSupplierId?: string
+  guideSupplierId?: string
+  vehiclePlate?: string
+  contactPhone?: string
 }
 
 export type InfoFormValues = InfoStepValues & {
@@ -37,11 +43,17 @@ export function formatChineseMonthDay(dateStr: string): string {
   return `${month}月${day}日`
 }
 
-/** 默认团名：仅路线名；传入出团日期后拼接「M月D日团」。 */
+/** 出团日期中文：`YYYY年M月D日`（如 2026年7月30日）。 */
+export function formatChineseYearMonthDay(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return `${year}年${month}月${day}日`
+}
+
+/** 默认团名：仅路线名；传入出团日期后前缀「YYYY年M月D日」。 */
 export function buildDefaultDepartureName(routeName: string, startDate?: string): string {
   const trimmed = routeName.trim()
   if (!startDate) return trimmed
-  return `${trimmed} ${formatChineseMonthDay(startDate)}团`
+  return `${formatChineseYearMonthDay(startDate)} ${trimmed}`
 }
 
 export function addDays(dateStr: string, days: number): string {
@@ -81,8 +93,7 @@ export function buildInitialInfoValues(
       : startDate
 
   return {
-    // 进入填写步时默认不带日期；用户选择出团日期后再由 UI 写入日期后缀
-    name: buildDefaultDepartureName(route.routeName),
+    name: buildDefaultDepartureName(route.routeName, startDate),
     departureNo: '',
     departureType: DepartureType.COMBINED,
     startDate,
@@ -97,7 +108,7 @@ export function canProceedFromRouteStep(route: RouteStepValues): boolean {
     return Boolean(route.templateId)
   }
 
-  return route.routeName.trim().length > 0
+  return route.routeName.trim().length > 0 && Boolean(route.startDate)
 }
 
 export function buildCreateDeparturePayload(
@@ -112,6 +123,19 @@ export function buildCreateDeparturePayload(
     ownerUserId: info.ownerUserId,
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
+  }
+
+  if (info.driverSupplierId) {
+    payload.driverSupplierId = info.driverSupplierId
+  }
+  if (info.guideSupplierId) {
+    payload.guideSupplierId = info.guideSupplierId
+  }
+  if (info.vehiclePlate?.trim()) {
+    payload.vehiclePlate = info.vehiclePlate.trim()
+  }
+  if (info.contactPhone?.trim()) {
+    payload.contactPhone = info.contactPhone.trim()
   }
 
   if (route.mode === 'template' && route.templateId) {
@@ -147,8 +171,7 @@ export function createInfoFormValues(
       : startDate
 
   return {
-    // 进入填写步时默认不带日期；用户选择出团日期后再由 UI 写入日期后缀
-    name: buildDefaultDepartureName(route.routeName),
+    name: buildDefaultDepartureName(route.routeName, startDate),
     departureNo,
     departureType: DepartureType.COMBINED,
     startDate,

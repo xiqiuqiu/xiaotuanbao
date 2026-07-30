@@ -19,6 +19,7 @@ describe('departure overview crew form (issue #206)', () => {
       driverSupplierId: 'supplier-driver',
       guideSupplierId: 'supplier-guide',
       vehiclePlate: '新A·20601',
+      contactPhone: '13800138000',
       notes: null,
     }
 
@@ -26,6 +27,7 @@ describe('departure overview crew form (issue #206)', () => {
       driverSupplierId: 'supplier-driver',
       guideSupplierId: 'supplier-guide',
       vehiclePlate: '新A·20601',
+      contactPhone: '13800138000',
     })
 
     expect(
@@ -34,11 +36,13 @@ describe('departure overview crew form (issue #206)', () => {
         driverSupplierId: undefined,
         guideSupplierId: undefined,
         vehiclePlate: undefined,
+        contactPhone: undefined,
       }),
     ).toMatchObject({
       driverSupplierId: null,
       guideSupplierId: null,
       vehiclePlate: null,
+      contactPhone: null,
     })
   })
 })

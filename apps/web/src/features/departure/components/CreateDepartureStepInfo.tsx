@@ -1,11 +1,27 @@
+import { useState, type CSSProperties } from 'react'
 import { CalendarOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Card, Col, DatePicker, Form, Input, Row, Select, Space, Typography, theme } from 'antd'
-import type { CSSProperties } from 'react'
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Form,
+  Input,
+  Row,
+  Select,
+  Space,
+  Typography,
+  theme,
+} from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import { useQuery } from '@tanstack/react-query'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
+import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import { listEmployeeOptions } from '@/services/employee.service'
+import { listSuppliers } from '@/services/supplier.service'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import {
@@ -29,15 +45,60 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
   const { token } = theme.useToken()
   const defaultDayCount = route.defaultDayCount
   const copySummary = buildRouteSummary(route)
+  const [driverSearch, setDriverSearch] = useState('')
+  const [guideSearch, setGuideSearch] = useState('')
+  const debouncedDriverSearch = useDebouncedValue(driverSearch.trim())
+  const debouncedGuideSearch = useDebouncedValue(guideSearch.trim())
+
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'create-departure'],
     queryFn: () => listEmployeeOptions(),
+  })
+  const {
+    data: driverSuppliersResult,
+    isLoading: isDriverSuppliersLoading,
+    isError: isDriverSuppliersError,
+    refetch: refetchDriverSuppliers,
+  } = useQuery({
+    queryKey: ['suppliers', 'create-departure-crew', ResourceKind.TRANSPORT, debouncedDriverSearch],
+    queryFn: () =>
+      listSuppliers({
+        search: debouncedDriverSearch || undefined,
+        category: ResourceKind.TRANSPORT,
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
+  })
+  const {
+    data: guideSuppliersResult,
+    isLoading: isGuideSuppliersLoading,
+    isError: isGuideSuppliersError,
+    refetch: refetchGuideSuppliers,
+  } = useQuery({
+    queryKey: ['suppliers', 'create-departure-crew', ResourceKind.GUIDE, debouncedGuideSearch],
+    queryFn: () =>
+      listSuppliers({
+        search: debouncedGuideSearch || undefined,
+        category: ResourceKind.GUIDE,
+        status: DirectoryProfileStatus.ACTIVE,
+        pageSize: 100,
+      }),
   })
 
   const employeeOptions =
     employeeOptionsResult?.map((employee) => ({
       value: employee.id,
       label: employee.name,
+    })) ?? []
+  const driverOptions =
+    driverSuppliersResult?.items.map((supplier) => ({
+      value: supplier.id,
+      label: supplier.name,
+    })) ?? []
+  const guideOptions =
+    guideSuppliersResult?.items.map((supplier) => ({
+      value: supplier.id,
+      label: supplier.name,
     })) ?? []
 
   const handleStartDateChange = (value: Dayjs | null) => {
@@ -86,11 +147,31 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
         <div className={styles.sectionHeader}>
           <Typography.Title level={5}>发团基础信息</Typography.Title>
           <Typography.Paragraph type="secondary">
-            团名默认取路线名称；选择出团日期后会自动带入日期，也可按本次实际团期调整。
+            团名默认取「出团日期 + 路线名称」；变更出团日期时会同步调整，也可按本次实际团期改写。
           </Typography.Paragraph>
         </div>
 
         <Form form={form} layout="vertical">
+          {isDriverSuppliersError || isGuideSuppliersError ? (
+            <Alert
+              type="error"
+              showIcon
+              title="执行班组供应商加载失败"
+              description="请检查网络后重试"
+              action={
+                <Button
+                  size="small"
+                  onClick={() => {
+                    void Promise.all([refetchDriverSuppliers(), refetchGuideSuppliers()])
+                  }}
+                >
+                  重试
+                </Button>
+              }
+              style={{ marginBottom: 16 }}
+            />
+          ) : null}
+
           <Row gutter={16}>
             <Col xs={24} md={16}>
               <Form.Item
@@ -98,7 +179,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
                 label="团名"
                 rules={[{ required: true, message: '请输入团名' }]}
               >
-                <Input placeholder="路线名称，选择出团日期后可带入日期" />
+                <Input placeholder="出团日期 + 路线名称，可按实际调整" />
               </Form.Item>
             </Col>
 
@@ -157,6 +238,48 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
             <Col xs={24} md={4}>
               <Form.Item name="dayCount" label="天数">
                 <Input disabled />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item
+                name="driverSupplierId"
+                label="司机"
+                extra="选择执行班组不会自动生成应付"
+              >
+                <Select
+                  allowClear
+                  showSearch={{ filterOption: false, onSearch: setDriverSearch }}
+                  loading={isDriverSuppliersLoading}
+                  placeholder="选择含「用车」类别的供应商"
+                  options={driverOptions}
+                  notFoundContent="暂无匹配供应商，请先到供应商名录维护「用车」类别"
+                />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item name="guideSupplierId" label="导游">
+                <Select
+                  allowClear
+                  showSearch={{ filterOption: false, onSearch: setGuideSearch }}
+                  loading={isGuideSuppliersLoading}
+                  placeholder="选择含「导游」类别的供应商"
+                  options={guideOptions}
+                  notFoundContent="暂无匹配供应商，请先到供应商名录维护「导游」类别"
+                />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item name="vehiclePlate" label="车牌">
+                <Input placeholder="可选，自由填写" maxLength={32} />
+              </Form.Item>
+            </Col>
+
+            <Col xs={24} md={12}>
+              <Form.Item name="contactPhone" label="联系电话">
+                <Input placeholder="可选" maxLength={32} />
               </Form.Item>
             </Col>
 

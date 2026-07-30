@@ -80,6 +80,7 @@ const UPDATE_DEPARTURE_FIELDS = [
   'driverSupplierId',
   'guideSupplierId',
   'vehiclePlate',
+  'contactPhone',
 ] as const
 
 const TRANSITION_TARGETS: Partial<Record<DepartureStatus, DepartureStatus[]>> = {
@@ -457,6 +458,23 @@ export class DepartureService {
       throw new BadRequestException('路线名称不能为空')
     }
 
+    if (dto.driverSupplierId) {
+      await this.ensureCrewSupplier(
+        organizationId,
+        dto.driverSupplierId,
+        ResourceKind.transport,
+        '司机必须选择含「用车」类别的供应商',
+      )
+    }
+    if (dto.guideSupplierId) {
+      await this.ensureCrewSupplier(
+        organizationId,
+        dto.guideSupplierId,
+        ResourceKind.guide,
+        '导游必须选择含「导游」类别的供应商',
+      )
+    }
+
     const dayCount = computeDayCount(startDate, endDate)
 
     const departure = await this.prisma.$transaction(async (tx) => {
@@ -477,6 +495,10 @@ export class DepartureService {
           ownerUserId: dto.ownerUserId,
           status: DepartureStatus.editing,
           notes: dto.notes?.trim() || null,
+          driverSupplierId: dto.driverSupplierId || null,
+          guideSupplierId: dto.guideSupplierId || null,
+          vehiclePlate: dto.vehiclePlate?.trim() || null,
+          contactPhone: dto.contactPhone?.trim() || null,
         },
       })
 
@@ -647,6 +669,10 @@ export class DepartureService {
 
     if (dto.vehiclePlate !== undefined) {
       data.vehiclePlate = dto.vehiclePlate?.trim() || null
+    }
+
+    if (dto.contactPhone !== undefined) {
+      data.contactPhone = dto.contactPhone?.trim() || null
     }
 
     let startDate = departure.startDate
@@ -1144,6 +1170,7 @@ export class DepartureService {
         ? crewSupplierNameMap.get(departure.guideSupplierId) ?? null
         : null,
       vehiclePlate: departure.vehiclePlate,
+      contactPhone: departure.contactPhone,
       grossReceivableCents: readModel.grossReceivableCents,
       fareAdjustmentNetCents: readModel.fareAdjustmentNetCents,
       discountCents: readModel.discountCents,

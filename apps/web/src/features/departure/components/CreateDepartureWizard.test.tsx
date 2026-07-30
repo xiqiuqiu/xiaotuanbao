@@ -58,6 +58,10 @@ vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn(),
 }))
 
+vi.mock('@/services/supplier.service', () => ({
+  listSuppliers: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}))
+
 import {
   copyDeparture,
   createDeparture,
@@ -122,6 +126,18 @@ function renderWizard({ strict = false }: { strict?: boolean } = {}) {
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
 }
 
+async function fillManualRouteAndContinue(
+  user: ReturnType<typeof userEvent.setup>,
+  routeName = '喀纳斯阿勒泰10日线',
+  startDate = '2026-08-01',
+) {
+  await user.click(screen.getByText('手动输入'))
+  await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), routeName)
+  await user.click(screen.getByLabelText('出团日期'))
+  await user.click(await screen.findByTitle(startDate))
+  await user.click(screen.getByRole('button', { name: '下一步' }))
+}
+
 describe('CreateDepartureWizard', () => {
   afterEach(() => {
     cleanup()
@@ -149,11 +165,14 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('disables next step until route name is filled on manual tab', async () => {
+  it('disables next step until route name and start date are filled on manual tab', async () => {
     const user = userEvent.setup()
     renderWizard()
 
     await user.click(screen.getByText('手动输入'))
+    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+
+    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
     expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
   })
 
@@ -161,9 +180,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByText('手动输入'))
-    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await fillManualRouteAndContinue(user)
 
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
@@ -175,9 +192,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByText('手动输入'))
-    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await fillManualRouteAndContinue(user)
     await screen.findByLabelText('团名')
 
     expect(screen.queryByText(/将复制/)).not.toBeInTheDocument()
@@ -465,9 +480,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByText('手动输入'))
-    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await fillManualRouteAndContinue(user)
     await screen.findByLabelText('团名')
 
     await user.clear(screen.getByLabelText('团名'))
@@ -481,9 +494,7 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    await user.click(screen.getByText('手动输入'))
-    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    await user.click(screen.getByRole('button', { name: '下一步' }))
+    await fillManualRouteAndContinue(user)
     await screen.findByLabelText('团名')
 
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
