@@ -37,6 +37,7 @@ import {
   counterpartyCollectionMethodText,
   counterpartyDisplayName,
 } from '../utils/counterparty-display'
+import { collectionMethodText } from '../utils/payment-schedule-identity-display'
 import { FinanceDepartureLink } from './FinanceDepartureLink'
 
 interface VerificationDetailDrawerProps {
@@ -460,7 +461,7 @@ export function VerificationDetailDrawer({
                         </Tag>
                       </Descriptions.Item>
                       <Descriptions.Item label="收款方式">
-                        {counterpartyCollectionMethodText(schedule.counterpartyType)}
+                        {collectionMethodText(schedule)}
                       </Descriptions.Item>
                       <Descriptions.Item label="往来对象">
                         {counterpartyDisplayName(schedule.counterpartyName)}
