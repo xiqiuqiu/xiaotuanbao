@@ -12,6 +12,96 @@
   min-height: 480px;
 }
 
+/* Variant D — clean top tab bar (ops | finance), no 业/财 prefixes */
+.topTabBar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex-wrap: wrap;
+  padding: 10px 16px 0;
+  background: var(--ant-color-fill-quaternary);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.topTabCluster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 0;
+}
+
+.topTabGroupLabel {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ant-color-text-tertiary);
+  padding-inline: 10px;
+}
+
+.topTabList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  align-items: flex-end;
+}
+
+.topTab {
+  appearance: none;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 100ms ease,
+    border-color 100ms ease,
+    background-color 100ms ease;
+}
+
+.topTab:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-bg-container);
+}
+
+.topTab:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: -2px;
+}
+
+.topTabActive {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+  border-bottom-color: var(--ant-color-primary);
+  background: var(--ant-color-bg-container);
+}
+
+.topTabDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 8px 10px;
+  background: var(--ant-color-border);
+  flex: 0 0 1px;
+}
+
+@media (max-width: 767px) {
+  .topTabBar {
+    flex-direction: column;
+    padding-bottom: 0;
+  }
+
+  .topTabDivider {
+    width: auto;
+    height: 1px;
+    margin: 4px 0 0;
+  }
+}
+
 .executionRow {
   align-items: stretch;
   min-height: 440px;
