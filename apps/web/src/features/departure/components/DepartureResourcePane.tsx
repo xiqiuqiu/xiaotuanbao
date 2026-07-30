@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import {
   Alert,
   Button,
+  Collapse,
   Empty,
   Flex,
   Form,
+  Modal,
   Space,
   Spin,
   Table,
@@ -19,6 +21,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DepartureStatus, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import type { DepartureDetail, DepartureResourceSummary } from '@/types/api'
 import { formatCents } from '../catalog'
+import {
+  formatBatchFinanceGenerationConfirmContent,
+  formatBatchFinanceGenerationMessage,
+} from '../utils/batch-finance-generation-message'
+import { generateDeparturePayablesBatch } from '../utils/generate-departure-payables-batch'
 import { summarizeSegmentResourceAmounts } from '../utils/segment-resource-amount-summary'
 import {
   createDepartureResource,
@@ -46,6 +53,10 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
+function stopCollapseToggle(event: MouseEvent) {
+  event.stopPropagation()
+}
+
 interface DepartureResourcePaneProps {
   departure: DepartureDetail
   readOnly: boolean
@@ -55,54 +66,66 @@ interface DepartureResourcePaneProps {
   highlightDepartureResourceId?: string
 }
 
-interface DepartureResourceHeaderProps {
+interface DepartureResourceSummaryMetaProps {
   amountSummary: ReturnType<typeof summarizeSegmentResourceAmounts>
+}
+
+function DepartureResourceSummaryMeta({ amountSummary }: DepartureResourceSummaryMetaProps) {
+  const { token } = theme.useToken()
+  if (amountSummary.resourceCount === 0) {
+    return null
+  }
+
+  return (
+    <Typography.Text type="secondary" aria-label="发团级资源金额汇总">
+      资源 {amountSummary.resourceCount} 项 ｜ 资源金额{' '}
+      <Typography.Text strong>
+        {formatCents(amountSummary.resourceAmountCents)}
+      </Typography.Text>
+      {amountSummary.ungeneratedPayableCents > 0 ? (
+        <>
+          {' ｜ 尚未生成应付 '}
+          <Typography.Text strong style={{ color: token.colorWarning }}>
+            {formatCents(amountSummary.ungeneratedPayableCents)}
+          </Typography.Text>
+        </>
+      ) : null}
+    </Typography.Text>
+  )
+}
+
+interface DepartureResourceCollapseActionsProps {
+  showBatchGenerate: boolean
+  batchGenerating: boolean
   showAddResource: boolean
+  onBatchGenerate: () => void
   onAddResource: () => void
 }
 
-function DepartureResourceHeader({
-  amountSummary,
+function DepartureResourceCollapseActions({
+  showBatchGenerate,
+  batchGenerating,
   showAddResource,
+  onBatchGenerate,
   onAddResource,
-}: DepartureResourceHeaderProps) {
-  const { token } = theme.useToken()
-  const showAmountMeta = amountSummary.resourceCount > 0
+}: DepartureResourceCollapseActionsProps) {
+  if (!showBatchGenerate && !showAddResource) {
+    return null
+  }
 
   return (
-    <Flex align="center" justify="space-between" gap={16} wrap="wrap" style={{ marginBottom: 16 }}>
-      <Flex align="baseline" gap={16} wrap="wrap">
-        <Flex vertical gap={2}>
-          <Typography.Text strong>发团级资源</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-            全程用车、保险、导游等覆盖整团的服务
-          </Typography.Text>
-        </Flex>
-        {showAmountMeta ? (
-          <Typography.Text type="secondary" aria-label="发团级资源金额汇总">
-            资源 {amountSummary.resourceCount} 项 ｜ 资源金额{' '}
-            <Typography.Text strong>
-              {formatCents(amountSummary.resourceAmountCents)}
-            </Typography.Text>
-            {amountSummary.ungeneratedPayableCents > 0 ? (
-              <>
-                {' ｜ 尚未生成应付 '}
-                <Typography.Text strong style={{ color: token.colorWarning }}>
-                  {formatCents(amountSummary.ungeneratedPayableCents)}
-                </Typography.Text>
-              </>
-            ) : null}
-          </Typography.Text>
-        ) : null}
-      </Flex>
-      <Space>
-        {showAddResource ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
-            添加资源
-          </Button>
-        ) : null}
-      </Space>
-    </Flex>
+    <Space onClick={stopCollapseToggle} onKeyDown={(event) => event.stopPropagation()}>
+      {showBatchGenerate ? (
+        <Button onClick={onBatchGenerate} loading={batchGenerating}>
+          批量生成应付
+        </Button>
+      ) : null}
+      {showAddResource ? (
+        <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
+          添加资源
+        </Button>
+      ) : null}
+    </Space>
   )
 }
 
@@ -303,6 +326,18 @@ export function DepartureResourcePane({
       }),
     [departure.status, listResult?.items],
   )
+  const showBatchGenerate =
+    !mutationLocked && amountSummary.ungeneratedPayableCount > 0
+  const [collapseOpen, setCollapseOpen] = useState(
+    () => Boolean(highlightDepartureResourceId),
+  )
+  const [prevHighlightId, setPrevHighlightId] = useState(highlightDepartureResourceId)
+  if (highlightDepartureResourceId !== prevHighlightId) {
+    setPrevHighlightId(highlightDepartureResourceId)
+    if (highlightDepartureResourceId) {
+      setCollapseOpen(true)
+    }
+  }
 
   const invalidateResourceQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['departure-resources', departure.id] })
@@ -319,6 +354,7 @@ export function DepartureResourcePane({
     setEditingResource(null)
     setViewOnly(false)
     setDrawerOpen(true)
+    setCollapseOpen(true)
   }
 
   const openEdit = useCallback((resource: DepartureResourceSummary, view = false) => {
@@ -366,6 +402,38 @@ export function DepartureResourcePane({
       message.error(mutationErrorMessage(error, '生成应付失败'))
     },
   })
+
+  const batchGenerateMutation = useMutation({
+    mutationFn: () => generateDeparturePayablesBatch(resources),
+    onSuccess: (result) => {
+      const text = formatBatchFinanceGenerationMessage(result, '应付')
+      if (result.failed > 0) {
+        message.warning(text)
+      } else if (result.succeeded > 0) {
+        message.success(text)
+      } else {
+        message.info(text)
+      }
+      invalidateResourceQueries()
+      invalidatePayableQueries()
+    },
+    onError: (error) => {
+      message.error(mutationErrorMessage(error, '批量生成应付失败'))
+    },
+  })
+
+  const confirmBatchGenerate = () => {
+    Modal.confirm({
+      title: '批量生成应付',
+      content: formatBatchFinanceGenerationConfirmContent(
+        amountSummary.ungeneratedPayableCount,
+        '应付',
+      ),
+      okText: '生成',
+      cancelText: '取消',
+      onOk: () => batchGenerateMutation.mutateAsync(),
+    })
+  }
 
   const voidMutation = useMutation({
     mutationFn: (values: VoidResourcePayableFormValues) => {
@@ -452,23 +520,49 @@ export function DepartureResourcePane({
 
   return (
     <div className={styles.pane}>
-      <DepartureResourceHeader
-        amountSummary={amountSummary}
-        showAddResource={
-          resourceEditable && !isLoading && !isError && resources.length > 0
-        }
-        onAddResource={openCreate}
-      />
-
-      <DepartureResourceList
-        isError={isError}
-        isLoading={isLoading}
-        resources={resources}
-        resourceEditable={resourceEditable}
-        columns={columns}
-        highlightResourceId={highlightDepartureResourceId}
-        onRetry={() => void refetch()}
-        onAddResource={openCreate}
+      <Collapse
+        activeKey={collapseOpen ? ['departure-resources'] : []}
+        onChange={(keys) => {
+          const next = Array.isArray(keys) ? keys : [keys]
+          setCollapseOpen(next.includes('departure-resources'))
+        }}
+        items={[
+          {
+            key: 'departure-resources',
+            label: (
+              <Flex align="baseline" gap={16} wrap="wrap" className={styles.collapseLabel}>
+                <Flex vertical gap={2}>
+                  <Typography.Text strong>发团级资源</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    全程用车、保险、导游等覆盖整团的服务
+                  </Typography.Text>
+                </Flex>
+                <DepartureResourceSummaryMeta amountSummary={amountSummary} />
+              </Flex>
+            ),
+            extra: (
+              <DepartureResourceCollapseActions
+                showBatchGenerate={showBatchGenerate}
+                batchGenerating={batchGenerateMutation.isPending}
+                showAddResource={resourceEditable && !isLoading && !isError}
+                onBatchGenerate={confirmBatchGenerate}
+                onAddResource={openCreate}
+              />
+            ),
+            children: (
+              <DepartureResourceList
+                isError={isError}
+                isLoading={isLoading}
+                resources={resources}
+                resourceEditable={resourceEditable}
+                columns={columns}
+                highlightResourceId={highlightDepartureResourceId}
+                onRetry={() => void refetch()}
+                onAddResource={openCreate}
+              />
+            ),
+          },
+        ]}
       />
 
       <ResourceDrawer
