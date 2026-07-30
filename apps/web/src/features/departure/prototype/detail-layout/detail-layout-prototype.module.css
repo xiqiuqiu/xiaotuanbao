@@ -275,61 +275,88 @@
 
 .costStrip {
   display: flex;
-  align-items: baseline;
+  align-items: stretch;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  padding: 12px 16px;
+  gap: 12px 24px;
+  padding: 14px 16px;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius-lg);
-  background: linear-gradient(
-    180deg,
-    var(--ant-color-fill-quaternary) 0%,
-    var(--ant-color-bg-container) 100%
-  );
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
 }
 
-.costStripPrimary {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px 10px;
+.costStripHero {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+  padding-right: 20px;
+  border-right: 1px solid var(--ant-color-border-secondary);
 }
 
 .costStripLabel {
   color: var(--ant-color-text-secondary);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .costStripTotal {
   color: var(--ant-color-text);
-  font-size: 22px;
-  font-weight: 650;
-  line-height: 1.2;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
 .costStripCount {
+  margin-top: 2px;
   color: var(--ant-color-text-tertiary);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
-.costStripBreakdown {
-  display: inline-flex;
-  align-items: baseline;
+.costStripMetrics {
+  display: flex;
+  align-items: stretch;
   flex-wrap: wrap;
-  gap: 0 8px;
-  color: var(--ant-color-text-secondary);
-  font-size: 13px;
-  line-height: 1.4;
+  gap: 12px 28px;
+  margin-left: auto;
+  min-width: 0;
 }
 
-.costStripSep {
-  color: var(--ant-color-border);
+.costStripMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 88px;
+}
+
+.costStripMetricValue {
+  color: var(--ant-color-text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.costStripMetricWarn .costStripMetricValue {
+  color: var(--ant-color-warning);
+}
+
+@media (max-width: 767px) {
+  .costStripHero {
+    width: 100%;
+    padding-right: 0;
+    padding-bottom: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--ant-color-border-secondary);
+  }
+
+  .costStripMetrics {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .departureCollapseLabel {

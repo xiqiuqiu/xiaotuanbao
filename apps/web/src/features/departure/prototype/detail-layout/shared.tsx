@@ -202,42 +202,34 @@ export function ExecutionCostStrip({
 
   return (
     <div className={styles.costStrip} aria-label="整团成本汇总">
-      <div className={styles.costStripPrimary}>
+      <div className={styles.costStripHero}>
         <span className={styles.costStripLabel}>成本合计</span>
         <span className={styles.costStripTotal}>{formatYuan(totalCents)}</span>
         <span className={styles.costStripCount}>{totalCount} 项资源</span>
       </div>
-      <div className={styles.costStripBreakdown}>
-        <span>
-          发团级{' '}
-          <Typography.Text strong>
+      <div className={styles.costStripMetrics} role="list">
+        <div className={styles.costStripMetric} role="listitem">
+          <span className={styles.costStripLabel}>发团级</span>
+          <span className={styles.costStripMetricValue}>
             {formatYuan(departure.resourceAmountCents)}
-          </Typography.Text>
-        </span>
-        <span className={styles.costStripSep} aria-hidden>
-          ｜
-        </span>
-        <span>
-          按日{' '}
-          <Typography.Text strong>
+          </span>
+        </div>
+        <div className={styles.costStripMetric} role="listitem">
+          <span className={styles.costStripLabel}>按日</span>
+          <span className={styles.costStripMetricValue}>
             {formatYuan(segment.resourceAmountCents)}
-          </Typography.Text>
-        </span>
+          </span>
+        </div>
         {ungenerated > 0 ? (
-          <>
-            <span className={styles.costStripSep} aria-hidden>
-              ｜
+          <div
+            className={`${styles.costStripMetric} ${styles.costStripMetricWarn}`}
+            role="listitem"
+          >
+            <span className={styles.costStripLabel}>尚未生成应付</span>
+            <span className={styles.costStripMetricValue}>
+              {formatYuan(ungenerated)}
             </span>
-            <span>
-              尚未生成应付{' '}
-              <Typography.Text
-                strong
-                style={{ color: 'var(--ant-color-warning, #faad14)' }}
-              >
-                {formatYuan(ungenerated)}
-              </Typography.Text>
-            </span>
-          </>
+          </div>
         ) : null}
       </div>
     </div>
