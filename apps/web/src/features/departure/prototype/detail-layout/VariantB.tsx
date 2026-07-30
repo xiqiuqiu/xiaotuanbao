@@ -97,6 +97,26 @@ function removeSegmentDay(
   }
 }
 
+function countUngenerated(resources: ProtoResource[]): number {
+  return resources.filter((item) => item.payableStatus === 'not_generated').length
+}
+
+function markGenerated(
+  resources: ProtoResource[],
+  predicate: (item: ProtoResource) => boolean,
+): { next: ProtoResource[]; generated: number } {
+  const now = '2026-07-30 11:00'
+  let generated = 0
+  const next = resources.map((item) => {
+    if (!predicate(item) || item.payableStatus !== 'not_generated') {
+      return item
+    }
+    generated += 1
+    return { ...item, payableStatus: 'pending' as const, updatedAt: now }
+  })
+  return { next, generated }
+}
+
 export const VARIANT_B_META = {
   key: 'B',
   label: '两级导航 · 横向日程轴',
@@ -290,6 +310,48 @@ export function ExecutionB({
     ? `第${selected.segment.dayIndex}天 · ${selected.segment.overview}`
     : '本段资源'
 
+  const departureUngenerated = countUngenerated(execution.departureResources)
+  const segmentUngenerated = selected
+    ? countUngenerated(selected.resources)
+    : 0
+
+  const confirmBatchGenerate = (scope: 'departure' | 'segment') => {
+    const count =
+      scope === 'departure' ? departureUngenerated : segmentUngenerated
+    if (count <= 0) {
+      message.info('没有尚未生成应付的资源')
+      return
+    }
+    const scopeLabelText =
+      scope === 'departure'
+        ? '发团级资源'
+        : `第${selected?.segment?.dayIndex ?? ''}天资源`
+    Modal.confirm({
+      title: '批量生成应付',
+      content: `将为 ${scopeLabelText} 中 ${count} 项「未生成」资源生成应付单（与现网一致：对本范围未生成项批量处理）。`,
+      okText: '生成',
+      cancelText: '取消',
+      onOk: () => {
+        if (scope === 'departure') {
+          const { next, generated } = markGenerated(
+            execution.departureResources,
+            () => true,
+          )
+          onExecutionChange({ ...execution, departureResources: next })
+          message.success(`已批量生成 ${generated} 笔发团级应付`)
+          return
+        }
+        if (!selectedId) return
+        const { next, generated } = markGenerated(
+          execution.segmentResources,
+          (item) => item.segmentId === selectedId,
+        )
+        onExecutionChange({ ...execution, segmentResources: next })
+        message.success(`已批量生成 ${generated} 笔按日应付`)
+      },
+    })
+  }
+
   return (
     <div className={styles.stackLayout}>
       <Collapse
@@ -305,20 +367,32 @@ export function ExecutionB({
                 <Typography.Text type="secondary">
                   合计 {formatYuan(depTotal)}
                 </Typography.Text>
+                {departureUngenerated > 0 ? (
+                  <Typography.Text type="secondary">
+                    尚未生成应付 {departureUngenerated} 项
+                  </Typography.Text>
+                ) : null}
               </Space>
             ),
             extra: (
-              <Button
-                size="small"
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  openDepartureDrawer()
-                }}
-              >
-                添加
-              </Button>
+              <Space size={8} onClick={(event) => event.stopPropagation()}>
+                {departureUngenerated > 0 ? (
+                  <Button
+                    size="small"
+                    onClick={() => confirmBatchGenerate('departure')}
+                  >
+                    批量生成应付
+                  </Button>
+                ) : null}
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => openDepartureDrawer()}
+                >
+                  添加
+                </Button>
+              </Space>
             ),
             children: (
               <Table
@@ -443,8 +517,13 @@ export function ExecutionB({
                   {selected.segment.date} · {selected.segment.overview}
                 </Typography.Text>
               </div>
-              <Flex align="center" gap={16} wrap="wrap">
+              <Flex align="center" gap={12} wrap="wrap">
                 <ResourceAmountSummary resources={selected.resources} />
+                {segmentUngenerated > 0 ? (
+                  <Button onClick={() => confirmBatchGenerate('segment')}>
+                    批量生成应付
+                  </Button>
+                ) : null}
                 <Button
                   type="primary"
                   icon={<PlusOutlined />}
