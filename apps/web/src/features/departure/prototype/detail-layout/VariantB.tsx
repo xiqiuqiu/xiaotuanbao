@@ -26,6 +26,7 @@ import {
   type ProtoResourceDraft,
 } from './ProtoResourceDrawer'
 import {
+  buildProtoResourceColumns,
   PlaceholderPane,
   ResourceTable,
   SectionTitle,
@@ -158,9 +159,10 @@ export function ExecutionB({
 
   const handleSave = (
     draft: ProtoResourceDraft,
-    _options?: { generatePayable?: boolean },
+    options?: { generatePayable?: boolean },
   ) => {
     const amountCents = Math.round(draft.amountYuan * 100)
+    const now = '2026-07-30 10:00'
     if (drawer.editing) {
       const patch = (item: ProtoResource): ProtoResource =>
         item.id === drawer.editing!.id
@@ -171,6 +173,10 @@ export function ExecutionB({
               supplier: draft.supplier,
               amountCents,
               notes: draft.notes,
+              updatedAt: now,
+              payableStatus: options?.generatePayable
+                ? 'pending'
+                : item.payableStatus,
             }
           : item
       onExecutionChange({
@@ -192,6 +198,9 @@ export function ExecutionB({
             amountCents,
             notes: draft.notes,
             scope: 'departure',
+            payableStatus: options?.generatePayable ? 'pending' : 'not_generated',
+            createdAt: now,
+            updatedAt: now,
           },
         ],
       })
@@ -211,6 +220,9 @@ export function ExecutionB({
             notes: draft.notes,
             scope: 'segment',
             segmentId: selectedId,
+            payableStatus: options?.generatePayable ? 'pending' : 'not_generated',
+            createdAt: now,
+            updatedAt: now,
           },
         ],
       })
@@ -261,39 +273,14 @@ export function ExecutionB({
                 size="small"
                 pagination={false}
                 dataSource={execution.departureResources}
+                scroll={{ x: 1200 }}
                 onRow={(record) => ({
                   onClick: () => openDepartureDrawer(record),
                   style: { cursor: 'pointer' },
                 })}
-                columns={[
-                  { title: '种类', dataIndex: 'kind', width: 88 },
-                  { title: '项目', dataIndex: 'title' },
-                  { title: '供应商', dataIndex: 'supplier', width: 140 },
-                  {
-                    title: '金额',
-                    dataIndex: 'amountCents',
-                    width: 120,
-                    align: 'right',
-                    render: (value: number) => formatYuan(value),
-                  },
-                  {
-                    title: '操作',
-                    key: 'actions',
-                    width: 72,
-                    render: (_: unknown, record: ProtoResource) => (
-                      <Button
-                        type="link"
-                        size="small"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          openDepartureDrawer(record)
-                        }}
-                      >
-                        编辑
-                      </Button>
-                    ),
-                  },
-                ]}
+                columns={buildProtoResourceColumns({
+                  onEdit: openDepartureDrawer,
+                })}
                 locale={{ emptyText: '暂无发团级资源' }}
               />
             ),
@@ -334,14 +321,15 @@ export function ExecutionB({
         {selected?.segment ? (
           <>
             <SectionTitle
-              title={`第${selected.segment.dayIndex}天 · ${selected.segment.overview}`}
-              hint={`${selected.segment.date} · 仅展示本段资源；属性同样进抽屉`}
+              title={`第${selected.segment.dayIndex}天 · 资源安排`}
+              hint={`${selected.segment.date} · ${selected.segment.overview}`}
             />
             <ResourceTable
               resources={selected.resources}
               emptyText="本段暂无酒店/门票等资源"
               onAdd={() => openSegmentDrawer()}
               onEdit={(resource) => openSegmentDrawer(resource)}
+              showSummary
             />
           </>
         ) : null}

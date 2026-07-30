@@ -20,6 +20,14 @@ export type ProtoTab = {
   group: ProtoTabGroup
 }
 
+/** Align with production SegmentPayableStatus labels shown in 资源安排 table */
+export type ProtoPayableStatus =
+  | 'not_generated'
+  | 'pending'
+  | 'partial'
+  | 'paid'
+  | 'closed'
+
 export type ProtoResource = {
   id: string
   kind: string
@@ -28,8 +36,10 @@ export type ProtoResource = {
   amountCents: number
   scope: 'departure' | 'segment'
   segmentId?: string
-  /** 备注等扩展属性 — 列表不展示，抽屉录入 */
   notes?: string
+  payableStatus: ProtoPayableStatus
+  createdAt: string
+  updatedAt: string
 }
 
 export type ProtoSegment = {

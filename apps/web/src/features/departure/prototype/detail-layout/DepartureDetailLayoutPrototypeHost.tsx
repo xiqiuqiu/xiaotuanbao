@@ -110,6 +110,7 @@ export function DepartureDetailLayoutPrototypeHost({
   )
 
   const onAddDepartureResource = useCallback(() => {
+    const now = '2026-07-30 10:00'
     setExecution((prev) => ({
       ...prev,
       focus: 'departure',
@@ -123,12 +124,17 @@ export function DepartureDetailLayoutPrototypeHost({
           supplier: '演示供应商',
           amountCents: 10000,
           scope: 'departure',
+          notes: '原型备注',
+          payableStatus: 'not_generated',
+          createdAt: now,
+          updatedAt: now,
         },
       ],
     }))
   }, [])
 
   const onAddSegmentResource = useCallback((segmentId?: string) => {
+    const now = '2026-07-30 10:00'
     setExecution((prev) => {
       const targetId =
         segmentId ?? prev.selectedSegmentId ?? prev.segments[0]?.id
@@ -147,6 +153,10 @@ export function DepartureDetailLayoutPrototypeHost({
             amountCents: 8800,
             scope: 'segment',
             segmentId: targetId,
+            notes: '原型备注',
+            payableStatus: 'not_generated',
+            createdAt: now,
+            updatedAt: now,
           },
         ],
       }
