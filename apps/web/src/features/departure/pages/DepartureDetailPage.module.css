@@ -1,5 +1,6 @@
 .detailWorkspace {
   display: flex;
+  flex-direction: column;
   min-height: 520px;
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
@@ -42,7 +43,6 @@
 @media (max-width: 1023px) {
   .detailWorkspace {
     min-height: 0;
-    flex-direction: column;
   }
 }
 

@@ -16,20 +16,19 @@ describe('发团详情响应式工作区', () => {
     'utf8',
   )
 
-  it('桌面功能导航在长页面中保持可见', () => {
+  it('详情工作区为顶栏 Tabs 纵向编排，导航可换行且窄屏触控达标', () => {
+    expect(pageCss).toMatch(/\.detailWorkspace\s*\{[^}]*flex-direction:\s*column/)
     expect(pageCss).toMatch(/\.detailWorkspace\s*\{[^}]*overflow:\s*visible/)
+    expect(navigationCss).toMatch(/\.topTabBar\s*\{[^}]*flex-wrap:\s*wrap/)
+    expect(navigationCss).toMatch(/\.topTabList\s*\{[^}]*flex-wrap:\s*wrap/)
+    expect(navigationCss).toMatch(/\.topTabDivider\s*\{/)
     expect(navigationCss).toMatch(
-      /\.taskRail\s*\{[^}]*position:\s*sticky[^}]*top:\s*16px[^}]*max-height:\s*calc\(100dvh - 96px\)/,
+      /@media\s*\(max-width:\s*767px\)[\s\S]*\.topTab\s*\{[^}]*min-height:\s*44px/,
     )
+    expect(navigationCss).not.toMatch(/\.taskRail\s*\{/)
   })
 
-  it('小于 1024px 时切换紧凑导航并堆叠执行工作区', () => {
-    expect(navigationCss).toMatch(
-      /@media\s*\(max-width:\s*1023px\)[\s\S]*\.taskRail\s*\{[^}]*display:\s*none/,
-    )
-    expect(pageCss).toMatch(
-      /@media\s*\(max-width:\s*1023px\)[\s\S]*\.detailWorkspace\s*\{[^}]*flex-direction:\s*column/,
-    )
+  it('小于 1024px 时执行工作区仍可纵向堆叠', () => {
     expect(executionCss).toMatch(
       /@media\s*\(max-width:\s*1023px\)[\s\S]*\.panes\s*\{[^}]*flex-direction:\s*column/,
     )
