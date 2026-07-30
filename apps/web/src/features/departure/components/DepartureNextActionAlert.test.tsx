@@ -130,6 +130,35 @@ describe('DepartureNextActionAlert', () => {
     expect(screen.getByRole('button', { name: '完善客源' })).toBeInTheDocument()
   })
 
+  it('顶部财务异常只保留行动摘要，不重复概览金额明细', () => {
+    renderAlert(
+      makeDeparture({
+        status: DepartureStatus.PENDING_SETTLEMENT,
+        completionTags: {
+          sourceOrders: '客源1单',
+          segments: '行程1段',
+          resources: '资源1项',
+          receivables: '应收已生成',
+          payables: '应付已生成',
+        },
+        overviewStats: makeOverviewStats({
+          anomalies: [
+            {
+              code: 'receivable_balance',
+              expectedCents: 100_000,
+              actualCents: 80_000,
+              differenceCents: -20_000,
+            },
+          ],
+        }),
+      }),
+    )
+
+    expect(screen.getByText('应收金额存在异常，请核对后再继续结算。')).toBeInTheDocument()
+    expect(screen.queryByText(/已生成应收合计/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看应收' })).toBeInTheDocument()
+  })
+
   it('hides after close and stays hidden after remount for the same fingerprint', async () => {
     const user = userEvent.setup()
     const departure = makeDeparture()

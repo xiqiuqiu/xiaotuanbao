@@ -1,5 +1,5 @@
 import { App, ConfigProvider } from 'antd'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -157,6 +157,27 @@ describe('MainLayout 侧栏开关', () => {
     const menuItem = screen.getByRole('menuitem', { name: new RegExp(`${menuLabel}$`) })
     expect(menuItem).toHaveAttribute('data-menu-id', expect.stringContaining(menuKey))
     expect(menuItem).toHaveClass('ant-menu-item-selected')
+  })
+
+  it.each([
+    ['/departure/departure-1', '发团详情'],
+    ['/departure/new', '新建发团'],
+  ])('发团子页面 %s 展示明确层级', (currentPathname, currentLabel) => {
+    pathname = currentPathname
+
+    render(
+      <ConfigProvider>
+        <MainLayout><main>内容</main></MainLayout>
+      </ConfigProvider>,
+    )
+
+    const breadcrumb = screen.getByRole('navigation')
+    expect(within(breadcrumb).getByRole('link', { name: '发团管理' })).toHaveAttribute(
+      'href',
+      '/departure',
+    )
+    expect(within(breadcrumb).getByText(currentLabel)).toBeInTheDocument()
+    expect(within(breadcrumb).queryByText('页面')).not.toBeInTheDocument()
   })
 
   it.each([

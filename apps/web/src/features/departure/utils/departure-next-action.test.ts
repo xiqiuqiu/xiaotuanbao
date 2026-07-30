@@ -88,7 +88,7 @@ describe('resolveDepartureNextAction', () => {
       expect(result).toMatchObject({
         type: 'warning',
         title: '应收与结算金额不一致',
-        description: '已生成应收合计 ¥800.00，结算金额合计 ¥1,000.00，少了 ¥200.00',
+        description: '应收金额存在异常，请核对后再继续结算。',
         action: { tab: 'receivables' },
       })
     })

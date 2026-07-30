@@ -59,7 +59,7 @@ function resolveAnomalyAction(
     return {
       type: 'warning',
       title: anomalyCount > 1 ? `发现 ${anomalyCount} 项财务异常` : copy.title,
-      description: copy.description,
+      description: '应收金额存在异常，请核对后再继续结算。',
       action: {
         label: '查看应收',
         tab: 'receivables',

@@ -254,7 +254,7 @@
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black 0);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .workspace {
     height: auto !important;
     min-height: 0;

@@ -65,17 +65,10 @@ export function DepartureHeaderCard({
     void navigate({ to: '/departure' })
   }
 
-  const metaLine = [
-    departure.routeName,
-    `${departure.startDate} ~ ${departure.endDate}`,
-    `负责人 ${ownerLabel}`,
-    `${departure.totalGuests} 人`,
-  ].join(' · ')
   const mergedMenuItems: NonNullable<MenuProps['items']> = [
     {
       key: 'history',
-      label: '状态与履历',
-      extra: historyCount > 0 ? historyCount : undefined,
+      label: `状态与履历（${historyCount}）`,
       onClick: () => onHistoryOpenChange(true),
     },
     ...(menuItems.length > 0
@@ -99,26 +92,39 @@ export function DepartureHeaderCard({
 
       <div className={styles.identity}>
         <div className={styles.titleRow}>
-          <Typography.Title level={4}>{departure.name}</Typography.Title>
+          <Typography.Title level={4} ellipsis={{ tooltip: departure.name }}>
+            {departure.name}
+          </Typography.Title>
           <Space size={4} wrap>
             <Tag color={DEPARTURE_PROGRESS_COLORS[departure.departureProgress] ?? 'default'}>
-              {catalogLabel(DEPARTURE_PROGRESS_LABELS, departure.departureProgress)}
+              行程 · {catalogLabel(DEPARTURE_PROGRESS_LABELS, departure.departureProgress)}
             </Tag>
             <Tag color={DEPARTURE_STATUS_COLORS[departure.status as DepartureStatus] ?? 'default'}>
-              {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
+              财务 · {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
             </Tag>
           </Space>
         </div>
 
-        <Typography.Text type="secondary" ellipsis>
-          {departure.departureNo} · {metaLine}
-        </Typography.Text>
+        <Space
+          className={styles.metaLine}
+          size={[8, 2]}
+          wrap
+          separator={<Typography.Text type="secondary">·</Typography.Text>}
+        >
+          <Typography.Text type="secondary">{departure.departureNo}</Typography.Text>
+          <Typography.Text type="secondary">{departure.routeName}</Typography.Text>
+          <Typography.Text type="secondary">
+            {departure.startDate} ~ {departure.endDate}
+          </Typography.Text>
+          <Typography.Text type="secondary">负责人 {ownerLabel}</Typography.Text>
+          <Typography.Text type="secondary">{departure.totalGuests} 人</Typography.Text>
+        </Space>
 
         <Typography.Text type="secondary" className={styles.timestamps}>
-            最近更新 {formatBusinessDateTime(departure.updatedAt)}
-            <Typography.Text type="secondary" className={styles.createdAt}>
-              创建于 {formatBusinessDateTime(departure.createdAt)}
-            </Typography.Text>
+          最近更新 {formatBusinessDateTime(departure.updatedAt)}
+          <Typography.Text type="secondary" className={styles.createdAt}>
+            创建于 {formatBusinessDateTime(departure.createdAt)}
+          </Typography.Text>
         </Typography.Text>
       </div>
 
@@ -129,8 +135,8 @@ export function DepartureHeaderCard({
           </Button>
         ) : null}
         <Dropdown menu={{ items: mergedMenuItems }} trigger={['click']}>
-          <Button aria-label="更多">
-            更多 <DownOutlined />
+          <Button aria-label="状态与操作">
+            状态与操作 <DownOutlined />
           </Button>
         </Dropdown>
       </Space>

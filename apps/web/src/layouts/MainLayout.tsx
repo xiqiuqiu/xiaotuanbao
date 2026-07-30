@@ -66,9 +66,21 @@ export function MainLayout({ children }: PropsWithChildren) {
     })
   }, [pathname])
 
+  const departureChildTitle =
+    pathname === '/departure/new'
+      ? '新建发团'
+      : pathname.startsWith('/departure/') &&
+          pathname !== '/departure/account-generation-gaps'
+        ? '发团详情'
+        : null
   const breadcrumbItems = [
     { title: <Link to="/">{routeTitles['/']}</Link> },
-    ...(pathname.startsWith('/supplier/')
+    ...(departureChildTitle
+      ? [
+          { title: <Link to="/departure">发团管理</Link> },
+          { title: departureChildTitle },
+        ]
+      : pathname.startsWith('/supplier/')
       ? [
           { title: <Link to="/supplier">供应商管理</Link> },
           { title: '详情' },
