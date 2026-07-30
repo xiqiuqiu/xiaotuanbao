@@ -10,10 +10,22 @@ import type {
 
 export const PROTO_SEGMENTS: ProtoSegment[] = [
   { id: 'seg-1', dayIndex: 1, date: '2026-07-28', overview: '乌鲁木齐集合 / 接机' },
-  { id: 'seg-2', dayIndex: 2, date: '2026-07-29', overview: '天山天池一日' },
-  { id: 'seg-3', dayIndex: 3, date: '2026-07-30', overview: '赴喀纳斯途中' },
-  { id: 'seg-4', dayIndex: 4, date: '2026-07-31', overview: '喀纳斯景区' },
-  { id: 'seg-5', dayIndex: 5, date: '2026-08-01', overview: '禾木村落' },
+  {
+    id: 'seg-2',
+    dayIndex: 2,
+    date: '2026-07-29',
+    overview: '天山天池',
+    pendingCheck: true,
+  },
+  { id: 'seg-3', dayIndex: 3, date: '2026-07-30', overview: '吐鲁番', pendingCheck: true },
+  {
+    id: 'seg-4',
+    dayIndex: 4,
+    date: '2026-07-31',
+    overview: '喀纳斯',
+    pendingCheck: true,
+  },
+  { id: 'seg-5', dayIndex: 5, date: '2026-08-01', overview: '伊犁' },
   { id: 'seg-6', dayIndex: 6, date: '2026-08-02', overview: '返程布尔津' },
   { id: 'seg-7', dayIndex: 7, date: '2026-08-03', overview: '魔鬼城 / 返乌' },
   { id: 'seg-8', dayIndex: 8, date: '2026-08-04', overview: '市区自由活动' },
@@ -95,7 +107,8 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     scope: 'segment',
     segmentId: 'seg-2',
     notes: '32座大巴',
-    payableStatus: 'pending',
+    payableStatus: 'not_generated',
+    pendingCheck: true,
     createdAt: '2026-07-22 16:37',
     updatedAt: '2026-07-22 16:38',
   }),
@@ -108,6 +121,8 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     scope: 'segment',
     segmentId: 'seg-2',
     notes: '含区间车',
+    payableStatus: 'not_generated',
+    pendingCheck: true,
   }),
   res({
     id: 'sr-3',
@@ -119,30 +134,33 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     segmentId: 'seg-2',
     notes: '3大床房，6双床房',
     payableStatus: 'pending',
+    pendingCheck: true,
     createdAt: '2026-07-22 16:38',
     updatedAt: '2026-07-23 13:06',
   }),
   res({
     id: 'sr-4',
     kind: '酒店',
-    title: '布尔津木屋客栈',
+    title: '吐鲁番酒店',
     supplier: '布尔津驿',
     amountCents: 56_000,
     scope: 'segment',
     segmentId: 'seg-3',
-    notes: '木屋双早',
+    notes: '复制资源待核',
     payableStatus: 'not_generated',
+    pendingCheck: true,
   }),
   res({
     id: 'sr-4b',
     kind: '门票',
-    title: '途中景区门票',
+    title: '火焰山门票',
     supplier: '演示票务',
     amountCents: 5_000,
     scope: 'segment',
     segmentId: 'seg-3',
-    notes: '未生成应付示例',
+    notes: '未生成应付',
     payableStatus: 'not_generated',
+    pendingCheck: true,
   }),
   res({
     id: 'sr-5',
@@ -152,6 +170,8 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     amountCents: 16_000,
     scope: 'segment',
     segmentId: 'seg-4',
+    payableStatus: 'not_generated',
+    pendingCheck: true,
   }),
   res({
     id: 'sr-6',
@@ -162,27 +182,53 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     scope: 'segment',
     segmentId: 'seg-4',
     notes: '观景房',
+    payableStatus: 'not_generated',
+    pendingCheck: true,
   }),
   res({
     id: 'sr-7',
     kind: '门票',
-    title: '禾木村门票',
+    title: '伊犁景区门票',
     supplier: '禾木景区',
     amountCents: 10_000,
     scope: 'segment',
     segmentId: 'seg-5',
+    payableStatus: 'pending',
   }),
   res({
     id: 'sr-8',
     kind: '酒店',
-    title: '禾木木屋',
+    title: '伊犁木屋',
     supplier: '禾木人家',
     amountCents: 72_000,
     scope: 'segment',
     segmentId: 'seg-5',
     notes: '木屋含早',
+    payableStatus: 'pending',
   }),
 ]
+
+/** 生成 X/Y：已生成应付数 / 资源总数（对齐现网行程段卡片） */
+export function payableGenerationGap(resources: ProtoResource[]): {
+  generated: number
+  total: number
+  ungenerated: number
+  percent: number
+  hasGap: boolean
+} {
+  const total = resources.length
+  const generated = resources.filter(
+    (item) => item.payableStatus !== 'not_generated',
+  ).length
+  const ungenerated = Math.max(0, total - generated)
+  return {
+    generated,
+    total,
+    ungenerated,
+    percent: total === 0 ? 100 : Math.round((generated / total) * 100),
+    hasGap: ungenerated > 0,
+  }
+}
 
 export function createInitialExecutionState(): ProtoExecutionState {
   return {

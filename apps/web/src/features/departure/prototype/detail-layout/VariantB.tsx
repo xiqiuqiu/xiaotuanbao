@@ -4,7 +4,7 @@
  * 导航：先选「业务执行 / 财务处理」，再在组内用胶囊页签切换，减少 8 项平铺。
  * 执行：发团级资源固定在顶部折叠条；日程改为横向时间轴；主区只放当日资源。
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import {
   Button,
   Collapse,
@@ -23,6 +23,8 @@ import dayjs from 'dayjs'
 import {
   countResourcesForSegment,
   formatYuan,
+  payableGenerationGap,
+  resourcesForSegment,
 } from './mock-data'
 import {
   ProtoResourceDrawer,
@@ -311,9 +313,13 @@ export function ExecutionB({
     : '本段资源'
 
   const departureUngenerated = countUngenerated(execution.departureResources)
+  const departureGap = payableGenerationGap(execution.departureResources)
   const segmentUngenerated = selected
     ? countUngenerated(selected.resources)
     : 0
+  const segmentGap = selected
+    ? payableGenerationGap(selected.resources)
+    : null
 
   const confirmBatchGenerate = (scope: 'departure' | 'segment') => {
     const count =
@@ -367,9 +373,9 @@ export function ExecutionB({
                 <Typography.Text type="secondary">
                   合计 {formatYuan(depTotal)}
                 </Typography.Text>
-                {departureUngenerated > 0 ? (
+                {departureGap.hasGap ? (
                   <Typography.Text type="secondary">
-                    尚未生成应付 {departureUngenerated} 项
+                    生成 {departureGap.generated}/{departureGap.total}
                   </Typography.Text>
                 ) : null}
               </Space>
@@ -425,7 +431,11 @@ export function ExecutionB({
 
         <div className={styles.timeline}>
           {execution.segments.map((segment) => {
-            const count = countResourcesForSegment(execution, segment.id)
+            const dayResources = resourcesForSegment(execution, segment.id)
+            const count = dayResources.length
+            const gap = payableGenerationGap(dayResources)
+            const pendingCheck =
+              segment.pendingCheck || dayResources.some((item) => item.pendingCheck)
             const active = selectedId === segment.id
             return (
               <div
@@ -447,10 +457,42 @@ export function ExecutionB({
                     })
                   }
                 >
-                  <div className={styles.timelineDay}>D{segment.dayIndex}</div>
+                  <div className={styles.timelineDayRow}>
+                    <span className={styles.timelineDay}>D{segment.dayIndex}</span>
+                    {pendingCheck ? (
+                      <Tag color="warning" className={styles.timelineCheckTag}>
+                        待检查
+                      </Tag>
+                    ) : null}
+                  </div>
                   <div className={styles.timelineDate}>{segment.date.slice(5)}</div>
-                  <div className={styles.timelineCount}>
-                    {count > 0 ? `${count} 项` : '空'}
+                  <div className={styles.timelineOverview} title={segment.overview}>
+                    {segment.overview}
+                  </div>
+                  <div className={styles.timelineMetaRow}>
+                    <span className={styles.timelineCount}>
+                      {count > 0 ? `资源${count}项` : '空'}
+                    </span>
+                    {gap.hasGap ? (
+                      <span
+                        className={styles.timelinePayableGap}
+                        title={`还有 ${gap.ungenerated} 项未生成应付`}
+                        aria-label={`生成 ${gap.generated}/${gap.total}`}
+                      >
+                        <span
+                          className={styles.timelinePayableRing}
+                          style={
+                            {
+                              '--ring-progress': `${gap.percent}%`,
+                              '--ring-color': 'var(--ant-color-primary)',
+                              '--ring-track': 'var(--ant-color-fill-secondary)',
+                            } as CSSProperties
+                          }
+                          aria-hidden
+                        />
+                        生成 {gap.generated}/{gap.total}
+                      </span>
+                    ) : null}
                   </div>
                 </button>
                 <button
@@ -519,6 +561,11 @@ export function ExecutionB({
               </div>
               <Flex align="center" gap={12} wrap="wrap">
                 <ResourceAmountSummary resources={selected.resources} />
+                {segmentGap?.hasGap ? (
+                  <Typography.Text type="secondary">
+                    生成 {segmentGap.generated}/{segmentGap.total}
+                  </Typography.Text>
+                ) : null}
                 {segmentUngenerated > 0 ? (
                   <Button onClick={() => confirmBatchGenerate('segment')}>
                     批量生成应付

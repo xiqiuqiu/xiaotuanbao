@@ -54,8 +54,13 @@ export function buildProtoResourceColumns(options?: {
     {
       title: '资源名称',
       dataIndex: 'title',
-      width: 180,
-      ellipsis: true,
+      width: 200,
+      render: (value: string, record: ProtoResource) => (
+        <Space size={6} wrap>
+          <span>{value || '-'}</span>
+          {record.pendingCheck ? <Tag color="warning">待检查</Tag> : null}
+        </Space>
+      ),
     },
     {
       title: '资源金额',

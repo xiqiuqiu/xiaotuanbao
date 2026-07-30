@@ -40,6 +40,8 @@ export type ProtoResource = {
   payableStatus: ProtoPayableStatus
   createdAt: string
   updatedAt: string
+  /** 复制自常用路线/他团等：需人工核对 */
+  pendingCheck?: boolean
 }
 
 export type ProtoSegment = {
@@ -47,6 +49,8 @@ export type ProtoSegment = {
   dayIndex: number
   date: string
   overview: string
+  /** 段内仍有待检查资源时，导航上也打标 */
+  pendingCheck?: boolean
 }
 
 export type ProtoExecutionState = {
