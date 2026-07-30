@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import type { DepartureDetail } from '@/types/api'
 import type { DepartureNextAction } from '../utils/departure-next-action'
-import { DepartureHeaderCard } from './DepartureHeaderCard'
+import { CollapsibleDepartureHeader } from './CollapsibleDepartureHeader'
 import { DepartureNextActionAlert } from './DepartureNextActionAlert'
 import { DepartureOperationsSheetDrawer } from './DepartureOperationsSheetDrawer'
 import { DepartureOverviewDrawer } from './DepartureOverviewDrawer'
@@ -86,7 +86,7 @@ export function DepartureHeader({ departure, canEdit, onUpdated }: DepartureHead
 
   return (
     <>
-      <DepartureHeaderCard
+      <CollapsibleDepartureHeader
         departure={departure}
         menuItems={menuItems}
         primaryAction={primaryAction}
