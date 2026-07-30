@@ -20,10 +20,14 @@ console.log(`
 ║    B 两级导航 · 横向日程轴                                   ║
 ║    C 窄图标轨 · 种类×日期矩阵                                ║
 ║                                                            ║
-║  1) 等 Vite 起来后登录（admin / admin123）                   ║
-║  2) 打开任意发团详情，访问：                                  ║
-║     /departure/<id>?tab=execution&variant=A                ║
-║  3) 底部切换条 / ← → 切换方案                                ║
+║  免登录预览（推荐）：                                         ║
+║    http://localhost:5173/prototype/departure-detail-layout ║
+║      ?tab=execution&variant=A                              ║
+║                                                            ║
+║  或挂到真实发团详情（需登录 + API）：                          ║
+║    /departure/<id>?tab=execution&variant=A                 ║
+║                                                            ║
+║  底部切换条 / ← → 切换方案                                   ║
 ╚════════════════════════════════════════════════════════════╝
 `)
 

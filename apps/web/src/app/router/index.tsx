@@ -39,6 +39,29 @@ const loginRoute = createRoute({
   },
 })
 
+/** PROTOTYPE — throwaway layout sandbox (no auth). Hidden intent in production. */
+const departureDetailLayoutPrototypeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/prototype/departure-detail-layout',
+  validateSearch: (search: Record<string, unknown>): {
+    tab?: string
+    variant?: string
+  } => ({
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+    variant:
+      typeof search.variant === 'string' && search.variant.trim()
+        ? search.variant.trim()
+        : 'A',
+  }),
+  component: lazyRouteComponent(
+    () =>
+      import(
+        '@/features/departure/prototype/detail-layout/StandaloneDepartureDetailLayoutPrototypePage'
+      ),
+    'StandaloneDepartureDetailLayoutPrototypePage',
+  ),
+})
+
 const appLayoutRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: 'app',
@@ -370,6 +393,7 @@ const systemUsersRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  departureDetailLayoutPrototypeRoute,
   platformLayoutRoute.addChildren([
     platformIndexRoute,
     platformOrganizationsRoute,

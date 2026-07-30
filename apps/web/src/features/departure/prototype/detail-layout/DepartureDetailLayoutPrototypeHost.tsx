@@ -43,10 +43,16 @@ function resolveTab(raw: unknown): ProtoTabKey {
 
 type DepartureDetailLayoutPrototypeHostProps = {
   departure: DepartureDetail
+  /**
+   * Standalone throwaway route (no auth / no real departure).
+   * When set, ←→ and tab switches stay on this path.
+   */
+  standalonePath?: '/prototype/departure-detail-layout'
 }
 
 export function DepartureDetailLayoutPrototypeHost({
   departure,
+  standalonePath,
 }: DepartureDetailLayoutPrototypeHostProps) {
   const { departureId } = useParams({ strict: false })
   const search = useSearch({ strict: false })
@@ -58,13 +64,24 @@ export function DepartureDetailLayoutPrototypeHost({
 
   const patchSearch = useCallback(
     (patch: { variant?: string; tab?: string }) => {
+      const nextSearch = {
+        tab: patch.tab ?? activeTab,
+        variant: patch.variant ?? variant,
+      }
+      if (standalonePath) {
+        navigate({
+          to: standalonePath,
+          search: nextSearch,
+          replace: true,
+        })
+        return
+      }
       if (!departureId) return
       navigate({
         to: '/departure/$departureId',
         params: { departureId },
         search: {
-          tab: patch.tab ?? activeTab,
-          variant: patch.variant ?? variant,
+          ...nextSearch,
           ...(typeof search.listReturn === 'string' && search.listReturn
             ? { listReturn: search.listReturn }
             : {}),
@@ -72,7 +89,7 @@ export function DepartureDetailLayoutPrototypeHost({
         replace: true,
       })
     },
-    [activeTab, departureId, navigate, search.listReturn, variant],
+    [activeTab, departureId, navigate, search.listReturn, standalonePath, variant],
   )
 
   const onVariantChange = useCallback(

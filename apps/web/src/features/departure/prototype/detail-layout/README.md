@@ -19,7 +19,13 @@
 pnpm prototype:departure-detail-layout
 ```
 
-然后登录，打开任意发团详情（脚本会提示带 `variant` 的 URL），或直接访问：
+**免登录沙盒（推荐，无需 API）：**
+
+```
+http://localhost:5173/prototype/departure-detail-layout?tab=execution&variant=A
+```
+
+也可挂到真实发团详情（需登录）：
 
 ```
 http://localhost:5173/departure/<departureId>?tab=execution&variant=A
@@ -27,4 +33,4 @@ http://localhost:5173/departure/<departureId>?tab=execution&variant=A
 
 - 底部黑色切换条 / 键盘 ← → 切换 A|B|C
 - 数据为内存 stub，刷新重置
-- 生产构建忽略 `variant`，不挂载本原型
+- 生产构建忽略 `variant`，独立路由页亦提示不可用
