@@ -101,7 +101,7 @@ export function buildProtoResourceColumns(options?: {
     {
       title: '操作',
       key: 'actions',
-      width: 148,
+      width: 220,
       fixed: 'right',
       render: (_: unknown, record: ProtoResource) => {
         const generated = record.payableStatus !== 'not_generated'
@@ -119,32 +119,21 @@ export function buildProtoResourceColumns(options?: {
             </Button>
             {generated ? (
               <>
-                <Button
-                  type="link"
-                  size="small"
-                  title="查看应付"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  查看
+                <Button type="link" size="small" onClick={(event) => event.stopPropagation()}>
+                  查看应付
                 </Button>
                 <Button
                   type="link"
                   size="small"
                   danger
-                  title="作废应付"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  作废
+                  作废应付
                 </Button>
               </>
             ) : (
-              <Button
-                type="link"
-                size="small"
-                title="生成应付"
-                onClick={(event) => event.stopPropagation()}
-              >
-                生成
+              <Button type="link" size="small" onClick={(event) => event.stopPropagation()}>
+                生成应付
               </Button>
             )}
           </Space>
