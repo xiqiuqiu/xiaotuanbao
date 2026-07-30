@@ -70,6 +70,14 @@ vi.mock('@/services/segment-resource.service', () => ({
   generatePayablesForSegment: vi.fn(),
 }))
 
+vi.mock('@/services/departure-resource.service', () => ({
+  listDepartureResources: vi.fn(async () => ({ items: [], total: 0 })),
+  createDepartureResource: vi.fn(),
+  updateDepartureResource: vi.fn(),
+  deleteDepartureResource: vi.fn(),
+  generateDeparturePayable: vi.fn(),
+}))
+
 const mockDeparture = {
   id: 'departure-1',
   departureNo: 'XTB2026070003',
@@ -117,7 +125,7 @@ describe('ExecutionTab URL sync', () => {
     renderExecutionTab(undefined)
 
     await waitFor(() => {
-      expect(screen.getByText('行程段')).toBeTruthy()
+      expect(screen.getByRole('region', { name: '按日资源' })).toBeTruthy()
     })
 
     expect(navigate).not.toHaveBeenCalled()

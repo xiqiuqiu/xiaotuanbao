@@ -3,10 +3,8 @@ import {
   Alert,
   Button,
   Card,
-  Col,
   Empty,
   Modal,
-  Row,
   Spin,
   message,
   theme,
@@ -39,9 +37,9 @@ import {
 import { summarizeExecutionCostStrip } from '../utils/execution-cost-strip-summary'
 import { formValuesToPayload } from '../utils/segment-form'
 import { ExecutionCostStrip } from './ExecutionCostStrip'
+import { ExecutionDayAxis } from './ExecutionDayAxis'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { DepartureResourcePane } from './DepartureResourcePane'
-import { ExecutionSegmentListPane } from './ExecutionSegmentListPane'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
 
@@ -76,6 +74,7 @@ interface ExecutionWorkspaceProps {
   onSelect: (segmentId: string) => void
   onEdit: (segment: ItinerarySegmentSummary) => void
   onCreate: () => void
+  onDelete: (segment: ItinerarySegmentSummary) => void
   onGenerateDaily: () => void
   onRebuildEmpty: () => void
 }
@@ -94,6 +93,7 @@ function ExecutionWorkspace({
   onSelect,
   onEdit,
   onCreate,
+  onDelete,
   onGenerateDaily,
   onRebuildEmpty,
 }: ExecutionWorkspaceProps) {
@@ -144,8 +144,8 @@ function ExecutionWorkspace({
         highlightDepartureResourceId={highlightDepartureResourceId}
       />
 
-      <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
-        <ExecutionSegmentListPane
+      <div className={styles.dayStack}>
+        <ExecutionDayAxis
           segments={segments}
           selectedSegmentId={selectedSegmentId}
           mutationLocked={mutationLocked}
@@ -153,50 +153,45 @@ function ExecutionWorkspace({
           onSelect={onSelect}
           onEdit={onEdit}
           onCreate={onCreate}
+          onDelete={onDelete}
           onGenerateDaily={onGenerateDaily}
           onRebuildEmpty={onRebuildEmpty}
         />
 
-        <Col
-          className={`${styles.paneCol} ${styles.resourcePaneCol}`}
-          flex="auto"
-          style={{ minWidth: 0 }}
-        >
-          <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
-            {segments.length === 0 ? (
-              <Empty
-                description="可按出团～回团一键生成一日一段骨架，或手工添加"
-                style={{ padding: '48px 0' }}
-              >
-                {!mutationLocked ? (
-                  <div className={styles.emptyActions}>
-                    <Button
-                      type="primary"
-                      loading={generatingDaily}
-                      onClick={onGenerateDaily}
-                    >
-                      一键生成一日段
-                    </Button>
-                    <Button icon={<PlusOutlined />} onClick={onCreate}>
-                      添加行程段
-                    </Button>
-                  </div>
-                ) : null}
-              </Empty>
-            ) : selectedSegment ? (
-              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-                <ExecutionResourcePane
-                  departure={departure}
-                  segment={selectedSegment}
-                  readOnly={readOnly}
-                  canEdit={canEdit}
-                  amountReadOnly={amountReadOnly}
-                />
-              </div>
-            ) : null}
-          </Card>
-        </Col>
-      </Row>
+        <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
+          {segments.length === 0 ? (
+            <Empty
+              description="可按出团～回团一键生成一日一段骨架，或手工添加一天"
+              style={{ padding: '48px 0' }}
+            >
+              {!mutationLocked ? (
+                <div className={styles.emptyActions}>
+                  <Button
+                    type="primary"
+                    loading={generatingDaily}
+                    onClick={onGenerateDaily}
+                  >
+                    一键生成一日段
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={onCreate}>
+                    添加一天
+                  </Button>
+                </div>
+              ) : null}
+            </Empty>
+          ) : selectedSegment ? (
+            <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+              <ExecutionResourcePane
+                departure={departure}
+                segment={selectedSegment}
+                readOnly={readOnly}
+                canEdit={canEdit}
+                amountReadOnly={amountReadOnly}
+              />
+            </div>
+          ) : null}
+        </Card>
+      </div>
     </div>
   )
 }
@@ -484,6 +479,7 @@ export function ExecutionTab({
         onSelect={(id) => navigateExecution(id)}
         onEdit={openEdit}
         onCreate={openCreate}
+        onDelete={(segment) => deleteMutation.mutate(segment.id)}
         onGenerateDaily={handleGenerateDaily}
         onRebuildEmpty={handleRebuildEmpty}
       />

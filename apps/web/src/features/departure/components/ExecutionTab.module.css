@@ -16,15 +16,11 @@
   max-height: 100%;
 }
 
-.panes {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: 100%;
-}
-
-.paneCol {
+.dayStack {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  gap: 12px;
   min-height: 0;
   max-height: 100%;
 }
@@ -47,116 +43,278 @@
   overflow: auto;
 }
 
-.segmentPaneCol .paneCardBody {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.segmentPane {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
-}
-
-.segmentList {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  gap: 8px;
-  min-height: 0;
-  overflow: auto;
-}
-
-/* Pushes the footer to the pane bottom when the list is short. */
-.segmentListGrow {
-  flex: 1 1 auto;
-  min-height: 0;
-  pointer-events: none;
-}
-
-/* Sticky over scrolling cards; border (not shadow) per DESIGN elevation. */
-.segmentListFooter {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  flex-shrink: 0;
-  padding-top: 8px;
-  background: var(--execution-item-bg);
-  border-top: 1px solid var(--execution-border);
-}
-
-.segmentListFooterActions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .emptyActions {
   display: flex;
   gap: 8px;
   justify-content: center;
 }
 
-.segmentItem {
+.dayResourcePanel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dayAxisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dayAxisHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dayAxis {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--execution-border);
+}
+
+.dayChipWrap {
   position: relative;
-  width: 100%;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.dayChipWrapSelected .dayChipRemove,
+.dayChipWrap:hover .dayChipRemove,
+.dayChipWrapSelected .dayChipEdit,
+.dayChipWrap:hover .dayChipEdit {
+  opacity: 1;
+}
+
+.dayChip {
+  display: flex;
+  flex-direction: column;
+  width: 128px;
+  min-height: 108px;
+  height: 100%;
   margin: 0;
+  padding: 8px 12px;
   border: 1px solid var(--execution-item-border);
   border-radius: var(--execution-radius);
   background: var(--execution-item-bg);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  box-sizing: border-box;
   transition:
     background-color 100ms ease,
     border-color 100ms ease,
     transform 100ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
-.segmentItem:has(.segmentItemSelect:active) {
+.dayChip:active {
   transform: scale(0.97);
 }
 
-.segmentItemSelect {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 12px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  border: 0;
-  border-radius: inherit;
-  background: transparent;
-}
-
-.segmentItemSelect:focus-visible {
+.dayChip:focus-visible {
   outline: 2px solid var(--execution-primary-border);
   outline-offset: 2px;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .segmentItem:hover {
-    background: var(--execution-fill-hover);
-  }
-
-  .segmentItemSelected:hover {
-    background: var(--execution-primary-bg);
+  .dayChip:hover {
     border-color: var(--execution-primary-border);
   }
 
-  .segmentItem:hover .segmentItemEdit {
-    opacity: 1;
+  .dayChipSelected:hover {
+    background: var(--execution-primary-bg);
+    border-color: var(--execution-primary);
   }
 }
 
+.dayChipSelected {
+  background: var(--execution-primary-bg);
+  border-color: var(--execution-primary);
+}
+
+.dayChipDayRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dayChipDay {
+  flex-shrink: 0;
+  font-weight: var(--execution-font-strong);
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--execution-text);
+}
+
+.dayChipCheckTag {
+  margin-inline-end: 0 !important;
+  margin-inline-start: 0 !important;
+  padding-inline: 4px !important;
+  font-size: 12px !important;
+  line-height: 16px !important;
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayChipDate {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--execution-text-secondary);
+  white-space: nowrap;
+}
+
+.dayChipName {
+  margin-top: 4px;
+  min-height: 16px;
+  color: var(--execution-text);
+  font-size: 12px;
+  font-weight: var(--execution-font-strong);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayChipFooter {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 16px;
+}
+
+.dayChipCount {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--execution-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayChipPayableGap {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: var(--execution-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dayChipPayableRing {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--ring-color) var(--ring-progress),
+    var(--ring-track) 0
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black 0);
+}
+
+.dayChipEdit {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 28px;
+  opacity: 0.45;
+  transition: opacity 100ms ease;
+}
+
+.dayChipSelected .dayChipEdit {
+  opacity: 1;
+}
+
+.dayChipRemove {
+  position: absolute;
+  z-index: 1;
+  top: -8px;
+  right: -8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--execution-border);
+  border-radius: 50%;
+  background: var(--execution-item-bg);
+  color: var(--execution-text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.dayChipRemove:hover {
+  color: var(--execution-error);
+  border-color: var(--execution-error);
+}
+
+.dayAxisAddChip {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 128px;
+  min-height: 108px;
+  padding: 8px 12px;
+  border: 1px dashed var(--execution-border);
+  border-radius: var(--execution-radius);
+  background: transparent;
+  color: var(--execution-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.dayAxisAddChip:hover {
+  border-color: var(--execution-primary);
+  color: var(--execution-primary);
+  background: var(--execution-primary-bg);
+}
+
+.dayAxisAddChip:focus-visible {
+  outline: 2px solid var(--execution-primary-border);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .segmentItem {
+  .dayChip {
     transition: background-color 100ms ease, border-color 100ms ease;
   }
 
-  .segmentItem:has(.segmentItemSelect:active) {
+  .dayChip:active {
     transform: none;
   }
 
@@ -179,116 +337,13 @@
   }
 }
 
-.segmentItemSelected {
-  background: var(--execution-primary-bg);
-  border-color: var(--execution-primary-border);
-}
-
-.segmentItemHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.segmentItemTitle {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-width: 0;
-  padding-inline-end: 28px;
-  font-weight: var(--execution-font-strong);
-  color: var(--execution-text);
-  line-height: 1.4;
-}
-
-.segmentItemEdit {
-  position: absolute;
-  top: 8px;
-  right: 4px;
-  opacity: 0.45;
-  transition: opacity 100ms ease;
-}
-
-.segmentItemSelected .segmentItemEdit {
-  opacity: 1;
-}
-
-.segmentItemMeta {
-  display: block;
-  color: var(--execution-text-secondary);
-  font-size: var(--execution-font-sm);
-  line-height: 1.5;
-}
-
-.segmentItemOverview {
-  display: block;
-  min-width: 0;
-  color: var(--execution-text-tertiary);
-  font-size: var(--execution-font-sm);
-  line-height: 1.5;
-}
-
-.segmentItemOverviewRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--execution-border);
-}
-
-.segmentPayableGap {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 6px;
-  color: var(--execution-text-secondary);
-  font-size: var(--execution-font-sm);
-  line-height: 1.5;
-}
-
-.segmentPayableRing {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: conic-gradient(
-    var(--ring-color) var(--ring-progress),
-    var(--ring-track) 0
-  );
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), black 0);
-}
-
 @media (max-width: 1023px) {
   .workspace {
     height: auto !important;
     min-height: 0;
   }
 
-  .panes {
-    flex-direction: column;
-    gap: 16px;
-    max-height: none;
-  }
-
-  .paneCol,
-  .segmentPaneCol,
-  .resourcePaneCol {
-    flex: 1 1 auto !important;
-    width: 100%;
-    max-width: 100% !important;
-    max-height: none;
-  }
-
-  .segmentPaneCol .paneCardBody {
-    max-height: 280px;
-  }
-
-  .segmentPaneCol .segmentList {
+  .dayStack {
     max-height: none;
   }
 }

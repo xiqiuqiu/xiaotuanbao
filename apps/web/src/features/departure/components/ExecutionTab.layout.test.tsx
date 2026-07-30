@@ -144,7 +144,7 @@ describe('ExecutionTab layout', () => {
     cleanup()
   })
 
-  it('stacks 成本条 → 发团级折叠 → 行程段/当日资源，并汇总金额与待生成项数', async () => {
+  it('stacks 成本条 → 发团级折叠 → 横向日程轴 → 当日资源，并汇总金额与待生成项数', async () => {
     renderExecutionTab()
 
     const costStrip = await screen.findByRole('list', { name: '整团成本汇总' })
@@ -158,7 +158,7 @@ describe('ExecutionTab layout', () => {
     expect(within(costStrip).getByText('¥3,000.00')).toBeInTheDocument()
 
     const departureTitle = screen.getByText('发团级资源')
-    const segmentTitle = screen.getByText('行程段')
+    const dayAxis = screen.getByRole('region', { name: '按日资源' })
     const resourceTitle = screen.getByText('资源安排')
 
     expect(
@@ -166,83 +166,71 @@ describe('ExecutionTab layout', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     expect(
-      departureTitle.compareDocumentPosition(segmentTitle) &
+      departureTitle.compareDocumentPosition(dayAxis) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
     expect(
-      segmentTitle.compareDocumentPosition(resourceTitle) &
+      dayAxis.compareDocumentPosition(resourceTitle) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
 
     expect(screen.getByLabelText('发团级资源金额汇总')).toHaveTextContent(
       /资源 1 项.*资源金额.*¥5,000\.00.*尚未生成应付.*¥5,000\.00/,
     )
-    // Collapse header exposes departure-level batch generate; day pane keeps its own.
     expect(screen.getAllByRole('button', { name: '批量生成应付' }).length).toBeGreaterThanOrEqual(
       1,
     )
   })
 
-  it('keeps 行程段 and 资源安排 side-by-side in one nowrap row', async () => {
+  it('keeps the selected day resource table below the horizontal day axis', async () => {
     const { container } = renderExecutionTab()
 
-    const segmentTitle = await screen.findByText('行程段')
-    const resourceTitle = await screen.findByText('资源安排')
+    const dayAxis = await screen.findByRole('region', { name: '按日资源' })
+    const resourceTitle = screen.getByText('资源安排')
 
-    const segmentCard = segmentTitle.closest('.ant-card')
-    const resourceCard = resourceTitle.closest('.ant-card')
-    expect(segmentCard).toBeTruthy()
-    expect(resourceCard).toBeTruthy()
-    expect(segmentCard!.querySelector('.ant-card-extra')).toBeNull()
+    expect(within(dayAxis).getByText('西栅夜游')).toBeInTheDocument()
+    expect(within(dayAxis).getByText('07-14')).toBeInTheDocument()
+    expect(within(dayAxis).getByText('1项')).toBeInTheDocument()
     expect(container.querySelector('[aria-label="生成 0/1"]')).toBeTruthy()
+
+    const resourceCard = resourceTitle.closest('.ant-card')
+    expect(resourceCard).toBeTruthy()
     expect(within(resourceCard as HTMLElement).getByText('批量生成应付')).toBeInTheDocument()
-    expect(within(resourceCard as HTMLElement).getByText('添加资源')).toBeInTheDocument()
-
-    const segmentCol = segmentCard!.parentElement
-    const resourceCol = resourceCard!.parentElement
-    expect(segmentCol?.className).toContain('ant-col')
-    expect(resourceCol?.className).toContain('ant-col')
-
-    const row = segmentCol?.parentElement
-    expect(row).toBe(resourceCol?.parentElement)
-    expect(row?.className).toContain('ant-row')
-    expect(row?.className).toContain('ant-row-no-wrap')
+    expect(
+      await within(resourceCard as HTMLElement).findByText('添加资源'),
+    ).toBeInTheDocument()
+    expect(
+      dayAxis.compareDocumentPosition(resourceTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
-  it('puts segment and resource panes in a fixed-height scroll workspace', async () => {
+  it('puts day axis and resource pane in a fixed-height scroll workspace', async () => {
     const { container } = renderExecutionTab()
 
-    expect(await screen.findByText('行程段')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '按日资源' })).toBeInTheDocument()
 
     const workspace = container.querySelector('[class*="workspace"]')
     expect(workspace).toBeTruthy()
 
-    const segmentCard = screen.getByText('行程段').closest('.ant-card')
-    expect(segmentCard?.className).toMatch(/paneCard/)
-    expect(segmentCard?.querySelector('[class*="paneCardBody"]')).toBeTruthy()
-
     const selected = container.querySelector('[data-segment-id="segment-1"]')
     expect(selected).toBeTruthy()
 
-    const addBtn = screen.getByRole('button', { name: '添加' })
-    const footer = addBtn.closest('[class*="segmentListFooter"]')
-    expect(footer).toBeTruthy()
-    expect(segmentCard).toContainElement(footer)
-    expect(footer!.parentElement?.lastElementChild).toBe(footer)
+    const addBtn = screen.getByRole('button', { name: '添加一天' })
+    expect(addBtn).toBeInTheDocument()
   })
 
-  it('does not render 模板 badge on segment nav cards', async () => {
+  it('does not render 模板 badge on day cards', async () => {
     renderExecutionTab()
 
     expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
     expect(screen.queryByText('模板')).not.toBeInTheDocument()
   })
 
-  it('keeps segment selection and editing as separate keyboard actions', async () => {
+  it('keeps day selection and editing as separate keyboard actions', async () => {
     const user = userEvent.setup()
     const { container } = renderExecutionTab()
 
-    const selectButton = await screen.findByRole('button', { name: /^西栅夜游/ })
+    const selectButton = await screen.findByRole('button', { name: 'D1 西栅夜游' })
     const editButton = screen.getByRole('button', { name: '编辑西栅夜游' })
 
     expect(container.querySelector('[role="button"] button')).toBeNull()
