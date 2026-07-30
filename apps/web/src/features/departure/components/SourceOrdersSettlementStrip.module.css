@@ -1,0 +1,88 @@
+.settlementStrip {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(3, 1fr);
+  align-items: stretch;
+  gap: 0;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+}
+
+.settlementStripCell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+}
+
+.settlementStripCell + .settlementStripCell {
+  border-left: 1px solid var(--ant-color-border-secondary);
+}
+
+.settlementStripHero {
+  background: var(--ant-color-fill-quaternary);
+}
+
+.settlementStripLabel {
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settlementStripTotal {
+  color: var(--ant-color-text);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.settlementStripCount {
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settlementStripMetricValue {
+  color: var(--ant-color-text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlementStripMetricWarn .settlementStripMetricValue {
+  color: var(--ant-color-warning);
+}
+
+@media (max-width: 991px) {
+  .settlementStrip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settlementStripCell:nth-child(3),
+  .settlementStripCell:nth-child(4) {
+    border-top: 1px solid var(--ant-color-border-secondary);
+  }
+
+  .settlementStripCell:nth-child(3) {
+    border-left: 0;
+  }
+}
+
+@media (max-width: 575px) {
+  .settlementStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .settlementStripCell + .settlementStripCell {
+    border-left: 0;
+    border-top: 1px solid var(--ant-color-border-secondary);
+  }
+}

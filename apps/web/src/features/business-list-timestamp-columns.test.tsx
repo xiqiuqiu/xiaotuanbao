@@ -47,8 +47,8 @@ describe('业务列表时间列', () => {
           deleteMutation: stubMutation(),
           generateMutation: stubMutation(),
           onOpen: noop,
-          onOpenGuests: noop,
           onViewReceivables: noop,
+          onViewRebate: noop,
         }),
       ),
     )

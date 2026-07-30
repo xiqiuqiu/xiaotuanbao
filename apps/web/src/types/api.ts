@@ -86,6 +86,7 @@ export type {
   RouteTemplateDetailSummary,
   CreateRouteTemplateFromDepartureDto,
   SourceOrderSummary,
+  SourceOrderGuestNameSummary,
   SourceOrderListResult,
   PendingReceivableSourceOrderItem,
   PendingReceivableSourceOrderListResult,

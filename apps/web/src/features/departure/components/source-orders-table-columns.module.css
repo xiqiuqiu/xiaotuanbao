@@ -1,0 +1,29 @@
+.guestRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.guestNameEllipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guestRosterEmpty {
+  color: var(--ant-color-text-tertiary);
+}
+
+.guestRosterSub {
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.guestRosterWarn {
+  color: var(--ant-color-warning);
+  font-size: 12px;
+  line-height: 1.4;
+}

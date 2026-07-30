@@ -1437,6 +1437,10 @@ describe('Departure API (e2e)', () => {
 
       expect(afterCreate.body.data.items[0].guestCount).toBe(1)
       expect(afterCreate.body.data.items[0].id).toBe(sourceOrderId)
+      expect(afterCreate.body.data.items[0].guests).toEqual([
+        { id: expect.any(String), name: '张三' },
+        { id: secondGuest.body.data.id, name: '李四' },
+      ])
 
       const guestsAfterCreate = await authRequest(app, coordinatorToken)
         .get(`/api/source-orders/${sourceOrderId}/guests`)
@@ -1458,6 +1462,9 @@ describe('Departure API (e2e)', () => {
         .expect(200)
 
       expect(afterDelete.body.data.items[0].guestCount).toBe(1)
+      expect(afterDelete.body.data.items[0].guests).toEqual([
+        { id: expect.any(String), name: '张三' },
+      ])
 
       const guestsAfterDelete = await authRequest(app, coordinatorToken)
         .get(`/api/source-orders/${sourceOrderId}/guests`)

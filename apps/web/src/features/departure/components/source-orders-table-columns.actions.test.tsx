@@ -32,6 +32,7 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     guestCollectCents: 1000000,
     settlementNotes: null,
     notes: null,
+    guests: [],
     receivableStatus: 'not_generated',
     hasPaymentSchedule: false,
     hasSourceAmountMismatch: false,
@@ -76,7 +77,6 @@ function renderActions(
     deleteMutation: stubMutation(),
     generateMutation: stubMutation(),
     onOpen: vi.fn(),
-    onOpenGuests: vi.fn(),
     onViewReceivables,
     onViewRebate,
   })
@@ -153,6 +153,13 @@ describe('source orders action column', () => {
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
+  it('never shows 客人名单 in the actions column (roster is edited via drawer)', () => {
+    renderActions(baseOrder(), { canEdit: true, canGenerate: true })
+
+    expect(screen.queryByRole('button', { name: '客人名单' })).toBeNull()
+    expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
+  })
+
   it('keeps 生成应收 visible but opens 查看 (not 编辑) for 财务 (no departure:write)', () => {
     renderActions(baseOrder(), { canEdit: false, canGenerate: true })
 
@@ -181,7 +188,6 @@ describe('source orders action column', () => {
       deleteMutation: stubMutation(),
       generateMutation: stubMutation(),
       onOpen,
-      onOpenGuests: vi.fn(),
       onViewReceivables: vi.fn(),
       onViewRebate: vi.fn(),
     })

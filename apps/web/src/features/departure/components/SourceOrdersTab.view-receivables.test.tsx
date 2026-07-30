@@ -61,6 +61,7 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     guestCollectCents: 1000000,
     settlementNotes: null,
     notes: null,
+    guests: [],
     receivableStatus: 'pending',
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
