@@ -136,29 +136,32 @@ export function DepartureHeaderCard({
           <HeaderMetaItem value={`${departure.totalGuests} 人`} />
         </Space>
 
-        <Space
-          className={styles.crewLine}
-          size={[12, 4]}
-          wrap
-          aria-label="执行班组"
-        >
-          <HeaderMetaItem
-            label="司机名称"
-            value={departure.driverSupplierName?.trim() || '-'}
-          />
-          <HeaderMetaItem
-            label="导游名称"
-            value={departure.guideSupplierName?.trim() || '-'}
-          />
-          <HeaderMetaItem
-            label="司机车牌"
-            value={departure.vehiclePlate?.trim() || '-'}
-          />
-          <HeaderMetaItem
-            label="联系电话"
-            value={crewContactPhone?.trim() || '-'}
-          />
-        </Space>
+        <div className={styles.crewLine} aria-label="执行班组">
+          <div className={styles.crewCell}>
+            <span className={styles.crewLabel}>司机</span>
+            <span className={styles.crewValue}>
+              {departure.driverSupplierName?.trim() || '-'}
+            </span>
+          </div>
+          <div className={styles.crewCell}>
+            <span className={styles.crewLabel}>导游</span>
+            <span className={styles.crewValue}>
+              {departure.guideSupplierName?.trim() || '-'}
+            </span>
+          </div>
+          <div className={styles.crewCell}>
+            <span className={styles.crewLabel}>车牌</span>
+            <span className={styles.crewValue}>
+              {departure.vehiclePlate?.trim() || '-'}
+            </span>
+          </div>
+          <div className={styles.crewCell}>
+            <span className={styles.crewLabel}>电话</span>
+            <span className={styles.crewValue}>
+              {crewContactPhone?.trim() || '-'}
+            </span>
+          </div>
+        </div>
 
         <Typography.Text type="secondary" className={styles.timestamps}>
           最近更新 {formatBusinessDateTime(departure.updatedAt)}
