@@ -1,6 +1,6 @@
 /**
- * #243 护栏：发团详情不再挂载布局原型 Host / PrototypeSwitcher；
- * ?variant= 不得劫持正式工作区。
+ * #243 / #252 护栏：发团详情不再挂载布局或客源一览原型 Host / PrototypeSwitcher；
+ * ?variant= 不得劫持正式工作区（含客源管理 Tab）。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -99,7 +99,7 @@ function renderPage() {
   )
 }
 
-describe('DepartureDetailPage prototype removal (#243)', () => {
+describe('DepartureDetailPage prototype removal (#243 / #252)', () => {
   beforeEach(() => {
     navigate.mockReset()
     mockSearch = { tab: 'execution', variant: 'A' }
@@ -118,6 +118,19 @@ describe('DepartureDetailPage prototype removal (#243)', () => {
       'true',
     )
     expect(screen.getByText('执行内容')).toBeInTheDocument()
+    expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
+  })
+
+  it('selects sourceOrders tab without PrototypeSwitcher even when ?variant=A', async () => {
+    mockSearch = { tab: 'sourceOrders', variant: 'A' }
+    renderPage()
+
+    expect(await screen.findByRole('tab', { name: '客源管理' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByText('客源内容')).toBeInTheDocument()
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
   })
