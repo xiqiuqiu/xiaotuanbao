@@ -81,6 +81,32 @@ vi.mock('@/services/segment-resource.service', () => ({
   generatePayablesForSegment: vi.fn(),
 }))
 
+vi.mock('@/services/departure-resource.service', () => ({
+  listDepartureResources: vi.fn(async () => ({
+    items: [
+      {
+        id: 'departure-resource-1',
+        departureId: 'departure-1',
+        resourceKind: 'vehicle',
+        counterpartyType: 'supplier',
+        counterpartyId: 'supplier-2',
+        counterpartyName: '全程车队',
+        title: '全程用车',
+        amountCents: 500000,
+        payableStatus: 'not_generated',
+        notes: null,
+        hasPaymentSchedule: false,
+        amountFieldsLocked: false,
+      },
+    ],
+    total: 1,
+  })),
+  createDepartureResource: vi.fn(),
+  updateDepartureResource: vi.fn(),
+  deleteDepartureResource: vi.fn(),
+  generateDeparturePayable: vi.fn(),
+}))
+
 const mockDeparture = {
   id: 'departure-1',
   departureNo: 'XTB2026070003',
@@ -116,6 +142,45 @@ function renderExecutionTab() {
 describe('ExecutionTab layout', () => {
   afterEach(() => {
     cleanup()
+  })
+
+  it('stacks 成本条 → 发团级折叠 → 行程段/当日资源，并汇总金额与待生成项数', async () => {
+    renderExecutionTab()
+
+    const costStrip = await screen.findByRole('list', { name: '整团成本汇总' })
+    expect(within(costStrip).getByText('成本合计')).toBeInTheDocument()
+    expect(within(costStrip).getByText('发团级')).toBeInTheDocument()
+    expect(within(costStrip).getByText('按日')).toBeInTheDocument()
+    expect(within(costStrip).getByText('尚未生成应付')).toBeInTheDocument()
+    expect(within(costStrip).getByText('2 项待生成')).toBeInTheDocument()
+    expect(within(costStrip).getAllByText('¥8,000.00').length).toBeGreaterThanOrEqual(1)
+    expect(within(costStrip).getByText('¥5,000.00')).toBeInTheDocument()
+    expect(within(costStrip).getByText('¥3,000.00')).toBeInTheDocument()
+
+    const departureTitle = screen.getByText('发团级资源')
+    const segmentTitle = screen.getByText('行程段')
+    const resourceTitle = screen.getByText('资源安排')
+
+    expect(
+      costStrip.compareDocumentPosition(departureTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      departureTitle.compareDocumentPosition(segmentTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      segmentTitle.compareDocumentPosition(resourceTitle) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+
+    expect(screen.getByLabelText('发团级资源金额汇总')).toHaveTextContent(
+      /资源 1 项.*资源金额.*¥5,000\.00.*尚未生成应付.*¥5,000\.00/,
+    )
+    // Collapse header exposes departure-level batch generate; day pane keeps its own.
+    expect(screen.getAllByRole('button', { name: '批量生成应付' }).length).toBeGreaterThanOrEqual(
+      1,
+    )
   })
 
   it('keeps 行程段 and 资源安排 side-by-side in one nowrap row', async () => {

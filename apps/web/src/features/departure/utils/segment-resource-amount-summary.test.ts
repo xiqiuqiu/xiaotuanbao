@@ -8,6 +8,7 @@ describe('summarizeSegmentResourceAmounts', () => {
       resourceCount: 0,
       resourceAmountCents: 0,
       ungeneratedPayableCents: 0,
+      ungeneratedPayableCount: 0,
     })
   })
 
@@ -30,6 +31,7 @@ describe('summarizeSegmentResourceAmounts', () => {
       resourceCount: 2,
       resourceAmountCents: 1_120_000,
       ungeneratedPayableCents: 1_120_000,
+      ungeneratedPayableCount: 2,
     })
   })
 
@@ -56,6 +58,7 @@ describe('summarizeSegmentResourceAmounts', () => {
       resourceCount: 3,
       resourceAmountCents: 1_220_000,
       ungeneratedPayableCents: 100_000,
+      ungeneratedPayableCount: 1,
     })
   })
 
@@ -78,6 +81,7 @@ describe('summarizeSegmentResourceAmounts', () => {
       resourceCount: 2,
       resourceAmountCents: 50_000,
       ungeneratedPayableCents: 50_000,
+      ungeneratedPayableCount: 1,
     })
   })
 
@@ -96,6 +100,7 @@ describe('summarizeSegmentResourceAmounts', () => {
       resourceCount: 1,
       resourceAmountCents: 300_000,
       ungeneratedPayableCents: 0,
+      ungeneratedPayableCount: 0,
     })
   })
 })

@@ -5,9 +5,11 @@ export interface SegmentResourceAmountSummary {
   resourceCount: number
   resourceAmountCents: number
   ungeneratedPayableCents: number
+  /** Rows with 未生成且金额>0；与金额缺口同一口径。 */
+  ungeneratedPayableCount: number
 }
 
-type ResourceAmountRow = {
+export type ResourceAmountRow = {
   amountCents: number
   payableStatus: string
 }
@@ -22,6 +24,7 @@ export function summarizeSegmentResourceAmounts(
 ): SegmentResourceAmountSummary {
   let resourceAmountCents = 0
   let ungeneratedPayableCents = 0
+  let ungeneratedPayableCount = 0
 
   for (const resource of resources) {
     resourceAmountCents += resource.amountCents
@@ -31,6 +34,7 @@ export function summarizeSegmentResourceAmounts(
       resource.amountCents > 0
     ) {
       ungeneratedPayableCents += resource.amountCents
+      ungeneratedPayableCount += 1
     }
   }
 
@@ -38,5 +42,6 @@ export function summarizeSegmentResourceAmounts(
     resourceCount: resources.length,
     resourceAmountCents,
     ungeneratedPayableCents,
+    ungeneratedPayableCount,
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Alert,
   Button,
@@ -9,10 +9,12 @@ import {
   Row,
   Spin,
   message,
+  theme,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { DepartureStatus } from '@xiaotuanbao/shared'
 import type {
   DepartureDetail,
   GenerateDailySegmentsMode,
@@ -29,11 +31,14 @@ import {
   updateSegment,
 } from '@/services/segment.service'
 import { listSegmentResources } from '@/services/segment-resource.service'
+import { listDepartureResources } from '@/services/departure-resource.service'
 import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
 } from '../utils/execution-segment-selection'
+import { summarizeExecutionCostStrip } from '../utils/execution-cost-strip-summary'
 import { formValuesToPayload } from '../utils/segment-form'
+import { ExecutionCostStrip } from './ExecutionCostStrip'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { DepartureResourcePane } from './DepartureResourcePane'
 import { ExecutionSegmentListPane } from './ExecutionSegmentListPane'
@@ -92,67 +97,107 @@ function ExecutionWorkspace({
   onGenerateDaily,
   onRebuildEmpty,
 }: ExecutionWorkspaceProps) {
+  const { token } = theme.useToken()
+  const { data: departureResourceList } = useQuery({
+    queryKey: ['departure-resources', departure.id],
+    queryFn: ({ signal }) => listDepartureResources(departure.id, {}, signal),
+  })
+
+  const segmentResourceQueries = useQueries({
+    queries: segments.map((segment) => ({
+      queryKey: ['segment-resources', segment.id] as const,
+      queryFn: ({ signal }: { signal?: AbortSignal }) =>
+        listSegmentResources(segment.id, {}, signal),
+      ...operationalQueryOptions(),
+    })),
+  })
+
+  const costStripSummary = summarizeExecutionCostStrip(
+    departureResourceList?.items ?? [],
+    segmentResourceQueries.flatMap((query) => query.data?.items ?? []),
+    { departureSettled: departure.status === DepartureStatus.SETTLED },
+  )
+  const costStripReady =
+    departureResourceList !== undefined &&
+    (segments.length === 0 ||
+      segmentResourceQueries.every((query) => !query.isPending))
+
+  const stackTokenStyle = {
+    '--execution-border': token.colorBorderSecondary,
+    '--execution-fill-hover': token.colorFillQuaternary,
+    '--execution-item-bg': token.colorBgContainer,
+    '--execution-text': token.colorText,
+    '--execution-text-secondary': token.colorTextSecondary,
+    '--execution-text-tertiary': token.colorTextTertiary,
+    '--execution-warning': token.colorWarning,
+  } as CSSProperties
+
   return (
-    <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
-      <ExecutionSegmentListPane
-        segments={segments}
-        selectedSegmentId={selectedSegmentId}
-        mutationLocked={mutationLocked}
-        generatingDaily={generatingDaily}
-        onSelect={onSelect}
-        onEdit={onEdit}
-        onCreate={onCreate}
-        onGenerateDaily={onGenerateDaily}
-        onRebuildEmpty={onRebuildEmpty}
+    <div className={styles.stackLayout} style={stackTokenStyle}>
+      {costStripReady ? <ExecutionCostStrip summary={costStripSummary} /> : null}
+
+      <DepartureResourcePane
+        departure={departure}
+        readOnly={readOnly}
+        canEdit={canEdit}
+        amountReadOnly={amountReadOnly}
+        highlightDepartureResourceId={highlightDepartureResourceId}
       />
 
-      <Col
-        className={`${styles.paneCol} ${styles.resourcePaneCol}`}
-        flex="auto"
-        style={{ minWidth: 0 }}
-      >
-        <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
-          <DepartureResourcePane
-            departure={departure}
-            readOnly={readOnly}
-            canEdit={canEdit}
-            amountReadOnly={amountReadOnly}
-            highlightDepartureResourceId={highlightDepartureResourceId}
-          />
-          {segments.length === 0 ? (
-            <Empty
-              description="可按出团～回团一键生成一日一段骨架，或手工添加"
-              style={{ padding: '48px 0' }}
-            >
-              {!mutationLocked ? (
-                <div className={styles.emptyActions}>
-                  <Button
-                    type="primary"
-                    loading={generatingDaily}
-                    onClick={onGenerateDaily}
-                  >
-                    一键生成一日段
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={onCreate}>
-                    添加行程段
-                  </Button>
-                </div>
-              ) : null}
-            </Empty>
-          ) : selectedSegment ? (
-            <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-              <ExecutionResourcePane
-                departure={departure}
-                segment={selectedSegment}
-                readOnly={readOnly}
-                canEdit={canEdit}
-                amountReadOnly={amountReadOnly}
-              />
-            </div>
-          ) : null}
-        </Card>
-      </Col>
-    </Row>
+      <Row className={styles.panes} gutter={16} wrap={false} align="stretch">
+        <ExecutionSegmentListPane
+          segments={segments}
+          selectedSegmentId={selectedSegmentId}
+          mutationLocked={mutationLocked}
+          generatingDaily={generatingDaily}
+          onSelect={onSelect}
+          onEdit={onEdit}
+          onCreate={onCreate}
+          onGenerateDaily={onGenerateDaily}
+          onRebuildEmpty={onRebuildEmpty}
+        />
+
+        <Col
+          className={`${styles.paneCol} ${styles.resourcePaneCol}`}
+          flex="auto"
+          style={{ minWidth: 0 }}
+        >
+          <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
+            {segments.length === 0 ? (
+              <Empty
+                description="可按出团～回团一键生成一日一段骨架，或手工添加"
+                style={{ padding: '48px 0' }}
+              >
+                {!mutationLocked ? (
+                  <div className={styles.emptyActions}>
+                    <Button
+                      type="primary"
+                      loading={generatingDaily}
+                      onClick={onGenerateDaily}
+                    >
+                      一键生成一日段
+                    </Button>
+                    <Button icon={<PlusOutlined />} onClick={onCreate}>
+                      添加行程段
+                    </Button>
+                  </div>
+                ) : null}
+              </Empty>
+            ) : selectedSegment ? (
+              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+                <ExecutionResourcePane
+                  departure={departure}
+                  segment={selectedSegment}
+                  readOnly={readOnly}
+                  canEdit={canEdit}
+                  amountReadOnly={amountReadOnly}
+                />
+              </div>
+            ) : null}
+          </Card>
+        </Col>
+      </Row>
+    </div>
   )
 }
 
