@@ -45,6 +45,22 @@ export class CreateDepartureDto {
   @IsOptional()
   @IsString()
   templateId?: string
+
+  @IsOptional()
+  @IsString()
+  driverSupplierId?: string | null
+
+  @IsOptional()
+  @IsString()
+  guideSupplierId?: string | null
+
+  @IsOptional()
+  @IsString()
+  vehiclePlate?: string | null
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string | null
 }
 
 export class ListDeparturesQueryDto {
@@ -184,6 +200,10 @@ export class UpdateDepartureDto {
   @IsOptional()
   @IsString()
   vehiclePlate?: string | null
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string | null
 }
 
 export class TransitionDepartureDto {

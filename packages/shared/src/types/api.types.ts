@@ -776,6 +776,10 @@ export interface CreateDepartureDto {
   departureType?: string
   notes?: string
   templateId?: string
+  driverSupplierId?: string | null
+  guideSupplierId?: string | null
+  vehiclePlate?: string | null
+  contactPhone?: string | null
 }
 
 export interface CopyDepartureDto {
@@ -798,6 +802,7 @@ export interface UpdateDepartureDto {
   driverSupplierId?: string | null
   guideSupplierId?: string | null
   vehiclePlate?: string | null
+  contactPhone?: string | null
 }
 
 export interface TransitionDepartureDto {
@@ -953,6 +958,7 @@ export interface DepartureDetail extends DepartureSummary {
   guideSupplierId: string | null
   guideSupplierName: string | null
   vehiclePlate: string | null
+  contactPhone: string | null
   grossReceivableCents: number
   /** 本团全部客源单的团款调整净额合计（增项 − 减项）。 */
   fareAdjustmentNetCents: number
@@ -2008,6 +2014,7 @@ export interface DepartureOperationsSheetDepartureInfo {
   driverSupplierName: string | null
   guideSupplierName: string | null
   vehiclePlate: string | null
+  contactPhone: string | null
   status: string
   departureProgress: string
   notes: string | null

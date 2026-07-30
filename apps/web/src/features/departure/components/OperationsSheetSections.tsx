@@ -48,6 +48,7 @@ export function OperationsSheetMetaSection({ sheet }: { sheet: DepartureOperatio
           { label: '司机', children: sheet.departure.driverSupplierName || '-' },
           { label: '导游', children: sheet.departure.guideSupplierName || '-' },
           { label: '车牌', children: sheet.departure.vehiclePlate || '-' },
+          { label: '电话', children: sheet.departure.contactPhone || '-' },
           {
             label: '发团状态',
             children: catalogLabel(DEPARTURE_STATUS_LABELS, sheet.departure.status),

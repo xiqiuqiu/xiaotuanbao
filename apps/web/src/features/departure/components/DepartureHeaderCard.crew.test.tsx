@@ -38,6 +38,7 @@ function buildDeparture(
     driverSupplierName: '王师傅车队',
     guideSupplierName: '李导游',
     vehiclePlate: '新A·20601',
+    contactPhone: '13800138000',
     createdAt: '2026-07-14T00:05:59.000Z',
     updatedAt: '2026-07-14T01:06:59.000Z',
     archiveHistory: [],
@@ -65,7 +66,7 @@ describe('DepartureHeaderCard 执行班组', () => {
     expect(within(crew).getByText('王师傅车队')).toBeInTheDocument()
     expect(within(crew).getByText('李导游')).toBeInTheDocument()
     expect(within(crew).getByText('新A·20601')).toBeInTheDocument()
-    expect(within(crew).getByText('电话').parentElement).toHaveTextContent('电话-')
+    expect(within(crew).getByText('13800138000')).toBeInTheDocument()
 
     expect(screen.queryByText('司机名称')).not.toBeInTheDocument()
     expect(screen.queryByText('导游名称')).not.toBeInTheDocument()
@@ -73,13 +74,14 @@ describe('DepartureHeaderCard 执行班组', () => {
     expect(screen.queryByText('联系电话')).not.toBeInTheDocument()
   })
 
-  it('班组字段为空时显示「-」，电话无正式字段时固定为「-」', () => {
+  it('班组字段为空时显示「-」', () => {
     render(
       <DepartureHeaderCard
         departure={buildDeparture({
           driverSupplierName: null,
           guideSupplierName: '  ',
           vehiclePlate: null,
+          contactPhone: null,
         })}
         menuItems={[]}
         historyOpen={false}

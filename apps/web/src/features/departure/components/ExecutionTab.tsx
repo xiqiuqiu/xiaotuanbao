@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Empty,
-  Modal,
   Spin,
   message,
   theme,
@@ -15,7 +14,6 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import type {
   DepartureDetail,
-  GenerateDailySegmentsMode,
   GenerateDailySegmentsResult,
   ItinerarySegmentListResult,
   ItinerarySegmentSummary,
@@ -76,7 +74,6 @@ interface ExecutionWorkspaceProps {
   onCreate: () => void
   onDelete: (segment: ItinerarySegmentSummary) => void
   onGenerateDaily: () => void
-  onRebuildEmpty: () => void
 }
 
 function ExecutionWorkspace({
@@ -95,7 +92,6 @@ function ExecutionWorkspace({
   onCreate,
   onDelete,
   onGenerateDaily,
-  onRebuildEmpty,
 }: ExecutionWorkspaceProps) {
   const { token } = theme.useToken()
   const { data: departureResourceList } = useQuery({
@@ -149,13 +145,10 @@ function ExecutionWorkspace({
           segments={segments}
           selectedSegmentId={selectedSegmentId}
           mutationLocked={mutationLocked}
-          generatingDaily={generatingDaily}
           onSelect={onSelect}
           onEdit={onEdit}
           onCreate={onCreate}
           onDelete={onDelete}
-          onGenerateDaily={onGenerateDaily}
-          onRebuildEmpty={onRebuildEmpty}
         />
 
         <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
@@ -401,17 +394,12 @@ export function ExecutionTab({
   })
 
   const generateDailyMutation = useMutation({
-    mutationFn: (mode: GenerateDailySegmentsMode) =>
-      generateDailySegments(departure.id, { mode }),
+    mutationFn: () => generateDailySegments(departure.id, { mode: 'fill_missing' }),
     onSuccess: (result: GenerateDailySegmentsResult) => {
-      if (result.mode === 'rebuild_empty') {
-        message.success(
-          `已重建空段：新增 ${result.createdCount} 段，清除无资源空段 ${result.removedCount} 个`,
-        )
-      } else if (result.createdCount > 0) {
+      if (result.createdCount > 0) {
         message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程段`)
       } else {
-        message.info('出团～回团各日均已有行程段覆盖，未新增；若要重铺空段请用「重建空段」')
+        message.info('出团～回团各日均已有行程段覆盖，未新增')
       }
       if (result.preservedWithResources > 0) {
         message.info(`已保留 ${result.preservedWithResources} 个含资源的行程段`)
@@ -424,19 +412,7 @@ export function ExecutionTab({
   })
 
   const handleGenerateDaily = () => {
-    generateDailyMutation.mutate('fill_missing')
-  }
-
-  const handleRebuildEmpty = () => {
-    Modal.confirm({
-      title: '重建无资源空段？',
-      content:
-        '将删除本团全部无资源的行程段，再按出团日～回团日补齐一日一段骨架。已有资源的行程段不会被删除或覆盖。',
-      okText: '重建空段',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: () => generateDailyMutation.mutateAsync('rebuild_empty'),
-    })
+    generateDailyMutation.mutate()
   }
 
   if (isLoading) {
@@ -481,7 +457,6 @@ export function ExecutionTab({
         onCreate={openCreate}
         onDelete={(segment) => deleteMutation.mutate(segment.id)}
         onGenerateDaily={handleGenerateDaily}
-        onRebuildEmpty={handleRebuildEmpty}
       />
 
       <SegmentDrawer

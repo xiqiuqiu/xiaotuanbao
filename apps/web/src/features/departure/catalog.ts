@@ -70,7 +70,7 @@ export const DEPARTURE_PROGRESS_COLORS: Record<string, string> = {
 }
 
 export const DEPARTURE_DETAIL_TABS = [
-  { key: 'overview', label: '概览', group: 'operations' },
+  { key: 'overview', label: '概览信息', group: 'operations' },
   { key: 'sourceOrders', label: '客源管理', group: 'operations' },
   { key: 'execution', label: '执行安排', group: 'operations' },
   { key: 'incomeRecords', label: '增收记录', group: 'operations' },

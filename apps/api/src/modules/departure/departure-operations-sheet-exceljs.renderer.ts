@@ -160,6 +160,7 @@ export class ExcelJsDepartureOperationsSheetRenderer extends DepartureOperations
     row = writeKeyValue(sheet, row, '司机', snapshot.departure.driverSupplierName ?? '-')
     row = writeKeyValue(sheet, row, '导游', snapshot.departure.guideSupplierName ?? '-')
     row = writeKeyValue(sheet, row, '车牌', snapshot.departure.vehiclePlate ?? '-')
+    row = writeKeyValue(sheet, row, '电话', snapshot.departure.contactPhone ?? '-')
     row = writeKeyValue(
       sheet,
       row,

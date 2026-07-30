@@ -41,13 +41,13 @@ export function createDefaultSegmentFormValues(): SegmentFormValues {
 export function formValuesToPayload(
   values: SegmentFormValues,
 ): CreateItinerarySegmentDto & UpdateItinerarySegmentDto {
-  const startDate = values.startDate || null
-  const endDate = values.endDate || null
+  // UI exposes a single「日期」; one-day segments keep start === end.
+  const date = values.startDate || null
 
   return {
     name: values.name.trim(),
-    startDate,
-    endDate,
+    startDate: date,
+    endDate: date,
     notes: values.notes?.trim() || undefined,
     fullTicketCount: values.fullTicketCount ?? 0,
     halfTicketCount: values.halfTicketCount ?? 0,

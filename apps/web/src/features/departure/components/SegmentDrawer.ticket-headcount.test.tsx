@@ -39,7 +39,7 @@ describe('SegmentDrawer ticket type headcount #203', () => {
     cleanup()
   })
 
-  it('shows prominent mismatch warning while save remains available', async () => {
+  it('does not show ticket headcount mismatch alert or ticket count fields', async () => {
     render(
       <ConfigProvider>
         <SegmentDrawer
@@ -54,10 +54,14 @@ describe('SegmentDrawer ticket type headcount #203', () => {
       </ConfigProvider>,
     )
 
-    expect(await screen.findByText('票型人数与客源人数不一致')).toBeInTheDocument()
-    expect(
-      screen.getByText('票型人数合计（7）与本团客源人数（10）不一致，请核对。仍可保存。'),
-    ).toBeInTheDocument()
+    expect(await screen.findByLabelText('行程段名称')).toBeInTheDocument()
+    expect(screen.queryByText('票型人数与客源人数不一致')).not.toBeInTheDocument()
+    expect(screen.queryByText(/票型人数合计/)).not.toBeInTheDocument()
+    expect(screen.queryByText('票型人数')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('全')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('开始日期')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('结束日期')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('日期')).toBeInTheDocument()
 
     const saveButton = document.querySelector(
       '.ant-drawer-footer .ant-btn-primary',

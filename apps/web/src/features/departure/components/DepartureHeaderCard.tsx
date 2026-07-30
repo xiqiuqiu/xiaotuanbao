@@ -156,7 +156,10 @@ export function DepartureHeaderCard({
             label="车牌"
             value={displayOrDash(departure.vehiclePlate)}
           />
-          <HeaderMetaItem label="电话" value="-" />
+          <HeaderMetaItem
+            label="电话"
+            value={displayOrDash(departure.contactPhone)}
+          />
         </Space>
 
         <Typography.Text type="secondary" className={styles.timestamps}>

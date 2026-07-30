@@ -337,6 +337,7 @@ export class DepartureOperationsSheetService {
         driverSupplierName: departure.driverSupplier?.name ?? null,
         guideSupplierName: departure.guideSupplier?.name ?? null,
         vehiclePlate: departure.vehiclePlate,
+        contactPhone: departure.contactPhone,
         status: departure.status,
         departureProgress: deriveDepartureProgress(departure.startDate, departure.endDate),
         notes: departure.notes,

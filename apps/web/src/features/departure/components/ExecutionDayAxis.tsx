@@ -10,13 +10,10 @@ type ExecutionDayAxisProps = {
   segments: ItinerarySegmentSummary[]
   selectedSegmentId?: string
   mutationLocked: boolean
-  generatingDaily?: boolean
   onSelect: (segmentId: string) => void
   onEdit: (segment: ItinerarySegmentSummary) => void
   onCreate: () => void
   onDelete: (segment: ItinerarySegmentSummary) => void
-  onGenerateDaily: () => void
-  onRebuildEmpty: () => void
 }
 
 function formatDayAxisDate(startDate: string | null, endDate: string | null): string | null {
@@ -37,13 +34,10 @@ export function ExecutionDayAxis({
   segments,
   selectedSegmentId,
   mutationLocked,
-  generatingDaily = false,
   onSelect,
   onEdit,
   onCreate,
   onDelete,
-  onGenerateDaily,
-  onRebuildEmpty,
 }: ExecutionDayAxisProps) {
   const { token } = theme.useToken()
   const axisRef = useRef<HTMLDivElement>(null)
@@ -110,26 +104,6 @@ export function ExecutionDayAxis({
     >
       <div className={styles.dayAxisHeader}>
         <Typography.Text strong>按日资源</Typography.Text>
-        {!mutationLocked ? (
-          <div className={styles.dayAxisHeaderActions}>
-            <Button
-              size="small"
-              loading={generatingDaily}
-              aria-label="一键生成一日段"
-              onClick={onGenerateDaily}
-            >
-              一键生成一日段
-            </Button>
-            <Button
-              size="small"
-              disabled={generatingDaily || segments.length === 0}
-              aria-label="重建空段"
-              onClick={onRebuildEmpty}
-            >
-              重建空段
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       <div ref={axisRef} className={styles.dayAxis}>

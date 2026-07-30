@@ -9,7 +9,7 @@ describe('DepartureDetailNavigation', () => {
     cleanup()
   })
 
-  it('以顶栏 Tabs 展示可见功能，业务与财务仅细分隔、无分组标题，并支持切换', async () => {
+  it('以顶栏 Tabs 展示可见功能，无业务财务分隔线与分组标题，并支持切换', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
 
@@ -27,8 +27,7 @@ describe('DepartureDetailNavigation', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
     expect(screen.queryByText('业务执行')).not.toBeInTheDocument()
     expect(screen.queryByText('财务处理')).not.toBeInTheDocument()
-
-    expect(nav.querySelector('[aria-hidden="true"]')).not.toBeNull()
+    expect(nav.querySelector('[aria-hidden="true"]')).toBeNull()
 
     const executionTab = screen.getByRole('tab', { name: '执行安排' })
     expect(executionTab).toHaveAttribute('aria-selected', 'true')
@@ -62,7 +61,7 @@ describe('DepartureDetailNavigation', () => {
     expect(onChange).toHaveBeenCalledWith('sourceOrders')
   })
 
-  it('只有一组可见时不渲染业务财务分隔', () => {
+  it('只有一组可见时仍可渲染业务 Tabs', () => {
     render(
       <DepartureDetailNavigation
         activeTab="overview"
@@ -72,7 +71,7 @@ describe('DepartureDetailNavigation', () => {
     )
 
     const nav = screen.getByRole('navigation', { name: '发团详情功能导航' })
-    expect(within(nav).getByRole('tab', { name: '概览' })).toBeInTheDocument()
+    expect(within(nav).getByRole('tab', { name: '概览信息' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: '应收管理' })).not.toBeInTheDocument()
     expect(nav.querySelector('[aria-hidden="true"]')).toBeNull()
   })

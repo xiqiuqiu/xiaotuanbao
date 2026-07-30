@@ -150,7 +150,9 @@ export function CollapsibleDepartureHeader({
           </span>
           <span className={styles.headerCollapsedPair}>
             <span className={styles.headerCollapsedLabel}>电话</span>
-            <span className={styles.headerCollapsedCrewValue}>-</span>
+            <span className={styles.headerCollapsedCrewValue}>
+              {displayOrDash(departure.contactPhone)}
+            </span>
           </span>
         </span>
       </div>

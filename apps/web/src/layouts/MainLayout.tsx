@@ -32,6 +32,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed)
   const logoutPendingRef = useRef(false)
+  const prevPathnameRef = useRef<string | null>(null)
 
   const visibleMenuItems = useMemo(
     () => filterMenuItems(mainMenuItems, menuKeys),
@@ -46,6 +47,17 @@ export function MainLayout({ children }: PropsWithChildren) {
     if (pathname.startsWith('/system')) return ['system']
     return []
   })
+
+  // 进入发团管理（含子页）时默认收起侧栏，便于详情工作区；区内可手动展开且不会被反复强制收起。
+  useEffect(() => {
+    const isInsideDeparture = pathname.startsWith('/departure')
+    const wasOutside =
+      prevPathnameRef.current === null || !prevPathnameRef.current.startsWith('/departure')
+    if (isInsideDeparture && wasOutside) {
+      setSidebarCollapsed(true)
+    }
+    prevPathnameRef.current = pathname
+  }, [pathname, setSidebarCollapsed])
 
   // defaultOpenKeys 仅在首次挂载生效；从工作台跳入二级菜单时需受控同步展开父级。
   useEffect(() => {

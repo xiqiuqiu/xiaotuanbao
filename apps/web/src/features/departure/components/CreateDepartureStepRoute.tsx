@@ -5,6 +5,7 @@ import {
   Card,
   Checkbox,
   Col,
+  DatePicker,
   Empty,
   Form,
   Input,
@@ -18,6 +19,8 @@ import {
   theme,
 } from 'antd'
 import { ClockCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+import type { Dayjs } from 'dayjs'
+import dayjs from 'dayjs'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
 import styles from './CreateDepartureStepRoute.module.css'
@@ -102,6 +105,7 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
         mode: 'manual',
         routeName: values.mode === 'manual' ? values.routeName : '',
         defaultDayCount: values.mode === 'manual' ? values.defaultDayCount : undefined,
+        startDate: values.mode === 'manual' ? values.startDate : undefined,
       })
       return
     }
@@ -258,7 +262,7 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
         <div className={styles.manualPanel}>
           <Typography.Title level={5}>手动输入路线</Typography.Title>
           <Typography.Paragraph type="secondary">
-            未沉淀为常用路线时，可先填写名称和默认天数继续创建。
+            未沉淀为常用路线时，可先填写名称、出团日期和默认天数继续创建。
           </Typography.Paragraph>
           <Form layout="vertical" className={styles.manualForm}>
             <Form.Item label="路线名称" required>
@@ -267,6 +271,24 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
                 value={values.routeName}
                 onChange={(event) =>
                   onChange({ ...values, mode: 'manual', routeName: event.target.value })
+                }
+              />
+            </Form.Item>
+            <Form.Item
+              label="出团日期"
+              required
+              extra="必填，将带入下一步并用于默认团名"
+            >
+              <DatePicker
+                className={styles.fullWidth}
+                aria-label="出团日期"
+                value={values.startDate ? dayjs(values.startDate) : null}
+                onChange={(value: Dayjs | null) =>
+                  onChange({
+                    ...values,
+                    mode: 'manual',
+                    startDate: value?.format('YYYY-MM-DD'),
+                  })
                 }
               />
             </Form.Item>

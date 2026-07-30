@@ -13,6 +13,7 @@ export interface DepartureOverviewFormValues {
   driverSupplierId?: string
   guideSupplierId?: string
   vehiclePlate?: string
+  contactPhone?: string
   notes?: string
 }
 
@@ -29,6 +30,7 @@ export function departureToFormValues(departure: DepartureDetail): DepartureOver
     driverSupplierId: departure.driverSupplierId ?? undefined,
     guideSupplierId: departure.guideSupplierId ?? undefined,
     vehiclePlate: departure.vehiclePlate ?? undefined,
+    contactPhone: departure.contactPhone ?? undefined,
     notes: departure.notes ?? undefined,
   }
 }
@@ -46,6 +48,7 @@ export function buildUpdateDeparturePayload(
     driverSupplierId: values.driverSupplierId ?? null,
     guideSupplierId: values.guideSupplierId ?? null,
     vehiclePlate: values.vehiclePlate ?? null,
+    contactPhone: values.contactPhone ?? null,
     notes: values.notes ?? null,
   }
 }

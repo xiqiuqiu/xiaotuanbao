@@ -818,6 +818,7 @@ describe('Departure API (e2e)', () => {
           driverSupplierId: transportSupplierId,
           guideSupplierId,
           vehiclePlate: '新A·20601',
+          contactPhone: '13800138000',
         })
         .expect(200)
 
@@ -827,6 +828,7 @@ describe('Departure API (e2e)', () => {
         guideSupplierId,
         guideSupplierName: `${testPrefix}-crew-guide`,
         vehiclePlate: '新A·20601',
+        contactPhone: '13800138000',
       })
 
       const operationsSheet = await authRequest(app, coordinatorToken)
@@ -837,6 +839,7 @@ describe('Departure API (e2e)', () => {
         driverSupplierName: `${testPrefix}-crew-transport`,
         guideSupplierName: `${testPrefix}-crew-guide`,
         vehiclePlate: '新A·20601',
+        contactPhone: '13800138000',
       })
       expect(
         await prisma.paymentSchedule.count({
