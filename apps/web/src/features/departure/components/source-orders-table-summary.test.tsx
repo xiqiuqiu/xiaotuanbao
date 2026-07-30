@@ -35,6 +35,7 @@ function baseOrder(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSumm
     guestCollectCents: 2450000,
     settlementNotes: null,
     notes: null,
+    guests: [],
     receivableStatus: 'pending',
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
@@ -130,7 +131,6 @@ describe('renderSourceOrdersTableSummary', () => {
         mutate: () => undefined,
       } as never,
       onOpen: () => undefined,
-      onOpenGuests: () => undefined,
       onViewReceivables: () => undefined,
       onViewRebate: () => undefined,
     })

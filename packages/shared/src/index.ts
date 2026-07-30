@@ -125,6 +125,7 @@ export type {
   SourceOrderFareAdjustmentSummary,
   SourceOrderFareAdjustmentInput,
   SourceOrderSummary,
+  SourceOrderGuestNameSummary,
   SourceOrderListSummary,
   SourceOrderListResult,
   PendingReceivableSourceOrderItem,

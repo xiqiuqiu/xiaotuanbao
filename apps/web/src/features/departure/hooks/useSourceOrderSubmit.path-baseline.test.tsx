@@ -46,6 +46,7 @@ function staleListOrder(): SourceOrderSummary {
     guestCollectCents: 600000,
     settlementNotes: null,
     notes: null,
+    guests: [],
     receivableStatus: 'pending',
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,

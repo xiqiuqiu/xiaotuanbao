@@ -6,6 +6,7 @@ import {
   resolveSourceOrderAmountChange,
   resolveSourceOrderCollectionPeriods,
   resolveUpdateCollectionPeriodInputs,
+  toSourceOrderGuestNameSummaries,
 } from './source-order.utils'
 
 describe('computeSourceOrderAmounts', () => {
@@ -674,5 +675,32 @@ describe('buildSourceOrderDisplayName', () => {
 
   it('appends sequence for duplicates', () => {
     expect(buildSourceOrderDisplayName('西安某旅行社', 2)).toBe('西安某旅行社 2')
+  })
+})
+
+describe('toSourceOrderGuestNameSummaries', () => {
+  it('maps id + name in caller order and drops other fields', () => {
+    expect(
+      toSourceOrderGuestNameSummaries([
+        { id: 'g1', name: '张三', phone: '13800000000' } as { id: string; name: string },
+        { id: 'g2', name: '李四' },
+      ]),
+    ).toEqual([
+      { id: 'g1', name: '张三' },
+      { id: 'g2', name: '李四' },
+    ])
+  })
+
+  it('treats missing guests as empty (未录入)', () => {
+    expect(toSourceOrderGuestNameSummaries(undefined)).toEqual([])
+    expect(toSourceOrderGuestNameSummaries(null)).toEqual([])
+    expect(toSourceOrderGuestNameSummaries([])).toEqual([])
+  })
+
+  it('lets callers derive 未齐 when guests.length < guestCount', () => {
+    const guests = toSourceOrderGuestNameSummaries([{ id: 'g1', name: '王五' }])
+    const guestCount = 3
+    expect(guests.length).toBe(1)
+    expect(guests.length < guestCount).toBe(true)
   })
 })

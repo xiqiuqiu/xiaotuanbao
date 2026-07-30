@@ -60,37 +60,37 @@ function SourceOrdersTableSummaryRow({ pageData }: { pageData: readonly SourceOr
         <Table.Summary.Cell index={0}>
           <Typography.Text strong>合计</Typography.Text>
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={1} align="right">
+        <Table.Summary.Cell index={1}>
           <Typography.Text strong>{totals.guestCount}</Typography.Text>
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={2} align="right">
+        {/* 客人名单 */}
+        <Table.Summary.Cell index={2} />
+        {/* 收款方式 */}
+        <Table.Summary.Cell index={3} />
+        <Table.Summary.Cell index={4} align="right">
           <SummaryAmount value={totals.grossReceivableCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={3} align="right">
+        <Table.Summary.Cell index={5} align="right">
           <SummaryAmount value={totals.fareAdjustmentNetCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={4} align="right">
+        <Table.Summary.Cell index={6} align="right">
           <SummaryAmount value={totals.discountCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={5} align="right">
+        <Table.Summary.Cell index={7} align="right">
           <SummaryAmount value={totals.netReceivableCents} />
         </Table.Summary.Cell>
-        {/* 收款方式 */}
-        <Table.Summary.Cell index={6} />
-        <Table.Summary.Cell index={7} align="right">
+        <Table.Summary.Cell index={8} align="right">
           <SummaryAmount value={totals.partnerCollectedCents} />
         </Table.Summary.Cell>
-        <Table.Summary.Cell index={8} align="right">
+        <Table.Summary.Cell index={9} align="right">
           <SummaryAmount value={totals.guestCollectCents} />
         </Table.Summary.Cell>
-        {/* 应收状态 */}
-        <Table.Summary.Cell index={9} />
         <Table.Summary.Cell index={10} align="right">
           <SummaryAmount value={totals.rebateDisplayCents} />
         </Table.Summary.Cell>
-        {/* 返利状态～更新时间：无合计语义；操作列单独占位以对齐 fixed 列 */}
-        <Table.Summary.Cell index={11} colSpan={4} />
-        <Table.Summary.Cell index={15} />
+        {/* 应收状态～更新时间：无合计语义；操作列单独占位以对齐 fixed 列 */}
+        <Table.Summary.Cell index={11} colSpan={5} />
+        <Table.Summary.Cell index={16} />
       </Table.Summary.Row>
     </Table.Summary>
   )

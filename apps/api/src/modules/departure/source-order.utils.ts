@@ -386,3 +386,10 @@ export function resolveSourceOrderAmountChange(
 export function buildSourceOrderDisplayName(partnerName: string, sequence: number): string {
   return sequence > 1 ? `${partnerName} ${sequence}` : partnerName
 }
+
+/** 列表摘要轻量客人字段：按传入顺序映射 id + name（调用方保证创建序）。 */
+export function toSourceOrderGuestNameSummaries(
+  guests: ReadonlyArray<{ id: string; name: string }> | null | undefined,
+): Array<{ id: string; name: string }> {
+  return (guests ?? []).map((guest) => ({ id: guest.id, name: guest.name }))
+}

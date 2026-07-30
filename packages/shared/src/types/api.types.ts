@@ -1317,6 +1317,12 @@ export interface SourceOrderFareAdjustmentInput {
   customName?: string | null
 }
 
+/** 客源单列表摘要用的轻量客人字段（名单备忘；不回写 guestCount）。 */
+export interface SourceOrderGuestNameSummary {
+  id: string
+  name: string
+}
+
 export interface SourceOrderSummary {
   id: string
   departureId: string
@@ -1346,6 +1352,11 @@ export interface SourceOrderSummary {
   guestCollectCents: number
   settlementNotes: string | null
   notes: string | null
+  /**
+   * 按创建序的轻量客人名单（至少 id + name）。
+   * 未录 = 空数组；未齐 = guests.length < guestCount（名单不回写人数）。
+   */
+  guests: SourceOrderGuestNameSummary[]
   receivableStatus: string
   hasPaymentSchedule: boolean
   hasSourceAmountMismatch: boolean

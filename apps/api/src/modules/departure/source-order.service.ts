@@ -49,6 +49,7 @@ import {
   resolveSourceOrderAmountChange,
   resolveSourceOrderCollectionPeriods,
   resolveUpdateCollectionPeriodInputs,
+  toSourceOrderGuestNameSummaries,
   type SourceOrderFareAdjustmentInput,
 } from './source-order.utils'
 import { validateSourceOrderInput } from './source-order.validation'
@@ -71,6 +72,7 @@ type SourceOrderFareAdjustmentRow = Pick<
 type SourceOrderWithPartner = SourceOrder & {
   partner: Partner
   fareAdjustments?: SourceOrderFareAdjustmentRow[]
+  guests?: Array<{ id: string; name: string }>
 }
 
 function toFareAdjustmentInputs(
@@ -140,6 +142,7 @@ export class SourceOrderService {
       include: {
         partner: true,
         fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
       },
       orderBy: [{ createdAt: 'asc' }],
     })
@@ -343,6 +346,7 @@ export class SourceOrderService {
         include: {
           partner: true,
           fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+          guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
         },
       })
     })
@@ -631,6 +635,7 @@ export class SourceOrderService {
           partner: true,
           departure: true,
           fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+          guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
         },
       })
     })
@@ -851,6 +856,7 @@ export class SourceOrderService {
         partner: true,
         departure: true,
         fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
       },
     })
 
@@ -933,6 +939,7 @@ export class SourceOrderService {
       guestCollectCents: order.guestCollectCents,
       settlementNotes: order.settlementNotes,
       notes: order.notes,
+      guests: toSourceOrderGuestNameSummaries(order.guests),
       receivableStatus:
         scheduleMeta?.receivableStatus ?? SourceOrderReceivableStatus.NOT_GENERATED,
       hasPaymentSchedule: scheduleMeta?.hasSchedule ?? false,

@@ -50,10 +50,6 @@ vi.mock('./SourceOrderDrawer', () => ({
     open ? <div data-testid="source-order-drawer">正式客源单抽屉</div> : null,
 }))
 
-vi.mock('./SourceOrderGuestDrawer', () => ({
-  SourceOrderGuestDrawer: () => null,
-}))
-
 const departure = {
   id: 'departure-1',
   departureNo: 'XTB2026070003',

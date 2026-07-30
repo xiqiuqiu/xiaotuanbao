@@ -16,9 +16,10 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import styles from './source-orders-table-columns.module.css'
 
 interface BuildSourceOrdersColumnsOptions {
-  /** 持有 `departure:write` 且发团未关闭：显示编辑/客人名单/删除。 */
+  /** 持有 `departure:write` 且发团未关闭：显示编辑/删除。 */
   canEdit: boolean
   /** 发团未关闭（持有 `/departure`）：显示生成应收；财务只读仍可见。 */
   canGenerate: boolean
@@ -26,7 +27,6 @@ interface BuildSourceOrdersColumnsOptions {
   generateMutation: UseMutationResult<unknown, Error, string, unknown>
   /** 打开同一客源单抽屉；`viewOnly` 时只读（无写权限或发团只读）。 */
   onOpen: (record: SourceOrderSummary, viewOnly: boolean) => void
-  onOpenGuests: (record: SourceOrderSummary) => void
   onViewReceivables: (record: SourceOrderSummary) => void
   /** 跳转到发团应付并定位该客源单返利。 */
   onViewRebate: (record: SourceOrderSummary) => void
@@ -135,19 +135,62 @@ export function renderGuestCollectBreakdown(
   )
 }
 
+/** 客人名单列：顿号连接、单行省略、未录/未齐提示（名单备忘，不回写人数）。 */
+export function renderGuestRosterCell(order: SourceOrderSummary) {
+  const guests = order.guests ?? []
+  const { guestCount } = order
+
+  if (guests.length === 0) {
+    return (
+      <div className={styles.guestRoster}>
+        <span className={styles.guestRosterEmpty}>未录入</span>
+        <span className={guestCount > 0 ? styles.guestRosterWarn : styles.guestRosterSub}>
+          应录 {guestCount} 人
+        </span>
+      </div>
+    )
+  }
+
+  const names = guests.map((guest) => guest.name).join('、')
+  const incomplete = guests.length < guestCount
+
+  return (
+    <div className={styles.guestRoster}>
+      <div className={styles.guestNameEllipsis} title={names}>
+        {names}
+      </div>
+      <span className={incomplete ? styles.guestRosterWarn : styles.guestRosterSub}>
+        {guests.length}/{guestCount} 人
+        {incomplete ? ' · 未齐' : ''}
+      </span>
+    </div>
+  )
+}
+
 export function buildSourceOrdersColumns({
   canEdit,
   canGenerate,
   deleteMutation,
   generateMutation,
   onOpen,
-  onOpenGuests,
   onViewReceivables,
   onViewRebate,
 }: BuildSourceOrdersColumnsOptions): ColumnsType<SourceOrderSummary> {
   return [
     { title: '客户', dataIndex: 'partnerName', width: 140 },
-    { title: '总人数', dataIndex: 'guestCount', width: 80, align: 'right' },
+    { title: '总人数', dataIndex: 'guestCount', width: 72 },
+    {
+      title: '客人名单',
+      key: 'guests',
+      width: 180,
+      render: (_: unknown, record: SourceOrderSummary) => renderGuestRosterCell(record),
+    },
+    {
+      title: '收款方式',
+      dataIndex: 'collectionMode',
+      width: 150,
+      render: (value: string) => catalogLabel(SOURCE_ORDER_COLLECTION_LABELS, value),
+    },
     {
       title: '原始应收',
       dataIndex: 'grossReceivableCents',
@@ -177,12 +220,6 @@ export function buildSourceOrdersColumns({
       render: renderCents,
     },
     {
-      title: '收款方式',
-      dataIndex: 'collectionMode',
-      width: 150,
-      render: (value: string) => catalogLabel(SOURCE_ORDER_COLLECTION_LABELS, value),
-    },
-    {
       title: '客户已收',
       dataIndex: 'partnerCollectedCents',
       width: 120,
@@ -192,17 +229,9 @@ export function buildSourceOrdersColumns({
     {
       title: '我方代收',
       key: 'guestCollectBreakdown',
-      width: 200,
+      width: 160,
       align: 'right',
       render: (_: unknown, record: SourceOrderSummary) => renderGuestCollectBreakdown(record),
-    },
-    {
-      title: '应收状态',
-      dataIndex: 'receivableStatus',
-      width: 100,
-      render: (value: string) => (
-        <Tag>{catalogLabel(SOURCE_ORDER_RECEIVABLE_STATUS_LABELS, value)}</Tag>
-      ),
     },
     {
       title: '返利金额',
@@ -215,6 +244,14 @@ export function buildSourceOrdersColumns({
         ) : (
           <span>-</span>
         ),
+    },
+    {
+      title: '应收状态',
+      dataIndex: 'receivableStatus',
+      width: 100,
+      render: (value: string) => (
+        <Tag>{catalogLabel(SOURCE_ORDER_RECEIVABLE_STATUS_LABELS, value)}</Tag>
+      ),
     },
     {
       title: '返利状态',
@@ -234,7 +271,7 @@ export function buildSourceOrdersColumns({
       title: '操作',
       key: 'actions',
       fixed: 'right',
-      width: 320,
+      width: 280,
       render: (_: unknown, record: SourceOrderSummary) => {
         const allowGenerate = canGenerateReceivable(record)
         const viewOnly = !canEdit
@@ -254,11 +291,6 @@ export function buildSourceOrdersColumns({
             {canViewRebatePayable(record) ? (
               <Button type="link" size="small" onClick={() => onViewRebate(record)}>
                 查看返利
-              </Button>
-            ) : null}
-            {canEdit ? (
-              <Button type="link" size="small" onClick={() => onOpenGuests(record)}>
-                客人名单
               </Button>
             ) : null}
             {canGenerate && allowGenerate ? (

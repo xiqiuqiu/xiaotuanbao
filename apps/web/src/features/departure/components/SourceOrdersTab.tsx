@@ -10,8 +10,8 @@ import { listPartners } from '@/services/partner.service'
 import { listSourceOrders } from '@/services/source-order.service'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
-import { SourceOrderGuestDrawer } from './SourceOrderGuestDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
+import { SourceOrdersSettlementStrip } from './SourceOrdersSettlementStrip'
 import { buildSourceOrdersColumns } from './source-orders-table-columns'
 import { renderSourceOrdersTableSummary } from './source-orders-table-summary'
 import {
@@ -20,6 +20,7 @@ import {
   initialDrawerState,
 } from './source-orders-tab-state'
 import { EMPTY_SOURCE_ORDER_FILTERS } from '../utils/source-order-filter-state'
+import { summarizeSourceOrdersSettlementStrip } from '../utils/source-orders-settlement-strip-summary'
 import {
   confirmBatchGenerateReceivables,
   countPendingReceivables,
@@ -35,6 +36,9 @@ interface SourceOrdersTabProps {
   canEdit: boolean
   amountReadOnly?: boolean
 }
+
+/** 与方案 A 列宽之和对齐；备注列需有明确宽度。 */
+export const SOURCE_ORDERS_TABLE_SCROLL_X = 2460
 
 export function SourceOrdersTab({
   departure,
@@ -148,12 +152,13 @@ export function SourceOrdersTab({
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
 
+  const settlementStripSummary = useMemo(
+    () => summarizeSourceOrdersSettlementStrip(listResult?.items ?? []),
+    [listResult?.items],
+  )
+
   const onOpen = useCallback((order: SourceOrderSummary, viewOnly: boolean) => {
     dispatchDrawer({ type: viewOnly ? 'OPEN_VIEW' : 'OPEN_EDIT', order })
-  }, [])
-
-  const onOpenGuests = useCallback((order: SourceOrderSummary) => {
-    dispatchDrawer({ type: 'OPEN_GUESTS', order })
   }, [])
 
   const onViewReceivables = useCallback(
@@ -200,20 +205,10 @@ export function SourceOrdersTab({
         deleteMutation,
         generateMutation,
         onOpen,
-        onOpenGuests,
         onViewReceivables,
         onViewRebate,
       }),
-    [
-      deleteMutation,
-      editable,
-      generateMutation,
-      onOpen,
-      onOpenGuests,
-      onViewReceivables,
-      onViewRebate,
-      readOnly,
-    ],
+    [deleteMutation, editable, generateMutation, onOpen, onViewReceivables, onViewRebate, readOnly],
   )
 
   const partnerOptions =
@@ -274,15 +269,18 @@ export function SourceOrdersTab({
           />
         </Card>
       ) : (
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={listResult?.items ?? []}
-          scroll={{ x: 2280 }}
-          pagination={false}
-          summary={renderSourceOrdersTableSummary}
-        />
+        <>
+          <SourceOrdersSettlementStrip summary={settlementStripSummary} />
+          <Table
+            rowKey="id"
+            loading={isLoading}
+            columns={columns}
+            dataSource={listResult?.items ?? []}
+            scroll={{ x: SOURCE_ORDERS_TABLE_SCROLL_X }}
+            pagination={false}
+            summary={renderSourceOrdersTableSummary}
+          />
+        </>
       )}
 
       <SourceOrderDrawer
@@ -297,13 +295,6 @@ export function SourceOrdersTab({
         onSubmit={(payload, pathBaseline, options) => {
           void submitSourceOrder(payload, pathBaseline, options)
         }}
-      />
-
-      <SourceOrderGuestDrawer
-        open={drawer.guestDrawerOpen}
-        sourceOrder={drawer.guestOrder}
-        readOnly={!editable}
-        onClose={() => dispatchDrawer({ type: 'CLOSE_GUEST_DRAWER' })}
       />
     </div>
   )

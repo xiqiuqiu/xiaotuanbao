@@ -79,6 +79,7 @@ type SourceOrderWithRelations = SourceOrder & {
     customName: string | null
     sortOrder: number
   }>
+  guests?: Array<{ id: string; name: string }>
 }
 
 export interface SourceOrderFinanceMeta {
@@ -1411,6 +1412,7 @@ export class DepartureFinanceBridgeService {
           },
         },
         fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
       },
     })
 

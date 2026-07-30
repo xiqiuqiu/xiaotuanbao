@@ -104,6 +104,7 @@ function postReceivableSyncOrder(
     guestCollectCents: 620000,
     settlementNotes: null,
     notes: null,
+    guests: [],
     receivableStatus: 'pending',
     hasPaymentSchedule: true,
     hasSourceAmountMismatch: false,
