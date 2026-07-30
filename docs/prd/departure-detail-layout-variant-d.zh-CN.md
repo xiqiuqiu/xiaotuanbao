@@ -1,6 +1,6 @@
 # PRD：发团详情导航与执行安排布局（方案 D）
 
-**状态**：已定稿（原型验证 2026-07-30；待挂 GitHub Issue）  
+**状态**：已定稿（原型验证 2026-07-30；Issue [#237](https://github.com/xiqiuqiu/xiaotuanbao/issues/237)）  
 **Menu Key**：`/departure`（发团详情：导航 + 执行安排）  
 **域词汇**：见根目录 [CONTEXT.md](../../CONTEXT.md)（重点：Departure、Execution Arrangement、Itinerary Segment、Departure Resource、Segment Resource、Execution Crew、Cost Total、Pending Payable Generation）  
 **决议来源**：布局原型 A/B/C/D（PR [#236](https://github.com/xiqiuqiu/xiaotuanbao/pull/236)，分支 `cursor/departure-detail-layout-prototype-c893`）；用户确认 **D 款可落地**。相关能力背景见 [departure-daily-execution-crew-ground-income.zh-CN.md](./departure-daily-execution-crew-ground-income.zh-CN.md)、ADR-0034。  
