@@ -19,6 +19,7 @@ import type {
   ProtoTabKey,
 } from './types'
 import { PROTO_TABS } from './types'
+import styles from './detail-layout-prototype.module.css'
 
 export function tabLabel(key: ProtoTabKey): string {
   return PROTO_TABS.find((tab) => tab.key === key)?.label ?? key
@@ -143,21 +144,31 @@ export function buildProtoResourceColumns(options?: {
   ]
 }
 
+export function summarizeProtoResourceAmounts(resources: ProtoResource[]) {
+  let resourceAmountCents = 0
+  let ungeneratedPayableCents = 0
+  for (const item of resources) {
+    resourceAmountCents += item.amountCents
+    if (item.payableStatus === 'not_generated' && item.amountCents > 0) {
+      ungeneratedPayableCents += item.amountCents
+    }
+  }
+  return {
+    resourceCount: resources.length,
+    resourceAmountCents,
+    ungeneratedPayableCents,
+  }
+}
+
 /** Align production ExecutionResourceHeader / DepartureResourceHeader summary. */
 export function ResourceAmountSummary({ resources }: { resources: ProtoResource[] }) {
   if (resources.length === 0) return null
-  const total = resources.reduce((sum, item) => sum + item.amountCents, 0)
-  const ungeneratedPayableCents = resources.reduce(
-    (sum, item) =>
-      item.payableStatus === 'not_generated' && item.amountCents > 0
-        ? sum + item.amountCents
-        : sum,
-    0,
-  )
+  const { resourceCount, resourceAmountCents, ungeneratedPayableCents } =
+    summarizeProtoResourceAmounts(resources)
   return (
     <Typography.Text type="secondary" aria-label="资源金额汇总" style={{ fontSize: 13 }}>
-      资源 {resources.length} 项 ｜ 资源金额{' '}
-      <Typography.Text strong>{formatYuan(total)}</Typography.Text>
+      资源 {resourceCount} 项 ｜ 资源金额{' '}
+      <Typography.Text strong>{formatYuan(resourceAmountCents)}</Typography.Text>
       {ungeneratedPayableCents > 0 ? (
         <>
           {' ｜ 尚未生成应付 '}
@@ -170,6 +181,66 @@ export function ResourceAmountSummary({ resources }: { resources: ProtoResource[
         </>
       ) : null}
     </Typography.Text>
+  )
+}
+
+/** Whole-trip cost glance above split 发团级 / 按日 blocks. */
+export function ExecutionCostStrip({
+  departureResources,
+  segmentResources,
+}: {
+  departureResources: ProtoResource[]
+  segmentResources: ProtoResource[]
+}) {
+  const departure = summarizeProtoResourceAmounts(departureResources)
+  const segment = summarizeProtoResourceAmounts(segmentResources)
+  const totalCents = departure.resourceAmountCents + segment.resourceAmountCents
+  const totalCount = departure.resourceCount + segment.resourceCount
+  const ungenerated =
+    departure.ungeneratedPayableCents + segment.ungeneratedPayableCents
+  if (totalCount === 0) return null
+
+  return (
+    <div className={styles.costStrip} aria-label="整团成本汇总">
+      <div className={styles.costStripPrimary}>
+        <span className={styles.costStripLabel}>成本合计</span>
+        <span className={styles.costStripTotal}>{formatYuan(totalCents)}</span>
+        <span className={styles.costStripCount}>{totalCount} 项资源</span>
+      </div>
+      <div className={styles.costStripBreakdown}>
+        <span>
+          发团级{' '}
+          <Typography.Text strong>
+            {formatYuan(departure.resourceAmountCents)}
+          </Typography.Text>
+        </span>
+        <span className={styles.costStripSep} aria-hidden>
+          ｜
+        </span>
+        <span>
+          按日{' '}
+          <Typography.Text strong>
+            {formatYuan(segment.resourceAmountCents)}
+          </Typography.Text>
+        </span>
+        {ungenerated > 0 ? (
+          <>
+            <span className={styles.costStripSep} aria-hidden>
+              ｜
+            </span>
+            <span>
+              尚未生成应付{' '}
+              <Typography.Text
+                strong
+                style={{ color: 'var(--ant-color-warning, #faad14)' }}
+              >
+                {formatYuan(ungenerated)}
+              </Typography.Text>
+            </span>
+          </>
+        ) : null}
+      </div>
+    </div>
   )
 }
 

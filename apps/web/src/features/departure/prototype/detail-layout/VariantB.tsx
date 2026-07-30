@@ -35,6 +35,7 @@ import {
 } from './ProtoSegmentDrawer'
 import {
   buildProtoResourceColumns,
+  ExecutionCostStrip,
   PlaceholderPane,
   ResourceAmountSummary,
   ResourceTable,
@@ -380,6 +381,11 @@ export function ExecutionB({
 
   return (
     <div className={styles.stackLayout}>
+      <ExecutionCostStrip
+        departureResources={execution.departureResources}
+        segmentResources={execution.segmentResources}
+      />
+
       <Collapse
         activeKey={groupOpen ? ['departure'] : []}
         onChange={(keys) => setGroupOpen(keys.includes('departure'))}

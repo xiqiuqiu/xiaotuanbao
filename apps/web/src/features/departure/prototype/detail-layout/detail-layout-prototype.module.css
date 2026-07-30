@@ -273,6 +273,65 @@
   gap: 16px;
 }
 
+.costStrip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: linear-gradient(
+    180deg,
+    var(--ant-color-fill-quaternary) 0%,
+    var(--ant-color-bg-container) 100%
+  );
+}
+
+.costStripPrimary {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.costStripLabel {
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.costStripTotal {
+  color: var(--ant-color-text);
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.costStripCount {
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.costStripBreakdown {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.costStripSep {
+  color: var(--ant-color-border);
+}
+
 .departureCollapseLabel {
   display: inline-flex;
   align-items: center;
