@@ -28,12 +28,7 @@ export function PlaceholderPane({ tab }: { tab: ProtoTabKey }) {
   return (
     <Empty
       image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={
-        <span>
-          「{tabLabel(tab)}」占位 — 本原型只对比<strong>导航位置</strong>与
-          <strong>执行安排布局</strong>，其它页签不渲染真内容。
-        </span>
-      }
+      description={`「${tabLabel(tab)}」内容区`}
       style={{ padding: '64px 0' }}
     />
   )

@@ -13,7 +13,6 @@
  * Stub state is in-memory only; gated by ?variant= in DEV.
  */
 import { useCallback, useState } from 'react'
-import { Alert, Typography } from 'antd'
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import type { DepartureDetail } from '@/types/api'
 import { PrototypeSwitcher } from '@/components/prototype/PrototypeSwitcher'
@@ -163,38 +162,11 @@ export function DepartureDetailLayoutPrototypeHost({
     })
   }, [])
 
-  const selectedSegment = execution.segments.find(
-    (item) => item.id === execution.selectedSegmentId,
-  )
+  // Keep departure in scope so host stays typed for both embedded / standalone mounts.
+  void departure.departureNo
 
   return (
     <>
-      <Alert
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-        message="发团详情布局 UI 原型（throwaway）"
-        description={
-          <Typography.Paragraph style={{ marginBottom: 0 }}>
-            对比「页签放哪」与「执行安排如何拆发团级 / 按日资源」。数据为内存 stub（团：
-            <Typography.Text code>{departure.departureNo}</Typography.Text>
-            ），刷新重置。底部切换条或 ← → 切换
-            A/B/C/D。D 的发团级/按日资源列表点「添加/编辑」走抽屉录属性（与现网一致）。当前：
-            <Typography.Text code>{variant}</Typography.Text> · Tab{' '}
-            <Typography.Text code>{activeTab}</Typography.Text> · 焦点{' '}
-            <Typography.Text code>
-              {execution.focus === 'departure'
-                ? '全程资源'
-                : selectedSegment
-                  ? `第${selectedSegment.dayIndex}天`
-                  : '未选'}
-            </Typography.Text>{' '}
-            · 发团级 {execution.departureResources.length} / 段资源{' '}
-            {execution.segmentResources.length}
-          </Typography.Paragraph>
-        }
-      />
-
       {variant === 'A' && (
         <VariantA
           activeTab={activeTab}

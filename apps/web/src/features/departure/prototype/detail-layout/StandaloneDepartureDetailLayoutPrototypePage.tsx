@@ -1,7 +1,9 @@
 /**
  * PROTOTYPE — standalone page (no auth). Open without API/DB to compare layouts.
  */
-import { Card, Flex, Tag, Typography } from 'antd'
+import { Button, Card, Flex, Tag, Typography } from 'antd'
+import { ArrowLeftOutlined } from '@ant-design/icons'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { DepartureType, type DepartureDetail } from '@xiaotuanbao/shared'
 import { DepartureDetailLayoutPrototypeHost } from './DepartureDetailLayoutPrototypeHost'
 
@@ -20,6 +22,9 @@ const MOCK_DEPARTURE = {
 } as unknown as DepartureDetail
 
 export function StandaloneDepartureDetailLayoutPrototypePage() {
+  const navigate = useNavigate()
+  const router = useRouter()
+
   if (import.meta.env.PROD) {
     return (
       <div style={{ padding: 48 }}>
@@ -28,20 +33,39 @@ export function StandaloneDepartureDetailLayoutPrototypePage() {
     )
   }
 
+  const handleBack = () => {
+    if (router.history.canGoBack()) {
+      router.history.back()
+      return
+    }
+    void navigate({ to: '/departure' })
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#F5F5F5', padding: 24 }}>
       <Card size="small" style={{ marginBottom: 16 }}>
         <Flex justify="space-between" align="flex-start" wrap="wrap" gap={12}>
-          <div>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {MOCK_DEPARTURE.name}
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              {MOCK_DEPARTURE.departureNo} · {MOCK_DEPARTURE.routeName} ·{' '}
-              {MOCK_DEPARTURE.startDate} ~ {MOCK_DEPARTURE.endDate} ·{' '}
-              {MOCK_DEPARTURE.totalGuests} 人
-            </Typography.Text>
-          </div>
+          <Flex gap={12} align="flex-start">
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
+              aria-label="返回上一级"
+              onClick={handleBack}
+              style={{ marginTop: 2 }}
+            >
+              返回
+            </Button>
+            <div>
+              <Typography.Title level={4} style={{ margin: 0 }}>
+                {MOCK_DEPARTURE.name}
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                {MOCK_DEPARTURE.departureNo} · {MOCK_DEPARTURE.routeName} ·{' '}
+                {MOCK_DEPARTURE.startDate} ~ {MOCK_DEPARTURE.endDate} ·{' '}
+                {MOCK_DEPARTURE.totalGuests} 人
+              </Typography.Text>
+            </div>
+          </Flex>
           <Flex gap={8}>
             <Tag color="processing">行程·进行中</Tag>
             <Tag color="processing">财务·编辑中</Tag>

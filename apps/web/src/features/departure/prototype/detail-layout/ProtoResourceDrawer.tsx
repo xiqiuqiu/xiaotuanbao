@@ -124,10 +124,7 @@ export function ProtoResourceDrawer({
         </Space>
       }
     >
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        方案 D 只改列表与日程布局；种类 / 供应商 / 名称 / 金额 / 备注等属性仍走本抽屉（与现网一致）。后续字段可继续往下加。
-      </Typography.Paragraph>
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
         <Form.Item
           name="kind"
           label="资源种类"

@@ -12,43 +12,29 @@
   min-height: 480px;
 }
 
-/* Variant D — clean top tab bar (ops | finance), no 业/财 prefixes */
+/* Variant D — single-row tabs; ops | finance divider only, no group titles */
 .topTabBar {
   display: flex;
   align-items: stretch;
-  gap: 0;
   flex-wrap: wrap;
-  padding: 10px 16px 0;
-  background: var(--ant-color-fill-quaternary);
+  gap: 0;
+  padding: 0 12px;
+  background: var(--ant-color-bg-container);
   border-bottom: 1px solid var(--ant-color-border-secondary);
-}
-
-.topTabCluster {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  padding-bottom: 0;
-}
-
-.topTabGroupLabel {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ant-color-text-tertiary);
-  padding-inline: 10px;
 }
 
 .topTabList {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 0;
-  align-items: flex-end;
+  min-width: 0;
 }
 
 .topTab {
   appearance: none;
   margin: 0;
-  padding: 8px 12px 10px;
+  padding: 12px 14px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -58,15 +44,11 @@
   line-height: 1.4;
   cursor: pointer;
   white-space: nowrap;
-  transition:
-    color 100ms ease,
-    border-color 100ms ease,
-    background-color 100ms ease;
+  transition: color 100ms ease, border-color 100ms ease;
 }
 
 .topTab:hover {
   color: var(--ant-color-text);
-  background: var(--ant-color-bg-container);
 }
 
 .topTab:focus-visible {
@@ -78,27 +60,49 @@
   color: var(--ant-color-primary);
   font-weight: 600;
   border-bottom-color: var(--ant-color-primary);
-  background: var(--ant-color-bg-container);
 }
 
 .topTabDivider {
   width: 1px;
-  align-self: stretch;
-  margin: 8px 8px 10px;
+  align-self: center;
+  height: 16px;
+  margin: 0 4px;
   background: var(--ant-color-border);
   flex: 0 0 1px;
 }
 
+.dayResourcePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: var(--ant-color-bg-container);
+}
+
+.dayDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.dayDetailTable {
+  margin-top: 0;
+}
+
 @media (max-width: 767px) {
   .topTabBar {
-    flex-direction: column;
-    padding-bottom: 0;
+    padding-inline: 8px;
+  }
+
+  .topTab {
+    padding: 10px 10px;
   }
 
   .topTabDivider {
-    width: auto;
-    height: 1px;
-    margin: 4px 0 0;
+    display: none;
   }
 }
 

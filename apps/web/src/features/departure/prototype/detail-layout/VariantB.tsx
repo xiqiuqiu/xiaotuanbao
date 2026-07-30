@@ -7,7 +7,6 @@
 import { useMemo, useState } from 'react'
 import {
   Button,
-  Card,
   Collapse,
   Empty,
   Flex,
@@ -32,8 +31,8 @@ import {
 import {
   buildProtoResourceColumns,
   PlaceholderPane,
+  ResourceAmountSummary,
   ResourceTable,
-  SectionTitle,
   segmentMeta,
 } from './shared'
 import type {
@@ -306,9 +305,6 @@ export function ExecutionB({
                 <Typography.Text type="secondary">
                   合计 {formatYuan(depTotal)}
                 </Typography.Text>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  列表扫一眼；点「添加 / 编辑」在抽屉录全量属性
-                </Typography.Text>
               </Space>
             ),
             extra: (
@@ -345,15 +341,14 @@ export function ExecutionB({
         ]}
       />
 
-      <Card
-        size="small"
-        title="按日资源（酒店 / 门票）"
-        extra={
+      <section className={styles.dayResourcePanel} aria-label="按日资源">
+        <Flex align="center" justify="space-between" gap={12} wrap="wrap">
+          <Typography.Text strong>按日资源</Typography.Text>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            可按出团日一键生成后，再人工增删天数
+            酒店 / 门票按天录入
           </Typography.Text>
-        }
-      >
+        </Flex>
+
         <div className={styles.timeline}>
           {execution.segments.map((segment) => {
             const count = countResourcesForSegment(execution, segment.id)
@@ -403,7 +398,7 @@ export function ExecutionB({
                       title: `删除第${segment.dayIndex}天？`,
                       content:
                         resourceCount > 0
-                          ? `该日有 ${resourceCount} 项资源，删除后一并移除（原型内存态）。`
+                          ? `该日有 ${resourceCount} 项资源，删除后一并移除。`
                           : '删除后可再「添加一天」补回。后续天数会重新编号。',
                       okText: '删除',
                       okButtonProps: { danger: true },
@@ -438,19 +433,35 @@ export function ExecutionB({
         </div>
 
         {selected?.segment ? (
-          <>
-            <SectionTitle
-              title={`第${selected.segment.dayIndex}天 · 资源安排`}
-              hint={`${selected.segment.date} · ${selected.segment.overview}`}
-            />
-            <ResourceTable
-              resources={selected.resources}
-              emptyText="本段暂无酒店/门票等资源"
-              onAdd={() => openSegmentDrawer()}
-              onEdit={(resource) => openSegmentDrawer(resource)}
-              showSummary
-            />
-          </>
+          <div className={styles.dayDetail}>
+            <Flex align="center" justify="space-between" gap={12} wrap="wrap">
+              <div>
+                <Typography.Text strong>
+                  第{selected.segment.dayIndex}天
+                </Typography.Text>
+                <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                  {selected.segment.date} · {selected.segment.overview}
+                </Typography.Text>
+              </div>
+              <Flex align="center" gap={16} wrap="wrap">
+                <ResourceAmountSummary resources={selected.resources} />
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => openSegmentDrawer()}
+                >
+                  添加资源
+                </Button>
+              </Flex>
+            </Flex>
+            <div className={styles.dayDetailTable}>
+              <ResourceTable
+                resources={selected.resources}
+                emptyText="本段暂无酒店/门票等资源"
+                onEdit={(resource) => openSegmentDrawer(resource)}
+              />
+            </div>
+          </div>
         ) : (
           <Empty
             description="暂无行程天，可点「添加一天」手工补段"
@@ -465,7 +476,7 @@ export function ExecutionB({
             </Button>
           </Empty>
         )}
-      </Card>
+      </section>
 
       <ProtoResourceDrawer
         open={drawer.open}
