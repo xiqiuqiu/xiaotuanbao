@@ -4,6 +4,7 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
+    "prototype:departure-detail-layout": "node ./apps/web/src/features/departure/prototype/detail-layout/run.mjs",
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter api build",
     "preview:web": "pnpm --filter web preview",

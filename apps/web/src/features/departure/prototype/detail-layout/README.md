@@ -1,0 +1,30 @@
+# PROTOTYPE — 发团详情导航 + 执行安排布局
+
+> Throwaway. Answers one question, then gets folded or discarded.
+
+## Question
+
+1. 发团详情里「概览 / 客源 / 增收 / 应收 / 应付…」这些 Tab **放哪里**更便于操作？
+2. 执行安排如何布局：**发团级资源**（全程统一录入）与 **按日资源**（酒店、门票）互不抢空间？
+
+| Key | 方案 | 导航 | 执行安排 |
+|---|---|---|---|
+| A | 顶栏页签 · 全程伪日段 | 横向 Tabs（业务/财务同级） | 左侧日轨第一项=「全程资源」；选日只看当日 |
+| B | 两级导航 · 横向日程轴 | 先业务/财务，再组内胶囊 | 发团级顶部折叠条；日程横向轴；主区仅当日 |
+| C | 图标轨 · 种类×日期矩阵 | 窄图标轨 | 发团级顶条 + 酒店/门票矩阵 |
+
+## Run
+
+```bash
+pnpm prototype:departure-detail-layout
+```
+
+然后登录，打开任意发团详情（脚本会提示带 `variant` 的 URL），或直接访问：
+
+```
+http://localhost:5173/departure/<departureId>?tab=execution&variant=A
+```
+
+- 底部黑色切换条 / 键盘 ← → 切换 A|B|C
+- 数据为内存 stub，刷新重置
+- 生产构建忽略 `variant`，不挂载本原型

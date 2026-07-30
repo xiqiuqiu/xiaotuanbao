@@ -12,6 +12,10 @@ import { ApiError } from '@/lib/request/client'
 import { DepartureHeader } from '../components/DepartureHeader'
 import { DepartureDetailWorkspace } from '../components/DepartureDetailWorkspace'
 import {
+  DepartureDetailLayoutPrototypeHost,
+  isDepartureDetailLayoutPrototypeActive,
+} from '../prototype/detail-layout/DepartureDetailLayoutPrototypeHost'
+import {
   DEPARTURE_DETAIL_TABS,
   isDepartureDetailTabKey,
   isDepartureDetailTabVisible,
@@ -61,11 +65,17 @@ export function DepartureDetailPage() {
         tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
+        // PROTOTYPE — preserve layout variant while exploring
+        ...(typeof search.variant === 'string' && search.variant
+          ? { variant: search.variant }
+          : {}),
       },
       // Keep a single detail history entry so「返回」reaches the jump source.
       replace: true,
     })
   }
+
+  const layoutPrototypeActive = isDepartureDetailLayoutPrototypeActive(search.variant)
 
   const handleUpdated = () => {
     queryClient.invalidateQueries({ queryKey: ['departure', departureId] })
@@ -147,14 +157,18 @@ export function DepartureDetailPage() {
       />
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
 
-      <DepartureDetailWorkspace
-        departure={departure}
-        activeTab={activeTab}
-        menuKeys={menuKeys}
-        canEdit={canEdit}
-        search={search}
-        onTabChange={handleTabChange}
-      />
+      {layoutPrototypeActive ? (
+        <DepartureDetailLayoutPrototypeHost departure={departure} />
+      ) : (
+        <DepartureDetailWorkspace
+          departure={departure}
+          activeTab={activeTab}
+          menuKeys={menuKeys}
+          canEdit={canEdit}
+          search={search}
+          onTabChange={handleTabChange}
+        />
+      )}
     </div>
   )
 }

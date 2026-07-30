@@ -1,0 +1,208 @@
+/**
+ * PROTOTYPE host — Three variants of departure detail navigation + execution layout.
+ *
+ * Question:
+ * 1) 发团详情业务/财务 Tab 放哪里更便于操作？
+ * 2) 执行安排如何拆开发团级资源（统一录入）与按日资源（酒店/门票）？
+ *
+ * - A 顶栏页签 · 「全程」伪日段
+ * - B 业务/财务两级导航 · 横向日程轴
+ * - C 窄图标轨 · 种类×日期矩阵
+ *
+ * Stub state is in-memory only; gated by ?variant= in DEV.
+ */
+import { useCallback, useState } from 'react'
+import { Alert, Typography } from 'antd'
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router'
+import type { DepartureDetail } from '@/types/api'
+import { PrototypeSwitcher } from '@/components/prototype/PrototypeSwitcher'
+import { createInitialExecutionState } from './mock-data'
+import { VariantA, VARIANT_A_META } from './VariantA'
+import { VariantB, VARIANT_B_META } from './VariantB'
+import { VariantC, VARIANT_C_META } from './VariantC'
+import type { ProtoExecutionState, ProtoTabKey } from './types'
+import { PROTO_TABS } from './types'
+
+const VARIANTS = [VARIANT_A_META, VARIANT_B_META, VARIANT_C_META] as const
+type VariantKey = (typeof VARIANTS)[number]['key']
+const VARIANT_KEYS: ReadonlySet<string> = new Set(VARIANTS.map((item) => item.key))
+
+function resolveVariant(raw: unknown): VariantKey {
+  if (typeof raw === 'string' && VARIANT_KEYS.has(raw)) {
+    return raw as VariantKey
+  }
+  return 'A'
+}
+
+function resolveTab(raw: unknown): ProtoTabKey {
+  if (typeof raw === 'string' && PROTO_TABS.some((tab) => tab.key === raw)) {
+    return raw as ProtoTabKey
+  }
+  return 'execution'
+}
+
+type DepartureDetailLayoutPrototypeHostProps = {
+  departure: DepartureDetail
+}
+
+export function DepartureDetailLayoutPrototypeHost({
+  departure,
+}: DepartureDetailLayoutPrototypeHostProps) {
+  const { departureId } = useParams({ strict: false })
+  const search = useSearch({ strict: false })
+  const navigate = useNavigate()
+  const [execution, setExecution] = useState<ProtoExecutionState>(createInitialExecutionState)
+
+  const variant = resolveVariant(search.variant)
+  const activeTab = resolveTab(search.tab)
+
+  const patchSearch = useCallback(
+    (patch: { variant?: string; tab?: string }) => {
+      if (!departureId) return
+      navigate({
+        to: '/departure/$departureId',
+        params: { departureId },
+        search: {
+          tab: patch.tab ?? activeTab,
+          variant: patch.variant ?? variant,
+          ...(typeof search.listReturn === 'string' && search.listReturn
+            ? { listReturn: search.listReturn }
+            : {}),
+        },
+        replace: true,
+      })
+    },
+    [activeTab, departureId, navigate, search.listReturn, variant],
+  )
+
+  const onVariantChange = useCallback(
+    (key: string) => patchSearch({ variant: key }),
+    [patchSearch],
+  )
+
+  const onTabChange = useCallback(
+    (tab: ProtoTabKey) => patchSearch({ tab }),
+    [patchSearch],
+  )
+
+  const onAddDepartureResource = useCallback(() => {
+    setExecution((prev) => ({
+      ...prev,
+      focus: 'departure',
+      selectedSegmentId: null,
+      departureResources: [
+        ...prev.departureResources,
+        {
+          id: `dr-new-${Date.now()}`,
+          kind: '其他',
+          title: `原型新增全程资源 ${prev.departureResources.length + 1}`,
+          supplier: '演示供应商',
+          amountCents: 10000,
+          scope: 'departure',
+        },
+      ],
+    }))
+  }, [])
+
+  const onAddSegmentResource = useCallback((segmentId?: string) => {
+    setExecution((prev) => {
+      const targetId =
+        segmentId ?? prev.selectedSegmentId ?? prev.segments[0]?.id
+      if (!targetId) return prev
+      return {
+        ...prev,
+        focus: 'segment',
+        selectedSegmentId: targetId,
+        segmentResources: [
+          ...prev.segmentResources,
+          {
+            id: `sr-new-${Date.now()}`,
+            kind: prev.segmentResources.length % 2 === 0 ? '酒店' : '门票',
+            title: `原型新增按日资源 ${prev.segmentResources.length + 1}`,
+            supplier: '演示供应商',
+            amountCents: 8800,
+            scope: 'segment',
+            segmentId: targetId,
+          },
+        ],
+      }
+    })
+  }, [])
+
+  const selectedSegment = execution.segments.find(
+    (item) => item.id === execution.selectedSegmentId,
+  )
+
+  return (
+    <>
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="发团详情布局 UI 原型（throwaway）"
+        description={
+          <Typography.Paragraph style={{ marginBottom: 0 }}>
+            对比「页签放哪」与「执行安排如何拆发团级 / 按日资源」。数据为内存 stub（团：
+            <Typography.Text code>{departure.departureNo}</Typography.Text>
+            ），刷新重置。底部切换条或 ← → 切换 A/B/C。当前：
+            <Typography.Text code>{variant}</Typography.Text> · Tab{' '}
+            <Typography.Text code>{activeTab}</Typography.Text> · 焦点{' '}
+            <Typography.Text code>
+              {execution.focus === 'departure'
+                ? '全程资源'
+                : selectedSegment
+                  ? `第${selectedSegment.dayIndex}天`
+                  : '未选'}
+            </Typography.Text>{' '}
+            · 发团级 {execution.departureResources.length} / 段资源{' '}
+            {execution.segmentResources.length}
+          </Typography.Paragraph>
+        }
+      />
+
+      {variant === 'A' && (
+        <VariantA
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          execution={execution}
+          onExecutionChange={setExecution}
+          onAddDepartureResource={onAddDepartureResource}
+          onAddSegmentResource={onAddSegmentResource}
+        />
+      )}
+      {variant === 'B' && (
+        <VariantB
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          execution={execution}
+          onExecutionChange={setExecution}
+          onAddDepartureResource={onAddDepartureResource}
+          onAddSegmentResource={onAddSegmentResource}
+        />
+      )}
+      {variant === 'C' && (
+        <VariantC
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          execution={execution}
+          onExecutionChange={setExecution}
+          onAddDepartureResource={onAddDepartureResource}
+          onAddSegmentResource={onAddSegmentResource}
+        />
+      )}
+
+      <PrototypeSwitcher
+        variants={[...VARIANTS]}
+        current={variant}
+        onChange={onVariantChange}
+      />
+    </>
+  )
+}
+
+export function isDepartureDetailLayoutPrototypeActive(
+  variant: unknown,
+): boolean {
+  if (import.meta.env.PROD) return false
+  return typeof variant === 'string' && VARIANT_KEYS.has(variant)
+}
