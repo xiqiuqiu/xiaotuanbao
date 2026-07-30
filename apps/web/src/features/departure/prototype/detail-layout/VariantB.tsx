@@ -18,7 +18,7 @@ import {
   Typography,
   message,
 } from 'antd'
-import { CloseOutlined, PlusOutlined } from '@ant-design/icons'
+import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   countResourcesForSegment,
@@ -30,6 +30,10 @@ import {
   ProtoResourceDrawer,
   type ProtoResourceDraft,
 } from './ProtoResourceDrawer'
+import {
+  ProtoSegmentDrawer,
+  type ProtoSegmentDraft,
+} from './ProtoSegmentDrawer'
 import {
   buildProtoResourceColumns,
   PlaceholderPane,
@@ -220,6 +224,7 @@ export function ExecutionB({
     scope: 'departure',
     editing: null,
   })
+  const [segmentEditor, setSegmentEditor] = useState<ProtoSegment | null>(null)
   const selectedId = execution.selectedSegmentId ?? execution.segments[0]?.id
   const selected = selectedId ? segmentMeta(execution, selectedId) : null
   const depTotal = execution.departureResources.reduce(
@@ -233,6 +238,30 @@ export function ExecutionB({
 
   const openSegmentDrawer = (editing: ProtoResource | null = null) => {
     setDrawer({ open: true, scope: 'segment', editing })
+  }
+
+  const openDayEditor = (segment: ProtoSegment) => {
+    setSegmentEditor(segment)
+  }
+
+  const saveDayEditor = (draft: ProtoSegmentDraft) => {
+    if (!segmentEditor) return
+    onExecutionChange({
+      ...execution,
+      segments: execution.segments.map((item) =>
+        item.id === segmentEditor.id
+          ? {
+              ...item,
+              overview: draft.overview.trim(),
+              date: draft.date.format('YYYY-MM-DD'),
+            }
+          : item,
+      ),
+      selectedSegmentId: segmentEditor.id,
+      focus: 'segment',
+    })
+    message.success('行程段已更新')
+    setSegmentEditor(null)
   }
 
   const handleSave = (
@@ -497,6 +526,18 @@ export function ExecutionB({
                 </button>
                 <button
                   type="button"
+                  className={styles.timelineChipEdit}
+                  aria-label={`编辑第${segment.dayIndex}天名称`}
+                  title="编辑行程段名称"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openDayEditor(segment)
+                  }}
+                >
+                  <EditOutlined />
+                </button>
+                <button
+                  type="button"
                   className={styles.timelineChipRemove}
                   aria-label={`删除第${segment.dayIndex}天`}
                   title="删除这一天"
@@ -538,9 +579,11 @@ export function ExecutionB({
             onClick={() => {
               const next = addSegmentDay(execution)
               onExecutionChange(next)
+              const created = next.segments[next.segments.length - 1]
               message.success(
-                `已添加第${next.segments[next.segments.length - 1]?.dayIndex}天`,
+                `已添加第${created?.dayIndex}天，请填写行程段名称`,
               )
+              if (created) openDayEditor(created)
             }}
           >
             <PlusOutlined />
@@ -551,14 +594,22 @@ export function ExecutionB({
         {selected?.segment ? (
           <div className={styles.dayDetail}>
             <Flex align="center" justify="space-between" gap={12} wrap="wrap">
-              <div>
+              <Flex align="center" gap={8} wrap="wrap">
                 <Typography.Text strong>
                   第{selected.segment.dayIndex}天
                 </Typography.Text>
-                <Typography.Text type="secondary" style={{ marginLeft: 8 }}>
+                <Typography.Text type="secondary">
                   {selected.segment.date} · {selected.segment.overview}
                 </Typography.Text>
-              </div>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openDayEditor(selected.segment!)}
+                >
+                  编辑行程段
+                </Button>
+              </Flex>
               <Flex align="center" gap={12} wrap="wrap">
                 <ResourceAmountSummary resources={selected.resources} />
                 {segmentGap?.hasGap ? (
@@ -611,6 +662,13 @@ export function ExecutionB({
         editing={drawer.editing}
         onClose={() => setDrawer({ open: false, scope: 'departure', editing: null })}
         onSave={handleSave}
+      />
+
+      <ProtoSegmentDrawer
+        open={Boolean(segmentEditor)}
+        editing={segmentEditor}
+        onClose={() => setSegmentEditor(null)}
+        onSave={saveDayEditor}
       />
     </div>
   )
