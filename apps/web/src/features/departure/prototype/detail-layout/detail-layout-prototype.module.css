@@ -286,12 +286,9 @@
   display: inline-flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 0 8px;
   min-width: 0;
   padding-left: 12px;
   border-left: 1px solid var(--ant-color-border-secondary);
-  color: var(--ant-color-text-secondary);
-  font-size: 13px;
   line-height: 1.4;
 }
 

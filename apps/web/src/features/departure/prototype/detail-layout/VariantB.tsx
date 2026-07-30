@@ -22,7 +22,6 @@ import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   countResourcesForSegment,
-  formatYuan,
   payableGenerationGap,
   resourcesForSegment,
 } from './mock-data'
@@ -227,10 +226,6 @@ export function ExecutionB({
   const [segmentEditor, setSegmentEditor] = useState<ProtoSegment | null>(null)
   const selectedId = execution.selectedSegmentId ?? execution.segments[0]?.id
   const selected = selectedId ? segmentMeta(execution, selectedId) : null
-  const depTotal = execution.departureResources.reduce(
-    (sum, item) => sum + item.amountCents,
-    0,
-  )
 
   const openDepartureDrawer = (editing: ProtoResource | null = null) => {
     setDrawer({ open: true, scope: 'departure', editing })
@@ -342,13 +337,9 @@ export function ExecutionB({
     : '本段资源'
 
   const departureUngenerated = countUngenerated(execution.departureResources)
-  const departureGap = payableGenerationGap(execution.departureResources)
   const segmentUngenerated = selected
     ? countUngenerated(selected.resources)
     : 0
-  const segmentGap = selected
-    ? payableGenerationGap(selected.resources)
-    : null
 
   const confirmBatchGenerate = (scope: 'departure' | 'segment') => {
     const count =
@@ -398,31 +389,11 @@ export function ExecutionB({
             label: (
               <div className={styles.departureCollapseLabel}>
                 <Typography.Text strong>发团级资源（全程）</Typography.Text>
-                <Tag color="blue" style={{ marginInlineEnd: 0 }}>
-                  {execution.departureResources.length} 项
-                </Tag>
                 {execution.departureResources.length > 0 ? (
-                  <span
-                    className={styles.departureCollapseMeta}
-                    aria-label="发团级资源汇总"
-                  >
-                    <span>
-                      合计{' '}
-                      <Typography.Text strong>{formatYuan(depTotal)}</Typography.Text>
-                    </span>
-                    {departureGap.hasGap ? (
-                      <>
-                        <span className={styles.metaSep} aria-hidden>
-                          ｜
-                        </span>
-                        <span
-                          className={styles.genProgress}
-                          title={`还有 ${departureGap.ungenerated} 项未生成应付`}
-                        >
-                          生成 {departureGap.generated}/{departureGap.total}
-                        </span>
-                      </>
-                    ) : null}
+                  <span className={styles.departureCollapseMeta}>
+                    <ResourceAmountSummary
+                      resources={execution.departureResources}
+                    />
                   </span>
                 ) : null}
               </div>
@@ -432,10 +403,9 @@ export function ExecutionB({
                 {departureUngenerated > 0 ? (
                   <Button
                     size="small"
-                    title="批量生成应付"
                     onClick={() => confirmBatchGenerate('departure')}
                   >
-                    批量生成
+                    批量生成应付
                   </Button>
                 ) : null}
                 <Button
@@ -623,30 +593,14 @@ export function ExecutionB({
               </div>
               <div className={styles.dayDetailActions}>
                 {selected.resources.length > 0 ? (
-                  <span className={styles.dayDetailMeta} aria-label="当日资源汇总">
-                    <ResourceAmountSummary resources={selected.resources} />
-                    {segmentGap?.hasGap ? (
-                      <>
-                        <span className={styles.metaSep} aria-hidden>
-                          ｜
-                        </span>
-                        <span
-                          className={styles.genProgress}
-                          title={`还有 ${segmentGap.ungenerated} 项未生成应付`}
-                        >
-                          生成 {segmentGap.generated}/{segmentGap.total}
-                        </span>
-                      </>
-                    ) : null}
-                  </span>
+                  <ResourceAmountSummary resources={selected.resources} />
                 ) : null}
                 {segmentUngenerated > 0 ? (
                   <Button
                     size="small"
-                    title="批量生成应付"
                     onClick={() => confirmBatchGenerate('segment')}
                   >
-                    批量生成
+                    批量生成应付
                   </Button>
                 ) : null}
                 <Button

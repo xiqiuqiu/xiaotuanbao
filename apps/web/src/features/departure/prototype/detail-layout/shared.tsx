@@ -143,19 +143,33 @@ export function buildProtoResourceColumns(options?: {
   ]
 }
 
+/** Align production ExecutionResourceHeader / DepartureResourceHeader summary. */
 export function ResourceAmountSummary({ resources }: { resources: ProtoResource[] }) {
   if (resources.length === 0) return null
   const total = resources.reduce((sum, item) => sum + item.amountCents, 0)
+  const ungeneratedPayableCents = resources.reduce(
+    (sum, item) =>
+      item.payableStatus === 'not_generated' && item.amountCents > 0
+        ? sum + item.amountCents
+        : sum,
+    0,
+  )
   return (
-    <>
-      <span>{resources.length} 项</span>
-      <span style={{ color: 'var(--ant-color-border)' }} aria-hidden>
-        ｜
-      </span>
-      <span>
-        合计 <Typography.Text strong>{formatYuan(total)}</Typography.Text>
-      </span>
-    </>
+    <Typography.Text type="secondary" aria-label="资源金额汇总" style={{ fontSize: 13 }}>
+      资源 {resources.length} 项 ｜ 资源金额{' '}
+      <Typography.Text strong>{formatYuan(total)}</Typography.Text>
+      {ungeneratedPayableCents > 0 ? (
+        <>
+          {' ｜ 尚未生成应付 '}
+          <Typography.Text
+            strong
+            style={{ color: 'var(--ant-color-warning, #faad14)' }}
+          >
+            {formatYuan(ungeneratedPayableCents)}
+          </Typography.Text>
+        </>
+      ) : null}
+    </Typography.Text>
   )
 }
 
