@@ -24,6 +24,23 @@ type DepartureHeaderCardProps = {
   primaryAction?: { label: string; onClick: () => void } | null
   historyOpen: boolean
   onHistoryOpenChange: (open: boolean) => void
+  /** Optional on-site contact phone (prototype / future crew field). */
+  crewContactPhone?: string | null
+}
+
+function HeaderMetaItem({
+  label,
+  value,
+}: {
+  label?: string
+  value: string
+}) {
+  return (
+    <Typography.Text type="secondary" className={styles.metaItem}>
+      {label ? <span className={styles.metaItemLabel}>{label}</span> : null}
+      <span className={styles.metaItemValue}>{value}</span>
+    </Typography.Text>
+  )
 }
 
 export function DepartureHeaderCard({
@@ -32,6 +49,7 @@ export function DepartureHeaderCard({
   primaryAction = null,
   historyOpen,
   onHistoryOpenChange,
+  crewContactPhone,
 }: DepartureHeaderCardProps) {
   const navigate = useNavigate()
   const router = useRouter()
@@ -109,15 +127,37 @@ export function DepartureHeaderCard({
           className={styles.metaLine}
           size={[8, 2]}
           wrap
-          separator={<Typography.Text type="secondary">·</Typography.Text>}
+          separator={<span className={styles.metaSep} aria-hidden>·</span>}
         >
-          <Typography.Text type="secondary">{departure.departureNo}</Typography.Text>
-          <Typography.Text type="secondary">{departure.routeName}</Typography.Text>
-          <Typography.Text type="secondary">
-            {departure.startDate} ~ {departure.endDate}
-          </Typography.Text>
-          <Typography.Text type="secondary">负责人 {ownerLabel}</Typography.Text>
-          <Typography.Text type="secondary">{departure.totalGuests} 人</Typography.Text>
+          <HeaderMetaItem value={departure.departureNo} />
+          <HeaderMetaItem value={departure.routeName} />
+          <HeaderMetaItem value={`${departure.startDate} ~ ${departure.endDate}`} />
+          <HeaderMetaItem label="负责人" value={ownerLabel} />
+          <HeaderMetaItem value={`${departure.totalGuests} 人`} />
+        </Space>
+
+        <Space
+          className={styles.crewLine}
+          size={[12, 4]}
+          wrap
+          aria-label="执行班组"
+        >
+          <HeaderMetaItem
+            label="司机名称"
+            value={departure.driverSupplierName?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="导游名称"
+            value={departure.guideSupplierName?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="司机车牌"
+            value={departure.vehiclePlate?.trim() || '-'}
+          />
+          <HeaderMetaItem
+            label="联系电话"
+            value={crewContactPhone?.trim() || '-'}
+          />
         </Space>
 
         <Typography.Text type="secondary" className={styles.timestamps}>

@@ -37,6 +37,39 @@
   min-width: 0;
 }
 
+.crewLine {
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.metaSep {
+  color: var(--ant-color-text-quaternary, var(--ant-color-text-tertiary));
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.metaItemLabel {
+  color: var(--ant-color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.metaItemValue {
+  color: var(--ant-color-text-secondary);
+  min-width: 0;
+}
+
+.crewLine .metaItemValue {
+  color: var(--ant-color-text);
+  font-weight: 500;
+}
+
 .timestamps {
   font-size: 12px;
 }
