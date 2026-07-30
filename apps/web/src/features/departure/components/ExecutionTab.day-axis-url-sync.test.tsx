@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
-import { createSegment, listSegments } from '@/services/segment.service'
 import { ExecutionTab } from './ExecutionTab'
 
 type SearchState = {
@@ -28,15 +27,15 @@ vi.mock('@tanstack/react-router', () => ({
   useSearch: () => searchState,
 }))
 
-const existingSegment: ItinerarySegmentSummary = {
+const day1: ItinerarySegmentSummary = {
   id: 'segment-1',
   departureId: 'departure-1',
-  name: '喀纳斯',
+  name: '西栅夜游',
   sortOrder: 0,
-  startDate: '2026-07-13',
-  endDate: '2026-07-15',
-  dayCount: 3,
-  destination: null,
+  startDate: '2026-07-14',
+  endDate: '2026-07-14',
+  dayCount: 1,
+  destination: '乌镇西栅',
   notes: null,
   fullTicketCount: 0,
   halfTicketCount: 0,
@@ -44,61 +43,48 @@ const existingSegment: ItinerarySegmentSummary = {
   freeTicketCount: 0,
   hasTicketHeadcountMismatch: false,
   pendingCheck: false,
-  resourceCount: 2,
+  resourceCount: 1,
   outsourceCount: 0,
-  resourceAmountCents: 568000,
-  payableGeneratedCount: 1,
-  payableStatus: 'partially_paid',
-}
-
-const createdSegment: ItinerarySegmentSummary = {
-  id: 'segment-new',
-  departureId: 'departure-1',
-  name: '新建段',
-  sortOrder: 1,
-  startDate: null,
-  endDate: null,
-  dayCount: 0,
-  destination: null,
-  notes: null,
-  fullTicketCount: 0,
-  halfTicketCount: 0,
-  studentTicketCount: 0,
-  freeTicketCount: 0,
-  hasTicketHeadcountMismatch: false,
-  pendingCheck: false,
-  resourceCount: 0,
-  outsourceCount: 0,
-  resourceAmountCents: 0,
+  resourceAmountCents: 300000,
   payableGeneratedCount: 0,
   payableStatus: 'not_generated',
 }
 
-/** Stale list until we explicitly include the created segment — models
- *  the window after create where URL already has the new id but the
- *  segments query cache has not yet returned it. */
-let segmentItems: ItinerarySegmentSummary[] = [existingSegment]
+const day2: ItinerarySegmentSummary = {
+  id: 'segment-2',
+  departureId: 'departure-1',
+  name: '东栅晨游',
+  sortOrder: 1,
+  startDate: '2026-07-15',
+  endDate: '2026-07-15',
+  dayCount: 1,
+  destination: '乌镇东栅',
+  notes: null,
+  fullTicketCount: 0,
+  halfTicketCount: 0,
+  studentTicketCount: 0,
+  freeTicketCount: 0,
+  hasTicketHeadcountMismatch: false,
+  pendingCheck: true,
+  resourceCount: 2,
+  outsourceCount: 0,
+  resourceAmountCents: 180000,
+  payableGeneratedCount: 1,
+  payableStatus: 'partially_paid',
+}
 
 vi.mock('@/services/segment.service', () => ({
   listSegments: vi.fn(async () => ({
-    items: segmentItems,
+    items: [day1, day2],
     summary: {
-      segmentCount: segmentItems.length,
-      totalDays: segmentItems.reduce((sum, s) => sum + s.dayCount, 0),
-      resourceCount: segmentItems.reduce((sum, s) => sum + s.resourceCount, 0),
+      segmentCount: 2,
+      totalDays: 2,
+      resourceCount: 3,
       payableOverview: 'partially_paid',
     },
-    total: segmentItems.length,
+    total: 2,
   })),
-  createSegment: vi.fn(async () => {
-    // Real API would persist first; list refetch then includes the new row.
-    // Keep this delayed until after the mutation resolves so the stale-cache
-    // window still exists for the first paint after navigate.
-    queueMicrotask(() => {
-      segmentItems = [existingSegment, createdSegment]
-    })
-    return createdSegment
-  }),
+  createSegment: vi.fn(),
   generateDailySegments: vi.fn(),
   updateSegment: vi.fn(),
   deleteSegment: vi.fn(),
@@ -123,11 +109,11 @@ vi.mock('@/services/departure-resource.service', () => ({
 
 const mockDeparture = {
   id: 'departure-1',
-  departureNo: 'XBZL2026070008',
-  name: 'D线 乌鲁木齐-喀纳斯 10日游',
-  startDate: '2026-07-13',
-  endDate: '2026-07-22',
-  dayCount: 10,
+  departureNo: 'XTB2026070003',
+  name: '乌镇西栅2日线 7月14日团',
+  startDate: '2026-07-14',
+  endDate: '2026-07-15',
+  dayCount: 2,
   totalGuests: 18,
   status: 'editing',
 } as DepartureDetail
@@ -169,46 +155,54 @@ function renderHarness() {
   )
 }
 
-describe('ExecutionTab create → select new segment', () => {
+describe('ExecutionTab day axis ↔ URL segmentId sync', () => {
   beforeEach(() => {
     searchState = { tab: 'execution', segmentId: 'segment-1' }
-    segmentItems = [existingSegment]
     navigate.mockClear()
-    vi.mocked(createSegment).mockClear()
-    vi.mocked(listSegments).mockClear()
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it('keeps the newly created segment selected after save (not fall back to first)', async () => {
+  it('renders a horizontal day axis instead of the vertical segment list title', async () => {
+    renderHarness()
+
+    const axis = await screen.findByRole('region', { name: '按日资源' })
+    expect(within(axis).getByText('西栅夜游')).toBeInTheDocument()
+    expect(within(axis).getByText('东栅晨游')).toBeInTheDocument()
+    expect(within(axis).getByText('待检查')).toBeInTheDocument()
+    expect(screen.queryByText('行程段')).not.toBeInTheDocument()
+  })
+
+  it('selecting another day updates URL segmentId and keeps the card selected', async () => {
     const user = userEvent.setup()
     renderHarness()
 
-    expect(await screen.findByText('喀纳斯')).toBeInTheDocument()
+    const axis = await screen.findByRole('region', { name: '按日资源' })
+    const day2Card = within(axis).getByRole('button', { name: 'D2 东栅晨游' })
 
-    await user.click(screen.getByRole('button', { name: '添加一天' }))
-    expect(await screen.findByText('添加行程段')).toBeInTheDocument()
-
-    await user.type(screen.getByLabelText('行程段名称'), '新建段')
-    await user.click(screen.getByRole('button', { name: /保\s*存/ }))
+    await user.click(day2Card)
 
     await waitFor(() => {
-      expect(createSegment).toHaveBeenCalled()
+      expect(searchState.segmentId).toBe('segment-2')
     })
 
-    // After settle: URL / selection must stay on the created segment —
-    // not fall back to the first (喀纳斯) while the list query catches up.
-    await waitFor(() => {
-      expect(searchState.segmentId).toBe('segment-new')
-    })
+    expect(day2Card).toHaveAttribute('aria-pressed', 'true')
+    const day1Card = within(axis).getByRole('button', { name: 'D1 西栅夜游' })
+    expect(day1Card).toHaveAttribute('aria-pressed', 'false')
+  })
 
-    await waitFor(() => {
-      const newNav = document.querySelector('[data-segment-id="segment-new"]')
-      const firstNav = document.querySelector('[data-segment-id="segment-1"]')
-      expect(newNav?.querySelector('[aria-pressed="true"]')).toBeTruthy()
-      expect(firstNav?.querySelector('[aria-pressed="true"]')).toBeNull()
-    })
+  it('restores the selected day from URL segmentId on refresh', async () => {
+    searchState = { tab: 'execution', segmentId: 'segment-2' }
+    renderHarness()
+
+    const axis = await screen.findByRole('region', { name: '按日资源' })
+    const day2Card = within(axis).getByRole('button', { name: 'D2 东栅晨游' })
+    const day1Card = within(axis).getByRole('button', { name: 'D1 西栅夜游' })
+
+    expect(day2Card).toHaveAttribute('aria-pressed', 'true')
+    expect(day1Card).toHaveAttribute('aria-pressed', 'false')
+    expect(document.querySelector('[data-segment-id="segment-2"]')).toBeTruthy()
   })
 })
