@@ -201,36 +201,39 @@ export function ExecutionCostStrip({
   if (totalCount === 0) return null
 
   return (
-    <div className={styles.costStrip} aria-label="整团成本汇总">
-      <div className={styles.costStripHero}>
+    <div className={styles.costStrip} aria-label="整团成本汇总" role="list">
+      <div className={`${styles.costStripCell} ${styles.costStripHero}`} role="listitem">
         <span className={styles.costStripLabel}>成本合计</span>
         <span className={styles.costStripTotal}>{formatYuan(totalCents)}</span>
         <span className={styles.costStripCount}>{totalCount} 项资源</span>
       </div>
-      <div className={styles.costStripMetrics} role="list">
-        <div className={styles.costStripMetric} role="listitem">
-          <span className={styles.costStripLabel}>发团级</span>
-          <span className={styles.costStripMetricValue}>
-            {formatYuan(departure.resourceAmountCents)}
-          </span>
-        </div>
-        <div className={styles.costStripMetric} role="listitem">
-          <span className={styles.costStripLabel}>按日</span>
-          <span className={styles.costStripMetricValue}>
-            {formatYuan(segment.resourceAmountCents)}
-          </span>
-        </div>
-        {ungenerated > 0 ? (
-          <div
-            className={`${styles.costStripMetric} ${styles.costStripMetricWarn}`}
-            role="listitem"
-          >
-            <span className={styles.costStripLabel}>尚未生成应付</span>
-            <span className={styles.costStripMetricValue}>
-              {formatYuan(ungenerated)}
-            </span>
-          </div>
-        ) : null}
+      <div className={styles.costStripCell} role="listitem">
+        <span className={styles.costStripLabel}>发团级</span>
+        <span className={styles.costStripMetricValue}>
+          {formatYuan(departure.resourceAmountCents)}
+        </span>
+        <span className={styles.costStripCount}>{departure.resourceCount} 项</span>
+      </div>
+      <div className={styles.costStripCell} role="listitem">
+        <span className={styles.costStripLabel}>按日</span>
+        <span className={styles.costStripMetricValue}>
+          {formatYuan(segment.resourceAmountCents)}
+        </span>
+        <span className={styles.costStripCount}>{segment.resourceCount} 项</span>
+      </div>
+      <div
+        className={`${styles.costStripCell} ${
+          ungenerated > 0 ? styles.costStripMetricWarn : ''
+        }`}
+        role="listitem"
+      >
+        <span className={styles.costStripLabel}>尚未生成应付</span>
+        <span className={styles.costStripMetricValue}>
+          {formatYuan(ungenerated)}
+        </span>
+        <span className={styles.costStripCount}>
+          {ungenerated > 0 ? '待生成' : '已齐'}
+        </span>
       </div>
     </div>
   )
