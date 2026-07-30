@@ -131,6 +131,18 @@ export const PROTO_SEGMENT_RESOURCES: ProtoResource[] = [
     scope: 'segment',
     segmentId: 'seg-3',
     notes: '木屋双早',
+    payableStatus: 'not_generated',
+  }),
+  res({
+    id: 'sr-4b',
+    kind: '门票',
+    title: '途中景区门票',
+    supplier: '演示票务',
+    amountCents: 5_000,
+    scope: 'segment',
+    segmentId: 'seg-3',
+    notes: '未生成应付示例',
+    payableStatus: 'not_generated',
   }),
   res({
     id: 'sr-5',
