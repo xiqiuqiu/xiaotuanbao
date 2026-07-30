@@ -242,7 +242,7 @@
 }
 
 .genProgress {
-  color: var(--ant-color-warning-text);
+  color: var(--ant-color-warning-text, var(--ant-color-warning));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
