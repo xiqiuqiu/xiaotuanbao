@@ -215,6 +215,38 @@
   gap: 16px;
 }
 
+.departureCollapseLabel {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.departureCollapseMeta {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  min-width: 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--ant-color-border-secondary);
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.metaSep {
+  color: var(--ant-color-border);
+}
+
+.genProgress {
+  color: var(--ant-color-warning-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .timeline {
   display: flex;
   gap: 8px;

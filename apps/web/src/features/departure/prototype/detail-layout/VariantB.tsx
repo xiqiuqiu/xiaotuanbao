@@ -396,27 +396,46 @@ export function ExecutionB({
           {
             key: 'departure',
             label: (
-              <Space size={12} wrap>
+              <div className={styles.departureCollapseLabel}>
                 <Typography.Text strong>发团级资源（全程）</Typography.Text>
-                <Tag color="blue">{execution.departureResources.length} 项</Tag>
-                <Typography.Text type="secondary">
-                  合计 {formatYuan(depTotal)}
-                </Typography.Text>
-                {departureGap.hasGap ? (
-                  <Typography.Text type="secondary">
-                    生成 {departureGap.generated}/{departureGap.total}
-                  </Typography.Text>
+                <Tag color="blue" style={{ marginInlineEnd: 0 }}>
+                  {execution.departureResources.length} 项
+                </Tag>
+                {execution.departureResources.length > 0 ? (
+                  <span
+                    className={styles.departureCollapseMeta}
+                    aria-label="发团级资源汇总"
+                  >
+                    <span>
+                      合计{' '}
+                      <Typography.Text strong>{formatYuan(depTotal)}</Typography.Text>
+                    </span>
+                    {departureGap.hasGap ? (
+                      <>
+                        <span className={styles.metaSep} aria-hidden>
+                          ｜
+                        </span>
+                        <span
+                          className={styles.genProgress}
+                          title={`还有 ${departureGap.ungenerated} 项未生成应付`}
+                        >
+                          生成 {departureGap.generated}/{departureGap.total}
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
                 ) : null}
-              </Space>
+              </div>
             ),
             extra: (
               <Space size={8} onClick={(event) => event.stopPropagation()}>
                 {departureUngenerated > 0 ? (
                   <Button
                     size="small"
+                    title="批量生成应付"
                     onClick={() => confirmBatchGenerate('departure')}
                   >
-                    批量生成应付
+                    批量生成
                   </Button>
                 ) : null}
                 <Button
@@ -616,13 +635,20 @@ export function ExecutionB({
               <Flex align="center" gap={12} wrap="wrap">
                 <ResourceAmountSummary resources={selected.resources} />
                 {segmentGap?.hasGap ? (
-                  <Typography.Text type="secondary">
+                  <Typography.Text
+                    type="secondary"
+                    className={styles.genProgress}
+                    title={`还有 ${segmentGap.ungenerated} 项未生成应付`}
+                  >
                     生成 {segmentGap.generated}/{segmentGap.total}
                   </Typography.Text>
                 ) : null}
                 {segmentUngenerated > 0 ? (
-                  <Button onClick={() => confirmBatchGenerate('segment')}>
-                    批量生成应付
+                  <Button
+                    title="批量生成应付"
+                    onClick={() => confirmBatchGenerate('segment')}
+                  >
+                    批量生成
                   </Button>
                 ) : null}
                 <Button
@@ -630,7 +656,7 @@ export function ExecutionB({
                   icon={<PlusOutlined />}
                   onClick={() => openSegmentDrawer()}
                 >
-                  添加资源
+                  添加
                 </Button>
               </Flex>
             </Flex>

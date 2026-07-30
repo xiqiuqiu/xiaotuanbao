@@ -97,7 +97,7 @@ export function buildProtoResourceColumns(options?: {
     {
       title: '操作',
       key: 'actions',
-      width: 220,
+      width: 148,
       fixed: 'right',
       render: (_: unknown, record: ProtoResource) => {
         const generated = record.payableStatus !== 'not_generated'
@@ -115,21 +115,32 @@ export function buildProtoResourceColumns(options?: {
             </Button>
             {generated ? (
               <>
-                <Button type="link" size="small" onClick={(event) => event.stopPropagation()}>
-                  查看应付
+                <Button
+                  type="link"
+                  size="small"
+                  title="查看应付"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  查看
                 </Button>
                 <Button
                   type="link"
                   size="small"
                   danger
+                  title="作废应付"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  作废应付
+                  作废
                 </Button>
               </>
             ) : (
-              <Button type="link" size="small" onClick={(event) => event.stopPropagation()}>
-                生成应付
+              <Button
+                type="link"
+                size="small"
+                title="生成应付"
+                onClick={(event) => event.stopPropagation()}
+              >
+                生成
               </Button>
             )}
           </Space>
@@ -143,8 +154,12 @@ export function ResourceAmountSummary({ resources }: { resources: ProtoResource[
   if (resources.length === 0) return null
   const total = resources.reduce((sum, item) => sum + item.amountCents, 0)
   return (
-    <Typography.Text type="secondary" aria-label="资源金额汇总">
-      资源 {resources.length} 项 ｜ 资源金额 <Typography.Text strong>{formatYuan(total)}</Typography.Text>
+    <Typography.Text type="secondary" aria-label="资源金额汇总" style={{ fontSize: 13 }}>
+      {resources.length} 项
+      <span style={{ margin: '0 8px', color: 'var(--ant-color-border)' }} aria-hidden>
+        ｜
+      </span>
+      合计 <Typography.Text strong>{formatYuan(total)}</Typography.Text>
     </Typography.Text>
   )
 }
