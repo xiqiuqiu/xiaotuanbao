@@ -229,6 +229,7 @@
   position: relative;
   flex: 0 0 auto;
   display: flex;
+  align-items: stretch;
 }
 
 .timelineChipWrapActive .timelineChipRemove,
@@ -241,9 +242,10 @@
 .timelineChip {
   display: flex;
   flex-direction: column;
-  width: 112px;
-  min-height: 112px;
-  padding: 8px;
+  width: 120px;
+  min-height: 108px;
+  height: 100%;
+  padding: 8px 10px;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   background: var(--ant-color-bg-container);
@@ -280,10 +282,14 @@
 
 .timelineCheckTag {
   margin-inline-end: 0 !important;
-  padding-inline: 4px !important;
-  font-size: 11px !important;
-  line-height: 16px !important;
+  margin-inline-start: 0 !important;
+  padding-inline: 3px !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
   flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timelineDate {
@@ -310,31 +316,34 @@
   margin-top: auto;
   padding-top: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
+  min-height: 16px;
 }
 
 .timelineCount {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 11px;
-  line-height: 1.3;
+  line-height: 16px;
   color: var(--ant-color-text-tertiary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timelinePayableGap {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
-  min-height: 16px;
+  gap: 3px;
   color: var(--ant-color-text-secondary);
   font-size: 11px;
-  line-height: 1.3;
+  line-height: 16px;
   white-space: nowrap;
-}
-
-.timelinePayableGapPlaceholder {
-  min-height: 16px;
+  font-variant-numeric: tabular-nums;
 }
 
 .timelinePayableRing {
@@ -392,14 +401,15 @@
 
 .timelineAddChip {
   flex: 0 0 auto;
+  align-self: stretch;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 112px;
-  min-height: 112px;
-  padding: 8px;
+  width: 120px;
+  min-height: 108px;
+  padding: 8px 10px;
   border: 1px dashed var(--ant-color-border);
   border-radius: 8px;
   background: transparent;

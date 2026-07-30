@@ -499,13 +499,13 @@ export function ExecutionB({
                     {segment.overview}
                   </div>
                   <div className={styles.timelineFooter}>
-                    <div className={styles.timelineCount}>
-                      {count > 0 ? `资源${count}项` : '空'}
-                    </div>
+                    <span className={styles.timelineCount}>
+                      {count > 0 ? `${count}项` : '空'}
+                    </span>
                     {gap.hasGap ? (
-                      <div
+                      <span
                         className={styles.timelinePayableGap}
-                        title={`还有 ${gap.ungenerated} 项未生成应付`}
+                        title={`生成应付 ${gap.generated}/${gap.total}，还有 ${gap.ungenerated} 项未生成`}
                         aria-label={`生成 ${gap.generated}/${gap.total}`}
                       >
                         <span
@@ -519,11 +519,11 @@ export function ExecutionB({
                           }
                           aria-hidden
                         />
-                        <span>生成 {gap.generated}/{gap.total}</span>
-                      </div>
-                    ) : (
-                      <div className={styles.timelinePayableGapPlaceholder} aria-hidden />
-                    )}
+                        <span>
+                          {gap.generated}/{gap.total}
+                        </span>
+                      </span>
+                    ) : null}
                   </div>
                 </button>
                 <button
