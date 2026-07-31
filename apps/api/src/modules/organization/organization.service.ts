@@ -2,8 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import type { OrganizationSummary } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
-  getShanghaiTodayString,
-  getShanghaiYearMonthString,
+  getShanghaiNumberingDayKey,
+  getShanghaiNumberingMonthKey,
 } from '../departure/departure-date.utils'
 import { buildNumberingExamples } from './organization-numbering.utils'
 
@@ -20,17 +20,14 @@ export class OrganizationService {
       throw new NotFoundException('Organization 不存在')
     }
 
-    const periodMonth = getShanghaiYearMonthString()
-    const periodDay = getShanghaiTodayString().replace(/-/g, '')
-
     return {
       id: organization.id,
       name: organization.name,
       businessPrefix: organization.businessPrefix,
       numberingExamples: buildNumberingExamples(
         organization.businessPrefix,
-        periodMonth,
-        periodDay,
+        getShanghaiNumberingMonthKey(),
+        getShanghaiNumberingDayKey(),
       ),
     }
   }

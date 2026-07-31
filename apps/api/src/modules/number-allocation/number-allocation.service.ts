@@ -9,8 +9,8 @@ import {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
-  getShanghaiTodayString,
-  getShanghaiYearMonthString,
+  getShanghaiNumberingDayKey,
+  getShanghaiNumberingMonthKey,
 } from '../departure/departure-date.utils'
 
 export const MISSING_BUSINESS_PREFIX_MESSAGE =
@@ -24,7 +24,7 @@ export class NumberAllocationService {
 
   async previewDepartureNo(organizationId: string): Promise<string> {
     const businessPrefix = await this.requireBusinessPrefix(organizationId)
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const sequence = await this.peekNextSequence(
       organizationId,
       DocumentSequenceType.departure,
@@ -38,7 +38,7 @@ export class NumberAllocationService {
     client: DbClient = this.prisma,
   ): Promise<string> {
     const businessPrefix = await this.requireBusinessPrefix(organizationId, client)
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const sequence = await this.nextSequence(
       organizationId,
       DocumentSequenceType.departure,
@@ -54,7 +54,7 @@ export class NumberAllocationService {
     client: DbClient = this.prisma,
   ): Promise<string> {
     const businessPrefix = await this.requireBusinessPrefix(organizationId, client)
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const documentType =
       direction === PaymentScheduleDirection.receivable
         ? DocumentSequenceType.ar
@@ -72,7 +72,7 @@ export class NumberAllocationService {
     client: DbClient = this.prisma,
   ): Promise<string> {
     const businessPrefix = await this.requireBusinessPrefix(organizationId, client)
-    const periodKey = getShanghaiTodayString().replace(/-/g, '')
+    const periodKey = getShanghaiNumberingDayKey()
     const sequence = await this.nextSequence(
       organizationId,
       DocumentSequenceType.tx,
@@ -87,7 +87,7 @@ export class NumberAllocationService {
     client: DbClient = this.prisma,
   ): Promise<string> {
     const businessPrefix = await this.requireBusinessPrefix(organizationId, client)
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const sequence = await this.nextSequence(
       organizationId,
       DocumentSequenceType.cl,
