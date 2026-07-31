@@ -16,7 +16,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 describe('DepartureHeaderCard 时间信息', () => {
-  it('将创建与更新时间收敛为次要元数据', () => {
+  it('一体顶栏不展示创建/更新时间（收敛进履历，避免顶栏占高）', () => {
     const departure = {
       id: 'departure-1',
       departureNo: 'TB2026070001',
@@ -45,10 +45,8 @@ describe('DepartureHeaderCard 时间信息', () => {
       />,
     )
 
-    expect(screen.getByText(/最近更新 2026-07-14 09:06/)).toBeInTheDocument()
-    expect(screen.getByText(/创建于 2026-07-14 08:05/)).toBeInTheDocument()
-    expect(screen.queryByText('创建时间')).not.toBeInTheDocument()
-    expect(screen.queryByText('更新时间')).not.toBeInTheDocument()
+    expect(screen.queryByText(/最近更新/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/创建于/)).not.toBeInTheDocument()
     expect(screen.getByText('行程 · 未开始')).toBeInTheDocument()
     expect(screen.getByText('财务 · 编辑中')).toBeInTheDocument()
     expect(screen.getByText('负责人')).toBeInTheDocument()

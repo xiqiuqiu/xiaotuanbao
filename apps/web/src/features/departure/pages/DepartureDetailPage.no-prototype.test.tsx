@@ -1,5 +1,5 @@
 /**
- * 执行安排密度原型已收口：?variant= 不得劫持正式工作区。
+ * 发团详情工作区不受废弃的 ?variant= 影响；切 Tab 也不再透传 variant。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -16,7 +16,6 @@ let mockSearch: {
   variant?: string
 } = {
   tab: 'execution',
-  variant: 'C',
 }
 
 vi.mock('@tanstack/react-router', () => ({
@@ -98,10 +97,10 @@ function renderPage() {
   )
 }
 
-describe('DepartureDetailPage prototype removal (execution-density folded)', () => {
+describe('DepartureDetailPage no-prototype workspace', () => {
   beforeEach(() => {
     navigate.mockReset()
-    mockSearch = { tab: 'execution', variant: 'C' }
+    mockSearch = { tab: 'execution' }
     vi.mocked(getDeparture).mockResolvedValue(departure)
   })
 
@@ -109,7 +108,7 @@ describe('DepartureDetailPage prototype removal (execution-density folded)', () 
     cleanup()
   })
 
-  it('renders the production workspace and ignores layout ?variant=', async () => {
+  it('renders the production workspace', async () => {
     renderPage()
 
     expect(await screen.findByRole('tab', { name: '执行安排' })).toHaveAttribute(
@@ -121,7 +120,7 @@ describe('DepartureDetailPage prototype removal (execution-density folded)', () 
     expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
   })
 
-  it('selects sourceOrders tab without PrototypeSwitcher even when ?variant=A', async () => {
+  it('ignores stale ?variant= on workspace tabs', async () => {
     mockSearch = { tab: 'sourceOrders', variant: 'A' }
     renderPage()
 
@@ -133,7 +132,7 @@ describe('DepartureDetailPage prototype removal (execution-density folded)', () 
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
   })
 
-  it('does not preserve layout variant when syncing tab URL', async () => {
+  it('does not preserve variant when syncing tab URL', async () => {
     const user = userEvent.setup()
     mockSearch = { tab: 'execution', variant: 'C', segmentId: 'seg-1' }
     renderPage()

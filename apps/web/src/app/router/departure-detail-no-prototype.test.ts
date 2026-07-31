@@ -1,26 +1,26 @@
 /**
- * 执行安排密度原型已收口为正式互斥布局：详情 search 不透传 layout variant。
+ * 发团详情顶部卡片方案 B 已落地：不再透传 ?variant=，也不注册独立 sandbox 路由。
  */
 import { describe, expect, it } from 'vitest'
 import { router } from './index'
 
-describe('departure detail prototype removal (execution-density folded)', () => {
+describe('departure detail header no-prototype guard', () => {
   it('does not register a separate sandbox route', () => {
     expect(Object.keys(router.routesByPath)).not.toContain(
-      '/prototype/execution-density',
+      '/prototype/departure-header-card',
     )
   })
 
-  it('strips layout variant from departure detail search validation', () => {
+  it('strips header variant from departure detail search validation', () => {
     const validated = router.routesByPath['/departure/$departureId']!.options.validateSearch!({
-      tab: 'execution',
+      tab: 'overview',
       segmentId: 'seg-1',
-      variant: 'C',
+      variant: 'B',
       listReturn: '/departure',
     })
 
     expect(validated).toEqual({
-      tab: 'execution',
+      tab: 'overview',
       segmentId: 'seg-1',
       listReturn: '/departure',
     })

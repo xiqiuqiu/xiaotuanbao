@@ -1,4 +1,4 @@
-import { Button, Card, Skeleton } from 'antd'
+import { Button, Skeleton } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import {
@@ -26,23 +26,24 @@ export function DepartureDetailShellSkeleton({
 
   return (
     <div role="status" aria-label="发团详情加载中">
-      <Card
-        size="small"
-        className={headerStyles.headerCard}
-        classNames={{ body: headerStyles.headerBody }}
-      >
-        <Link to="/departure">
-          <Button
-            type="text"
-            aria-label="返回发团列表"
-            icon={<ArrowLeftOutlined aria-hidden />}
-            className={headerStyles.backButton}
-          />
-        </Link>
-        <div className={styles.headerIdentity}>
-          <Skeleton active title={{ width: '40%' }} paragraph={{ rows: 2 }} />
+      <div className={headerStyles.shell}>
+        <div className={headerStyles.top}>
+          <Link to="/departure">
+            <Button
+              type="text"
+              aria-label="返回发团列表"
+              icon={<ArrowLeftOutlined aria-hidden />}
+              className={headerStyles.backButton}
+            />
+          </Link>
+          <div className={`${headerStyles.identity} ${styles.headerIdentity}`}>
+            <Skeleton active title={{ width: '40%' }} paragraph={{ rows: 1 }} />
+          </div>
         </div>
-      </Card>
+        <div className={headerStyles.metaRow}>
+          <Skeleton.Input active size="small" style={{ width: 240 }} />
+        </div>
+      </div>
 
       <section className={pageStyles.detailWorkspace} aria-label="发团详情工作区加载中">
         <nav

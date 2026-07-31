@@ -154,7 +154,7 @@ describe('DepartureHeaderCard 返回', () => {
     ).not.toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '状态与操作' }))
+    await user.click(screen.getByRole('button', { name: '更多操作' }))
     await user.click(await screen.findByText('状态与履历（1）'))
 
     expect(onHistoryOpenChange).toHaveBeenCalledWith(true)
@@ -172,7 +172,7 @@ describe('DepartureHeaderCard 返回', () => {
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: '状态与操作' }))
+    await user.click(screen.getByRole('button', { name: '更多操作' }))
 
     expect(await screen.findByText('状态与履历（0）')).toBeInTheDocument()
   })
