@@ -50,6 +50,6 @@ export function formatSnapshotDateForFilename(exportedAt: string): string {
 }
 
 export function buildOperationsSheetContentDisposition(filename: string): string {
-  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '\\"')
-  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+  const escapedFilename = filename.replace(/"/g, '\\"')
+  return `attachment; filename="${escapedFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
 }
