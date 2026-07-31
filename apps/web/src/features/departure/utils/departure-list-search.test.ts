@@ -204,11 +204,11 @@ describe('resolveWorkbenchDepartureFilterBanner', () => {
     expect(resolveWorkbenchDepartureFilterBanner({
       accountGenerationGap: 'any',
       startDateFrom: '2026-07-23',
-    })).toEqual({ title: '已筛选：待生成账款发团' })
+    })).toEqual({ title: '已筛选：待提交账款发团' })
 
     expect(resolveWorkbenchDepartureFilterBanner({
       accountGenerationGap: 'payable',
-    })).toEqual({ title: '已筛选：待生成应付发团' })
+    })).toEqual({ title: '已筛选：待提交应付发团' })
 
     expect(resolveWorkbenchDepartureFilterBanner({
       departureDataGap: 'any',

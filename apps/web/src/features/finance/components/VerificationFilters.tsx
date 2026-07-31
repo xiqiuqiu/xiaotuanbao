@@ -22,6 +22,7 @@ interface VerificationFiltersProps {
   onScheduleNoChange: (value: string) => void
   onDepartureKeywordChange: (value: string) => void
   onReset: () => void
+  onApply?: () => void
   extra?: ReactNode
 }
 
@@ -40,6 +41,7 @@ export function VerificationFilters({
   onScheduleNoChange,
   onDepartureKeywordChange,
   onReset,
+  onApply,
   extra,
 }: VerificationFiltersProps) {
   return (
@@ -121,7 +123,20 @@ export function VerificationFilters({
               onSearch={(value) => onDepartureKeywordChange(value.trim())}
             />
           ) : null}
-          <Button onClick={onReset}>重置</Button>
+          <Button
+            autoInsertSpace={false}
+            onClick={() => {
+              onTransactionNoChange(transactionNo.trim())
+              onScheduleNoChange(scheduleNo.trim())
+              onDepartureKeywordChange(departureKeyword.trim())
+              onApply?.()
+            }}
+          >
+            查询
+          </Button>
+          <Button autoInsertSpace={false} onClick={onReset}>
+            重置
+          </Button>
         </Space>
         {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
       </div>

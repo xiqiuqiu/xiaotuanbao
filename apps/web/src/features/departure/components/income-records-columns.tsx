@@ -9,13 +9,14 @@ import {
   DepartureIncomeType,
   type DepartureIncomeRecordSummary,
 } from '@xiaotuanbao/shared'
+import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import { formatCents } from '../catalog'
 
 const COMPOSITE_COLORS: Record<DepartureIncomeSettlementComposite, string> = {
   [DepartureIncomeSettlementComposite.PENDING_SETTLE]: 'default',
   [DepartureIncomeSettlementComposite.PENDING_COMMISSION]: 'warning',
   [DepartureIncomeSettlementComposite.PENDING_COLLECT]: 'processing',
-  [DepartureIncomeSettlementComposite.SETTLED]: 'success',
+  [DepartureIncomeSettlementComposite.SETTLED]: 'default',
 }
 
 type BuildIncomeRecordsColumnsOptions = {
@@ -26,6 +27,12 @@ type BuildIncomeRecordsColumnsOptions = {
   onMarkPaid: (item: DepartureIncomeRecordSummary) => void
   onDelete: (item: DepartureIncomeRecordSummary) => void
 }
+
+/**
+ * 与 `buildIncomeRecordsColumns` 列宽之和对齐。
+ * Table `scroll.x` 不得小于此值；任一列缺 width 时宽屏剩余空间会灌进该列造成大片空白。
+ */
+export const INCOME_RECORDS_TABLE_SCROLL_X = 1350
 
 export function buildIncomeRecordsColumns({
   mutationLocked,
@@ -42,7 +49,12 @@ export function buildIncomeRecordsColumns({
       width: 120,
       render: (value: DepartureIncomeType) => DEPARTURE_INCOME_TYPE_LABELS[value],
     },
-    { title: '项目名称', dataIndex: 'projectName', ellipsis: true },
+    {
+      title: '项目名称',
+      dataIndex: 'projectName',
+      width: 160,
+      ellipsis: true,
+    },
     {
       title: '合作方',
       dataIndex: 'partnerSupplierName',
@@ -77,7 +89,7 @@ export function buildIncomeRecordsColumns({
       render: (value: number) => formatCents(value),
     },
     {
-      title: '综合状态',
+      title: '状态',
       dataIndex: 'settlementComposite',
       width: 110,
       render: (value: DepartureIncomeSettlementComposite) => (
@@ -85,6 +97,13 @@ export function buildIncomeRecordsColumns({
           {DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS[value]}
         </Tag>
       ),
+    },
+    {
+      title: '备注',
+      dataIndex: 'remark',
+      width: 140,
+      ellipsis: { showTitle: false },
+      render: (value: string | null) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
     },
     {
       title: '操作',

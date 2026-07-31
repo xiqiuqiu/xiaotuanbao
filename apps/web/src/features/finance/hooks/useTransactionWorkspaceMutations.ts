@@ -16,7 +16,10 @@ import {
   buildUpdateTransactionPayload,
   type TransactionFormValues,
 } from '../utils/transaction-form'
-import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
+import {
+  buildGeneratedRebatePayableProcessNavigation,
+  promptGeneratedRebatePayableFollowUp,
+} from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -49,10 +52,7 @@ export function useTransactionWorkspaceMutations({
 
   const goProcessRebatePayable = useCallback(
     (rebate: PaymentScheduleSummary) => {
-      void navigate({
-        to: '/finance/payable',
-        search: { scheduleNo: rebate.scheduleNo },
-      })
+      void navigate(buildGeneratedRebatePayableProcessNavigation(rebate))
     },
     [navigate],
   )

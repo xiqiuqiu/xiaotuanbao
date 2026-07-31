@@ -13,7 +13,7 @@ import { authRequest, createTestApp, loginAs } from './helpers'
 /**
  * ADR-0023 / #133: departure:write action key enforcement.
  * 计调 (wangjie) 与企业管理员 (admin) 持有 departure:write，可写；财务 (acai) 不持有，
- * 对发团/客源/执行/资源/常用路线的写接口返回 403；但生成应收/应付挂在 /departure，财务仍可 200。
+ * 对发团/客源/执行/资源/常用路线的写接口返回 403；但提交应收/应付挂在 /departure，财务仍可 200。
  */
 describe('departure:write action-key enforcement (e2e)', () => {
   let app: INestApplication
@@ -362,7 +362,7 @@ describe('departure:write action-key enforcement (e2e)', () => {
     })
   })
 
-  describe('生成应收/应付挂在 /departure — 财务仍可 200', () => {
+  describe('提交应收/应付挂在 /departure — 财务仍可 200', () => {
     it('lets 财务 generate receivables from a source order and a departure', async () => {
       const departure = await createDeparture(coordinatorToken)
       const sourceOrder = await createSourceOrder(departure.id)

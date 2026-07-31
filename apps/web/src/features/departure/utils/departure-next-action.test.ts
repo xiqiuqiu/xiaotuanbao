@@ -51,8 +51,8 @@ function makeDeparture(overrides: Partial<DepartureInput> = {}): DepartureInput 
       sourceOrders: '客源1单',
       segments: '行程1段',
       resources: '资源1项',
-      receivables: '应收已生成',
-      payables: '应付已生成',
+      receivables: '应收已提交',
+      payables: '应付已提交',
     },
     overviewStats: makeOverviewStats(),
     isFinanciallySettled: false,
@@ -102,8 +102,8 @@ describe('resolveDepartureNextAction', () => {
             sourceOrders: '客源未录入',
             segments: '行程1段',
             resources: '资源1项',
-            receivables: '应收已生成',
-            payables: '应付已生成',
+            receivables: '应收已提交',
+            payables: '应付已提交',
           },
         }),
         canWrite: true,
@@ -124,8 +124,8 @@ describe('resolveDepartureNextAction', () => {
             sourceOrders: '客源1单',
             segments: '行程未安排',
             resources: '资源1项',
-            receivables: '应收已生成',
-            payables: '应付已生成',
+            receivables: '应收已提交',
+            payables: '应付已提交',
           },
         }),
         canWrite: true,
@@ -139,20 +139,13 @@ describe('resolveDepartureNextAction', () => {
       expect(result?.description).toBeUndefined()
     })
 
-    it('returns info suggesting pending settlement when prep is complete and canWrite', () => {
-      const result = resolveDepartureNextAction({
-        departure: makeDeparture(),
-        canWrite: true,
-      })
-
-      expect(result).toMatchObject({
-        type: 'info',
-        title: '资料已就绪，可切换为待结算',
-        action: {
-          label: '切换为待结算',
-          intent: 'pending_settlement',
-        },
-      })
+    it('returns null when prep is complete (pending-settlement prompt temporarily hidden)', () => {
+      expect(
+        resolveDepartureNextAction({
+          departure: makeDeparture(),
+          canWrite: true,
+        }),
+      ).toBeNull()
     })
 
     it('returns null when prep is complete and cannot write', () => {

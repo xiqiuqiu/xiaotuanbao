@@ -44,6 +44,8 @@ interface PaymentScheduleFiltersProps {
   onDueDateRangeChange: (value: DueDateRange) => void
   onDepartureDateRangeChange?: (value: DepartureDateRange) => void
   onReset: () => void
+  /** 显式查询（与客源筛选条对齐）；未传时仍展示按钮并提交当前关键字 trim。 */
+  onApply?: () => void
 }
 
 export function PaymentScheduleFilters({
@@ -62,6 +64,7 @@ export function PaymentScheduleFilters({
   onDueDateRangeChange,
   onDepartureDateRangeChange,
   onReset,
+  onApply,
 }: PaymentScheduleFiltersProps) {
   const isCounterpartyScope = scope === 'partner' || scope === 'supplier'
   const showDepartureFilter = scope === 'global'
@@ -181,7 +184,19 @@ export function PaymentScheduleFilters({
             style={{ maxWidth: '100%' }}
           />
         ) : null}
-        <Button onClick={onReset}>重置</Button>
+        <Button
+          autoInsertSpace={false}
+          onClick={() => {
+            onKeywordChange(keyword.trim())
+            onCounterpartyKeywordChange(counterpartyKeyword.trim())
+            onApply?.()
+          }}
+        >
+          查询
+        </Button>
+        <Button autoInsertSpace={false} onClick={onReset}>
+          重置
+        </Button>
       </Space>
     </Card>
   )

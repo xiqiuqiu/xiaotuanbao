@@ -1,6 +1,6 @@
 /**
  * 团内增收记录页签 — 方案 A：筛选 + 表格（含表尾合计）+ 抽屉（ADR-0036）。
- * 列表快捷标记已收/已付经 PATCH，不生成应收/应付。
+ * 列表快捷标记已收/已付经 PATCH，不提交应收/应付。
  */
 import { useState } from 'react'
 import {
@@ -32,7 +32,10 @@ import {
   updateIncomeRecord,
   type ListIncomeRecordsParams,
 } from '@/services/income-record.service'
-import { buildIncomeRecordsColumns } from './income-records-columns'
+import {
+  buildIncomeRecordsColumns,
+  INCOME_RECORDS_TABLE_SCROLL_X,
+} from './income-records-columns'
 import { IncomeRecordsFilters } from './IncomeRecordsFilters'
 import { renderIncomeRecordsTableSummary } from './income-records-table-summary'
 import {
@@ -54,6 +57,11 @@ export function IncomeRecordsPanel({
   const [form] = Form.useForm<IncomeRecordFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<DepartureIncomeRecordSummary | null>(null)
+  const [typeDraft, setTypeDraft] = useState<DepartureIncomeType | 'all'>('all')
+  const [compositeDraft, setCompositeDraft] = useState<
+    DepartureIncomeSettlementComposite | 'all'
+  >('all')
+  const [keywordDraft, setKeywordDraft] = useState('')
   const [typeFilter, setTypeFilter] = useState<DepartureIncomeType | 'all'>('all')
   const [compositeFilter, setCompositeFilter] = useState<
     DepartureIncomeSettlementComposite | 'all'
@@ -230,11 +238,25 @@ export function IncomeRecordsPanel({
         onRefresh={() => void query.refetch()}
       />
       <IncomeRecordsFilters
-        typeFilter={typeFilter}
-        compositeFilter={compositeFilter}
-        onTypeChange={setTypeFilter}
-        onCompositeChange={setCompositeFilter}
-        onKeywordSearch={setKeyword}
+        typeFilter={typeDraft}
+        compositeFilter={compositeDraft}
+        keyword={keywordDraft}
+        onTypeChange={setTypeDraft}
+        onCompositeChange={setCompositeDraft}
+        onKeywordChange={setKeywordDraft}
+        onApply={() => {
+          setTypeFilter(typeDraft)
+          setCompositeFilter(compositeDraft)
+          setKeyword(keywordDraft.trim())
+        }}
+        onReset={() => {
+          setTypeDraft('all')
+          setCompositeDraft('all')
+          setKeywordDraft('')
+          setTypeFilter('all')
+          setCompositeFilter('all')
+          setKeyword('')
+        }}
         extra={
           mutationLocked ? null : (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
@@ -255,7 +277,7 @@ export function IncomeRecordsPanel({
         columns={columns}
         dataSource={items}
         pagination={false}
-        scroll={{ x: 1200 }}
+        scroll={{ x: INCOME_RECORDS_TABLE_SCROLL_X }}
         summary={renderIncomeRecordsTableSummary}
         locale={{
           emptyText: (

@@ -236,7 +236,7 @@ describe('Departure batch finance generation (e2e)', () => {
     })
     expect(byId[already.id]).toMatchObject({
       outcome: 'skipped',
-      reason: expect.stringMatching(/不能再次生成|已生成/),
+      reason: expect.stringMatching(/不能再次提交|已生成/),
     })
 
     const second = await authRequest(app, coordinatorToken)
@@ -326,7 +326,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(byId[pendingA.id]).toMatchObject({ outcome: 'succeeded' })
     expect(byId[zero.id]).toMatchObject({
       outcome: 'skipped',
-      reason: '资源金额须大于 0 才能生成应付',
+      reason: '资源金额须大于 0 才能提交应付',
     })
     expect(byId[already.id]).toBeUndefined()
     expect(byId[pendingB.id]).toBeUndefined()
@@ -354,7 +354,7 @@ describe('Departure batch finance generation (e2e)', () => {
       .post(`/api/departures/${departure.id}/generate-receivables`)
       .expect(409)
 
-    expect(response.body.message).toBe('发团已关闭，不可生成应收')
+    expect(response.body.message).toBe('发团已关闭，不可提交应收')
   })
 
   it('exposes payableGeneratedCount on segment list', async () => {
@@ -402,7 +402,7 @@ describe('Departure batch finance generation (e2e)', () => {
       .post(`/api/segments/${segment.id}/generate-payables`)
       .expect(409)
 
-    expect(response.body.message).toBe('发团已关闭，不可生成应付')
+    expect(response.body.message).toBe('发团已关闭，不可提交应付')
   })
 
   it('does not expose departure-level generate-payables', async () => {

@@ -1,4 +1,4 @@
-import { Button, Popconfirm, Space, Tag } from 'antd'
+import { Button, Popconfirm, Space, Tag, Tooltip, Typography } from 'antd'
 import { CopyOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
@@ -16,6 +16,9 @@ import {
   formatCents,
   renderCompletionTags,
 } from '../catalog'
+import {
+  getIncompleteCompletionLabels,
+} from '../utils/departure-transition'
 import type { DepartureListSearch } from '../utils/departure-list-search'
 
 type DepartureColumnsActions = {
@@ -27,8 +30,10 @@ type DepartureColumnsActions = {
 /**
  * 与 `buildDepartureColumns` 列宽之和对齐（含复制+删除操作列）。
  * Table `scroll.x` 不得小于此值，否则 fixed 操作列会压住左侧内容。
+ * 发团视图不单独占「路线名称」列（160），路线改在团名悬停展示；
+ * 完成情况只铺待办缺口 Tag，列宽收敛。
  */
-export const DEPARTURE_LIST_TABLE_SCROLL_X = 2300
+export const DEPARTURE_LIST_TABLE_SCROLL_X = 2020
 
 export function buildDepartureColumns(
   actions: DepartureColumnsActions,
@@ -52,18 +57,29 @@ export function buildDepartureColumns(
       dataIndex: 'name',
       width: 200,
       ellipsis: { showTitle: false },
-      render: (name: string, record) => (
-        <DepartureDetailPrefetchLink record={record} listSearch={listSearch}>
-          <EllipsisTooltipText empty="">{name}</EllipsisTooltipText>
-        </DepartureDetailPrefetchLink>
-      ),
-    },
-    {
-      title: '路线名称',
-      dataIndex: 'routeName',
-      width: 160,
-      ellipsis: { showTitle: false },
-      render: (value: string) => <EllipsisTooltipText>{value}</EllipsisTooltipText>,
+      render: (name: string, record) => {
+        const routeLabel = record.routeName?.trim()
+        const cell = (
+          <DepartureDetailPrefetchLink record={record} listSearch={listSearch}>
+            <EllipsisTooltipText empty="-" tooltip={routeLabel ? false : undefined}>
+              {name}
+            </EllipsisTooltipText>
+          </DepartureDetailPrefetchLink>
+        )
+        if (!routeLabel) return cell
+        return (
+          <Tooltip
+            title={
+              <>
+                <div>{name || '-'}</div>
+                <div>路线名称：{routeLabel}</div>
+              </>
+            }
+          >
+            <span style={{ display: 'inline-block', maxWidth: '100%' }}>{cell}</span>
+          </Tooltip>
+        )
+      },
     },
     {
       title: '发团类型',
@@ -101,18 +117,42 @@ export function buildDepartureColumns(
     {
       title: '完成情况',
       key: 'completionTags',
-      width: 320,
-      render: (_value, record) => (
-        <Space size={[0, 4]} wrap>
-          {renderCompletionTags(record.completionTags).map((tag) => (
-            <Tag key={tag.label}>{tag.label}</Tag>
-          ))}
-        </Space>
-      ),
+      width: 200,
+      render: (_value, record) => {
+        const allLabels = renderCompletionTags(record.completionTags).map((tag) => tag.label)
+        const incompleteLabels = getIncompleteCompletionLabels(record.completionTags)
+        const tooltip = (
+          <Space orientation="vertical" size={2}>
+            {allLabels.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </Space>
+        )
+
+        if (incompleteLabels.length === 0) {
+          return (
+            <Tooltip title={tooltip}>
+              <Typography.Text type="secondary">已齐</Typography.Text>
+            </Tooltip>
+          )
+        }
+
+        return (
+          <Tooltip title={tooltip}>
+            <Space size={[4, 4]} wrap>
+              {incompleteLabels.map((label) => (
+                <Tag key={label} color="warning" style={{ marginInlineEnd: 0 }}>
+                  {label}
+                </Tag>
+              ))}
+            </Space>
+          </Tooltip>
+        )
+      },
     },
-    { title: '实际应收', dataIndex: 'netReceivableCents', width: 110, render: (value: number) => formatCents(value) },
-    { title: '应付合计', dataIndex: 'payableCents', width: 110, render: (value: number) => formatCents(value) },
-    { title: '预估毛利', dataIndex: 'estimatedMarginCents', width: 110, render: (value: number) => formatCents(value) },
+    { title: '结算应收', dataIndex: 'netReceivableCents', width: 110, render: (value: number) => formatCents(value) },
+    { title: '成本合计', dataIndex: 'payableCents', width: 110, render: (value: number) => formatCents(value) },
+    { title: '当前毛利', dataIndex: 'estimatedMarginCents', width: 110, render: (value: number) => formatCents(value) },
     {
       title: '负责人',
       dataIndex: 'ownerName',

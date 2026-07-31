@@ -3,7 +3,7 @@ import type { DepartureDetail } from '@/types/api'
 
 export type DepartureTransitionAction = 'pending_settlement' | 'settled' | 'close'
 
-const INCOMPLETE_MARKERS = ['未录入', '未安排', '未生成'] as const
+const INCOMPLETE_MARKERS = ['未录入', '未安排', '未提交'] as const
 
 export function isCompletionTagIncomplete(label: string): boolean {
   return INCOMPLETE_MARKERS.some((marker) => label.includes(marker))

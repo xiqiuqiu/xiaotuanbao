@@ -24,7 +24,7 @@ describe('财务工作台队列符合 antd 内容布局组件规范', () => {
   const receivables = stripComments(source('./FinanceReceivablesModule.tsx'))
   const homeCss = source('./HomePage.module.css')
 
-  it('待核销流水 / 待生成账款：块级列表用 Flex，标题与 meta 用 Typography.Text ellipsis', () => {
+  it('待核销流水 / 待提交账款：块级列表用 Flex，标题与 meta 用 Typography.Text ellipsis', () => {
     expect(funds).toMatch(/<Flex\s+vertical\b[^>]*className=\{styles\.queueList\}/)
     expect(funds).not.toMatch(/<\s*Space\b/)
 

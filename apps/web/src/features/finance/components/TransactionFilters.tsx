@@ -29,6 +29,7 @@ interface TransactionFiltersProps {
   onDepartureChange: (value?: string) => void
   onStatusChange: (value?: 'normal' | 'voided') => void
   onReset: () => void
+  onApply?: () => void
   extra?: ReactNode
 }
 
@@ -49,6 +50,7 @@ export function TransactionFilters({
   onDepartureChange,
   onStatusChange,
   onReset,
+  onApply,
   extra,
 }: TransactionFiltersProps) {
   const showDepartureFilter = scope === 'global'
@@ -154,7 +156,19 @@ export function TransactionFilters({
             onChange={onStatusChange}
             options={[...TRANSACTION_STATUS_OPTIONS]}
           />
-          <Button onClick={onReset}>重置</Button>
+          <Button
+            autoInsertSpace={false}
+            onClick={() => {
+              onPartnerKeywordChange(partnerKeyword.trim())
+              onTransactionNoChange(transactionNo.trim())
+              onApply?.()
+            }}
+          >
+            查询
+          </Button>
+          <Button autoInsertSpace={false} onClick={onReset}>
+            重置
+          </Button>
         </Space>
         {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
       </div>

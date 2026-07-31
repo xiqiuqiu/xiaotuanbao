@@ -38,6 +38,7 @@ import {
 import { DepartureService } from './departure.service'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 import { buildOperationsSheetContentDisposition } from './departure-operations-sheet-excel.types'
+import { RouteLedgerExportService } from './route-ledger-export.service'
 import {
   CreateDepartureIncomeRecordDto,
   ListDepartureIncomeRecordsQueryDto,
@@ -51,6 +52,7 @@ export class DepartureController {
   constructor(
     private readonly departureService: DepartureService,
     private readonly operationsSheetService: DepartureOperationsSheetService,
+    private readonly routeLedgerExportService: RouteLedgerExportService,
     private readonly departureIncomeRecordService: DepartureIncomeRecordService,
   ) {}
 
@@ -86,6 +88,23 @@ export class DepartureController {
     @Query() query: ListRouteLedgerQueryDto,
   ): Promise<RouteLedgerResult> {
     return this.departureService.getRouteLedger(request.user.organizationId, query)
+  }
+
+  @Get('route-ledger.xlsx')
+  @RequireMenu('/departure')
+  async downloadRouteLedger(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Query() query: ListRouteLedgerQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.routeLedgerExportService.buildWorkbook(
+      request.user.organizationId,
+      query,
+      request.user.userId,
+    )
+    res.setHeader('Content-Type', file.contentType)
+    res.setHeader('Content-Disposition', buildOperationsSheetContentDisposition(file.filename))
+    res.send(file.buffer)
   }
 
   @Post()

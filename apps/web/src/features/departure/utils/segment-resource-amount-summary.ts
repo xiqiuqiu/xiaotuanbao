@@ -15,7 +15,7 @@ export type ResourceAmountRow = {
 }
 
 /**
- * Mirrors departure overview Cost Total / 尚未生成应付, narrowed to one segment.
+ * Mirrors departure overview Cost Total / 尚未提交应付, narrowed to one segment.
  * Uses resource agreed amounts only; closed counts as generated; voided returns to not_generated.
  */
 export function summarizeSegmentResourceAmounts(

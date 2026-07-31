@@ -24,12 +24,12 @@ export function PendingReceivableSourceOrdersPage() {
   if (query.isError && !query.data) {
     return (
       <div>
-        <PageHeader title="待生成应收" />
+        <PageHeader title="待提交应收" />
         <Card>
           <Alert
             type="error"
             showIcon
-            title="待生成应收列表加载失败"
+            title="待提交应收列表加载失败"
             description={query.error instanceof Error ? query.error.message : '请稍后重试'}
             action={(
               <Button loading={query.isFetching} onClick={() => void query.refetch()}>
@@ -44,7 +44,7 @@ export function PendingReceivableSourceOrdersPage() {
 
   return (
     <div>
-      <PageHeader title="待生成应收" />
+      <PageHeader title="待提交应收" />
       <Card>
         <StaleDataAlert
           isFetching={query.isFetching}
@@ -72,7 +72,7 @@ export function PendingReceivableSourceOrdersPage() {
             {
               title: '应收状态',
               width: 110,
-              render: () => <Tag color="blue">待生成应收</Tag>,
+              render: () => <Tag color="blue">待提交应收</Tag>,
             },
             {
               title: '结算金额',
@@ -87,7 +87,7 @@ export function PendingReceivableSourceOrdersPage() {
           ]}
           locale={{
             emptyText: (
-              <Empty description="当前没有待生成应收的客源单">
+              <Empty description="当前没有待提交应收的客源单">
                 <Button onClick={() => void navigate({ to: '/departure' })}>查看发团</Button>
               </Empty>
             ),

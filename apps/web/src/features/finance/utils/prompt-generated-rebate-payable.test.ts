@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { Modal } from 'antd'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
+  buildGeneratedRebatePayableProcessNavigation,
   buildGeneratedRebatePayablePromptCopy,
   promptGeneratedRebatePayableFollowUp,
   shouldPromptGeneratedRebatePayable,
@@ -88,5 +89,25 @@ describe('promptGeneratedRebatePayableFollowUp', () => {
     const confirmSpy = vi.spyOn(Modal, 'confirm')
     promptGeneratedRebatePayableFollowUp(null, vi.fn())
     expect(confirmSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('buildGeneratedRebatePayableProcessNavigation', () => {
+  it('stays on departure payables tab with scheduleNo, not global /finance/payable', () => {
+    const target = buildGeneratedRebatePayableProcessNavigation(
+      rebate({ departureId: 'dep-42', scheduleNo: 'APX182607000003', sourceId: 'so-9' }),
+    )
+    expect(target).toEqual({
+      to: '/departure/$departureId',
+      params: { departureId: 'dep-42' },
+      search: {
+        tab: 'payables',
+        scheduleNo: 'APX182607000003',
+        highlightSourceOrderId: 'so-9',
+      },
+    })
+    expect(target).not.toEqual(
+      expect.objectContaining({ to: '/finance/payable' }),
+    )
   })
 })

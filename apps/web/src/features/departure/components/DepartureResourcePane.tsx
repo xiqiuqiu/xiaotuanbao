@@ -56,7 +56,7 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
 interface DepartureResourcePaneProps {
   departure: DepartureDetail
   readOnly: boolean
-  /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响生成应付。 */
+  /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响提交应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
   highlightDepartureResourceId?: string
@@ -80,7 +80,7 @@ function DepartureResourceSummaryMeta({ amountSummary }: DepartureResourceSummar
       </Typography.Text>
       {amountSummary.ungeneratedPayableCents > 0 ? (
         <>
-          {' ｜ 尚未生成应付 '}
+          {' ｜ 尚未提交应付 '}
           <Typography.Text strong style={{ color: token.colorWarning }}>
             {formatCents(amountSummary.ungeneratedPayableCents)}
           </Typography.Text>
@@ -113,7 +113,7 @@ function DepartureResourceHeaderActions({
     <Space>
       {showBatchGenerate ? (
         <Button onClick={onBatchGenerate} loading={batchGenerating}>
-          批量生成应付
+          批量提交应付
         </Button>
       ) : null}
       {showAddResource ? (
@@ -265,7 +265,7 @@ function useSaveResourceMutations({
       }
       if (!result.generateOk) {
         message.warning(
-          `资源已保存，但生成应付失败：${mutationErrorMessage(
+          `资源已保存，但提交应付失败：${mutationErrorMessage(
             result.generateError,
             '请稍后在列表中重试',
           )}`,
@@ -275,8 +275,8 @@ function useSaveResourceMutations({
       }
       message.success(
         result.generateResult.sourceAmountMismatch
-          ? '已保存并生成应付，存在来源金额差异，请核对'
-          : '已保存并生成应付',
+          ? '已保存并提交应付，存在来源金额差异，请核对'
+          : '已保存并提交应付',
       )
       invalidatePayableQueries()
       closeDrawer()
@@ -378,14 +378,14 @@ export function DepartureResourcePane({
     onSuccess: (result) => {
       message.success(
         result.sourceAmountMismatch
-          ? '应付已生成，存在来源金额差异，请核对'
-          : '应付已生成',
+          ? '应付已提交，存在来源金额差异，请核对'
+          : '应付已提交',
       )
       invalidateResourceQueries()
       invalidatePayableQueries()
     },
     onError: (error) => {
-      message.error(mutationErrorMessage(error, '生成应付失败'))
+      message.error(mutationErrorMessage(error, '提交应付失败'))
     },
   })
 
@@ -404,18 +404,18 @@ export function DepartureResourcePane({
       invalidatePayableQueries()
     },
     onError: (error) => {
-      message.error(mutationErrorMessage(error, '批量生成应付失败'))
+      message.error(mutationErrorMessage(error, '批量提交应付失败'))
     },
   })
 
   const confirmBatchGenerate = () => {
     Modal.confirm({
-      title: '批量生成应付',
+      title: '批量提交应付',
       content: formatBatchFinanceGenerationConfirmContent(
         amountSummary.ungeneratedPayableCount,
         '应付',
       ),
-      okText: '生成',
+      okText: '提交',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),
     })

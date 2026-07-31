@@ -1526,7 +1526,7 @@ describe('Departure API (e2e)', () => {
         .delete(`/api/source-orders/${sourceOrderId}`)
         .expect(409)
 
-      expect(response.body.message).toBe('当前客源单已生成应收，不能直接删除')
+      expect(response.body.message).toBe('当前客源单已提交应收，不能直接删除')
     })
   })
 
@@ -2141,8 +2141,8 @@ describe('Departure API (e2e)', () => {
         sourceOrders: '客源1单',
         segments: '行程1段',
         resources: '资源1项',
-        receivables: '应收未生成',
-        payables: '应付未生成',
+        receivables: '应收未提交',
+        payables: '应付未提交',
       })
       expect(response.body.data.overviewStats).toEqual({
         receivedCents: 0,
@@ -2244,7 +2244,7 @@ describe('Departure API (e2e)', () => {
 
       expect(response.body.data.verifiedReceivableCents).toBe(500000)
       expect(response.body.data.openUnsettledReceivableCents).toBe(500000)
-      expect(response.body.data.completionTags.receivables).toBe('应收已生成')
+      expect(response.body.data.completionTags.receivables).toBe('应收已提交')
       expect(response.body.data.isFinanciallySettled).toBe(false)
       expect(response.body.data.overviewStats).toMatchObject({
         receivedCents: 500000,

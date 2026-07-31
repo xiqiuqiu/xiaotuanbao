@@ -372,7 +372,7 @@ describe('Workbench contract (e2e)', () => {
           { key: 'data-gaps', label: '资料待补充', value: 3, suffix: '个发团' },
           {
             key: 'pending-payables',
-            label: '待生成应付',
+            label: '待提交应付',
             value: 3,
             suffix: '个资源',
             href: '/departure?accountGenerationGap=payable',
@@ -422,7 +422,7 @@ describe('Workbench contract (e2e)', () => {
       for (const metric of coordinatorModule.metrics) {
         const path = metric.href.replace('/departure', '/api/departures')
         const drillDown = await authRequest(app, cookie).get(path).expect(200)
-        // 待生成应付指标按资源行计数；发团列表下钻按发团去重，总数可不一致
+        // 待提交应付指标按资源行计数；发团列表下钻按发团去重，总数可不一致
         if (metric.key === 'pending-payables') {
           expect(drillDown.body.data.total).toBeGreaterThan(0)
           expect(drillDown.body.data.total).toBeLessThanOrEqual(metric.value)
@@ -565,20 +565,20 @@ describe('Workbench contract (e2e)', () => {
       )
       await createDepartureWithOrder('没有账款不可结清', DepartureStatus.pending_settlement)
       for (let index = 1; index <= 6; index += 1) {
-        await createDepartureWithOrder(`待生成应收 ${index}`, DepartureStatus.editing)
+        await createDepartureWithOrder(`待提交应收 ${index}`, DepartureStatus.editing)
       }
 
       await prisma.itinerarySegment.create({
         data: {
           departureId: open.id,
-          name: '存在待生成应付的行程段',
+          name: '存在待提交应付的行程段',
           sortOrder: 1,
           resources: {
             create: {
               resourceKind: ResourceKind.transport,
               counterpartyType: CounterpartyType.supplier,
               supplierId: supplier.id,
-              title: '待生成应付资源',
+              title: '待提交应付资源',
               amountCents: 5000,
             },
           },
@@ -630,18 +630,18 @@ describe('Workbench contract (e2e)', () => {
 
       expect(departureModule.metrics[3]).toMatchObject({
         key: 'pending-payables',
-        label: '待生成应付',
+        label: '待提交应付',
         value: 1,
         suffix: '个资源',
         href: '/departure?accountGenerationGap=payable',
       })
       expect(settlementModule).toMatchObject({
-        title: '待生成账款',
+        title: '待提交账款',
       })
       expect(settlementModule.metrics).toEqual([
         expect.objectContaining({
           key: 'pending-receivables',
-          label: '待生成应收',
+          label: '待提交应收',
           value: 7,
           suffix: '个客源单',
           href: '/source-orders?receivableGeneration=not_generated',
@@ -651,9 +651,9 @@ describe('Workbench contract (e2e)', () => {
         (item: { kind: string }) => item.kind === 'coordinator-payable-pending',
       )).toEqual([
         expect.objectContaining({
-          title: '待生成应付资源',
+          title: '待提交应付资源',
           departureName: '仍有开放账款不可结清',
-          segmentName: '存在待生成应付的行程段',
+          segmentName: '存在待提交应付的行程段',
           resourceKind: 'transport',
         }),
       ])
@@ -678,7 +678,7 @@ describe('Workbench contract (e2e)', () => {
       expect(pendingPayables.body.data.items).toEqual([
         expect.objectContaining({
           generationKind: 'payable',
-          title: '待生成应付资源',
+          title: '待提交应付资源',
         }),
       ])
 
@@ -1644,7 +1644,7 @@ describe('Workbench contract (e2e)', () => {
         data: {
           departureId: openDeparture.id,
           partnerId: partner.id,
-          displayName: '待生成应收客源单',
+          displayName: '待提交应收客源单',
           guestCount: 1,
           adultGuestCount: 1,
           childGuestCount: 0,
@@ -1665,7 +1665,7 @@ describe('Workbench contract (e2e)', () => {
         data: {
           departureId: closedDeparture.id,
           partnerId: partner.id,
-          displayName: '关闭发团待生成应收',
+          displayName: '关闭发团待提交应收',
           guestCount: 1,
           adultGuestCount: 1,
           childGuestCount: 0,
@@ -1703,7 +1703,7 @@ describe('Workbench contract (e2e)', () => {
           resourceKind: ResourceKind.hotel,
           counterpartyType: CounterpartyType.supplier,
           supplierId: supplier.id,
-          title: '待生成应付酒店',
+          title: '待提交应付酒店',
           amountCents: 15000,
         },
       })
@@ -1723,12 +1723,12 @@ describe('Workbench contract (e2e)', () => {
           resourceKind: ResourceKind.meal,
           counterpartyType: CounterpartyType.supplier,
           supplierId: supplier.id,
-          title: '已生成应付餐食',
+          title: '已提交应付餐食',
           amountCents: 4000,
         },
       })
       await createPayable({
-        title: '资源已生成应付',
+        title: '资源已提交应付',
         amountCents: 4000,
         departureId: closedDeparture.id,
         sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
@@ -1787,22 +1787,22 @@ describe('Workbench contract (e2e)', () => {
       })
       expect(generationItems).toHaveLength(3)
       expect(generationItems.map((item: { title: string }) => item.title)).toEqual([
-        '待生成应收客源单',
-        '待生成应付酒店',
-        '关闭发团待生成应收',
+        '待提交应收客源单',
+        '待提交应付酒店',
+        '关闭发团待提交应收',
       ])
       expect(generationItems.find(
-        (item: { title: string }) => item.title === '关闭发团待生成应收',
+        (item: { title: string }) => item.title === '关闭发团待提交应收',
       )).toMatchObject({ generationKind: 'receivable', departureClosed: true })
       expect(generationItems.find(
-        (item: { title: string }) => item.title === '待生成应付酒店',
+        (item: { title: string }) => item.title === '待提交应付酒店',
       )).toMatchObject({ generationKind: 'payable', estimatedAmountCents: 15000 })
 
       expect(JSON.stringify(fundsModule)).not.toContain('已关闭节点')
       expect(JSON.stringify(fundsModule)).not.toContain('已作废节点')
       expect(JSON.stringify(fundsModule)).not.toContain('已作废流水')
       expect(JSON.stringify(fundsModule)).not.toContain('零元不入缺口')
-      expect(JSON.stringify(fundsModule)).not.toContain('已生成应付餐食')
+      expect(JSON.stringify(fundsModule)).not.toContain('已提交应付餐食')
       expect(JSON.stringify(fundsModule)).not.toContain('催付')
       expect(JSON.stringify(fundsModule.metrics)).not.toContain('overdue')
       expect(JSON.stringify(fundsModule.metrics)).not.toContain('dueDate')
@@ -1825,7 +1825,7 @@ describe('Workbench contract (e2e)', () => {
         expect(drillDown.body.data.total).toBe(target.total)
       }
 
-      // 待生成账款按资源/客源单计数；查看全部落到发团列表（按发团去重）
+      // 待提交账款按资源/客源单计数；查看全部落到发团列表（按发团去重）
       const generationDepartures = await authRequest(app, cookie)
         .get(fundsModule.secondaryHref.replace('/departure', '/api/departures'))
         .expect(200)
@@ -2008,7 +2008,7 @@ describe('Workbench contract (e2e)', () => {
         endOffset: 5,
       })
       const endedGapDeparture = await createDeparture({
-        name: '已结束待生成账款发团',
+        name: '已结束待提交账款发团',
         startOffset: -10,
         endOffset: -1,
       })
@@ -2063,7 +2063,7 @@ describe('Workbench contract (e2e)', () => {
         data: {
           departureId: endedGapDeparture.id,
           partnerId: partner.id,
-          displayName: '已结束待生成应收客源单',
+          displayName: '已结束待提交应收客源单',
           guestCount: 2,
           adultGuestCount: 2,
           childGuestCount: 0,
@@ -2147,7 +2147,7 @@ describe('Workbench contract (e2e)', () => {
       expect(JSON.stringify(riskModule.items)).not.toContain('逾期12天应收')
       expect(JSON.stringify(riskModule.items)).not.toContain('三日后资料缺口发团')
       expect(JSON.stringify(riskModule.items)).not.toContain('超7天未核销收入')
-      expect(JSON.stringify(riskModule.items)).not.toContain('已结束待生成账款发团')
+      expect(JSON.stringify(riskModule.items)).not.toContain('已结束待提交账款发团')
       expect(JSON.stringify(riskModule.items)).not.toContain('账龄7天不入风险分级')
       expect(JSON.stringify(riskModule.items)).not.toMatch(/风险评分|综合评分|"score"\s*:/i)
       expect(riskModule.description).toBeUndefined()

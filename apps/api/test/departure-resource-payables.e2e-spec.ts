@@ -214,7 +214,7 @@ describe('Departure resource CRUD and generate payables (e2e) (#205)', () => {
       .post(`/api/departure-resources/${resource.id}/generate-payable`)
       .expect(409)
 
-    expect(second.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(second.body.message).toBe('当前资源已提交应付，不能再次提交')
 
     const count = await prisma.paymentSchedule.count({
       where: {

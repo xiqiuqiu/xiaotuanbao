@@ -8,13 +8,13 @@ import {
 describe('formatBatchFinanceGenerationConfirmContent', () => {
   it('summarizes receivable candidate count', () => {
     expect(formatBatchFinanceGenerationConfirmContent(3, '应收')).toBe(
-      '确认后将生成 3 条应收记录',
+      '确认后将提交 3 条应收记录',
     )
   })
 
   it('summarizes payable candidate count and clamps invalid counts', () => {
     expect(formatBatchFinanceGenerationConfirmContent(-2.7, '应付')).toBe(
-      '确认后将生成 0 条应付记录',
+      '确认后将提交 0 条应付记录',
     )
   })
 })
@@ -30,7 +30,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
       items: [],
     }
     expect(formatBatchFinanceGenerationMessage(result, '应收')).toBe(
-      '没有可生成的未生成应收',
+      '没有可提交的未提交应收',
     )
   })
 
@@ -58,7 +58,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
       ],
     }
     expect(formatBatchFinanceGenerationMessage(result, '应付')).toBe(
-      '应付批量生成完成：成功 2 · 跳过 1 · 失败 1。丙：网络错误',
+      '应付批量提交完成：成功 2 · 跳过 1 · 失败 1。丙：网络错误',
     )
   })
 })

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ResourceDrawer } from './ResourceDrawer'
@@ -15,6 +15,7 @@ vi.mock('@/services/supplier.service', () => ({
     total: 1,
   })),
   getSupplier: vi.fn(),
+  createSupplier: vi.fn(),
 }))
 
 function renderDrawer(
@@ -28,14 +29,16 @@ function renderDrawer(
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <ResourceDrawer
-          open
-          editing={null}
-          readOnly={false}
-          loading={false}
-          onClose={vi.fn()}
-          {...props}
-        />
+        <App>
+          <ResourceDrawer
+            open
+            editing={null}
+            readOnly={false}
+            loading={false}
+            onClose={vi.fn()}
+            {...props}
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -55,47 +58,47 @@ describe('ResourceDrawer save and generate', () => {
     cleanup()
   })
 
-  it('shows 保存并生成应付 when canSaveAndGenerate is enabled', () => {
+  it('shows 保存并提交应付 when canSaveAndGenerate is enabled', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: '保存并生成应付' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '保存并提交应付' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /保\s*存$/ })).toBeTruthy()
   })
 
-  it('hides 保存并生成应付 when canSaveAndGenerate is false', () => {
+  it('hides 保存并提交应付 when canSaveAndGenerate is false', () => {
     renderDrawer({
       canSaveAndGenerate: false,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.queryByRole('button', { name: '保存并生成应付' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '保存并提交应付' })).toBeNull()
   })
 
-  it('disables 保存并生成应付 while saveAndGenerateLoading', () => {
+  it('disables 保存并提交应付 while saveAndGenerateLoading', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       saveAndGenerateLoading: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: /保存并生成应付/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /保存并提交应付/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /保\s*存$/ })).toBeDisabled()
   })
 
-  it('disables 保存并生成应付 while loading', () => {
+  it('disables 保存并提交应付 while loading', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       loading: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: /保存并生成应付/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /保存并提交应付/ })).toBeDisabled()
   })
 
-  it('submits with generatePayable when 保存并生成应付 is clicked', async () => {
+  it('submits with generatePayable when 保存并提交应付 is clicked', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
 
@@ -105,7 +108,7 @@ describe('ResourceDrawer save and generate', () => {
     })
 
     await fillValidCreateForm(user)
-    await user.click(screen.getByRole('button', { name: '保存并生成应付' }))
+    await user.click(screen.getByRole('button', { name: '保存并提交应付' }))
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(
@@ -147,7 +150,7 @@ describe('ResourceDrawer save and generate', () => {
       onSubmit,
     })
 
-    await user.click(screen.getByRole('button', { name: '保存并生成应付' }))
+    await user.click(screen.getByRole('button', { name: '保存并提交应付' }))
     expect(onSubmit).not.toHaveBeenCalled()
     await screen.findByText('请选择供应商')
 

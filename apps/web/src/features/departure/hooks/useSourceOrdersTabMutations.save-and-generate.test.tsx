@@ -109,7 +109,7 @@ describe('useSourceOrdersTabMutations save and generate', () => {
     await waitFor(() => {
       expect(createSourceOrder).toHaveBeenCalledWith('departure-1', payload)
       expect(generateReceivables).toHaveBeenCalledWith('order-new')
-      expect(successSpy).toHaveBeenCalledWith('已保存并生成应收')
+      expect(successSpy).toHaveBeenCalledWith('已保存并提交应收')
     })
 
     successSpy.mockRestore()
@@ -144,7 +144,7 @@ describe('useSourceOrdersTabMutations save and generate', () => {
       expect(createSourceOrder).toHaveBeenCalled()
       expect(generateReceivables).toHaveBeenCalledWith('order-new')
       expect(warningSpy).toHaveBeenCalledWith(
-        '客源单已保存，但生成应收失败：路径金额须大于 0',
+        '客源单已保存，但提交应收失败：路径金额须大于 0',
       )
     })
 

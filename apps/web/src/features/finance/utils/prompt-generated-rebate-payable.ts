@@ -19,7 +19,7 @@ export function buildGeneratedRebatePayablePromptCopy(rebate: PaymentScheduleSum
 }
 
 /**
- * 核销齐账后若落账返利应付：提示财务处理；「去处理」由调用方跳转应付列表并筛该单号。
+ * 核销齐账后若落账返利应付：提示财务处理；「去处理」跳转该发团应付 Tab 并筛该单号。
  */
 export function promptGeneratedRebatePayableFollowUp(
   rebate: PaymentScheduleSummary | null | undefined,
@@ -39,4 +39,30 @@ export function promptGeneratedRebatePayableFollowUp(
       onGoProcess(rebate)
     },
   })
+}
+
+/**
+ * 「去处理」导航目标：留在该返利所属发团的应付 Tab，并按单号定位。
+ * （勿跳公共 /finance/payable，会离开团单上下文。）
+ */
+export function buildGeneratedRebatePayableProcessNavigation(
+  rebate: PaymentScheduleSummary,
+): {
+  to: '/departure/$departureId'
+  params: { departureId: string }
+  search: {
+    tab: 'payables'
+    scheduleNo: string
+    highlightSourceOrderId?: string
+  }
+} {
+  return {
+    to: '/departure/$departureId',
+    params: { departureId: rebate.departureId },
+    search: {
+      tab: 'payables',
+      scheduleNo: rebate.scheduleNo,
+      ...(rebate.sourceId ? { highlightSourceOrderId: rebate.sourceId } : {}),
+    },
+  }
 }

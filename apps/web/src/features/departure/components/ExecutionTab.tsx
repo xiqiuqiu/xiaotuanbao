@@ -48,7 +48,7 @@ interface ExecutionTabProps {
   highlightDepartureResourceId?: string
   /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
-  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应付。 */
+  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响提交应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
 }
@@ -172,7 +172,7 @@ function ExecutionWorkspace({
             <span className={styles.layerCardMeta}>
               {departureSummary.ungeneratedPayableCount > 0 ? (
                 <span className={styles.layerCardWarn}>
-                  {departureSummary.ungeneratedPayableCount} 项未生成应付
+                  {departureSummary.ungeneratedPayableCount} 项未提交应付
                 </span>
               ) : (
                 '全程统一录入'
@@ -257,7 +257,7 @@ export function ExecutionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  // 行程段增删改属 departure:write：财务（无 canEdit）只读，但资源生成应付不受此限。
+  // 行程段增删改属 departure:write：财务（无 canEdit）只读，但资源提交应付不受此限。
   const mutationLocked = readOnly || amountReadOnly || !canEdit
 
   const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({

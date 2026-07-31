@@ -15,7 +15,7 @@ export function SourceOrdersSettlementStrip({
   }
 
   const pendingLabel =
-    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待生成` : '已齐'
+    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待提交` : '已齐'
 
   return (
     <div
@@ -50,7 +50,7 @@ export function SourceOrdersSettlementStrip({
         }`}
         role="listitem"
       >
-        <span className={styles.settlementStripLabel}>尚未生成应收</span>
+        <span className={styles.settlementStripLabel}>尚未提交应收</span>
         <span className={styles.settlementStripMetricValue}>
           {formatCents(summary.ungeneratedCents)}
         </span>

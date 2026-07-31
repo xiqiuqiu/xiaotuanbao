@@ -30,7 +30,10 @@ import {
   type EditScheduleFormValues,
 } from '../utils/edit-schedule-form'
 import { yuanToCents } from '../utils/finance-form'
-import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
+import {
+  buildGeneratedRebatePayableProcessNavigation,
+  promptGeneratedRebatePayableFollowUp,
+} from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -87,10 +90,7 @@ export function usePaymentScheduleMutations({
   const navigate = useNavigate()
 
   const goProcessRebatePayable = (rebate: PaymentScheduleSummary) => {
-    void navigate({
-      to: '/finance/payable',
-      search: { scheduleNo: rebate.scheduleNo },
-    })
+    void navigate(buildGeneratedRebatePayableProcessNavigation(rebate))
   }
 
   const confirmMutation = useMutation({

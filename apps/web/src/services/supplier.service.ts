@@ -56,8 +56,11 @@ export async function getSupplier(id: string): Promise<SupplierSummary> {
   return request.get<SupplierSummary>(`/suppliers/${id}`)
 }
 
-export async function createSupplier(payload: CreateSupplierPayload): Promise<SupplierSummary> {
-  return request.post<SupplierSummary>('/suppliers', payload)
+export async function createSupplier(
+  payload: CreateSupplierPayload,
+  config?: { silentError?: boolean },
+): Promise<SupplierSummary> {
+  return request.post<SupplierSummary>('/suppliers', payload, config)
 }
 
 export async function updateSupplier(

@@ -113,7 +113,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   updateBookingNoticeTemplate: { gating: 'menuGated', endpointKey: '/system/organization' },
   deleteBookingNoticeTemplate: { gating: 'menuGated', endpointKey: '/system/organization' },
 
-  // ---- 菜单级：生成应收/应付挂 /departure（发团可见者皆可）----
+  // ---- 菜单级：提交应收/应付挂 /departure（发团可见者皆可）----
   generatePayable: { gating: 'menuGated', endpointKey: '/departure' },
   generateDeparturePayable: { gating: 'menuGated', endpointKey: '/departure' },
   generatePayablesForSegment: { gating: 'menuGated', endpointKey: '/departure' },

@@ -17,6 +17,7 @@ import {
   departureToFormValues,
   type DepartureOverviewFormValues,
 } from '../utils/departure-overview-form'
+import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
 
 interface DepartureOverviewDrawerProps {
   open: boolean
@@ -134,16 +135,6 @@ export function DepartureOverviewDrawer({
       value: employee.id,
       label: employee.name,
     })) ?? []
-  const driverOptions = withCurrentSupplierOption(
-    driverSuppliersResult?.items ?? [],
-    departure.driverSupplierId,
-    departure.driverSupplierName,
-  )
-  const guideOptions = withCurrentSupplierOption(
-    guideSuppliersResult?.items ?? [],
-    departure.guideSupplierId,
-    departure.guideSupplierName,
-  )
 
   const handleClose = () => {
     form.resetFields()
@@ -272,26 +263,38 @@ export function DepartureOverviewDrawer({
         <Form.Item
           name="driverSupplierId"
           label="司机"
-          extra="选择执行班组不会自动生成应付"
+          extra="选择执行班组不会自动提交应付"
         >
-          <Select
-            allowClear
-            showSearch={{ filterOption: false, onSearch: setDriverSearch }}
+          <SupplierQuickCreateSelect
+            category={ResourceKind.TRANSPORT}
+            suppliers={driverSuppliersResult?.items ?? []}
+            pinnedOption={
+              departure.driverSupplierId && departure.driverSupplierName
+                ? { id: departure.driverSupplierId, name: departure.driverSupplierName }
+                : null
+            }
+            searchValue={driverSearch}
+            onSearch={setDriverSearch}
             loading={isDriverSuppliersLoading}
             placeholder="选择含「用车」类别的供应商"
-            options={driverOptions}
-            notFoundContent="暂无匹配供应商，请先到供应商名录维护「用车」类别"
+            emptyHint="暂无匹配供应商，请先到供应商名录维护「用车」类别"
           />
         </Form.Item>
 
         <Form.Item name="guideSupplierId" label="导游">
-          <Select
-            allowClear
-            showSearch={{ filterOption: false, onSearch: setGuideSearch }}
+          <SupplierQuickCreateSelect
+            category={ResourceKind.GUIDE}
+            suppliers={guideSuppliersResult?.items ?? []}
+            pinnedOption={
+              departure.guideSupplierId && departure.guideSupplierName
+                ? { id: departure.guideSupplierId, name: departure.guideSupplierName }
+                : null
+            }
+            searchValue={guideSearch}
+            onSearch={setGuideSearch}
             loading={isGuideSuppliersLoading}
             placeholder="选择含「导游」类别的供应商"
-            options={guideOptions}
-            notFoundContent="暂无匹配供应商，请先到供应商名录维护「导游」类别"
+            emptyHint="暂无匹配供应商，请先到供应商名录维护「导游」类别"
           />
         </Form.Item>
 
@@ -309,19 +312,4 @@ export function DepartureOverviewDrawer({
       </Form>
     </Drawer>
   )
-}
-
-function withCurrentSupplierOption(
-  suppliers: Array<{ id: string; name: string }>,
-  currentId: string | null,
-  currentName: string | null,
-) {
-  const options = suppliers.map((supplier) => ({
-    value: supplier.id,
-    label: supplier.name,
-  }))
-  if (currentId && currentName && !options.some((option) => option.value === currentId)) {
-    options.unshift({ value: currentId, label: currentName })
-  }
-  return options
 }

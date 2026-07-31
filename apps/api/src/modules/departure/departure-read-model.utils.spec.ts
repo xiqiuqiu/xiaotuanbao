@@ -35,8 +35,8 @@ describe('departure-read-model.utils', () => {
       expect(deriveSourceOrderTag(0)).toBe('客源未录入')
       expect(deriveSegmentTag(0)).toBe('行程未录入')
       expect(deriveResourceTag(0)).toBe('资源未安排')
-      expect(deriveReceivableTagFromSchedules([], new Map())).toBe('应收未生成')
-      expect(derivePayableTagFromSchedules([], new Map())).toBe('应付未生成')
+      expect(deriveReceivableTagFromSchedules([], new Map())).toBe('应收未提交')
+      expect(derivePayableTagFromSchedules([], new Map())).toBe('应付未提交')
     })
 
     it('derives count tags', () => {
@@ -48,11 +48,11 @@ describe('departure-read-model.utils', () => {
     it('derives receivable and payable schedule tags', () => {
       const settled = new Map([['ar-1', 1000000]])
       expect(deriveReceivableTagFromSchedules([receivableSchedule], settled)).toBe('已收齐')
-      expect(deriveReceivableTagFromSchedules([receivableSchedule], new Map())).toBe('应收已生成')
+      expect(deriveReceivableTagFromSchedules([receivableSchedule], new Map())).toBe('应收已提交')
 
       const paid = new Map([['ap-1', 500000]])
       expect(derivePayableTagFromSchedules([payableSchedule], paid)).toBe('已付清')
-      expect(derivePayableTagFromSchedules([payableSchedule], new Map())).toBe('应付已生成')
+      expect(derivePayableTagFromSchedules([payableSchedule], new Map())).toBe('应付已提交')
     })
 
     it('does not label closed schedules with remaining amounts as fully settled', () => {
@@ -63,13 +63,13 @@ describe('departure-read-model.utils', () => {
           [{ ...receivableSchedule, cancelledAt }],
           new Map([['ar-1', 400_000]]),
         ),
-      ).toBe('应收已生成')
+      ).toBe('应收已提交')
       expect(
         derivePayableTagFromSchedules(
           [{ ...payableSchedule, cancelledAt }],
           new Map([['ap-1', 200_000]]),
         ),
-      ).toBe('应付已生成')
+      ).toBe('应付已提交')
     })
 
     it('matches ider completionTags example', () => {
@@ -85,8 +85,8 @@ describe('departure-read-model.utils', () => {
         sourceOrders: '客源3单',
         segments: '行程2段',
         resources: '资源5项',
-        receivables: '应收未生成',
-        payables: '应付未生成',
+        receivables: '应收未提交',
+        payables: '应付未提交',
       })
     })
   })
@@ -377,7 +377,7 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.openUnsettledPayableCents).toBe(0)
       expect(aggregate.unverifiedIncomeCents).toBe(0)
       expect(aggregate.unverifiedExpenseCents).toBe(0)
-      expect(aggregate.completionTags.receivables).toBe('应收未生成')
+      expect(aggregate.completionTags.receivables).toBe('应收未提交')
       expect(aggregate.isFinanciallySettled).toBe(false)
     })
   })

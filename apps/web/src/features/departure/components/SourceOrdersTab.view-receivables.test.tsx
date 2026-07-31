@@ -187,14 +187,14 @@ describe('SourceOrdersTab 查看返利 navigation', () => {
   })
 })
 
-describe('SourceOrdersTab 批量生成应收', () => {
+describe('SourceOrdersTab 批量提交应收', () => {
   afterEach(() => {
     cleanup()
     navigate.mockReset()
     listSourceOrders.mockReset()
   })
 
-  it('shows 批量生成应收 only when ungenerated source orders exist', async () => {
+  it('shows 批量提交应收 only when ungenerated source orders exist', async () => {
     listSourceOrders.mockResolvedValue({
       items: [baseOrder({ receivableStatus: 'not_generated', hasPaymentSchedule: false })],
       summary: {
@@ -212,7 +212,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
 
     const { unmount } = renderTab()
 
-    expect(await screen.findByRole('button', { name: '批量生成应收' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '批量提交应收' })).toBeTruthy()
     unmount()
 
     listSourceOrders.mockResolvedValue({
@@ -234,7 +234,7 @@ describe('SourceOrdersTab 批量生成应收', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     })
-    expect(screen.queryByRole('button', { name: '批量生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '批量提交应收' })).toBeNull()
   })
 
   it('counts deposit+balance paths for guest_only and only balance for split in batch confirmation', async () => {
@@ -290,13 +290,13 @@ describe('SourceOrdersTab 批量生成应收', () => {
 
     try {
       renderTab()
-      await user.click(await screen.findByRole('button', { name: '批量生成应收' }))
+      await user.click(await screen.findByRole('button', { name: '批量提交应收' }))
 
-      expect(confirmConfig).toMatchObject({ title: '批量生成应收', okText: '生成' })
+      expect(confirmConfig).toMatchObject({ title: '批量提交应收', okText: '提交' })
 
       render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
       // guest_only G=S → 2 paths; split G=S → 1 path (balance only)
-      const summary = screen.getByText('确认后将生成 3 条应收记录')
+      const summary = screen.getByText('确认后将提交 3 条应收记录')
       const explanation = screen.getByText(
         '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收；当代收不足以覆盖结算金额时同批生成客户补款。',
       )

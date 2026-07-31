@@ -187,7 +187,7 @@ export function IncomeRecordDrawer({
             notFoundContent={partnerQuery.isLoading ? '加载中…' : '暂无供应商'}
           />
         </Form.Item>
-        <Form.Item name="occurredOn" label="发生日期" rules={[{ required: true }]}>
+        <Form.Item name="occurredOn" label="交易日期" rules={[{ required: true }]}>
           <DatePicker style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
@@ -213,10 +213,10 @@ export function IncomeRecordDrawer({
           name="commissionYuan"
           label="导游提成"
           rules={[
-            { required: true, type: 'number', min: 0 },
+            { type: 'number', min: 0 },
             {
               validator: async (_, value) => {
-                if (value == null) return
+                if (value == null || value === '') return
                 if (Number(value) > Number(amountYuan ?? 0)) {
                   throw new Error('导游提成不得大于增收金额')
                 }
@@ -231,7 +231,7 @@ export function IncomeRecordDrawer({
             {Number.isFinite(companyYuan) ? formatCents(Math.round(companyYuan * 100)) : '-'}
           </Typography.Text>
         </Form.Item>
-        <Form.Item name="incomeStatus" label="收入状态" rules={[{ required: true }]}>
+        <Form.Item name="incomeStatus" label="收账状态" rules={[{ required: true }]}>
           <Select options={INCOME_STATUS_OPTIONS} />
         </Form.Item>
         <Form.Item name="commissionStatus" label="提成状态" rules={[{ required: true }]}>

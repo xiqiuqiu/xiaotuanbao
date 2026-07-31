@@ -74,8 +74,8 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       sourceOrders: '客源未录入',
       segments: '行程1段',
       resources: '资源1项',
-      receivables: '应收未生成',
-      payables: '应付未生成',
+      receivables: '应收未提交',
+      payables: '应付未提交',
     },
     grossReceivableCents: 0,
     fareAdjustmentNetCents: 0,
@@ -158,8 +158,8 @@ describe('DepartureNextActionAlert', () => {
           sourceOrders: '客源1单',
           segments: '行程1段',
           resources: '资源1项',
-          receivables: '应收已生成',
-          payables: '应付已生成',
+          receivables: '应收已提交',
+          payables: '应付已提交',
         },
         overviewStats: makeOverviewStats({
           anomalies: [
@@ -175,7 +175,7 @@ describe('DepartureNextActionAlert', () => {
     )
 
     expect(screen.getByText('应收金额存在异常，请核对后再继续结算。')).toBeInTheDocument()
-    expect(screen.queryByText(/已生成应收合计/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/已提交应收合计/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeInTheDocument()
   })
 
@@ -207,8 +207,8 @@ describe('DepartureNextActionAlert', () => {
         sourceOrders: '客源1单',
         segments: '行程未录入',
         resources: '资源1项',
-        receivables: '应收未生成',
-        payables: '应付未生成',
+        receivables: '应收未提交',
+        payables: '应付未提交',
       },
       sourceOrderCount: 1,
       segmentCount: 0,

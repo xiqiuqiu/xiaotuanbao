@@ -64,7 +64,7 @@ interface ExecutionResourcePaneProps {
   departure: DepartureDetail
   segment: ItinerarySegmentSummary
   readOnly: boolean
-  /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响生成应付。 */
+  /** 是否持有 `departure:write`；财务无，仅封锁资源编辑与作废，不影响提交应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
 }
@@ -101,7 +101,7 @@ function ExecutionResourceHeader({
             </Typography.Text>
             {amountSummary.ungeneratedPayableCents > 0 ? (
               <>
-                {' ｜ 尚未生成应付 '}
+                {' ｜ 尚未提交应付 '}
                 <Typography.Text strong style={{ color: token.colorWarning }}>
                   {formatCents(amountSummary.ungeneratedPayableCents)}
                 </Typography.Text>
@@ -113,7 +113,7 @@ function ExecutionResourceHeader({
       <Space>
         {showBatchGenerate ? (
           <Button onClick={onBatchGenerate} loading={batchGenerating}>
-            批量生成应付
+            批量提交应付
           </Button>
         ) : null}
         {showAddResource ? (
@@ -249,7 +249,7 @@ function useSaveResourceMutations({
       }
       if (!result.generateOk) {
         message.warning(
-          `资源已保存，但生成应付失败：${mutationErrorMessage(
+          `资源已保存，但提交应付失败：${mutationErrorMessage(
             result.generateError,
             '请稍后在列表中重试',
           )}`,
@@ -259,8 +259,8 @@ function useSaveResourceMutations({
       }
       message.success(
         result.generateResult.sourceAmountMismatch
-          ? '已保存并生成应付，存在来源金额差异，请核对'
-          : '已保存并生成应付',
+          ? '已保存并提交应付，存在来源金额差异，请核对'
+          : '已保存并提交应付',
       )
       invalidatePayableQueries()
       closeDrawer()
@@ -286,7 +286,7 @@ export function ExecutionResourcePane({
   // 关闭节点属财务动作（POST …/cancel 要 /finance/receivable）：计调无此权限，须 gating。
   const canCloseFinance = canMutateFinance(menuKeys)
   const mutationLocked = readOnly || amountReadOnly
-  // 资源增删改与作废应付属 departure:write：财务只读，但生成应付不受此限。
+  // 资源增删改与作废应付属 departure:write：财务只读，但提交应付不受此限。
   const resourceEditable = !mutationLocked && canEdit
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingResource, setEditingResource] = useState<SegmentResourceSummary | null>(null)
@@ -371,14 +371,14 @@ export function ExecutionResourcePane({
     onSuccess: (result) => {
       message.success(
         result.sourceAmountMismatch
-          ? '应付已生成，存在来源金额差异，请核对'
-          : '应付已生成',
+          ? '应付已提交，存在来源金额差异，请核对'
+          : '应付已提交',
       )
       invalidateResourceQueries()
       invalidatePayableQueries()
     },
     onError: (error) => {
-      message.error(mutationErrorMessage(error, '生成应付失败'))
+      message.error(mutationErrorMessage(error, '提交应付失败'))
     },
   })
 
@@ -397,7 +397,7 @@ export function ExecutionResourcePane({
       invalidatePayableQueries()
     },
     onError: (error) => {
-      message.error(mutationErrorMessage(error, '批量生成应付失败'))
+      message.error(mutationErrorMessage(error, '批量提交应付失败'))
     },
   })
 
@@ -439,9 +439,9 @@ export function ExecutionResourcePane({
   const confirmBatchGenerate = () => {
     if (!payableGap.hasGap) return
     Modal.confirm({
-      title: '批量生成应付',
+      title: '批量提交应付',
       content: formatBatchFinanceGenerationConfirmContent(payableGap.ungenerated, '应付'),
-      okText: '生成',
+      okText: '提交',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),
     })

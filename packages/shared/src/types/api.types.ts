@@ -162,7 +162,7 @@ export interface WorkbenchFinancePendingSettlementItem extends WorkbenchItem {
   departureClosed: boolean
 }
 
-/** 财务「待生成账款」队列项。 */
+/** 财务「待提交账款」队列项。 */
 export interface WorkbenchFinanceAccountGenerationItem extends WorkbenchItem {
   kind: 'finance-account-generation'
   href: string
@@ -220,7 +220,7 @@ export interface WorkbenchModule {
   >
   total?: number
   href?: string
-  /** 第二队列汇总（如待生成账款）；与 href/total 并列。 */
+  /** 第二队列汇总（如待提交账款）；与 href/total 并列。 */
   secondaryTotal?: number
   secondaryHref?: string
 }
@@ -1368,7 +1368,7 @@ export interface SourceOrderSummary {
   hasSourceAmountMismatch: boolean
   amountFieldsLocked: boolean
   /**
-   * 已生成应收但约定路径仍有缺失（如旧规则只建尾款、未建客户补款）。
+   * 已提交应收但约定路径仍有缺失（如旧规则只建尾款、未建客户补款）。
    * 列表可显示「补全应收」并再次调用生成接口补建。
    */
   hasIncompleteReceivablePaths: boolean
@@ -1413,7 +1413,7 @@ export interface BatchFinanceGenerationItem {
   reason?: string
 }
 
-/** 发团级一键生成应收/应付的汇总结果；逐条独立事务，允许部分成功。 */
+/** 发团级一键提交应收/应付的汇总结果；逐条独立事务，允许部分成功。 */
 export interface BatchFinanceGenerationResult {
   attempted: number
   succeeded: number

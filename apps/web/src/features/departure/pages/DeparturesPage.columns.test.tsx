@@ -4,6 +4,30 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DepartureSummary } from '@/types/api'
 import { buildDepartureColumns, DEPARTURE_LIST_TABLE_SCROLL_X } from './departure-columns'
 
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual<typeof import('@tanstack/react-query')>(
+    '@tanstack/react-query',
+  )
+  return {
+    ...actual,
+    useQueryClient: () => ({ prefetchQuery: vi.fn() }),
+  }
+})
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode
+    className?: string
+  }) => (
+    <a href="/detail" className={className}>
+      {children}
+    </a>
+  ),
+}))
+
 afterEach(() => {
   cleanup()
 })
@@ -76,5 +100,81 @@ describe('发团列表操作列', () => {
     }, 0)
 
     expect(totalWidth).toBeLessThanOrEqual(DEPARTURE_LIST_TABLE_SCROLL_X)
+  })
+
+  it('完成情况：列表只铺待办缺口 warning Tag；全齐显示「已齐」', () => {
+    const completionColumn = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true).find(
+      (column) => 'key' in column && column.key === 'completionTags',
+    )
+    expect(completionColumn?.render).toBeTypeOf('function')
+
+    const incompleteRecord = {
+      id: 'departure-1',
+      completionTags: {
+        sourceOrders: '客源未录入',
+        segments: '行程5段',
+        resources: '资源2项',
+        receivables: '应收未提交',
+        payables: '应付已提交',
+      },
+    } as DepartureSummary
+
+    const { container, rerender } = render(
+      <>{completionColumn!.render?.(undefined, incompleteRecord, 0)}</>,
+    )
+    const tags = Array.from(container.querySelectorAll('.ant-tag'))
+    const texts = tags.map((el) => el.textContent)
+    expect(texts).toEqual(['客源未录入', '应收未提交'])
+    expect(tags.every((el) => /ant-tag-warning/.test(el.className))).toBe(true)
+    expect(screen.queryByText('行程5段')).toBeNull()
+    expect(screen.queryByText('应付已提交')).toBeNull()
+
+    const completeRecord = {
+      id: 'departure-2',
+      completionTags: {
+        sourceOrders: '客源3单',
+        segments: '行程5段',
+        resources: '资源2项',
+        receivables: '应收已提交',
+        payables: '应付已提交',
+      },
+    } as DepartureSummary
+    rerender(<>{completionColumn!.render?.(undefined, completeRecord, 0)}</>)
+    expect(screen.getByText('已齐')).toBeTruthy()
+    expect(container.querySelectorAll('.ant-tag')).toHaveLength(0)
+  })
+
+  it('金额列标题与详情概览口径一致：结算应收 / 成本合计 / 当前毛利', () => {
+    const titles = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true).map((c) =>
+      String(c.title),
+    )
+    expect(titles).toContain('结算应收')
+    expect(titles).toContain('成本合计')
+    expect(titles).toContain('当前毛利')
+    expect(titles).not.toContain('实际应收')
+    expect(titles).not.toContain('应付合计')
+    expect(titles).not.toContain('预估毛利')
+  })
+
+  it('发团视图不单独展示路线名称列；悬停团名可见路线名称', async () => {
+    const user = userEvent.setup()
+    const columns = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true)
+    const titles = columns.map((c) => String(c.title))
+    expect(titles).not.toContain('路线名称')
+    expect(titles).toContain('团名')
+
+    const nameColumn = columns.find((c) => c.title === '团名')
+    expect(nameColumn?.render).toBeTypeOf('function')
+
+    const record = {
+      id: 'departure-1',
+      name: '2026年8月1日 南疆5日游',
+      routeName: '南疆5日游',
+    } as DepartureSummary
+
+    render(<>{nameColumn!.render?.(record.name, record, 0)}</>)
+    await user.hover(screen.getByText('2026年8月1日 南疆5日游'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('路线名称：南疆5日游')
   })
 })

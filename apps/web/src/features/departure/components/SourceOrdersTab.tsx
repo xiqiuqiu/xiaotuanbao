@@ -30,7 +30,7 @@ interface SourceOrdersTabProps {
   departure: DepartureDetail
   /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
-  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应收。 */
+  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响提交应收。 */
   canEdit: boolean
   amountReadOnly?: boolean
 }
@@ -98,7 +98,7 @@ export function SourceOrdersTab({
     ...operationalQueryOptions(),
   })
 
-  /** 批量生成按全团未生成客源单的有效应收路径计数；与筛选列表解耦。 */
+  /** 批量提交按全团未提交客源单的有效应收路径计数；与筛选列表解耦。 */
   const { data: allOrdersForBatchCount } = useQuery({
     queryKey: ['source-orders', departure.id, EMPTY_SOURCE_ORDER_FILTERS],
     queryFn: ({ signal }) =>
@@ -228,7 +228,7 @@ export function SourceOrdersTab({
                   }
                   loading={batchGenerateMutation.isPending}
                 >
-                  批量生成应收
+                  批量提交应收
                 </Button>
               ) : null}
               {editable ? (

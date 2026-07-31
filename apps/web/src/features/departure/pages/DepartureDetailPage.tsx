@@ -61,6 +61,10 @@ export function DepartureDetailPage() {
         tab: key as DepartureDetailTabKey,
         ...(search.segmentId ? { segmentId: search.segmentId } : {}),
         ...(search.listReturn ? { listReturn: search.listReturn } : {}),
+        // PROTOTYPE — preserve overview variant while exploring
+        ...(typeof search.variant === 'string' && search.variant
+          ? { variant: search.variant }
+          : {}),
       },
       // Keep a single detail history entry so「返回」reaches the jump source.
       replace: true,

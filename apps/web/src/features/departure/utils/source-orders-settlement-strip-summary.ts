@@ -1,7 +1,7 @@
 import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 
-/** 客源管理结算汇总条：对应当前列表 items（与表尾合计同一批，与批量生成全团计数解耦）。 */
+/** 客源管理结算汇总条：对应当前列表 items（与表尾合计同一批，与批量提交全团计数解耦）。 */
 export interface SourceOrdersSettlementStripSummary {
   orderCount: number
   totalGuests: number

@@ -36,7 +36,7 @@ export class SourceOrderReceivableGapService {
       where: {
         departure: {
           organizationId,
-          // 已结清发团不可再生成应收（CONTEXT Departure Status）。
+          // 已结清发团不可再提交应收（CONTEXT Departure Status）。
           status: { not: DepartureStatus.settled },
         },
       },

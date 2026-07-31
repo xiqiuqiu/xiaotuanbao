@@ -77,8 +77,12 @@ export function SourceOrdersFilters({
             onChange={(event) => onDraftChange({ ...draft, keyword: event.target.value })}
             onPressEnter={onApply}
           />
-          <Button onClick={onApply}>查询</Button>
-          <Button onClick={onReset}>重置</Button>
+          <Button autoInsertSpace={false} onClick={onApply}>
+            查询
+          </Button>
+          <Button autoInsertSpace={false} onClick={onReset}>
+            重置
+          </Button>
         </Space>
         {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
       </div>

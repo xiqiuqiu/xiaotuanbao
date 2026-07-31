@@ -151,7 +151,7 @@ export class CoordinatorWorkbenchService {
         },
         {
           key: 'pending-payables',
-          label: '待生成应付',
+          label: '待提交应付',
           value: pendingPayableCount,
           suffix: '个资源',
           href: '/departure?accountGenerationGap=payable',

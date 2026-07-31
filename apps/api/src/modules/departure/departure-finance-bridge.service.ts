@@ -178,10 +178,10 @@ export class DepartureFinanceBridgeService {
 
         // 有效路径齐全 → 拒绝；有效路径为空但曾有过应收（含已关闭）→ 拒绝；仅缺路径 → 补建。
         if (activeExisting.length > 0 && missingPaths.length === 0) {
-          throw new ConflictException('当前客源单已生成应收，不能再次生成')
+          throw new ConflictException('当前客源单已提交应收，不能再次提交')
         }
         if (activeExisting.length === 0 && existingSchedules.length > 0) {
-          throw new ConflictException('当前客源单已生成应收，不能再次生成')
+          throw new ConflictException('当前客源单已提交应收，不能再次提交')
         }
 
         const createdSchedules: PaymentScheduleSummary[] = []
@@ -782,7 +782,7 @@ export class DepartureFinanceBridgeService {
     if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
       return this.generateDepartureResourcePayable(organizationId, params.sourceId)
     }
-    throw new BadRequestException('仅资源可生成应付')
+    throw new BadRequestException('仅资源可提交应付')
   }
 
   async generatePayable(
@@ -806,10 +806,10 @@ export class DepartureFinanceBridgeService {
           resourceId,
           tx,
         )
-        this.ensureDepartureAllowsNewObligation(lockedResource.segment.departure, '生成应付')
+        this.ensureDepartureAllowsNewObligation(lockedResource.segment.departure, '提交应付')
 
         if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能生成应付')
+          throw new BadRequestException('资源金额须大于 0 才能提交应付')
         }
 
         const existingTrace = await this.findAnyPayableSchedule(
@@ -819,7 +819,7 @@ export class DepartureFinanceBridgeService {
           tx,
         )
         if (existingTrace) {
-          throw new ConflictException('当前资源已生成应付，不能再次生成')
+          throw new ConflictException('当前资源已提交应付，不能再次提交')
         }
 
         const spec = this.buildPayableSpec(lockedResource)
@@ -898,10 +898,10 @@ export class DepartureFinanceBridgeService {
           resourceId,
           tx,
         )
-        this.ensureDepartureAllowsNewObligation(lockedResource.departure, '生成应付')
+        this.ensureDepartureAllowsNewObligation(lockedResource.departure, '提交应付')
 
         if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能生成应付')
+          throw new BadRequestException('资源金额须大于 0 才能提交应付')
         }
 
         const existingTrace = await this.findAnyPayableSchedule(
@@ -911,7 +911,7 @@ export class DepartureFinanceBridgeService {
           tx,
         )
         if (existingTrace) {
-          throw new ConflictException('当前资源已生成应付，不能再次生成')
+          throw new ConflictException('当前资源已提交应付，不能再次提交')
         }
 
         const spec = this.buildPayableSpec(lockedResource)
@@ -1425,7 +1425,7 @@ export class DepartureFinanceBridgeService {
 
   private ensureDepartureAllowsNewObligation(
     departure: { status: string },
-    action = '生成应收',
+    action = '提交应收',
   ) {
     this.departureFinanceFacade.assertAllowsNewObligation(departure, action)
   }

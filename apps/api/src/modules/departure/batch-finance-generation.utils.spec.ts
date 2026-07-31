@@ -32,17 +32,17 @@ describe('batch-finance-generation.utils', () => {
   it('treats regenerate conflicts as already-generated skips', () => {
     expect(
       isAlreadyGeneratedConflict(
-        new ConflictException('当前客源单已生成应收，不能再次生成'),
+        new ConflictException('当前客源单已提交应收，不能再次提交'),
       ),
     ).toBe(true)
-    expect(isAlreadyGeneratedConflict(new ConflictException('发团已关闭，不可生成应收'))).toBe(
+    expect(isAlreadyGeneratedConflict(new ConflictException('发团已关闭，不可提交应收'))).toBe(
       false,
     )
   })
 
   it('reads nest http exception messages', () => {
-    expect(httpExceptionMessage(new ConflictException('当前资源已生成应付，不能再次生成'))).toBe(
-      '当前资源已生成应付，不能再次生成',
+    expect(httpExceptionMessage(new ConflictException('当前资源已提交应付，不能再次提交'))).toBe(
+      '当前资源已提交应付，不能再次提交',
     )
   })
 })

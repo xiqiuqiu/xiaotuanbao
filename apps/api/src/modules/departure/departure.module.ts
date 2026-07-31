@@ -29,6 +29,7 @@ import { SourceOrderReceivableGapService } from './source-order-receivable-gap.s
 import { SegmentResourcePayableGapService } from './segment-resource-payable-gap.service'
 import { AccountGenerationGapService } from './account-generation-gap.service'
 import { AccountGenerationGapController } from './account-generation-gap.controller'
+import { RouteLedgerExportService } from './route-ledger-export.service'
 
 @Module({
   imports: [AuthModule, forwardRef(() => FinanceModule), NumberAllocationModule],
@@ -64,6 +65,7 @@ import { AccountGenerationGapController } from './account-generation-gap.control
     },
     DepartureOperationsSheetService,
     DepartureIncomeRecordService,
+    RouteLedgerExportService,
   ],
   exports: [
     DepartureDataGapService,

@@ -501,7 +501,7 @@ export class SegmentResourceService {
     })
 
     if (hasSchedule > 0) {
-      throw new ConflictException('当前资源已生成应付，不能直接删除')
+      throw new ConflictException('当前资源已提交应付，不能直接删除')
     }
 
     await this.prisma.segmentResource.delete({ where: { id: resource.id } })
@@ -539,7 +539,7 @@ export class SegmentResourceService {
     await this.departureFinanceFacade.assertAllowsNewObligationById(
       organizationId,
       segment.departureId,
-      '生成应付',
+      '提交应付',
     )
 
     const resources = await this.prisma.segmentResource.findMany({
@@ -590,7 +590,7 @@ export class SegmentResourceService {
           sourceId: resource.id,
           sourceLabel,
           outcome: 'skipped',
-          reason: '资源金额须大于 0 才能生成应付',
+          reason: '资源金额须大于 0 才能提交应付',
         })
         continue
       }

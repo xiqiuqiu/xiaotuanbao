@@ -195,7 +195,7 @@ export function defaultDirectionForFareAdjustmentKind(
 }
 
 export const SOURCE_ORDER_RECEIVABLE_STATUS_LABELS: Record<string, string> = {
-  [SourceOrderReceivableStatus.NOT_GENERATED]: '未生成',
+  [SourceOrderReceivableStatus.NOT_GENERATED]: '未提交',
   [SourceOrderReceivableStatus.PENDING]: '待收',
   [SourceOrderReceivableStatus.PARTIAL]: '部分收款',
   [SourceOrderReceivableStatus.COLLECTED]: '已收齐',
@@ -222,7 +222,7 @@ export const GUEST_GENDER_LABELS = Object.fromEntries(
 ) as Record<string, string>
 
 export const SEGMENT_PAYABLE_STATUS_LABELS: Record<string, string> = {
-  [SegmentPayableStatus.NOT_GENERATED]: '未生成',
+  [SegmentPayableStatus.NOT_GENERATED]: '未提交',
   [SegmentPayableStatus.PENDING]: '待付',
   [SegmentPayableStatus.PARTIAL]: '部分付款',
   [SegmentPayableStatus.PAID]: '已付清',

@@ -404,7 +404,7 @@ describe('Seed demo business loop', () => {
         endDate: wuzhenEnd,
         ownerUserId,
         departureType: DepartureType.combined,
-        notes: '演示：编辑中，可手动触发「生成应收/应付」',
+        notes: '演示：编辑中，可手动触发「提交应收/应付」',
       })
       .expect(201)
 

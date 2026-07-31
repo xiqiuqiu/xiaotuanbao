@@ -118,7 +118,7 @@ describe('ExecutionResourcePane amount summary', () => {
     listSegmentResources.mockReset()
   })
 
-  it('shows resource amount and 尚未生成应付 in the resource header', async () => {
+  it('shows resource amount and 尚未提交应付 in the resource header', async () => {
     listSegmentResources.mockResolvedValue({
       items: [
         baseResource({ id: 'r1', amountCents: 220_000 }),
@@ -135,7 +135,7 @@ describe('ExecutionResourcePane amount summary', () => {
     const summary = await screen.findByLabelText('本段资源金额汇总')
     expect(summary.textContent).toContain('资源 2 项')
     expect(summary.textContent).toContain(
-      '资源 2 项 ｜ 资源金额 ¥11,200.00 ｜ 尚未生成应付 ¥11,200.00',
+      '资源 2 项 ｜ 资源金额 ¥11,200.00 ｜ 尚未提交应付 ¥11,200.00',
     )
   })
 
@@ -147,7 +147,7 @@ describe('ExecutionResourcePane amount summary', () => {
     expect(screen.queryByLabelText('本段资源金额汇总')).toBeNull()
   })
 
-  it('omits 尚未生成应付 when every resource already has a payable', async () => {
+  it('omits 尚未提交应付 when every resource already has a payable', async () => {
     listSegmentResources.mockResolvedValue({
       items: [
         baseResource({
@@ -162,10 +162,10 @@ describe('ExecutionResourcePane amount summary', () => {
     const summary = await screen.findByLabelText('本段资源金额汇总')
     expect(summary.textContent).toContain('资源金额')
     expect(summary.textContent).toContain('¥2,200.00')
-    expect(summary.textContent).not.toContain('尚未生成应付')
+    expect(summary.textContent).not.toContain('尚未提交应付')
   })
 
-  it('omits 尚未生成应付 when the departure is settled', async () => {
+  it('omits 尚未提交应付 when the departure is settled', async () => {
     listSegmentResources.mockResolvedValue({
       items: [baseResource({ amountCents: 300_000 })],
     })
@@ -173,6 +173,6 @@ describe('ExecutionResourcePane amount summary', () => {
 
     const summary = await screen.findByLabelText('本段资源金额汇总')
     expect(summary.textContent).toContain('资源金额')
-    expect(summary.textContent).not.toContain('尚未生成应付')
+    expect(summary.textContent).not.toContain('尚未提交应付')
   })
 })

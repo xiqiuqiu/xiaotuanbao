@@ -86,13 +86,13 @@ describe('resource payable actions', () => {
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
   })
 
-  it('keeps 生成应付 visible for 财务 when the payable is ungenerated', () => {
+  it('keeps 提交应付 visible for 财务 when the payable is ungenerated', () => {
     renderActions(
       resource({ payableStatus: 'not_generated', paymentScheduleId: null }),
       false,
     )
 
-    expect(screen.getByRole('button', { name: '生成应付' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '提交应付' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 

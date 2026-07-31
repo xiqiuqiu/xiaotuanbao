@@ -171,7 +171,7 @@ describe('ExecutionTab layout', () => {
     expect(screen.queryByText('西栅团队票')).not.toBeInTheDocument()
 
     expect(await screen.findByLabelText('发团级资源金额汇总')).toHaveTextContent(
-      /资源 1 项.*资源金额.*¥5,000\.00.*尚未生成应付.*¥5,000\.00/,
+      /资源 1 项.*资源金额.*¥5,000\.00.*尚未提交应付.*¥5,000\.00/,
     )
     expect(screen.getAllByText('合计').length).toBeGreaterThanOrEqual(1)
   })
@@ -189,7 +189,7 @@ describe('ExecutionTab layout', () => {
 
     const resourceCard = resourceTitle.closest('.ant-card')
     expect(resourceCard).toBeTruthy()
-    expect(within(resourceCard as HTMLElement).getByText('批量生成应付')).toBeInTheDocument()
+    expect(within(resourceCard as HTMLElement).getByText('批量提交应付')).toBeInTheDocument()
     expect(
       await within(resourceCard as HTMLElement).findByText('添加资源'),
     ).toBeInTheDocument()

@@ -123,25 +123,15 @@ function getIncompletePrepTab(
 
 function resolveEditingAction(
   departure: DepartureInput,
-  canWrite: boolean,
+  _canWrite: boolean,
 ): DepartureNextAction | null {
   const incomplete = getIncompletePrepTab(departure)
   if (incomplete) {
     return incomplete
   }
 
-  if (canWrite) {
-    return {
-      type: 'info',
-      title: '资料已就绪，可切换为待结算',
-      description: '客源、行程与资源已录入完毕。',
-      action: {
-        label: '切换为待结算',
-        intent: 'pending_settlement',
-      },
-    }
-  }
-
+  // 资料齐后「可切换为待结算」横幅暂隐藏：产品尚未定稿该阶段提示怎么呈现。
+  // 更多操作里仍可手动切换。
   return null
 }
 
@@ -154,10 +144,10 @@ function resolvePendingSettlementAction(
   if (stats.ungeneratedReceivableCents > 0) {
     return {
       type: 'warning',
-      title: '尚有应收未生成',
-      description: `未生成应收 ${formatCents(stats.ungeneratedReceivableCents)}`,
+      title: '尚有应收未提交',
+      description: `未提交应收 ${formatCents(stats.ungeneratedReceivableCents)}`,
       action: {
-        label: '生成应收',
+        label: '提交应收',
         tab: 'receivables',
       },
     }
@@ -166,10 +156,10 @@ function resolvePendingSettlementAction(
   if (stats.ungeneratedPayableCents > 0) {
     return {
       type: 'warning',
-      title: '尚有应付未生成',
-      description: `未生成应付 ${formatCents(stats.ungeneratedPayableCents)}`,
+      title: '尚有应付未提交',
+      description: `未提交应付 ${formatCents(stats.ungeneratedPayableCents)}`,
       action: {
-        label: '生成应付',
+        label: '提交应付',
         tab: 'payables',
       },
     }

@@ -199,7 +199,7 @@ function DayChip({
         <div className={styles.dayChipFooter}>
           <span className={styles.dayChipCount}>{resourceLabel}</span>
           {gap.hasGap ? (
-            <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未生成应付`}>
+            <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未提交应付`}>
               <span
                 className={styles.dayChipPayableGap}
                 aria-label={`生成 ${gap.generated}/${gap.total}`}

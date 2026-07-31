@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 回归：财务「待核销流水 / 待生成账款」须与图表模块同构 —
+ * 回归：财务「待核销流水 / 待提交账款」须与图表模块同构 —
  * lazy + LazyChartModule（Suspense Skeleton），避免 chunk 到达前空白直出。
  */
 describe('HomePage finance funds module lazy skeleton', () => {

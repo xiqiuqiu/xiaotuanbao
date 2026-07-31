@@ -32,7 +32,7 @@ function payableStatusTagColor(status: string): string | undefined {
 
 export type BuildExecutionResourceColumnsOptions<T extends ExecutionResourceRow = ExecutionResourceRow> = {
   mutationLocked: boolean
-  /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读。生成应付不受此限。 */
+  /** 持有 `departure:write`：显示编辑/删除/作废应付；财务无则只读。提交应付不受此限。 */
   canEdit: boolean
   /**
    * 可执行财务账款操作（持有 /finance/*，见 capability `financeMutate`）。关闭节点走
@@ -149,7 +149,7 @@ export function buildExecutionResourceColumns<T extends ExecutionResourceRow>({
                 onClick={() => onGenerate(record.id)}
                 loading={generatingId === record.id}
               >
-                生成应付
+                提交应付
               </Button>
             ) : null}
             {allowVoid ? (

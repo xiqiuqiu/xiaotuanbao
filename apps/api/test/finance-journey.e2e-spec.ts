@@ -447,8 +447,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       unverifiedIncomeCents: 1000000,
       unverifiedExpenseCents: 360000,
       completionTags: {
-        receivables: '应收已生成',
-        payables: '应付已生成',
+        receivables: '应收已提交',
+        payables: '应付已提交',
       },
     })
 
@@ -712,12 +712,12 @@ describe('Finance journeys (cross-module e2e)', () => {
     const regeneratePayable = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resource.body.data.id}/generate-payable`)
       .expect(409)
-    expect(regeneratePayable.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(regeneratePayable.body.message).toBe('当前资源已提交应付，不能再次提交')
 
     const regenerateReceivable = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.body.data.id}/generate-receivables`)
       .expect(409)
-    expect(regenerateReceivable.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(regenerateReceivable.body.message).toBe('当前客源单已提交应收，不能再次提交')
 
     const cancelledHistory = await authRequest(app, financeToken)
       .get('/api/finance/verifications')
@@ -939,8 +939,8 @@ describe('Finance journeys (cross-module e2e)', () => {
     const beforeFinance = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${departure.body.data.id}`)
       .expect(200)
-    expect(beforeFinance.body.data.completionTags.receivables).toBe('应收未生成')
-    expect(beforeFinance.body.data.completionTags.payables).toBe('应付未生成')
+    expect(beforeFinance.body.data.completionTags.receivables).toBe('应收未提交')
+    expect(beforeFinance.body.data.completionTags.payables).toBe('应付未提交')
     expect(beforeFinance.body.data.payableCents).toBe(350000)
 
     const sourceOrder = await authRequest(app, coordinatorToken)
@@ -1084,8 +1084,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       verifiedPayableCents: 100000,
       openUnsettledPayableCents: 260000,
       completionTags: {
-        receivables: '应收已生成',
-        payables: '应付已生成',
+        receivables: '应收已提交',
+        payables: '应付已提交',
       },
     })
 
@@ -1297,7 +1297,7 @@ describe('Finance journeys (cross-module e2e)', () => {
       openUnsettledPayableCents: 0,
       completionTags: {
         receivables: '已收齐',
-        payables: '应付未生成',
+        payables: '应付未提交',
       },
     })
 
@@ -1670,13 +1670,13 @@ describe('Finance journeys (cross-module e2e)', () => {
       authRequest(app, coordinatorToken).post(
         `/api/source-orders/${ops.sourceOrderId}/generate-receivables`,
       ),
-      '生成应收',
+      '提交应收',
     )
     await expectArchivedConflict(
       authRequest(app, coordinatorToken).post(
         `/api/segment-resources/${ops.resourceId}/generate-payable`,
       ),
-      '生成应付',
+      '提交应付',
     )
 
     await expectArchivedConflict(
@@ -1924,8 +1924,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       verifiedReceivableCents: 0,
       verifiedPayableCents: 0,
       completionTags: {
-        receivables: '应收未生成',
-        payables: '应付未生成',
+        receivables: '应收未提交',
+        payables: '应付未提交',
       },
     })
 
@@ -2043,7 +2043,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     const regenerated = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${ops.sourceOrderId}/generate-receivables`)
       .expect(409)
-    expect(regenerated.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(regenerated.body.message).toBe('当前客源单已提交应收，不能再次提交')
 
     const sourceOrder = await authRequest(app, coordinatorToken)
       .get(`/api/source-orders/${ops.sourceOrderId}`)
@@ -2805,7 +2805,7 @@ describe('Finance journeys (cross-module e2e)', () => {
     const regenerate = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resourceId}/generate-payable`)
       .expect(409)
-    expect(regenerate.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(regenerate.body.message).toBe('当前资源已提交应付，不能再次提交')
 
     await authRequest(app, financeToken)
       .patch(`/api/finance/payables/${payableScheduleId}`)

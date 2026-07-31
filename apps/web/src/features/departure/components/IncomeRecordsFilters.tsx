@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Input, Select, Space } from 'antd'
+import { Button, Input, Select, Space } from 'antd'
 import {
   DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
   DEPARTURE_INCOME_TYPE_LABELS,
@@ -16,7 +16,7 @@ const TYPE_FILTER_OPTIONS = [
 ]
 
 const COMPOSITE_FILTER_OPTIONS = [
-  { value: 'all' as const, label: '全部综合状态' },
+  { value: 'all' as const, label: '全部状态' },
   ...Object.values(DepartureIncomeSettlementComposite).map((value) => ({
     value,
     label: DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS[value],
@@ -26,18 +26,24 @@ const COMPOSITE_FILTER_OPTIONS = [
 type IncomeRecordsFiltersProps = {
   typeFilter: DepartureIncomeType | 'all'
   compositeFilter: DepartureIncomeSettlementComposite | 'all'
+  keyword: string
   onTypeChange: (value: DepartureIncomeType | 'all') => void
   onCompositeChange: (value: DepartureIncomeSettlementComposite | 'all') => void
-  onKeywordSearch: (value: string) => void
+  onKeywordChange: (value: string) => void
+  onApply: () => void
+  onReset: () => void
   extra?: ReactNode
 }
 
 export function IncomeRecordsFilters({
   typeFilter,
   compositeFilter,
+  keyword,
   onTypeChange,
   onCompositeChange,
-  onKeywordSearch,
+  onKeywordChange,
+  onApply,
+  onReset,
   extra,
 }: IncomeRecordsFiltersProps) {
   return (
@@ -55,17 +61,23 @@ export function IncomeRecordsFilters({
           value={compositeFilter}
           options={COMPOSITE_FILTER_OPTIONS}
           onChange={onCompositeChange}
-          aria-label="综合状态筛选"
+          aria-label="状态筛选"
         />
-        <Input.Search
+        <Input
           allowClear
           placeholder="项目名称 / 备注 / 合作方"
           style={{ width: 240 }}
-          onSearch={onKeywordSearch}
-          onChange={(event) => {
-            if (!event.target.value) onKeywordSearch('')
-          }}
+          value={keyword}
+          aria-label="搜索项目名称、备注、合作方"
+          onChange={(event) => onKeywordChange(event.target.value)}
+          onPressEnter={onApply}
         />
+        <Button autoInsertSpace={false} onClick={onApply}>
+          查询
+        </Button>
+        <Button autoInsertSpace={false} onClick={onReset}>
+          重置
+        </Button>
       </Space>
       {extra}
     </Space>

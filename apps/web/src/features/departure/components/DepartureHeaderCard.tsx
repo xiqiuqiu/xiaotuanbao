@@ -114,7 +114,7 @@ export function DepartureHeaderCard({
               <Tag
                 color={DEPARTURE_STATUS_COLORS[departure.status as DepartureStatus] ?? 'default'}
               >
-                财务 · {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
+                发团 · {catalogLabel(DEPARTURE_STATUS_LABELS, departure.status)}
               </Tag>
             </span>
           </div>

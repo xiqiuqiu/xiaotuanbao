@@ -127,11 +127,11 @@ describe('ExecutionResourcePane action buttons', () => {
     navigate.mockReset()
   })
 
-  it('shows 生成应付 when payable has not been created', async () => {
+  it('shows 提交应付 when payable has not been created', async () => {
     listSegmentResources.mockResolvedValue({ items: [baseResource()] })
     renderPane()
 
-    expect(await screen.findByRole('button', { name: '生成应付' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '提交应付' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看应付' })).toBeNull()
@@ -154,7 +154,7 @@ describe('ExecutionResourcePane action buttons', () => {
     generatePayable.mockResolvedValue({ sourceAmountMismatch: false })
     renderPane()
 
-    await user.click(await screen.findByRole('button', { name: '生成应付' }))
+    await user.click(await screen.findByRole('button', { name: '提交应付' }))
 
     await waitFor(() => {
       expect(generatePayable).toHaveBeenCalledWith('resource-1')
@@ -176,7 +176,7 @@ describe('ExecutionResourcePane action buttons', () => {
     })
   })
 
-  it('shows 查看应付 instead of 生成应付 / 重新生成 after payable is created', async () => {
+  it('shows 查看应付 instead of 提交应付 / 重新生成 after payable is created', async () => {
     listSegmentResources.mockResolvedValue({
       items: [
         baseResource({
@@ -192,7 +192,7 @@ describe('ExecutionResourcePane action buttons', () => {
       expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
     })
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '生成应付' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应付' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
@@ -213,7 +213,7 @@ describe('ExecutionResourcePane action buttons', () => {
       expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
     })
     expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '生成应付' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应付' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
@@ -246,7 +246,7 @@ describe('ExecutionResourcePane action buttons', () => {
     })
   })
 
-  it('shows 批量生成应付 only when the segment still has ungenerated resources', async () => {
+  it('shows 批量提交应付 only when the segment still has ungenerated resources', async () => {
     listSegmentResources.mockResolvedValue({ items: [baseResource()] })
     const { unmount } = renderPane({
       resourceCount: 2,
@@ -254,7 +254,7 @@ describe('ExecutionResourcePane action buttons', () => {
       payableStatus: 'pending',
     })
 
-    expect(await screen.findByRole('button', { name: '批量生成应付' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: '批量提交应付' })).toBeTruthy()
     unmount()
 
     listSegmentResources.mockResolvedValue({
@@ -274,7 +274,7 @@ describe('ExecutionResourcePane action buttons', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '查看应付' })).toBeTruthy()
     })
-    expect(screen.queryByRole('button', { name: '批量生成应付' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '批量提交应付' })).toBeNull()
   })
 
   it('confirms batch generate then calls segment API and shows success toast', async () => {
@@ -315,19 +315,19 @@ describe('ExecutionResourcePane action buttons', () => {
         payableStatus: 'not_generated',
       })
 
-      await user.click(await screen.findByRole('button', { name: '批量生成应付' }))
+      await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
 
       expect(confirmConfig).toMatchObject({
-        title: '批量生成应付',
-        content: '确认后将生成 1 条应付记录',
-        okText: '生成',
+        title: '批量提交应付',
+        content: '确认后将提交 1 条应付记录',
+        okText: '提交',
       })
 
       await confirmConfig?.onOk?.()
 
       expect(generatePayablesForSegment).toHaveBeenCalledWith('segment-1')
       await waitFor(() => {
-        expect(successSpy).toHaveBeenCalledWith('应付批量生成完成：成功 1')
+        expect(successSpy).toHaveBeenCalledWith('应付批量提交完成：成功 1')
       })
     } finally {
       confirmSpy.mockRestore()
@@ -378,12 +378,12 @@ describe('ExecutionResourcePane action buttons', () => {
         payableStatus: 'not_generated',
       })
 
-      await user.click(await screen.findByRole('button', { name: '批量生成应付' }))
+      await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
       await confirmConfig?.onOk?.()
 
       await waitFor(() => {
         expect(warningSpy).toHaveBeenCalledWith(
-          '应付批量生成完成：成功 1 · 失败 1。酒店：网络错误',
+          '应付批量提交完成：成功 1 · 失败 1。酒店：网络错误',
         )
       })
     } finally {

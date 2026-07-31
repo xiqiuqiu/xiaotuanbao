@@ -19,10 +19,12 @@ export function httpExceptionMessage(error: unknown): string {
 }
 
 export function isAlreadyGeneratedConflict(error: unknown): boolean {
+  const message = httpExceptionMessage(error)
   return (
     error instanceof ConflictException &&
-    (httpExceptionMessage(error).includes('不能再次生成') ||
-      httpExceptionMessage(error).includes('已生成'))
+    (message.includes('不能再次提交') ||
+      message.includes('已提交应收') ||
+      message.includes('已提交应付'))
   )
 }
 

@@ -70,47 +70,47 @@ describe('SourceOrderDrawer save and generate', () => {
     cleanup()
   })
 
-  it('shows 保存并生成应收 when canSaveAndGenerate is enabled on create', () => {
+  it('shows 保存并提交应收 when canSaveAndGenerate is enabled on create', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: '保存并生成应收' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '保存并提交应收' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /保\s*存$/ })).toBeTruthy()
   })
 
-  it('hides 保存并生成应收 when canSaveAndGenerate is false', () => {
+  it('hides 保存并提交应收 when canSaveAndGenerate is false', () => {
     renderDrawer({
       canSaveAndGenerate: false,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.queryByRole('button', { name: '保存并生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '保存并提交应收' })).toBeNull()
   })
 
-  it('disables 保存并生成应收 while saveAndGenerateLoading', () => {
+  it('disables 保存并提交应收 while saveAndGenerateLoading', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       saveAndGenerateLoading: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: /保存并生成应收/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /保存并提交应收/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /保\s*存$/ })).toBeDisabled()
   })
 
-  it('disables 保存并生成应收 while loading', () => {
+  it('disables 保存并提交应收 while loading', () => {
     renderDrawer({
       canSaveAndGenerate: true,
       loading: true,
       onSubmit: vi.fn(),
     })
 
-    expect(screen.getByRole('button', { name: /保存并生成应收/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /保存并提交应收/ })).toBeDisabled()
   })
 
-  it('submits with generateReceivable when 保存并生成应收 is clicked', async () => {
+  it('submits with generateReceivable when 保存并提交应收 is clicked', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
 
@@ -120,7 +120,7 @@ describe('SourceOrderDrawer save and generate', () => {
     })
 
     await fillValidCreateForm(user)
-    await user.click(screen.getByRole('button', { name: '保存并生成应收' }))
+    await user.click(screen.getByRole('button', { name: '保存并提交应收' }))
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(
@@ -164,7 +164,7 @@ describe('SourceOrderDrawer save and generate', () => {
       onSubmit,
     })
 
-    await user.click(screen.getByRole('button', { name: '保存并生成应收' }))
+    await user.click(screen.getByRole('button', { name: '保存并提交应收' }))
     expect(onSubmit).not.toHaveBeenCalled()
     await screen.findByText('请选择客户')
 

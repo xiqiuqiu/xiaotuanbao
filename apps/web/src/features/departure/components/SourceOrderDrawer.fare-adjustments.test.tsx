@@ -90,6 +90,20 @@ describe('SourceOrderDrawer fare adjustments', () => {
     expect(within(fareSection!).getByText('操作')).toBeTruthy()
   })
 
+  it('列序为金额在调整说明左侧', () => {
+    renderDrawer()
+    const fareSection = document.getElementById('so-section-fare')
+    expect(fareSection).toBeTruthy()
+    const headers = within(fareSection!)
+      .getAllByRole('columnheader')
+      .map((el) => el.textContent?.trim())
+    const amountIdx = headers.indexOf('金额')
+    const noteIdx = headers.indexOf('调整说明')
+    expect(amountIdx).toBeGreaterThanOrEqual(0)
+    expect(noteIdx).toBeGreaterThanOrEqual(0)
+    expect(amountIdx).toBeLessThan(noteIdx)
+  })
+
   it('adds a draft row with inline save/cancel and does not commit until save', () => {
     renderDrawer()
 
