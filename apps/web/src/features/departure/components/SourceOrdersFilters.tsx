@@ -10,6 +10,8 @@ interface SourceOrdersFiltersProps {
   onApply: () => void
   onReset: () => void
   extra?: ReactNode
+  /** Optional settlement glance rendered inside the same card below filters. */
+  summary?: ReactNode
 }
 
 export function SourceOrdersFilters({
@@ -19,9 +21,10 @@ export function SourceOrdersFilters({
   onApply,
   onReset,
   extra,
+  summary,
 }: SourceOrdersFiltersProps) {
   return (
-    <Card style={{ marginBottom: 16 }}>
+    <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
       <div
         style={{
           display: 'flex',
@@ -29,6 +32,7 @@ export function SourceOrdersFilters({
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 16,
+          padding: 16,
         }}
       >
         <Space wrap>
@@ -78,6 +82,7 @@ export function SourceOrdersFilters({
         </Space>
         {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
       </div>
+      {summary ?? null}
     </Card>
   )
 }

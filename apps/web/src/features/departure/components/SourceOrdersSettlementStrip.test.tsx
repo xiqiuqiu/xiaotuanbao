@@ -69,4 +69,5 @@ describe('SourceOrdersSettlementStrip', () => {
 
     expect(container).toBeEmptyDOMElement()
   })
+
 })

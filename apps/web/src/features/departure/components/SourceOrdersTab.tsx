@@ -11,7 +11,6 @@ import { listSourceOrders } from '@/services/source-order.service'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
-import { SourceOrdersSettlementStrip } from './SourceOrdersSettlementStrip'
 import { buildSourceOrdersColumns } from './source-orders-table-columns'
 import { renderSourceOrdersTableSummary } from './source-orders-table-summary'
 import {
@@ -20,7 +19,6 @@ import {
   initialDrawerState,
 } from './source-orders-tab-state'
 import { EMPTY_SOURCE_ORDER_FILTERS } from '../utils/source-order-filter-state'
-import { summarizeSourceOrdersSettlementStrip } from '../utils/source-orders-settlement-strip-summary'
 import {
   confirmBatchGenerateReceivables,
   countPendingReceivables,
@@ -152,11 +150,6 @@ export function SourceOrdersTab({
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
 
-  const settlementStripSummary = useMemo(
-    () => summarizeSourceOrdersSettlementStrip(listResult?.items ?? []),
-    [listResult?.items],
-  )
-
   const onOpen = useCallback((order: SourceOrderSummary, viewOnly: boolean) => {
     dispatchDrawer({ type: viewOnly ? 'OPEN_VIEW' : 'OPEN_EDIT', order })
   }, [])
@@ -269,18 +262,15 @@ export function SourceOrdersTab({
           />
         </Card>
       ) : (
-        <>
-          <SourceOrdersSettlementStrip summary={settlementStripSummary} />
-          <Table
-            rowKey="id"
-            loading={isLoading}
-            columns={columns}
-            dataSource={listResult?.items ?? []}
-            scroll={{ x: SOURCE_ORDERS_TABLE_SCROLL_X }}
-            pagination={false}
-            summary={renderSourceOrdersTableSummary}
-          />
-        </>
+        <Table
+          rowKey="id"
+          loading={isLoading}
+          columns={columns}
+          dataSource={listResult?.items ?? []}
+          scroll={{ x: SOURCE_ORDERS_TABLE_SCROLL_X }}
+          pagination={false}
+          summary={renderSourceOrdersTableSummary}
+        />
       )}
 
       <SourceOrderDrawer

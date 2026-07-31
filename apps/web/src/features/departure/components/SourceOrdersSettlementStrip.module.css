@@ -11,6 +11,13 @@
   overflow: hidden;
 }
 
+.settlementStripEmbedded {
+  margin-bottom: 0;
+  border: none;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  border-radius: 0;
+}
+
 .settlementStripCell {
   display: flex;
   flex-direction: column;

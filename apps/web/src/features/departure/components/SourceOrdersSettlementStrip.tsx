@@ -7,7 +7,9 @@ interface SourceOrdersSettlementStripProps {
 }
 
 /** Read-only settlement glance above the source-orders table (scheme A). */
-export function SourceOrdersSettlementStrip({ summary }: SourceOrdersSettlementStripProps) {
+export function SourceOrdersSettlementStrip({
+  summary,
+}: SourceOrdersSettlementStripProps) {
   if (summary.orderCount === 0) {
     return null
   }
@@ -16,7 +18,11 @@ export function SourceOrdersSettlementStrip({ summary }: SourceOrdersSettlementS
     summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待生成` : '已齐'
 
   return (
-    <div className={styles.settlementStrip} aria-label="客源结算汇总" role="list">
+    <div
+      className={styles.settlementStrip}
+      aria-label="客源结算汇总"
+      role="list"
+    >
       <div className={`${styles.settlementStripCell} ${styles.settlementStripHero}`} role="listitem">
         <span className={styles.settlementStripLabel}>结算应收</span>
         <span className={styles.settlementStripTotal}>

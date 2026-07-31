@@ -1,6 +1,6 @@
 /**
  * #252 护栏：客源管理一览主站不挂载 throwaway 原型沙盒；
- * 详情 search 不透传 list `variant`（方案 A 已正式落地，无运行时切换）。
+ * 详情 search 不透传 list `variant`。
  */
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'

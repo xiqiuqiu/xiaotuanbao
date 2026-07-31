@@ -44,6 +44,7 @@ import {
 import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
+import { renderExecutionResourceTableSummary } from './execution-resource-table-summary'
 import { counterpartyFilterFromSegmentResource } from '@/features/finance/utils/payment-schedule-view-counterparty'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -187,6 +188,7 @@ function ExecutionResourceList({
       dataSource={resources}
       pagination={false}
       scroll={{ x: 1300 }}
+      summary={renderExecutionResourceTableSummary}
     />
   )
 }
