@@ -38,7 +38,7 @@ describe('MainLayout 侧栏开关', () => {
     cleanup()
   })
 
-  it('进入发团管理时默认收起侧栏', async () => {
+  it('进入发团管理一览时不自动收起侧栏', async () => {
     const { rerender } = render(
       <ConfigProvider>
         <MainLayout>
@@ -59,9 +59,61 @@ describe('MainLayout 侧栏开关', () => {
     )
 
     await waitFor(() => {
+      expect(useUiStore.getState().sidebarCollapsed).toBe(false)
+    })
+    expect(screen.getByRole('button', { name: '折叠侧边栏' })).toBeInTheDocument()
+  })
+
+  it('进入发团管理详情时默认收起侧栏', async () => {
+    const { rerender } = render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: '折叠侧边栏' })).toBeInTheDocument()
+
+    pathname = '/departure/departure-1'
+    rerender(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    await waitFor(() => {
       expect(useUiStore.getState().sidebarCollapsed).toBe(true)
     })
     expect(screen.getByRole('button', { name: '展开侧边栏' })).toBeInTheDocument()
+  })
+
+  it('从发团一览进入详情时收起侧栏', async () => {
+    pathname = '/departure'
+    const { rerender } = render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(useUiStore.getState().sidebarCollapsed).toBe(false)
+
+    pathname = '/departure/departure-1'
+    rerender(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    await waitFor(() => {
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true)
+    })
   })
 
   it('Tooltip 与可访问名称随折叠状态同步', async () => {

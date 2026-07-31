@@ -48,12 +48,17 @@ export function MainLayout({ children }: PropsWithChildren) {
     return []
   })
 
-  // 进入发团管理（含子页）时默认收起侧栏，便于详情工作区；区内可手动展开且不会被反复强制收起。
+  // 进入发团详情/新建等工作区时默认收起侧栏；一览页保持展开，区内可手动展开且不会被反复强制收起。
   useEffect(() => {
-    const isInsideDeparture = pathname.startsWith('/departure')
-    const wasOutside =
-      prevPathnameRef.current === null || !prevPathnameRef.current.startsWith('/departure')
-    if (isInsideDeparture && wasOutside) {
+    const isDepartureWorkspace =
+      pathname.startsWith('/departure/') && pathname !== '/departure/'
+    const wasOutsideWorkspace =
+      prevPathnameRef.current === null ||
+      !(
+        prevPathnameRef.current.startsWith('/departure/') &&
+        prevPathnameRef.current !== '/departure/'
+      )
+    if (isDepartureWorkspace && wasOutsideWorkspace) {
       setSidebarCollapsed(true)
     }
     prevPathnameRef.current = pathname
