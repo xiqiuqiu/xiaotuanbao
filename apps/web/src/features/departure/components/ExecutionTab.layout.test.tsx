@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
@@ -144,42 +146,34 @@ describe('ExecutionTab layout', () => {
     cleanup()
   })
 
-  it('stacks 成本条 → 发团级折叠 → 横向日程轴 → 当日资源，并汇总金额与待生成项数', async () => {
+  it('shows day and departure as mutually exclusive layers with a switcher', async () => {
+    const user = userEvent.setup()
     renderExecutionTab()
 
-    const costStrip = await screen.findByRole('list', { name: '整团成本汇总' })
-    expect(within(costStrip).getByText('成本合计')).toBeInTheDocument()
-    expect(within(costStrip).getByText('发团级')).toBeInTheDocument()
-    expect(within(costStrip).getByText('按日')).toBeInTheDocument()
-    expect(within(costStrip).getByText('尚未生成应付')).toBeInTheDocument()
-    expect(within(costStrip).getByText('2 项待生成')).toBeInTheDocument()
-    expect(within(costStrip).getAllByText('¥8,000.00').length).toBeGreaterThanOrEqual(1)
-    expect(within(costStrip).getByText('¥5,000.00')).toBeInTheDocument()
-    expect(within(costStrip).getByText('¥3,000.00')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: '整团成本汇总' })).not.toBeInTheDocument()
 
-    const departureTitle = screen.getByText('发团级资源')
-    const dayAxis = screen.getByRole('region', { name: '按日资源' })
-    const resourceTitle = screen.getByText('资源安排')
+    const dayLayerTab = await screen.findByRole('tab', { name: /按日资源/ })
+    const departureLayerTab = screen.getByRole('tab', { name: /发团级资源/ })
+    expect(dayLayerTab).toHaveAttribute('aria-selected', 'true')
+    expect(departureLayerTab).toHaveAttribute('aria-selected', 'false')
 
-    expect(
-      costStrip.compareDocumentPosition(departureTitle) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(
-      departureTitle.compareDocumentPosition(dayAxis) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(
-      dayAxis.compareDocumentPosition(resourceTitle) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    // Day layer: axis + segment resources visible; departure table hidden
+    expect(screen.getByRole('region', { name: '按日资源' })).toBeInTheDocument()
+    expect(await screen.findByText('西栅团队票')).toBeInTheDocument()
+    expect(screen.queryByText('全程用车')).not.toBeInTheDocument()
 
-    expect(screen.getByLabelText('发团级资源金额汇总')).toHaveTextContent(
+    await user.click(departureLayerTab)
+
+    expect(departureLayerTab).toHaveAttribute('aria-selected', 'true')
+    expect(dayLayerTab).toHaveAttribute('aria-selected', 'false')
+    expect(screen.queryByRole('region', { name: '按日资源' })).not.toBeInTheDocument()
+    expect(await screen.findByText('全程用车')).toBeInTheDocument()
+    expect(screen.queryByText('西栅团队票')).not.toBeInTheDocument()
+
+    expect(await screen.findByLabelText('发团级资源金额汇总')).toHaveTextContent(
       /资源 1 项.*资源金额.*¥5,000\.00.*尚未生成应付.*¥5,000\.00/,
     )
-    expect(screen.getAllByRole('button', { name: '批量生成应付' }).length).toBeGreaterThanOrEqual(
-      1,
-    )
+    expect(screen.getAllByText('合计').length).toBeGreaterThanOrEqual(1)
   })
 
   it('keeps the selected day resource table below the horizontal day axis', async () => {
@@ -217,6 +211,50 @@ describe('ExecutionTab layout', () => {
 
     const addBtn = screen.getByRole('button', { name: '添加一天' })
     expect(addBtn).toBeInTheDocument()
+  })
+
+  it('fills the workspace when showing the departure layer (no stacked max-height cap)', async () => {
+    const user = userEvent.setup()
+    renderExecutionTab()
+
+    await user.click(await screen.findByRole('tab', { name: /发团级资源/ }))
+    expect(await screen.findByText('全程用车')).toBeInTheDocument()
+
+    const departurePaneCss = readFileSync(
+      resolve(__dirname, './DepartureResourcePane.module.css'),
+      'utf8',
+    )
+    expect(departurePaneCss).toMatch(/\.pane\s*\{[^}]*flex:\s*1\s+1\s+auto/)
+    expect(departurePaneCss).not.toMatch(/max-height:\s*38%/)
+
+    const executionCss = readFileSync(resolve(__dirname, './ExecutionTab.module.css'), 'utf8')
+    expect(executionCss).toMatch(/\.workspace\s*\{[^}]*overflow:\s*hidden/)
+    expect(executionCss).toMatch(/\.layerSwitch\s*\{/)
+  })
+
+  it('opens the departure layer when locating a departure resource', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConfigProvider>
+          <ExecutionTab
+            departure={mockDeparture}
+            segmentId="segment-1"
+            highlightDepartureResourceId="departure-resource-1"
+            readOnly={false}
+            canEdit
+          />
+        </ConfigProvider>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('tab', { name: /发团级资源/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(await screen.findByText('全程用车')).toBeInTheDocument()
   })
 
   it('does not render 模板 badge on day cards', async () => {

@@ -146,7 +146,6 @@ export function DepartureDetailPage() {
         onRefresh={handleRefreshDetail}
       />
       <DepartureHeader departure={departure} canEdit={canEdit} onUpdated={handleUpdated} />
-
       <DepartureDetailWorkspace
         departure={departure}
         activeTab={activeTab}

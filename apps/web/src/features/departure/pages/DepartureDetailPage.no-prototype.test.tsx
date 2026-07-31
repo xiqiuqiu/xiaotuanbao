@@ -1,6 +1,5 @@
 /**
- * #243 / #252 护栏：发团详情不再挂载布局或客源一览原型 Host / PrototypeSwitcher；
- * ?variant= 不得劫持正式工作区（含客源管理 Tab）。
+ * 执行安排密度原型已收口：?variant= 不得劫持正式工作区。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -17,7 +16,7 @@ let mockSearch: {
   variant?: string
 } = {
   tab: 'execution',
-  variant: 'A',
+  variant: 'C',
 }
 
 vi.mock('@tanstack/react-router', () => ({
@@ -83,7 +82,7 @@ const { getDeparture } = await import('@/services/departure.service')
 
 const departure = {
   id: 'departure-1',
-  departureNo: 'XTB2026070003',
+  departureNo: 'XTB26070003',
   name: '乌镇西栅2日线',
   status: 'editing',
 } as unknown as DepartureDetail
@@ -99,10 +98,10 @@ function renderPage() {
   )
 }
 
-describe('DepartureDetailPage prototype removal (#243 / #252)', () => {
+describe('DepartureDetailPage prototype removal (execution-density folded)', () => {
   beforeEach(() => {
     navigate.mockReset()
-    mockSearch = { tab: 'execution', variant: 'A' }
+    mockSearch = { tab: 'execution', variant: 'C' }
     vi.mocked(getDeparture).mockResolvedValue(departure)
   })
 
@@ -132,12 +131,11 @@ describe('DepartureDetailPage prototype removal (#243 / #252)', () => {
     )
     expect(screen.getByText('客源内容')).toBeInTheDocument()
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
   })
 
   it('does not preserve layout variant when syncing tab URL', async () => {
     const user = userEvent.setup()
-    mockSearch = { tab: 'execution', variant: 'D', segmentId: 'seg-1' }
+    mockSearch = { tab: 'execution', variant: 'C', segmentId: 'seg-1' }
     renderPage()
 
     await screen.findByRole('tab', { name: '执行安排' })

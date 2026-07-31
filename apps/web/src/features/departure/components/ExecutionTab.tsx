@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Alert,
   Button,
@@ -8,8 +8,8 @@ import {
   message,
   theme,
 } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AppstoreOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import type {
@@ -32,14 +32,15 @@ import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
 } from '../utils/execution-segment-selection'
-import { summarizeExecutionCostStrip } from '../utils/execution-cost-strip-summary'
+import { summarizeSegmentResourceAmounts } from '../utils/segment-resource-amount-summary'
 import { formValuesToPayload } from '../utils/segment-form'
-import { ExecutionCostStrip } from './ExecutionCostStrip'
 import { ExecutionDayAxis } from './ExecutionDayAxis'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { DepartureResourcePane } from './DepartureResourcePane'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
+
+type ExecutionLayer = 'day' | 'departure'
 
 interface ExecutionTabProps {
   departure: DepartureDetail
@@ -94,29 +95,29 @@ function ExecutionWorkspace({
   onGenerateDaily,
 }: ExecutionWorkspaceProps) {
   const { token } = theme.useToken()
+  const [layer, setLayer] = useState<ExecutionLayer>(() =>
+    highlightDepartureResourceId ? 'departure' : 'day',
+  )
+
+  useEffect(() => {
+    if (highlightDepartureResourceId) {
+      setLayer('departure')
+    }
+  }, [highlightDepartureResourceId])
+
   const { data: departureResourceList } = useQuery({
     queryKey: ['departure-resources', departure.id],
     queryFn: ({ signal }) => listDepartureResources(departure.id, {}, signal),
+    ...operationalQueryOptions(),
   })
 
-  const segmentResourceQueries = useQueries({
-    queries: segments.map((segment) => ({
-      queryKey: ['segment-resources', segment.id] as const,
-      queryFn: ({ signal }: { signal?: AbortSignal }) =>
-        listSegmentResources(segment.id, {}, signal),
-      ...operationalQueryOptions(),
-    })),
-  })
-
-  const costStripSummary = summarizeExecutionCostStrip(
-    departureResourceList?.items ?? [],
-    segmentResourceQueries.flatMap((query) => query.data?.items ?? []),
-    { departureSettled: departure.status === DepartureStatus.SETTLED },
+  const departureSummary = useMemo(
+    () =>
+      summarizeSegmentResourceAmounts(departureResourceList?.items ?? [], {
+        departureSettled: departure.status === DepartureStatus.SETTLED,
+      }),
+    [departure.status, departureResourceList?.items],
   )
-  const costStripReady =
-    departureResourceList !== undefined &&
-    (segments.length === 0 ||
-      segmentResourceQueries.every((query) => !query.isPending))
 
   const stackTokenStyle = {
     '--execution-border': token.colorBorderSecondary,
@@ -126,65 +127,118 @@ function ExecutionWorkspace({
     '--execution-text-secondary': token.colorTextSecondary,
     '--execution-text-tertiary': token.colorTextTertiary,
     '--execution-warning': token.colorWarning,
+    '--execution-primary': token.colorPrimary,
+    '--execution-primary-bg': token.colorPrimaryBg,
+    '--execution-primary-border': token.colorPrimaryBorder,
   } as CSSProperties
+
+  const onDepartureLayer = layer === 'departure'
 
   return (
     <div className={styles.stackLayout} style={stackTokenStyle}>
-      {costStripReady ? <ExecutionCostStrip summary={costStripSummary} /> : null}
-
-      <DepartureResourcePane
-        departure={departure}
-        readOnly={readOnly}
-        canEdit={canEdit}
-        amountReadOnly={amountReadOnly}
-        highlightDepartureResourceId={highlightDepartureResourceId}
-      />
-
-      <div className={styles.dayStack}>
-        <ExecutionDayAxis
-          segments={segments}
-          selectedSegmentId={selectedSegmentId}
-          mutationLocked={mutationLocked}
-          onSelect={onSelect}
-          onEdit={onEdit}
-          onCreate={onCreate}
-          onDelete={onDelete}
-        />
-
-        <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
-          {segments.length === 0 ? (
-            <Empty
-              description="可按出团～回团一键生成一日一段骨架，或手工添加一天"
-              style={{ padding: '48px 0' }}
-            >
-              {!mutationLocked ? (
-                <div className={styles.emptyActions}>
-                  <Button
-                    type="primary"
-                    loading={generatingDaily}
-                    onClick={onGenerateDaily}
-                  >
-                    一键生成一日段
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={onCreate}>
-                    添加一天
-                  </Button>
-                </div>
-              ) : null}
-            </Empty>
-          ) : selectedSegment ? (
-            <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-              <ExecutionResourcePane
-                departure={departure}
-                segment={selectedSegment}
-                readOnly={readOnly}
-                canEdit={canEdit}
-                amountReadOnly={amountReadOnly}
-              />
-            </div>
-          ) : null}
-        </Card>
+      <div className={styles.layerSwitch} role="tablist" aria-label="资源层级">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!onDepartureLayer}
+          className={`${styles.layerCard} ${!onDepartureLayer ? styles.layerCardActive : ''}`}
+          onClick={() => setLayer('day')}
+        >
+          <span className={styles.layerCardIcon} aria-hidden>
+            <CalendarOutlined />
+          </span>
+          <span className={styles.layerCardBody}>
+            <span className={styles.layerCardTitle}>按日资源</span>
+            <span className={styles.layerCardMeta}>
+              {segments.length > 0 ? `${segments.length} 天行程` : '尚未生成日程'}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={onDepartureLayer}
+          className={`${styles.layerCard} ${onDepartureLayer ? styles.layerCardActive : ''}`}
+          onClick={() => setLayer('departure')}
+        >
+          <span className={styles.layerCardIcon} aria-hidden>
+            <AppstoreOutlined />
+          </span>
+          <span className={styles.layerCardBody}>
+            <span className={styles.layerCardTitle}>
+              发团级资源
+              <span className={styles.layerCardCount}>{departureSummary.resourceCount}</span>
+            </span>
+            <span className={styles.layerCardMeta}>
+              {departureSummary.ungeneratedPayableCount > 0 ? (
+                <span className={styles.layerCardWarn}>
+                  {departureSummary.ungeneratedPayableCount} 项未生成应付
+                </span>
+              ) : (
+                '全程统一录入'
+              )}
+            </span>
+          </span>
+        </button>
       </div>
+
+      {onDepartureLayer ? (
+        <div className={styles.layerPane}>
+          <DepartureResourcePane
+            departure={departure}
+            readOnly={readOnly}
+            canEdit={canEdit}
+            amountReadOnly={amountReadOnly}
+            highlightDepartureResourceId={highlightDepartureResourceId}
+          />
+        </div>
+      ) : (
+        <div className={styles.dayStack}>
+          <ExecutionDayAxis
+            segments={segments}
+            selectedSegmentId={selectedSegmentId}
+            mutationLocked={mutationLocked}
+            onSelect={onSelect}
+            onEdit={onEdit}
+            onCreate={onCreate}
+            onDelete={onDelete}
+          />
+
+          <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
+            {segments.length === 0 ? (
+              <Empty
+                description="可按出团～回团一键生成一日一段骨架，或手工添加一天"
+                style={{ padding: '48px 0' }}
+              >
+                {!mutationLocked ? (
+                  <div className={styles.emptyActions}>
+                    <Button
+                      type="primary"
+                      loading={generatingDaily}
+                      onClick={onGenerateDaily}
+                    >
+                      一键生成一日段
+                    </Button>
+                    <Button icon={<PlusOutlined />} onClick={onCreate}>
+                      添加一天
+                    </Button>
+                  </div>
+                ) : null}
+              </Empty>
+            ) : selectedSegment ? (
+              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+                <ExecutionResourcePane
+                  departure={departure}
+                  segment={selectedSegment}
+                  readOnly={readOnly}
+                  canEdit={canEdit}
+                  amountReadOnly={amountReadOnly}
+                />
+              </div>
+            ) : null}
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

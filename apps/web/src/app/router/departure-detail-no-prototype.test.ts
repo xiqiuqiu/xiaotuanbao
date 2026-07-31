@@ -1,13 +1,13 @@
 /**
- * #243 护栏：发团详情主站不挂载布局原型沙盒；详情 search 不透传 layout variant。
+ * 执行安排密度原型已收口为正式互斥布局：详情 search 不透传 layout variant。
  */
 import { describe, expect, it } from 'vitest'
 import { router } from './index'
 
-describe('departure detail prototype removal (#243)', () => {
-  it('does not register the layout prototype sandbox route', () => {
+describe('departure detail prototype removal (execution-density folded)', () => {
+  it('does not register a separate sandbox route', () => {
     expect(Object.keys(router.routesByPath)).not.toContain(
-      '/prototype/departure-detail-layout',
+      '/prototype/execution-density',
     )
   })
 
@@ -15,7 +15,7 @@ describe('departure detail prototype removal (#243)', () => {
     const validated = router.routesByPath['/departure/$departureId']!.options.validateSearch!({
       tab: 'execution',
       segmentId: 'seg-1',
-      variant: 'A',
+      variant: 'C',
       listReturn: '/departure',
     })
 
