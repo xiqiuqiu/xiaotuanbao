@@ -88,7 +88,7 @@ export function ExecutionDayAxis({
 
     Modal.confirm({
       title: `删除${dayLabel}？`,
-      content: '删除后可再「添加一天」补回。',
+      content: '删除后可再「添加一天」补回；发团至少保留一天。',
       okText: '删除',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -118,7 +118,7 @@ export function ExecutionDayAxis({
               dayIndex={dayIndex}
               selected={selected}
               showEdit={!mutationLocked}
-              showDelete={!mutationLocked}
+              showDelete={!mutationLocked && segments.length > 1}
               onSelect={() => onSelect(segment.id)}
               onEdit={() => onEdit(segment)}
               onDelete={() => {

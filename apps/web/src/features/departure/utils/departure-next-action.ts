@@ -110,8 +110,10 @@ function getIncompletePrepTab(
 
   return {
     type: 'warning',
-    title: `${incompleteLabels.join('、')}尚未完备`,
-    description: `${incompleteLabels.map((label) => tagByLabel[label as keyof typeof tagByLabel]).join('、')}`,
+    // Single line: use completion-tag copy only (avoid「尚未完备」+ tag 重复).
+    title: incompleteLabels
+      .map((label) => tagByLabel[label as keyof typeof tagByLabel])
+      .join('、'),
     action: {
       label: tab === 'sourceOrders' ? '完善客源' : '完善行程与资源',
       tab,

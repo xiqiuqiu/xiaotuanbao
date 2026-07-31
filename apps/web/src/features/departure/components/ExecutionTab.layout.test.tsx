@@ -282,7 +282,7 @@ describe('ExecutionTab layout', () => {
     mockNavigate.mockClear()
     editButton.focus()
     await user.keyboard('{Enter}')
-    expect(await screen.findByText('编辑行程段')).toBeInTheDocument()
+    expect(await screen.findByText('编辑行程')).toBeInTheDocument()
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

@@ -1,18 +1,68 @@
-.alert {
-  margin-bottom: 16px;
+/* Compact next-step strip: one row, no tall stacked Alert body. */
+.alertCompact {
+  margin-bottom: 12px;
+  padding-block: 8px;
+  padding-inline: 12px;
+  align-items: center;
+}
+
+.alertCompact :global(.ant-alert-icon) {
+  margin-inline-end: 8px;
+}
+
+.alertCompact :global(.ant-alert-content) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.alertCompact :global(.ant-alert-message) {
+  margin-bottom: 0;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+
+.copy {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.detail {
+  font-weight: 400;
+  color: var(--ant-color-text-secondary);
+}
+
+.detail::before {
+  content: '·';
+  margin-inline-end: 8px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.cta {
+  flex-shrink: 0;
+  padding-inline: 0;
+  height: auto;
 }
 
 @media (max-width: 767px) {
-  .alert {
+  .alertCompact {
     align-items: flex-start;
-    flex-wrap: wrap;
   }
 
-  .alert :global(.ant-alert-content) {
-    min-width: 0;
-  }
-
-  .alert :global(.ant-alert-action) {
-    margin-top: 8px;
+  .line {
+    width: 100%;
   }
 }

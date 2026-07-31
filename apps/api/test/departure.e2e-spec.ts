@@ -1862,7 +1862,7 @@ describe('Departure API (e2e)', () => {
         .delete(`/api/segments/${segmentId}`)
         .expect(409)
 
-      expect(response.body.message).toBe('当前行程段已有资源，不能删除')
+      expect(response.body.message).toBe('当前行程已有资源，不能删除')
     })
 
     it('returns 409 when mutating segments on closed departure', async () => {

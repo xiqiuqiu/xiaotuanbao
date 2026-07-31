@@ -1,4 +1,6 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -125,9 +127,27 @@ describe('DepartureNextActionAlert', () => {
   it('shows the next-action guidance for incomplete source orders', () => {
     renderAlert(makeDeparture())
 
-    expect(screen.getByText('客源尚未完备')).toBeInTheDocument()
     expect(screen.getByText('客源未录入')).toBeInTheDocument()
+    expect(screen.queryByText('客源尚未完备')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '完善客源' })).toBeInTheDocument()
+  })
+
+  it('renders a compact inline strip (title · detail + CTA), not a tall stacked Alert', () => {
+    const { container } = renderAlert(makeDeparture())
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert).toBeTruthy()
+    expect(alert?.className).toMatch(/alertCompact/)
+
+    const css = readFileSync(resolve(__dirname, './DepartureNextActionAlert.module.css'), 'utf8')
+    expect(css).toMatch(/\.alertCompact\s*\{[^}]*padding-block:\s*8px/)
+    expect(css).toMatch(/\.line\s*\{[^}]*display:\s*flex/)
+
+    // Incomplete prep: one title only (tag copy), CTA in the same strip.
+    const line = container.querySelector('[class*="line"]')
+    expect(line).toBeTruthy()
+    expect(line?.textContent).toMatch(/客源未录入/)
+    expect(line?.textContent).not.toMatch(/尚未完备/)
+    expect(within(line as HTMLElement).getByRole('button', { name: '完善客源' })).toBeInTheDocument()
   })
 
   it('顶部财务异常只保留行动摘要，不重复概览金额明细', () => {
@@ -164,14 +184,14 @@ describe('DepartureNextActionAlert', () => {
     const departure = makeDeparture()
     const { unmount } = renderAlert(departure)
 
-    expect(screen.getByText('客源尚未完备')).toBeInTheDocument()
+    expect(screen.getByText('客源未录入')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /close/i }))
-    expect(screen.queryByText('客源尚未完备')).not.toBeInTheDocument()
+    expect(screen.queryByText('客源未录入')).not.toBeInTheDocument()
 
     unmount()
     renderAlert(departure)
-    expect(screen.queryByText('客源尚未完备')).not.toBeInTheDocument()
+    expect(screen.queryByText('客源未录入')).not.toBeInTheDocument()
   })
 
   it('shows again when guidance fingerprint changes', async () => {
@@ -180,7 +200,7 @@ describe('DepartureNextActionAlert', () => {
     const { rerender } = renderAlert(departure)
 
     await user.click(screen.getByRole('button', { name: /close/i }))
-    expect(screen.queryByText('客源尚未完备')).not.toBeInTheDocument()
+    expect(screen.queryByText('客源未录入')).not.toBeInTheDocument()
 
     const nextDeparture = makeDeparture({
       completionTags: {
@@ -204,7 +224,7 @@ describe('DepartureNextActionAlert', () => {
       </ConfigProvider>,
     )
 
-    expect(screen.getByText('行程尚未完备')).toBeInTheDocument()
     expect(screen.getByText('行程未录入')).toBeInTheDocument()
+    expect(screen.queryByText('行程尚未完备')).not.toBeInTheDocument()
   })
 })

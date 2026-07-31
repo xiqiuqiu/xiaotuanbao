@@ -52,6 +52,7 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from './departure-date.utils'
+import { fillMissingDailySkeletonInTx } from './daily-segment-skeleton.write'
 import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
 import { assertRouteLedgerQueryAxes } from './route-ledger.validation'
@@ -517,6 +518,8 @@ export class DepartureService {
         })
       }
 
+      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
+
       return created
     })
 
@@ -578,6 +581,8 @@ export class DepartureService {
         targetDepartureId: created.id,
         targetStartDate: startDate,
       })
+
+      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
 
       return created
     })

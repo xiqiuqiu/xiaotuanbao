@@ -64,7 +64,7 @@ describe('MainLayout 侧栏开关', () => {
     expect(screen.getByRole('button', { name: '折叠侧边栏' })).toBeInTheDocument()
   })
 
-  it('进入发团管理详情时默认收起侧栏', async () => {
+  it('进入发团管理详情时不自动收起侧栏', async () => {
     const { rerender } = render(
       <ConfigProvider>
         <MainLayout>
@@ -85,12 +85,12 @@ describe('MainLayout 侧栏开关', () => {
     )
 
     await waitFor(() => {
-      expect(useUiStore.getState().sidebarCollapsed).toBe(true)
+      expect(useUiStore.getState().sidebarCollapsed).toBe(false)
     })
-    expect(screen.getByRole('button', { name: '展开侧边栏' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '折叠侧边栏' })).toBeInTheDocument()
   })
 
-  it('从发团一览进入详情时收起侧栏', async () => {
+  it('从发团一览进入详情时保持侧栏展开', async () => {
     pathname = '/departure'
     const { rerender } = render(
       <ConfigProvider>
@@ -112,7 +112,7 @@ describe('MainLayout 侧栏开关', () => {
     )
 
     await waitFor(() => {
-      expect(useUiStore.getState().sidebarCollapsed).toBe(true)
+      expect(useUiStore.getState().sidebarCollapsed).toBe(false)
     })
   })
 

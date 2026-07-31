@@ -207,7 +207,7 @@ function ExecutionWorkspace({
           <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
             {segments.length === 0 ? (
               <Empty
-                description="可按出团～回团一键生成一日一段骨架，或手工添加一天"
+                description="至少保留一天行程。可按出团～回团补齐日程，或手工添加一天"
                 style={{ padding: '48px 0' }}
               >
                 {!mutationLocked ? (
@@ -391,9 +391,9 @@ export function ExecutionTab({
     },
     onSuccess: ({ saved, editingId }) => {
       if (editingId) {
-        message.success('行程段已更新')
+        message.success('行程已更新')
       } else {
-        message.success('行程段已添加')
+        message.success('行程已添加')
         message.info('请在本段「资源安排」中添加用车、酒店、拼出等资源')
         // Seed the list cache before URL sync so resolveSelectedSegmentId does
         // not treat the new id as missing and fall back to the first segment.
@@ -429,7 +429,7 @@ export function ExecutionTab({
       navigateExecution(saved.id)
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '保存行程段失败')
+      message.error(error instanceof Error ? error.message : '保存行程失败')
     },
   })
 
@@ -437,13 +437,13 @@ export function ExecutionTab({
     mutationFn: (id: string) => deleteSegment(id),
     onSuccess: (_result, deletedId) => {
       const nextSegmentId = resolveAdjacentSegmentId(segments, deletedId)
-      message.success('行程段已删除')
+      message.success('行程已删除')
       closeDrawer()
       invalidateSegments()
       navigateExecution(nextSegmentId)
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '删除行程段失败')
+      message.error(error instanceof Error ? error.message : '删除行程失败')
     },
   })
 
@@ -451,17 +451,17 @@ export function ExecutionTab({
     mutationFn: () => generateDailySegments(departure.id, { mode: 'fill_missing' }),
     onSuccess: (result: GenerateDailySegmentsResult) => {
       if (result.createdCount > 0) {
-        message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程段`)
+        message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程`)
       } else {
-        message.info('出团～回团各日均已有行程段覆盖，未新增')
+        message.info('出团～回团各日均已有行程覆盖，未新增')
       }
       if (result.preservedWithResources > 0) {
-        message.info(`已保留 ${result.preservedWithResources} 个含资源的行程段`)
+        message.info(`已保留 ${result.preservedWithResources} 个含资源的行程`)
       }
       invalidateSegments()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '生成每日行程段失败')
+      message.error(error instanceof Error ? error.message : '生成每日行程失败')
     },
   })
 
@@ -482,7 +482,7 @@ export function ExecutionTab({
       <Alert
         type="error"
         showIcon
-        title="行程段加载失败"
+        title="行程加载失败"
         description="请稍后重试，或检查网络后再次加载。"
         action={
           <Button size="small" onClick={() => void refetch()}>
@@ -523,7 +523,7 @@ export function ExecutionTab({
         onClose={closeDrawer}
         onSubmit={(values) => saveMutation.mutate(values)}
         onDelete={
-          editingSegment
+          editingSegment && segments.length > 1
             ? () => deleteMutation.mutate(editingSegment.id)
             : undefined
         }

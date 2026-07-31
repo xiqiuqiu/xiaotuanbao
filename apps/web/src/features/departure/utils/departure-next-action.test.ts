@@ -111,9 +111,10 @@ describe('resolveDepartureNextAction', () => {
 
       expect(result).toMatchObject({
         type: 'warning',
+        title: '客源未录入',
         action: { tab: 'sourceOrders' },
       })
-      expect(result?.title).toMatch(/客源/)
+      expect(result?.description).toBeUndefined()
     })
 
     it('returns warning with execution tab when segments are incomplete', () => {
@@ -132,8 +133,10 @@ describe('resolveDepartureNextAction', () => {
 
       expect(result).toMatchObject({
         type: 'warning',
+        title: '行程未安排',
         action: { tab: 'execution' },
       })
+      expect(result?.description).toBeUndefined()
     })
 
     it('returns info suggesting pending settlement when prep is complete and canWrite', () => {

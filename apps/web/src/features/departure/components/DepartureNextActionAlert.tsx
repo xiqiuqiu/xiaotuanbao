@@ -47,20 +47,31 @@ export function DepartureNextActionAlert({
       type={nextAction.type}
       showIcon
       closable
-      className={styles.alert}
-      title={nextAction.title}
-      description={nextAction.description}
+      className={styles.alertCompact}
+      title={
+        <span className={styles.line}>
+          <span className={styles.copy}>
+            <span className={styles.title}>{nextAction.title}</span>
+            {nextAction.description ? (
+              <span className={styles.detail}>{nextAction.description}</span>
+            ) : null}
+          </span>
+          {nextAction.action ? (
+            <Button
+              size="small"
+              type="link"
+              className={styles.cta}
+              onClick={() => onAction(nextAction.action!)}
+            >
+              {nextAction.action.label}
+            </Button>
+          ) : null}
+        </span>
+      }
       onClose={() => {
         dismissNextAction(departure.id, fingerprint)
         setClosed({ departureId: departure.id, fingerprint })
       }}
-      action={
-        nextAction.action ? (
-          <Button size="small" onClick={() => onAction(nextAction.action!)}>
-            {nextAction.action.label}
-          </Button>
-        ) : undefined
-      }
     />
   )
 }

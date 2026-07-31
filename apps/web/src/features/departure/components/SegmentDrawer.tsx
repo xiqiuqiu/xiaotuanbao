@@ -75,7 +75,7 @@ export function SegmentDrawer({
 
   return (
     <Drawer
-      title={readOnly ? '查看行程段' : editing ? '编辑行程段' : '添加行程段'}
+      title={readOnly ? '查看行程' : editing ? '编辑行程' : '添加行程'}
       size="min(480px, 100vw)"
       open={open}
       onClose={handleClose}
@@ -91,7 +91,7 @@ export function SegmentDrawer({
             {showDelete ? (
               canDelete ? (
                 <Popconfirm
-                  title="确定删除该行程段？"
+                  title="确定删除该行程？"
                   onConfirm={onDelete}
                   okButtonProps={{ loading: deleting, danger: true }}
                 >
@@ -102,7 +102,7 @@ export function SegmentDrawer({
               ) : (
                 <Button
                   danger
-                  onClick={() => message.error('当前行程段已有资源，不能删除')}
+                  onClick={() => message.error('当前行程已有资源，不能删除')}
                 >
                   删除
                 </Button>
@@ -137,9 +137,9 @@ export function SegmentDrawer({
         initialValues={initialValues}
       >
         <Form.Item
-          label="行程段名称"
+          label="行程名称"
           name="name"
-          rules={[{ required: true, whitespace: true, message: '请填写行程段名称' }]}
+          rules={[{ required: true, whitespace: true, message: '请填写行程名称' }]}
         >
           <Input placeholder="如喀纳斯段" />
         </Form.Item>
