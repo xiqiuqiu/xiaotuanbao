@@ -68,6 +68,7 @@ import {
   getDepartureOperationalDates,
 } from './departure-operational-window'
 import { DepartureSettlementReadinessService } from './departure-settlement-readiness.service'
+import { fillMissingDailySkeletonInTx } from './daily-segment-skeleton.write'
 
 const UPDATE_DEPARTURE_FIELDS = [
   'name',
@@ -517,6 +518,8 @@ export class DepartureService {
         })
       }
 
+      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
+
       return created
     })
 
@@ -578,6 +581,8 @@ export class DepartureService {
         targetDepartureId: created.id,
         targetStartDate: startDate,
       })
+
+      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
 
       return created
     })
