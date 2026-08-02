@@ -5,7 +5,10 @@ import {
   Button,
   Card,
   Empty,
+  Flex,
+  Segmented,
   Spin,
+  Typography,
   theme,
 } from 'antd'
 import { AppstoreOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons'
@@ -129,56 +132,48 @@ function ExecutionWorkspace({
 
   const onDepartureLayer = layer === 'departure'
 
+  const layerMeta = onDepartureLayer
+    ? departureSummary.ungeneratedPayableCount > 0
+      ? `${departureSummary.ungeneratedPayableCount} 项未提交应付`
+      : '全程统一录入'
+    : segments.length > 0
+      ? `${segments.length} 天行程`
+      : '尚未生成日程'
+
   return (
     <div className={styles.stackLayout} style={stackTokenStyle}>
-      <div className={styles.layerSwitch} role="tablist" aria-label="资源层级">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!onDepartureLayer}
-          className={`${styles.layerCard} ${!onDepartureLayer ? styles.layerCardActive : ''}`}
-          onClick={() => setSelectedLayer('day')}
-        >
-          <span className={styles.layerCardIcon} aria-hidden>
-            <CalendarOutlined />
-          </span>
-          <span className={styles.layerCardBody}>
-            <span className={styles.layerCardTitle}>按日资源</span>
-            <span className={styles.layerCardMeta}>
-              {segments.length > 0 ? `${segments.length} 天行程` : '尚未生成日程'}
-            </span>
-          </span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={onDepartureLayer}
-          className={`${styles.layerCard} ${onDepartureLayer ? styles.layerCardActive : ''}`}
-          onClick={() => setSelectedLayer('departure')}
-        >
-          <span className={styles.layerCardIcon} aria-hidden>
-            <AppstoreOutlined />
-          </span>
-          <span className={styles.layerCardBody}>
-            <span className={styles.layerCardTitle}>
-              发团级资源
-              <span className={styles.layerCardCount}>{departureSummary.resourceCount}</span>
-            </span>
-            <span className={styles.layerCardMeta}>
-              {departureSummary.ungeneratedPayableCount > 0 ? (
-                <span className={styles.layerCardWarn}>
-                  {departureSummary.ungeneratedPayableCount} 项未提交应付
-                </span>
-              ) : (
-                '全程统一录入'
-              )}
-            </span>
-          </span>
-        </button>
-      </div>
+      <Flex className={styles.layerSwitch} align="center" wrap="wrap" gap={12}>
+        <Segmented
+          value={layer}
+          aria-label="资源层级"
+          options={[
+            {
+              label: '按日资源',
+              value: 'day',
+              icon: <CalendarOutlined />,
+            },
+            {
+              label:
+                departureSummary.resourceCount > 0
+                  ? `发团级资源 · ${departureSummary.resourceCount}`
+                  : '发团级资源',
+              value: 'departure',
+              icon: <AppstoreOutlined />,
+            },
+          ]}
+          onChange={(value) => setSelectedLayer(value as ExecutionLayer)}
+        />
+        <Typography.Text type="secondary" className={styles.layerMeta}>
+          {layerMeta}
+        </Typography.Text>
+      </Flex>
 
       {onDepartureLayer ? (
-        <div className={styles.layerPane}>
+        <Card
+          key="departure"
+          className={`${styles.paneCard} ${styles.resourcePaneEnter}`}
+          classNames={{ body: styles.paneCardBody }}
+        >
           <DepartureResourcePane
             departure={departure}
             readOnly={readOnly}
@@ -186,53 +181,61 @@ function ExecutionWorkspace({
             amountReadOnly={amountReadOnly}
             highlightDepartureResourceId={highlightDepartureResourceId}
           />
-        </div>
+        </Card>
       ) : (
-        <div className={styles.dayStack}>
-          <ExecutionDayAxis
-            segments={segments}
-            selectedSegmentId={selectedSegmentId}
-            mutationLocked={mutationLocked}
-            onSelect={onSelect}
-            onEdit={onEdit}
-            onCreate={onCreate}
-            onDelete={onDelete}
-          />
-
-          <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
-            {segments.length === 0 ? (
-              <Empty
-                description="至少保留一天行程。可按出团～回团补齐日程，或手工添加一天"
-                style={{ padding: '48px 0' }}
-              >
-                {!mutationLocked ? (
-                  <div className={styles.emptyActions}>
-                    <Button
-                      type="primary"
-                      loading={generatingDaily}
-                      onClick={onGenerateDaily}
-                    >
-                      一键生成一日段
-                    </Button>
-                    <Button icon={<PlusOutlined />} onClick={onCreate}>
-                      添加一天
-                    </Button>
-                  </div>
-                ) : null}
-              </Empty>
-            ) : selectedSegment ? (
-              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-                <ExecutionResourcePane
-                  departure={departure}
-                  segment={selectedSegment}
-                  readOnly={readOnly}
-                  canEdit={canEdit}
-                  amountReadOnly={amountReadOnly}
-                />
-              </div>
-            ) : null}
-          </Card>
-        </div>
+        <Card
+          key="day"
+          className={`${styles.paneCard} ${styles.resourcePaneEnter}`}
+          classNames={{ body: styles.paneCardBody }}
+        >
+          {segments.length === 0 ? (
+            <Empty
+              description="至少保留一天行程。可按出团～回团补齐日程，或手工添加一天"
+              style={{ padding: '48px 0' }}
+            >
+              {!mutationLocked ? (
+                <div className={styles.emptyActions}>
+                  <Button
+                    type="primary"
+                    loading={generatingDaily}
+                    onClick={onGenerateDaily}
+                  >
+                    一键生成一日段
+                  </Button>
+                  <Button icon={<PlusOutlined />} onClick={onCreate}>
+                    添加一天
+                  </Button>
+                </div>
+              ) : null}
+            </Empty>
+          ) : (
+            <>
+              <ExecutionDayAxis
+                segments={segments}
+                selectedSegmentId={selectedSegmentId}
+                mutationLocked={mutationLocked}
+                onSelect={onSelect}
+                onEdit={onEdit}
+                onCreate={onCreate}
+                onDelete={onDelete}
+              />
+              {selectedSegment ? (
+                <div
+                  key={selectedSegment.id}
+                  className={`${styles.resourcePaneEnter} ${styles.resourcePaneScroll}`}
+                >
+                  <ExecutionResourcePane
+                    departure={departure}
+                    segment={selectedSegment}
+                    readOnly={readOnly}
+                    canEdit={canEdit}
+                    amountReadOnly={amountReadOnly}
+                  />
+                </div>
+              ) : null}
+            </>
+          )}
+        </Card>
       )}
     </div>
   )

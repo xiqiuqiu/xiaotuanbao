@@ -125,6 +125,26 @@
 
 执行记录（分支 `animation/049-053-workbench-motion`）：049–053 已落地；vitest 5 文件 22 通过；`pnpm --filter web typecheck` 绿。基线无 `.settlementQueueItem`（050 仅门控既有 4 类 hover）；合并含结算队列 WIP 时请补 fine-pointer 门控。
 
+## 2026-08-02 追加（基线 commit `341bdf6`）
+
+来源：2026-08-02 `improve-animations` 发团详情页动效审计。范围：Tab/概览入场、执行日程轴、发团级资源 locate、层级切换。
+
+| 执行顺序 | 计划 | 严重度 | 状态 | 依赖 |
+| --- | --- | --- | --- | --- |
+| 54 | [054 — 统一日程 chip scale(0.97)](054-unify-daychip-press-scale.md) | HIGH | DONE | 无；建议最先 |
+| 55 | [055 — 资源 locate 对齐财务 480ms](055-align-departure-resource-locate-flash.md) | HIGH | DONE | 无 |
+| 56 | [056 — Tab/资源 ease-out-quint](056-tab-resource-ease-out-quint.md) | MEDIUM | DONE | 与 057 同改 CSS/测试 |
+| 57 | [057 — reduced-motion 保留 opacity fade](057-reduced-motion-keep-opacity-fade.md) | MEDIUM | DONE | 与 056 同批 |
+| 58 | [058 — 首次概览跳过外层 fade](058-skip-outer-fade-on-first-overview.md) | LOW | DONE | 无 |
+| 59 | [059 — 执行层切换短 fade](059-execution-layer-switch-fade.md) | LOW | DONE | 建议 056/057 后 |
+
+建议批次：
+1. **HIGH**：054、055。
+2. **入场 CSS**：056 + 057。
+3. **结构 / 对称**：058、059。
+
+执行记录：054–059 已落地；motion 相关 vitest 7 文件 19 通过；`pnpm --filter web typecheck` 绿。
+
 ## 批次与验证门
 
 1. **安全与正确性**：001、002、004、005、006、007；以及 026–029。每个计划先跑聚焦测试；批次结束跑 web typecheck 与相关 vitest。

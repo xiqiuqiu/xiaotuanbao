@@ -12,7 +12,6 @@ import { TransactionsWorkspace } from '@/features/finance/components/Transaction
 import { VerificationsWorkspace } from '@/features/finance/components/VerificationsWorkspace'
 import { canMutateFinance } from '@/features/finance/utils/finance-permission'
 import { DepartureOverview } from './DepartureOverview'
-import { DepartureDetailNavigation } from './DepartureDetailNavigation'
 import { SourceOrdersTab } from './SourceOrdersTab'
 import { ExecutionTab } from './ExecutionTab'
 import { IncomeRecordsPanel } from './IncomeRecordsPanel'
@@ -45,8 +44,9 @@ type DepartureDetailWorkspaceProps = {
   onTabChange: (key: string) => void
 }
 
-function wrapTabPane(children: ReactNode) {
-  return <div className={styles.tabPaneEnter}>{children}</div>
+function wrapTabPane(children: ReactNode, options?: { fadeEnter?: boolean }) {
+  const fadeEnter = options?.fadeEnter !== false
+  return <div className={fadeEnter ? styles.tabPaneEnter : undefined}>{children}</div>
 }
 
 function resolveTransactionDirection(
@@ -128,15 +128,18 @@ export function DepartureDetailWorkspace({
   )
   const tabItems: NonNullable<TabsProps['items']> = visibleTabs.map((tab) => {
     if (tab.key === 'overview') {
+      const isFirstOverviewEnter = !animatedOverviewDepartureIds.current.has(departure.id)
       return {
         key: tab.key,
         label: tab.label,
+        // First overview visit: skip outer fade so metric-card stagger is the only entrance.
         children: wrapTabPane(
           <DepartureOverview
             departure={departure}
-            animateEnter={!animatedOverviewDepartureIds.current.has(departure.id)}
+            animateEnter={isFirstOverviewEnter}
             mutationLocked={readOnly || amountReadOnly || !canEdit}
           />,
+          { fadeEnter: !isFirstOverviewEnter },
         ),
       }
     }
@@ -259,21 +262,14 @@ export function DepartureDetailWorkspace({
 
   return (
     <section className={styles.detailWorkspace} aria-label="发团详情工作区">
-      <DepartureDetailNavigation
-        activeTab={activeTab}
-        tabs={visibleTabs}
+      <Tabs
+        aria-label="发团详情内容"
+        className={styles.detailTabs}
+        destroyOnHidden
+        activeKey={activeTab}
         onChange={onTabChange}
+        items={tabItems}
       />
-
-      <div className={styles.detailWorkspaceContent}>
-        <Tabs
-          aria-label="发团详情内容"
-          activeKey={activeTab}
-          onChange={onTabChange}
-          items={tabItems}
-          tabBarStyle={{ display: 'none' }}
-        />
-      </div>
     </section>
   )
 }

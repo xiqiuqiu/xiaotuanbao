@@ -2,16 +2,6 @@
   animation: metric-card-enter 180ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
 }
 
-/* 经营构成：分区标题 + 同层统计，不再套外层 Card */
-.compositionSection {
-  padding: 16px 0 0;
-  border-top: 1px solid var(--ant-color-border-secondary);
-}
-
-.compositionTitle {
-  margin: 0 0 16px !important;
-}
-
 /* ⓘ 与相邻标题同色（Statistic description / Title heading） */
 .calcInfoButton {
   color: inherit;
@@ -63,7 +53,7 @@
   animation-delay: 90ms;
 }
 
-.compositionSection.metricCardEnter {
+.compositionCard.metricCardEnter {
   animation-delay: 105ms;
 }
 

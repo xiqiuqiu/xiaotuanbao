@@ -250,8 +250,8 @@ export function SourceOrdersTab({
         }
       />
 
-      {isError && !listResult ? (
-        <Card>
+      <Card>
+        {isError && !listResult ? (
           <Alert
             type="error"
             showIcon
@@ -265,18 +265,18 @@ export function SourceOrdersTab({
               </Button>
             }
           />
-        </Card>
-      ) : (
-        <Table
-          rowKey="id"
-          loading={isLoading}
-          columns={columns}
-          dataSource={listResult?.items ?? []}
-          scroll={{ x: SOURCE_ORDERS_TABLE_SCROLL_X }}
-          pagination={false}
-          summary={renderSourceOrdersTableSummary}
-        />
-      )}
+        ) : (
+          <Table
+            rowKey="id"
+            loading={isLoading}
+            columns={columns}
+            dataSource={listResult?.items ?? []}
+            scroll={{ x: SOURCE_ORDERS_TABLE_SCROLL_X }}
+            pagination={false}
+            summary={renderSourceOrdersTableSummary}
+          />
+        )}
+      </Card>
 
       <SourceOrderDrawer
         open={drawer.drawerOpen}

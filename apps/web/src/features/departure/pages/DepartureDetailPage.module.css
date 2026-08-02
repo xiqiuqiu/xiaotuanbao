@@ -1,27 +1,29 @@
+/*
+ * 发团详情工作区：页面级原生 Tabs。
+ * 各 Tab 内容自带筛选 Card / 指标 Card / 表格，不再包一层外层 Card（DESIGN：避免套 Card）。
+ */
 .detailWorkspace {
-  display: flex;
-  flex-direction: column;
-  min-height: 520px;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: var(--ant-border-radius-lg);
-  overflow: visible;
+  min-width: 0;
 }
 
+.detailTabs {
+  min-width: 0;
+}
+
+.detailTabs :global(.ant-tabs-content),
+.detailTabs :global(.ant-tabs-tabpane-active) {
+  min-width: 0;
+}
+
+/* 骨架屏内容区留白 */
 .detailWorkspaceContent {
   min-width: 0;
-  flex: 1;
-  padding: 16px;
-}
-
-.detailWorkspaceContent :global(.ant-tabs-content-holder),
-.detailWorkspaceContent :global(.ant-tabs-content),
-.detailWorkspaceContent :global(.ant-tabs-tabpane-active) {
-  min-width: 0;
+  padding-top: 8px;
 }
 
 .tabPaneEnter {
-  animation: tab-pane-fade 120ms ease both;
+  animation: tab-pane-fade 120ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1))
+    both;
 }
 
 @keyframes tab-pane-fade {
@@ -35,19 +37,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Opacity-only fade aids tab comprehension; drop movement elsewhere. */
   .tabPaneEnter {
-    animation: none;
-  }
-}
-
-@media (max-width: 1023px) {
-  .detailWorkspace {
-    min-height: 0;
+    animation: tab-pane-fade 120ms
+      var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
   }
 }
 
 @media (max-width: 767px) {
-  .detailWorkspaceContent {
-    padding: 12px;
+  /* 窄屏主触控目标 ≥ 44px（DESIGN） */
+  .detailTabs :global(.ant-tabs-tab) {
+    min-height: 44px;
+    padding-block: 12px;
   }
 }

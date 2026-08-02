@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Button, Input, Select, Space } from 'antd'
+import { Button, Card, Input, Select, Space } from 'antd'
 import {
   DEPARTURE_INCOME_SETTLEMENT_COMPOSITE_LABELS,
   DEPARTURE_INCOME_TYPE_LABELS,
@@ -47,39 +47,41 @@ export function IncomeRecordsFilters({
   extra,
 }: IncomeRecordsFiltersProps) {
   return (
-    <Space wrap style={{ width: '100%', marginBottom: 16, justifyContent: 'space-between' }}>
-      <Space wrap>
-        <Select
-          style={{ width: 160 }}
-          value={typeFilter}
-          options={TYPE_FILTER_OPTIONS}
-          onChange={onTypeChange}
-          aria-label="增收类型筛选"
-        />
-        <Select
-          style={{ width: 160 }}
-          value={compositeFilter}
-          options={COMPOSITE_FILTER_OPTIONS}
-          onChange={onCompositeChange}
-          aria-label="状态筛选"
-        />
-        <Input
-          allowClear
-          placeholder="项目名称 / 备注 / 合作方"
-          style={{ width: 240 }}
-          value={keyword}
-          aria-label="搜索项目名称、备注、合作方"
-          onChange={(event) => onKeywordChange(event.target.value)}
-          onPressEnter={onApply}
-        />
-        <Button autoInsertSpace={false} onClick={onApply}>
-          查询
-        </Button>
-        <Button autoInsertSpace={false} onClick={onReset}>
-          重置
-        </Button>
+    <Card style={{ marginBottom: 16 }}>
+      <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
+        <Space wrap>
+          <Select
+            style={{ width: 160 }}
+            value={typeFilter}
+            options={TYPE_FILTER_OPTIONS}
+            onChange={onTypeChange}
+            aria-label="增收类型筛选"
+          />
+          <Select
+            style={{ width: 160 }}
+            value={compositeFilter}
+            options={COMPOSITE_FILTER_OPTIONS}
+            onChange={onCompositeChange}
+            aria-label="状态筛选"
+          />
+          <Input
+            allowClear
+            placeholder="项目名称 / 备注 / 合作方"
+            style={{ width: 240 }}
+            value={keyword}
+            aria-label="搜索项目名称、备注、合作方"
+            onChange={(event) => onKeywordChange(event.target.value)}
+            onPressEnter={onApply}
+          />
+          <Button autoInsertSpace={false} onClick={onApply}>
+            查询
+          </Button>
+          <Button autoInsertSpace={false} onClick={onReset}>
+            重置
+          </Button>
+        </Space>
+        {extra}
       </Space>
-      {extra}
-    </Space>
+    </Card>
   )
 }

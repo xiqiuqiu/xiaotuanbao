@@ -10,6 +10,8 @@ const motionCssFiles = [
   '../pages/LoginPage.module.css',
   '../pages/HomePage.module.css',
   '../features/departure/components/DepartureOverviewStatsCards.module.css',
+  '../features/departure/components/DepartureResourcePane.module.css',
+  '../features/departure/pages/DepartureDetailPage.module.css',
   '../features/finance/components/PaymentScheduleWorkspace.module.css',
   '../features/departure/components/ExecutionTab.module.css',
 ] as const

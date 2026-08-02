@@ -7,7 +7,6 @@ import {
   type DepartureDetailTabKey,
 } from '@/features/departure/catalog'
 import headerStyles from '@/features/departure/components/DepartureHeaderCard.module.css'
-import navigationStyles from '@/features/departure/components/DepartureDetailNavigation.module.css'
 import pageStyles from '@/features/departure/pages/DepartureDetailPage.module.css'
 import styles from './DepartureDetailShellSkeleton.module.css'
 
@@ -20,10 +19,6 @@ type DepartureDetailShellSkeletonProps = {
 export function DepartureDetailShellSkeleton({
   tabs = DEPARTURE_DETAIL_TABS,
 }: DepartureDetailShellSkeletonProps) {
-  const operations = tabs.filter((tab) => tab.group === 'operations')
-  const finance = tabs.filter((tab) => tab.group === 'finance')
-  const showDivider = operations.length > 0 && finance.length > 0
-
   return (
     <div role="status" aria-label="发团详情加载中">
       <div className={headerStyles.shell}>
@@ -46,38 +41,20 @@ export function DepartureDetailShellSkeleton({
       </div>
 
       <section className={pageStyles.detailWorkspace} aria-label="发团详情工作区加载中">
-        <nav
-          className={navigationStyles.topTabBar}
-          aria-label="发团详情功能导航加载中"
+        <div
+          className={styles.tabsSkeleton}
+          role="tablist"
+          aria-label="发团详情内容加载中"
         >
-          <div
-            className={`${navigationStyles.topTabList} ${styles.topTabSkeletonList}`}
-            role="tablist"
-          >
-            {operations.map((tab) => (
-              <Skeleton.Button
-                key={tab.key}
-                active
-                size="small"
-                className={styles.topTabSkeleton}
-              />
-            ))}
-
-            {showDivider ? (
-              <div className={navigationStyles.topTabDivider} aria-hidden="true" />
-            ) : null}
-
-            {finance.map((tab) => (
-              <Skeleton.Button
-                key={tab.key}
-                active
-                size="small"
-                className={styles.topTabSkeleton}
-              />
-            ))}
-          </div>
-        </nav>
-
+          {tabs.map((tab) => (
+            <Skeleton.Button
+              key={tab.key}
+              active
+              size="small"
+              className={styles.tabSkeleton}
+            />
+          ))}
+        </div>
         <div className={pageStyles.detailWorkspaceContent}>
           <Skeleton active paragraph={{ rows: 8 }} />
         </div>

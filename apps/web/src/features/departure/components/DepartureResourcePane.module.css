@@ -28,18 +28,18 @@
   }
 }
 
-.locateFlash > td:not(:global(.ant-table-cell-fix)) {
-  animation: departure-resource-locate-flash 2.4s ease-out both;
-}
-
-.locateFlash > td:global(.ant-table-cell-fix) {
-  animation: departure-resource-locate-flash 2.4s ease-out both;
-}
-
+/* One soft breathe — match PaymentScheduleWorkspace locate flash (480ms). */
 @keyframes departure-resource-locate-flash {
-  0%,
-  12% {
-    background-color: var(--schedule-locate-bg, rgba(250, 173, 20, 0.18));
+  0% {
+    background-color: transparent;
+  }
+
+  15% {
+    background-color: color-mix(in srgb, var(--schedule-locate-bg, rgba(250, 173, 20, 0.18)) 78%, transparent);
+  }
+
+  35% {
+    background-color: color-mix(in srgb, var(--schedule-locate-bg, rgba(250, 173, 20, 0.18)) 62%, transparent);
   }
 
   100% {
@@ -47,10 +47,25 @@
   }
 }
 
+/* Only flash scrollable body cells. Animating fixed cells promotes stacking
+   and briefly reveals content under the sticky 操作 column. */
+.locateFlash > td:not(:global(.ant-table-cell-fix)) {
+  animation: departure-resource-locate-flash 480ms
+    var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) 1 both;
+}
+
+.locateFlash > td:global(.ant-table-cell-fix) {
+  z-index: 3;
+  background-color: var(--ant-color-bg-container, #fff);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .locateFlash > td:not(:global(.ant-table-cell-fix)),
-  .locateFlash > td:global(.ant-table-cell-fix) {
+  .locateFlash > td:not(:global(.ant-table-cell-fix)) {
     animation: none;
-    background-color: var(--schedule-locate-bg, rgba(250, 173, 20, 0.18));
+    background-color: color-mix(
+      in srgb,
+      var(--schedule-locate-bg, rgba(250, 173, 20, 0.18)) 62%,
+      transparent
+    );
   }
 }
