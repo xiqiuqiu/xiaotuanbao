@@ -11,7 +11,10 @@ import { EditScheduleDrawer } from './EditScheduleDrawer'
 import type { ConfirmCollectionFormValues } from '../utils/confirm-collection-form'
 import type { ConfirmPaymentFormValues } from '../utils/confirm-payment-form'
 import type { EditScheduleFormValues } from '../utils/edit-schedule-form'
-import type { CreateVerificationFormValues } from '../utils/verification-form'
+import type {
+  CreateVerificationFormValues,
+  CreateVerificationSubmission,
+} from '../utils/verification-form'
 
 interface PaymentScheduleActionDialogsProps {
   isReceivable: boolean
@@ -36,7 +39,7 @@ interface PaymentScheduleActionDialogsProps {
     ConfirmCollectionFormValues | ConfirmPaymentFormValues,
     unknown
   >
-  verifyCreateMutation: UseMutationResult<unknown, Error, CreateVerificationFormValues, unknown>
+  verifyCreateMutation: UseMutationResult<unknown, Error, CreateVerificationSubmission, unknown>
   cancelMutation: UseMutationResult<unknown, Error, CancelScheduleFormValues, unknown>
   reopenMutation: UseMutationResult<unknown, Error, ReopenScheduleFormValues, unknown>
   adjustMutation: UseMutationResult<unknown, Error, AdjustAmountFormValues, unknown>

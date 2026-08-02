@@ -8,7 +8,10 @@ import {
   type VoidTransactionFormValues,
 } from './VoidTransactionModal'
 import type { TransactionFormValues } from '../utils/transaction-form'
-import type { CreateVerificationFormValues } from '../utils/verification-form'
+import type {
+  CreateVerificationFormValues,
+  CreateVerificationSubmission,
+} from '../utils/verification-form'
 
 export type TransactionActionDialogsProps = {
   voidModalOpen: boolean
@@ -31,7 +34,7 @@ export type TransactionActionDialogsProps = {
   verifyLoading: boolean
   verifyForm: FormInstance<CreateVerificationFormValues>
   onCloseVerify: () => void
-  onSubmitVerify: (values: CreateVerificationFormValues) => void
+  onSubmitVerify: (values: CreateVerificationSubmission) => void
 }
 
 export function TransactionActionDialogs({

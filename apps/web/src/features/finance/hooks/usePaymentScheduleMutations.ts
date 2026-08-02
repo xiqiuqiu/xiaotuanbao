@@ -37,17 +37,18 @@ import {
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
+  type CreateVerificationSubmission,
 } from '../utils/verification-form'
 import {
   PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
   SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
 } from '../queries/finance-query-keys'
+import { invalidateFinanceMutationQueries } from '../utils/invalidate-finance-mutation-queries'
 
 interface UsePaymentScheduleMutationsOptions {
   queryClient: QueryClient
   isReceivable: boolean
   listQueryKey: string
-  departureListQueryKey: string
   partnerListQueryKey: string
   supplierListQueryKey: string
   activeSchedule: PaymentScheduleSummary | null
@@ -69,7 +70,6 @@ export function usePaymentScheduleMutations({
   queryClient,
   isReceivable,
   listQueryKey,
-  departureListQueryKey,
   partnerListQueryKey,
   supplierListQueryKey,
   activeSchedule,
@@ -93,6 +93,25 @@ export function usePaymentScheduleMutations({
     void navigate(buildGeneratedRebatePayableProcessNavigation(rebate))
   }
 
+  const invalidateScheduleQueries = (
+    departureIds = activeSchedule ? [activeSchedule.departureId] : [],
+    additionalQueryKeys: readonly string[] = [],
+  ) => {
+    invalidateFinanceMutationQueries(queryClient, {
+      queryKeys: [
+        listQueryKey,
+        partnerListQueryKey,
+        supplierListQueryKey,
+        PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
+        SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY,
+        'finance-transactions',
+        'finance-verifications',
+        ...additionalQueryKeys,
+      ],
+      departureIds,
+    })
+  }
+
   const confirmMutation = useMutation({
     mutationFn: async (values: ConfirmCollectionFormValues | ConfirmPaymentFormValues) => {
       if (!activeSchedule) {
@@ -107,17 +126,7 @@ export function usePaymentScheduleMutations({
       message.success(isReceivable ? '收款已登记' : '付款已登记')
       confirmForm.resetFields()
       onConfirmSuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      invalidateScheduleQueries(undefined, ['finance-payables'])
       promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
@@ -126,23 +135,13 @@ export function usePaymentScheduleMutations({
   })
 
   const verifyCreateMutation = useMutation({
-    mutationFn: (values: CreateVerificationFormValues) =>
+    mutationFn: (values: CreateVerificationSubmission) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: (data) => {
+    onSuccess: (data, values) => {
       message.success('核销已完成')
       verifyForm.resetFields()
       onVerifySuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
+      invalidateScheduleQueries(values.affectedDepartureIds, ['finance-payables'])
       promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
@@ -164,15 +163,7 @@ export function usePaymentScheduleMutations({
       message.success('节点已关闭')
       cancelForm.resetFields()
       onCancelSuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
+      invalidateScheduleQueries()
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '关闭失败')
@@ -195,16 +186,7 @@ export function usePaymentScheduleMutations({
       message.success('节点已重新打开')
       reopenForm.resetFields()
       onReopenSuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['payment-schedule-detail'] })
+      invalidateScheduleQueries()
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '重新打开失败')
@@ -225,22 +207,8 @@ export function usePaymentScheduleMutations({
       message.success('约定金额已调整')
       adjustForm.resetFields()
       onAdjustSuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['payment-schedule-detail'] })
-      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
       // Explicit adjust also syncs source-order path amounts (ADR-0010).
-      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['source-order'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure'] })
-      void queryClient.invalidateQueries({ queryKey: ['departures'] })
+      invalidateScheduleQueries(undefined, ['source-orders', 'source-order', 'departures'])
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '调整失败')
@@ -261,21 +229,8 @@ export function usePaymentScheduleMutations({
       message.success('节点已更新')
       editForm.resetFields()
       onEditSuccess()
-      void queryClient.invalidateQueries({ queryKey: [listQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [departureListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [partnerListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [supplierListQueryKey] })
-      void queryClient.invalidateQueries({ queryKey: [PARTNER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: [SUPPLIER_PAYMENT_SCHEDULE_SUMMARY_QUERY_KEY] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
       // Ordinary amount edits sync source facts; keep execution / source-order tabs fresh.
-      void queryClient.invalidateQueries({ queryKey: ['segment-resources'] })
-      void queryClient.invalidateQueries({ queryKey: ['source-orders'] })
-      void queryClient.invalidateQueries({ queryKey: ['source-order'] })
-      void queryClient.invalidateQueries({ queryKey: ['departure'] })
-      void queryClient.invalidateQueries({ queryKey: ['departures'] })
+      invalidateScheduleQueries(undefined, ['source-orders', 'source-order', 'departures'])
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '更新失败')

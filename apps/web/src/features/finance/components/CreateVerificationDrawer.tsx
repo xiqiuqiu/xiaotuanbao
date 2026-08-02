@@ -44,6 +44,7 @@ import {
 } from '../utils/finance-form'
 import type {
   CreateVerificationFormValues,
+  CreateVerificationSubmission,
   VerificationDirection,
 } from '../utils/verification-form'
 import { useCreateVerificationDrawerState } from '../hooks/useCreateVerificationDrawerState'
@@ -63,7 +64,7 @@ interface CreateVerificationDrawerProps {
   loading: boolean
   form: FormInstance<CreateVerificationFormValues>
   onClose: () => void
-  onSubmit: (values: CreateVerificationFormValues) => void
+  onSubmit: (values: CreateVerificationSubmission) => void
   lockedDepartureId?: string
   initialTransaction?: FinanceTransactionSummary
   initialSchedule?: PaymentScheduleSummary
@@ -863,6 +864,16 @@ export function CreateVerificationDrawer({
   const handleSubmit = (values: CreateVerificationFormValues) => {
     const transactionDepartureId = state.selectedTransaction?.departureId
     const scheduleDepartureId = state.selectedSchedule?.departureId
+    const submitValues = {
+      ...values,
+      affectedDepartureIds: [
+        ...new Set(
+          [transactionDepartureId, scheduleDepartureId].filter(
+            (departureId): departureId is string => Boolean(departureId),
+          ),
+        ),
+      ],
+    }
     if (
       transactionDepartureId &&
       scheduleDepartureId &&
@@ -873,11 +884,11 @@ export function CreateVerificationDrawer({
         content: `流水关联「${formatDepartureLabel(transactionDepartureId, state.departureMap)}」，收付款节点关联「${formatDepartureLabel(scheduleDepartureId, state.departureMap)}」。跨团核销将正常计入双方发团，请确认业务归属无误。`,
         okText: '继续核销',
         cancelText: '取消',
-        onOk: () => onSubmit(values),
+        onOk: () => onSubmit(submitValues),
       })
       return
     }
-    onSubmit(values)
+    onSubmit(submitValues)
   }
 
   const handleClose = () => {
