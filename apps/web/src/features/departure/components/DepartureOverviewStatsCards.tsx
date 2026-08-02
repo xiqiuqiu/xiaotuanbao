@@ -361,14 +361,12 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
         </Col>
       </Row>
 
-      <section
+      <Card
         role="group"
         aria-label="经营构成"
-        className={`${styles.compositionSection} ${animateEnter ? styles.metricCardEnter : ''}`}
+        title="经营构成"
+        className={`${styles.compositionCard} ${animateEnter ? styles.metricCardEnter : ''}`}
       >
-        <Title level={5} className={styles.compositionTitle}>
-          经营构成
-        </Title>
         <Row gutter={[16, 16]} className={styles.secondRow}>
           <Col xs={12} sm={6}>
             <Statistic title="原始团款" value={formatCents(departure.grossReceivableCents)} />
@@ -396,7 +394,7 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
             />
           </Col>
         </Row>
-      </section>
+      </Card>
     </Space>
   )
 }

@@ -1,6 +1,6 @@
 /* Compact next-step strip: one row, no tall stacked Alert body. */
 .alertCompact {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   padding-block: 8px;
   padding-inline: 12px;
   align-items: center;

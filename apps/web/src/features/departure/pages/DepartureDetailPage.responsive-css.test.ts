@@ -7,26 +7,19 @@ describe('发团详情响应式工作区', () => {
     resolve(__dirname, './DepartureDetailPage.module.css'),
     'utf8',
   )
-  const navigationCss = readFileSync(
-    resolve(__dirname, '../components/DepartureDetailNavigation.module.css'),
-    'utf8',
-  )
   const executionCss = readFileSync(
     resolve(__dirname, '../components/ExecutionTab.module.css'),
     'utf8',
   )
 
-  it('详情工作区为顶栏 Tabs 纵向编排，导航可换行且窄屏触控达标', () => {
-    expect(pageCss).toMatch(/\.detailWorkspace\s*\{[^}]*flex-direction:\s*column/)
-    expect(pageCss).toMatch(/\.detailWorkspace\s*\{[^}]*overflow:\s*visible/)
-    expect(navigationCss).toMatch(/\.topTabBar\s*\{[^}]*flex-wrap:\s*wrap/)
-    expect(navigationCss).toMatch(/\.topTabList\s*\{[^}]*flex-wrap:\s*wrap/)
-    expect(navigationCss).toMatch(/\.topTab\s*\{[^}]*font-size:\s*15px/)
-    expect(navigationCss).not.toMatch(/\.topTabDivider\s*\{/)
-    expect(navigationCss).toMatch(
-      /@media\s*\(max-width:\s*767px\)[\s\S]*\.topTab\s*\{[^}]*min-height:\s*44px/,
+  it('详情工作区以页面级原生 Tabs 编排，窄屏触控达标', () => {
+    expect(pageCss).toMatch(/\.detailWorkspace\s*\{/)
+    expect(pageCss).toMatch(/\.detailTabs\s*\{/)
+    expect(pageCss).toMatch(
+      /@media\s*\(max-width:\s*767px\)[\s\S]*:global\(\.ant-tabs-tab\)\s*\{[^}]*min-height:\s*44px/,
     )
-    expect(navigationCss).not.toMatch(/\.taskRail\s*\{/)
+    expect(pageCss).not.toMatch(/\.taskRail\s*\{/)
+    expect(pageCss).not.toMatch(/tabBarStyle/)
   })
 
   it('小于 1024px 时执行工作区取消固定高度，便于纵向堆叠滚动', () => {

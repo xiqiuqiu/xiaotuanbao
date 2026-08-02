@@ -152,8 +152,8 @@ export function IncomeRecordDrawer({
       onClose={onClose}
       size={480}
       destroyOnHidden
-      extra={
-        <Space>
+      footer={
+        <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
           <Button onClick={onClose}>取消</Button>
           <Button type="primary" loading={saving} onClick={onSave}>
             保存

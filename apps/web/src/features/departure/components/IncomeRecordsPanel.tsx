@@ -6,6 +6,7 @@ import { useState } from 'react'
 import {
   App,
   Button,
+  Card,
   Empty,
   Form,
   Space,
@@ -270,27 +271,28 @@ export function IncomeRecordsPanel({
           当前发团不可编辑，增收记录只读。
         </Typography.Paragraph>
       ) : null}
-      <Table
-        size="small"
-        rowKey="id"
-        loading={query.isLoading}
-        columns={columns}
-        dataSource={items}
-        pagination={false}
-        scroll={{ x: INCOME_RECORDS_TABLE_SCROLL_X }}
-        summary={renderIncomeRecordsTableSummary}
-        locale={{
-          emptyText: (
-            <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">
-              {mutationLocked ? null : (
-                <Button icon={<PlusOutlined />} onClick={openCreate}>
-                  新增增收记录
-                </Button>
-              )}
-            </Empty>
-          ),
-        }}
-      />
+      <Card>
+        <Table
+          rowKey="id"
+          loading={query.isLoading}
+          columns={columns}
+          dataSource={items}
+          pagination={false}
+          scroll={{ x: INCOME_RECORDS_TABLE_SCROLL_X }}
+          summary={renderIncomeRecordsTableSummary}
+          locale={{
+            emptyText: (
+              <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">
+                {mutationLocked ? null : (
+                  <Button icon={<PlusOutlined />} onClick={openCreate}>
+                    新增增收记录
+                  </Button>
+                )}
+              </Empty>
+            ),
+          }}
+        />
+      </Card>
       <IncomeRecordDrawer
         open={drawerOpen}
         editing={editing != null}

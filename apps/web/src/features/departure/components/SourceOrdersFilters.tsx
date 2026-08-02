@@ -24,17 +24,8 @@ export function SourceOrdersFilters({
   summary,
 }: SourceOrdersFiltersProps) {
   return (
-    <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 0 } }}>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 16,
-          padding: 16,
-        }}
-      >
+    <Card style={{ marginBottom: 16 }}>
+      <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
         <Space wrap>
           <Select
             allowClear
@@ -84,8 +75,8 @@ export function SourceOrdersFilters({
             重置
           </Button>
         </Space>
-        {extra ? <div style={{ flexShrink: 0 }}>{extra}</div> : null}
-      </div>
+        {extra}
+      </Space>
       {summary ?? null}
     </Card>
   )

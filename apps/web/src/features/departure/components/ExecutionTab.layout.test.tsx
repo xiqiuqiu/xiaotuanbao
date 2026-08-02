@@ -154,20 +154,20 @@ describe('ExecutionTab layout', () => {
 
     expect(screen.queryByRole('list', { name: '整团成本汇总' })).not.toBeInTheDocument()
 
-    const dayLayerTab = await screen.findByRole('tab', { name: /按日资源/ })
-    const departureLayerTab = screen.getByRole('tab', { name: /发团级资源/ })
-    expect(dayLayerTab).toHaveAttribute('aria-selected', 'true')
-    expect(departureLayerTab).toHaveAttribute('aria-selected', 'false')
+    const dayLayer = await screen.findByRole('radio', { name: /按日资源/ })
+    const departureLayer = screen.getByRole('radio', { name: /发团级资源/ })
+    expect(dayLayer).toBeChecked()
+    expect(departureLayer).not.toBeChecked()
 
     // Day layer: axis + segment resources visible; departure table hidden
     expect(screen.getByRole('region', { name: '按日资源' })).toBeInTheDocument()
     expect(await screen.findByText('西栅团队票')).toBeInTheDocument()
     expect(screen.queryByText('全程用车')).not.toBeInTheDocument()
 
-    await user.click(departureLayerTab)
+    await user.click(departureLayer.closest('label') ?? departureLayer)
 
-    expect(departureLayerTab).toHaveAttribute('aria-selected', 'true')
-    expect(dayLayerTab).toHaveAttribute('aria-selected', 'false')
+    expect(departureLayer).toBeChecked()
+    expect(dayLayer).not.toBeChecked()
     expect(screen.queryByRole('region', { name: '按日资源' })).not.toBeInTheDocument()
     expect(await screen.findByText('全程用车')).toBeInTheDocument()
     expect(screen.queryByText('西栅团队票')).not.toBeInTheDocument()
@@ -219,7 +219,8 @@ describe('ExecutionTab layout', () => {
     const user = userEvent.setup()
     renderExecutionTab()
 
-    await user.click(await screen.findByRole('tab', { name: /发团级资源/ }))
+    const departureLayer = await screen.findByRole('radio', { name: /发团级资源/ })
+    await user.click(departureLayer.closest('label') ?? departureLayer)
     expect(await screen.findByText('全程用车')).toBeInTheDocument()
 
     const departurePaneCss = readFileSync(
@@ -232,6 +233,7 @@ describe('ExecutionTab layout', () => {
     const executionCss = readFileSync(resolve(__dirname, './ExecutionTab.module.css'), 'utf8')
     expect(executionCss).toMatch(/\.workspace\s*\{[^}]*overflow:\s*hidden/)
     expect(executionCss).toMatch(/\.layerSwitch\s*\{/)
+    expect(executionCss).not.toMatch(/\.layerCard\s*\{/)
   })
 
   it('opens the departure layer when locating a departure resource', async () => {
@@ -254,10 +256,7 @@ describe('ExecutionTab layout', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByRole('tab', { name: /发团级资源/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(await screen.findByRole('radio', { name: /发团级资源/ })).toBeChecked()
     expect(await screen.findByText('全程用车')).toBeInTheDocument()
   })
 

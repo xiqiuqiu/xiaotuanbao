@@ -48,6 +48,9 @@ import {
 } from './ResourcePayableActionModals'
 import styles from './DepartureResourcePane.module.css'
 
+/** Matches `.locateFlash` duration in DepartureResourcePane.module.css. */
+const LOCATE_FLASH_MS = 480
+
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
@@ -153,7 +156,7 @@ function DepartureResourceList({
       return
     }
     setHighlightActive(true)
-    const timer = window.setTimeout(() => setHighlightActive(false), 2400)
+    const timer = window.setTimeout(() => setHighlightActive(false), LOCATE_FLASH_MS)
     return () => window.clearTimeout(timer)
   }, [highlightResourceId, resources])
 

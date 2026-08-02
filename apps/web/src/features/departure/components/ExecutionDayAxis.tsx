@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { App, Button, Tag, Tooltip, Typography, theme } from 'antd'
-import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { App, Button, Tag, Tooltip, theme } from 'antd'
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ItinerarySegmentSummary } from '@/types/api'
 import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
@@ -103,10 +103,6 @@ export function ExecutionDayAxis({
       style={axisTokenStyle}
       aria-label="按日资源"
     >
-      <div className={styles.dayAxisHeader}>
-        <Typography.Text strong>按日资源</Typography.Text>
-      </div>
-
       <div ref={axisRef} className={styles.dayAxis}>
         {segments.map((segment, index) => {
           const dayIndex = index + 1
@@ -130,15 +126,17 @@ export function ExecutionDayAxis({
         })}
 
         {!mutationLocked ? (
-          <button
-            type="button"
+          <Button
+            type="dashed"
             className={styles.dayAxisAddChip}
             aria-label="添加一天"
             onClick={onCreate}
           >
-            <PlusOutlined />
-            <span>添加一天</span>
-          </button>
+            <span className={styles.dayAxisAddContent}>
+              <PlusOutlined aria-hidden />
+              <span>添加一天</span>
+            </span>
+          </Button>
         ) : null}
       </div>
     </section>
@@ -180,7 +178,7 @@ function DayChip({
     >
       <button
         type="button"
-        className={`${styles.dayChip}${selected ? ` ${styles.dayChipSelected}` : ''}`}
+        className={styles.dayChip}
         aria-pressed={selected}
         aria-label={`D${dayIndex} ${segment.name}`}
         onClick={onSelect}
@@ -224,29 +222,28 @@ function DayChip({
           ) : null}
         </div>
       </button>
-      {showEdit ? (
-        <Button
-          type="text"
-          size="small"
-          className={styles.dayChipEdit}
-          icon={<EditOutlined />}
-          aria-label={`编辑${segment.name}`}
-          onClick={onEdit}
-        />
-      ) : null}
-      {showDelete ? (
-        <button
-          type="button"
-          className={styles.dayChipRemove}
-          aria-label={`删除第${dayIndex}天`}
-          title="删除这一天"
-          onClick={(event) => {
-            event.stopPropagation()
-            onDelete()
-          }}
-        >
-          <CloseOutlined />
-        </button>
+      {showEdit || showDelete ? (
+        <div className={styles.dayChipActions}>
+          {showEdit ? (
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              aria-label={`编辑${segment.name}`}
+              onClick={onEdit}
+            />
+          ) : null}
+          {showDelete ? (
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label={`删除第${dayIndex}天`}
+              onClick={onDelete}
+            />
+          ) : null}
+        </div>
       ) : null}
     </div>
   )

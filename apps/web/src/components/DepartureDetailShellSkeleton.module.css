@@ -3,14 +3,19 @@
   flex: 1;
 }
 
-.topTabSkeletonList {
+.tabsSkeleton {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-block: 8px;
+  min-width: 0;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
-.topTabSkeleton,
-.topTabSkeleton :global(.ant-skeleton-button) {
+.tabSkeleton,
+.tabSkeleton :global(.ant-skeleton-button) {
   width: 72px;
   min-width: 72px;
 }
