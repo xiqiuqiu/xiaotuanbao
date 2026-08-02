@@ -29,8 +29,7 @@
     "docker:logs": "docker compose logs -f",
     "docker:restart:api": "docker compose restart api",
     "docker:migrate": "docker compose exec api pnpm exec prisma migrate deploy",
-    "docker:seed": "docker compose exec api pnpm exec prisma db seed",
-    "prototype:departure-overview": "node apps/web/src/features/departure/prototype/overview/run.mjs"
+    "docker:seed": "docker compose exec api pnpm exec prisma db seed"
   },
   "engines": {
     "node": ">=22.13"

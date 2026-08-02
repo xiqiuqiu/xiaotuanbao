@@ -1,5 +1,5 @@
 /**
- * 概览原型只换 Overview：其它 Tab 不受 ?variant= 劫持（Overview 在本文件被 mock）。
+ * 概览原型已收口：详情页切 Tab 不透传 ?variant=；工作区不挂 PrototypeSwitcher。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -120,7 +120,7 @@ describe('DepartureDetailPage no-prototype workspace', () => {
     expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
   })
 
-  it('ignores ?variant= on non-overview workspace tabs', async () => {
+  it('ignores ?variant= on workspace tabs', async () => {
     mockSearch = { tab: 'sourceOrders', variant: 'A' }
     renderPage()
 
@@ -129,11 +129,10 @@ describe('DepartureDetailPage no-prototype workspace', () => {
       'true',
     )
     expect(screen.getByText('客源内容')).toBeInTheDocument()
-    // Overview (host of PrototypeSwitcher) is mocked — switcher must not appear here.
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
   })
 
-  it('preserves overview variant when syncing tab URL', async () => {
+  it('does not preserve overview variant when syncing tab URL', async () => {
     const user = userEvent.setup()
     mockSearch = { tab: 'execution', variant: 'C', segmentId: 'seg-1' }
     renderPage()
@@ -145,7 +144,7 @@ describe('DepartureDetailPage no-prototype workspace', () => {
       expect(navigate).toHaveBeenCalledWith({
         to: '/departure/$departureId',
         params: { departureId: 'departure-1' },
-        search: { tab: 'payables', segmentId: 'seg-1', variant: 'C' },
+        search: { tab: 'payables', segmentId: 'seg-1' },
         replace: true,
       })
     })
