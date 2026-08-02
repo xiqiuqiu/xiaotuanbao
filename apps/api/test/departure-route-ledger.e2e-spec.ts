@@ -741,7 +741,10 @@ describe('Departure route ledger API (e2e)', () => {
     expect(String(xlsxResponse.headers['content-type'] ?? '')).toContain(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    expect(String(xlsxResponse.headers['content-disposition'] ?? '')).toContain('线路视图_')
+    const disposition = String(xlsxResponse.headers['content-disposition'] ?? '')
+    expect(disposition).toMatch(/attachment/)
+    const filenameStar = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? ''
+    expect(decodeURIComponent(filenameStar)).toContain('线路视图_')
 
     const workbook = new ExcelJS.Workbook()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

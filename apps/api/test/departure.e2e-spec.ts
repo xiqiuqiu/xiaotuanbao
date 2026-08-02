@@ -357,6 +357,7 @@ describe('Departure API (e2e)', () => {
 
     it('purges departure that only has itinerary segments', async () => {
       const created = await createTestDeparture({ name: `${testPrefix}-purge-segments` })
+      await prisma.itinerarySegment.deleteMany({ where: { departureId: created.id } })
       await authRequest(app, coordinatorToken)
         .post(`/api/departures/${created.id}/segments`)
         .send({ name: 'D1 乌鲁木齐' })
@@ -1556,7 +1557,9 @@ describe('Departure API (e2e)', () => {
     }
 
     async function createSegmentDeparture() {
-      return createTestDeparture({ startDate: '2026-08-01', endDate: '2026-08-10' })
+      const departure = await createTestDeparture({ startDate: '2026-08-01', endDate: '2026-08-10' })
+      await prisma.itinerarySegment.deleteMany({ where: { departureId: departure.id } })
+      return departure
     }
 
     it('creates segment with computed day count', async () => {
@@ -1821,6 +1824,12 @@ describe('Departure API (e2e)', () => {
     it('deletes segment without resources', async () => {
       const departure = await createSegmentDeparture()
 
+      // Keep a second segment so delete is not blocked by "at least one day" rule.
+      await authRequest(app, coordinatorToken)
+        .post(`/api/departures/${departure.id}/segments`)
+        .send(segmentPayload({ name: '保留段', startDate: '2026-08-04', endDate: '2026-08-05' }))
+        .expect(201)
+
       const created = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/segments`)
         .send(segmentPayload())
@@ -1834,7 +1843,8 @@ describe('Departure API (e2e)', () => {
         .get(`/api/departures/${departure.id}/segments`)
         .expect(200)
 
-      expect(list.body.data.total).toBe(0)
+      expect(list.body.data.total).toBe(1)
+      expect(list.body.data.items[0].name).toBe('保留段')
     })
 
     it('returns 409 when deleting segment with resources', async () => {
@@ -1888,6 +1898,7 @@ describe('Departure API (e2e)', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-10',
       })
+      await prisma.itinerarySegment.deleteMany({ where: { departureId: departure.id } })
       const segment = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departure.id}/segments`)
         .send({
@@ -2071,6 +2082,7 @@ describe('Departure API (e2e)', () => {
     }
 
     async function seedDepartureData(departureId: string) {
+      await prisma.itinerarySegment.deleteMany({ where: { departureId } })
       const sourceOrder = await authRequest(app, coordinatorToken)
         .post(`/api/departures/${departureId}/source-orders`)
         .send({
@@ -2847,13 +2859,15 @@ describe('Departure API (e2e)', () => {
     })
 
     async function createOpsDeparture(overrides: Record<string, unknown> = {}) {
-      return createTestDeparture({
+      const departure = await createTestDeparture({
         name: `${testPrefix}-ops-sheet`,
         notes: '发团级备注应单独归属',
         startDate: '2026-09-01',
         endDate: '2026-09-05',
         ...overrides,
       })
+      await prisma.itinerarySegment.deleteMany({ where: { departureId: departure.id } })
+      return departure
     }
 
     it('returns finance-not-started snapshot with guest representative, stable resource order, and dash progress', async () => {

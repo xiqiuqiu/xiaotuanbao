@@ -377,6 +377,8 @@ describe('Route Template API (e2e)', () => {
 
     const departureId = createResponse.body.data.id as string
 
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
+
     const response = await authRequest(app, coordinatorToken)
       .post(`/api/route-templates/from-departure/${departureId}`)
       .send({
@@ -401,6 +403,8 @@ describe('Route Template API (e2e)', () => {
       .expect(201)
 
     const departureId = createResponse.body.data.id as string
+
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)
@@ -469,6 +473,8 @@ describe('Route Template API (e2e)', () => {
 
     const departureId = createResponse.body.data.id as string
 
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
+
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)
       .send({
@@ -503,6 +509,8 @@ describe('Route Template API (e2e)', () => {
       .expect(201)
 
     const departureId = createResponse.body.data.id as string
+
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
 
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)
@@ -559,6 +567,8 @@ describe('Route Template API (e2e)', () => {
       .expect(201)
 
     const departureId = createResponse.body.data.id as string
+
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
 
     const segmentResponse = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)

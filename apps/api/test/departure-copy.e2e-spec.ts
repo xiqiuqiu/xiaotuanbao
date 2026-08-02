@@ -11,7 +11,7 @@ import {
   SourceOrderDiscountType,
 } from '@prisma/client'
 import { PrismaClient } from '@prisma/client'
-import { authRequest, createTestApp, loginAs } from './helpers'
+import { authRequest, createTestApp, DEPARTURE_NO_REGEX, loginAs } from './helpers'
 
 describe('Departure copy & save template (e2e)', () => {
   let app: INestApplication
@@ -128,6 +128,8 @@ describe('Departure copy & save template (e2e)', () => {
       .expect(201)
 
     const departureId = createResponse.body.data.id as string
+
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
 
     const segmentResponse = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)
@@ -264,20 +266,29 @@ describe('Departure copy & save template (e2e)', () => {
       sourceTemplateId: null,
       routeName: `${testPrefix}-喀纳斯线`,
     })
-    expect(response.body.data.departureNo).toMatch(/^[A-Z]{2,4}\d{6}\d{4}$/)
+    expect(response.body.data.departureNo).toMatch(DEPARTURE_NO_REGEX)
 
     const copiedDepartureId = response.body.data.id as string
 
     const segmentsResponse = await authRequest(app, coordinatorToken)
       .get(`/api/departures/${copiedDepartureId}/segments`)
       .expect(200)
-    expect(segmentsResponse.body.data.items).toHaveLength(1)
-    expect(segmentsResponse.body.data.items[0].name).toBe('喀纳斯段')
-    expect(segmentsResponse.body.data.items[0]).not.toHaveProperty('fromTemplate')
-    expect(segmentsResponse.body.data.items[0].pendingCheck).toBe(true)
-    expect(segmentsResponse.body.data.items[0].startDate).toBe('2026-09-01')
+    // Copied 3-day segment + fill_missing for the remaining 7 days of the new window.
+    expect(segmentsResponse.body.data.items).toHaveLength(8)
+    const copiedSegment = segmentsResponse.body.data.items.find(
+      (item: { name: string }) => item.name === '喀纳斯段',
+    )
+    expect(copiedSegment).toBeTruthy()
+    expect(copiedSegment).toMatchObject({
+      name: '喀纳斯段',
+      pendingCheck: true,
+      startDate: '2026-09-01',
+      endDate: '2026-09-03',
+      dayCount: 3,
+    })
+    expect(copiedSegment).not.toHaveProperty('fromTemplate')
 
-    const segmentId = segmentsResponse.body.data.items[0].id as string
+    const segmentId = copiedSegment!.id as string
     const resourcesResponse = await authRequest(app, coordinatorToken)
       .get(`/api/segments/${segmentId}/resources`)
       .expect(200)
@@ -289,14 +300,16 @@ describe('Departure copy & save template (e2e)', () => {
 
     const segments = await prisma.itinerarySegment.findMany({
       where: { departureId: copiedDepartureId },
-      orderBy: { startDate: 'asc' },
+      orderBy: [{ startDate: 'asc' }, { sortOrder: 'asc' }],
     })
-    expect(segments).toHaveLength(1)
-    expect(segments[0]).not.toHaveProperty('fromTemplate')
-    expect(segments[0].pendingCheck).toBe(true)
+    expect(segments).toHaveLength(8)
+    const dbCopied = segments.find((segment) => segment.name === '喀纳斯段')
+    expect(dbCopied).toBeTruthy()
+    expect(dbCopied).not.toHaveProperty('fromTemplate')
+    expect(dbCopied!.pendingCheck).toBe(true)
 
     const resources = await prisma.segmentResource.findMany({
-      where: { segmentId: segments[0].id },
+      where: { segmentId: dbCopied!.id },
     })
     expect(resources).toHaveLength(1)
     expect(resources[0]).not.toHaveProperty('fromTemplate')
@@ -341,6 +354,8 @@ describe('Departure copy & save template (e2e)', () => {
 
     const departureId = createResponse.body.data.id as string
 
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
+
     await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/segments`)
       .send({
@@ -370,14 +385,19 @@ describe('Departure copy & save template (e2e)', () => {
       .get(`/api/departures/${copiedDepartureId}/segments`)
       .expect(200)
 
-    expect(segmentsResponse.body.data.items).toHaveLength(2)
-    expect(segmentsResponse.body.data.items[0]).toMatchObject({
+    // Copied dated + undated segments, plus fill_missing for uncovered days (Sep 4–10).
+    expect(segmentsResponse.body.data.items).toHaveLength(9)
+    expect(
+      segmentsResponse.body.data.items.find((item: { name: string }) => item.name === '有日期段'),
+    ).toMatchObject({
       name: '有日期段',
       startDate: '2026-09-01',
       endDate: '2026-09-03',
       dayCount: 3,
     })
-    expect(segmentsResponse.body.data.items[1]).toMatchObject({
+    expect(
+      segmentsResponse.body.data.items.find((item: { name: string }) => item.name === '未定日期段'),
+    ).toMatchObject({
       name: '未定日期段',
       startDate: null,
       endDate: null,
@@ -429,6 +449,9 @@ describe('Departure copy & save template (e2e)', () => {
     const copiedSegments = await prisma.itinerarySegment.findMany({
       where: { departureId: copiedDepartureId },
     })
-    expect(copiedSegments[0].name).toBe('喀纳斯段')
+    expect(copiedSegments.some((segment) => segment.name === '喀纳斯段')).toBe(true)
+    expect(
+      copiedSegments.every((segment) => segment.name !== `${testPrefix}-renamed-segment`),
+    ).toBe(true)
   })
 })

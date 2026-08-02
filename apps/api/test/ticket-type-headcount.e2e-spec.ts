@@ -72,7 +72,9 @@ describe('Ticket type headcount soft check (e2e) #203', () => {
         ownerUserId,
       })
       .expect(201)
-    return response.body.data as { id: string; totalGuests: number }
+    const departure = response.body.data as { id: string; totalGuests: number }
+    await prisma.itinerarySegment.deleteMany({ where: { departureId: departure.id } })
+    return departure
   }
 
   async function createSourceOrder(departureId: string, adultGuestCount: number, childGuestCount = 0) {

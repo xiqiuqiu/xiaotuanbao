@@ -194,6 +194,7 @@ describe('Finance journeys (cross-module e2e)', () => {
   }
 
   async function seedOps(departureId: string) {
+    await prisma.itinerarySegment.deleteMany({ where: { departureId } })
     const sourceOrder = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departureId}/source-orders`)
       .send({
@@ -1919,7 +1920,8 @@ describe('Finance journeys (cross-module e2e)', () => {
       .expect(200)
     expect(copiedDetail.body.data).toMatchObject({
       sourceOrderCount: 0,
-      segmentCount: 1,
+      // Copied 5-day segment + fill_missing for Sep 6–10.
+      segmentCount: 6,
       resourceCount: 1,
       verifiedReceivableCents: 0,
       verifiedPayableCents: 0,
