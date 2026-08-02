@@ -1,6 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Modal, message } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type {
@@ -106,12 +106,14 @@ function renderPane(
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <ExecutionResourcePane
-          departure={departure}
-          segment={{ ...segment, ...segmentOverrides }}
-          readOnly={false}
-          canEdit={canEdit}
-        />
+        <App>
+          <ExecutionResourcePane
+            departure={departure}
+            segment={{ ...segment, ...segmentOverrides }}
+            readOnly={false}
+            canEdit={canEdit}
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -296,43 +298,24 @@ describe('ExecutionResourcePane action buttons', () => {
     }
     generatePayablesForSegment.mockResolvedValue(batchResult)
 
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
+    renderPane({
+      resourceCount: 1,
+      payableGeneratedCount: 0,
+      payableStatus: 'not_generated',
     })
-    const successSpy = vi.spyOn(message, 'success').mockImplementation(() => undefined as never)
 
-    try {
-      renderPane({
-        resourceCount: 1,
-        payableGeneratedCount: 0,
-        payableStatus: 'not_generated',
-      })
+    await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
 
-      await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('批量提交应付').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText('确认后将提交 1 条应付记录')).toBeInTheDocument()
 
-      expect(confirmConfig).toMatchObject({
-        title: '批量提交应付',
-        content: '确认后将提交 1 条应付记录',
-        okText: '提交',
-      })
+    await user.click(within(dialog).getByRole('button', { name: '提 交' }))
 
-      await confirmConfig?.onOk?.()
-
-      expect(generatePayablesForSegment).toHaveBeenCalledWith('segment-1')
-      await waitFor(() => {
-        expect(successSpy).toHaveBeenCalledWith('应付批量提交完成：成功 1')
-      })
-    } finally {
-      confirmSpy.mockRestore()
-      successSpy.mockRestore()
-    }
+    expect(generatePayablesForSegment).toHaveBeenCalledWith('segment-1')
+    await waitFor(() => {
+      expect(screen.getByText('应付批量提交完成：成功 1')).toBeInTheDocument()
+    })
   })
 
   it('shows warning toast when batch generate has failures', async () => {
@@ -359,36 +342,20 @@ describe('ExecutionResourcePane action buttons', () => {
       ],
     } satisfies BatchFinanceGenerationResult)
 
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
+    renderPane({
+      resourceCount: 2,
+      payableGeneratedCount: 0,
+      payableStatus: 'not_generated',
     })
-    const warningSpy = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never)
 
-    try {
-      renderPane({
-        resourceCount: 2,
-        payableGeneratedCount: 0,
-        payableStatus: 'not_generated',
-      })
+    await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: '提 交' }))
 
-      await user.click(await screen.findByRole('button', { name: '批量提交应付' }))
-      await confirmConfig?.onOk?.()
-
-      await waitFor(() => {
-        expect(warningSpy).toHaveBeenCalledWith(
-          '应付批量提交完成：成功 1 · 失败 1。酒店：网络错误',
-        )
-      })
-    } finally {
-      confirmSpy.mockRestore()
-      warningSpy.mockRestore()
-    }
+    await waitFor(() => {
+      expect(
+        screen.getByText('应付批量提交完成：成功 1 · 失败 1。酒店：网络错误'),
+      ).toBeInTheDocument()
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
@@ -97,12 +97,14 @@ function renderExecutionTab(segmentId?: string) {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <ExecutionTab
-          departure={mockDeparture}
-          segmentId={segmentId}
-          readOnly={false}
-          canEdit
-        />
+        <App>
+          <ExecutionTab
+            departure={mockDeparture}
+            segmentId={segmentId}
+            readOnly={false}
+            canEdit
+          />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )

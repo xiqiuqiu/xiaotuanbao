@@ -1,16 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
   Alert,
+  App,
   Button,
   Empty,
   Flex,
   Form,
-  Modal,
   Space,
   Spin,
   Table,
   Typography,
-  message,
   theme,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
@@ -173,7 +172,7 @@ function ExecutionResourceList({
     return (
       <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
         {resourceEditable ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
+          <Button icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
           </Button>
         ) : null}
@@ -208,6 +207,7 @@ function useSaveResourceMutations({
   invalidateResourceQueries,
   invalidatePayableQueries,
 }: SaveResourceMutationsOptions) {
+  const { message } = App.useApp()
   const saveMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
       const editingId = editingResource?.id ?? null
@@ -280,6 +280,7 @@ export function ExecutionResourcePane({
   canEdit,
   amountReadOnly = false,
 }: ExecutionResourcePaneProps) {
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const menuKeys = useAuthStore((state) => state.menuKeys)
@@ -438,7 +439,7 @@ export function ExecutionResourcePane({
 
   const confirmBatchGenerate = () => {
     if (!payableGap.hasGap) return
-    Modal.confirm({
+    modal.confirm({
       title: '批量提交应付',
       content: formatBatchFinanceGenerationConfirmContent(payableGap.ungenerated, '应付'),
       okText: '提交',

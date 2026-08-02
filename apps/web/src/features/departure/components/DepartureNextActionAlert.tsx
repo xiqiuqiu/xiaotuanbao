@@ -46,7 +46,14 @@ export function DepartureNextActionAlert({
     <Alert
       type={nextAction.type}
       showIcon
-      closable
+      closable={{
+        closeIcon: true,
+        'aria-label': 'Close',
+        onClose: () => {
+          dismissNextAction(departure.id, fingerprint)
+          setClosed({ departureId: departure.id, fingerprint })
+        },
+      }}
       className={styles.alertCompact}
       title={
         <span className={styles.line}>
@@ -68,10 +75,6 @@ export function DepartureNextActionAlert({
           ) : null}
         </span>
       }
-      onClose={() => {
-        dismissNextAction(departure.id, fingerprint)
-        setClosed({ departureId: departure.id, fingerprint })
-      }}
     />
   )
 }

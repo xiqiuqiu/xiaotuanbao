@@ -1,4 +1,5 @@
-import { Modal, Space, Typography, message } from 'antd'
+import { App, Space, Typography } from 'antd'
+import type { ModalFuncProps } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, type MutableRefObject } from 'react'
 import {
@@ -70,6 +71,7 @@ export function useSourceOrdersTabMutations({
   drawer,
   onCloseDrawer,
 }: UseSourceOrdersTabMutationsParams) {
+  const { message } = App.useApp()
   const queryClient = useQueryClient()
 
   const invalidateSourceOrders = () => {
@@ -218,6 +220,7 @@ export function useSourceOrderSubmit({
   impactAbortRef,
   latestEditingOrderIdRef,
 }: UseSourceOrderSubmitParams) {
+  const { modal } = App.useApp()
   return useCallback(
     async (
       payload: ReturnType<typeof formValuesToPayload>,
@@ -280,7 +283,7 @@ export function useSourceOrderSubmit({
         return
       }
 
-      Modal.confirm({
+      modal.confirm({
         title: '关联流水金额可能受影响',
         content: (
           <Space orientation="vertical" size={4} style={{ width: '100%' }}>
@@ -315,6 +318,7 @@ export function useSourceOrderSubmit({
       editingOrder,
       impactAbortRef,
       latestEditingOrderIdRef,
+      modal,
       saveAndGenerateMutation,
       saveMutation,
     ],
@@ -324,11 +328,12 @@ export function useSourceOrderSubmit({
 export function confirmBatchGenerateReceivables(
   pendingReceivableCount: number,
   batchGenerateMutation: ReturnType<typeof useSourceOrdersTabMutations>['batchGenerateMutation'],
+  confirm: (config: ModalFuncProps) => void,
 ) {
   if (pendingReceivableCount <= 0) {
     return
   }
-  Modal.confirm({
+  confirm({
     title: '批量提交应收',
     content: (
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>

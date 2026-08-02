@@ -1,6 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Modal } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
@@ -147,7 +147,9 @@ function renderTab() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        <App>
+          <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -155,7 +157,6 @@ function renderTab() {
 
 describe('SourceOrdersTab 金额路径变更软警示', () => {
   afterEach(() => {
-    Modal.destroyAll()
     cleanup()
     navigate.mockReset()
     listSourceOrders.mockReset()
@@ -184,44 +185,24 @@ describe('SourceOrdersTab 金额路径变更软警示', () => {
       baseOrder({ adultUnitPriceCents: 30000, guestCollectCents: 30000 }),
     )
 
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
+    renderTab()
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+    await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
 
-    try {
-      renderTab()
-      await user.click(await screen.findByRole('button', { name: '编辑' }))
-      await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
+    await waitFor(() =>
+      expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+        'order-1',
+        expect.any(AbortSignal),
+      ),
+    )
+    expect(updateSourceOrder).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('关联流水金额可能受影响').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/本单有 2 笔未核销游客代收流水/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/我方代收 ¥500\.00 → ¥300\.00/)).toBeInTheDocument()
 
-      await waitFor(() =>
-        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
-          'order-1',
-          expect.any(AbortSignal),
-        ),
-      )
-      expect(updateSourceOrder).not.toHaveBeenCalled()
-      expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
-
-      const { unmount: unmountConfirm } = render(
-        <ConfigProvider>{confirmConfig?.content}</ConfigProvider>,
-      )
-      expect(screen.getByText(/本单有 2 笔未核销游客代收流水/)).toBeInTheDocument()
-      expect(screen.getByText(/我方代收 ¥500\.00 → ¥300\.00/)).toBeInTheDocument()
-      unmountConfirm()
-
-      await Promise.resolve(confirmConfig?.onOk?.())
-      await waitFor(() => expect(updateSourceOrder).toHaveBeenCalledTimes(1))
-    } finally {
-      confirmSpy.mockRestore()
-      Modal.destroyAll()
-    }
+    await user.click(within(dialog).getByRole('button', { name: /仍要保存/ }))
+    await waitFor(() => expect(updateSourceOrder).toHaveBeenCalledTimes(1))
   })
 
   it('does not call update when soft warning is shown and user does not confirm', async () => {
@@ -242,27 +223,13 @@ describe('SourceOrdersTab 金额路径变更软警示', () => {
     })
     getGuestCollectionChangeImpact.mockResolvedValue({ affectedTransactionCount: 1 })
 
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
+    renderTab()
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+    await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
 
-    try {
-      renderTab()
-      await user.click(await screen.findByRole('button', { name: '编辑' }))
-      await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
-
-      await waitFor(() => expect(confirmConfig).toBeDefined())
-      expect(updateSourceOrder).not.toHaveBeenCalled()
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('关联流水金额可能受影响').length).toBeGreaterThan(0)
+    expect(updateSourceOrder).not.toHaveBeenCalled()
   })
 
   it('discards stale impact when drawer closes before response', async () => {
@@ -288,26 +255,20 @@ describe('SourceOrdersTab 金额路径变更软警示', () => {
     })
     getGuestCollectionChangeImpact.mockReturnValue(impactPromise)
 
-    const confirmSpy = vi.spyOn(Modal, 'confirm')
+    renderTab()
+    await user.click(await screen.findByRole('button', { name: '编辑' }))
+    await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
+    await user.click(await screen.findByRole('button', { name: '关闭抽屉' }))
 
-    try {
-      renderTab()
-      await user.click(await screen.findByRole('button', { name: '编辑' }))
-      await user.click(await screen.findByRole('button', { name: '模拟保存改价' }))
-      await user.click(await screen.findByRole('button', { name: '关闭抽屉' }))
+    resolveImpact!({ affectedTransactionCount: 2 })
 
-      resolveImpact!({ affectedTransactionCount: 2 })
-
-      await waitFor(() =>
-        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
-          'order-1',
-          expect.any(AbortSignal),
-        ),
-      )
-      expect(confirmSpy).not.toHaveBeenCalled()
-      expect(updateSourceOrder).not.toHaveBeenCalled()
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    await waitFor(() =>
+      expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+        'order-1',
+        expect.any(AbortSignal),
+      ),
+    )
+    expect(screen.queryByText('关联流水金额可能受影响')).not.toBeInTheDocument()
+    expect(updateSourceOrder).not.toHaveBeenCalled()
   })
 })

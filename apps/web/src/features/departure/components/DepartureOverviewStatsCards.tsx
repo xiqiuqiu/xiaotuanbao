@@ -361,44 +361,42 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} className={styles.secondRow}>
-        <Col xs={24}>
-          <Card
-            title="经营构成"
-            role="group"
-            aria-label="经营构成"
-            className={animateEnter ? styles.metricCardEnter : undefined}
-          >
-            <Row gutter={[16, 16]}>
-              <Col xs={12} sm={6}>
-                <Statistic title="原始团款" value={formatCents(departure.grossReceivableCents)} />
-              </Col>
-              <Col xs={12} sm={6}>
-                <Statistic title="优惠合计" value={formatCents(departure.discountCents)} />
-              </Col>
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={
-                    <CalculationTitle label="毛利率" description={CALCULATION_GUIDE.毛利率} />
-                  }
-                  value={marginRateLabel ?? '暂无数据'}
+      <section
+        role="group"
+        aria-label="经营构成"
+        className={`${styles.compositionSection} ${animateEnter ? styles.metricCardEnter : ''}`}
+      >
+        <Title level={5} className={styles.compositionTitle}>
+          经营构成
+        </Title>
+        <Row gutter={[16, 16]} className={styles.secondRow}>
+          <Col xs={12} sm={6}>
+            <Statistic title="原始团款" value={formatCents(departure.grossReceivableCents)} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic title="优惠合计" value={formatCents(departure.discountCents)} />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title={
+                <CalculationTitle label="毛利率" description={CALCULATION_GUIDE.毛利率} />
+              }
+              value={marginRateLabel ?? '暂无数据'}
+            />
+          </Col>
+          <Col xs={12} sm={6}>
+            <Statistic
+              title={
+                <CalculationTitle
+                  label="增收净收益"
+                  description={CALCULATION_GUIDE.增收净收益}
                 />
-              </Col>
-              <Col xs={12} sm={6}>
-                <Statistic
-                  title={
-                    <CalculationTitle
-                      label="增收净收益"
-                      description={CALCULATION_GUIDE.增收净收益}
-                    />
-                  }
-                  value={formatCents(stats.additionalIncomeNetCents)}
-                />
-              </Col>
-            </Row>
-          </Card>
-        </Col>
-      </Row>
+              }
+              value={formatCents(stats.additionalIncomeNetCents)}
+            />
+          </Col>
+        </Row>
+      </section>
     </Space>
   )
 }

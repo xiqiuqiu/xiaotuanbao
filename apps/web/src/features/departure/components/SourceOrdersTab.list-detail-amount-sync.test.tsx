@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
@@ -125,7 +125,9 @@ function renderTab() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        <App>
+          <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { Button, Modal, Tag, Tooltip, Typography, theme } from 'antd'
+import { App, Button, Tag, Tooltip, Typography, theme } from 'antd'
 import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ItinerarySegmentSummary } from '@/types/api'
@@ -39,6 +39,7 @@ export function ExecutionDayAxis({
   onCreate,
   onDelete,
 }: ExecutionDayAxisProps) {
+  const { modal } = App.useApp()
   const { token } = theme.useToken()
   const axisRef = useRef<HTMLDivElement>(null)
 
@@ -76,7 +77,7 @@ export function ExecutionDayAxis({
 
   const confirmDelete = (segment: ItinerarySegmentSummary, dayLabel: string) => {
     if (segment.resourceCount > 0) {
-      Modal.confirm({
+      modal.confirm({
         title: `删除${dayLabel}？`,
         content: `该日有 ${segment.resourceCount} 项资源，请先清空资源后再删除。`,
         okText: '知道了',
@@ -86,7 +87,7 @@ export function ExecutionDayAxis({
       return
     }
 
-    Modal.confirm({
+    modal.confirm({
       title: `删除${dayLabel}？`,
       content: '删除后可再「添加一天」补回；发团至少保留一天。',
       okText: '删除',

@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  App,
   Button,
   Empty,
   Flex,
   Form,
-  Modal,
   Space,
   Spin,
   Table,
   Typography,
-  message,
   theme,
 } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
@@ -186,7 +185,7 @@ function DepartureResourceList({
     return (
       <Empty description="暂无发团级资源" style={{ padding: '32px 0' }}>
         {resourceEditable ? (
-          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
+          <Button icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
           </Button>
         ) : null}
@@ -224,6 +223,7 @@ function useSaveResourceMutations({
   invalidateResourceQueries,
   invalidatePayableQueries,
 }: SaveResourceMutationsOptions) {
+  const { message } = App.useApp()
   const saveMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof formValuesToPayload>) => {
       const editingId = editingResource?.id ?? null
@@ -296,6 +296,7 @@ export function DepartureResourcePane({
   amountReadOnly = false,
   highlightDepartureResourceId,
 }: DepartureResourcePaneProps) {
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const menuKeys = useAuthStore((state) => state.menuKeys)
@@ -409,7 +410,7 @@ export function DepartureResourcePane({
   })
 
   const confirmBatchGenerate = () => {
-    Modal.confirm({
+    modal.confirm({
       title: '批量提交应付',
       content: formatBatchFinanceGenerationConfirmContent(
         amountSummary.ungeneratedPayableCount,

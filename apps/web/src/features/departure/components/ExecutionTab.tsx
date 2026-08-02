@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Alert,
+  App,
   Button,
   Card,
   Empty,
   Spin,
-  message,
   theme,
 } from 'antd'
 import { AppstoreOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons'
@@ -246,6 +246,7 @@ export function ExecutionTab({
   canEdit,
   amountReadOnly = false,
 }: ExecutionTabProps) {
+  const { message } = App.useApp()
   const navigate = useNavigate()
   const search = useSearch({ strict: false })
   const queryClient = useQueryClient()

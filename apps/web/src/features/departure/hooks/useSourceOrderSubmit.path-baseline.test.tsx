@@ -1,8 +1,8 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Modal } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import type { SourceOrderSummary } from '@/types/api'
 import { formValuesToPayload, sourceOrderToFormValues } from '../utils/source-order-form'
 import { useSourceOrderSubmit } from './useSourceOrdersTabMutations'
@@ -72,9 +72,16 @@ function freshDetailOrder(): SourceOrderSummary {
   }
 }
 
+function renderHarness(ui: ReactNode) {
+  return render(
+    <ConfigProvider>
+      <App>{ui}</App>
+    </ConfigProvider>,
+  )
+}
+
 describe('useSourceOrderSubmit path baseline after receivable sync', () => {
   afterEach(() => {
-    Modal.destroyAll()
     cleanup()
     getGuestCollectionChangeImpact.mockReset()
   })
@@ -82,7 +89,6 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
   it('does not call guest-collection impact for notes-only save when list row lags GET detail', async () => {
     const user = userEvent.setup()
     getGuestCollectionChangeImpact.mockResolvedValue({ affectedTransactionCount: 2 })
-    const confirmSpy = vi.spyOn(Modal, 'confirm')
     const saveMutate = vi.fn()
 
     function Harness() {
@@ -129,38 +135,19 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
       )
     }
 
-    try {
-      render(
-        <ConfigProvider>
-          <Harness />
-        </ConfigProvider>,
-      )
+    renderHarness(<Harness />)
 
-      await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
-      await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1))
-      expect(getGuestCollectionChangeImpact).not.toHaveBeenCalled()
-      expect(confirmSpy).not.toHaveBeenCalled()
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1))
+    expect(getGuestCollectionChangeImpact).not.toHaveBeenCalled()
+    expect(screen.queryByText('关联流水金额可能受影响')).not.toBeInTheDocument()
   })
 
   it('still confirms when payload path amounts diverge from GET detail baseline', async () => {
     const user = userEvent.setup()
     getGuestCollectionChangeImpact.mockResolvedValue({ affectedTransactionCount: 2 })
     const saveMutate = vi.fn()
-
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
 
     function Harness() {
       const impactAbortRef = useRef<AbortController | null>(null)
@@ -210,43 +197,25 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
       )
     }
 
-    try {
-      render(
-        <ConfigProvider>
-          <Harness />
-        </ConfigProvider>,
-      )
+    renderHarness(<Harness />)
 
-      await user.click(screen.getByRole('button', { name: '保存改价' }))
+    await user.click(screen.getByRole('button', { name: '保存改价' }))
 
-      await waitFor(() =>
-        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
-          'order-1',
-          expect.any(AbortSignal),
-        ),
-      )
-      expect(saveMutate).not.toHaveBeenCalled()
-      expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    await waitFor(() =>
+      expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+        'order-1',
+        expect.any(AbortSignal),
+      ),
+    )
+    expect(saveMutate).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('关联流水金额可能受影响').length).toBeGreaterThan(0)
   })
 
   it('confirms when guest_only reallocates deposit/balance with unchanged guestCollect total', async () => {
     const user = userEvent.setup()
     getGuestCollectionChangeImpact.mockResolvedValue({ affectedTransactionCount: 1 })
     const saveMutate = vi.fn()
-
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
 
     const guestOnlyOrder: SourceOrderSummary = {
       ...staleListOrder(),
@@ -304,32 +273,20 @@ describe('useSourceOrderSubmit path baseline after receivable sync', () => {
       )
     }
 
-    try {
-      render(
-        <ConfigProvider>
-          <Harness />
-        </ConfigProvider>,
-      )
+    renderHarness(<Harness />)
 
-      await user.click(screen.getByRole('button', { name: '保存重分配' }))
+    await user.click(screen.getByRole('button', { name: '保存重分配' }))
 
-      await waitFor(() =>
-        expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
-          'order-1',
-          expect.any(AbortSignal),
-        ),
-      )
-      expect(saveMutate).not.toHaveBeenCalled()
-      expect(confirmConfig?.title).toBe('关联流水金额可能受影响')
-
-      const { unmount: unmountConfirm } = render(
-        <ConfigProvider>{confirmConfig?.content}</ConfigProvider>,
-      )
-      expect(screen.getByText(/定金 ¥4,000\.00 → ¥3,000\.00/)).toBeInTheDocument()
-      expect(screen.getByText(/尾款 ¥6,000\.00 → ¥7,000\.00/)).toBeInTheDocument()
-      unmountConfirm()
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    await waitFor(() =>
+      expect(getGuestCollectionChangeImpact).toHaveBeenCalledWith(
+        'order-1',
+        expect.any(AbortSignal),
+      ),
+    )
+    expect(saveMutate).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('关联流水金额可能受影响').length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(/定金 ¥4,000\.00 → ¥3,000\.00/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/尾款 ¥6,000\.00 → ¥7,000\.00/)).toBeInTheDocument()
   })
 })

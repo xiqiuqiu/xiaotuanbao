@@ -191,13 +191,13 @@ export function IncomeRecordsPanel({
     const settled =
       item.incomeStatus === DepartureIncomeCollectionStatus.COLLECTED ||
       item.commissionStatus === DepartureIncomeCommissionStatus.PAID
-    if (!settled) {
-      deleteMutation.mutate(item)
-      return
-    }
     modal.confirm({
-      title: '确认删除已有结算痕迹的增收记录？',
-      content: '该记录收入已收或提成已付，删除后仅影响本团增收统计。',
+      title: settled
+        ? '确认删除已有结算痕迹的增收记录？'
+        : '确认删除增收记录？',
+      content: settled
+        ? '该记录收入已收或提成已付，删除后仅影响本团增收统计。'
+        : `将删除「${item.projectName}」，删除后不可恢复。`,
       okText: '删除',
       okButtonProps: { danger: true },
       onOk: () => deleteMutation.mutateAsync(item),
@@ -283,7 +283,7 @@ export function IncomeRecordsPanel({
           emptyText: (
             <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">
               {mutationLocked ? null : (
-                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                <Button icon={<PlusOutlined />} onClick={openCreate}>
                   新增增收记录
                 </Button>
               )}

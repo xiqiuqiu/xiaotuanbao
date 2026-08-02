@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import { Alert, Button, Card, Space, Table } from 'antd'
+import { Alert, App, Button, Card, Space, Table } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -44,6 +44,7 @@ export function SourceOrdersTab({
   canEdit,
   amountReadOnly = false,
 }: SourceOrdersTabProps) {
+  const { modal } = App.useApp()
   const editable = !readOnly && canEdit
   const navigate = useNavigate()
   const search = useSearch({ from: '/app/departure/$departureId' })
@@ -224,7 +225,11 @@ export function SourceOrdersTab({
               {showBatchGenerate ? (
                 <Button
                   onClick={() =>
-                    confirmBatchGenerateReceivables(pendingReceivableCount, batchGenerateMutation)
+                    confirmBatchGenerateReceivables(
+                      pendingReceivableCount,
+                      batchGenerateMutation,
+                      modal.confirm,
+                    )
                   }
                   loading={batchGenerateMutation.isPending}
                 >

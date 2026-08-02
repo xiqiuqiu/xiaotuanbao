@@ -1,6 +1,6 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Modal } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
@@ -84,7 +84,9 @@ function renderTab() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        <App>
+          <SourceOrdersTab departure={departure} readOnly={false} canEdit />
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -277,37 +279,23 @@ describe('SourceOrdersTab 批量提交应收', () => {
       total: 2,
     })
 
-    type ConfirmConfig = Parameters<typeof Modal.confirm>[0]
-    let confirmConfig: ConfirmConfig | undefined
-    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((config) => {
-      confirmConfig = config
-      return {
-        destroy: vi.fn(),
-        update: vi.fn(),
-        then: undefined,
-      } as ReturnType<typeof Modal.confirm>
-    })
+    renderTab()
+    await user.click(await screen.findByRole('button', { name: '批量提交应收' }))
 
-    try {
-      renderTab()
-      await user.click(await screen.findByRole('button', { name: '批量提交应收' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('批量提交应收').length).toBeGreaterThan(0)
+    expect(within(dialog).getByRole('button', { name: '提 交' })).toBeInTheDocument()
 
-      expect(confirmConfig).toMatchObject({ title: '批量提交应收', okText: '提交' })
-
-      render(<ConfigProvider>{confirmConfig?.content}</ConfigProvider>)
-      // guest_only G=S → 2 paths; split G=S → 1 path (balance only)
-      const summary = screen.getByText('确认后将提交 3 条应收记录')
-      const explanation = screen.getByText(
-        '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收；当代收不足以覆盖结算金额时同批生成客户补款。',
-      )
-      expect(screen.queryByRole('alert')).toBeNull()
-      expect(explanation).toHaveClass('ant-typography-secondary')
-      expect(explanation).toHaveStyle({ fontSize: '12px' })
-      expect(summary.compareDocumentPosition(explanation) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      )
-    } finally {
-      confirmSpy.mockRestore()
-    }
+    // guest_only G=S → 2 paths; split G=S → 1 path (balance only)
+    const summary = within(dialog).getByText('确认后将提交 3 条应收记录')
+    const explanation = within(dialog).getByText(
+      '「全部我方代收」按定金/尾款分别生成游客应收；「客户收定金+我方收尾款」仅生成尾款代收；当代收不足以覆盖结算金额时同批生成客户补款。',
+    )
+    expect(within(dialog).queryByRole('alert')).toBeNull()
+    expect(explanation).toHaveClass('ant-typography-secondary')
+    expect(explanation).toHaveStyle({ fontSize: '12px' })
+    expect(summary.compareDocumentPosition(explanation) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
   })
 })

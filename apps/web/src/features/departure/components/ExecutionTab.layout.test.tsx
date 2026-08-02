@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider } from 'antd'
+import { App, ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
@@ -128,14 +128,16 @@ function renderExecutionTab() {
   return render(
     <QueryClientProvider client={queryClient}>
       <ConfigProvider>
-        <div style={{ width: 900 }}>
-          <ExecutionTab
-            departure={mockDeparture}
-            segmentId="segment-1"
-            readOnly={false}
-            canEdit
-          />
-        </div>
+        <App>
+          <div style={{ width: 900 }}>
+            <ExecutionTab
+              departure={mockDeparture}
+              segmentId="segment-1"
+              readOnly={false}
+              canEdit
+            />
+          </div>
+        </App>
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -239,13 +241,15 @@ describe('ExecutionTab layout', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <ConfigProvider>
-          <ExecutionTab
-            departure={mockDeparture}
-            segmentId="segment-1"
-            highlightDepartureResourceId="departure-resource-1"
-            readOnly={false}
-            canEdit
-          />
+          <App>
+            <ExecutionTab
+              departure={mockDeparture}
+              segmentId="segment-1"
+              highlightDepartureResourceId="departure-resource-1"
+              readOnly={false}
+              canEdit
+            />
+          </App>
         </ConfigProvider>
       </QueryClientProvider>,
     )
