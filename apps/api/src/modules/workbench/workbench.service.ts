@@ -66,7 +66,7 @@ const MODULES_BY_TEMPLATE: Record<WorkbenchTemplate, readonly ModuleDefinition[]
     },
     {
       key: 'coordinator-settlement',
-      title: '待生成账款',
+      title: '待提交账款',
       requiredPermissions: ['/departure'],
     },
     {

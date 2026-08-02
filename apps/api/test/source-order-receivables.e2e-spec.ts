@@ -306,7 +306,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(409)
 
-    expect(second.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(second.body.message).toBe('当前客源单已提交应收，不能再次提交')
 
     const count = await prisma.paymentSchedule.count({
       where: {
@@ -704,7 +704,7 @@ describe('Source order generate receivables (e2e)', () => {
     const rejected = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(409)
-    expect(rejected.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(rejected.body.message).toBe('当前客源单已提交应收，不能再次提交')
   })
 
   it('does not create missing receivable path after finance touch', async () => {
@@ -812,7 +812,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(409)
 
-    expect(regenerated.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(regenerated.body.message).toBe('当前客源单已提交应收，不能再次提交')
 
     const fetched = await authRequest(app, coordinatorToken)
       .get(`/api/source-orders/${sourceOrder.id}`)
@@ -831,7 +831,7 @@ describe('Source order generate receivables (e2e)', () => {
     const departure = await createDeparture()
     const sourceOrder = await createSourceOrder(departure.id)
 
-    // 生成应收留在 /departure：计调可触发
+    // 提交应收留在 /departure：计调可触发
     await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(201)
@@ -878,7 +878,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(409)
 
-    expect(response.body.message).toBe('发团已关闭，不可生成应收')
+    expect(response.body.message).toBe('发团已关闭，不可提交应收')
   })
 
   it('returns closed receivable status after all schedules are cancelled, distinct from not_generated', async () => {
@@ -928,7 +928,7 @@ describe('Source order generate receivables (e2e)', () => {
       .post(`/api/source-orders/${sourceOrder.id}/generate-receivables`)
       .expect(409)
 
-    expect(rejected.body.message).toBe('当前客源单已生成应收，不能再次生成')
+    expect(rejected.body.message).toBe('当前客源单已提交应收，不能再次提交')
   })
 
   it('keeps receivable status from remaining active schedules when only one path is cancelled', async () => {

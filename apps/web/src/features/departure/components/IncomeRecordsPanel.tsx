@@ -1,18 +1,14 @@
 /**
- * 团内增收记录页签 — 方案 A：顶部合计 + 筛选 + 表格 + 抽屉（ADR-0036）。
- * 列表快捷标记已收/已付经 PATCH，不生成应收/应付。
+ * 团内增收记录页签 — 方案 A：筛选 + 表格（含表尾合计）+ 抽屉（ADR-0036）。
+ * 列表快捷标记已收/已付经 PATCH，不提交应收/应付。
  */
 import { useState } from 'react'
 import {
   App,
   Button,
-  Col,
   Empty,
-  Flex,
   Form,
-  Row,
   Space,
-  Statistic,
   Table,
   Typography,
 } from 'antd'
@@ -36,9 +32,12 @@ import {
   updateIncomeRecord,
   type ListIncomeRecordsParams,
 } from '@/services/income-record.service'
-import { formatCents } from '../catalog'
-import { buildIncomeRecordsColumns } from './income-records-columns'
+import {
+  buildIncomeRecordsColumns,
+  INCOME_RECORDS_TABLE_SCROLL_X,
+} from './income-records-columns'
 import { IncomeRecordsFilters } from './IncomeRecordsFilters'
+import { renderIncomeRecordsTableSummary } from './income-records-table-summary'
 import {
   IncomeRecordDrawer,
   type IncomeRecordFormValues,
@@ -58,6 +57,11 @@ export function IncomeRecordsPanel({
   const [form] = Form.useForm<IncomeRecordFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editing, setEditing] = useState<DepartureIncomeRecordSummary | null>(null)
+  const [typeDraft, setTypeDraft] = useState<DepartureIncomeType | 'all'>('all')
+  const [compositeDraft, setCompositeDraft] = useState<
+    DepartureIncomeSettlementComposite | 'all'
+  >('all')
+  const [keywordDraft, setKeywordDraft] = useState('')
   const [typeFilter, setTypeFilter] = useState<DepartureIncomeType | 'all'>('all')
   const [compositeFilter, setCompositeFilter] = useState<
     DepartureIncomeSettlementComposite | 'all'
@@ -201,9 +205,6 @@ export function IncomeRecordsPanel({
   }
 
   const items = query.data?.items ?? []
-  const amountTotal = query.data?.amountCentsTotal ?? 0
-  const commissionTotal = query.data?.commissionCentsTotal ?? 0
-  const companyTotal = query.data?.companyIncomeCentsTotal ?? 0
 
   const columns = buildIncomeRecordsColumns({
     mutationLocked,
@@ -236,33 +237,33 @@ export function IncomeRecordsPanel({
         hasData={Boolean(query.data)}
         onRefresh={() => void query.refetch()}
       />
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Statistic title="增收金额合计" value={formatCents(amountTotal)} />
-        </Col>
-        <Col xs={24} sm={8}>
-          <Statistic title="导游提成合计" value={formatCents(commissionTotal)} />
-        </Col>
-        <Col xs={24} sm={8}>
-          <Statistic title="公司增收合计" value={formatCents(companyTotal)} />
-        </Col>
-      </Row>
-      <Flex justify="space-between" align="center" wrap gap={8}>
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          增收明细
-        </Typography.Title>
-        {mutationLocked ? null : (
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新增
-          </Button>
-        )}
-      </Flex>
       <IncomeRecordsFilters
-        typeFilter={typeFilter}
-        compositeFilter={compositeFilter}
-        onTypeChange={setTypeFilter}
-        onCompositeChange={setCompositeFilter}
-        onKeywordSearch={setKeyword}
+        typeFilter={typeDraft}
+        compositeFilter={compositeDraft}
+        keyword={keywordDraft}
+        onTypeChange={setTypeDraft}
+        onCompositeChange={setCompositeDraft}
+        onKeywordChange={setKeywordDraft}
+        onApply={() => {
+          setTypeFilter(typeDraft)
+          setCompositeFilter(compositeDraft)
+          setKeyword(keywordDraft.trim())
+        }}
+        onReset={() => {
+          setTypeDraft('all')
+          setCompositeDraft('all')
+          setKeywordDraft('')
+          setTypeFilter('all')
+          setCompositeFilter('all')
+          setKeyword('')
+        }}
+        extra={
+          mutationLocked ? null : (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              新增
+            </Button>
+          )
+        }
       />
       {mutationLocked ? (
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
@@ -276,7 +277,8 @@ export function IncomeRecordsPanel({
         columns={columns}
         dataSource={items}
         pagination={false}
-        scroll={{ x: 1200 }}
+        scroll={{ x: INCOME_RECORDS_TABLE_SCROLL_X }}
+        summary={renderIncomeRecordsTableSummary}
         locale={{
           emptyText: (
             <Empty description="暂无增收记录，可登记购物店返利、车销或自费返利等">

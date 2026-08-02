@@ -13,10 +13,10 @@ export enum ResourceKind {
 }
 
 /**
- * Resource-kind picker options (添加/编辑资源、等).
+ * Full catalog for labels / supplier categories / historical rows.
  * 拼出 kept in the first five for common use; meal UI label「用餐」.
  */
-export const RESOURCE_KIND_OPTIONS = [
+const RESOURCE_KIND_CATALOG = [
   { value: ResourceKind.TRANSPORT, label: '用车' },
   { value: ResourceKind.HOTEL, label: '酒店' },
   { value: ResourceKind.GUIDE, label: '导游' },
@@ -30,8 +30,17 @@ export const RESOURCE_KIND_OPTIONS = [
   { value: ResourceKind.OTHER, label: '其他' },
 ] as const
 
+/**
+ * 执行安排添加/编辑资源的种类下拉：不含购物店、演出（购物店返利走增收记录）。
+ * 历史 shop/entertainment 行仍可读；编辑存量行时由 UI 补回当前种类选项。
+ */
+export const RESOURCE_KIND_OPTIONS = RESOURCE_KIND_CATALOG.filter(
+  (item) =>
+    item.value !== ResourceKind.SHOP && item.value !== ResourceKind.ENTERTAINMENT,
+)
+
 export const RESOURCE_KIND_LABELS = Object.fromEntries(
-  RESOURCE_KIND_OPTIONS.map((item) => [item.value, item.label]),
+  RESOURCE_KIND_CATALOG.map((item) => [item.value, item.label]),
 ) as Record<ResourceKind, string>
 
 /**
@@ -50,9 +59,9 @@ export const SUPPLIER_CATEGORY_MEAL_LABEL = '用餐'
 
 /**
  * Display order for supplier-category pickers (filters / forms).
- * Matches RESOURCE_KIND_OPTIONS picker order; outsource shown as 旅行社.
+ * Full catalog order（含购物店/演出）；与执行资源下拉解耦。
  */
-export const SUPPLIER_CATEGORY_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_OPTIONS.map(
+export const SUPPLIER_CATEGORY_SORT_ORDER: readonly ResourceKind[] = RESOURCE_KIND_CATALOG.map(
   (item) => item.value,
 )
 

@@ -189,9 +189,9 @@ describe('ExecutionTab create → select new segment', () => {
     expect(await screen.findByText('喀纳斯')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '添加一天' }))
-    expect(await screen.findByText('添加行程段')).toBeInTheDocument()
+    expect(await screen.findByText('添加行程')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('行程段名称'), '新建段')
+    await user.type(screen.getByLabelText('行程名称'), '新建段')
     await user.click(screen.getByRole('button', { name: /保\s*存/ }))
 
     await waitFor(() => {

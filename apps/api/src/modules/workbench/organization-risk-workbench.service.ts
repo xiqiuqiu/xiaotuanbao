@@ -38,7 +38,7 @@ const RISK_REASON: Record<WorkbenchOrganizationRiskCode, string> = {
   receivable_overdue_8_30: '应收逾期 8–30 天',
   departure_data_gap_upcoming: '未来 2–7 天出发且资料待补充',
   settlement_stale_over_7: '流水超过 7 天仍未完全核销',
-  ended_departure_account_gap: '已结束发团仍有应收或应付尚未生成',
+  ended_departure_account_gap: '已结束发团仍有应收或应付尚未提交',
 }
 
 type RiskCandidate = WorkbenchOrganizationRiskItem & {

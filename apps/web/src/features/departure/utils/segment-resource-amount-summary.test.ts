@@ -35,7 +35,7 @@ describe('summarizeSegmentResourceAmounts', () => {
     })
   })
 
-  it('excludes generated and closed resources from 尚未生成应付', () => {
+  it('excludes generated and closed resources from 尚未提交应付', () => {
     expect(
       summarizeSegmentResourceAmounts(
         [
@@ -62,7 +62,7 @@ describe('summarizeSegmentResourceAmounts', () => {
     })
   })
 
-  it('does not count zero-amount ungenerated resources in 尚未生成应付', () => {
+  it('does not count zero-amount ungenerated resources in 尚未提交应付', () => {
     expect(
       summarizeSegmentResourceAmounts(
         [
@@ -85,7 +85,7 @@ describe('summarizeSegmentResourceAmounts', () => {
     })
   })
 
-  it('treats 尚未生成应付 as zero when the departure is settled', () => {
+  it('treats 尚未提交应付 as zero when the departure is settled', () => {
     expect(
       summarizeSegmentResourceAmounts(
         [

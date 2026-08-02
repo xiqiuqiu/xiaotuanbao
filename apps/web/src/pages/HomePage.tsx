@@ -204,11 +204,11 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
               ) : <Typography.Text type="secondary">-</Typography.Text>,
             },
             {
-              title: '待生成应收',
+              title: '待提交应收',
               dataIndex: 'pendingReceivableCount',
               width: 140,
               render: (value: number) => value > 0
-                ? <Tag color="blue">待生成应收 {value} 个</Tag>
+                ? <Tag color="blue">待提交应收 {value} 个</Tag>
                 : <Typography.Text type="secondary">-</Typography.Text>,
             },
             {
@@ -358,24 +358,24 @@ function CoordinatorSettlementModule({
   return (
     <div className={styles.settlementGrid}>
       <SettlementQueueCard
-        title="待生成应付"
-        tooltip="按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。"
-        tooltipAriaLabel="待生成应付统计口径"
+        title="待提交应付"
+        tooltip="按尚未提交应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。"
+        tooltipAriaLabel="待提交应付统计口径"
         viewAllHref={payableMetric?.href}
         viewAllCount={payableMetric?.value ?? 0}
-        viewAllAriaLabel={`查看全部待生成应付 ${payableMetric?.value ?? 0} 项`}
+        viewAllAriaLabel={`查看全部待提交应付 ${payableMetric?.value ?? 0} 项`}
         items={payableItems}
-        emptyText="当前没有待生成应付的资源"
+        emptyText="当前没有待提交应付的资源"
       />
       <SettlementQueueCard
-        title="待生成应收"
-        tooltip="按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。"
-        tooltipAriaLabel="待生成应收统计口径"
+        title="待提交应收"
+        tooltip="按尚未提交应收的客源单数统计，数据来自现存客源单与应收记录。"
+        tooltipAriaLabel="待提交应收统计口径"
         viewAllHref={pendingMetric?.href}
         viewAllCount={pendingMetric?.value ?? 0}
-        viewAllAriaLabel={`查看全部待生成应收 ${pendingMetric?.value ?? 0} 项`}
+        viewAllAriaLabel={`查看全部待提交应收 ${pendingMetric?.value ?? 0} 项`}
         items={pendingItems}
-        emptyText="当前没有待生成应收的客源单"
+        emptyText="当前没有待提交应收的客源单"
       />
     </div>
   )

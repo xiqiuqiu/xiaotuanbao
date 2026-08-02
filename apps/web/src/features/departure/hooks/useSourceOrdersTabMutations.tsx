@@ -130,7 +130,7 @@ export function useSourceOrdersTabMutations({
       }
       if (!result.generateOk) {
         message.warning(
-          `客源单已保存，但生成应收失败：${
+          `客源单已保存，但提交应收失败：${
             result.generateError instanceof Error
               ? result.generateError.message
               : '请稍后在列表中重试'
@@ -141,8 +141,8 @@ export function useSourceOrdersTabMutations({
       }
       message.success(
         result.generateResult.sourceAmountMismatch
-          ? '已保存并生成应收，存在来源金额差异，请核对'
-          : '已保存并生成应收',
+          ? '已保存并提交应收，存在来源金额差异，请核对'
+          : '已保存并提交应收',
       )
       invalidateFinance()
       onCloseDrawer()
@@ -165,8 +165,8 @@ export function useSourceOrdersTabMutations({
     onSuccess: (result) => {
       message.success(
         result.sourceAmountMismatch
-          ? '应收已生成，存在来源金额差异，请核对'
-          : '应收已生成',
+          ? '应收已提交，存在来源金额差异，请核对'
+          : '应收已提交',
       )
       invalidateSourceOrders()
       invalidateFinance()
@@ -188,7 +188,7 @@ export function useSourceOrdersTabMutations({
       invalidateFinance()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '批量生成应收失败')
+      message.error(error instanceof Error ? error.message : '批量提交应收失败')
     },
   })
 
@@ -301,7 +301,7 @@ export function useSourceOrderSubmit({
             </Typography.Text>
           </Space>
         ),
-        okText: options.generateReceivable ? '仍要保存并生成' : '仍要保存',
+        okText: options.generateReceivable ? '仍要保存并提交' : '仍要保存',
         cancelText: '取消',
         onOk: () => {
           if (latestEditingOrderIdRef.current !== requestOrderId) {
@@ -329,7 +329,7 @@ export function confirmBatchGenerateReceivables(
     return
   }
   Modal.confirm({
-    title: '批量生成应收',
+    title: '批量提交应收',
     content: (
       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
         <span>{formatBatchFinanceGenerationConfirmContent(pendingReceivableCount, '应收')}</span>
@@ -338,7 +338,7 @@ export function confirmBatchGenerateReceivables(
         </Typography.Text>
       </Space>
     ),
-    okText: '生成',
+    okText: '提交',
     cancelText: '取消',
     onOk: () => batchGenerateMutation.mutateAsync(),
   })

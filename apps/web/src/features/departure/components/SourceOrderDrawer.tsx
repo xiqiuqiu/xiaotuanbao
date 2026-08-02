@@ -36,9 +36,10 @@ import {
   SourceOrderDiscountType,
   DirectoryProfileStatus,
 } from '@xiaotuanbao/shared'
-import type { SourceOrderSummary, SourceOrderGuestSummary } from '@/types/api'
+import type { SourceOrderSummary, SourceOrderGuestSummary, PartnerSummary } from '@/types/api'
 import { listPartners } from '@/services/partner.service'
 import { getSourceOrder, listSourceOrderGuests } from '@/services/source-order.service'
+import { PartnerQuickCreateSelect } from './PartnerQuickCreateSelect'
 import {
   FARE_ADJUSTMENT_DIRECTION_OPTIONS,
   FARE_ADJUSTMENT_KIND_OPTIONS,
@@ -81,7 +82,7 @@ interface SourceOrderDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
-  /** 未生成应收时可展示「保存并生成应收」。 */
+  /** 未提交应收时可展示「保存并提交应收」。 */
   canSaveAndGenerate?: boolean
   saveAndGenerateLoading?: boolean
   onClose: () => void
@@ -600,19 +601,6 @@ function FareAdjustmentsEditor({
             }
           />
         </td>
-        <td style={bodyCell}>
-          <Input
-            size="small"
-            maxLength={30}
-            showCount
-            placeholder={notePlaceholder(draftValue.kind)}
-            value={draftValue.customName ?? ''}
-            disabled={!canEdit}
-            onChange={(event) =>
-              setDraft({ ...draftValue, customName: event.target.value })
-            }
-          />
-        </td>
         <td style={{ ...bodyCell, width: 120 }}>
           <InputNumber
             size="small"
@@ -627,6 +615,19 @@ function FareAdjustmentsEditor({
                 ...draftValue,
                 amountYuan: amountYuan == null ? undefined : Number(amountYuan),
               })
+            }
+          />
+        </td>
+        <td style={bodyCell}>
+          <Input
+            size="small"
+            maxLength={30}
+            showCount
+            placeholder={notePlaceholder(draftValue.kind)}
+            value={draftValue.customName ?? ''}
+            disabled={!canEdit}
+            onChange={(event) =>
+              setDraft({ ...draftValue, customName: event.target.value })
             }
           />
         </td>
@@ -671,13 +672,13 @@ function FareAdjustmentsEditor({
           {row.direction === FareAdjustmentDirection.INCREASE ? '增项' : '减项'}
         </Tag>
       </td>
+      <td style={{ ...bodyCell, fontVariantNumeric: 'tabular-nums' }}>
+        ¥{(row.amountYuan ?? 0).toFixed(2)}
+      </td>
       <td style={bodyCell}>
         <Typography.Text type={row.customName ? undefined : 'secondary'}>
           {row.customName || '-'}
         </Typography.Text>
-      </td>
-      <td style={{ ...bodyCell, fontVariantNumeric: 'tabular-nums' }}>
-        ¥{(row.amountYuan ?? 0).toFixed(2)}
       </td>
       <td style={{ ...bodyCell, width: 72, whiteSpace: 'nowrap' }}>
         {canEdit ? (
@@ -717,8 +718,8 @@ function FareAdjustmentsEditor({
             <tr>
               <th style={headerCell}>调整项目</th>
               <th style={headerCell}>方向</th>
-              <th style={headerCell}>调整说明</th>
               <th style={headerCell}>金额</th>
+              <th style={headerCell}>调整说明</th>
               <th style={headerCell}>操作</th>
             </tr>
           </thead>
@@ -795,7 +796,9 @@ function totalGuestCountAtLeastOne(getFieldValue: (name: string) => unknown) {
 }
 
 interface SourceOrderFormFieldsProps {
-  partnerOptions: Array<{ value: string; label: string }>
+  partners: readonly Pick<PartnerSummary, 'id' | 'name' | 'status'>[]
+  partnerSearch: string
+  onPartnerSearch: (value: string) => void
   lockAmounts: boolean
   readOnly: boolean
   derivedTotalGuests: number
@@ -812,7 +815,9 @@ interface SourceOrderFormFieldsProps {
 }
 
 function SourceOrderFormFields({
-  partnerOptions,
+  partners,
+  partnerSearch,
+  onPartnerSearch,
   lockAmounts,
   readOnly,
   derivedTotalGuests,
@@ -838,10 +843,13 @@ function SourceOrderFormFields({
             label="客户"
             rules={[{ required: true, message: '请选择客户' }]}
           >
-            <Select
-              showSearch={{ optionFilterProp: 'label' }}
+            <PartnerQuickCreateSelect
+              partners={partners}
+              searchValue={partnerSearch}
+              onSearch={onPartnerSearch}
               placeholder="选择合作伙伴"
-              options={partnerOptions}
+              emptyHint="暂无匹配合作伙伴"
+              disabled={readOnly}
             />
           </Form.Item>
           <Row gutter={token.marginMD}>
@@ -1108,6 +1116,7 @@ export function SourceOrderDrawer({
     next: [],
   })
   const [activeSection, setActiveSection] = useState<DrawerSectionKey>('basics')
+  const [partnerSearch, setPartnerSearch] = useState('')
   const sourceOrderId = editing?.id ?? null
   const isCreate = open && !sourceOrderId
   const actionsBusy = loading || saveAndGenerateLoading
@@ -1200,6 +1209,7 @@ export function SourceOrderDrawer({
       hasFareDraftRef.current = false
       hasGuestDraftRef.current = false
       setActiveSection('basics')
+      setPartnerSearch('')
       return
     }
     if (!detailReady) {
@@ -1208,6 +1218,7 @@ export function SourceOrderDrawer({
 
     form.resetFields()
     form.setFieldsValue(initialValues)
+    setPartnerSearch('')
   }, [detailReady, form, initialValues, open])
 
   const handleClose = () => {
@@ -1390,7 +1401,7 @@ export function SourceOrderDrawer({
                       disabled={!detailReady || actionsBusy}
                       onClick={() => trySubmit('saveAndGenerate')}
                     >
-                      保存并生成应收
+                      保存并提交应收
                     </Button>
                   ) : null}
                   <Button
@@ -1469,12 +1480,9 @@ export function SourceOrderDrawer({
             onFinishFailed={resetSubmitIntent}
           >
             <SourceOrderFormFields
-              partnerOptions={
-                partnersResult?.items.map((partner) => ({
-                  value: partner.id,
-                  label: partner.name,
-                })) ?? []
-              }
+              partners={partnersResult?.items ?? []}
+              partnerSearch={partnerSearch}
+              onPartnerSearch={setPartnerSearch}
               lockAmounts={lockAmounts}
               readOnly={readOnly}
               derivedTotalGuests={derivedTotalGuests}

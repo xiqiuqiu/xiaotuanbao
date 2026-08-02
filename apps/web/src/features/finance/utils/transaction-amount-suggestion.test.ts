@@ -209,7 +209,7 @@ describe('formatGuestCollectionSuggestionText', () => {
       },
       formatCents,
     )
-    expect(text).toBe('尚未生成应收，参考剩余 ¥300.00')
+    expect(text).toBe('尚未提交应收，参考剩余 ¥300.00')
   })
 
   it('explains covered by existing unallocated transactions', () => {

@@ -104,9 +104,9 @@ export function formatGuestCollectionSuggestionText(
   }
   if (suggestion.settledHint === 'no_schedule') {
     if (suggestion.existingUnallocatedCents > 0) {
-      return `尚未生成应收，参考剩余 ${formatCents(suggestion.suggestedAmountCents)}`
+      return `尚未提交应收，参考剩余 ${formatCents(suggestion.suggestedAmountCents)}`
     }
-    return `尚未生成应收，参考路径金额 ${formatCents(suggestion.suggestedAmountCents)}`
+    return `尚未提交应收，参考路径金额 ${formatCents(suggestion.suggestedAmountCents)}`
   }
   if (suggestion.existingUnallocatedCents > 0 && suggestion.pathAmountCents != null) {
     return `参考剩余 ${formatCents(suggestion.suggestedAmountCents)}（节点约定 ${formatCents(suggestion.pathAmountCents)}）`

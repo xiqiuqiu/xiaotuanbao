@@ -246,7 +246,7 @@ export class DepartureResourceService {
     })
 
     if (hasSchedule > 0) {
-      throw new ConflictException('当前资源已生成应付，不能直接删除')
+      throw new ConflictException('当前资源已提交应付，不能直接删除')
     }
 
     await this.prisma.departureResource.delete({ where: { id: resource.id } })

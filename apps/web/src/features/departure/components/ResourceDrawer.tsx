@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
+  App,
   Button,
   Drawer,
   Form,
@@ -11,11 +12,16 @@ import {
   Typography,
   theme,
 } from 'antd'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CounterpartyType, DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
-import type { ItinerarySegmentSummary } from '@/types/api'
-import { getSupplier, listSuppliers } from '@/services/supplier.service'
-import { RESOURCE_KIND_OPTIONS } from '../catalog'
+import type { ItinerarySegmentSummary, SupplierSummary } from '@/types/api'
+import { useAuthStore } from '@/app/store/auth.store'
+import {
+  getSupplier,
+  listSuppliers,
+} from '@/services/supplier.service'
+import { canEditSupplier } from '@/features/supplier/utils/supplier-permission'
+import { RESOURCE_KIND_LABELS, RESOURCE_KIND_OPTIONS } from '../catalog'
 import { formatSegmentDateRange } from '../utils/segment-form'
 import {
   createEmptyResourceFormValues,
@@ -29,6 +35,14 @@ import {
   resolveSupplierFilterKind,
   resolveSupplierIdAfterKindChange,
 } from '../utils/resource-supplier-filter'
+import {
+  createOrResolveSupplierByName,
+  duplicateSupplierWarningMessage,
+  RESOURCE_SUPPLIER_CREATE_OPTION_VALUE,
+  formatResourceSupplierCreateOptionLabel,
+  resolveDuplicateSupplierSelection,
+  shouldShowResourceSupplierCreateOption,
+} from '../utils/resource-supplier-quick-create'
 
 interface ResourceDrawerProps {
   open: boolean
@@ -37,7 +51,7 @@ interface ResourceDrawerProps {
   readOnly: boolean
   amountReadOnly?: boolean
   loading: boolean
-  /** 未生成应付时可展示「保存并生成应付」。 */
+  /** 未提交应付时可展示「保存并提交应付」。 */
   canSaveAndGenerate?: boolean
   saveAndGenerateLoading?: boolean
   onClose: () => void
@@ -60,6 +74,8 @@ export function ResourceDrawer({
   onSubmit,
 }: ResourceDrawerProps) {
   const { token } = theme.useToken()
+  const { message } = App.useApp()
+  const queryClient = useQueryClient()
   const [form] = Form.useForm<ResourceFormValues>()
   const submitIntentRef = useRef<'save' | 'saveAndGenerate'>('save')
   const resourceKind = Form.useWatch('resourceKind', form)
@@ -67,6 +83,12 @@ export function ResourceDrawer({
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
   const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(new Map())
+  const [supplierSearch, setSupplierSearch] = useState('')
+  const [createdSupplierOption, setCreatedSupplierOption] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const canWriteSupplier = canEditSupplier(useAuthStore((state) => state.actionKeys) ?? [])
   /** 历史 Partner 拼出行：无 supplierId，可继续编辑；改选供应商则迁移。 */
   const isHistoricalPartnerResource = Boolean(
     editing &&
@@ -102,11 +124,15 @@ export function ResourceDrawer({
 
     form.resetFields()
     form.setFieldsValue(initialValues)
+    setSupplierSearch('')
+    setCreatedSupplierOption(null)
   }, [form, initialValues, open])
 
   const handleClose = () => {
     resetSubmitIntent()
     form.resetFields()
+    setSupplierSearch('')
+    setCreatedSupplierOption(null)
     onClose()
   }
 
@@ -144,6 +170,129 @@ export function ResourceDrawer({
     }
   }, [editingSupplier, suppliersResult])
 
+  const supplierOptions = useMemo(() => {
+    const byId = new Map<string, { value: string; label: string }>()
+    for (const supplier of suppliersResult?.items ?? []) {
+      byId.set(supplier.id, { value: supplier.id, label: supplier.name })
+    }
+    if (editingSupplier && !byId.has(editingSupplier.id)) {
+      byId.set(editingSupplier.id, {
+        value: editingSupplier.id,
+        label: editingSupplier.name,
+      })
+    }
+    if (createdSupplierOption && !byId.has(createdSupplierOption.id)) {
+      byId.set(createdSupplierOption.id, {
+        value: createdSupplierOption.id,
+        label: createdSupplierOption.name,
+      })
+    }
+
+    const options = [...byId.values()]
+    if (
+      shouldShowResourceSupplierCreateOption({
+        canWriteSupplier,
+        resourceKind,
+        searchText: supplierSearch,
+        suppliers: options.map((item) => ({ name: item.label })),
+      })
+    ) {
+      const name = supplierSearch.trim()
+      options.push({
+        value: RESOURCE_SUPPLIER_CREATE_OPTION_VALUE,
+        label: formatResourceSupplierCreateOptionLabel(name),
+      })
+    }
+    return options
+  }, [
+    canWriteSupplier,
+    createdSupplierOption,
+    editingSupplier,
+    resourceKind,
+    supplierSearch,
+    suppliersResult?.items,
+  ])
+
+  const selectExistingSupplier = (supplier: Pick<SupplierSummary, 'id' | 'name' | 'categories'>) => {
+    supplierCategoriesByIdRef.current.set(supplier.id, supplier.categories)
+    setCreatedSupplierOption({ id: supplier.id, name: supplier.name })
+    form.setFieldsValue({ supplierId: supplier.id })
+    setSupplierSearch('')
+  }
+
+  const applyDuplicateSupplier = (supplier: SupplierSummary, kind: ResourceKind) => {
+    const resolved = resolveDuplicateSupplierSelection({
+      supplier,
+      resourceKind: kind,
+    })
+    if (!resolved.ok) {
+      message.warning(
+        resolved.reason === 'missing_category'
+          ? '供应商已存在，但未包含当前资源种类，请到供应商管理补充类别或另选'
+          : duplicateSupplierWarningMessage(resolved.reason),
+      )
+      return false
+    }
+    selectExistingSupplier(supplier)
+    message.info('供应商已存在，已自动选中')
+    return true
+  }
+
+  const quickCreateMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const kind = resourceKind
+      if (!kind) {
+        throw new Error('请先选择资源种类')
+      }
+
+      return createOrResolveSupplierByName({
+        name,
+        category: kind,
+        localCandidates: [
+          ...(suppliersResult?.items ?? []),
+          ...(editingSupplier ? [editingSupplier] : []),
+          ...(createdSupplierOption
+            ? [{ id: createdSupplierOption.id, name: createdSupplierOption.name }]
+            : []),
+        ],
+        resolveLocal: async (id) => {
+          const fromList = suppliersResult?.items.find((item) => item.id === id)
+          if (fromList) {
+            return fromList
+          }
+          if (editingSupplier?.id === id) {
+            return editingSupplier
+          }
+          return undefined
+        },
+      })
+    },
+    onSuccess: (result) => {
+      if (result.kind === 'created') {
+        selectExistingSupplier(result.supplier)
+        message.success('供应商已创建')
+        void queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+        return
+      }
+      applyDuplicateSupplier(result.supplier, resourceKind!)
+      void queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+    },
+    onError: (error) => {
+      message.error(error instanceof Error ? error.message : '创建供应商失败')
+    },
+  })
+
+  const handleSupplierSelectValue = (value: string | null | undefined) => {
+    if (value !== RESOURCE_SUPPLIER_CREATE_OPTION_VALUE) {
+      return value ?? undefined
+    }
+    const name = supplierSearch.trim()
+    if (name && !quickCreateMutation.isPending) {
+      quickCreateMutation.mutate(name)
+    }
+    return form.getFieldValue('supplierId') as string | undefined
+  }
+
   return (
     <Drawer
       title={
@@ -178,7 +327,7 @@ export function ResourceDrawer({
                   form.submit()
                 }}
               >
-                保存并生成应付
+                保存并提交应付
               </Button>
             ) : null}
             <Button
@@ -235,23 +384,39 @@ export function ResourceDrawer({
           rules={[{ required: true, message: '请选择资源种类' }]}
         >
           <Select
-            options={RESOURCE_KIND_OPTIONS.map((item) => ({
+            options={(
+              resourceKind === ResourceKind.SHOP ||
+              resourceKind === ResourceKind.ENTERTAINMENT
+                ? [
+                    ...RESOURCE_KIND_OPTIONS,
+                    {
+                      value: resourceKind,
+                      label: RESOURCE_KIND_LABELS[resourceKind],
+                    },
+                  ]
+                : [...RESOURCE_KIND_OPTIONS]
+            ).map((item) => ({
               value: item.value,
               label: item.label,
             }))}
             disabled={readOnly || amountFieldsLocked}
             onChange={(nextKind) => {
               const currentSupplierId = form.getFieldValue('supplierId') as string | undefined
+              const nextSupplierId = resolveSupplierIdAfterKindChange({
+                nextKind,
+                currentSupplierId,
+                currentSupplierCategories: currentSupplierId
+                  ? supplierCategoriesByIdRef.current.get(currentSupplierId)
+                  : undefined,
+              })
               form.setFieldsValue({
                 partnerId: undefined,
-                supplierId: resolveSupplierIdAfterKindChange({
-                  nextKind,
-                  currentSupplierId,
-                  currentSupplierCategories: currentSupplierId
-                    ? supplierCategoriesByIdRef.current.get(currentSupplierId)
-                    : undefined,
-                }),
+                supplierId: nextSupplierId,
               })
+              setSupplierSearch('')
+              if (!nextSupplierId) {
+                setCreatedSupplierOption(null)
+              }
             }}
           />
         </Form.Item>
@@ -263,18 +428,19 @@ export function ResourceDrawer({
             rules={
               supplierRequired ? [{ required: true, message: '请选择供应商' }] : undefined
             }
+            getValueFromEvent={handleSupplierSelectValue}
           >
             <Select
               allowClear={!supplierRequired}
               showSearch={{ optionFilterProp: 'label' }}
+              searchValue={supplierSearch}
+              onSearch={setSupplierSearch}
               placeholder={
                 supplierRequired ? '选择供应商' : '可选：改选供应商以迁移对手方'
               }
-              options={suppliersResult?.items.map((supplier) => ({
-                value: supplier.id,
-                label: supplier.name,
-              }))}
-              disabled={readOnly || amountFieldsLocked}
+              options={supplierOptions}
+              disabled={readOnly || amountFieldsLocked || quickCreateMutation.isPending}
+              loading={quickCreateMutation.isPending}
             />
           </Form.Item>
         ) : null}

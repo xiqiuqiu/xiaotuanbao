@@ -37,9 +37,9 @@ describe('SourceOrdersSettlementStrip', () => {
     expect(strip.textContent).toContain(formatCents(700000))
     expect(strip.textContent).toContain('我方代收约定')
     expect(strip.textContent).toContain(formatCents(800000))
-    expect(strip.textContent).toContain('尚未生成应收')
+    expect(strip.textContent).toContain('尚未提交应收')
     expect(strip.textContent).toContain(formatCents(1000000))
-    expect(strip.textContent).toContain('1 单待生成')
+    expect(strip.textContent).toContain('1 单待提交')
   })
 
   it('shows 已齐 when every listed order has receivables', () => {
@@ -69,4 +69,5 @@ describe('SourceOrdersSettlementStrip', () => {
 
     expect(container).toBeEmptyDOMElement()
   })
+
 })

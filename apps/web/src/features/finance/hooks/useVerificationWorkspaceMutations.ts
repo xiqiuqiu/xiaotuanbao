@@ -6,7 +6,10 @@ import { useNavigate } from '@tanstack/react-router'
 import type { FinanceVerificationListItem, PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import { cancelVerification, createVerification } from '@/services/finance.service'
 import type { CancelVerificationFormValues } from '../components/CancelVerificationModal'
-import { promptGeneratedRebatePayableFollowUp } from '../utils/prompt-generated-rebate-payable'
+import {
+  buildGeneratedRebatePayableProcessNavigation,
+  promptGeneratedRebatePayableFollowUp,
+} from '../utils/prompt-generated-rebate-payable'
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
@@ -33,10 +36,7 @@ export function useVerificationWorkspaceMutations({
 
   const goProcessRebatePayable = useCallback(
     (rebate: PaymentScheduleSummary) => {
-      void navigate({
-        to: '/finance/payable',
-        search: { scheduleNo: rebate.scheduleNo },
-      })
+      void navigate(buildGeneratedRebatePayableProcessNavigation(rebate))
     },
     [navigate],
   )

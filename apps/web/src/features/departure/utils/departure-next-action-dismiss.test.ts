@@ -76,7 +76,7 @@ describe('dismiss storage', () => {
   it('does not treat a different fingerprint as dismissed', () => {
     const first = buildNextActionFingerprint(makeAction())
     const second = buildNextActionFingerprint(
-      makeAction({ title: '尚有应收未生成' }),
+      makeAction({ title: '尚有应收未提交' }),
     )
     dismissNextAction('dep-1', first)
 

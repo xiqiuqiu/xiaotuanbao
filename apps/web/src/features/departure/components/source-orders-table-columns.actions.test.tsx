@@ -95,18 +95,18 @@ describe('source orders action column', () => {
     cleanup()
   })
 
-  it('shows 生成应收 when receivable has not been created', () => {
+  it('shows 提交应收 when receivable has not been created', () => {
     renderActions(baseOrder())
 
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
-    expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '提交应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
   })
 
-  it('shows 查看应收 instead of 生成应收 after receivable is created', () => {
+  it('shows 查看应收 instead of 提交应收 after receivable is created', () => {
     renderActions(
       baseOrder({
         receivableStatus: 'pending',
@@ -118,7 +118,7 @@ describe('source orders action column', () => {
     expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '按实收结算' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '重新生成' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
@@ -134,7 +134,7 @@ describe('source orders action column', () => {
 
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '补全应收' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应收' })).toBeNull()
   })
 
   it('shows 查看应收 for closed receivable status and keeps 编辑 when writable', () => {
@@ -149,7 +149,7 @@ describe('source orders action column', () => {
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '查看' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看应收' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应收' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
@@ -160,20 +160,20 @@ describe('source orders action column', () => {
     expect(screen.getByRole('button', { name: '编辑' })).toBeTruthy()
   })
 
-  it('keeps 生成应收 visible but opens 查看 (not 编辑) for 财务 (no departure:write)', () => {
+  it('keeps 提交应收 visible but opens 查看 (not 编辑) for 财务 (no departure:write)', () => {
     renderActions(baseOrder(), { canEdit: false, canGenerate: true })
 
     expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
-    expect(screen.getByRole('button', { name: '生成应收' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '提交应收' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '客人名单' })).toBeNull()
     expect(screen.queryByRole('button', { name: '删除' })).toBeNull()
   })
 
-  it('hides 生成应收 when the departure is closed (no /departure generate path)', () => {
+  it('hides 提交应收 when the departure is closed (no /departure generate path)', () => {
     renderActions(baseOrder(), { canEdit: false, canGenerate: false })
 
-    expect(screen.queryByRole('button', { name: '生成应收' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '提交应收' })).toBeNull()
     expect(screen.getByRole('button', { name: '查看' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
   })

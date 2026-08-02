@@ -10,28 +10,32 @@ status: accepted
 
 ## 编号格式
 
+自 2026-07 起，对外编号与 `period_key` 的日期段均为 **两位年**（`yyMM` / `yyMMdd`）。此前已分配的四位年编号（如 `XTB2026070001`）保持不变，读侧长期认新旧两套形态；写侧只产出新形态。切换当月不迁旧序列键，新 `period_key` 从 `1` 起算。
+
 | 业务对象 | 格式 | 示例 |
 |---|---|---|
-| 发团（Departure） | `{prefix}{yyyyMM}{4位流水}` | `XTB2026070001` |
-| 应收收付款节点 | `AR{prefix}{yyyyMM}{6位流水}` | `ARXTB202607000001` |
-| 应付收付款节点 | `AP{prefix}{yyyyMM}{6位流水}` | `APXTB202607000001` |
-| 收支流水 | `TX{prefix}{yyyyMMdd}{6位流水}` | `TXXTB20260708000001` |
-| 核销 | `CL{prefix}{yyyyMM}{6位流水}` | `CLXTB202607000001` |
+| 发团（Departure） | `{prefix}{yyMM}{4位流水}` | `XTB26070001` |
+| 应收收付款节点 | `AR{prefix}{yyMM}{6位流水}` | `ARXTB2607000001` |
+| 应付收付款节点 | `AP{prefix}{yyMM}{6位流水}` | `APXTB2607000001` |
+| 收支流水 | `TX{prefix}{yyMMdd}{6位流水}` | `TXXTB260708000001` |
+| 核销 | `CL{prefix}{yyMM}{6位流水}` | `CLXTB2607000001` |
 
 业务编号不作为数据库主键（主键仍用 cuid）；编号字段加 `(organization_id, *_no)` 唯一索引。
 
 ## 序列表
 
-并发下通过 `document_sequences(organization_id, document_type, period_key, last_sequence)` 在事务内递增分配流水号，替代 `count()` 或 `findFirst + orderBy` 推算。`period_key` 为 `yyyyMM`（发团、AR、AP、CL）或 `yyyyMMdd`（TX）；`document_type` 为 `departure | ar | ap | tx | cl`。
+并发下通过 `document_sequences(organization_id, document_type, period_key, last_sequence)` 在事务内递增分配流水号，替代 `count()` 或 `findFirst + orderBy` 推算。`period_key` 为 `yyMM`（发团、AR、AP、CL）或 `yyMMdd`（TX）；`document_type` 为 `departure | ar | ap | tx | cl`。不考虑百年后两位年撞期。
 
 ## 曾考虑的替代方案
 
-- **发团编号锚定出团日期年月** — 6 月底为 8 月团建草稿会得到 `XTB202608xxxx`，与「编号表示建档时间、生成后不变」不一致；拒绝。
+- **发团编号锚定出团日期年月** — 6 月底为 8 月团建草稿会得到错误年月语义，与「编号表示建档时间、生成后不变」不一致；拒绝。
 - **财务编号嵌入发团号** — 流水可无 `departureId`（组织级资金进出），嵌入会破坏规则一致性且编号过长；拒绝，改由外键 + UI 展示团号。
 - **应收/应付/核销按日递增** — 可行，但编号更长且偏离按月对账习惯；拒绝，仅流水按日。
 - **流水前缀 TR、核销前缀 VR** — 与 AR/AP 财务编号族不统一；改为 `TX` / `CL`。
 - **唯一索引 + 重试** — 实现轻量但高并发下体验差；拒绝，采用序列表。
 - **迁移旧演示数据** — 第一版未上线，旧 `DT*` / 无组织前缀格式直接重置，不共存。
+- **仅改对外编号、`period_key` 仍用四位年** — 可避免百年撞期与切月重开；本版选择 `period_key` 与对外编号一致用两位年，接受上线当月新键从 1 起、不考虑百年后。
+- **改写已分配旧号** — 与「生成后不可变更」冲突，且牵动对账与沟通；拒绝，只改新号。
 
 ## 后果
 

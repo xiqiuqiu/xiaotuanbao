@@ -144,11 +144,11 @@ export function FinanceFundsModule({ module }: { module: WorkbenchModule }) {
       />
 
       <FundsQueueCard
-        title="待生成账款"
+        title="待提交账款"
         viewAllHref={module.secondaryHref}
         viewAllCount={module.secondaryTotal ?? 0}
         items={generationItems}
-        emptyText="当前没有待生成应收或应付"
+        emptyText="当前没有待提交应收或应付"
         renderItem={(item) => {
           const generation = item as WorkbenchFinanceAccountGenerationItem
           const amount = formatCents(generation.estimatedAmountCents)

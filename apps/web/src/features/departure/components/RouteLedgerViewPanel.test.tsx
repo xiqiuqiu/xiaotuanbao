@@ -9,6 +9,7 @@ import { RouteLedgerViewPanel } from './RouteLedgerViewPanel'
 
 const listDepartureRouteNames = vi.fn()
 const getDepartureRouteLedger = vi.fn()
+const downloadDepartureRouteLedger = vi.fn()
 const navigate = vi.fn()
 
 vi.mock('@tanstack/react-router', () => ({
@@ -38,6 +39,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/services/departure.service', () => ({
   listDepartureRouteNames: (...args: unknown[]) => listDepartureRouteNames(...args),
   getDepartureRouteLedger: (...args: unknown[]) => getDepartureRouteLedger(...args),
+  downloadDepartureRouteLedger: (...args: unknown[]) => downloadDepartureRouteLedger(...args),
 }))
 
 const routeGroupFixture = {
@@ -77,7 +79,7 @@ const routeGroupFixture = {
     {
       departureId: 'dep-a',
       departureNo: 'XTB202607150001',
-      departureName: '同日团 A',
+      departureName: '【表头冗余】同日团 A',
       startDate: '2026-07-15',
       totals: {
         orderCount: 2,
@@ -148,7 +150,7 @@ const routeGroupFixture = {
     {
       departureId: 'dep-b',
       departureNo: 'XTB202607150002',
-      departureName: '同日团 B',
+      departureName: '【表头冗余】同日团 B',
       startDate: '2026-07-15',
       totals: {
         orderCount: 1,
@@ -354,27 +356,88 @@ describe('RouteLedgerViewPanel', () => {
   beforeEach(() => {
     listDepartureRouteNames.mockReset()
     getDepartureRouteLedger.mockReset()
+    downloadDepartureRouteLedger.mockReset()
     navigate.mockReset()
     listDepartureRouteNames.mockResolvedValue({
       items: ['伊犁环线', '阿勒泰拼车'],
     })
     getDepartureRouteLedger.mockResolvedValue(ledgerFixture)
+    downloadDepartureRouteLedger.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it('未选路线与日期时显示空态，不发起查询 (#221)', async () => {
-    renderPanel()
+  it('进入线路视图且无筛选时，默认选中路线列表首项并查询', async () => {
+    const onFiltersChange = vi.fn()
+    renderPanel(<StatefulPanel onFiltersChange={onFiltersChange} />)
 
     await waitFor(() => {
-      expect(listDepartureRouteNames).toHaveBeenCalled()
+      expect(onFiltersChange).toHaveBeenCalledWith({
+        routeName: '伊犁环线',
+        startDateRange: null,
+      })
     })
 
-    expect(screen.getByText('请选择路线名称或出团日期')).toBeInTheDocument()
-    expect(screen.getByText(/也可只选出团日期/)).toBeInTheDocument()
-    expect(getDepartureRouteLedger).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(getDepartureRouteLedger).toHaveBeenCalledWith(
+        { routeName: '伊犁环线' },
+        expect.anything(),
+      )
+    })
+
+    expect(screen.queryByText('请选择路线名称或出团日期')).not.toBeInTheDocument()
+  })
+
+  it('已有出团日期轴时不覆盖用户筛选、不强制默认路线', async () => {
+    renderPanel(
+      <StatefulPanel
+        initial={{
+          routeName: undefined,
+          startDateRange: ['2026-07-15', '2026-07-15'],
+        }}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(getDepartureRouteLedger).toHaveBeenCalledWith(
+        { startDateFrom: '2026-07-15', startDateTo: '2026-07-15' },
+        expect.anything(),
+      )
+    })
+
+    expect(screen.queryByText('请选择路线名称或出团日期')).not.toBeInTheDocument()
+  })
+
+  it('筛选栏导出 Excel：结果就绪可点，并按当前筛选下载', async () => {
+    const user = userEvent.setup()
+    renderPanel(
+      <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
+    )
+
+    const exportBtn = await screen.findByRole('button', { name: /导出 Excel/ })
+    await waitFor(() => {
+      expect(exportBtn).not.toBeDisabled()
+    })
+
+    await user.click(exportBtn)
+    expect(downloadDepartureRouteLedger).toHaveBeenCalledWith({ routeName: '伊犁环线' })
+  })
+
+  it('日报表头不重复展示团名（与标题冗余）', async () => {
+    renderPanel(
+      <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
+    )
+
+    await waitFor(() => {
+      expect(
+        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
+      ).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('【表头冗余】同日团 A')).not.toBeInTheDocument()
+    expect(screen.queryByText('【表头冗余】同日团 B')).not.toBeInTheDocument()
   })
 
   it('同日多发团各出一份日报表，合计互不合并 (#221)', async () => {
@@ -622,7 +685,6 @@ describe('RouteLedgerViewPanel', () => {
       ).toBeInTheDocument()
     })
     expect(screen.getByText('暂无客源单')).toBeInTheDocument()
-    expect(screen.getByText('空客源团')).toBeInTheDocument()
     expect(screen.getByText('0 单')).toBeInTheDocument()
   })
 

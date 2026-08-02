@@ -444,12 +444,12 @@ describe('Departure–finance settlement transitions (e2e)', () => {
     const genReceivable = await authRequest(app, coordinatorToken)
       .post(`/api/source-orders/${extraSource.body.data.id}/generate-receivables`)
       .expect(409)
-    expect(genReceivable.body.message).toBe('发团已结清，不可生成应收')
+    expect(genReceivable.body.message).toBe('发团已结清，不可提交应收')
 
     const genPayable = await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${extraResource.body.data.id}/generate-payable`)
       .expect(409)
-    expect(genPayable.body.message).toBe('发团已结清，不可生成应付')
+    expect(genPayable.body.message).toBe('发团已结清，不可提交应付')
 
     const manualReceivable = await authRequest(app, financeToken)
       .post('/api/finance/receivables')
@@ -583,7 +583,7 @@ describe('Departure–finance settlement transitions (e2e)', () => {
       },
       {
         name: 'generate receivable',
-        expectedMessage: '发团已关闭，不可生成应收',
+        expectedMessage: '发团已关闭，不可提交应收',
         run: () =>
           authRequest(app, coordinatorToken).post(
             `/api/source-orders/${extraSource.body.data.id}/generate-receivables`,

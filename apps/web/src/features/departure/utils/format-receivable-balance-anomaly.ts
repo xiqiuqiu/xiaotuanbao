@@ -23,6 +23,6 @@ export function formatReceivableBalanceAnomalyCopy(
 
   return {
     title: '应收与结算金额不一致',
-    description: `已生成应收合计 ${formatCents(anomaly.actualCents)}，结算金额合计 ${formatCents(anomaly.expectedCents)}，${gapPhrase}`,
+    description: `已提交应收合计 ${formatCents(anomaly.actualCents)}，结算金额合计 ${formatCents(anomaly.expectedCents)}，${gapPhrase}`,
   }
 }

@@ -55,7 +55,7 @@ export const SOURCE_ORDER_CONVENTION_RECEIVABLE_SOURCE_TYPES = [
   ...SOURCE_ORDER_GUEST_COLLECTION_SOURCE_TYPES,
 ] as const
 
-/** 可识别为「客源单已生成应收」的来源类型（含 legacy 单节点游客代收）。 */
+/** 可识别为「客源单已提交应收」的来源类型（含 legacy 单节点游客代收）。 */
 export const SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES = [
   ...SOURCE_ORDER_CONVENTION_RECEIVABLE_SOURCE_TYPES,
   PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,

@@ -8,17 +8,23 @@ import { Typography } from 'antd'
 export function EllipsisTooltipText({
   children,
   empty = '-',
+  tooltip,
 }: {
   children: ReactNode
   /** 空值占位；传空字符串则保留空白（如确认单游客代表）。 */
   empty?: string
+  /**
+   * 悬停内容覆盖；`false` 关闭省略 Tooltip（外层已有 Tooltip 时用）。
+   * 默认展示全文。
+   */
+  tooltip?: ReactNode | false
 }) {
   const content =
     children === null || children === undefined || children === '' ? empty : children
 
   return (
     <Typography.Text
-      ellipsis={{ tooltip: content }}
+      ellipsis={{ tooltip: tooltip === false ? false : (tooltip ?? content) }}
       // Inherit parent color so TableNameLink (and other link wrappers) stay blue.
       style={{ width: '100%', margin: 0, color: 'inherit' }}
     >

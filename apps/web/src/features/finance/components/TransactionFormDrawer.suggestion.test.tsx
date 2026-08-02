@@ -260,7 +260,7 @@ describe('TransactionFormDrawer departure-scoped options and amount suggestion',
     })
 
     await waitFor(() => {
-      expect(screen.getByText(/尚未生成应收，参考剩余 ¥300\.00/)).toBeTruthy()
+      expect(screen.getByText(/尚未提交应收，参考剩余 ¥300\.00/)).toBeTruthy()
       expect(screen.getByRole('button', { name: '填入' })).toBeTruthy()
     })
 

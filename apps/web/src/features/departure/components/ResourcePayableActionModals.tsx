@@ -38,7 +38,7 @@ export function VoidResourcePayableModal({ resource, form, loading, onClose, onS
           <Alert
             type="warning"
             showIcon
-            title="作废后资源将恢复未生成"
+            title="作废后资源将恢复未提交"
             description={`原应付金额 ${formatCents(resource.amountCents)} 将保留在操作记录中；之后可修正资源金额并重新生成。`}
             style={{ marginBottom: 16 }}
           />

@@ -75,7 +75,7 @@ describe('summarizeSourceOrdersSettlementStrip', () => {
     })
   })
 
-  it('counts incomplete receivable paths as 尚未生成应收', () => {
+  it('counts incomplete receivable paths as 尚未提交应收', () => {
     const summary = summarizeSourceOrdersSettlementStrip([
       baseOrder({
         receivableStatus: 'pending',

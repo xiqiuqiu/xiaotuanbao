@@ -9,6 +9,7 @@ import {
   SourceOrderCollectionMode,
   SourceOrderDiscountType,
 } from '@prisma/client'
+import ExcelJS from 'exceljs'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
 
 /**
@@ -723,5 +724,49 @@ describe('Departure route ledger API (e2e)', () => {
         expect(JSON.stringify(row)).not.toMatch(/拼出价|拼出合计/)
       }
     }
+  })
+
+  it('exports route-ledger.xlsx for filtered departures with guest + resource sections', async () => {
+    const xlsxResponse = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger.xlsx')
+      .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+        res.on('end', () => callback(null, Buffer.concat(chunks)))
+      })
+      .expect(200)
+
+    expect(String(xlsxResponse.headers['content-type'] ?? '')).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    const disposition = String(xlsxResponse.headers['content-disposition'] ?? '')
+    expect(disposition).toMatch(/attachment/)
+    const filenameStar = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? ''
+    expect(decodeURIComponent(filenameStar)).toContain('线路视图_')
+
+    const workbook = new ExcelJS.Workbook()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await workbook.xlsx.load(xlsxResponse.body as any)
+    expect(workbook.worksheets.length).toBeGreaterThanOrEqual(2)
+
+    const cellTexts: string[] = []
+    workbook.worksheets[0].eachRow((row) => {
+      row.eachCell((cell) => {
+        const text = cell.text?.trim() || String(cell.value ?? '').trim()
+        if (text) cellTexts.push(text)
+      })
+    })
+    expect(cellTexts.join('|')).toContain('发客客户')
+    expect(cellTexts.join('|')).toContain('资源安排')
+    expect(cellTexts.join('|')).not.toMatch(/已付|未付/)
+  })
+
+  it('rejects route-ledger.xlsx when query axes are incomplete', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .get('/api/departures/route-ledger.xlsx')
+      .expect(400)
+    expect(response.body.message).toBe('请选择路线名称或完整的出团日期区间')
   })
 })

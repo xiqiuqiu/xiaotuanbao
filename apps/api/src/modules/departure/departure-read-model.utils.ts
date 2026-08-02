@@ -185,7 +185,7 @@ export function deriveReceivableTagFromSchedules(
 ): string {
   const receivable = schedules.filter((s) => s.direction === PaymentScheduleDirection.receivable)
   if (receivable.length === 0) {
-    return '应收未生成'
+    return '应收未提交'
   }
 
   const allSettled = receivable.every((schedule) => {
@@ -193,7 +193,7 @@ export function deriveReceivableTagFromSchedules(
     return settled >= schedule.amountCents
   })
 
-  return allSettled ? '已收齐' : '应收已生成'
+  return allSettled ? '已收齐' : '应收已提交'
 }
 
 export function derivePayableTagFromSchedules(
@@ -202,7 +202,7 @@ export function derivePayableTagFromSchedules(
 ): string {
   const payable = schedules.filter((s) => s.direction === PaymentScheduleDirection.payable)
   if (payable.length === 0) {
-    return '应付未生成'
+    return '应付未提交'
   }
 
   const allSettled = payable.every((schedule) => {
@@ -210,7 +210,7 @@ export function derivePayableTagFromSchedules(
     return settled >= schedule.amountCents
   })
 
-  return allSettled ? '已付清' : '应付已生成'
+  return allSettled ? '已付清' : '应付已提交'
 }
 
 export function deriveCompletionTags(input: {

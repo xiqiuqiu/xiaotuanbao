@@ -105,6 +105,41 @@ describe('Daily segment skeleton (e2e) #202', () => {
       .send(body)
   }
 
+  it('creates one-day segments automatically when departure is created', async () => {
+    const departure = await createDeparture({
+      name: `${testPrefix}-auto-skel`,
+      startDate: '2026-11-01',
+      endDate: '2026-11-03',
+    })
+
+    const listed = await listSegments(departure.id)
+    expect(listed.total).toBe(3)
+    expect(listed.items.map((item) => [item.startDate, item.endDate, item.name])).toEqual([
+      ['2026-11-01', '2026-11-01', '第1天'],
+      ['2026-11-02', '2026-11-02', '第2天'],
+      ['2026-11-03', '2026-11-03', '第3天'],
+    ])
+  })
+
+  it('rejects deleting the last remaining segment', async () => {
+    const departure = await createDeparture({
+      name: `${testPrefix}-last-day`,
+      startDate: '2026-12-01',
+      endDate: '2026-12-01',
+    })
+
+    const listed = await listSegments(departure.id)
+    expect(listed.total).toBeGreaterThanOrEqual(1)
+    const only = listed.items[0]
+    expect(only).toBeTruthy()
+
+    const response = await authRequest(app, coordinatorToken)
+      .delete(`/api/segments/${only!.id}`)
+      .expect(409)
+
+    expect(response.body.message).toMatch(/至少.*一天|不能清空/)
+  })
+
   it('generates N one-day segments for an N-day departure', async () => {
     const departure = await createDeparture({
       name: `${testPrefix}-10日`,
@@ -112,12 +147,16 @@ describe('Daily segment skeleton (e2e) #202', () => {
       endDate: '2026-08-10',
     })
 
+    // create already fills the skeleton; generate-daily is idempotent.
+    const listedBefore = await listSegments(departure.id)
+    expect(listedBefore.total).toBe(10)
+
     const response = await generateDaily(departure.id).expect(201)
 
     expect(response.body.data).toMatchObject({
       mode: 'fill_missing',
       dayCount: 10,
-      createdCount: 10,
+      createdCount: 0,
       removedCount: 0,
     })
 
@@ -145,8 +184,8 @@ describe('Daily segment skeleton (e2e) #202', () => {
       endDate: '2026-09-03',
     })
 
-    await generateDaily(departure.id).expect(201)
     const before = await listSegments(departure.id)
+    expect(before.total).toBe(3)
     const mid = before.items.find((item) => item.startDate === '2026-09-02')
     expect(mid).toBeTruthy()
 
@@ -177,6 +216,9 @@ describe('Daily segment skeleton (e2e) #202', () => {
       startDate: '2026-10-01',
       endDate: '2026-10-03',
     })
+
+    // Clear auto skeleton so we can seed a resource-bearing multi-day segment.
+    await prisma.itinerarySegment.deleteMany({ where: { departureId: departure.id } })
 
     const existing = await authRequest(app, coordinatorToken)
       .post(`/api/departures/${departure.id}/segments`)

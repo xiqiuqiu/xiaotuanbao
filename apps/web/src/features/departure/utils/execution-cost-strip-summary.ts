@@ -15,7 +15,7 @@ export interface ExecutionCostStripSummary {
 }
 
 /**
- * Client-side Cost Total + 尚未生成应付 for execution layout.
+ * Client-side Cost Total + 尚未提交应付 for execution layout.
  * Same row口径 as summarizeSegmentResourceAmounts (未生成且金额>0).
  */
 export function summarizeExecutionCostStrip(

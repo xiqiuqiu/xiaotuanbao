@@ -1,29 +1,28 @@
 /**
- * #243 护栏：发团详情主站不挂载布局原型沙盒；详情 search 不透传 layout variant。
+ * 概览原型挂载中：详情 search 透传 ?variant=；不注册独立 sandbox。
+ * 非概览 Tab 仍不挂 PrototypeSwitcher（DepartureOverview 被 mock 时）。
  */
 import { describe, expect, it } from 'vitest'
 import { router } from './index'
 
-describe('departure detail prototype removal (#243)', () => {
-  it('does not register the layout prototype sandbox route', () => {
-    expect(Object.keys(router.routesByPath)).not.toContain(
-      '/prototype/departure-detail-layout',
-    )
+describe('departure detail overview prototype search', () => {
+  it('does not register a separate sandbox route', () => {
+    expect(Object.keys(router.routesByPath)).not.toContain('/prototype/departure-overview')
   })
 
-  it('strips layout variant from departure detail search validation', () => {
+  it('preserves overview variant on departure detail search validation', () => {
     const validated = router.routesByPath['/departure/$departureId']!.options.validateSearch!({
-      tab: 'execution',
+      tab: 'overview',
       segmentId: 'seg-1',
-      variant: 'A',
+      variant: 'B',
       listReturn: '/departure',
     })
 
     expect(validated).toEqual({
-      tab: 'execution',
+      tab: 'overview',
       segmentId: 'seg-1',
       listReturn: '/departure',
+      variant: 'B',
     })
-    expect(validated).not.toHaveProperty('variant')
   })
 })

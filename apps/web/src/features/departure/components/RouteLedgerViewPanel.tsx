@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
@@ -19,6 +19,7 @@ import {
   Typography,
   theme,
 } from 'antd'
+import { DownloadOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
@@ -29,6 +30,7 @@ import type {
   RouteLedgerSourceOrderRow,
 } from '@/types/api'
 import {
+  downloadDepartureRouteLedger,
   getDepartureRouteLedger,
   listDepartureRouteNames,
 } from '@/services/departure.service'
@@ -146,7 +148,6 @@ function DepartureLedgerReport({
   listReturnSearch?: DepartureListSearch
 }) {
   const navigate = useNavigate()
-  const { token } = theme.useToken()
   const rows = useMemo(() => flattenRouteLedgerDeparture(departure), [departure])
   const totals = departure.totals
   const titlePrefix = formatRouteLedgerReportTitlePrefix(startDate, routeName)
@@ -300,11 +301,6 @@ function DepartureLedgerReport({
                   {departure.departureNo}
                 </Link>
               </Typography.Text>
-              {departure.departureName ? (
-                <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                  {departure.departureName}
-                </Typography.Text>
-              ) : null}
             </Flex>
             <OutsourceSummary outsource={departure.outsource} />
           </Flex>
@@ -387,6 +383,7 @@ export function RouteLedgerViewPanel({
   onSwitchToDepartureList,
   listReturnSearch,
 }: RouteLedgerViewPanelProps) {
+  const [exporting, setExporting] = useState(false)
   const startDateFrom = startDateRange?.[0]
   const startDateTo = startDateRange?.[1]
   const queryGate = resolveRouteLedgerQueryGate({
@@ -399,6 +396,34 @@ export function RouteLedgerViewPanel({
     queryKey: ['departures', 'route-names'],
     queryFn: ({ signal }) => listDepartureRouteNames(signal),
   })
+
+  /** 进入线路视图且双轴皆空时，默认选中路线列表首项（用户清空后不强制回填）。 */
+  const didAutoSelectRouteRef = useRef(false)
+  useEffect(() => {
+    if (didAutoSelectRouteRef.current) return
+    const hasAxes = Boolean(
+      routeName?.trim() || startDateFrom?.trim() || startDateTo?.trim(),
+    )
+    if (hasAxes) {
+      didAutoSelectRouteRef.current = true
+      return
+    }
+    if (routeNamesLoading) return
+    const first = routeNamesData?.items.find((name) => name.trim().length > 0)?.trim()
+    if (!first) {
+      didAutoSelectRouteRef.current = true
+      return
+    }
+    didAutoSelectRouteRef.current = true
+    onRouteNameChange(first)
+  }, [
+    routeName,
+    startDateFrom,
+    startDateTo,
+    routeNamesData,
+    routeNamesLoading,
+    onRouteNameChange,
+  ])
 
   const {
     data: ledger,
@@ -431,6 +456,20 @@ export function RouteLedgerViewPanel({
     () => (ledger ? listRouteLedgerReportStack(ledger.dateBlocks) : []),
     [ledger],
   )
+
+  async function handleExport() {
+    if (queryGate.status !== 'ready') {
+      return
+    }
+    setExporting(true)
+    try {
+      await downloadDepartureRouteLedger(queryGate.params)
+    } catch {
+      // downloadBinary already surfaces the error message
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const apiErrorMessage =
     ledgerQueryError && typeof ledgerQueryError === 'object' && 'message' in ledgerQueryError
@@ -559,6 +598,16 @@ export function RouteLedgerViewPanel({
                   ])
                 }}
               />
+            </Form.Item>
+            <Form.Item>
+              <Button
+                icon={<DownloadOutlined />}
+                loading={exporting}
+                disabled={queryGate.status !== 'ready' || ledgerLoading || !hasReportResults}
+                onClick={() => void handleExport()}
+              >
+                导出 Excel
+              </Button>
             </Form.Item>
           </Form>
         </div>

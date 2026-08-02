@@ -79,8 +79,8 @@ function makeDeparture(): DepartureDetail {
       sourceOrders: '客源0单',
       segments: '行程0段',
       resources: '资源0项',
-      receivables: '应收未生成',
-      payables: '应付未生成',
+      receivables: '应收未提交',
+      payables: '应付未提交',
     },
     grossReceivableCents: 0,
     fareAdjustmentNetCents: 0,
@@ -202,15 +202,11 @@ describe('IncomeRecordsPanel settlement UX', () => {
     await waitFor(() => {
       expect(screen.getByText('玉器返利')).toBeInTheDocument()
     })
-    const amountCard = () =>
-      screen.getByText('增收金额合计').closest('.ant-statistic') as HTMLElement
-    const commissionCard = () =>
-      screen.getByText('导游提成合计').closest('.ant-statistic') as HTMLElement
-    const companyCard = () =>
-      screen.getByText('公司增收合计').closest('.ant-statistic') as HTMLElement
-    expect(within(amountCard()).getByText('¥200.00')).toBeInTheDocument()
-    expect(within(commissionCard()).getByText('¥50.00')).toBeInTheDocument()
-    expect(within(companyCard()).getByText('¥150.00')).toBeInTheDocument()
+    const summaryRow = () => screen.getByText('合计').closest('tr') as HTMLElement
+    expect(within(summaryRow()).getByText('¥200.00')).toBeInTheDocument()
+    expect(within(summaryRow()).getByText('¥50.00')).toBeInTheDocument()
+    expect(within(summaryRow()).getByText('¥150.00')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: '增收结算汇总' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '标记已收' }))
     await waitFor(() => {
@@ -243,8 +239,28 @@ describe('IncomeRecordsPanel settlement UX', () => {
       )
     })
 
-    expect(within(amountCard()).getByText('¥200.00')).toBeInTheDocument()
-    expect(within(commissionCard()).getByText('¥50.00')).toBeInTheDocument()
-    expect(within(companyCard()).getByText('¥150.00')).toBeInTheDocument()
+    expect(within(summaryRow()).getByText('¥200.00')).toBeInTheDocument()
+    expect(within(summaryRow()).getByText('¥50.00')).toBeInTheDocument()
+    expect(within(summaryRow()).getByText('¥150.00')).toBeInTheDocument()
+  })
+
+  it('检索后接表格，表尾合计对齐金额列，无顶部统计条', async () => {
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByText('玉器返利')).toBeInTheDocument()
+    })
+
+    const filters = screen.getByPlaceholderText('项目名称 / 备注 / 合作方')
+    const table = screen.getByRole('table')
+    const summary = screen.getByText('合计')
+
+    expect(screen.queryByRole('list', { name: '增收结算汇总' })).not.toBeInTheDocument()
+    expect(
+      filters.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(table.contains(summary)).toBe(true)
+    expect(screen.getByText('新增').closest('button')).toBeTruthy()
+    expect(screen.queryByText('增收明细')).not.toBeInTheDocument()
   })
 })

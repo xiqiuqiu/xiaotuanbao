@@ -80,7 +80,7 @@ const coordinatorDeliverySnapshot = {
         },
         {
           key: 'pending-payables',
-          label: '待生成应付',
+          label: '待提交应付',
           value: 6,
           suffix: '个资源',
           href: '/departure?accountGenerationGap=payable',
@@ -132,11 +132,11 @@ const coordinatorDeliverySnapshot = {
     },
     {
       key: 'coordinator-settlement' as const,
-      title: '待生成账款',
+      title: '待提交账款',
       metrics: [
         {
           key: 'pending-receivables',
-          label: '待生成应收',
+          label: '待提交应收',
           value: 7,
           suffix: '个客源单',
           href: '/source-orders?receivableGeneration=not_generated',
@@ -146,7 +146,7 @@ const coordinatorDeliverySnapshot = {
         ...Array.from({ length: 6 }, (_, index) => ({
           kind: 'coordinator-payable-pending' as const,
           id: `payable-${index + 1}`,
-          title: `待生成应付资源 ${index + 1}`,
+          title: `待提交应付资源 ${index + 1}`,
           href: `/departure/departure-${index + 1}?tab=execution&highlightSegmentResourceId=payable-${index + 1}`,
           departureName: `关联发团 ${index + 1}`,
           segmentName: `行程段 ${index + 1}`,
@@ -356,7 +356,7 @@ const organizationAdminSnapshot = {
           href: '/departure/dep-risk-2',
           code: 'ended_departure_account_gap' as const,
           severity: 'attention' as const,
-          reason: '已结束发团仍有应收或应付尚未生成',
+          reason: '已结束发团仍有应收或应付尚未提交',
           amountCents: 18000,
         },
       ],
@@ -799,7 +799,7 @@ describe('HomePage workbench lifecycle', () => {
 
     expect(await screen.findByText('进行中发团')).toBeInTheDocument()
     expect(screen.getByText('未来 7 天发团')).toBeInTheDocument()
-    expect(screen.getAllByText('待生成应付')).toHaveLength(2)
+    expect(screen.getAllByText('待提交应付')).toHaveLength(2)
     const dataGapMetric = screen.getByLabelText('资料待补充')
     expect(dataGapMetric).toBeInTheDocument()
     expect(screen.getByText(/查看全部 9 项/)).toBeInTheDocument()
@@ -810,35 +810,35 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('无客源单')).toBeInTheDocument()
     expect(screen.getByText('无行程段')).toBeInTheDocument()
     expect(screen.getByText('另有 1 项')).toBeInTheDocument()
-    expect(screen.getByText('待生成应收 2 个')).toBeInTheDocument()
+    expect(screen.getByText('待提交应收 2 个')).toBeInTheDocument()
     expect(screen.queryByText('无任何资源')).not.toBeInTheDocument()
     expect(screen.queryByText('存在执行风险')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '待生成应收' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '待生成应付' })).toBeInTheDocument()
-    const payableTooltip = screen.getByLabelText('待生成应付统计口径')
+    expect(screen.getByRole('heading', { name: '待提交应收' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '待提交应付' })).toBeInTheDocument()
+    const payableTooltip = screen.getByLabelText('待提交应付统计口径')
     expect(payableTooltip).toBeInTheDocument()
     expect(payableTooltip.closest('.ant-card-head-title')).toBeTruthy()
     expect(payableTooltip.closest('.ant-card-extra')).toBeNull()
     await user.hover(payableTooltip)
     expect(await screen.findByText(
-      '按尚未生成应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。',
+      '按尚未提交应付的行程段资源数统计（约定金额大于零且尚无有效资源应付）。已结清发团不计入。',
     )).toBeInTheDocument()
-    const receivableTooltip = screen.getByLabelText('待生成应收统计口径')
+    const receivableTooltip = screen.getByLabelText('待提交应收统计口径')
     expect(receivableTooltip).toBeInTheDocument()
     expect(receivableTooltip.closest('.ant-card-head-title')).toBeTruthy()
     expect(receivableTooltip.closest('.ant-card-extra')).toBeNull()
     await user.hover(receivableTooltip)
     expect(await screen.findByText(
-      '按尚未生成应收的客源单数统计，数据来自现存客源单与应收记录。',
+      '按尚未提交应收的客源单数统计，数据来自现存客源单与应收记录。',
     )).toBeInTheDocument()
     expect(screen.getByText('待生成客源单 5')).toBeInTheDocument()
     expect(screen.queryByText('待生成客源单 6')).not.toBeInTheDocument()
-    expect(screen.getByText('待生成应付资源 5')).toBeInTheDocument()
-    expect(screen.queryByText('待生成应付资源 6')).not.toBeInTheDocument()
+    expect(screen.getByText('待提交应付资源 5')).toBeInTheDocument()
+    expect(screen.queryByText('待提交应付资源 6')).not.toBeInTheDocument()
     expect(screen.getByText('关联发团 1 · 行程段 1')).toBeInTheDocument()
     expect(screen.getAllByText('酒店').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('用车').length).toBeGreaterThanOrEqual(1)
-    const payableTitle = screen.getByText('待生成应付资源 1')
+    const payableTitle = screen.getByText('待提交应付资源 1')
     expect(payableTitle.closest('button')).toBeTruthy()
     expect(payableTitle.closest('.ant-typography')).toBeTruthy()
     expect(
@@ -867,12 +867,12 @@ describe('HomePage workbench lifecycle', () => {
     fireEvent.click(todayDeparture)
     expect(navigate).toHaveBeenCalledWith({ to: '/departure/departure-1' })
 
-    fireEvent.click(screen.getByRole('button', { name: '查看全部待生成应付 6 项' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看全部待提交应付 6 项' }))
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure?accountGenerationGap=payable',
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '查看全部待生成应收 7 项' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看全部待提交应收 7 项' }))
     expect(navigate).toHaveBeenCalledWith({
       to: '/source-orders?receivableGeneration=not_generated',
     })
@@ -882,7 +882,7 @@ describe('HomePage workbench lifecycle', () => {
       to: '/departure/departure-1?tab=sourceOrders',
     })
 
-    fireEvent.click(screen.getByText('待生成应付资源 1').closest('button')!)
+    fireEvent.click(screen.getByText('待提交应付资源 1').closest('button')!)
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure/departure-1?tab=execution&highlightSegmentResourceId=payable-1',
     })
@@ -1083,7 +1083,7 @@ describe('HomePage workbench lifecycle', () => {
     renderPage()
 
     expect(await screen.findByText('待付款')).toBeInTheDocument()
-    expect(await screen.findByText('待生成账款')).toBeInTheDocument()
+    expect(await screen.findByText('待提交账款')).toBeInTheDocument()
     expect(screen.getAllByText('待核销流水').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('¥215,400.00')).toBeInTheDocument()
     expect(screen.getByText('¥46,800.00')).toBeInTheDocument()

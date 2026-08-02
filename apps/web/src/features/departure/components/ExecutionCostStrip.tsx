@@ -14,7 +14,7 @@ export function ExecutionCostStrip({ summary }: ExecutionCostStripProps) {
 
   const pendingLabel =
     summary.ungeneratedCount > 0
-      ? `${summary.ungeneratedCount} 项待生成`
+      ? `${summary.ungeneratedCount} 项待提交`
       : '已齐'
 
   return (
@@ -44,7 +44,7 @@ export function ExecutionCostStrip({ summary }: ExecutionCostStripProps) {
         }`}
         role="listitem"
       >
-        <span className={styles.costStripLabel}>尚未生成应付</span>
+        <span className={styles.costStripLabel}>尚未提交应付</span>
         <span className={styles.costStripMetricValue}>
           {formatCents(summary.ungeneratedCents)}
         </span>

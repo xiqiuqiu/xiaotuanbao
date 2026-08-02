@@ -38,7 +38,7 @@ export const PRESET_ROLE_MENU_KEYS: Record<PresetRoleName, readonly MenuKey[]> =
 }
 
 /**
- * ADR-0023: 计调 与企业管理员持有 write action keys、财务不持有。生成应收/应付
+ * ADR-0023: 计调 与企业管理员持有 write action keys、财务不持有。提交应收/应付
  * 与 `/finance/*` 各操作刻意不设 action key（见 CONTEXT「Action Permission」）。
  */
 const COORDINATOR_ACTION_KEYS: readonly ActionKey[] = [

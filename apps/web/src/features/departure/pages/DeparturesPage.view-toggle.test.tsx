@@ -72,7 +72,7 @@ describe('DeparturesPage view toggle', () => {
     cleanup()
   })
 
-  it('默认展示发团视图，可切换到线路视图空态', async () => {
+  it('默认展示发团视图，可切换到线路视图并默认选中首条路线', async () => {
     const user = userEvent.setup()
     renderPage()
 
@@ -89,13 +89,17 @@ describe('DeparturesPage view toggle', () => {
     await user.click(screen.getByText('线路视图'))
 
     await waitFor(() => {
-      expect(screen.getByText('请选择路线名称或出团日期')).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: '线路视图' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(listDepartureRouteNames).toHaveBeenCalled()
+      expect(getDepartureRouteLedger).toHaveBeenCalledWith(
+        { routeName: '伊犁环线' },
+        expect.anything(),
+      )
     })
-    expect(screen.getByRole('tab', { name: '线路视图' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
-    expect(listDepartureRouteNames).toHaveBeenCalled()
+    expect(screen.queryByText('请选择路线名称或出团日期')).not.toBeInTheDocument()
   })
 
   it('URL 带 view=route-ledger 与筛选时直接进入线路视图并按条件查询 (#221)', async () => {

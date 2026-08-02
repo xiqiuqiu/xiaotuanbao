@@ -1,10 +1,13 @@
 import { Test } from '@nestjs/testing'
 import { DocumentSequenceType, PaymentScheduleDirection, PrismaClient } from '@prisma/client'
 import { PrismaModule } from '../src/database/prisma/prisma.module'
-import { getShanghaiTodayString, getShanghaiYearMonthString } from '../src/modules/departure/departure-date.utils'
+import {
+  getShanghaiNumberingDayKey,
+  getShanghaiNumberingMonthKey,
+} from '../src/modules/departure/departure-date.utils'
 import { NumberAllocationModule } from '../src/modules/number-allocation/number-allocation.module'
 import { NumberAllocationService } from '../src/modules/number-allocation/number-allocation.service'
-import { uniqueBusinessPrefix } from './helpers'
+import { DEPARTURE_NO_REGEX, uniqueBusinessPrefix } from './helpers'
 
 describe('NumberAllocationService (integration)', () => {
   let service: NumberAllocationService
@@ -41,15 +44,15 @@ describe('NumberAllocationService (integration)', () => {
   })
 
   it('formats departure numbers for current Shanghai month', async () => {
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const departureNo = await service.allocateDepartureNo(organizationId)
 
     expect(departureNo).toBe(`${testPrefix}${periodKey}0001`)
-    expect(departureNo).toMatch(/^[A-Z]{2,4}\d{6}\d{4}$/)
+    expect(departureNo).toMatch(DEPARTURE_NO_REGEX)
   })
 
   it('increments within the same period', async () => {
-    const periodKey = getShanghaiYearMonthString()
+    const periodKey = getShanghaiNumberingMonthKey()
     const first = await service.allocateDepartureNo(organizationId)
     const second = await service.allocateDepartureNo(organizationId)
 
@@ -58,8 +61,8 @@ describe('NumberAllocationService (integration)', () => {
   })
 
   it('resets sequence across periods', async () => {
-    const currentPeriod = getShanghaiYearMonthString()
-    const otherPeriod = currentPeriod === '202601' ? '202602' : '202601'
+    const currentPeriod = getShanghaiNumberingMonthKey()
+    const otherPeriod = currentPeriod === '2601' ? '2602' : '2601'
     await prisma.documentSequence.create({
       data: {
         organizationId,
@@ -74,8 +77,8 @@ describe('NumberAllocationService (integration)', () => {
   })
 
   it('allocates finance numbers with correct prefixes', async () => {
-    const monthKey = getShanghaiYearMonthString()
-    const dayKey = getShanghaiTodayString().replace(/-/g, '')
+    const monthKey = getShanghaiNumberingMonthKey()
+    const dayKey = getShanghaiNumberingDayKey()
 
     const arNo = await service.allocateScheduleNo(
       organizationId,
@@ -102,7 +105,7 @@ describe('NumberAllocationService (integration)', () => {
 
     expect(new Set(results).size).toBe(concurrency)
     results.forEach((no) => {
-      expect(no).toMatch(new RegExp(`^${testPrefix}${getShanghaiYearMonthString()}\\d{4}$`))
+      expect(no).toMatch(new RegExp(`^${testPrefix}${getShanghaiNumberingMonthKey()}\\d{4}$`))
     })
   })
 })

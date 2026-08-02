@@ -14,8 +14,14 @@ export function getShanghaiTodayString(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: SHANGHAI_TIME_ZONE }).format(new Date())
 }
 
-export function getShanghaiYearMonthString(): string {
-  return getShanghaiTodayString().replace(/-/g, '').slice(0, 6)
+/** Business-number / document_sequences period_key: yyMM (Asia/Shanghai). */
+export function getShanghaiNumberingMonthKey(): string {
+  return getShanghaiTodayString().replace(/-/g, '').slice(2, 6)
+}
+
+/** TX document_sequences period_key: yyMMdd (Asia/Shanghai). */
+export function getShanghaiNumberingDayKey(): string {
+  return getShanghaiTodayString().replace(/-/g, '').slice(2)
 }
 
 export function computeDayCount(startDate: Date, endDate: Date): number {

@@ -212,7 +212,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(409)
 
-    expect(second.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(second.body.message).toBe('当前资源已提交应付，不能再次提交')
 
     const count = await prisma.paymentSchedule.count({
       where: {
@@ -377,7 +377,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(409)
 
-    expect(regenerated.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(regenerated.body.message).toBe('当前资源已提交应付，不能再次提交')
 
     const fetched = await authRequest(app, coordinatorToken)
       .get(`/api/segment-resources/${resource.id}`)
@@ -405,7 +405,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .delete(`/api/segment-resources/${resource.id}`)
       .expect(409)
 
-    expect(response.body.message).toBe('当前资源已生成应付，不能直接删除')
+    expect(response.body.message).toBe('当前资源已提交应付，不能直接删除')
   })
 
   it('allows coordinator to generate payables but rejects manual finance payables (ADR-0023)', async () => {
@@ -413,7 +413,7 @@ describe('Segment resource generate payables (e2e)', () => {
     const segment = await createSegment(departure.id)
     const resource = await createResource(segment.id)
 
-    // 生成应付留在 /departure：计调可触发
+    // 提交应付留在 /departure：计调可触发
     await authRequest(app, coordinatorToken)
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(201)
@@ -461,7 +461,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(409)
 
-    expect(response.body.message).toBe('发团已关闭，不可生成应付')
+    expect(response.body.message).toBe('发团已关闭，不可提交应付')
   })
 
   it('returns closed payable status after schedule is cancelled, distinct from not_generated', async () => {
@@ -515,7 +515,7 @@ describe('Segment resource generate payables (e2e)', () => {
       .post(`/api/segment-resources/${resource.id}/generate-payable`)
       .expect(409)
 
-    expect(rejected.body.message).toBe('当前资源已生成应付，不能再次生成')
+    expect(rejected.body.message).toBe('当前资源已提交应付，不能再次提交')
   })
 
   it('voids an untouched payable, unlocks the resource, and allows regeneration and payment', async () => {

@@ -57,8 +57,8 @@ function makeDeparture(overrides: Partial<DepartureDetail> = {}): DepartureDetai
       sourceOrders: '客源1单',
       segments: '行程1段',
       resources: '资源1项',
-      receivables: '应收已生成',
-      payables: '应付已生成',
+      receivables: '应收已提交',
+      payables: '应付已提交',
     },
     grossReceivableCents: 1_200_000,
     fareAdjustmentNetCents: 50_000,
@@ -271,7 +271,7 @@ describe('DepartureOverviewStatsCards', () => {
     expect(screen.queryByText('查看资金提示')).not.toBeInTheDocument()
   })
 
-  it('成本合计入口就近解释确认应付、尚未生成应付、其他应付与资源账款差异', async () => {
+  it('成本合计入口就近解释确认应付、尚未提交应付、其他应付与资源账款差异', async () => {
     const user = userEvent.setup()
     renderCards()
 
@@ -282,7 +282,7 @@ describe('DepartureOverviewStatsCards', () => {
     )
 
     expect(screen.getByText('确认应付 ¥7,500.00')).toBeInTheDocument()
-    expect(screen.getByText('尚未生成应付 ¥800.00')).toBeInTheDocument()
+    expect(screen.getByText('尚未提交应付 ¥800.00')).toBeInTheDocument()
     expect(screen.getByText('其他应付 ¥1,000.00')).toBeInTheDocument()
     expect(screen.getByText('资源账款差异 ¥300.00')).toBeInTheDocument()
   })
@@ -367,7 +367,7 @@ describe('DepartureOverviewStatsCards', () => {
     await user.click(
       within(receiptSection).getByRole('button', { name: '查看收款组成' }),
     )
-    expect(screen.getByText('尚未生成应收 ¥2,000.00')).toBeInTheDocument()
+    expect(screen.getByText('尚未提交应收 ¥2,000.00')).toBeInTheDocument()
     expect(screen.getByText('其中已关闭未收 ¥1,000.00')).toBeInTheDocument()
     expect(screen.getByText('其他应收 ¥500.00')).toBeInTheDocument()
   })
@@ -429,8 +429,8 @@ describe('DepartureOverviewStatsCards', () => {
     expect(within(paymentSection).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100')
   })
 
-  it('存在尚未生成应付时付款进度以成本合计为分母而系统性偏低', () => {
-    // 已生成资源 400000 全部核销，但成本合计还含尚未生成应付 300000。
+  it('存在尚未提交应付时付款进度以成本合计为分母而系统性偏低', () => {
+    // 已生成资源 400000 全部核销，但成本合计还含尚未提交应付 300000。
     renderCards(
       makeDeparture({
         payableCents: 700_000,
@@ -562,7 +562,7 @@ describe('DepartureOverviewStatsCards', () => {
     expect(within(receiptSection).getByText('应收与结算金额不一致')).toBeInTheDocument()
     expect(
       within(receiptSection).getByText(
-        '已生成应收合计 ¥11,000.00，结算金额合计 ¥10,000.00，多出 ¥1,000.00',
+        '已提交应收合计 ¥11,000.00，结算金额合计 ¥10,000.00，多出 ¥1,000.00',
       ),
     ).toBeInTheDocument()
     expect(screen.getByText('现金')).toBeInTheDocument()

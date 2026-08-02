@@ -12,7 +12,6 @@ import type {
 } from '@xiaotuanbao/shared'
 import { ResourceKind, SegmentPayableStatus } from '@xiaotuanbao/shared'
 import {
-  Prisma,
   type Departure,
   type ItinerarySegment,
   type SegmentResource,
@@ -23,6 +22,7 @@ import {
   enumerateDateOnlyDays,
   segmentCoversDay,
 } from './daily-segment-skeleton.utils'
+import { normalizeSegmentSortOrderInTx } from './daily-segment-skeleton.write'
 import type { CreateItinerarySegmentDto, UpdateItinerarySegmentDto } from './dto/segment.dto'
 import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import { aggregatePayableOverview, countPayableGenerated } from './segment-payable-overview.utils'
@@ -249,7 +249,14 @@ export class SegmentService {
     this.ensureDepartureEditable(segment.departure)
 
     if (segment.resources.length > 0) {
-      throw new ConflictException('当前行程段已有资源，不能删除')
+      throw new ConflictException('当前行程已有资源，不能删除')
+    }
+
+    const siblingCount = await this.prisma.itinerarySegment.count({
+      where: { departureId: segment.departureId },
+    })
+    if (siblingCount <= 1) {
+      throw new ConflictException('发团至少保留一天行程，不能清空')
     }
 
     await this.prisma.itinerarySegment.delete({ where: { id: segment.id } })
@@ -299,6 +306,7 @@ export class SegmentService {
       )
 
       if (missingDays.length > 0) {
+        // createMany via shared helper would re-query; keep inline after rebuild_empty working set.
         await tx.itinerarySegment.createMany({
           data: missingDays.map((day) => {
             const dayIndex = days.indexOf(day)
@@ -316,7 +324,7 @@ export class SegmentService {
         })
       }
 
-      await this.normalizeSegmentSortOrder(tx, departure.id)
+      await normalizeSegmentSortOrderInTx(tx, departure.id)
 
       return {
         mode,
@@ -326,43 +334,6 @@ export class SegmentService {
         preservedWithResources,
       }
     })
-  }
-
-  private async normalizeSegmentSortOrder(
-    tx: Prisma.TransactionClient,
-    departureId: string,
-  ): Promise<void> {
-    const all = await tx.itinerarySegment.findMany({
-      where: { departureId },
-      select: { id: true, startDate: true, sortOrder: true },
-    })
-
-    const sorted = [...all].sort((left, right) => {
-      if (!left.startDate && !right.startDate) {
-        return left.sortOrder - right.sortOrder
-      }
-      if (!left.startDate) {
-        return 1
-      }
-      if (!right.startDate) {
-        return -1
-      }
-      const byDate = formatDateOnly(left.startDate).localeCompare(formatDateOnly(right.startDate))
-      if (byDate !== 0) {
-        return byDate
-      }
-      return left.sortOrder - right.sortOrder
-    })
-
-    for (let index = 0; index < sorted.length; index += 1) {
-      const segment = sorted[index]!
-      if (segment.sortOrder !== index) {
-        await tx.itinerarySegment.update({
-          where: { id: segment.id },
-          data: { sortOrder: index },
-        })
-      }
-    }
   }
 
   private async findDepartureOrThrow(organizationId: string, departureId: string) {
@@ -396,7 +367,7 @@ export class SegmentService {
     })
 
     if (!segment) {
-      throw new NotFoundException('行程段不存在')
+      throw new NotFoundException('行程不存在')
     }
 
     return segment

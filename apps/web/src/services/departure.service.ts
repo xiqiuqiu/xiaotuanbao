@@ -122,3 +122,10 @@ export async function downloadDepartureOperationsSheet(id: string): Promise<void
   const { blob, filename } = await downloadBinary(`/departures/${id}/operations-sheet.xlsx`)
   triggerBrowserDownload(blob, filename ?? `发团运营表_${id}.xlsx`)
 }
+
+export async function downloadDepartureRouteLedger(
+  params: GetRouteLedgerParams,
+): Promise<void> {
+  const { blob, filename } = await downloadBinary('/departures/route-ledger.xlsx', { params })
+  triggerBrowserDownload(blob, filename ?? '线路视图导出.xlsx')
+}

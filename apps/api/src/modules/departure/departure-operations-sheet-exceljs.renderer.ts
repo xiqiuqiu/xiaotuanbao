@@ -74,7 +74,7 @@ const RECEIVABLE_PROGRESS_LABELS: Record<string, string> = {
 }
 
 const PAYABLE_STATUS_LABELS: Record<string, string> = {
-  not_generated: '未生成',
+  not_generated: '未提交',
   pending: '待付',
   partial: '部分付款',
   paid: '已付清',

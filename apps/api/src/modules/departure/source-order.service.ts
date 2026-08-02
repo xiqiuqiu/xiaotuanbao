@@ -389,7 +389,7 @@ export class SourceOrderService {
     await this.departureFinanceFacade.assertAllowsNewObligationById(
       organizationId,
       departureId,
-      '生成应收',
+      '提交应收',
     )
 
     const orders = await this.prisma.sourceOrder.findMany({
@@ -673,7 +673,7 @@ export class SourceOrderService {
     })
 
     if (hasSchedule > 0) {
-      throw new ConflictException('当前客源单已生成应收，不能直接删除')
+      throw new ConflictException('当前客源单已提交应收，不能直接删除')
     }
 
     await this.prisma.sourceOrder.delete({ where: { id: order.id } })

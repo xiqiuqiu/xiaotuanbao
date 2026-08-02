@@ -21,7 +21,7 @@ import styles from './source-orders-table-columns.module.css'
 interface BuildSourceOrdersColumnsOptions {
   /** 持有 `departure:write` 且发团未关闭：显示编辑/删除。 */
   canEdit: boolean
-  /** 发团未关闭（持有 `/departure`）：显示生成应收；财务只读仍可见。 */
+  /** 发团未关闭（持有 `/departure`）：显示提交应收；财务只读仍可见。 */
   canGenerate: boolean
   deleteMutation: UseMutationResult<unknown, Error, string, unknown>
   generateMutation: UseMutationResult<unknown, Error, string, unknown>
@@ -66,7 +66,7 @@ export function sourceOrderHasRebateTrack(order: SourceOrderSummary): boolean {
   return order.estimatedRebateCents > 0
 }
 
-/** 返利状态文案：有预计金额但未落账时用「待生成」；无返利轨迹用「-」。 */
+/** 返利状态文案：有预计金额但未落账时用「待提交」；无返利轨迹用「-」。 */
 export function sourceOrderRebateStatusLabel(order: SourceOrderSummary): string {
   if (!sourceOrderHasRebateTrack(order)) {
     return '-'
@@ -75,7 +75,7 @@ export function sourceOrderRebateStatusLabel(order: SourceOrderSummary): string 
     order.rebateStatus === SegmentPayableStatus.NOT_GENERATED &&
     order.estimatedRebateCents > 0
   ) {
-    return '待生成'
+    return '待提交'
   }
 
   return catalogLabel(SEGMENT_PAYABLE_STATUS_LABELS, order.rebateStatus)
@@ -302,7 +302,7 @@ export function buildSourceOrdersColumns({
                 }
                 onClick={() => generateMutation.mutate(record.id)}
               >
-                {record.hasIncompleteReceivablePaths ? '补全应收' : '生成应收'}
+                {record.hasIncompleteReceivablePaths ? '补全应收' : '提交应收'}
               </Button>
             ) : null}
             {canEdit && allowGenerate ? (

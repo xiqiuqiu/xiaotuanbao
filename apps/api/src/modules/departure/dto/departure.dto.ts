@@ -112,7 +112,7 @@ export class ListDeparturesQueryDto {
   @IsIn(['ready'])
   settlementReadiness?: 'ready'
 
-  /** 工作台「待生成账款」下钻：筛选仍有应收/应付生成缺口的发团。 */
+  /** 工作台「待提交账款」下钻：筛选仍有应收/应付生成缺口的发团。 */
   @IsOptional()
   @IsIn(['any', 'payable', 'receivable'])
   accountGenerationGap?: 'any' | 'payable' | 'receivable'

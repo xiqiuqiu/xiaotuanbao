@@ -101,8 +101,8 @@ const mockDeparture: DepartureSummary = {
     sourceOrders: '客源未录入',
     segments: '行程未录入',
     resources: '资源未安排',
-    receivables: '应收未生成',
-    payables: '应付未生成',
+    receivables: '应收未提交',
+    payables: '应付未提交',
   },
   netReceivableCents: 0,
   payableCents: 0,
@@ -325,7 +325,7 @@ describe('CreateDepartureWizard', () => {
         segmentCount: 3,
         totalDays: 10,
         resourceCount: 7,
-        payableOverview: '应付未生成',
+        payableOverview: '应付未提交',
       },
       total: 0,
     })
@@ -352,7 +352,7 @@ describe('CreateDepartureWizard', () => {
         segmentCount: 3,
         totalDays: 10,
         resourceCount: 7,
-        payableOverview: '应付未生成',
+        payableOverview: '应付未提交',
       },
       total: 0,
     })

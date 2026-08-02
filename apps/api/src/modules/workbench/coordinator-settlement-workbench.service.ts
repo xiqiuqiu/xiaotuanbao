@@ -69,11 +69,11 @@ export class CoordinatorSettlementWorkbenchService {
 
     return {
       key: 'coordinator-settlement',
-      title: '待生成账款',
+      title: '待提交账款',
       metrics: [
         {
           key: 'pending-receivables',
-          label: '待生成应收',
+          label: '待提交应收',
           value: snapshot.pendingRows.length,
           suffix: '个客源单',
           href: '/source-orders?receivableGeneration=not_generated',

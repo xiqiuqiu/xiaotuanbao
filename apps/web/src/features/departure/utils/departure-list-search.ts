@@ -267,13 +267,13 @@ export function resolveWorkbenchDepartureFilterBanner(
     return { title: '已筛选：可确认结清发团' }
   }
   if (search.accountGenerationGap === 'payable') {
-    return { title: '已筛选：待生成应付发团' }
+    return { title: '已筛选：待提交应付发团' }
   }
   if (search.accountGenerationGap === 'receivable') {
-    return { title: '已筛选：待生成应收发团' }
+    return { title: '已筛选：待提交应收发团' }
   }
   if (search.accountGenerationGap === 'any') {
-    return { title: '已筛选：待生成账款发团' }
+    return { title: '已筛选：待提交账款发团' }
   }
   if (search.departureDataGap) {
     return { title: '已筛选：近期资料待补充发团' }

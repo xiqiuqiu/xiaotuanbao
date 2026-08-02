@@ -7,16 +7,22 @@ interface SourceOrdersSettlementStripProps {
 }
 
 /** Read-only settlement glance above the source-orders table (scheme A). */
-export function SourceOrdersSettlementStrip({ summary }: SourceOrdersSettlementStripProps) {
+export function SourceOrdersSettlementStrip({
+  summary,
+}: SourceOrdersSettlementStripProps) {
   if (summary.orderCount === 0) {
     return null
   }
 
   const pendingLabel =
-    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待生成` : '已齐'
+    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待提交` : '已齐'
 
   return (
-    <div className={styles.settlementStrip} aria-label="客源结算汇总" role="list">
+    <div
+      className={styles.settlementStrip}
+      aria-label="客源结算汇总"
+      role="list"
+    >
       <div className={`${styles.settlementStripCell} ${styles.settlementStripHero}`} role="listitem">
         <span className={styles.settlementStripLabel}>结算应收</span>
         <span className={styles.settlementStripTotal}>
@@ -44,7 +50,7 @@ export function SourceOrdersSettlementStrip({ summary }: SourceOrdersSettlementS
         }`}
         role="listitem"
       >
-        <span className={styles.settlementStripLabel}>尚未生成应收</span>
+        <span className={styles.settlementStripLabel}>尚未提交应收</span>
         <span className={styles.settlementStripMetricValue}>
           {formatCents(summary.ungeneratedCents)}
         </span>

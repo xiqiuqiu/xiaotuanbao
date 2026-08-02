@@ -26,9 +26,9 @@ const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
 
 const CALCULATION_GUIDE = {
   结算应收:
-    '本团当前应向客户收取的金额。计算：原始团款合计 + 调整净额 − 优惠合计。根据客源单实时统计，无需生成应收。',
+    '本团当前应向客户收取的金额。计算：原始团款合计 + 调整净额 − 优惠合计。根据客源单实时统计，无需提交应收。',
   成本合计:
-    '本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需生成应付。',
+    '本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需提交应付。',
   当前毛利:
     '本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。',
   毛利率:
@@ -69,6 +69,8 @@ interface AmountDetailProps {
   label: string
   amountCents: number
   danger?: boolean
+  /** 待提交缺口等提醒项：金额用系统 warning（#FAAD14 / token.colorWarning） */
+  warning?: boolean
   transactionLink?: {
     departureId: string
     direction: TransactionDirection
@@ -79,15 +81,20 @@ function AmountDetail({
   label,
   amountCents,
   danger = false,
+  warning = false,
   transactionLink,
 }: AmountDetailProps) {
+  const { token } = theme.useToken()
   if (amountCents === 0) {
     return null
   }
 
   return (
     <Flex justify="space-between" gap={8} wrap>
-      <Text type={danger ? 'danger' : 'secondary'}>
+      <Text
+        type={danger ? 'danger' : warning ? undefined : 'secondary'}
+        style={warning ? { color: token.colorWarning } : undefined}
+      >
         {label} {formatCents(amountCents)}
       </Text>
       {transactionLink ? (
@@ -323,7 +330,7 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
               hasCostDetails ? (
                 <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
                   <AmountDetail label="确认应付" amountCents={stats.confirmedPayableCents} />
-                  <AmountDetail label="尚未生成应付" amountCents={stats.ungeneratedPayableCents} />
+                  <AmountDetail label="尚未提交应付" amountCents={stats.ungeneratedPayableCents} warning />
                   <AmountDetail label="其他应付" amountCents={stats.otherPayableCents} />
                   <AmountDetail
                     label="资源账款差异"
@@ -451,8 +458,9 @@ function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
                 {hasReceivableDetails ? (
                   <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
                     <AmountDetail
-                      label="尚未生成应收"
+                      label="尚未提交应收"
                       amountCents={stats.ungeneratedReceivableCents}
+                      warning
                     />
                     <AmountDetail
                       label="其中已关闭未收"

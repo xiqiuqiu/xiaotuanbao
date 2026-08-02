@@ -16,7 +16,7 @@ export class SegmentResourcePayableGapService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 待生成应付：金额 > 0 且尚无有效（未作废）资源应付节点的段资源 ∪ 发团级资源。
+   * 待提交应付：金额 > 0 且尚无有效（未作废）资源应付节点的段资源 ∪ 发团级资源。
    * 已关闭节点仍视为已生成；已关闭发团不排除；已结清发团排除。
    */
   async findPendingItems(

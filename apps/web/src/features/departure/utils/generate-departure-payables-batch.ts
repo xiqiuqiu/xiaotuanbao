@@ -41,7 +41,7 @@ export async function generateDeparturePayablesBatch(
         sourceId: resource.id,
         sourceLabel: resource.title || resource.id,
         outcome: 'failed',
-        reason: error instanceof Error ? error.message : '生成应付失败',
+        reason: error instanceof Error ? error.message : '提交应付失败',
       })
     }
   }

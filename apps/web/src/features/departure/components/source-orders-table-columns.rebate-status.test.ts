@@ -49,8 +49,8 @@ function order(overrides: Partial<SourceOrderSummary> = {}): SourceOrderSummary 
 }
 
 describe('sourceOrderRebateStatusLabel', () => {
-  it('uses 待生成 instead of 预计 when rebate is estimated but not booked', () => {
-    expect(sourceOrderRebateStatusLabel(order())).toBe('待生成')
+  it('uses 待提交 instead of 预计 when rebate is estimated but not booked', () => {
+    expect(sourceOrderRebateStatusLabel(order())).toBe('待提交')
     expect(sourceOrderRebateStatusLabel(order())).not.toBe('预计')
   })
 
@@ -76,6 +76,6 @@ describe('sourceOrderRebateStatusLabel', () => {
     })
     expect(sourceOrderHasRebateTrack(noRebate)).toBe(false)
     expect(sourceOrderRebateStatusLabel(noRebate)).toBe('-')
-    expect(sourceOrderRebateStatusLabel(noRebate)).not.toBe('未生成')
+    expect(sourceOrderRebateStatusLabel(noRebate)).not.toBe('未提交')
   })
 })

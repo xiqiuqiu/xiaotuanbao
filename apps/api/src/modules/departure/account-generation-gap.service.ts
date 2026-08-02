@@ -53,7 +53,7 @@ export class AccountGenerationGapService {
     }
   }
 
-  /** 发团列表工作台下钻：有待生成账款缺口的发团 id（可按应收/应付收窄）。 */
+  /** 发团列表工作台下钻：有待提交账款缺口的发团 id（可按应收/应付收窄）。 */
   async findDepartureIdsWithGaps(
     organizationId: string,
     generationKind?: AccountGenerationGapItem['generationKind'] | 'any',

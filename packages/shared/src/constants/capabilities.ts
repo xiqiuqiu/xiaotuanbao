@@ -37,7 +37,7 @@ export const CAPABILITIES = {
     requiredKey: DEPARTURE_WRITE_ACTION_KEY,
     description:
       '发团 create/copy/update/transition/close/unarchive/purge（误建删除）；客源单/客人名单/行程段/段资源/常用路线的 ' +
-      'create/update/delete；资源应付作废。生成应收/应付刻意不在此列（挂 /departure，财务亦可）。',
+      'create/update/delete；资源应付作废。提交应收/应付刻意不在此列（挂 /departure，财务亦可）。',
   },
   partnerWrite: {
     label: '合作伙伴目录维护',

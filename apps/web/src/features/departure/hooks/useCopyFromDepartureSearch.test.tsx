@@ -41,7 +41,7 @@ const segmentResult = {
     segmentCount: 2,
     totalDays: 3,
     resourceCount: 4,
-    payableOverview: '应付未生成',
+    payableOverview: '应付未提交',
   },
 }
 

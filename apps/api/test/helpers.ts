@@ -76,10 +76,14 @@ export function authRequest(app: INestApplication, sessionCookie: string) {
   }
 }
 
-export const DEPARTURE_NO_REGEX = /^[A-Z]{2,4}\d{6}\d{4}$/
-export const AR_AP_SCHEDULE_NO_REGEX = /^A[RP][A-Z]{2,4}\d{6}\d{6}$/
-export const TX_NO_REGEX = /^TX[A-Z]{2,4}\d{8}\d{6}$/
-export const CL_NO_REGEX = /^CL[A-Z]{2,4}\d{6}\d{6}$/
+/** Accepts legacy yyyyMM and current yyMM period segments. */
+export const DEPARTURE_NO_REGEX = /^[A-Z]{2,4}(?:\d{6}|\d{4})\d{4}$/
+/** Accepts legacy yyyyMM and current yyMM period segments. */
+export const AR_AP_SCHEDULE_NO_REGEX = /^A[RP][A-Z]{2,4}(?:\d{6}|\d{4})\d{6}$/
+/** Accepts legacy yyyyMMdd and current yyMMdd period segments. */
+export const TX_NO_REGEX = /^TX[A-Z]{2,4}(?:\d{8}|\d{6})\d{6}$/
+/** Accepts legacy yyyyMM and current yyMM period segments. */
+export const CL_NO_REGEX = /^CL[A-Z]{2,4}(?:\d{6}|\d{4})\d{6}$/
 
 export function uniqueBusinessPrefix(seed: string): string {
   const letters = seed.replace(/[^a-z]/gi, '').toUpperCase()

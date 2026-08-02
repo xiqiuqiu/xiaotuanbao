@@ -34,7 +34,7 @@ describe('summarizeExecutionCostStrip', () => {
     })
   })
 
-  it('counts only 未生成且金额>0 rows toward 尚未生成应付', () => {
+  it('counts only 未生成且金额>0 rows toward 尚未提交应付', () => {
     expect(
       summarizeExecutionCostStrip(
         [
@@ -61,7 +61,7 @@ describe('summarizeExecutionCostStrip', () => {
     })
   })
 
-  it('treats 尚未生成应付 as zero when the departure is settled', () => {
+  it('treats 尚未提交应付 as zero when the departure is settled', () => {
     expect(
       summarizeExecutionCostStrip(
         [

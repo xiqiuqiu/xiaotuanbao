@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Alert,
   Button,
@@ -8,8 +8,8 @@ import {
   message,
   theme,
 } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AppstoreOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { DepartureStatus } from '@xiaotuanbao/shared'
 import type {
@@ -32,14 +32,15 @@ import {
   resolveAdjacentSegmentId,
   resolveSelectedSegmentId,
 } from '../utils/execution-segment-selection'
-import { summarizeExecutionCostStrip } from '../utils/execution-cost-strip-summary'
+import { summarizeSegmentResourceAmounts } from '../utils/segment-resource-amount-summary'
 import { formValuesToPayload } from '../utils/segment-form'
-import { ExecutionCostStrip } from './ExecutionCostStrip'
 import { ExecutionDayAxis } from './ExecutionDayAxis'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { DepartureResourcePane } from './DepartureResourcePane'
 import { SegmentDrawer } from './SegmentDrawer'
 import styles from './ExecutionTab.module.css'
+
+type ExecutionLayer = 'day' | 'departure'
 
 interface ExecutionTabProps {
   departure: DepartureDetail
@@ -47,7 +48,7 @@ interface ExecutionTabProps {
   highlightDepartureResourceId?: string
   /** 结构性只读（发团已关闭）；同时封锁编辑与生成。 */
   readOnly: boolean
-  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响生成应付。 */
+  /** 是否持有 `departure:write`；财务无，仅封锁编辑，不影响提交应付。 */
   canEdit: boolean
   amountReadOnly?: boolean
 }
@@ -94,29 +95,29 @@ function ExecutionWorkspace({
   onGenerateDaily,
 }: ExecutionWorkspaceProps) {
   const { token } = theme.useToken()
+  const [layer, setLayer] = useState<ExecutionLayer>(() =>
+    highlightDepartureResourceId ? 'departure' : 'day',
+  )
+
+  useEffect(() => {
+    if (highlightDepartureResourceId) {
+      setLayer('departure')
+    }
+  }, [highlightDepartureResourceId])
+
   const { data: departureResourceList } = useQuery({
     queryKey: ['departure-resources', departure.id],
     queryFn: ({ signal }) => listDepartureResources(departure.id, {}, signal),
+    ...operationalQueryOptions(),
   })
 
-  const segmentResourceQueries = useQueries({
-    queries: segments.map((segment) => ({
-      queryKey: ['segment-resources', segment.id] as const,
-      queryFn: ({ signal }: { signal?: AbortSignal }) =>
-        listSegmentResources(segment.id, {}, signal),
-      ...operationalQueryOptions(),
-    })),
-  })
-
-  const costStripSummary = summarizeExecutionCostStrip(
-    departureResourceList?.items ?? [],
-    segmentResourceQueries.flatMap((query) => query.data?.items ?? []),
-    { departureSettled: departure.status === DepartureStatus.SETTLED },
+  const departureSummary = useMemo(
+    () =>
+      summarizeSegmentResourceAmounts(departureResourceList?.items ?? [], {
+        departureSettled: departure.status === DepartureStatus.SETTLED,
+      }),
+    [departure.status, departureResourceList?.items],
   )
-  const costStripReady =
-    departureResourceList !== undefined &&
-    (segments.length === 0 ||
-      segmentResourceQueries.every((query) => !query.isPending))
 
   const stackTokenStyle = {
     '--execution-border': token.colorBorderSecondary,
@@ -126,65 +127,118 @@ function ExecutionWorkspace({
     '--execution-text-secondary': token.colorTextSecondary,
     '--execution-text-tertiary': token.colorTextTertiary,
     '--execution-warning': token.colorWarning,
+    '--execution-primary': token.colorPrimary,
+    '--execution-primary-bg': token.colorPrimaryBg,
+    '--execution-primary-border': token.colorPrimaryBorder,
   } as CSSProperties
+
+  const onDepartureLayer = layer === 'departure'
 
   return (
     <div className={styles.stackLayout} style={stackTokenStyle}>
-      {costStripReady ? <ExecutionCostStrip summary={costStripSummary} /> : null}
-
-      <DepartureResourcePane
-        departure={departure}
-        readOnly={readOnly}
-        canEdit={canEdit}
-        amountReadOnly={amountReadOnly}
-        highlightDepartureResourceId={highlightDepartureResourceId}
-      />
-
-      <div className={styles.dayStack}>
-        <ExecutionDayAxis
-          segments={segments}
-          selectedSegmentId={selectedSegmentId}
-          mutationLocked={mutationLocked}
-          onSelect={onSelect}
-          onEdit={onEdit}
-          onCreate={onCreate}
-          onDelete={onDelete}
-        />
-
-        <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
-          {segments.length === 0 ? (
-            <Empty
-              description="可按出团～回团一键生成一日一段骨架，或手工添加一天"
-              style={{ padding: '48px 0' }}
-            >
-              {!mutationLocked ? (
-                <div className={styles.emptyActions}>
-                  <Button
-                    type="primary"
-                    loading={generatingDaily}
-                    onClick={onGenerateDaily}
-                  >
-                    一键生成一日段
-                  </Button>
-                  <Button icon={<PlusOutlined />} onClick={onCreate}>
-                    添加一天
-                  </Button>
-                </div>
-              ) : null}
-            </Empty>
-          ) : selectedSegment ? (
-            <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
-              <ExecutionResourcePane
-                departure={departure}
-                segment={selectedSegment}
-                readOnly={readOnly}
-                canEdit={canEdit}
-                amountReadOnly={amountReadOnly}
-              />
-            </div>
-          ) : null}
-        </Card>
+      <div className={styles.layerSwitch} role="tablist" aria-label="资源层级">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!onDepartureLayer}
+          className={`${styles.layerCard} ${!onDepartureLayer ? styles.layerCardActive : ''}`}
+          onClick={() => setLayer('day')}
+        >
+          <span className={styles.layerCardIcon} aria-hidden>
+            <CalendarOutlined />
+          </span>
+          <span className={styles.layerCardBody}>
+            <span className={styles.layerCardTitle}>按日资源</span>
+            <span className={styles.layerCardMeta}>
+              {segments.length > 0 ? `${segments.length} 天行程` : '尚未生成日程'}
+            </span>
+          </span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={onDepartureLayer}
+          className={`${styles.layerCard} ${onDepartureLayer ? styles.layerCardActive : ''}`}
+          onClick={() => setLayer('departure')}
+        >
+          <span className={styles.layerCardIcon} aria-hidden>
+            <AppstoreOutlined />
+          </span>
+          <span className={styles.layerCardBody}>
+            <span className={styles.layerCardTitle}>
+              发团级资源
+              <span className={styles.layerCardCount}>{departureSummary.resourceCount}</span>
+            </span>
+            <span className={styles.layerCardMeta}>
+              {departureSummary.ungeneratedPayableCount > 0 ? (
+                <span className={styles.layerCardWarn}>
+                  {departureSummary.ungeneratedPayableCount} 项未提交应付
+                </span>
+              ) : (
+                '全程统一录入'
+              )}
+            </span>
+          </span>
+        </button>
       </div>
+
+      {onDepartureLayer ? (
+        <div className={styles.layerPane}>
+          <DepartureResourcePane
+            departure={departure}
+            readOnly={readOnly}
+            canEdit={canEdit}
+            amountReadOnly={amountReadOnly}
+            highlightDepartureResourceId={highlightDepartureResourceId}
+          />
+        </div>
+      ) : (
+        <div className={styles.dayStack}>
+          <ExecutionDayAxis
+            segments={segments}
+            selectedSegmentId={selectedSegmentId}
+            mutationLocked={mutationLocked}
+            onSelect={onSelect}
+            onEdit={onEdit}
+            onCreate={onCreate}
+            onDelete={onDelete}
+          />
+
+          <Card className={styles.paneCard} classNames={{ body: styles.paneCardBody }}>
+            {segments.length === 0 ? (
+              <Empty
+                description="至少保留一天行程。可按出团～回团补齐日程，或手工添加一天"
+                style={{ padding: '48px 0' }}
+              >
+                {!mutationLocked ? (
+                  <div className={styles.emptyActions}>
+                    <Button
+                      type="primary"
+                      loading={generatingDaily}
+                      onClick={onGenerateDaily}
+                    >
+                      一键生成一日段
+                    </Button>
+                    <Button icon={<PlusOutlined />} onClick={onCreate}>
+                      添加一天
+                    </Button>
+                  </div>
+                ) : null}
+              </Empty>
+            ) : selectedSegment ? (
+              <div key={selectedSegment.id} className={styles.resourcePaneEnter}>
+                <ExecutionResourcePane
+                  departure={departure}
+                  segment={selectedSegment}
+                  readOnly={readOnly}
+                  canEdit={canEdit}
+                  amountReadOnly={amountReadOnly}
+                />
+              </div>
+            ) : null}
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
@@ -203,7 +257,7 @@ export function ExecutionTab({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editingSegment, setEditingSegment] = useState<ItinerarySegmentSummary | null>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
-  // 行程段增删改属 departure:write：财务（无 canEdit）只读，但资源生成应付不受此限。
+  // 行程段增删改属 departure:write：财务（无 canEdit）只读，但资源提交应付不受此限。
   const mutationLocked = readOnly || amountReadOnly || !canEdit
 
   const { data: listResult, isLoading, isError, isFetching, refetch } = useQuery({
@@ -337,9 +391,9 @@ export function ExecutionTab({
     },
     onSuccess: ({ saved, editingId }) => {
       if (editingId) {
-        message.success('行程段已更新')
+        message.success('行程已更新')
       } else {
-        message.success('行程段已添加')
+        message.success('行程已添加')
         message.info('请在本段「资源安排」中添加用车、酒店、拼出等资源')
         // Seed the list cache before URL sync so resolveSelectedSegmentId does
         // not treat the new id as missing and fall back to the first segment.
@@ -375,7 +429,7 @@ export function ExecutionTab({
       navigateExecution(saved.id)
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '保存行程段失败')
+      message.error(error instanceof Error ? error.message : '保存行程失败')
     },
   })
 
@@ -383,13 +437,13 @@ export function ExecutionTab({
     mutationFn: (id: string) => deleteSegment(id),
     onSuccess: (_result, deletedId) => {
       const nextSegmentId = resolveAdjacentSegmentId(segments, deletedId)
-      message.success('行程段已删除')
+      message.success('行程已删除')
       closeDrawer()
       invalidateSegments()
       navigateExecution(nextSegmentId)
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '删除行程段失败')
+      message.error(error instanceof Error ? error.message : '删除行程失败')
     },
   })
 
@@ -397,17 +451,17 @@ export function ExecutionTab({
     mutationFn: () => generateDailySegments(departure.id, { mode: 'fill_missing' }),
     onSuccess: (result: GenerateDailySegmentsResult) => {
       if (result.createdCount > 0) {
-        message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程段`)
+        message.success(`已按出团～回团生成 ${result.createdCount} 个一日行程`)
       } else {
-        message.info('出团～回团各日均已有行程段覆盖，未新增')
+        message.info('出团～回团各日均已有行程覆盖，未新增')
       }
       if (result.preservedWithResources > 0) {
-        message.info(`已保留 ${result.preservedWithResources} 个含资源的行程段`)
+        message.info(`已保留 ${result.preservedWithResources} 个含资源的行程`)
       }
       invalidateSegments()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '生成每日行程段失败')
+      message.error(error instanceof Error ? error.message : '生成每日行程失败')
     },
   })
 
@@ -428,7 +482,7 @@ export function ExecutionTab({
       <Alert
         type="error"
         showIcon
-        title="行程段加载失败"
+        title="行程加载失败"
         description="请稍后重试，或检查网络后再次加载。"
         action={
           <Button size="small" onClick={() => void refetch()}>
@@ -469,7 +523,7 @@ export function ExecutionTab({
         onClose={closeDrawer}
         onSubmit={(values) => saveMutation.mutate(values)}
         onDelete={
-          editingSegment
+          editingSegment && segments.length > 1
             ? () => deleteMutation.mutate(editingSegment.id)
             : undefined
         }
