@@ -15,6 +15,10 @@ export interface CreateVerificationFormValues {
   remark?: string
 }
 
+export interface CreateVerificationSubmission extends CreateVerificationFormValues {
+  affectedDepartureIds: string[]
+}
+
 /** @deprecated Use CreateVerificationFormValues */
 export type VerificationFormValues = CreateVerificationFormValues
 

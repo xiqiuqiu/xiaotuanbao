@@ -23,7 +23,9 @@ import {
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
+  type CreateVerificationSubmission,
 } from '../utils/verification-form'
+import { invalidateFinanceMutationQueries } from '../utils/invalidate-finance-mutation-queries'
 
 type UseTransactionWorkspaceMutationsOptions = {
   lockedDepartureId?: string
@@ -118,13 +120,21 @@ export function useTransactionWorkspaceMutations({
   })
 
   const verifyMutation = useMutation({
-    mutationFn: (values: CreateVerificationFormValues) =>
+    mutationFn: (values: CreateVerificationSubmission) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: (data) => {
+    onSuccess: (data, values) => {
       message.success('核销已创建')
       verifyForm.resetFields()
       onVerifySuccess()
-      invalidateLists()
+      invalidateFinanceMutationQueries(queryClient, {
+        queryKeys: [
+          'finance-transactions',
+          'finance-receivables',
+          'finance-payables',
+          'finance-verifications',
+        ],
+        departureIds: values.affectedDepartureIds,
+      })
       promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {

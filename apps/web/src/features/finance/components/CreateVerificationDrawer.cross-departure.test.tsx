@@ -10,7 +10,10 @@ import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider, Form } from 'antd'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CreateVerificationDrawer } from './CreateVerificationDrawer'
-import type { CreateVerificationFormValues } from '../utils/verification-form'
+import type {
+  CreateVerificationFormValues,
+  CreateVerificationSubmission,
+} from '../utils/verification-form'
 
 const listFinanceDepartureOptions = vi.fn()
 const listTransactions = vi.fn()
@@ -86,7 +89,7 @@ function makeSchedule(departureId: string): PaymentScheduleSummary {
 function Harness({
   onSubmit,
 }: {
-  onSubmit: (values: CreateVerificationFormValues) => void
+  onSubmit: (values: CreateVerificationSubmission) => void
 }) {
   const [form] = Form.useForm<CreateVerificationFormValues>()
 
@@ -164,6 +167,9 @@ describe('CreateVerificationDrawer cross-departure confirmation', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '继续核销' }))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ affectedDepartureIds: ['dep-1', 'dep-2'] }),
+    )
   })
 
   it('keeps the entered verification when returning from preview', async () => {
@@ -220,7 +226,7 @@ function ScheduleFirstHarness({
   onSubmit,
 }: {
   schedule: PaymentScheduleSummary
-  onSubmit: (values: CreateVerificationFormValues) => void
+  onSubmit: (values: CreateVerificationSubmission) => void
 }) {
   const [form] = Form.useForm<CreateVerificationFormValues>()
 

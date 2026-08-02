@@ -389,7 +389,6 @@ export function usePaymentScheduleWorkspace({
     queryClient,
     isReceivable,
     listQueryKey,
-    departureListQueryKey,
     partnerListQueryKey,
     supplierListQueryKey,
     activeSchedule: dialogs.activeSchedule,

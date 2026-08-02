@@ -13,7 +13,9 @@ import {
 import {
   buildCreateVerificationPayload,
   type CreateVerificationFormValues,
+  type CreateVerificationSubmission,
 } from '../utils/verification-form'
+import { invalidateFinanceMutationQueries } from '../utils/invalidate-finance-mutation-queries'
 
 type UseVerificationWorkspaceMutationsOptions = {
   form: FormInstance<CreateVerificationFormValues>
@@ -41,24 +43,27 @@ export function useVerificationWorkspaceMutations({
     [navigate],
   )
 
-  const invalidateVerificationQueries = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['finance-verifications'] })
-    void queryClient.invalidateQueries({ queryKey: ['departure-verifications'] })
-    void queryClient.invalidateQueries({ queryKey: ['finance-receivables'] })
-    void queryClient.invalidateQueries({ queryKey: ['finance-payables'] })
-    void queryClient.invalidateQueries({ queryKey: ['departure-receivables'] })
-    void queryClient.invalidateQueries({ queryKey: ['departure-payables'] })
-    void queryClient.invalidateQueries({ queryKey: ['finance-transactions'] })
+  const invalidateVerificationQueries = useCallback((departureIds?: readonly string[]) => {
+    invalidateFinanceMutationQueries(queryClient, {
+      queryKeys: [
+        'finance-verifications',
+        'finance-verification',
+        'finance-receivables',
+        'finance-payables',
+        'finance-transactions',
+      ],
+      departureIds,
+    })
   }, [queryClient])
 
   const createMutation = useMutation({
-    mutationFn: (values: CreateVerificationFormValues) =>
+    mutationFn: (values: CreateVerificationSubmission) =>
       createVerification(buildCreateVerificationPayload(values)),
-    onSuccess: (data) => {
+    onSuccess: (data, values) => {
       message.success('核销已创建')
       form.resetFields()
       onCreateSuccess()
-      invalidateVerificationQueries()
+      invalidateVerificationQueries(values.affectedDepartureIds)
       promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
@@ -75,7 +80,6 @@ export function useVerificationWorkspaceMutations({
       cancelForm.resetFields()
       onCancelSuccess()
       invalidateVerificationQueries()
-      void queryClient.invalidateQueries({ queryKey: ['finance-verification'] })
     },
     onError: (error) => {
       message.error(error instanceof Error ? error.message : '撤销失败')
