@@ -95,15 +95,10 @@ function ExecutionWorkspace({
   onGenerateDaily,
 }: ExecutionWorkspaceProps) {
   const { token } = theme.useToken()
-  const [layer, setLayer] = useState<ExecutionLayer>(() =>
+  const [selectedLayer, setSelectedLayer] = useState<ExecutionLayer>(() =>
     highlightDepartureResourceId ? 'departure' : 'day',
   )
-
-  useEffect(() => {
-    if (highlightDepartureResourceId) {
-      setLayer('departure')
-    }
-  }, [highlightDepartureResourceId])
+  const layer = highlightDepartureResourceId ? 'departure' : selectedLayer
 
   const { data: departureResourceList } = useQuery({
     queryKey: ['departure-resources', departure.id],
@@ -142,7 +137,7 @@ function ExecutionWorkspace({
           role="tab"
           aria-selected={!onDepartureLayer}
           className={`${styles.layerCard} ${!onDepartureLayer ? styles.layerCardActive : ''}`}
-          onClick={() => setLayer('day')}
+          onClick={() => setSelectedLayer('day')}
         >
           <span className={styles.layerCardIcon} aria-hidden>
             <CalendarOutlined />
@@ -159,7 +154,7 @@ function ExecutionWorkspace({
           role="tab"
           aria-selected={onDepartureLayer}
           className={`${styles.layerCard} ${onDepartureLayer ? styles.layerCardActive : ''}`}
-          onClick={() => setLayer('departure')}
+          onClick={() => setSelectedLayer('departure')}
         >
           <span className={styles.layerCardIcon} aria-hidden>
             <AppstoreOutlined />

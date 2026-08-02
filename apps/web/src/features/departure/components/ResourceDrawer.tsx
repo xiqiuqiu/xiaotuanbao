@@ -61,7 +61,228 @@ interface ResourceDrawerProps {
   ) => void
 }
 
-export function ResourceDrawer({
+interface ResourceDrawerFormFieldsProps {
+  resourceKind: ResourceKind | undefined
+  readOnly: boolean
+  amountReadOnly: boolean
+  amountFieldsLocked: boolean
+  supplierRequired: boolean
+  supplierSearch: string
+  supplierOptions: { value: string; label: string }[]
+  quickCreateLoading: boolean
+  onResourceKindChange: (kind: ResourceKind) => void
+  onSupplierSearch: (value: string) => void
+  getSupplierValueFromEvent: (value: string | null | undefined) => string | undefined
+}
+
+function ResourceDrawerFormFields({
+  resourceKind,
+  readOnly,
+  amountReadOnly,
+  amountFieldsLocked,
+  supplierRequired,
+  supplierSearch,
+  supplierOptions,
+  quickCreateLoading,
+  onResourceKindChange,
+  onSupplierSearch,
+  getSupplierValueFromEvent,
+}: ResourceDrawerFormFieldsProps) {
+  return (
+    <>
+      <Form.Item
+        name="resourceKind"
+        label="资源种类"
+        rules={[{ required: true, message: '请选择资源种类' }]}
+      >
+        <Select
+          options={(
+            resourceKind === ResourceKind.SHOP ||
+            resourceKind === ResourceKind.ENTERTAINMENT
+              ? [
+                  ...RESOURCE_KIND_OPTIONS,
+                  {
+                    value: resourceKind,
+                    label: RESOURCE_KIND_LABELS[resourceKind],
+                  },
+                ]
+              : [...RESOURCE_KIND_OPTIONS]
+          ).map((item) => ({
+            value: item.value,
+            label: item.label,
+          }))}
+          disabled={readOnly || amountFieldsLocked}
+          onChange={onResourceKindChange}
+        />
+      </Form.Item>
+
+      {resourceKind ? (
+        <Form.Item
+          name="supplierId"
+          label="供应商"
+          rules={
+            supplierRequired ? [{ required: true, message: '请选择供应商' }] : undefined
+          }
+          getValueFromEvent={getSupplierValueFromEvent}
+        >
+          <Select
+            allowClear={!supplierRequired}
+            showSearch={{ optionFilterProp: 'label' }}
+            searchValue={supplierSearch}
+            onSearch={onSupplierSearch}
+            placeholder={supplierRequired ? '选择供应商' : '可选：改选供应商以迁移对手方'}
+            options={supplierOptions}
+            disabled={readOnly || amountFieldsLocked || quickCreateLoading}
+            loading={quickCreateLoading}
+          />
+        </Form.Item>
+      ) : null}
+
+      <Form.Item
+        name="title"
+        label="资源名称"
+        rules={[{ required: true, whitespace: true, message: '请填写资源名称' }]}
+      >
+        <Input placeholder="如喀纳斯用车、阿勒泰拼出、贾登峪住宿" disabled={readOnly} />
+      </Form.Item>
+
+      <Form.Item
+        name="amountYuan"
+        label="资源金额（元）"
+        rules={[
+          { required: true, message: '请填写资源金额' },
+          {
+            type: 'number',
+            min: 0,
+            message: '资源金额不能小于0',
+          },
+        ]}
+      >
+        <InputNumber
+          min={0}
+          precision={2}
+          style={{ width: '100%' }}
+          disabled={readOnly || amountReadOnly || amountFieldsLocked}
+        />
+      </Form.Item>
+
+      <Form.Item name="notes" label="备注" style={{ marginBottom: 0 }}>
+        <Input.TextArea
+          autoSize={{ minRows: 3, maxRows: 6 }}
+          placeholder="使用日期、数量、明细、特殊约定"
+        />
+      </Form.Item>
+    </>
+  )
+}
+
+function ResourceDrawerFooter({
+  readOnly,
+  actionsBusy,
+  canSaveAndGenerate,
+  saveAndGenerateLoading,
+  loading,
+  onClose,
+  onSave,
+  onSaveAndGenerate,
+}: {
+  readOnly: boolean
+  actionsBusy: boolean
+  canSaveAndGenerate: boolean
+  saveAndGenerateLoading: boolean
+  loading: boolean
+  onClose: () => void
+  onSave: () => void
+  onSaveAndGenerate: () => void
+}) {
+  if (readOnly) {
+    return (
+      <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+        <Button onClick={onClose}>关闭</Button>
+      </Space>
+    )
+  }
+
+  return (
+    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+      <Button onClick={onClose} disabled={actionsBusy}>
+        取消
+      </Button>
+      {canSaveAndGenerate ? (
+        <Button
+          loading={saveAndGenerateLoading}
+          disabled={actionsBusy}
+          onClick={onSaveAndGenerate}
+        >
+          保存并提交应付
+        </Button>
+      ) : null}
+      <Button
+        type="primary"
+        loading={loading}
+        disabled={saveAndGenerateLoading}
+        onClick={onSave}
+      >
+        保存
+      </Button>
+    </Space>
+  )
+}
+
+function ResourceDrawerAlerts({
+  editing,
+  readOnly,
+  isHistoricalPartnerResource,
+}: {
+  editing: ResourceSummaryForForm | null
+  readOnly: boolean
+  isHistoricalPartnerResource: boolean
+}) {
+  const { token } = theme.useToken()
+  return (
+    <>
+      {editing?.hasSourceAmountMismatch ? (
+        <Alert
+          type="warning"
+          showIcon
+          title="来源差异警示"
+          description="资源金额与已生成的应付节点不一致，且财务已介入，请核对后再处理。"
+          style={{ marginBottom: token.marginMD }}
+        />
+      ) : null}
+      {isHistoricalPartnerResource && !readOnly ? (
+        <Alert
+          type="info"
+          showIcon
+          title="历史承接方资源"
+          description={`当前对手方为承接方「${editing?.counterpartyName ?? '-'}」。可继续编辑；若选择供应商将改为供应商对手方。`}
+          style={{ marginBottom: token.marginMD }}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function ResourceDrawerTitle({ title, context }: { title: string; context: string }) {
+  const { token } = theme.useToken()
+  return (
+    <Space orientation="vertical" size={token.marginXXS}>
+      <span>{title}</span>
+      <Typography.Text type="secondary" style={{ fontWeight: 'normal' }}>
+        {context}
+      </Typography.Text>
+    </Space>
+  )
+}
+
+export function ResourceDrawer(props: ResourceDrawerProps) {
+  const sessionKey = props.open
+    ? `${props.editing?.id ?? 'new'}:${props.readOnly ? 'read' : 'edit'}:${props.amountReadOnly ? 'amount-read' : 'amount-edit'}`
+    : 'closed'
+  return <ResourceDrawerSession key={sessionKey} {...props} />
+}
+
+function ResourceDrawerSession({
   open,
   segment,
   editing,
@@ -82,7 +303,10 @@ export function ResourceDrawer({
   const actionsBusy = loading || saveAndGenerateLoading
   const amountFieldsLocked = Boolean(editing?.amountFieldsLocked)
   const supplierFilterKind = resolveSupplierFilterKind(resourceKind)
-  const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(new Map())
+  const supplierCategoriesByIdRef = useRef<Map<string, string[]>>(null!)
+  if (supplierCategoriesByIdRef.current === null) {
+    supplierCategoriesByIdRef.current = new Map<string, string[]>()
+  }
   const [supplierSearch, setSupplierSearch] = useState('')
   const [createdSupplierOption, setCreatedSupplierOption] = useState<{
     id: string
@@ -116,18 +340,6 @@ export function ResourceDrawer({
     submitIntentRef.current = 'save'
   }
 
-  useEffect(() => {
-    if (!open) {
-      resetSubmitIntent()
-      return
-    }
-
-    form.resetFields()
-    form.setFieldsValue(initialValues)
-    setSupplierSearch('')
-    setCreatedSupplierOption(null)
-  }, [form, initialValues, open])
-
   const handleClose = () => {
     resetSubmitIntent()
     form.resetFields()
@@ -153,13 +365,6 @@ export function ResourceDrawer({
     queryFn: () => getSupplier(editingSupplierId!),
     enabled: open && Boolean(editingSupplierId),
   })
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-    supplierCategoriesByIdRef.current = new Map()
-  }, [open, formKey])
 
   useEffect(() => {
     if (editingSupplier) {
@@ -293,77 +498,57 @@ export function ResourceDrawer({
     return form.getFieldValue('supplierId') as string | undefined
   }
 
+  const handleResourceKindChange = (nextKind: ResourceKind) => {
+    const currentSupplierId = form.getFieldValue('supplierId') as string | undefined
+    const nextSupplierId = resolveSupplierIdAfterKindChange({
+      nextKind,
+      currentSupplierId,
+      currentSupplierCategories: currentSupplierId
+        ? supplierCategoriesByIdRef.current.get(currentSupplierId)
+        : undefined,
+    })
+    form.setFieldsValue({
+      partnerId: undefined,
+      supplierId: nextSupplierId,
+    })
+    setSupplierSearch('')
+    if (!nextSupplierId) {
+      setCreatedSupplierOption(null)
+    }
+  }
+
   return (
     <Drawer
-      title={
-        <Space orientation="vertical" size={token.marginXXS}>
-          <span>{drawerTitle}</span>
-          <Typography.Text type="secondary" style={{ fontWeight: 'normal' }}>
-            {segmentContext}
-          </Typography.Text>
-        </Space>
-      }
+      title={<ResourceDrawerTitle title={drawerTitle} context={segmentContext} />}
       open={open}
       size="min(480px, 100vw)"
       destroyOnHidden
       onClose={handleClose}
       styles={{ footer: { paddingBlock: token.paddingMD } }}
       footer={
-        readOnly ? (
-          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            <Button onClick={handleClose}>关闭</Button>
-          </Space>
-        ) : (
-          <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-            <Button onClick={handleClose} disabled={actionsBusy}>
-              取消
-            </Button>
-            {canSaveAndGenerate ? (
-              <Button
-                loading={saveAndGenerateLoading}
-                disabled={actionsBusy}
-                onClick={() => {
-                  submitIntentRef.current = 'saveAndGenerate'
-                  form.submit()
-                }}
-              >
-                保存并提交应付
-              </Button>
-            ) : null}
-            <Button
-              type="primary"
-              loading={loading}
-              disabled={saveAndGenerateLoading}
-              onClick={() => {
-                submitIntentRef.current = 'save'
-                form.submit()
-              }}
-            >
-              保存
-            </Button>
-          </Space>
-        )
+        <ResourceDrawerFooter
+          readOnly={readOnly}
+          actionsBusy={actionsBusy}
+          canSaveAndGenerate={canSaveAndGenerate}
+          saveAndGenerateLoading={saveAndGenerateLoading}
+          loading={loading}
+          onClose={handleClose}
+          onSave={() => {
+            submitIntentRef.current = 'save'
+            form.submit()
+          }}
+          onSaveAndGenerate={() => {
+            submitIntentRef.current = 'saveAndGenerate'
+            form.submit()
+          }}
+        />
       }
     >
-      {editing?.hasSourceAmountMismatch ? (
-        <Alert
-          type="warning"
-          showIcon
-          title="来源差异警示"
-          description="资源金额与已生成的应付节点不一致，且财务已介入，请核对后再处理。"
-          style={{ marginBottom: token.marginMD }}
-        />
-      ) : null}
-
-      {isHistoricalPartnerResource && !readOnly ? (
-        <Alert
-          type="info"
-          showIcon
-          title="历史承接方资源"
-          description={`当前对手方为承接方「${editing?.counterpartyName ?? '-'}」。可继续编辑；若选择供应商将改为供应商对手方。`}
-          style={{ marginBottom: token.marginMD }}
-        />
-      ) : null}
+      <ResourceDrawerAlerts
+        editing={editing}
+        readOnly={readOnly}
+        isHistoricalPartnerResource={isHistoricalPartnerResource}
+      />
 
       <Form
         key={formKey}
@@ -378,107 +563,19 @@ export function ResourceDrawer({
         }}
         onFinishFailed={resetSubmitIntent}
       >
-        <Form.Item
-          name="resourceKind"
-          label="资源种类"
-          rules={[{ required: true, message: '请选择资源种类' }]}
-        >
-          <Select
-            options={(
-              resourceKind === ResourceKind.SHOP ||
-              resourceKind === ResourceKind.ENTERTAINMENT
-                ? [
-                    ...RESOURCE_KIND_OPTIONS,
-                    {
-                      value: resourceKind,
-                      label: RESOURCE_KIND_LABELS[resourceKind],
-                    },
-                  ]
-                : [...RESOURCE_KIND_OPTIONS]
-            ).map((item) => ({
-              value: item.value,
-              label: item.label,
-            }))}
-            disabled={readOnly || amountFieldsLocked}
-            onChange={(nextKind) => {
-              const currentSupplierId = form.getFieldValue('supplierId') as string | undefined
-              const nextSupplierId = resolveSupplierIdAfterKindChange({
-                nextKind,
-                currentSupplierId,
-                currentSupplierCategories: currentSupplierId
-                  ? supplierCategoriesByIdRef.current.get(currentSupplierId)
-                  : undefined,
-              })
-              form.setFieldsValue({
-                partnerId: undefined,
-                supplierId: nextSupplierId,
-              })
-              setSupplierSearch('')
-              if (!nextSupplierId) {
-                setCreatedSupplierOption(null)
-              }
-            }}
-          />
-        </Form.Item>
-
-        {resourceKind ? (
-          <Form.Item
-            name="supplierId"
-            label="供应商"
-            rules={
-              supplierRequired ? [{ required: true, message: '请选择供应商' }] : undefined
-            }
-            getValueFromEvent={handleSupplierSelectValue}
-          >
-            <Select
-              allowClear={!supplierRequired}
-              showSearch={{ optionFilterProp: 'label' }}
-              searchValue={supplierSearch}
-              onSearch={setSupplierSearch}
-              placeholder={
-                supplierRequired ? '选择供应商' : '可选：改选供应商以迁移对手方'
-              }
-              options={supplierOptions}
-              disabled={readOnly || amountFieldsLocked || quickCreateMutation.isPending}
-              loading={quickCreateMutation.isPending}
-            />
-          </Form.Item>
-        ) : null}
-
-        <Form.Item
-          name="title"
-          label="资源名称"
-          rules={[{ required: true, whitespace: true, message: '请填写资源名称' }]}
-        >
-          <Input placeholder="如喀纳斯用车、阿勒泰拼出、贾登峪住宿" disabled={readOnly} />
-        </Form.Item>
-
-        <Form.Item
-          name="amountYuan"
-          label="资源金额（元）"
-          rules={[
-            { required: true, message: '请填写资源金额' },
-            {
-              type: 'number',
-              min: 0,
-              message: '资源金额不能小于0',
-            },
-          ]}
-        >
-          <InputNumber
-            min={0}
-            precision={2}
-            style={{ width: '100%' }}
-            disabled={readOnly || amountReadOnly || amountFieldsLocked}
-          />
-        </Form.Item>
-
-        <Form.Item name="notes" label="备注" style={{ marginBottom: 0 }}>
-          <Input.TextArea
-            autoSize={{ minRows: 3, maxRows: 6 }}
-            placeholder="使用日期、数量、明细、特殊约定"
-          />
-        </Form.Item>
+        <ResourceDrawerFormFields
+          resourceKind={resourceKind}
+          readOnly={readOnly}
+          amountReadOnly={amountReadOnly}
+          amountFieldsLocked={amountFieldsLocked}
+          supplierRequired={supplierRequired}
+          supplierSearch={supplierSearch}
+          supplierOptions={supplierOptions}
+          quickCreateLoading={quickCreateMutation.isPending}
+          onResourceKindChange={handleResourceKindChange}
+          onSupplierSearch={setSupplierSearch}
+          getSupplierValueFromEvent={handleSupplierSelectValue}
+        />
       </Form>
     </Drawer>
   )

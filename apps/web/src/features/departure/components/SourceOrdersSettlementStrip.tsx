@@ -18,12 +18,11 @@ export function SourceOrdersSettlementStrip({
     summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待提交` : '已齐'
 
   return (
-    <div
+    <ul
       className={styles.settlementStrip}
       aria-label="客源结算汇总"
-      role="list"
     >
-      <div className={`${styles.settlementStripCell} ${styles.settlementStripHero}`} role="listitem">
+      <li className={`${styles.settlementStripCell} ${styles.settlementStripHero}`}>
         <span className={styles.settlementStripLabel}>结算应收</span>
         <span className={styles.settlementStripTotal}>
           {formatCents(summary.netReceivableCents)}
@@ -31,31 +30,30 @@ export function SourceOrdersSettlementStrip({
         <span className={styles.settlementStripCount}>
           {summary.orderCount} 单 · {summary.totalGuests} 人
         </span>
-      </div>
-      <div className={styles.settlementStripCell} role="listitem">
+      </li>
+      <li className={styles.settlementStripCell}>
         <span className={styles.settlementStripLabel}>客户已收</span>
         <span className={styles.settlementStripMetricValue}>
           {formatCents(summary.partnerCollectedCents)}
         </span>
-      </div>
-      <div className={styles.settlementStripCell} role="listitem">
+      </li>
+      <li className={styles.settlementStripCell}>
         <span className={styles.settlementStripLabel}>我方代收约定</span>
         <span className={styles.settlementStripMetricValue}>
           {formatCents(summary.guestCollectCents)}
         </span>
-      </div>
-      <div
+      </li>
+      <li
         className={`${styles.settlementStripCell} ${
           summary.ungeneratedCount > 0 ? styles.settlementStripMetricWarn : ''
         }`}
-        role="listitem"
       >
         <span className={styles.settlementStripLabel}>尚未提交应收</span>
         <span className={styles.settlementStripMetricValue}>
           {formatCents(summary.ungeneratedCents)}
         </span>
         <span className={styles.settlementStripCount}>{pendingLabel}</span>
-      </div>
-    </div>
+      </li>
+    </ul>
   )
 }

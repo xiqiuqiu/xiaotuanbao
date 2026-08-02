@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import {
   App,
   Button,
@@ -103,17 +103,10 @@ function GuestCollapsedSummary({
   const overflow = guests.length - visible.length
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       aria-label="客人名单摘要，点击展开"
       onClick={onExpand}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onExpand()
-        }
-      }}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -121,9 +114,13 @@ function GuestCollapsedSummary({
         gap: token.marginXS,
         minHeight: 40,
         padding: `${token.paddingXS}px ${token.paddingSM}px`,
+        width: '100%',
         border: `1px solid ${token.colorBorderSecondary}`,
         borderRadius: token.borderRadiusLG,
         background: token.colorBgContainer,
+        color: 'inherit',
+        font: 'inherit',
+        textAlign: 'left',
         cursor: 'pointer',
       }}
     >
@@ -143,7 +140,7 @@ function GuestCollapsedSummary({
           ) : null}
         </>
       )}
-    </div>
+    </button>
   )
 }
 
@@ -167,13 +164,6 @@ function CompactGuestTable({
     setDraftState(next)
     onDraftPresenceChange(Boolean(next))
   }
-
-  useEffect(() => {
-    if (!canEdit && draft) {
-      setDraftState(null)
-      onDraftPresenceChange(false)
-    }
-  }, [canEdit, draft, onDraftPresenceChange])
 
   const startAdd = () => {
     if (draft) {
@@ -435,12 +425,13 @@ export function SourceOrderGuestRosterSection({
   const [expanded, setExpanded] = useState(true)
   const [guests, setGuests] = useState(() => initialBaseline.map(guestSummaryToFormRow))
 
-  useEffect(() => {
+  const handleGuestsChange = (next: SourceOrderGuestFormRow[]) => {
+    setGuests(next)
     onSyncBundleChange({
       baseline: initialBaseline,
-      next: guests,
+      next,
     })
-  }, [guests, initialBaseline, onSyncBundleChange])
+  }
 
   return (
     <section>
@@ -479,8 +470,9 @@ export function SourceOrderGuestRosterSection({
       </Flex>
       <div style={{ display: expanded ? 'block' : 'none' }}>
         <CompactGuestTable
+          key={readOnly ? 'read-only' : 'editable'}
           guests={guests}
-          onChange={setGuests}
+          onChange={handleGuestsChange}
           readOnly={readOnly}
           onDraftPresenceChange={onDraftPresenceChange}
         />

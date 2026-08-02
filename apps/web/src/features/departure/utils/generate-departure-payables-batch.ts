@@ -21,30 +21,28 @@ export async function generateDeparturePayablesBatch(
       item.payableStatus === SegmentPayableStatus.NOT_GENERATED && item.amountCents > 0,
   )
 
-  const items: BatchFinanceGenerationResult['items'] = []
-  let succeeded = 0
-  let failed = 0
-
-  for (const resource of candidates) {
-    try {
-      await generateDeparturePayable(resource.id)
-      succeeded += 1
-      items.push({
-        sourceId: resource.id,
-        sourceLabel: resource.title || resource.id,
-        outcome: 'succeeded',
-        generatedCount: 1,
-      })
-    } catch (error) {
-      failed += 1
-      items.push({
-        sourceId: resource.id,
-        sourceLabel: resource.title || resource.id,
-        outcome: 'failed',
-        reason: error instanceof Error ? error.message : '提交应付失败',
-      })
-    }
-  }
+  const items = await Promise.all(
+    candidates.map(async (resource) => {
+      try {
+        await generateDeparturePayable(resource.id)
+        return {
+          sourceId: resource.id,
+          sourceLabel: resource.title || resource.id,
+          outcome: 'succeeded' as const,
+          generatedCount: 1,
+        }
+      } catch (error) {
+        return {
+          sourceId: resource.id,
+          sourceLabel: resource.title || resource.id,
+          outcome: 'failed' as const,
+          reason: error instanceof Error ? error.message : '提交应付失败',
+        }
+      }
+    }),
+  ) satisfies BatchFinanceGenerationResult['items']
+  const succeeded = items.filter((item) => item.outcome === 'succeeded').length
+  const failed = items.length - succeeded
 
   return {
     attempted: candidates.length,

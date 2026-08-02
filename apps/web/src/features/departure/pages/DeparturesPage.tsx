@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+} from 'react'
 import { App, Button, Space, Tabs } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DirectoryProfileStatus } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
-import { listDepartures, purgeDeparture } from '@/services/departure.service'
+import {
+  listDepartureRouteNames,
+  listDepartures,
+  purgeDeparture,
+} from '@/services/departure.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listPartners } from '@/services/partner.service'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -30,6 +40,18 @@ import {
   type DepartureListSearch,
   type DepartureManagementView,
 } from '../utils/departure-list-search'
+
+function useRouteLedgerRouteNames({
+  enabled,
+}: {
+  enabled: boolean
+}) {
+  return useQuery({
+    queryKey: ['departures', 'route-names'],
+    queryFn: ({ signal }) => listDepartureRouteNames(signal),
+    enabled,
+  })
+}
 
 export function DeparturesPage() {
   const { message } = App.useApp()
@@ -87,6 +109,14 @@ export function DeparturesPage() {
       }),
     enabled: isListView,
   })
+
+  const { data: routeNamesData, isLoading: routeNamesLoading } =
+    useRouteLedgerRouteNames({ enabled: true })
+  const routeLedgerRouteName =
+    state.routeName ??
+    (startDateFrom || startDateTo
+      ? undefined
+      : routeNamesData?.items.find((name) => name.trim().length > 0)?.trim())
 
   const listFilterKey = [
     state.keyword,
@@ -290,7 +320,9 @@ export function DeparturesPage() {
         ) : (
           <RouteLedgerViewPanel
             viewNavigation={viewNavigation}
-            routeName={state.routeName}
+            routeNames={routeNamesData?.items ?? []}
+            routeNamesLoading={routeNamesLoading}
+            routeName={routeLedgerRouteName}
             startDateRange={state.startDateRange}
             onRouteNameChange={(value) =>
               dispatch({ type: 'SET_ROUTE_NAME', value })

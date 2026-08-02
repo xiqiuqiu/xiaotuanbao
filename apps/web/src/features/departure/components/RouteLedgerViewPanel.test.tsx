@@ -1,8 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider } from 'antd'
-import { useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RouteLedgerResult } from '@/types/api'
 import { RouteLedgerViewPanel } from './RouteLedgerViewPanel'
@@ -300,9 +300,40 @@ function StatefulPanel({
 }) {
   const [routeName, setRouteName] = useState(initial.routeName)
   const [startDateRange, setStartDateRange] = useState(initial.startDateRange)
+  const didAutoSelectRouteRef = useRef(false)
+  const { data: routeNamesData, isLoading: routeNamesLoading } = useQuery({
+    queryKey: ['departures', 'route-names'],
+    queryFn: () => listDepartureRouteNames(),
+  })
+
+  useEffect(() => {
+    if (didAutoSelectRouteRef.current) return
+    const hasAxes = Boolean(
+      routeName?.trim() || startDateRange?.[0]?.trim() || startDateRange?.[1]?.trim(),
+    )
+    if (hasAxes) {
+      didAutoSelectRouteRef.current = true
+      return
+    }
+    if (routeNamesLoading) return
+    const first = routeNamesData?.items.find((name) => name.trim().length > 0)?.trim()
+    didAutoSelectRouteRef.current = true
+    if (first) {
+      setRouteName(first)
+      onFiltersChange?.({ routeName: first, startDateRange })
+    }
+  }, [
+    onFiltersChange,
+    routeName,
+    routeNamesData,
+    routeNamesLoading,
+    startDateRange,
+  ])
 
   return (
     <RouteLedgerViewPanel
+      routeNames={routeNamesData?.items ?? []}
+      routeNamesLoading={routeNamesLoading}
       routeName={routeName}
       startDateRange={startDateRange}
       onRouteNameChange={(value) => {

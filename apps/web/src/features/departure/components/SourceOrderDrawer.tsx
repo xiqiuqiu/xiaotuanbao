@@ -5,7 +5,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type Dispatch,
   type ReactNode,
+  type RefObject,
+  type SetStateAction,
 } from 'react'
 import {
   Alert,
@@ -26,6 +29,7 @@ import {
   Button,
   theme,
 } from 'antd'
+import type { FormInstance } from 'antd'
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -58,6 +62,7 @@ import {
   type SourceOrderPathBaseline,
 } from '../utils/source-order-form'
 import {
+  guestSummaryToFormRow,
   type SourceOrderGuestSyncBundle,
 } from '../utils/source-order-guest-form'
 import { SourceOrderGuestRosterSection } from './SourceOrderGuestRosterSection'
@@ -74,6 +79,94 @@ type DrawerSectionKey = (typeof DRAWER_SECTIONS)[number]['key']
 
 function sectionDomId(key: DrawerSectionKey) {
   return `so-section-${key}`
+}
+
+function observeSourceOrderSections({
+  scrollingByTabRef,
+  setActiveSection,
+}: {
+  scrollingByTabRef: RefObject<boolean>
+  setActiveSection: Dispatch<SetStateAction<DrawerSectionKey>>
+}) {
+  let cancelled = false
+  let rafId = 0
+  const activeObservers: IntersectionObserver[] = []
+
+  const setup = () => {
+    if (cancelled) {
+      return
+    }
+    // Prefer the drawer body that actually hosts our sections (avoid stray drawers).
+    const section = document.getElementById(sectionDomId('basics'))
+    const root =
+      (section?.closest('.ant-drawer-body') as Element | null) ??
+      document.querySelector('.ant-drawer-body')
+    if (!root || !section) {
+      rafId = window.requestAnimationFrame(setup)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (scrollingByTabRef.current) {
+          return
+        }
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        const top = visible[0]
+        if (!top?.target.id.startsWith('so-section-')) {
+          return
+        }
+        const key = top.target.id.replace('so-section-', '') as DrawerSectionKey
+        if (DRAWER_SECTIONS.some((item) => item.key === key)) {
+          setActiveSection((current) => (current === key ? current : key))
+        }
+      },
+      {
+        root,
+        rootMargin: '-20% 0px -55% 0px',
+        threshold: [0.1, 0.25, 0.5],
+      },
+    )
+    activeObservers.push(observer)
+
+    for (const item of DRAWER_SECTIONS) {
+      const node = document.getElementById(sectionDomId(item.key))
+      if (node) {
+        observer.observe(node)
+      }
+    }
+  }
+
+  setup()
+
+  return () => {
+    cancelled = true
+    window.cancelAnimationFrame(rafId)
+    for (const observer of activeObservers) {
+      observer.disconnect()
+    }
+  }
+}
+
+function useSourceOrderSectionObserver({
+  open,
+  detailReady,
+  scrollingByTabRef,
+  setActiveSection,
+}: {
+  open: boolean
+  detailReady: boolean
+  scrollingByTabRef: RefObject<boolean>
+  setActiveSection: Dispatch<SetStateAction<DrawerSectionKey>>
+}) {
+  useEffect(() => {
+    if (!open || !detailReady || typeof IntersectionObserver === 'undefined') {
+      return
+    }
+    return observeSourceOrderSections({ scrollingByTabRef, setActiveSection })
+  }, [detailReady, open, scrollingByTabRef, setActiveSection])
 }
 
 interface SourceOrderDrawerProps {
@@ -405,6 +498,181 @@ function notePlaceholder(kind: FareAdjustmentKind): string {
   return entry?.noteRequired ? '必填，说明调整原因' : '选填'
 }
 
+interface FareAdjustmentEditorRowProps {
+  draft: FareDraft
+  canEdit: boolean
+  kindOptions: Array<{
+    value: FareAdjustmentKind
+    label: string
+    disabled: boolean
+  }>
+  onChange: (draft: FareDraft) => void
+  onSave: () => void
+  onCancel: () => void
+}
+
+function FareAdjustmentEditorRow({
+  draft,
+  canEdit,
+  kindOptions,
+  onChange,
+  onSave,
+  onCancel,
+}: FareAdjustmentEditorRowProps) {
+  const { token } = theme.useToken()
+  const bodyCell: CSSProperties = {
+    padding: `${token.paddingXS}px ${token.paddingSM}px`,
+    verticalAlign: 'middle',
+  }
+  const directionLocked = draft.kind !== FareAdjustmentKind.OTHER
+
+  return (
+    <tr
+      key={`edit-${draft.editingIndex ?? 'new'}`}
+      data-testid="fare-adjustment-row-editor"
+      style={{ background: token.colorPrimaryBg }}
+    >
+      <td style={{ ...bodyCell, width: 160 }}>
+        <Select
+          size="small"
+          value={draft.kind}
+          options={kindOptions}
+          style={{ width: '100%' }}
+          disabled={!canEdit}
+          onChange={(kind: FareAdjustmentKind) => {
+            onChange({
+              ...draft,
+              kind,
+              direction: defaultDirectionForFareAdjustmentKind(kind),
+              customName: kind === FareAdjustmentKind.OTHER ? draft.customName : undefined,
+            })
+          }}
+        />
+      </td>
+      <td style={{ ...bodyCell, width: 100 }}>
+        <Select
+          size="small"
+          value={draft.direction}
+          disabled={!canEdit || directionLocked}
+          options={[...FARE_ADJUSTMENT_DIRECTION_OPTIONS]}
+          style={{ width: '100%' }}
+          onChange={(direction: FareAdjustmentDirection) =>
+            onChange({ ...draft, direction })
+          }
+        />
+      </td>
+      <td style={{ ...bodyCell, width: 120 }}>
+        <InputNumber
+          size="small"
+          min={0.01}
+          precision={2}
+          style={{ width: '100%' }}
+          value={draft.amountYuan ?? null}
+          placeholder="金额"
+          disabled={!canEdit}
+          onChange={(amountYuan) =>
+            onChange({
+              ...draft,
+              amountYuan: amountYuan == null ? undefined : Number(amountYuan),
+            })
+          }
+        />
+      </td>
+      <td style={bodyCell}>
+        <Input
+          size="small"
+          maxLength={30}
+          showCount
+          placeholder={notePlaceholder(draft.kind)}
+          value={draft.customName ?? ''}
+          disabled={!canEdit}
+          onChange={(event) => onChange({ ...draft, customName: event.target.value })}
+        />
+      </td>
+      <td style={{ ...bodyCell, width: 120, whiteSpace: 'nowrap' }}>
+        {canEdit ? (
+          <Space size={0}>
+            <Button type="link" size="small" aria-label="保存调整项" onClick={onSave}>
+              保存
+            </Button>
+            <Button type="link" size="small" aria-label="取消调整项" onClick={onCancel}>
+              取消
+            </Button>
+          </Space>
+        ) : null}
+      </td>
+    </tr>
+  )
+}
+
+function FareAdjustmentViewRow({
+  row,
+  index,
+  draftOpen,
+  canEdit,
+  onEdit,
+  onRemove,
+}: {
+  row: SourceOrderFareAdjustmentFormRow
+  index: number
+  draftOpen: boolean
+  canEdit: boolean
+  onEdit: () => void
+  onRemove: () => void
+}) {
+  const { token } = theme.useToken()
+  const bodyCell: CSSProperties = {
+    padding: `${token.paddingXS}px ${token.paddingSM}px`,
+    verticalAlign: 'middle',
+  }
+
+  return (
+    <tr
+      data-testid="fare-adjustment-row"
+      style={{
+        borderTop:
+          index === 0 && !draftOpen ? undefined : `1px solid ${token.colorBorderSecondary}`,
+      }}
+    >
+      <td style={bodyCell}>{kindLabel(row.kind)}</td>
+      <td style={bodyCell}>
+        <Tag color={row.direction === FareAdjustmentDirection.INCREASE ? 'blue' : 'default'}>
+          {row.direction === FareAdjustmentDirection.INCREASE ? '增项' : '减项'}
+        </Tag>
+      </td>
+      <td style={{ ...bodyCell, fontVariantNumeric: 'tabular-nums' }}>
+        ¥{(row.amountYuan ?? 0).toFixed(2)}
+      </td>
+      <td style={bodyCell}>
+        <Typography.Text type={row.customName ? undefined : 'secondary'}>
+          {row.customName || '-'}
+        </Typography.Text>
+      </td>
+      <td style={{ ...bodyCell, width: 72, whiteSpace: 'nowrap' }}>
+        {canEdit ? (
+          <Space size={0}>
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              aria-label="编辑调整项"
+              onClick={onEdit}
+            />
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              aria-label="删除调整项"
+              onClick={onRemove}
+            />
+          </Space>
+        ) : null}
+      </td>
+    </tr>
+  )
+}
+
 function FareAdjustmentsEditor({
   value,
   onChange,
@@ -430,12 +698,6 @@ function FareAdjustmentsEditor({
     setDraftState(next)
     onDraftPresenceChange(Boolean(next))
   }
-
-  useEffect(() => {
-    if (!canEdit && draft) {
-      setDraft(null)
-    }
-  }, [canEdit, draft])
 
   const usedFixedKinds = new Set<FareAdjustmentKind>()
   for (const [index, row] of rows.entries()) {
@@ -526,6 +788,7 @@ function FareAdjustmentsEditor({
     }
 
     const cleaned: SourceOrderFareAdjustmentFormRow = {
+      rowKey: draft.rowKey ?? crypto.randomUUID(),
       kind: draft.kind,
       direction:
         draft.kind === FareAdjustmentKind.OTHER
@@ -563,147 +826,6 @@ function FareAdjustmentsEditor({
     verticalAlign: 'middle',
   }
 
-  const renderEditorRow = (draftValue: FareDraft) => {
-    const directionLocked = draftValue.kind !== FareAdjustmentKind.OTHER
-    return (
-      <tr
-        key={`edit-${draftValue.editingIndex ?? 'new'}`}
-        data-testid="fare-adjustment-row-editor"
-        style={{ background: token.colorPrimaryBg }}
-      >
-        <td style={{ ...bodyCell, width: 160 }}>
-          <Select
-            size="small"
-            value={draftValue.kind}
-            options={kindOptions}
-            style={{ width: '100%' }}
-            disabled={!canEdit}
-            onChange={(kind: FareAdjustmentKind) => {
-              setDraft({
-                ...draftValue,
-                kind,
-                direction: defaultDirectionForFareAdjustmentKind(kind),
-                customName:
-                  kind === FareAdjustmentKind.OTHER ? draftValue.customName : undefined,
-              })
-            }}
-          />
-        </td>
-        <td style={{ ...bodyCell, width: 100 }}>
-          <Select
-            size="small"
-            value={draftValue.direction}
-            disabled={!canEdit || directionLocked}
-            options={[...FARE_ADJUSTMENT_DIRECTION_OPTIONS]}
-            style={{ width: '100%' }}
-            onChange={(direction: FareAdjustmentDirection) =>
-              setDraft({ ...draftValue, direction })
-            }
-          />
-        </td>
-        <td style={{ ...bodyCell, width: 120 }}>
-          <InputNumber
-            size="small"
-            min={0.01}
-            precision={2}
-            style={{ width: '100%' }}
-            value={draftValue.amountYuan ?? null}
-            placeholder="金额"
-            disabled={!canEdit}
-            onChange={(amountYuan) =>
-              setDraft({
-                ...draftValue,
-                amountYuan: amountYuan == null ? undefined : Number(amountYuan),
-              })
-            }
-          />
-        </td>
-        <td style={bodyCell}>
-          <Input
-            size="small"
-            maxLength={30}
-            showCount
-            placeholder={notePlaceholder(draftValue.kind)}
-            value={draftValue.customName ?? ''}
-            disabled={!canEdit}
-            onChange={(event) =>
-              setDraft({ ...draftValue, customName: event.target.value })
-            }
-          />
-        </td>
-        <td style={{ ...bodyCell, width: 120, whiteSpace: 'nowrap' }}>
-          {canEdit ? (
-            <Space size={0}>
-              <Button
-                type="link"
-                size="small"
-                aria-label="保存调整项"
-                onClick={saveDraft}
-              >
-                保存
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                aria-label="取消调整项"
-                onClick={cancelEdit}
-              >
-                取消
-              </Button>
-            </Space>
-          ) : null}
-        </td>
-      </tr>
-    )
-  }
-
-  const renderViewRow = (row: SourceOrderFareAdjustmentFormRow, index: number) => (
-    <tr
-      key={`row-${index}`}
-      data-testid="fare-adjustment-row"
-      style={{
-        borderTop:
-          index === 0 && !draft ? undefined : `1px solid ${token.colorBorderSecondary}`,
-      }}
-    >
-      <td style={bodyCell}>{kindLabel(row.kind)}</td>
-      <td style={bodyCell}>
-        <Tag color={row.direction === FareAdjustmentDirection.INCREASE ? 'blue' : 'default'}>
-          {row.direction === FareAdjustmentDirection.INCREASE ? '增项' : '减项'}
-        </Tag>
-      </td>
-      <td style={{ ...bodyCell, fontVariantNumeric: 'tabular-nums' }}>
-        ¥{(row.amountYuan ?? 0).toFixed(2)}
-      </td>
-      <td style={bodyCell}>
-        <Typography.Text type={row.customName ? undefined : 'secondary'}>
-          {row.customName || '-'}
-        </Typography.Text>
-      </td>
-      <td style={{ ...bodyCell, width: 72, whiteSpace: 'nowrap' }}>
-        {canEdit ? (
-          <Space size={0}>
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              aria-label="编辑调整项"
-              onClick={() => startEdit(index)}
-            />
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label="删除调整项"
-              onClick={() => removeRow(index)}
-            />
-          </Space>
-        ) : null}
-      </td>
-    </tr>
-  )
-
   return (
     <div>
       <div
@@ -739,11 +861,42 @@ function FareAdjustmentsEditor({
               </tr>
             ) : null}
             {rows.map((row, index) =>
-              draft?.editingIndex === index && draft
-                ? renderEditorRow(draft)
-                : renderViewRow(row, index),
+              draft?.editingIndex === index && draft ? (
+                <FareAdjustmentEditorRow
+                  key={`edit-${draft.editingIndex}`}
+                  draft={draft}
+                  canEdit={canEdit}
+                  kindOptions={kindOptions}
+                  onChange={setDraft}
+                  onSave={saveDraft}
+                  onCancel={cancelEdit}
+                />
+              ) : (
+                <FareAdjustmentViewRow
+                  key={
+                    row.rowKey ??
+                    `${row.kind}:${row.direction}:${row.amountYuan ?? 0}:${row.customName ?? ''}`
+                  }
+                  row={row}
+                  index={index}
+                  draftOpen={Boolean(draft)}
+                  canEdit={canEdit}
+                  onEdit={() => startEdit(index)}
+                  onRemove={() => removeRow(index)}
+                />
+              ),
             )}
-            {draft && draft.editingIndex == null ? renderEditorRow(draft) : null}
+            {draft && draft.editingIndex == null ? (
+              <FareAdjustmentEditorRow
+                key="edit-new"
+                draft={draft}
+                canEdit={canEdit}
+                kindOptions={kindOptions}
+                onChange={setDraft}
+                onSave={saveDraft}
+                onCancel={cancelEdit}
+              />
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -968,6 +1121,7 @@ function SourceOrderFormFields({
         <FormSection title="团款调整">
           <Form.Item name="fareAdjustments" noStyle>
             <FareAdjustmentsEditor
+              key={lockAmounts || readOnly ? 'locked' : 'editable'}
               lockAmounts={lockAmounts}
               readOnly={readOnly}
               adjustmentNetYuan={derivedAdjustmentNetYuan}
@@ -1093,7 +1247,183 @@ function SourceOrderFormFields({
   )
 }
 
-export function SourceOrderDrawer({
+export function SourceOrderDrawer(props: SourceOrderDrawerProps) {
+  const sessionKey = props.open
+    ? `${props.editing?.id ?? 'new'}:${props.readOnly ? 'read' : 'edit'}:${props.amountReadOnly ? 'amount-read' : 'amount-edit'}`
+    : 'closed'
+  return <SourceOrderDrawerSession key={sessionKey} {...props} />
+}
+
+interface SourceOrderDrawerFooterProps {
+  readOnly: boolean
+  detailReady: boolean
+  actionsBusy: boolean
+  canSaveAndGenerate: boolean
+  saveAndGenerateLoading: boolean
+  loading: boolean
+  grossYuan: number
+  adjustmentNetYuan: number
+  discountYuan: number
+  settlementYuan: number
+  collectionMode: SourceOrderCollectionMode
+  depositYuan: number
+  balanceYuan: number
+  partnerCollectedYuan: number
+  guestCollectYuan: number
+  customerTopUpYuan: number
+  rebateYuan: number
+  onClose: () => void
+  onSubmitIntent: (intent: 'save' | 'saveAndGenerate') => void
+}
+
+function SourceOrderDrawerFooter({
+  readOnly,
+  detailReady,
+  actionsBusy,
+  canSaveAndGenerate,
+  saveAndGenerateLoading,
+  loading,
+  grossYuan,
+  adjustmentNetYuan,
+  discountYuan,
+  settlementYuan,
+  collectionMode,
+  depositYuan,
+  balanceYuan,
+  partnerCollectedYuan,
+  guestCollectYuan,
+  customerTopUpYuan,
+  rebateYuan,
+  onClose,
+  onSubmitIntent,
+}: SourceOrderDrawerFooterProps) {
+  const { token } = theme.useToken()
+  return (
+    <Flex vertical gap={token.marginSM} style={{ width: '100%' }}>
+      {detailReady ? (
+        <SettlementPreviewCard
+          grossYuan={grossYuan}
+          adjustmentNetYuan={adjustmentNetYuan}
+          discountYuan={discountYuan}
+          settlementYuan={settlementYuan}
+          collectionMode={collectionMode}
+          depositYuan={depositYuan}
+          balanceYuan={balanceYuan}
+          partnerCollectedYuan={partnerCollectedYuan}
+          guestCollectYuan={guestCollectYuan}
+          customerTopUpYuan={customerTopUpYuan}
+          rebateYuan={rebateYuan}
+        />
+      ) : null}
+      {readOnly ? (
+        <Flex justify="flex-end">
+          <Button onClick={onClose}>关闭</Button>
+        </Flex>
+      ) : (
+        <Flex justify="flex-end">
+          <Space>
+            <Button onClick={onClose} disabled={actionsBusy}>
+              取消
+            </Button>
+            {canSaveAndGenerate ? (
+              <Button
+                loading={saveAndGenerateLoading}
+                disabled={!detailReady || actionsBusy}
+                onClick={() => onSubmitIntent('saveAndGenerate')}
+              >
+                保存并提交应收
+              </Button>
+            ) : null}
+            <Button
+              type="primary"
+              loading={loading}
+              disabled={!detailReady || saveAndGenerateLoading}
+              onClick={() => onSubmitIntent('save')}
+            >
+              保存
+            </Button>
+          </Space>
+        </Flex>
+      )}
+    </Flex>
+  )
+}
+
+interface SourceOrderDrawerFormProps extends SourceOrderFormFieldsProps {
+  form: FormInstance<SourceOrderFormValues>
+  formKey: string
+  initialValues: SourceOrderFormValues
+  resolvedOrder: SourceOrderSummary | null
+  submitIntentRef: RefObject<'save' | 'saveAndGenerate'>
+  hasFareDraftRef: RefObject<boolean>
+  hasGuestDraftRef: RefObject<boolean>
+  guestSyncRef: RefObject<SourceOrderGuestSyncBundle | null>
+  onSubmit: SourceOrderDrawerProps['onSubmit']
+}
+
+function SourceOrderDrawerForm({
+  form,
+  formKey,
+  initialValues,
+  resolvedOrder,
+  submitIntentRef,
+  hasFareDraftRef,
+  hasGuestDraftRef,
+  guestSyncRef,
+  onSubmit,
+  ...fieldProps
+}: SourceOrderDrawerFormProps) {
+  const { message } = App.useApp()
+  const resetSubmitIntent = () => {
+    submitIntentRef.current = 'save'
+  }
+
+  return (
+    <Form
+      key={formKey}
+      form={form}
+      layout="vertical"
+      disabled={fieldProps.readOnly}
+      scrollToFirstError={{ focus: true }}
+      initialValues={initialValues}
+      onFinish={(values) => {
+        if (hasFareDraftRef.current) {
+          message.warning('请先保存或取消当前调整行后再保存客源单')
+          resetSubmitIntent()
+          return
+        }
+        if (hasGuestDraftRef.current) {
+          message.warning('请先保存或取消当前名单行后再保存客源单')
+          resetSubmitIntent()
+          return
+        }
+        const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
+          ? {
+              guestCollectCents: resolvedOrder.guestCollectCents,
+              partnerCollectedCents: resolvedOrder.partnerCollectedCents,
+              depositCents: resolvedOrder.depositCents,
+              balanceCents: resolvedOrder.balanceCents,
+            }
+          : null
+        const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
+        const guests = guestSyncRef.current ?? {
+          baseline: fieldProps.guestBaseline,
+          next: fieldProps.guestBaseline.map(guestSummaryToFormRow),
+        }
+        resetSubmitIntent()
+        onSubmit(formValuesToPayload(values), pathBaseline, {
+          generateReceivable,
+          guests,
+        })
+      }}
+      onFinishFailed={resetSubmitIntent}
+    >
+      <SourceOrderFormFields {...fieldProps} />
+    </Form>
+  )
+}
+
+function SourceOrderDrawerSession({
   open,
   editing,
   readOnly,
@@ -1111,10 +1441,7 @@ export function SourceOrderDrawer({
   const scrollingByTabRef = useRef(false)
   const hasFareDraftRef = useRef(false)
   const hasGuestDraftRef = useRef(false)
-  const guestSyncRef = useRef<SourceOrderGuestSyncBundle>({
-    baseline: [],
-    next: [],
-  })
+  const guestSyncRef = useRef<SourceOrderGuestSyncBundle | null>(null)
   const [activeSection, setActiveSection] = useState<DrawerSectionKey>('basics')
   const [partnerSearch, setPartnerSearch] = useState('')
   const sourceOrderId = editing?.id ?? null
@@ -1204,28 +1531,19 @@ export function SourceOrderDrawer({
   }
 
   useEffect(() => {
-    if (!open) {
-      resetSubmitIntent()
-      hasFareDraftRef.current = false
-      hasGuestDraftRef.current = false
-      setActiveSection('basics')
-      setPartnerSearch('')
-      return
-    }
     if (!detailReady) {
       return
     }
 
     form.resetFields()
     form.setFieldsValue(initialValues)
-    setPartnerSearch('')
-  }, [detailReady, form, initialValues, open])
+  }, [detailReady, form, initialValues])
 
   const handleClose = () => {
     resetSubmitIntent()
     hasFareDraftRef.current = false
     hasGuestDraftRef.current = false
-    guestSyncRef.current = { baseline: [], next: [] }
+    guestSyncRef.current = null
     form.resetFields()
     onClose()
   }
@@ -1252,72 +1570,12 @@ export function SourceOrderDrawer({
     })
   }
 
-  useEffect(() => {
-    if (!open || !detailReady) {
-      return
-    }
-    if (typeof IntersectionObserver === 'undefined') {
-      return
-    }
-
-    let cancelled = false
-    let observer: IntersectionObserver | null = null
-    let rafId = 0
-
-    const setup = () => {
-      if (cancelled) {
-        return
-      }
-      // Prefer the drawer body that actually hosts our sections (avoid stray drawers).
-      const section = document.getElementById(sectionDomId('basics'))
-      const root =
-        (section?.closest('.ant-drawer-body') as Element | null) ??
-        document.querySelector('.ant-drawer-body')
-      if (!root || !section) {
-        rafId = window.requestAnimationFrame(setup)
-        return
-      }
-
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (scrollingByTabRef.current) {
-            return
-          }
-          const visible = entries
-            .filter((entry) => entry.isIntersecting)
-            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-          const top = visible[0]
-          if (!top?.target.id.startsWith('so-section-')) {
-            return
-          }
-          const key = top.target.id.replace('so-section-', '') as DrawerSectionKey
-          if (DRAWER_SECTIONS.some((item) => item.key === key)) {
-            setActiveSection((current) => (current === key ? current : key))
-          }
-        },
-        {
-          root,
-          rootMargin: '-20% 0px -55% 0px',
-          threshold: [0.1, 0.25, 0.5],
-        },
-      )
-
-      for (const item of DRAWER_SECTIONS) {
-        const node = document.getElementById(sectionDomId(item.key))
-        if (node) {
-          observer.observe(node)
-        }
-      }
-    }
-
-    setup()
-
-    return () => {
-      cancelled = true
-      window.cancelAnimationFrame(rafId)
-      observer?.disconnect()
-    }
-  }, [open, detailReady])
+  useSourceOrderSectionObserver({
+    open,
+    detailReady,
+    scrollingByTabRef,
+    setActiveSection,
+  })
 
   const { data: partnersResult } = useQuery({
     queryKey: ['partners', 'source-order-select'],
@@ -1361,61 +1619,35 @@ export function SourceOrderDrawer({
       }}
       footer={
         detailError && sourceOrderId ? null : (
-          <Flex vertical gap={token.marginSM} style={{ width: '100%' }}>
-            {detailReady ? (
-              <SettlementPreviewCard
-                grossYuan={derivedGrossYuan}
-                adjustmentNetYuan={derivedAdjustmentNetYuan}
-                discountYuan={derivedDiscountYuan}
-                settlementYuan={derivedSettlementYuan}
-                collectionMode={resolvedCollectionMode}
-                depositYuan={
-                  resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
-                    ? 0
-                    : Number(depositYuan ?? 0)
-                }
-                balanceYuan={
-                  resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
-                    ? 0
-                    : Number(balanceYuan ?? 0)
-                }
-                partnerCollectedYuan={derivedAmounts.partnerCollectedCents / 100}
-                guestCollectYuan={derivedAmounts.guestCollectCents / 100}
-                customerTopUpYuan={derivedAmounts.estimatedCustomerTopUpCents / 100}
-                rebateYuan={derivedAmounts.estimatedRebateCents / 100}
-              />
-            ) : null}
-            {readOnly ? (
-              <Flex justify="flex-end">
-                <Button onClick={handleClose}>关闭</Button>
-              </Flex>
-            ) : (
-              <Flex justify="flex-end">
-                <Space>
-                  <Button onClick={handleClose} disabled={actionsBusy}>
-                    取消
-                  </Button>
-                  {canSaveAndGenerate ? (
-                    <Button
-                      loading={saveAndGenerateLoading}
-                      disabled={!detailReady || actionsBusy}
-                      onClick={() => trySubmit('saveAndGenerate')}
-                    >
-                      保存并提交应收
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="primary"
-                    loading={loading}
-                    disabled={!detailReady || saveAndGenerateLoading}
-                    onClick={() => trySubmit('save')}
-                  >
-                    保存
-                  </Button>
-                </Space>
-              </Flex>
-            )}
-          </Flex>
+          <SourceOrderDrawerFooter
+            readOnly={readOnly}
+            detailReady={detailReady}
+            actionsBusy={actionsBusy}
+            canSaveAndGenerate={canSaveAndGenerate}
+            saveAndGenerateLoading={saveAndGenerateLoading}
+            loading={loading}
+            grossYuan={derivedGrossYuan}
+            adjustmentNetYuan={derivedAdjustmentNetYuan}
+            discountYuan={derivedDiscountYuan}
+            settlementYuan={derivedSettlementYuan}
+            collectionMode={resolvedCollectionMode}
+            depositYuan={
+              resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
+                ? 0
+                : Number(depositYuan ?? 0)
+            }
+            balanceYuan={
+              resolvedCollectionMode === SourceOrderCollectionMode.PARTNER_SETTLED
+                ? 0
+                : Number(balanceYuan ?? 0)
+            }
+            partnerCollectedYuan={derivedAmounts.partnerCollectedCents / 100}
+            guestCollectYuan={derivedAmounts.guestCollectCents / 100}
+            customerTopUpYuan={derivedAmounts.estimatedCustomerTopUpCents / 100}
+            rebateYuan={derivedAmounts.estimatedRebateCents / 100}
+            onClose={handleClose}
+            onSubmitIntent={trySubmit}
+          />
         )
       }
     >
@@ -1444,64 +1676,37 @@ export function SourceOrderDrawer({
       {detailReady && !detailError ? (
         <>
           <FormSectionNav activeKey={activeSection} onChange={scrollToSection} />
-          <Form
-            key={formKey}
+          <SourceOrderDrawerForm
             form={form}
-            layout="vertical"
-            disabled={readOnly}
-            scrollToFirstError={{ focus: true }}
+            formKey={formKey}
             initialValues={initialValues}
-            onFinish={(values) => {
-              if (hasFareDraftRef.current) {
-                message.warning('请先保存或取消当前调整行后再保存客源单')
-                resetSubmitIntent()
-                return
-              }
-              if (hasGuestDraftRef.current) {
-                message.warning('请先保存或取消当前名单行后再保存客源单')
-                resetSubmitIntent()
-                return
-              }
-              const pathBaseline: SourceOrderPathBaseline | null = resolvedOrder
-                ? {
-                    guestCollectCents: resolvedOrder.guestCollectCents,
-                    partnerCollectedCents: resolvedOrder.partnerCollectedCents,
-                    depositCents: resolvedOrder.depositCents,
-                    balanceCents: resolvedOrder.balanceCents,
-                  }
-                : null
-              const generateReceivable = submitIntentRef.current === 'saveAndGenerate'
-              resetSubmitIntent()
-              onSubmit(formValuesToPayload(values), pathBaseline, {
-                generateReceivable,
-                guests: guestSyncRef.current,
-              })
+            resolvedOrder={resolvedOrder}
+            submitIntentRef={submitIntentRef}
+            hasFareDraftRef={hasFareDraftRef}
+            hasGuestDraftRef={hasGuestDraftRef}
+            guestSyncRef={guestSyncRef}
+            onSubmit={onSubmit}
+            partners={partnersResult?.items ?? []}
+            partnerSearch={partnerSearch}
+            onPartnerSearch={setPartnerSearch}
+            lockAmounts={lockAmounts}
+            readOnly={readOnly}
+            derivedTotalGuests={derivedTotalGuests}
+            derivedGrossYuan={derivedGrossYuan}
+            derivedAdjustmentNetYuan={derivedAdjustmentNetYuan}
+            discountType={discountType}
+            collectionMode={collectionMode}
+            onFareDraftPresenceChange={(hasDraft) => {
+              hasFareDraftRef.current = hasDraft
             }}
-            onFinishFailed={resetSubmitIntent}
-          >
-            <SourceOrderFormFields
-              partners={partnersResult?.items ?? []}
-              partnerSearch={partnerSearch}
-              onPartnerSearch={setPartnerSearch}
-              lockAmounts={lockAmounts}
-              readOnly={readOnly}
-              derivedTotalGuests={derivedTotalGuests}
-              derivedGrossYuan={derivedGrossYuan}
-              derivedAdjustmentNetYuan={derivedAdjustmentNetYuan}
-              discountType={discountType}
-              collectionMode={collectionMode}
-              onFareDraftPresenceChange={(hasDraft) => {
-                hasFareDraftRef.current = hasDraft
-              }}
-              guestSessionKey={guestSessionKey}
-              guestBaseline={guestBaseline}
-              guestBaselineReady={guestsReady}
-              onGuestDraftPresenceChange={(hasDraft) => {
-                hasGuestDraftRef.current = hasDraft
-              }}
-              onGuestSyncBundleChange={onGuestSyncBundleChange}
-            />
-          </Form>
+            guestSessionKey={guestSessionKey}
+            guestBaseline={guestBaseline}
+            guestBaselineReady={guestsReady}
+            onGuestDraftPresenceChange={(hasDraft) => {
+              hasGuestDraftRef.current = hasDraft
+            }}
+            onGuestSyncBundleChange={onGuestSyncBundleChange}
+          />
         </>
       ) : null}
     </Drawer>

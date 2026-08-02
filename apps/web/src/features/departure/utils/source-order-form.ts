@@ -7,6 +7,8 @@ import {
 import type { SourceOrderSummary } from '@/types/api'
 
 export interface SourceOrderFareAdjustmentFormRow {
+  /** Client-only stable identity for table rendering; omitted from API payloads. */
+  rowKey?: string
   kind: FareAdjustmentKind
   direction: FareAdjustmentDirection
   amountYuan?: number
@@ -234,6 +236,7 @@ export function sourceOrderToFormValues(order: SourceOrderSummary): SourceOrderF
     settlementNotes: order.settlementNotes ?? undefined,
     notes: order.notes ?? undefined,
     fareAdjustments: (order.fareAdjustments ?? []).map((item) => ({
+      rowKey: item.id,
       kind: item.kind as FareAdjustmentKind,
       direction: item.direction as FareAdjustmentDirection,
       amountYuan: centsToYuan(item.amountCents),

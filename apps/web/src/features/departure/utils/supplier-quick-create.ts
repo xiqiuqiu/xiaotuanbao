@@ -6,15 +6,9 @@ import { createSupplier, getSupplier, listSuppliers } from '@/services/supplier.
 /** Sentinel Select value for the inline「创建“…”」option — never persisted as supplierId. */
 export const SUPPLIER_QUICK_CREATE_OPTION_VALUE = '__create_supplier__'
 
-/** @deprecated Use SUPPLIER_QUICK_CREATE_OPTION_VALUE */
-export const RESOURCE_SUPPLIER_CREATE_OPTION_VALUE = SUPPLIER_QUICK_CREATE_OPTION_VALUE
-
 export function formatSupplierQuickCreateOptionLabel(name: string): string {
   return `创建“${name.trim()}”`
 }
-
-/** @deprecated Use formatSupplierQuickCreateOptionLabel */
-export const formatResourceSupplierCreateOptionLabel = formatSupplierQuickCreateOptionLabel
 
 /** Exact name match after trim (aligned with API uniqueness). */
 export function findSupplierByExactName(

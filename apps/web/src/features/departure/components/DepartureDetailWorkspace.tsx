@@ -69,7 +69,10 @@ export function DepartureDetailWorkspace({
   onTabChange,
 }: DepartureDetailWorkspaceProps) {
   const navigate = useNavigate()
-  const animatedOverviewDepartureIds = useRef(new Set<string>())
+  const animatedOverviewDepartureIds = useRef<Set<string>>(null!)
+  if (animatedOverviewDepartureIds.current === null) {
+    animatedOverviewDepartureIds.current = new Set<string>()
+  }
 
   const readOnly = departure.status === DepartureStatus.CLOSED
   const amountReadOnly =

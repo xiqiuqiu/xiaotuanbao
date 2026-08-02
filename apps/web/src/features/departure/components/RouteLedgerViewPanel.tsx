@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
@@ -32,7 +32,6 @@ import type {
 import {
   downloadDepartureRouteLedger,
   getDepartureRouteLedger,
-  listDepartureRouteNames,
 } from '@/services/departure.service'
 import { formatCents } from '../catalog'
 import {
@@ -57,6 +56,8 @@ const ROUTE_LEDGER_TABLE_SCROLL_X = 1200
 
 type RouteLedgerViewPanelProps = {
   viewNavigation?: ReactNode
+  routeNames: string[]
+  routeNamesLoading: boolean
   routeName?: string
   startDateRange: [string | undefined, string | undefined] | null
   onRouteNameChange: (value?: string) => void
@@ -376,6 +377,8 @@ function DepartureLedgerReport({
  */
 export function RouteLedgerViewPanel({
   viewNavigation,
+  routeNames,
+  routeNamesLoading,
   routeName,
   startDateRange,
   onRouteNameChange,
@@ -391,39 +394,6 @@ export function RouteLedgerViewPanel({
     startDateFrom,
     startDateTo,
   })
-
-  const { data: routeNamesData, isLoading: routeNamesLoading } = useQuery({
-    queryKey: ['departures', 'route-names'],
-    queryFn: ({ signal }) => listDepartureRouteNames(signal),
-  })
-
-  /** 进入线路视图且双轴皆空时，默认选中路线列表首项（用户清空后不强制回填）。 */
-  const didAutoSelectRouteRef = useRef(false)
-  useEffect(() => {
-    if (didAutoSelectRouteRef.current) return
-    const hasAxes = Boolean(
-      routeName?.trim() || startDateFrom?.trim() || startDateTo?.trim(),
-    )
-    if (hasAxes) {
-      didAutoSelectRouteRef.current = true
-      return
-    }
-    if (routeNamesLoading) return
-    const first = routeNamesData?.items.find((name) => name.trim().length > 0)?.trim()
-    if (!first) {
-      didAutoSelectRouteRef.current = true
-      return
-    }
-    didAutoSelectRouteRef.current = true
-    onRouteNameChange(first)
-  }, [
-    routeName,
-    startDateFrom,
-    startDateTo,
-    routeNamesData,
-    routeNamesLoading,
-    onRouteNameChange,
-  ])
 
   const {
     data: ledger,
@@ -446,11 +416,10 @@ export function RouteLedgerViewPanel({
     enabled: queryGate.status === 'ready',
   })
 
-  const options =
-    routeNamesData?.items.map((name) => ({
-      value: name,
-      label: name,
-    })) ?? []
+  const options = routeNames.map((name) => ({
+    value: name,
+    label: name,
+  }))
 
   const reportStack = useMemo(
     () => (ledger ? listRouteLedgerReportStack(ledger.dateBlocks) : []),

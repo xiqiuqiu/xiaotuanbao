@@ -73,17 +73,3 @@ export function formatSegmentDateRange(
 
   return `${start.format('M月D日')}–${end.format('M月D日')}`
 }
-
-export function formatResourceOverview(segment: ItinerarySegmentSummary): string {
-  const parts = [`资源${segment.resourceCount}项`]
-
-  if (segment.outsourceCount > 0) {
-    parts.push(`拼出${segment.outsourceCount}条`)
-  }
-
-  if (segment.resourceAmountCents > 0) {
-    parts.push(`¥${(segment.resourceAmountCents / 100).toLocaleString('zh-CN')}`)
-  }
-
-  return parts.join('｜')
-}
