@@ -46,6 +46,23 @@ export function MainLayout({ children }: PropsWithChildren) {
     if (pathname.startsWith('/system')) return ['system']
     return []
   })
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(max-width: 767px)').matches
+      : false,
+  )
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const syncViewport = () => {
+      setIsNarrowViewport(mediaQuery.matches)
+    }
+    syncViewport()
+    mediaQuery.addEventListener('change', syncViewport)
+    return () => {
+      mediaQuery.removeEventListener('change', syncViewport)
+    }
+  }, [])
 
   // defaultOpenKeys 仅在首次挂载生效；从工作台跳入二级菜单时需受控同步展开父级。
   useEffect(() => {
@@ -134,10 +151,22 @@ export function MainLayout({ children }: PropsWithChildren) {
           onClick={({ key }) => {
             if (key.startsWith('/')) {
               navigate({ to: key })
+              if (isNarrowViewport) {
+                setSidebarCollapsed(true)
+              }
             }
           }}
         />
       </Sider>
+
+      {!sidebarCollapsed && isNarrowViewport ? (
+        <button
+          type="button"
+          className={styles.siderMask}
+          aria-label="关闭侧边栏"
+          onClick={() => setSidebarCollapsed(true)}
+        />
+      ) : null}
 
       <Layout className={styles.main}>
         <Header

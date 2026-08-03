@@ -59,7 +59,7 @@ export function PartnerDetailPage() {
   if (!partnerId) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
           返回合作伙伴列表
         </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -80,7 +80,7 @@ export function PartnerDetailPage() {
   if (isError || !partner) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
           返回合作伙伴列表
         </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -95,7 +95,7 @@ export function PartnerDetailPage() {
 
   return (
     <div>
-      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
         返回合作伙伴列表
       </Button>
       <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>

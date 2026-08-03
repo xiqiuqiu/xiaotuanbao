@@ -16,7 +16,7 @@ export function DepartureTransactionsLink({
       to="/departure/$departureId"
       params={{ departureId }}
       search={buildDepartureTransactionTabSearch(direction)}
-      style={{ marginLeft: 8 }}
+      style={{ marginInlineStart: 8 }}
     >
       {children}
     </Link>

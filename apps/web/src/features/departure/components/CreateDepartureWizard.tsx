@@ -187,7 +187,7 @@ export function CreateDepartureWizard() {
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
-          style={{ paddingLeft: 0 }}
+          style={{ paddingInlineStart: 0 }}
           onClick={goBack}
         >
           返回发团列表

@@ -55,7 +55,7 @@
 }
 
 .brandMeta {
-  margin-left: 4px;
+  margin-inline-start: 4px;
   color: var(--shell-text-tertiary);
   font-size: 13px;
   font-weight: 400;

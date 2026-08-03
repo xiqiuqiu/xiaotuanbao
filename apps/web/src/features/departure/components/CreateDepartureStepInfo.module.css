@@ -36,7 +36,7 @@
 }
 
 .summaryIcon {
-  margin-right: 8px;
+  margin-inline-end: 8px;
   color: var(--info-secondary);
 }
 

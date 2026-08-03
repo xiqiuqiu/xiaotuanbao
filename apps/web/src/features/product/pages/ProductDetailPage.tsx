@@ -51,7 +51,7 @@ export function ProductDetailPage() {
   if (!productId) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0 }} onClick={goBack}>
           返回产品中心
         </Button>
         <Typography.Title level={4}>产品不存在</Typography.Title>
@@ -70,7 +70,7 @@ export function ProductDetailPage() {
   if (isError || !product) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0 }} onClick={goBack}>
           返回产品中心
         </Button>
         <Typography.Title level={4}>产品不存在</Typography.Title>

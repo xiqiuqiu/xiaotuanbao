@@ -38,12 +38,16 @@ body {
 .app-content {
   min-width: 0;
   margin: 0;
-  padding: 16px;
+  padding-block: 16px;
+  padding-inline: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
 
 @media (max-width: 767px) {
   .app-content {
-    padding: 12px;
+    padding-block: 12px;
+    padding-inline: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   }
 }
 

@@ -14,7 +14,7 @@
 
 .cashBreakdown {
   min-width: 144px;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .progressBreakdown {
@@ -29,6 +29,10 @@
 .progressLoad :global(.ant-progress-track) {
   transform-origin: left center;
   animation: progress-load 240ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
+}
+
+:global([dir='rtl']) .progressLoad :global(.ant-progress-track) {
+  transform-origin: right center;
 }
 
 @keyframes progress-load {
@@ -108,7 +112,7 @@
 @media (max-width: 575px) {
   .cashBreakdown {
     width: 100%;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }
 

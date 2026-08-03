@@ -36,7 +36,7 @@ export function ProductDetailHeader({
 
   return (
     <Space style={{ marginBottom: 16 }} wrap>
-      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }} onClick={onBack}>
+      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0 }} onClick={onBack}>
         返回产品中心
       </Button>
       <Typography.Title level={4} style={{ margin: 0 }}>

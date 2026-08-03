@@ -10,13 +10,13 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
   const { token } = theme.useToken()
 
   return (
-    <Row gutter={16} style={{ marginBottom: 16 }}>
-      <Col span={6}>
+    <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+      <Col xs={12} sm={12} xl={6}>
         <Card>
           <Statistic title="员工总数" value={stats?.total ?? 0} prefix={<UserOutlined />} />
         </Card>
       </Col>
-      <Col span={6}>
+      <Col xs={12} sm={12} xl={6}>
         <Card>
           <Statistic
             title="启用"
@@ -25,7 +25,7 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
           />
         </Card>
       </Col>
-      <Col span={6}>
+      <Col xs={12} sm={12} xl={6}>
         <Card>
           <Statistic
             title="停用"
@@ -34,7 +34,7 @@ export function EmployeeStatsCards({ stats }: EmployeeStatsCardsProps) {
           />
         </Card>
       </Col>
-      <Col span={6}>
+      <Col xs={12} sm={12} xl={6}>
         <Card>
           <Statistic title="今日新增" value={stats?.createdToday ?? 0} />
         </Card>

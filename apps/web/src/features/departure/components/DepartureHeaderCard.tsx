@@ -121,7 +121,7 @@ export function DepartureHeaderCard({
         </div>
 
         <div className={styles.actions} aria-label="发团操作">
-          <Space size={4}>
+          <Space size={12}>
             {primaryAction ? (
               <Button type="primary" size="small" onClick={primaryAction.onClick}>
                 {primaryAction.label}

@@ -64,9 +64,9 @@
 .actions {
   flex: none;
   align-self: center;
-  margin-left: 8px;
-  padding-left: 16px;
-  border-left: 1px solid var(--ant-color-border-secondary);
+  margin-inline-start: 8px;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--ant-color-border-secondary);
 }
 
 .metaRow {
@@ -74,7 +74,8 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 12px;
-  padding-left: 40px;
+  /* Align under title: back button (~32px) + top gap (8px). */
+  padding-inline-start: 40px;
   font-size: 12px;
   color: var(--ant-color-text-secondary);
   line-height: 1.5;
@@ -120,13 +121,13 @@
 
   .actions {
     width: 100%;
-    margin-left: 0;
-    padding-left: 40px;
-    border-left: none;
+    margin-inline-start: 0;
+    padding-inline-start: 40px;
+    border-inline-start: none;
   }
 
   .metaRow {
-    padding-left: 0;
+    padding-inline-start: 40px;
   }
 
   .backButton,

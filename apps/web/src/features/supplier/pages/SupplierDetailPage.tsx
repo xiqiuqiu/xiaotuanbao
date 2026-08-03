@@ -64,7 +64,7 @@ export function SupplierDetailPage() {
   if (!supplierId) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
           返回供应商列表
         </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -85,7 +85,7 @@ export function SupplierDetailPage() {
   if (isError || !supplier) {
     return (
       <div>
-        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+        <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
           返回供应商列表
         </Button>
         <Typography.Title level={4} style={{ marginTop: 0 }}>
@@ -100,7 +100,7 @@ export function SupplierDetailPage() {
 
   return (
     <div>
-      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0, marginBottom: 16 }} onClick={goBack}>
+      <Button type="text" icon={<ArrowLeftOutlined />} style={{ paddingInlineStart: 0, marginBottom: 16 }} onClick={goBack}>
         返回供应商列表
       </Button>
       <Typography.Title level={4} style={{ marginTop: 0, marginBottom: 16 }}>

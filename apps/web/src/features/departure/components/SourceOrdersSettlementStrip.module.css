@@ -30,7 +30,7 @@
 }
 
 .settlementStripCell + .settlementStripCell {
-  border-left: 1px solid var(--ant-color-border-secondary);
+  border-inline-start: 1px solid var(--ant-color-border-secondary);
 }
 
 .settlementStripHero {
@@ -81,7 +81,7 @@
   }
 
   .settlementStripCell:nth-child(3) {
-    border-left: 0;
+    border-inline-start: 0;
   }
 }
 
@@ -91,7 +91,7 @@
   }
 
   .settlementStripCell + .settlementStripCell {
-    border-left: 0;
+    border-inline-start: 0;
     border-top: 1px solid var(--ant-color-border-secondary);
   }
 }

@@ -116,6 +116,46 @@ describe('MainLayout 侧栏开关', () => {
     })
   })
 
+  it('窄屏侧栏展开时点击遮罩可关闭', async () => {
+    const originalMatchMedia = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('max-width: 767px'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    useUiStore.setState({ sidebarCollapsed: false })
+    const user = userEvent.setup()
+    try {
+      render(
+        <ConfigProvider>
+          <MainLayout>
+            <main>内容</main>
+          </MainLayout>
+        </ConfigProvider>,
+      )
+
+      expect(screen.getByRole('button', { name: '关闭侧边栏' })).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '关闭侧边栏' }))
+      expect(useUiStore.getState().sidebarCollapsed).toBe(true)
+      expect(screen.queryByRole('button', { name: '关闭侧边栏' })).not.toBeInTheDocument()
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        configurable: true,
+        value: originalMatchMedia,
+      })
+    }
+  })
+
   it('Tooltip 与可访问名称随折叠状态同步', async () => {
     const user = userEvent.setup()
     render(

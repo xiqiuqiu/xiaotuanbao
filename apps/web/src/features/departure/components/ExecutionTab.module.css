@@ -73,7 +73,11 @@
   gap: 8px;
   align-items: stretch;
   overflow-x: auto;
-  padding: 4px 0;
+  padding-block: 4px;
+  /* Narrow the content box so the next day chip peeks ~24px when the axis overflows. */
+  padding-inline-end: 24px;
+  scroll-padding-inline-end: 24px;
+  scroll-snap-type: x proximity;
 }
 
 .dayChipWrap {
@@ -85,6 +89,7 @@
   border-radius: var(--execution-radius);
   background: var(--execution-item-bg);
   overflow: hidden;
+  scroll-snap-align: start;
   transition:
     background-color 100ms ease,
     border-color 100ms ease,
@@ -118,7 +123,7 @@
   border-radius: 0;
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   color: inherit;
   font: inherit;
   box-sizing: border-box;
@@ -259,6 +264,7 @@
   height: auto !important;
   padding: 8px 12px !important;
   white-space: normal;
+  scroll-snap-align: start;
 }
 
 .dayAxisAddContent {

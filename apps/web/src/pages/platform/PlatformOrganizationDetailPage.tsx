@@ -110,7 +110,7 @@ export function PlatformOrganizationDetailPage() {
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
-          style={{ paddingLeft: 0, marginBottom: 16 }}
+          style={{ paddingInlineStart: 0, marginBottom: 16 }}
           onClick={goBack}
         >
           返回名录
@@ -136,7 +136,7 @@ export function PlatformOrganizationDetailPage() {
         <Button
           type="text"
           icon={<ArrowLeftOutlined />}
-          style={{ paddingLeft: 0, marginBottom: 16 }}
+          style={{ paddingInlineStart: 0, marginBottom: 16 }}
           onClick={goBack}
         >
           返回名录
@@ -153,7 +153,7 @@ export function PlatformOrganizationDetailPage() {
       <Button
         type="text"
         icon={<ArrowLeftOutlined />}
-        style={{ paddingLeft: 0, marginBottom: 16 }}
+        style={{ paddingInlineStart: 0, marginBottom: 16 }}
         onClick={goBack}
       >
         返回名录
