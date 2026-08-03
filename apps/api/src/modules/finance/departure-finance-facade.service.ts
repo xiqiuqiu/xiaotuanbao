@@ -23,6 +23,7 @@ import {
 import type {
   GenerateReceivablesResult,
   PaymentScheduleSummary,
+  SettleByActualCollectionResult,
   SourceOrderSummary,
 } from '@xiaotuanbao/shared'
 import {
@@ -41,7 +42,13 @@ import {
   formatDateOnly,
   getShanghaiTodayString,
 } from '../departure/departure-date.utils'
-import { reconcileUnitPricesToGross } from '../departure/source-order.utils'
+import {
+  reconcileUnitPricesToGross,
+  resolveSourceOrderAmountChange,
+  type SourceOrderAmountInput,
+  type SourceOrderStoredAmounts,
+} from '../departure/source-order.utils'
+import { DepartureFinanceActualCollectionService } from './departure-finance-actual-collection.service'
 import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
 import type {
   SourceOrderFinanceMeta,
@@ -234,6 +241,8 @@ export class DepartureFinanceFacade {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => DepartureFinanceGenerationService))
     private readonly generation: DepartureFinanceGenerationService,
+    @Inject(forwardRef(() => DepartureFinanceActualCollectionService))
+    private readonly actualCollection: DepartureFinanceActualCollectionService,
   ) {}
 
   async generateReceivables(
@@ -268,6 +277,94 @@ export class DepartureFinanceFacade {
   ): Promise<SourceOrderFinanceMeta> {
     await this.generation.syncSourceOrderConvention(organizationId, order)
     return (await this.getSourceOrderFinanceState(organizationId, order.id, order)).meta
+  }
+
+  async settleByActualCollection(
+    organizationId: string,
+    sourceOrderId: string,
+    toSourceOrderSummary: (
+      order: SourceOrder & {
+        partner: Partner
+        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
+      },
+      meta: SourceOrderFinanceMeta,
+    ) => SourceOrderSummary,
+  ): Promise<SettleByActualCollectionResult> {
+    const result = await this.actualCollection.settleByActualCollection(
+      organizationId,
+      sourceOrderId,
+      (departure, action) => this.assertAllowsNewObligation(departure, action),
+    )
+    const financeMeta = (
+      await this.getSourceOrderFinanceState(organizationId, sourceOrderId, result.order)
+    ).meta
+    return {
+      schedules: result.schedules,
+      sourceOrder: toSourceOrderSummary(result.order, financeMeta),
+      actualGuestCollectedCents: result.actualGuestCollectedCents,
+      customerTopUpCents: result.customerTopUpCents,
+      rebateCents: result.rebateCents,
+    }
+  }
+
+  async syncActualCollectionSettlementAfterGuestVerification(
+    organizationId: string,
+    paymentScheduleId: string,
+  ): Promise<PaymentScheduleSummary | null> {
+    return this.actualCollection.syncActualCollectionSettlementAfterGuestVerification(
+      organizationId,
+      paymentScheduleId,
+      (departure, action) => this.assertAllowsNewObligation(departure, action),
+    )
+  }
+
+  async assertAmountFieldsEditable(
+    organizationId: string,
+    sourceOrderId: string,
+    order: SourceOrderStoredAmounts,
+    nextAmounts: SourceOrderAmountInput,
+  ): Promise<void> {
+    const { amountOutcomeChanged } = resolveSourceOrderAmountChange(order, nextAmounts)
+    if (!amountOutcomeChanged) {
+      return
+    }
+
+    const meta = (await this.getSourceOrderFinanceState(organizationId, sourceOrderId)).meta
+    if (meta.amountFieldsLocked) {
+      throw new BadRequestException('当前客源单已发生收款，不允许修改金额')
+    }
+  }
+
+  async assertResourceAmountEditable(
+    organizationId: string,
+    resourceId: string,
+    currentAmountCents: number,
+    nextAmountCents: number,
+  ): Promise<void> {
+    if (currentAmountCents === nextAmountCents) {
+      return
+    }
+
+    const meta = await this.getSegmentResourceFinanceState(organizationId, resourceId)
+    if (meta.amountFieldsLocked) {
+      throw new BadRequestException('当前资源已发生付款，不允许修改金额')
+    }
+  }
+
+  async assertDepartureResourceAmountEditable(
+    organizationId: string,
+    resourceId: string,
+    currentAmountCents: number,
+    nextAmountCents: number,
+  ): Promise<void> {
+    if (currentAmountCents === nextAmountCents) {
+      return
+    }
+
+    const meta = await this.getDepartureResourceFinanceState(organizationId, resourceId)
+    if (meta.amountFieldsLocked) {
+      throw new BadRequestException('当前资源已发生付款，不允许修改金额')
+    }
   }
 
   async generateResourcePayable(
