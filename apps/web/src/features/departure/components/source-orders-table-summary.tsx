@@ -1,45 +1,18 @@
 import { Table, Typography, theme } from 'antd'
 import type { SourceOrderSummary } from '@/types/api'
 import { formatCents } from '../catalog'
-import { sourceOrderRebateDisplayCents } from './source-orders-table-columns'
+import {
+  buildSourceOrdersListGlance,
+  type SourceOrdersTableTotals,
+} from '../utils/source-orders-list-glance'
 
-/** Numeric totals for the source-orders table footer (current filtered page). */
-export interface SourceOrdersTableTotals {
-  guestCount: number
-  grossReceivableCents: number
-  fareAdjustmentNetCents: number
-  discountCents: number
-  netReceivableCents: number
-  partnerCollectedCents: number
-  guestCollectCents: number
-  rebateDisplayCents: number
-}
+export type { SourceOrdersTableTotals }
 
+/** @deprecated Prefer `buildSourceOrdersListGlance(orders).tableTotals`. */
 export function aggregateSourceOrdersTableTotals(
   pageData: readonly SourceOrderSummary[],
 ): SourceOrdersTableTotals {
-  return pageData.reduce<SourceOrdersTableTotals>(
-    (totals, order) => ({
-      guestCount: totals.guestCount + order.guestCount,
-      grossReceivableCents: totals.grossReceivableCents + order.grossReceivableCents,
-      fareAdjustmentNetCents: totals.fareAdjustmentNetCents + order.fareAdjustmentNetCents,
-      discountCents: totals.discountCents + order.discountCents,
-      netReceivableCents: totals.netReceivableCents + order.netReceivableCents,
-      partnerCollectedCents: totals.partnerCollectedCents + order.partnerCollectedCents,
-      guestCollectCents: totals.guestCollectCents + order.guestCollectCents,
-      rebateDisplayCents: totals.rebateDisplayCents + sourceOrderRebateDisplayCents(order),
-    }),
-    {
-      guestCount: 0,
-      grossReceivableCents: 0,
-      fareAdjustmentNetCents: 0,
-      discountCents: 0,
-      netReceivableCents: 0,
-      partnerCollectedCents: 0,
-      guestCollectCents: 0,
-      rebateDisplayCents: 0,
-    },
-  )
+  return buildSourceOrdersListGlance(pageData).tableTotals
 }
 
 function SummaryAmount({ value }: { value: number }) {
@@ -52,7 +25,7 @@ function SummaryAmount({ value }: { value: number }) {
 
 function SourceOrdersTableSummaryRow({ pageData }: { pageData: readonly SourceOrderSummary[] }) {
   const { token } = theme.useToken()
-  const totals = aggregateSourceOrdersTableTotals(pageData)
+  const totals = buildSourceOrdersListGlance(pageData).tableTotals
 
   return (
     <Table.Summary fixed>

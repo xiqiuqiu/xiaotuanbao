@@ -16,7 +16,11 @@ import {
   catalogLabel,
   formatCents,
 } from '../catalog'
+import { sourceOrderRebateDisplayCents } from '../utils/source-order-rebate-display'
+import { isUngeneratedReceivable } from '../utils/source-orders-list-glance'
 import styles from './source-orders-table-columns.module.css'
+
+export { sourceOrderRebateDisplayCents }
 
 interface BuildSourceOrdersColumnsOptions {
   /** 持有 `departure:write` 且发团未关闭：显示编辑/删除。 */
@@ -33,10 +37,7 @@ interface BuildSourceOrdersColumnsOptions {
 }
 
 function canGenerateReceivable(record: SourceOrderSummary): boolean {
-  return (
-    record.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
-    record.hasIncompleteReceivablePaths
-  )
+  return isUngeneratedReceivable(record)
 }
 
 /** 返利已落账且仍待付/部分付时，操作列追加跳转入口。 */
@@ -49,13 +50,6 @@ export function canViewRebatePayable(record: SourceOrderSummary): boolean {
 
 function renderCents(value: number) {
   return <span style={{ whiteSpace: 'nowrap' }}>{formatCents(value)}</span>
-}
-
-/** 列表展示：未落账用预计金额，已落账用应付金额。 */
-export function sourceOrderRebateDisplayCents(order: SourceOrderSummary): number {
-  return order.rebateStatus === SegmentPayableStatus.NOT_GENERATED
-    ? order.estimatedRebateCents
-    : order.rebateCents
 }
 
 /** 是否有返利轨迹（已落账，或按公式预计 > 0）。无返利时列表用「-」，不展示 0 / 未生成。 */
