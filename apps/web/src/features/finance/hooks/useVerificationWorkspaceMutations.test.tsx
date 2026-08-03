@@ -63,6 +63,7 @@ describe('useVerificationWorkspaceMutations', () => {
     })
 
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['departure', 'dep-1'] })
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['source-orders', 'dep-1'] })
   })
 
   it('撤销核销后刷新所属发团详情', async () => {

@@ -14,7 +14,8 @@ dayjs.locale('zh-cn')
 const theme = {
   cssVar: {},
   token: {
-    colorPrimary: '#1677FF',
+    // Slightly deeper than DESIGN.md swatch so white label text clears WCAG AA 4.5:1.
+    colorPrimary: '#1464D9',
     colorText: '#1F1F1F',
     colorTextSecondary: '#595959',
     colorTextTertiary: '#8C8C8C',
@@ -63,7 +64,7 @@ const theme = {
       itemMarginInline: 8,
     },
     Tabs: {
-      inkBarColor: '#1677FF',
+      inkBarColor: '#1464D9',
     },
   },
 }

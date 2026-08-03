@@ -2,8 +2,6 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
-  Card,
-  Checkbox,
   Col,
   DatePicker,
   Empty,
@@ -18,7 +16,7 @@ import {
   message,
   theme,
 } from 'antd'
-import { ClockCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+import { ClockCircleOutlined, DeleteOutlined, SearchOutlined } from '@ant-design/icons'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
@@ -138,6 +136,8 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
     })
   }
 
+  const helperTextStyle = { color: token.colorTextSecondary }
+
   return (
     <div
       className={styles.routeStep}
@@ -146,6 +146,8 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
           '--route-fill': token.colorFillAlter,
           '--route-border': token.colorBorderSecondary,
           '--route-radius': `${token.borderRadiusLG}px`,
+          '--route-selected-border': token.colorPrimary,
+          '--route-selected-bg': token.colorPrimaryBg,
         } as CSSProperties
       }
     >
@@ -165,12 +167,16 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
         <div>
           <Input.Search
             allowClear
+            aria-label="搜索路线名称"
             placeholder="搜索路线名称"
             className={styles.search}
+            enterButton={
+              <Button type="default" icon={<SearchOutlined />} aria-label="搜索路线" />
+            }
             onSearch={setKeyword}
           />
 
-          <Typography.Text type="secondary">共 {templates.length} 条路线</Typography.Text>
+          <Typography.Text style={helperTextStyle}>共 {templates.length} 条路线</Typography.Text>
 
           {isLoading ? (
             <div className={styles.loading}>
@@ -192,55 +198,42 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
 
                 return (
                   <Col key={template.id} xs={24} xl={12}>
-                    <Card
-                      hoverable
-                      className={styles.templateCard}
-                      styles={{ body: { padding: 16 } }}
-                      onClick={() => handleSelectTemplate(template)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          handleSelectTemplate(template)
-                        }
-                      }}
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={selected}
-                      aria-label={`选择路线 ${template.name}`}
-                      style={{
-                        borderColor: selected ? token.colorPrimary : undefined,
-                        background: selected ? token.colorPrimaryBg : undefined,
-                      }}
+                    <div
+                      className={
+                        selected
+                          ? `${styles.templateCardShell} ${styles.templateCardShellSelected}`
+                          : styles.templateCardShell
+                      }
                     >
-                      <div className={styles.templateCardHeader}>
-                        <div className={styles.templateTitle}>
-                          <Checkbox
-                            checked={selected}
-                            aria-label={`选择路线 ${template.name}`}
-                            onChange={() => handleSelectTemplate(template)}
-                            onClick={(event) => event.stopPropagation()}
-                          />
-                          <Typography.Text strong>{template.name}</Typography.Text>
-                        </div>
-                        <Button
-                          type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          aria-label={`删除常用路线 ${template.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            handleDeleteTemplate(template)
-                          }}
-                        />
-                      </div>
-                      <div className={styles.templateMeta}>
-                        <Typography.Text type="secondary">
-                          <ClockCircleOutlined /> {template.defaultDayCount} 天
+                      <button
+                        type="button"
+                        className={styles.templateSelect}
+                        aria-pressed={selected}
+                        aria-label={`选择路线 ${template.name}`}
+                        onClick={() => handleSelectTemplate(template)}
+                      >
+                        <Typography.Text strong className={styles.templateName}>
+                          {template.name}
                         </Typography.Text>
-                        <Typography.Text type="secondary">已使用 {template.usageCount} 次</Typography.Text>
-                      </div>
-                    </Card>
+                        <div className={styles.templateMeta}>
+                          <Typography.Text style={helperTextStyle}>
+                            <ClockCircleOutlined aria-hidden /> {template.defaultDayCount} 天
+                          </Typography.Text>
+                          <Typography.Text style={helperTextStyle}>
+                            已使用 {template.usageCount} 次
+                          </Typography.Text>
+                        </div>
+                      </button>
+                      <Button
+                        type="text"
+                        size="small"
+                        danger
+                        className={styles.templateDelete}
+                        icon={<DeleteOutlined />}
+                        aria-label={`删除常用路线 ${template.name}`}
+                        onClick={() => handleDeleteTemplate(template)}
+                      />
+                    </div>
                   </Col>
                 )
               })}
@@ -250,14 +243,14 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
           {selectedTemplate ? (
             <div className={styles.selectedTemplateBanner}>
               <div>
-                <Typography.Text type="secondary">已选择路线</Typography.Text>
+                <Typography.Text style={helperTextStyle}>已选择路线</Typography.Text>
                 <Typography.Text strong>{selectedTemplate.name}</Typography.Text>
               </div>
               <div className={styles.selectedMeta}>
-                <Typography.Text type="secondary">
+                <Typography.Text style={helperTextStyle}>
                   {selectedTemplate.defaultDayCount} 天
                 </Typography.Text>
-                <Typography.Text type="secondary">
+                <Typography.Text style={helperTextStyle}>
                   已使用 {selectedTemplate.usageCount} 次
                 </Typography.Text>
                 <Typography.Link onClick={handleClearTemplate}>清除</Typography.Link>
@@ -268,12 +261,13 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
       ) : (
         <div className={styles.manualPanel}>
           <Typography.Title level={5}>手动输入路线</Typography.Title>
-          <Typography.Paragraph type="secondary">
+          <Typography.Paragraph style={helperTextStyle}>
             未沉淀为常用路线时，可先填写名称、出团日期和默认天数继续创建。
           </Typography.Paragraph>
           <Form layout="vertical" className={styles.manualForm}>
             <Form.Item label="路线名称" required>
               <Input
+                aria-label="路线名称"
                 placeholder="如：喀纳斯阿勒泰10日线"
                 value={values.routeName}
                 onChange={(event) =>

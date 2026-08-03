@@ -23,6 +23,20 @@ import {
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 
+const focusRouteStepGap = (nextRouteValues: RouteStepValues) => {
+  if (nextRouteValues.mode === 'template') {
+    document.querySelector<HTMLElement>('[aria-label^="选择路线 "]')?.focus()
+    return
+  }
+
+  if (!nextRouteValues.routeName.trim()) {
+    document.querySelector<HTMLElement>('[aria-label="路线名称"]')?.focus()
+    return
+  }
+
+  document.querySelector<HTMLElement>('[aria-label="出团日期"]')?.focus()
+}
+
 export function CreateDepartureWizard() {
   const screens = Grid.useBreakpoint()
   const { token } = theme.useToken()
@@ -89,6 +103,18 @@ export function CreateDepartureWizard() {
   })
 
   const handleRouteStepNext = async () => {
+    if (!canProceed) {
+      if (routeValues.mode === 'template') {
+        message.warning('请先选择一条常用路线')
+      } else if (!routeValues.routeName.trim()) {
+        message.warning('请填写路线名称')
+      } else {
+        message.warning('请选择出团日期')
+      }
+      focusRouteStepGap(routeValues)
+      return
+    }
+
     if (routeValues.mode === 'template' && routeValues.templateId) {
       try {
         const detail = await getRouteTemplate(routeValues.templateId)
@@ -191,7 +217,7 @@ export function CreateDepartureWizard() {
             </aside>
           ) : null}
 
-          <main className={styles.workspace}>
+          <section className={styles.workspace} aria-label="发团创建内容">
             {currentStep === 0 || showCopyBootstrap ? (
               <Form form={infoForm} className={styles.hiddenForm} aria-hidden />
             ) : null}
@@ -206,7 +232,7 @@ export function CreateDepartureWizard() {
                 <CreateDepartureStepInfo form={infoForm} route={routeValues} />
               )}
             </div>
-          </main>
+          </section>
         </div>
 
         <footer className={styles.wizardFooter}>
@@ -221,7 +247,6 @@ export function CreateDepartureWizard() {
             {!isCopyMode && !copyFromId && currentStep === 0 ? (
               <Button
                 type="primary"
-                disabled={!canProceed}
                 loading={initializingStep2}
                 onClick={() => void handleRouteStepNext()}
               >

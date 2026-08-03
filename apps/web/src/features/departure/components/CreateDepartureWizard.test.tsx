@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ConfigProvider, Modal } from 'antd'
+import { ConfigProvider, Modal, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -165,15 +165,25 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('disables next step until route name and start date are filled on manual tab', async () => {
+  it('keeps next enabled and warns when route name or start date is missing on manual tab', async () => {
     const user = userEvent.setup()
+    const warningSpy = vi.spyOn(message, 'warning').mockImplementation(() => {})
     renderWizard()
 
     await user.click(screen.getByText('手动输入'))
-    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+    const next = screen.getByRole('button', { name: '下一步' })
+    expect(next).toBeEnabled()
+
+    await user.click(next)
+    expect(warningSpy).toHaveBeenCalledWith('请填写路线名称')
+    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
 
     await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    expect(screen.getByRole('button', { name: '下一步' })).toBeDisabled()
+    await user.click(next)
+    expect(warningSpy).toHaveBeenCalledWith('请选择出团日期')
+    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
+
+    warningSpy.mockRestore()
   })
 
   it('enters step 2 from manual tab without template copy modal', async () => {

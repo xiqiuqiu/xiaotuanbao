@@ -2,8 +2,8 @@
 name: 小团宝
 description: 克制、可靠、清晰的旅行社运营工作台
 colors:
-  primary: "#1677FF"
-  primary-hover: "#4096FF"
+  primary: "#1464D9"
+  primary-hover: "#3C82E8"
   primary-active: "#0958D9"
   ink: "#1F1F1F"
   ink-secondary: "#595959"
@@ -115,7 +115,7 @@ components:
 
 ### Primary
 
-- **小团宝蓝** `#1677FF`：主操作、链接、焦点、当前选中、关键图表系列。单屏面积应明显低于中性色。
+- **小团宝蓝** `#1464D9`：主操作、链接、焦点、当前选中、关键图表系列。单屏面积应明显低于中性色；白字对比需满足 WCAG AA 4.5:1。
 - Hover 使用 `#4096FF`，Active 使用 `#0958D9`；由 antd 算法派生，业务页面不硬编码。
 
 ### Neutral

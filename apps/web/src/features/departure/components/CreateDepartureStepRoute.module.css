@@ -21,8 +21,56 @@
   margin-top: 16px;
 }
 
-.templateCard {
+.templateCardShell {
+  position: relative;
   height: 100%;
+  border: 1px solid var(--route-border);
+  border-radius: var(--route-radius);
+  background: var(--ant-color-bg-container, #fff);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.templateCardShell:hover {
+  border-color: var(--route-selected-border);
+}
+
+.templateCardShellSelected {
+  border-color: var(--route-selected-border);
+  background: var(--route-selected-bg);
+}
+
+.templateSelect {
+  display: block;
+  width: 100%;
+  min-height: 88px;
+  margin: 0;
+  padding: 16px 40px 16px 16px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  text-align: start;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.templateSelect:focus-visible {
+  outline: 2px solid var(--route-selected-border);
+  outline-offset: 2px;
+}
+
+.templateName {
+  display: block;
+  min-width: 0;
+}
+
+.templateDelete {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  z-index: 1;
 }
 
 .selectedTemplateBanner {
@@ -46,20 +94,6 @@
 .selectedMeta {
   flex-wrap: wrap;
   justify-content: flex-end;
-}
-
-.templateCardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.templateTitle {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 8px;
 }
 
 .templateMeta {
@@ -100,5 +134,13 @@
 
   .selectedMeta {
     justify-content: flex-start;
+  }
+
+  /* Avoid iOS Safari zooming the page when focusing inputs below 16px. */
+  .routeStep :global(.ant-input),
+  .routeStep :global(.ant-input-number-input),
+  .routeStep :global(.ant-picker-input > input),
+  .routeStep :global(.ant-select-selection-search-input) {
+    font-size: 16px;
   }
 }

@@ -1,5 +1,14 @@
+.infoStep {
+  min-width: 0;
+}
+
 .sectionHeader {
   margin-bottom: 24px;
+}
+
+.crewHint {
+  display: block;
+  margin-bottom: 8px;
 }
 
 .sectionHeader h5 {
@@ -45,5 +54,15 @@
 @media (max-width: 1199px) {
   .summaryCard {
     position: static;
+  }
+}
+
+@media (max-width: 575px) {
+  /* Avoid iOS Safari zooming the page when focusing inputs below 16px. */
+  .infoStep :global(.ant-input),
+  .infoStep :global(textarea.ant-input),
+  .infoStep :global(.ant-picker-input > input),
+  .infoStep :global(.ant-select-selection-search-input) {
+    font-size: 16px;
   }
 }

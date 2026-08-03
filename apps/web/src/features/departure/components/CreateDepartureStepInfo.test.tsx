@@ -34,7 +34,7 @@ const initialValues: InfoFormValues = {
   dayCount: 10,
 }
 
-function renderStep() {
+function renderStep(values: InfoFormValues = initialValues) {
   let formRef: FormInstance<InfoFormValues> | undefined
 
   function Harness() {
@@ -52,7 +52,8 @@ function renderStep() {
   }
 
   render(<Harness />)
-  formRef?.setFieldsValue(initialValues)
+  formRef?.setFieldsValue(values)
+  return formRef
 }
 
 describe('CreateDepartureStepInfo', () => {
@@ -74,5 +75,21 @@ describe('CreateDepartureStepInfo', () => {
     expect(screen.getByLabelText('车牌')).toBeInTheDocument()
     expect(screen.getByLabelText('导游')).toBeInTheDocument()
     expect(screen.getByLabelText('联系电话')).toBeInTheDocument()
+    expect(
+      screen.getByText('选择执行班组（司机、导游）不会自动提交应付'),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('联系电话')).toHaveAttribute('type', 'tel')
+  })
+
+  it('结束日期早于出团日期时给出字段级错误', async () => {
+    const form = renderStep({
+      ...initialValues,
+      startDate: '2026-08-10',
+      endDate: '2026-08-01',
+      dayCount: 1,
+    })
+
+    await expect(form!.validateFields(['endDate'])).rejects.toBeTruthy()
+    expect(await screen.findByText('结束日期不能早于出团日期')).toBeInTheDocument()
   })
 })
