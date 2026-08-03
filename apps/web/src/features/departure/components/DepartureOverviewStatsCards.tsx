@@ -19,33 +19,15 @@ import type { DepartureDetail, DepartureOverviewAnomaly } from '@xiaotuanbao/sha
 import { formatCents as formatUnsignedCents } from '../catalog'
 import { DepartureTransactionsLink } from '../utils/departure-transactions-link'
 import { formatReceivableBalanceAnomalyCopy } from '../utils/format-receivable-balance-anomaly'
+import { RECEIVABLE_SETTLEMENT_CALCULATION_GUIDE as CALCULATION_GUIDE } from '../utils/receivable-settlement-metrics.copy'
+import {
+  buildFullDepartureReceivableSettlementMetrics,
+  type FullDepartureReceivableSettlementMetrics,
+} from '../utils/receivable-settlement-metrics'
 import styles from './DepartureOverviewStatsCards.module.css'
 
 const { Text, Title } = Typography
 const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
-
-const CALCULATION_GUIDE = {
-  结算应收:
-    '本团当前应向客户收取的金额。计算：原始团款合计 + 调整净额 − 优惠合计。根据客源单实时统计，无需提交应收。',
-  成本合计:
-    '本团当前需要承担的全部成本。计算：各项资源成本合计。根据资源安排实时统计，无需提交应付。',
-  当前毛利:
-    '本团当前预计经营毛利。计算：结算应收 − 成本合计。根据客源团款与资源成本实时统计，不表示现金结果。',
-  毛利率:
-    '本团当前毛利占结算应收的比例。计算：当前毛利 ÷ 结算应收 × 100%。根据当前毛利和结算应收实时统计；',
-  增收净收益:
-    '本团增收记录的公司增收合计（增收金额 − 导游提成）。独立于其他应收、团款收款进度与当前毛利；不从收支流水推导；明细在「增收记录」页签。',
-  团款收款进度:
-    '本团结算金额的收回进度。计算：团款已收 ÷ 各单结算金额合计 × 100%。单笔团款已收 = min(游客代收已收, 结算金额) + 客户补款已收；代收溢价与返利不计入。',
-  游客代收进度:
-    '本团游客代收账单的收回进度。计算：游客代收已收 ÷ 各单 G约定（定金+尾款）× 100%。已收仅统计定金代收/尾款代收节点的有效核销。',
-  返利:
-    '本团应付给发客合作方的返利。预估按各单 max(0, G约定−结算金额)；已确认/已付/未付来自游客代收齐账后自动落账的返利应付节点。返利不计入团款收款进度。',
-  资源付款:
-    '本团资源成本的实际支付进度。计算：已付金额 ÷ 成本合计 × 100%。已付仅统计资源应付的有效核销；手工应付与返利应付等不计入本进度。',
-  现金净流入:
-    '本团当前实际发生的资金收支情况。计算：现金净流入 = 有效收入 − 有效支出。根据已关联本团的未作废收支流水实时统计。',
-} as const
 
 function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
@@ -290,16 +272,24 @@ function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly
 interface OverviewSectionProps {
   departure: DepartureDetail
   animateEnter: boolean
+  receivableSettlement: FullDepartureReceivableSettlementMetrics
 }
 
-function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) {
+function OverviewSummaryRows({
+  departure,
+  animateEnter,
+  receivableSettlement,
+}: OverviewSectionProps) {
   const stats = departure.overviewStats
   const hasCostDetails =
     stats.confirmedPayableCents !== 0 ||
     stats.ungeneratedPayableCents !== 0 ||
     stats.otherPayableCents !== 0 ||
     stats.resourcePayableDifferenceCents !== 0
-  const marginRateLabel = formatPercent(departure.estimatedMarginCents, departure.netReceivableCents)
+  const marginRateLabel = formatPercent(
+    departure.estimatedMarginCents,
+    receivableSettlement.settlementReceivableCents,
+  )
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
@@ -315,7 +305,7 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
         <Col xs={24} sm={12} xl={6}>
           <SummaryCard
             title="结算应收"
-            value={formatCents(departure.netReceivableCents)}
+            value={formatCents(receivableSettlement.settlementReceivableCents)}
             equationDescription={CALCULATION_GUIDE.结算应收}
             animateEnter={animateEnter}
           />
@@ -399,12 +389,16 @@ function OverviewSummaryRows({ departure, animateEnter }: OverviewSectionProps) 
   )
 }
 
-function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
+function PaymentAndCashRow({
+  departure,
+  animateEnter,
+  receivableSettlement,
+}: OverviewSectionProps) {
   const { token } = theme.useToken()
   const stats = departure.overviewStats
-  const settlementReceivableCents = stats.settlementCollectionReceivableCents
-  const settlementReceivedCents = stats.settlementCollectionReceivedCents
-  const settlementUnreceivedCents = settlementReceivableCents - settlementReceivedCents
+  const settlementReceivableCents = receivableSettlement.collectionReceivableCents
+  const settlementReceivedCents = receivableSettlement.collectionReceivedCents
+  const settlementUnreceivedCents = receivableSettlement.collectionUnreceivedCents
   const guestCollectionUnreceivedCents =
     stats.guestCollectionAgreedCents - stats.guestCollectionReceivedCents
   const hasRebateDetails =
@@ -413,7 +407,7 @@ function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
     stats.rebatePaidCents !== 0 ||
     stats.rebateUnpaidCents !== 0
   const hasReceivableDetails =
-    stats.ungeneratedReceivableCents !== 0 ||
+    receivableSettlement.ungeneratedReceivableCents !== 0 ||
     stats.closedUnreceivedCents !== 0 ||
     stats.otherReceivableCents !== 0
   const hasPaymentDetails =
@@ -455,7 +449,7 @@ function PaymentAndCashRow({ departure, animateEnter }: OverviewSectionProps) {
                   <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
                     <AmountDetail
                       label="尚未提交应收"
-                      amountCents={stats.ungeneratedReceivableCents}
+                      amountCents={receivableSettlement.ungeneratedReceivableCents}
                       warning
                     />
                     <AmountDetail
@@ -643,10 +637,27 @@ export function DepartureOverviewStatsCards({
   departure,
   animateEnter = false,
 }: DepartureOverviewStatsCardsProps) {
+  const receivableSettlement = buildFullDepartureReceivableSettlementMetrics({
+    netReceivableCents: departure.netReceivableCents,
+    settlementCollectionReceivableCents:
+      departure.overviewStats.settlementCollectionReceivableCents,
+    settlementCollectionReceivedCents:
+      departure.overviewStats.settlementCollectionReceivedCents,
+    ungeneratedReceivableCents: departure.overviewStats.ungeneratedReceivableCents,
+  })
+
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <OverviewSummaryRows departure={departure} animateEnter={animateEnter} />
-      <PaymentAndCashRow departure={departure} animateEnter={animateEnter} />
+      <OverviewSummaryRows
+        departure={departure}
+        animateEnter={animateEnter}
+        receivableSettlement={receivableSettlement}
+      />
+      <PaymentAndCashRow
+        departure={departure}
+        animateEnter={animateEnter}
+        receivableSettlement={receivableSettlement}
+      />
     </Space>
   )
 }

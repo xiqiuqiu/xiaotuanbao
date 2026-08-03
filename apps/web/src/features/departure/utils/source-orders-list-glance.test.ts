@@ -69,6 +69,7 @@ describe('buildSourceOrdersListGlance', () => {
 
     const glance = buildSourceOrdersListGlance(orders)
 
+    expect(glance.scope).toBe('filter')
     expect(glance.stripSummary).toEqual({
       orderCount: 2,
       totalGuests: 15,
@@ -109,6 +110,7 @@ describe('buildSourceOrdersListGlance', () => {
 
   it('returns zero projections for an empty list', () => {
     expect(buildSourceOrdersListGlance([])).toEqual({
+      scope: 'filter',
       stripSummary: {
         orderCount: 0,
         totalGuests: 0,

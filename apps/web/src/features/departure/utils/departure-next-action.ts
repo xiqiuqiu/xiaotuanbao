@@ -3,6 +3,7 @@ import type { DepartureDetail } from '@/types/api'
 import { formatCents } from '../catalog'
 import { isCompletionTagIncomplete } from './departure-transition'
 import { formatReceivableBalanceAnomalyCopy } from './format-receivable-balance-anomaly'
+import { buildFullDepartureReceivableSettlementMetrics } from './receivable-settlement-metrics'
 
 export type DepartureNextAction = {
   type: 'info' | 'warning' | 'success'
@@ -35,6 +36,7 @@ type DepartureInput = Pick<
   | 'status'
   | 'completionTags'
   | 'overviewStats'
+  | 'netReceivableCents'
   | 'isFinanciallySettled'
   | 'sourceOrderCount'
   | 'segmentCount'
@@ -140,15 +142,22 @@ function resolvePendingSettlementAction(
   canWrite: boolean,
 ): DepartureNextAction | null {
   const stats = departure.overviewStats
+  const receivableSettlement = buildFullDepartureReceivableSettlementMetrics({
+    netReceivableCents: departure.netReceivableCents,
+    settlementCollectionReceivableCents: stats.settlementCollectionReceivableCents,
+    settlementCollectionReceivedCents: stats.settlementCollectionReceivedCents,
+    ungeneratedReceivableCents: stats.ungeneratedReceivableCents,
+  })
 
-  if (stats.ungeneratedReceivableCents > 0) {
+  if (receivableSettlement.ungeneratedReceivableCents > 0) {
     return {
       type: 'warning',
       title: '尚有应收未提交',
-      description: `未提交应收 ${formatCents(stats.ungeneratedReceivableCents)}`,
+      description: `未提交应收 ${formatCents(receivableSettlement.ungeneratedReceivableCents)}`,
       action: {
         label: '提交应收',
-        tab: 'receivables',
+        // 提交应收主路径在客源 Tab；跟进已提交收款仍走 receivables。
+        tab: 'sourceOrders',
       },
     }
   }

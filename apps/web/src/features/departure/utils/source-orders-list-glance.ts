@@ -1,6 +1,11 @@
-import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import { sourceOrderRebateDisplayCents } from './source-order-rebate-display'
+import {
+  isUngeneratedReceivable,
+  tagReceivableSettlementScope,
+} from './receivable-settlement-metrics'
+
+export { isUngeneratedReceivable }
 
 /** 客源结算条：对应当前筛选列表（与表尾合计同一批；与批量提交全团路径计数解耦）。 */
 export interface SourceOrdersSettlementStripSummary {
@@ -26,16 +31,10 @@ export interface SourceOrdersTableTotals {
 }
 
 export interface SourceOrdersListGlance {
+  /** 筛选列表口径；与全团 overview metrics 对账时用 scope 区分。 */
+  scope: 'filter'
   stripSummary: SourceOrdersSettlementStripSummary
   tableTotals: SourceOrdersTableTotals
-}
-
-/** 列表 glance 共用的「尚未提交应收」谓词（单数口径，非路径数）。 */
-export function isUngeneratedReceivable(order: SourceOrderSummary): boolean {
-  return (
-    order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
-    order.hasIncompleteReceivablePaths
-  )
 }
 
 const EMPTY_STRIP: SourceOrdersSettlementStripSummary = {
@@ -61,16 +60,20 @@ const EMPTY_TABLE: SourceOrdersTableTotals = {
 
 /**
  * 客源列表 glance：一次遍历投影结算条与表尾合计。
- * Scope：调用方传入的当前筛选 items；不负责全团批量路径计数。
+ * Scope：filter（当前筛选 items）；全团口径见 buildFullDepartureReceivableSettlementMetrics。
+ * 不负责全团批量路径计数。
  */
 export function buildSourceOrdersListGlance(
   orders: readonly SourceOrderSummary[],
 ): SourceOrdersListGlance {
   if (orders.length === 0) {
-    return { stripSummary: EMPTY_STRIP, tableTotals: EMPTY_TABLE }
+    return tagReceivableSettlementScope(
+      { stripSummary: EMPTY_STRIP, tableTotals: EMPTY_TABLE },
+      'filter',
+    )
   }
 
-  return orders.reduce<SourceOrdersListGlance>(
+  const aggregated = orders.reduce(
     (acc, order) => {
       const ungenerated = isUngeneratedReceivable(order)
       return {
@@ -108,4 +111,6 @@ export function buildSourceOrdersListGlance(
     },
     { stripSummary: EMPTY_STRIP, tableTotals: EMPTY_TABLE },
   )
+
+  return tagReceivableSettlementScope(aggregated, 'filter')
 }

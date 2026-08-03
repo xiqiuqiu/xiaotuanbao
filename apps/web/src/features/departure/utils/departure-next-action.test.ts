@@ -55,6 +55,7 @@ function makeDeparture(overrides: Partial<DepartureInput> = {}): DepartureInput 
       payables: '应付已提交',
     },
     overviewStats: makeOverviewStats(),
+    netReceivableCents: 0,
     isFinanciallySettled: false,
     sourceOrderCount: 1,
     segmentCount: 1,
@@ -159,7 +160,7 @@ describe('resolveDepartureNextAction', () => {
   })
 
   describe('pending settlement', () => {
-    it('prioritizes ungenerated receivables', () => {
+    it('prioritizes ungenerated receivables and routes to sourceOrders', () => {
       const result = resolveDepartureNextAction({
         departure: makeDeparture({
           status: DepartureStatus.PENDING_SETTLEMENT,
@@ -174,7 +175,7 @@ describe('resolveDepartureNextAction', () => {
 
       expect(result).toMatchObject({
         type: 'warning',
-        action: { tab: 'receivables' },
+        action: { label: '提交应收', tab: 'sourceOrders' },
       })
       expect(result?.description).toMatch(/¥500\.00/)
     })
