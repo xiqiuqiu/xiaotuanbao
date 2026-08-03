@@ -156,7 +156,11 @@ function CoordinatorDepartureModule({ module }: { module: WorkbenchModule }) {
           pagination={false}
           size="small"
           scroll={{ x: 900 }}
-          locale={{ emptyText: '近期暂无进行中或未来 7 天发团' }}
+          locale={{
+            emptyText: module.href
+              ? '近期暂无进行中或未来 7 天发团，可查看全部发团'
+              : '近期暂无进行中或未来 7 天发团',
+          }}
           columns={[
             {
               title: '发团',
@@ -365,7 +369,7 @@ function CoordinatorSettlementModule({
         viewAllCount={payableMetric?.value ?? 0}
         viewAllAriaLabel={`查看全部待提交应付 ${payableMetric?.value ?? 0} 项`}
         items={payableItems}
-        emptyText="当前没有待提交应付的资源"
+        emptyText="当前没有待提交应付的资源。可到发团执行安排添加资源后再提交"
       />
       <SettlementQueueCard
         title="待提交应收"
@@ -375,7 +379,7 @@ function CoordinatorSettlementModule({
         viewAllCount={pendingMetric?.value ?? 0}
         viewAllAriaLabel={`查看全部待提交应收 ${pendingMetric?.value ?? 0} 项`}
         items={pendingItems}
-        emptyText="当前没有待提交应收的客源单"
+        emptyText="当前没有待提交应收的客源单。可到发团客源管理添加客源后再提交"
       />
     </div>
   )
@@ -408,7 +412,7 @@ function GenericModuleGrid({
           {module.items.length === 0 ? (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="当前模块暂无待处理数据，可稍后刷新查看"
+              description="暂无待处理事项。可稍后刷新，或进入对应业务页继续处理"
             />
           ) : (
             <Space orientation="vertical" size={8} className={styles.itemList}>

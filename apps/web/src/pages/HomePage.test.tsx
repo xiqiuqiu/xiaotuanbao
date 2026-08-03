@@ -777,7 +777,7 @@ describe('HomePage workbench lifecycle', () => {
     expect(screen.getByText('0')).toBeInTheDocument()
     expect(screen.getByText('缺失值')).toBeInTheDocument()
     expect(screen.getByText('-')).toBeInTheDocument()
-    expect(screen.getByText('当前模块暂无待处理数据，可稍后刷新查看')).toBeInTheDocument()
+    expect(screen.getByText('暂无待处理事项。可稍后刷新，或进入对应业务页继续处理')).toBeInTheDocument()
     expect(screen.getByText(/数据更新时间/)).toBeInTheDocument()
   })
 

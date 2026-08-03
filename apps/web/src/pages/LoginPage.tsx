@@ -35,7 +35,7 @@ const REMEMBER_USERNAME_KEY = 'xiaotuanbao.login.rememberedUsername'
 const FEATURES = [
   {
     key: 'departure',
-    title: '团单经营',
+    title: '发团经营',
     desc: '全流程跟进',
     icon: <ScheduleOutlined />,
   },
@@ -114,7 +114,7 @@ export function LoginPage() {
               让团单、资源与资金高效协同
             </Typography.Title>
             <Typography.Paragraph className={styles.subheadline}>
-              地接旅行社团单经营与财务协作平台
+              地接旅行社发团经营与财务协作平台
             </Typography.Paragraph>
           </div>
 
@@ -146,7 +146,7 @@ export function LoginPage() {
             登录工作台
           </Typography.Title>
           <Typography.Paragraph className={styles.cardSubtitle}>
-            使用{env.appName}组织账号登录
+            使用{env.appName}组织用户名登录
           </Typography.Paragraph>
 
           {loginMutation.error ? (
@@ -155,7 +155,7 @@ export function LoginPage() {
               title={
                 loginMutation.error instanceof Error
                   ? loginMutation.error.message
-                  : '登录失败'
+                  : '无法登录。核对用户名与密码后重试，或联系企业管理员重置密码'
               }
               showIcon
               style={{ marginBottom: token.marginMD }}
@@ -185,7 +185,7 @@ export function LoginPage() {
               <Input
                 size="large"
                 prefix={<UserOutlined className={styles.inputIcon} />}
-                placeholder="请输入用户名"
+                autoComplete="username"
               />
             </Form.Item>
 
@@ -197,7 +197,7 @@ export function LoginPage() {
               <Input.Password
                 size="large"
                 prefix={<LockOutlined className={styles.inputIcon} />}
-                placeholder="请输入密码"
+                autoComplete="current-password"
               />
             </Form.Item>
 
@@ -210,7 +210,7 @@ export function LoginPage() {
                 checked={rememberUsername}
                 onChange={(event) => setRememberUsername(event.target.checked)}
               >
-                记住账号
+                记住用户名
               </Checkbox>
               <Button
                 type="link"

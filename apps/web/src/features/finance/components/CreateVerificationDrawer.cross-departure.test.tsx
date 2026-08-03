@@ -193,7 +193,7 @@ describe('CreateVerificationDrawer cross-departure confirmation', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '返回修改' }))
 
-    expect(screen.getByText('新增核销')).toBeInTheDocument()
+    expect(screen.getByText('新建核销')).toBeInTheDocument()
     expect(
       screen.getByRole('spinbutton', { name: '本次核销金额（元）' }),
     ).toHaveValue('1000.00')

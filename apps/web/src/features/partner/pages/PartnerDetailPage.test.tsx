@@ -201,7 +201,7 @@ describe('PartnerDetailPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '合作团单' }))
     await waitFor(() => {
-      expect(screen.getByText('该合作伙伴暂无客源团单')).toBeInTheDocument()
+      expect(screen.getByText('该合作伙伴暂无客源单')).toBeInTheDocument()
     })
   })
 })

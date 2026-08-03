@@ -203,7 +203,7 @@ describe('PartnerSourceOrdersTab', () => {
   it('shows source empty state for customer-direction partner without orders', async () => {
     renderTab(buildPartner())
 
-    expect(await screen.findByText('该合作伙伴暂无客源团单')).toBeInTheDocument()
+    expect(await screen.findByText('该合作伙伴暂无客源单')).toBeInTheDocument()
     expect(screen.getByText('客源').closest('.ant-segmented-item')).toHaveClass(
       'ant-segmented-item-selected',
     )
@@ -214,7 +214,7 @@ describe('PartnerSourceOrdersTab', () => {
     renderTab(buildPartner())
 
     await waitFor(() => {
-      expect(screen.getByText('该合作伙伴暂无客源团单')).toBeInTheDocument()
+      expect(screen.getByText('该合作伙伴暂无客源单')).toBeInTheDocument()
     })
     expect(screen.queryByText('阿勒泰拼出')).not.toBeInTheDocument()
   })
@@ -276,7 +276,7 @@ describe('PartnerSourceOrdersTab', () => {
   it('keeps the 客源/拼出 Segmented outside the flat filter card (align 往来账款)', async () => {
     renderTab(buildPartner())
 
-    await screen.findByText('该合作伙伴暂无客源团单')
+    await screen.findByText('该合作伙伴暂无客源单')
 
     const segmentControl = screen.getByRole('radiogroup', { name: 'segmented control' })
     const departureStart = screen.getByPlaceholderText('出团日期起')

@@ -107,7 +107,9 @@ export function useDepartureHeaderActions(
       invalidateDeparture()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '关闭失败')
+      message.error(
+        error instanceof Error ? error.message : '无法关闭发团。请稍后重试，或检查网络后再次操作',
+      )
     },
   })
 
@@ -120,7 +122,11 @@ export function useDepartureHeaderActions(
       invalidateDeparture()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '解除归档失败')
+      message.error(
+        error instanceof Error
+          ? error.message
+          : '无法解除归档。请稍后重试，或检查网络后再次操作',
+      )
     },
   })
 

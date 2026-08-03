@@ -212,10 +212,10 @@ export function PartnerSourceOrdersTab({ partner }: PartnerSourceOrdersTabProps)
   const listReady = isSource ? Boolean(sourceResult) : Boolean(outsourceResult)
   const emptyDescription = hasDateFilter
     ? isSource
-      ? '当前筛选下暂无客源团单'
+      ? '当前筛选下暂无客源单'
       : '当前筛选下暂无拼出资源'
     : isSource
-      ? '该合作伙伴暂无客源团单'
+      ? '该合作伙伴暂无客源单'
       : '该合作伙伴暂无拼出资源'
 
   return (

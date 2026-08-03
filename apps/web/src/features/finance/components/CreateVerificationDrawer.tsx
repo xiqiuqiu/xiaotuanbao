@@ -909,7 +909,7 @@ export function CreateVerificationDrawer({
 
   return (
     <Drawer
-      title={previewing ? '核销预览' : '新增核销'}
+      title={previewing ? '核销预览' : '新建核销'}
       open={open}
       size="min(960px, 100vw)"
       onClose={handleClose}

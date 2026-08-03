@@ -130,7 +130,9 @@ export function usePaymentScheduleMutations({
       promptGeneratedRebatePayableFollowUp(data.generatedRebatePayable, goProcessRebatePayable)
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '操作失败')
+      message.error(
+        error instanceof Error ? error.message : '无法完成操作。请稍后重试，或检查网络后再次操作',
+      )
     },
   })
 
@@ -166,7 +168,9 @@ export function usePaymentScheduleMutations({
       invalidateScheduleQueries()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '关闭失败')
+      message.error(
+        error instanceof Error ? error.message : '无法关闭节点。请稍后重试，或检查网络后再次操作',
+      )
     },
   })
 

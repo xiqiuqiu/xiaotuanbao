@@ -77,12 +77,10 @@ export function ExecutionDayAxis({
 
   const confirmDelete = (segment: ItinerarySegmentSummary, dayLabel: string) => {
     if (segment.resourceCount > 0) {
-      modal.confirm({
-        title: `删除${dayLabel}？`,
+      modal.info({
+        title: `无法删除${dayLabel}`,
         content: `该日有 ${segment.resourceCount} 项资源，请先清空资源后再删除。`,
         okText: '知道了',
-        cancelText: '取消',
-        onOk: () => undefined,
       })
       return
     }

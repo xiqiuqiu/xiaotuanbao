@@ -205,7 +205,9 @@ export function PartnersPage() {
       queryClient.invalidateQueries({ queryKey: ['partners'] })
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '删除失败')
+      message.error(
+        error instanceof Error ? error.message : '无法删除合作伙伴。请稍后重试',
+      )
     },
   })
 
@@ -256,7 +258,7 @@ export function PartnersPage() {
   return (
     <div>
       <PageHeader
-        title="合作伙伴管理"
+        title="合作伙伴"
         action={
           canEdit ? (
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>

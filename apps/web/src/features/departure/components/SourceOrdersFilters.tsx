@@ -30,7 +30,7 @@ export function SourceOrdersFilters({
           <Select
             allowClear
             aria-label="客户"
-            placeholder="客户"
+            placeholder="全部客户"
             style={{ width: 180 }}
             showSearch={{ optionFilterProp: 'label' }}
             value={draft.partnerId}
@@ -40,7 +40,7 @@ export function SourceOrdersFilters({
           <Select
             allowClear
             aria-label="收款方式"
-            placeholder="收款方式"
+            placeholder="全部收款方式"
             style={{ width: 180 }}
             value={draft.collectionMode}
             onChange={(value) => onDraftChange({ ...draft, collectionMode: value })}
@@ -49,8 +49,8 @@ export function SourceOrdersFilters({
           <Select
             allowClear
             aria-label="优惠状态"
-            placeholder="优惠状态"
-            style={{ width: 120 }}
+            placeholder="全部优惠状态"
+            style={{ width: 140 }}
             value={draft.hasDiscount}
             onChange={(value) => onDraftChange({ ...draft, hasDiscount: value })}
             options={[
@@ -62,7 +62,7 @@ export function SourceOrdersFilters({
           <Input
             allowClear
             aria-label="搜索客户名称、备注"
-            placeholder="搜索客户名称、备注"
+            placeholder="客户名称或备注"
             style={{ width: 220 }}
             value={draft.keyword}
             onChange={(event) => onDraftChange({ ...draft, keyword: event.target.value })}

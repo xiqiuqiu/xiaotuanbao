@@ -155,7 +155,9 @@ export function SuppliersPage() {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] })
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '删除失败')
+      message.error(
+        error instanceof Error ? error.message : '无法删除供应商。请稍后重试',
+      )
     },
   })
 

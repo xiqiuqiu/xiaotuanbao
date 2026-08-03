@@ -90,7 +90,9 @@ export function useProductDetailMutations({
       onDeleted()
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '删除失败')
+      message.error(
+        error instanceof Error ? error.message : '无法删除。请稍后重试',
+      )
     },
   })
 

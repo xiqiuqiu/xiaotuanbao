@@ -59,7 +59,7 @@ export function VerificationFilters({
           <DatePicker.RangePicker
             allowClear
             aria-label="核销日期"
-            placeholder={['核销日期起', '核销日期止']}
+            placeholder={['开始日期', '结束日期']}
             value={
               dateRange
                 ? [
@@ -79,7 +79,7 @@ export function VerificationFilters({
           <Select
             allowClear
             aria-label="核销类型"
-            placeholder="核销类型"
+            placeholder="全部类型"
             style={{ width: 120 }}
             value={direction}
             onChange={onDirectionChange}
@@ -88,7 +88,7 @@ export function VerificationFilters({
           <Select
             allowClear
             aria-label="核销状态"
-            placeholder="核销状态"
+            placeholder="全部状态"
             style={{ width: 120 }}
             value={status}
             onChange={onStatusChange}
@@ -97,7 +97,7 @@ export function VerificationFilters({
           <Input.Search
             allowClear
             aria-label="关联流水单号"
-            placeholder="关联流水单号"
+            placeholder="搜索流水单号"
             style={{ width: 180 }}
             value={transactionNo}
             onChange={(event) => onTransactionNoChange(event.target.value)}
@@ -106,7 +106,7 @@ export function VerificationFilters({
           <Input.Search
             allowClear
             aria-label="关联账款单号"
-            placeholder="关联账款单号"
+            placeholder="搜索账款单号"
             style={{ width: 180 }}
             value={scheduleNo}
             onChange={(event) => onScheduleNoChange(event.target.value)}
@@ -116,7 +116,7 @@ export function VerificationFilters({
             <Input.Search
               allowClear
               aria-label="发团号/名称关键字"
-              placeholder="发团号/名称关键字"
+              placeholder="搜索团号或团名"
               style={{ width: 200 }}
               value={departureKeyword}
               onChange={(event) => onDepartureKeywordChange(event.target.value)}

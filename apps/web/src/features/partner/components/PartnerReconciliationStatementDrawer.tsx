@@ -253,7 +253,7 @@ export function PartnerReconciliationStatementDrawer({
         ) : null}
 
         {hasPeriod && !isLoading && !isError && data && data.rows.length === 0 ? (
-          <Empty description="该周期内暂无客源团单，可调整对账周期" />
+          <Empty description="该周期内暂无客源单，可调整对账周期" />
         ) : null}
 
         {hasPeriod && !isError ? (

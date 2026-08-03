@@ -80,7 +80,7 @@ export function DepartureFilters({
           <Input
             allowClear
             aria-label="路线名称"
-            placeholder="路线名称"
+            placeholder="如：喀纳斯环线"
             style={{ width: 160 }}
             value={routeNameFilter}
             onChange={(event) => onRouteNameChange(event.target.value || undefined)}
@@ -88,7 +88,7 @@ export function DepartureFilters({
           <Select
             allowClear
             aria-label="发团类型"
-            placeholder="发团类型"
+            placeholder="全部类型"
             style={{ width: 120 }}
             value={departureTypeFilter}
             onChange={onDepartureTypeChange}
@@ -97,7 +97,7 @@ export function DepartureFilters({
           <Select
             allowClear
             aria-label="出团进度"
-            placeholder="出团进度"
+            placeholder="全部进度"
             style={{ width: 120 }}
             value={departureProgressFilter}
             onChange={onDepartureProgressChange}
@@ -106,7 +106,7 @@ export function DepartureFilters({
           <Select
             allowClear
             aria-label="发团状态"
-            placeholder="发团状态"
+            placeholder="全部状态"
             style={{ width: 120 }}
             value={statusFilter}
             onChange={onStatusChange}
@@ -115,7 +115,7 @@ export function DepartureFilters({
           <Select
             allowClear
             aria-label="负责人"
-            placeholder="负责人"
+            placeholder="全部负责人"
             style={{ width: 140 }}
             value={ownerUserIdFilter}
             onChange={onOwnerChange}
@@ -126,7 +126,7 @@ export function DepartureFilters({
           <Select
             allowClear
             aria-label="发团客源"
-            placeholder="发团客源"
+            placeholder="全部客源"
             style={{ width: 160 }}
             value={partnerIdFilter}
             onChange={onPartnerChange}
@@ -137,7 +137,7 @@ export function DepartureFilters({
           <DatePicker.RangePicker
             allowClear
             aria-label="出团日期"
-            placeholder={['出团日期起', '出团日期止']}
+            placeholder={['开始日期', '结束日期']}
             value={
               startDateRange?.[0] || startDateRange?.[1]
                 ? [

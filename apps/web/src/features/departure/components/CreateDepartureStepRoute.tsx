@@ -81,7 +81,7 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
       void queryClient.invalidateQueries({ queryKey: ['route-templates'] })
     },
     onError: (error: Error) => {
-      message.error(error.message || '删除失败')
+      message.error(error.message || '无法删除常用路线。请稍后重试')
     },
   })
 
@@ -177,7 +177,14 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
               <Spin />
             </div>
           ) : templates.length === 0 ? (
-            <Empty description="暂无常用路线" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description="暂无常用路线。可先手动输入路线信息"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            >
+              <Button type="link" onClick={() => handleTabChange('manual')}>
+                改为手动输入
+              </Button>
+            </Empty>
           ) : (
             <Row gutter={[16, 16]} className={styles.templateGrid}>
               {templates.map((template) => {

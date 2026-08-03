@@ -49,7 +49,7 @@ export function resolveDuplicatePartnerSelection(input: {
 }
 
 export function duplicatePartnerWarningMessage(): string {
-  return '同名合作伙伴不可用（已停用或已归档），请到合作伙伴管理处理或改用其他名称'
+  return '同名合作伙伴不可用（已停用或已归档），请到合作伙伴页处理或改用其他名称'
 }
 
 export async function createOrResolvePartnerByName(input: {

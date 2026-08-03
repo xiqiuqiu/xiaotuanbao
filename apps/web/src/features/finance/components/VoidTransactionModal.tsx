@@ -65,7 +65,12 @@ export function VoidTransactionModal({
             label="作废原因"
             rules={[{ required: true, message: '请输入作废原因' }]}
           >
-            <Input.TextArea rows={3} maxLength={200} showCount placeholder="请输入作废原因" />
+            <Input.TextArea
+              rows={3}
+              maxLength={200}
+              showCount
+              placeholder="如：重复登记、金额录错"
+            />
           </Form.Item>
         </Form>
       ) : null}

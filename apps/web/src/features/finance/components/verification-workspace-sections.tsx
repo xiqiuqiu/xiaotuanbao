@@ -135,7 +135,7 @@ export function VerificationWorkspaceFilters({
 export function CreateVerificationButton({ onClick }: { onClick: () => void }) {
   return (
     <Button type="primary" icon={<PlusOutlined />} onClick={onClick}>
-      新增核销
+      新建核销
     </Button>
   )
 }
