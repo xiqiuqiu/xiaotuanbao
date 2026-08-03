@@ -17,7 +17,6 @@ import { SegmentResourceController } from './segment-resource.controller'
 import { SegmentResourceService } from './segment-resource.service'
 import { DepartureResourceController } from './departure-resource.controller'
 import { DepartureResourceService } from './departure-resource.service'
-import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import { DepartureFinanceReadController } from './departure-finance-read.controller'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
 import { DepartureOperationsSheetExcelRenderer } from './departure-operations-sheet-excel.types'
@@ -58,7 +57,6 @@ import { RouteLedgerExportService } from './route-ledger-export.service'
     SegmentService,
     SegmentResourceService,
     DepartureResourceService,
-    DepartureFinanceBridgeService,
     {
       provide: DepartureOperationsSheetExcelRenderer,
       useClass: ExcelJsDepartureOperationsSheetRenderer,
@@ -73,7 +71,6 @@ import { RouteLedgerExportService } from './route-ledger-export.service'
     SourceOrderReceivableGapService,
     SegmentResourcePayableGapService,
     AccountGenerationGapService,
-    DepartureFinanceBridgeService,
   ],
 })
 export class DepartureModule {}

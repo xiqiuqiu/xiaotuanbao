@@ -16,6 +16,7 @@ Departure 到 Finance 的 seam 由 Finance 拥有：Finance module 内新增 `De
 
 - `DepartureFinanceFacade` 是主要测试 surface；重点覆盖 snapshot、finance-touched、source amount mismatch、金额锁定、已关闭节点与部分/全部核销。
 - 迁移顺序先从 `getDepartureFinanceSnapshot(organizationId, departureIds)` 开始，让 `DepartureReadModelService` 停止直接读取 Finance implementation；之后迁 Finance Generation，最后迁 Source Order / Segment Resource 的 finance state 派生。
+- **迁移已完成（2026-08）**：Snapshot / Generation / 按实收结算 / Source Order 与资源 finance state 均由 Finance 拥有（Facade + `DepartureFinanceGenerationService` + `DepartureFinanceActualCollectionService`）；`DepartureFinanceBridgeService` 已删除；Finance module 不再 `forwardRef` 依赖 Departure module。
 - `DepartureFinanceSnapshot` 只返回 Finance 拥有的原子财务事实：收付款节点的约定金额、已核销金额、节点数量与人工关闭状态，以及未作废流水的收入/支出总额与其中未核销部分；不返回中文 completion tag，也不读取客源单实际应收或行程段资源预计成本。
 - Snapshot 是按发团汇总的窄聚合 interface，不向 Departure 暴露 Payment Schedule 明细。应收方向分开提供客源路径与其他应收聚合，使客源收款进度只消费客户补款、游客代收两类来源；应付方向按非作废节点提供确认金额、有效核销、开放未结清与已关闭未结清四个原子聚合，保证 `确认应付 = 已付 + 开放未付 + 已关闭未付`。节点数量、人工关闭数、作废数与账款结束状态亦以聚合值表达。
 - Departure read model 负责将 Finance Snapshot 与 Departure 拥有的实际应收、预计成本组合为未收、尚未生成应收、尚未生成应付、其他应付、资源账款差异、未付、预估毛利和确认毛利等跨上下文指标，并生成发团概览展示标签。客源应收须满足 `实际应收 = 已收 + 已生成开放未收 + 已关闭未收 + 尚未生成应收`；未生成资源应付只属于预计成本提示，不进入确认应付、未付或付款进度。成本对账须满足 `确认应付 - 预计成本 = 其他应付 + 资源账款差异 - 尚未生成应付`，组成因素即使净额相抵也不得隐藏。现金净流入则由 Snapshot 中的未作废收入/支出流水总额相减，不复用概览已收/已付口径。

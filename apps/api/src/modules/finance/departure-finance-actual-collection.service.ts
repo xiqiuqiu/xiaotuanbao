@@ -5,12 +5,7 @@ import {
   Logger,
   forwardRef,
 } from '@nestjs/common'
-import type {
-  GenerateReceivablesResult,
-  PaymentScheduleSummary,
-  SettleByActualCollectionResult,
-  SourceOrderSummary,
-} from '@xiaotuanbao/shared'
+import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
   isFinanceTouched,
   isSourceOrderGuestCollectionSourceType,
@@ -21,93 +16,45 @@ import {
   CounterpartyType,
   PaymentScheduleCloseDisposition,
   PaymentScheduleDirection,
-  type Partner,
   type PaymentSchedule,
   type Prisma,
-  type DepartureResource,
-  type SegmentResource,
-  type SourceOrder,
-  type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import {
-  DepartureFinanceFacade,
-  type SegmentResourceFinanceState,
-} from '../finance/departure-finance-facade.service'
-import {
-  loadReceivableSchedules as loadReceivableSchedulesShared,
-  loadSourceOrderOrThrow as loadSourceOrderOrThrowShared,
-  type SourceOrderFinanceMeta,
-  type SourceOrderWithRelations,
-} from '../finance/departure-finance-schedule-loaders'
-import { PaymentScheduleService } from '../finance/payment-schedule.service'
-import { VerificationService } from '../finance/verification.service'
-import { formatDateOnly } from './departure-date.utils'
+import { formatDateOnly } from '../departure/departure-date.utils'
 import {
   assertGuestNodesReadyForSettlement,
   buildActualCollectionSettlementPaths,
   buildObsoleteSettlementPathCloseData,
-} from './source-order-actual-collection-settlement'
+} from '../departure/source-order-actual-collection-settlement'
+import type { PaymentScheduleService } from './payment-schedule.service'
+import { VerificationService } from './verification.service'
 import {
-  resolveSourceOrderAmountChange,
-  type SourceOrderAmountInput,
-  type SourceOrderStoredAmounts,
-} from './source-order.utils'
+  loadReceivableSchedules,
+  loadSourceOrderOrThrow,
+  type SourceOrderWithRelations,
+} from './departure-finance-schedule-loaders'
 
-/** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
-export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
-
-export type { SourceOrderFinanceMeta, SourceOrderWithRelations }
-
-type SegmentResourceWithRelations = SegmentResource & {
-  partner: Partner | null
-  supplier: Supplier | null
-  segment: {
-    id: string
-    endDate: Date | null
-    departure: { id: string; organizationId: string; status: string; endDate: Date }
-  }
+function paymentScheduleServiceToken() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./payment-schedule.service')
+    .PaymentScheduleService as typeof import('./payment-schedule.service').PaymentScheduleService
 }
 
-type DepartureResourceWithRelations = DepartureResource & {
-  partner: Partner | null
-  supplier: Supplier | null
-  departure: { id: string; organizationId: string; status: string; endDate: Date }
-}
-
-type DbClient = PrismaService | Prisma.TransactionClient
-
+/**
+ * Finance-owned actual-collection settlement (ADR-0004).
+ * Public seam is DepartureFinanceFacade; this class is the deep implementation.
+ */
 @Injectable()
-export class DepartureFinanceBridgeService {
-  private readonly logger = new Logger(DepartureFinanceBridgeService.name)
+export class DepartureFinanceActualCollectionService {
+  private readonly logger = new Logger(DepartureFinanceActualCollectionService.name)
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(paymentScheduleServiceToken))
     private readonly paymentScheduleService: PaymentScheduleService,
     @Inject(forwardRef(() => VerificationService))
     private readonly verificationService: VerificationService,
-    @Inject(forwardRef(() => DepartureFinanceFacade))
-    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
-
-  /** @deprecated Prefer DepartureFinanceFacade.generateReceivables (ADR-0004). */
-  async generateReceivables(
-    organizationId: string,
-    sourceOrderId: string,
-    toSourceOrderSummary: (
-      order: SourceOrder & {
-        partner: Partner
-        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
-      },
-      meta: SourceOrderFinanceMeta,
-    ) => SourceOrderSummary,
-  ): Promise<GenerateReceivablesResult> {
-    return this.departureFinanceFacade.generateReceivables(
-      organizationId,
-      sourceOrderId,
-      toSourceOrderSummary,
-    )
-  }
 
   /**
    * 游客代收应收核销变更后：齐账则自动落补款/返利；未齐账则不作提前落账。
@@ -117,6 +64,7 @@ export class DepartureFinanceBridgeService {
   async syncActualCollectionSettlementAfterGuestVerification(
     organizationId: string,
     paymentScheduleId: string,
+    assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
   ): Promise<PaymentScheduleSummary | null> {
     const schedule = await this.prisma.paymentSchedule.findFirst({
       where: { id: paymentScheduleId, organizationId },
@@ -143,6 +91,7 @@ export class DepartureFinanceBridgeService {
       const result = await this.executeActualCollectionSettlement(
         organizationId,
         schedule.sourceId,
+        assertAllowsNewObligation,
       )
       if (!result.rebateScheduleId || result.rebateCents <= 0) {
         return null
@@ -177,32 +126,35 @@ export class DepartureFinanceBridgeService {
   async settleByActualCollection(
     organizationId: string,
     sourceOrderId: string,
-    toSourceOrderSummary: (
-      order: SourceOrder & {
-        partner: Partner
-        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
-      },
-      meta: SourceOrderFinanceMeta,
-    ) => SourceOrderSummary,
-  ): Promise<SettleByActualCollectionResult> {
+    assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
+  ): Promise<{
+    order: SourceOrderWithRelations
+    schedules: PaymentScheduleSummary[]
+    actualGuestCollectedCents: number
+    customerTopUpCents: number
+    rebateCents: number
+  }> {
     const {
       order,
       scheduleRefs,
       actualGuestCollectedCents,
       customerTopUpCents,
       rebateCents,
-    } = await this.executeActualCollectionSettlement(organizationId, sourceOrderId)
+    } = await this.executeActualCollectionSettlement(
+      organizationId,
+      sourceOrderId,
+      assertAllowsNewObligation,
+    )
 
     const schedules = await Promise.all(
       scheduleRefs.map((ref) =>
         this.paymentScheduleService.getById(organizationId, ref.direction, ref.id),
       ),
     )
-    const financeMeta = await this.evaluateFinanceMeta(organizationId, sourceOrderId, order)
 
     return {
+      order,
       schedules,
-      sourceOrder: toSourceOrderSummary(order, financeMeta),
       actualGuestCollectedCents,
       customerTopUpCents,
       rebateCents,
@@ -212,6 +164,7 @@ export class DepartureFinanceBridgeService {
   private async executeActualCollectionSettlement(
     organizationId: string,
     sourceOrderId: string,
+    assertAllowsNewObligation: (departure: { status: string }, action?: string) => void,
   ): Promise<{
     order: SourceOrderWithRelations
     scheduleRefs: Array<{ id: string; direction: PaymentScheduleDirection }>
@@ -229,19 +182,15 @@ export class DepartureFinanceBridgeService {
           FOR UPDATE
         `
 
-        const lockedOrder = await this.loadSourceOrderOrThrow(
-          organizationId,
-          sourceOrderId,
-          tx,
-        )
-        this.ensureDepartureAllowsNewObligation(lockedOrder.departure, '按实收结算')
+        const lockedOrder = await loadSourceOrderOrThrow(tx, organizationId, sourceOrderId)
+        assertAllowsNewObligation(lockedOrder.departure, '按实收结算')
 
         if (lockedOrder.collectionMode === 'partner_settled') {
           throw new BadRequestException('全部客户结算无需按实收结算')
         }
 
         const guestSchedules = (
-          await this.loadReceivableSchedules(organizationId, sourceOrderId, tx)
+          await loadReceivableSchedules(tx, organizationId, sourceOrderId)
         ).filter(
           (schedule) =>
             schedule.cancelledAt == null &&
@@ -381,137 +330,6 @@ export class DepartureFinanceBridgeService {
     )
   }
 
-  /** @deprecated Prefer DepartureFinanceFacade.syncSourceOrderSchedules (ADR-0004). */
-  async syncSourceOrderSchedules(
-    organizationId: string,
-    order: SourceOrderWithRelations,
-  ): Promise<SourceOrderFinanceMeta> {
-    return this.departureFinanceFacade.syncSourceOrderSchedules(organizationId, order)
-  }
-
-  /** @deprecated Prefer DepartureFinanceFacade.getSourceOrderFinanceState (ADR-0004 step 3). */
-  async evaluateFinanceMeta(
-    organizationId: string,
-    sourceOrderId: string,
-    order?: Pick<
-      SourceOrder,
-      | 'collectionMode'
-      | 'depositCents'
-      | 'balanceCents'
-      | 'netReceivableCents'
-      | 'partnerCollectedCents'
-      | 'guestCollectCents'
-    >,
-  ): Promise<SourceOrderFinanceMeta> {
-    return (
-      await this.departureFinanceFacade.getSourceOrderFinanceState(
-        organizationId,
-        sourceOrderId,
-        order,
-      )
-    ).meta
-  }
-
-  async assertAmountFieldsEditable(
-    organizationId: string,
-    sourceOrderId: string,
-    order: SourceOrderStoredAmounts,
-    nextAmounts: SourceOrderAmountInput,
-  ): Promise<void> {
-    const { amountOutcomeChanged } = resolveSourceOrderAmountChange(order, nextAmounts)
-    if (!amountOutcomeChanged) {
-      return
-    }
-
-    const meta = await this.evaluateFinanceMeta(organizationId, sourceOrderId)
-    if (meta.amountFieldsLocked) {
-      throw new BadRequestException('当前客源单已发生收款，不允许修改金额')
-    }
-  }
-
-  /** @deprecated Prefer DepartureFinanceFacade.generateResourcePayable (ADR-0004). */
-  async generateResourcePayable(
-    organizationId: string,
-    params: { sourceType: string; sourceId: string },
-  ): Promise<{
-    schedule: PaymentScheduleSummary
-    sourceAmountMismatch: boolean
-  }> {
-    return this.departureFinanceFacade.generateResourcePayable(organizationId, params)
-  }
-
-  /** @deprecated Prefer DepartureFinanceFacade.syncSegmentResourceSchedule (ADR-0004). */
-  async syncSegmentResourceSchedule(
-    organizationId: string,
-    resource: SegmentResourceWithRelations,
-  ): Promise<SegmentResourceFinanceMeta> {
-    return this.departureFinanceFacade.syncSegmentResourceSchedule(organizationId, resource)
-  }
-
-  /** @deprecated Prefer DepartureFinanceFacade.syncDepartureResourceSchedule (ADR-0004). */
-  async syncDepartureResourceSchedule(
-    organizationId: string,
-    resource: DepartureResourceWithRelations,
-  ): Promise<SegmentResourceFinanceMeta> {
-    return this.departureFinanceFacade.syncDepartureResourceSchedule(organizationId, resource)
-  }
-
-  async evaluateResourceFinanceMeta(
-    organizationId: string,
-    resourceId: string,
-    resource?: Pick<SegmentResource, 'amountCents' | 'resourceKind' | 'partnerId' | 'supplierId'>,
-  ): Promise<SegmentResourceFinanceMeta> {
-    return this.departureFinanceFacade.getSegmentResourceFinanceState(
-      organizationId,
-      resourceId,
-      resource,
-    )
-  }
-
-  async evaluateDepartureResourceFinanceMeta(
-    organizationId: string,
-    resourceId: string,
-    resource?: Pick<DepartureResource, 'amountCents'>,
-  ): Promise<SegmentResourceFinanceMeta> {
-    return this.departureFinanceFacade.getDepartureResourceFinanceState(
-      organizationId,
-      resourceId,
-      resource,
-    )
-  }
-
-  async assertResourceAmountEditable(
-    organizationId: string,
-    resourceId: string,
-    currentAmountCents: number,
-    nextAmountCents: number,
-  ): Promise<void> {
-    if (currentAmountCents === nextAmountCents) {
-      return
-    }
-
-    const meta = await this.evaluateResourceFinanceMeta(organizationId, resourceId)
-    if (meta.amountFieldsLocked) {
-      throw new BadRequestException('当前资源已发生付款，不允许修改金额')
-    }
-  }
-
-  async assertDepartureResourceAmountEditable(
-    organizationId: string,
-    resourceId: string,
-    currentAmountCents: number,
-    nextAmountCents: number,
-  ): Promise<void> {
-    if (currentAmountCents === nextAmountCents) {
-      return
-    }
-
-    const meta = await this.evaluateDepartureResourceFinanceMeta(organizationId, resourceId)
-    if (meta.amountFieldsLocked) {
-      throw new BadRequestException('当前资源已发生付款，不允许修改金额')
-    }
-  }
-
   private async assertSettlementNodesNotTouched(
     schedules: Array<PaymentSchedule | null>,
     tx: Prisma.TransactionClient,
@@ -604,28 +422,4 @@ export class DepartureFinanceBridgeService {
     )
     return { id: created.id, direction: expected.direction }
   }
-
-  private async loadReceivableSchedules(
-    organizationId: string,
-    sourceOrderId: string,
-    client: DbClient = this.prisma,
-  ): Promise<PaymentSchedule[]> {
-    return loadReceivableSchedulesShared(client, organizationId, sourceOrderId)
-  }
-
-  private async loadSourceOrderOrThrow(
-    organizationId: string,
-    sourceOrderId: string,
-    client: DbClient = this.prisma,
-  ): Promise<SourceOrderWithRelations> {
-    return loadSourceOrderOrThrowShared(client, organizationId, sourceOrderId)
-  }
-
-  private ensureDepartureAllowsNewObligation(
-    departure: { status: string },
-    action = '提交应收',
-  ) {
-    this.departureFinanceFacade.assertAllowsNewObligation(departure, action)
-  }
 }
-

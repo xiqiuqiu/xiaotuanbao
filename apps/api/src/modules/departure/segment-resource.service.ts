@@ -38,7 +38,6 @@ import type {
   ListSupplierServiceOrdersQueryDto,
   UpdateSegmentResourceDto,
 } from './dto/segment-resource.dto'
-import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import type { SegmentResourceFinanceState } from '../finance/departure-finance-facade.service'
 import {
   resolveSegmentResourceCounterparty,
@@ -60,7 +59,6 @@ type SegmentResourceWithRelations = SegmentResource & {
 export class SegmentResourceService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly financeBridge: DepartureFinanceBridgeService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
@@ -455,7 +453,7 @@ export class SegmentResourceService {
     }
 
     const nextAmountCents = dto.amountCents ?? resource.amountCents
-    await this.financeBridge.assertResourceAmountEditable(
+    await this.departureFinanceFacade.assertResourceAmountEditable(
       organizationId,
       resource.id,
       resource.amountCents,

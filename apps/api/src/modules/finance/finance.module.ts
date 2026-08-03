@@ -1,7 +1,7 @@
-import { Module, forwardRef } from '@nestjs/common'
+import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
 import { NumberAllocationModule } from '../number-allocation/number-allocation.module'
-import { DepartureModule } from '../departure/departure.module'
+import { DepartureFinanceActualCollectionService } from './departure-finance-actual-collection.service'
 import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
 import { FinanceOperationsService } from './finance-operations.service'
@@ -17,7 +17,7 @@ import { VerificationController } from './verification.controller'
 import { VerificationService } from './verification.service'
 
 @Module({
-  imports: [AuthModule, NumberAllocationModule, forwardRef(() => DepartureModule)],
+  imports: [AuthModule, NumberAllocationModule],
   controllers: [
     ReceivableController,
     PayableController,
@@ -28,6 +28,7 @@ import { VerificationService } from './verification.service'
   ],
   providers: [
     DepartureFinanceGenerationService,
+    DepartureFinanceActualCollectionService,
     DepartureFinanceFacade,
     PaymentScheduleService,
     VerificationService,

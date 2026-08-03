@@ -58,10 +58,7 @@ import {
   isAlreadyGeneratedConflict,
   summarizeBatchFinanceGeneration,
 } from './batch-finance-generation.utils'
-import {
-  DepartureFinanceBridgeService,
-  type SourceOrderFinanceMeta,
-} from './departure-finance-bridge.service'
+import type { SourceOrderFinanceMeta } from '../finance/departure-finance-schedule-loaders'
 import { TransactionService } from '../finance/transaction.service'
 
 type SourceOrderFareAdjustmentRow = Pick<
@@ -104,7 +101,6 @@ function toFareAdjustmentCreateRows(
 export class SourceOrderService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly financeBridge: DepartureFinanceBridgeService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly transactionService: TransactionService,
   ) {}
@@ -375,7 +371,7 @@ export class SourceOrderService {
   }
 
   async settleByActualCollection(organizationId: string, sourceOrderId: string) {
-    return this.financeBridge.settleByActualCollection(
+    return this.departureFinanceFacade.settleByActualCollection(
       organizationId,
       sourceOrderId,
       (order, meta) => this.toSourceOrderSummary(order, meta),
@@ -569,7 +565,7 @@ export class SourceOrderService {
       },
     )
 
-    await this.financeBridge.assertAmountFieldsEditable(
+    await this.departureFinanceFacade.assertAmountFieldsEditable(
       organizationId,
       order.id,
       storedAmounts,

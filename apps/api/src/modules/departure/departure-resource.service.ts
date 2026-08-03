@@ -28,7 +28,6 @@ import {
   DepartureFinanceFacade,
   type SegmentResourceFinanceState,
 } from '../finance/departure-finance-facade.service'
-import { DepartureFinanceBridgeService } from './departure-finance-bridge.service'
 import type {
   CreateDepartureResourceDto,
   ListDepartureResourcesQueryDto,
@@ -49,7 +48,6 @@ type DepartureResourceWithRelations = DepartureResource & {
 export class DepartureResourceService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly financeBridge: DepartureFinanceBridgeService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
@@ -199,7 +197,7 @@ export class DepartureResourceService {
     }
 
     const nextAmountCents = dto.amountCents ?? resource.amountCents
-    await this.financeBridge.assertDepartureResourceAmountEditable(
+    await this.departureFinanceFacade.assertDepartureResourceAmountEditable(
       organizationId,
       resource.id,
       resource.amountCents,

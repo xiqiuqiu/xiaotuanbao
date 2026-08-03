@@ -39,7 +39,6 @@ describe('SegmentResourceService.listOutsourceByPartner', () => {
     const service = new SegmentResourceService(
       prisma as never,
       {} as never,
-      {} as never,
     )
 
     const result = await service.listOutsourceByPartner('org-1', 'partner-1', {})

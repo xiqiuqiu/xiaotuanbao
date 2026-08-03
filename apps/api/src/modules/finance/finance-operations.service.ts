@@ -11,7 +11,6 @@ import {
   type PaymentSchedule,
 } from '@prisma/client'
 import { formatDateOnly } from '../departure/departure-date.utils'
-import { DepartureFinanceBridgeService } from '../departure/departure-finance-bridge.service'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   ConfirmCollectionDto,
@@ -40,8 +39,6 @@ export class FinanceOperationsService {
     @Inject(forwardRef(departureFinanceFacadeService))
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly financeIdempotencyService: FinanceIdempotencyService,
-    @Inject(forwardRef(() => DepartureFinanceBridgeService))
-    private readonly departureFinanceBridge: DepartureFinanceBridgeService,
   ) {}
 
   async confirmCollection(
@@ -134,7 +131,7 @@ export class FinanceOperationsService {
     })
 
     const generatedRebatePayable =
-      await this.departureFinanceBridge.syncActualCollectionSettlementAfterGuestVerification(
+      await this.departureFinanceFacade.syncActualCollectionSettlementAfterGuestVerification(
         organizationId,
         result.scheduleId,
       )
@@ -223,7 +220,7 @@ export class FinanceOperationsService {
     })
 
     const generatedRebatePayable =
-      await this.departureFinanceBridge.syncActualCollectionSettlementAfterGuestVerification(
+      await this.departureFinanceFacade.syncActualCollectionSettlementAfterGuestVerification(
         organizationId,
         result.scheduleId,
       )

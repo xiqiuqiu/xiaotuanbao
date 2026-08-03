@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post, Query, Req, UseGuards, forwardRef } from '@nestjs/common'
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type {
   FinanceVerificationDetail,
   FinanceVerificationListResult,
@@ -7,7 +7,7 @@ import type {
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
-import { DepartureFinanceBridgeService } from '../departure/departure-finance-bridge.service'
+import { DepartureFinanceFacade } from './departure-finance-facade.service'
 import {
   CancelFinanceVerificationDto,
   CreateFinanceVerificationDto,
@@ -22,8 +22,7 @@ export class VerificationController {
   constructor(
     private readonly verificationService: VerificationService,
     private readonly financeIdempotencyService: FinanceIdempotencyService,
-    @Inject(forwardRef(() => DepartureFinanceBridgeService))
-    private readonly departureFinanceBridge: DepartureFinanceBridgeService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
   @Get()
@@ -57,7 +56,7 @@ export class VerificationController {
     })
 
     const generatedRebatePayable =
-      await this.departureFinanceBridge.syncActualCollectionSettlementAfterGuestVerification(
+      await this.departureFinanceFacade.syncActualCollectionSettlementAfterGuestVerification(
         request.user.organizationId,
         dto.paymentScheduleId,
       )
