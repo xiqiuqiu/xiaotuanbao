@@ -154,8 +154,8 @@ export function PaymentScheduleFilters({
         ) : null}
         <Select
           allowClear
-          aria-label="节点状态"
-          placeholder="节点状态"
+          aria-label={isReceivable ? '应收状态' : '应付状态'}
+          placeholder={isReceivable ? '应收状态' : '应付状态'}
           style={{ width: 140, maxWidth: '100%' }}
           value={statusFilter}
           onChange={onStatusChange}
