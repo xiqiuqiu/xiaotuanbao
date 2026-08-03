@@ -481,7 +481,7 @@ export class SegmentResourceService {
       },
     })
 
-    const financeMeta = await this.financeBridge.syncSegmentResourceSchedule(
+    const financeMeta = await this.departureFinanceFacade.syncSegmentResourceSchedule(
       organizationId,
       updated,
     )
@@ -511,13 +511,11 @@ export class SegmentResourceService {
     organizationId: string,
     resourceId: string,
   ): Promise<GeneratePayableResult> {
-    const { schedule, sourceAmountMismatch } = await this.financeBridge.generateResourcePayable(
-      organizationId,
-      {
+    const { schedule, sourceAmountMismatch } =
+      await this.departureFinanceFacade.generateResourcePayable(organizationId, {
         sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
         sourceId: resourceId,
-      },
-    )
+      })
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
     const meta = await this.departureFinanceFacade.getSegmentResourceFinanceState(
       organizationId,

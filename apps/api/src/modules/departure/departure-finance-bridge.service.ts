@@ -1,10 +1,8 @@
 import {
   BadRequestException,
-  ConflictException,
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
   forwardRef,
 } from '@nestjs/common'
 import type {
@@ -23,14 +21,11 @@ import {
   deriveSourceOrderReceivableStatus,
   computeReceivableDueDate,
   PaymentScheduleStatus,
-  shouldCancelSourceOrderScheduleOnConventionSync,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
   PaymentScheduleCloseDisposition,
   PaymentScheduleDirection,
-  type FareAdjustmentDirection,
-  type FareAdjustmentKind,
   type Partner,
   type PaymentSchedule,
   type Prisma,
@@ -44,6 +39,13 @@ import {
   DepartureFinanceFacade,
   type SegmentResourceFinanceState,
 } from '../finance/departure-finance-facade.service'
+import {
+  loadReceivableSchedules as loadReceivableSchedulesShared,
+  loadRebateSchedules as loadRebateSchedulesShared,
+  loadSourceOrderOrThrow as loadSourceOrderOrThrowShared,
+  type SourceOrderFinanceMeta,
+  type SourceOrderWithRelations,
+} from '../finance/departure-finance-schedule-loaders'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
 import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
@@ -62,38 +64,7 @@ import {
 /** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
 export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
 
-type SourceOrderWithRelations = SourceOrder & {
-  partner: Partner
-  departure: {
-    id: string
-    organizationId: string
-    status: string
-    startDate: Date
-    endDate: Date
-  }
-  fareAdjustments?: Array<{
-    id: string
-    kind: FareAdjustmentKind
-    direction: FareAdjustmentDirection
-    amountCents: number
-    customName: string | null
-    sortOrder: number
-  }>
-  guests?: Array<{ id: string; name: string }>
-}
-
-export interface SourceOrderFinanceMeta {
-  hasSchedule: boolean
-  receivableStatus: SourceOrderReceivableStatus
-  hasSourceAmountMismatch: boolean
-  amountFieldsLocked: boolean
-  /** 约定应收路径尚有缺失（如旧规则只建了尾款、未建客户补款） */
-  hasIncompleteReceivablePaths: boolean
-  rebateCents: number
-  rebateStatus: SegmentPayableStatus
-  /** 当前有效返利应付 scheduleNo；无有效返利时为 null */
-  rebateScheduleNo: string | null
-}
+export type { SourceOrderFinanceMeta, SourceOrderWithRelations }
 
 type SegmentResourceWithRelations = SegmentResource & {
   partner: Partner | null
@@ -113,14 +84,6 @@ type DepartureResourceWithRelations = DepartureResource & {
 
 type DbClient = PrismaService | Prisma.TransactionClient
 
-interface PayableSpec {
-  amountCents: number
-  title: string
-  counterpartyType: CounterpartyType
-  counterpartyId?: string
-  counterpartyName?: string
-}
-
 @Injectable()
 export class DepartureFinanceBridgeService {
   private readonly logger = new Logger(DepartureFinanceBridgeService.name)
@@ -130,9 +93,11 @@ export class DepartureFinanceBridgeService {
     private readonly paymentScheduleService: PaymentScheduleService,
     @Inject(forwardRef(() => VerificationService))
     private readonly verificationService: VerificationService,
+    @Inject(forwardRef(() => DepartureFinanceFacade))
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
+  /** @deprecated Prefer DepartureFinanceFacade.generateReceivables (ADR-0004). */
   async generateReceivables(
     organizationId: string,
     sourceOrderId: string,
@@ -144,82 +109,11 @@ export class DepartureFinanceBridgeService {
       meta: SourceOrderFinanceMeta,
     ) => SourceOrderSummary,
   ): Promise<GenerateReceivablesResult> {
-    // Concurrent generate callers wait on FOR UPDATE; default 2s/5s is too tight under CI load.
-    const { order, schedules } = await this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM source_orders
-          WHERE id = ${sourceOrderId}
-          FOR UPDATE
-        `
-
-        const lockedOrder = await this.loadSourceOrderOrThrow(
-          organizationId,
-          sourceOrderId,
-          tx,
-        )
-        this.ensureDepartureAllowsNewObligation(lockedOrder.departure)
-
-        const existingSchedules = await this.loadReceivableSchedules(
-          organizationId,
-          sourceOrderId,
-          tx,
-        )
-        const activeExisting = existingSchedules.filter((schedule) => schedule.cancelledAt == null)
-        const dueDate = computeReceivableDueDate(formatDateOnly(lockedOrder.departure.startDate))
-        const expectedPaths = this.buildReceivablePaths(lockedOrder).filter(
-          (path) => path.amountCents > 0,
-        )
-        const activeByType = new Map(
-          activeExisting.map((schedule) => [schedule.sourceType, schedule]),
-        )
-        const missingPaths = expectedPaths.filter((path) => !activeByType.has(path.sourceType))
-
-        // 有效路径齐全 → 拒绝；有效路径为空但曾有过应收（含已关闭）→ 拒绝；仅缺路径 → 补建。
-        if (activeExisting.length > 0 && missingPaths.length === 0) {
-          throw new ConflictException('当前客源单已提交应收，不能再次提交')
-        }
-        if (activeExisting.length === 0 && existingSchedules.length > 0) {
-          throw new ConflictException('当前客源单已提交应收，不能再次提交')
-        }
-
-        const createdSchedules: PaymentScheduleSummary[] = []
-        const pathsToCreate =
-          activeExisting.length === 0 ? expectedPaths : missingPaths
-
-        for (const path of pathsToCreate) {
-          const created = await this.paymentScheduleService.create(
-            organizationId,
-            PaymentScheduleDirection.receivable,
-            {
-              departureId: lockedOrder.departureId,
-              title: path.title,
-              amountCents: path.amountCents,
-              dueDate,
-              counterpartyType: path.counterpartyType,
-              counterpartyId: path.counterpartyId,
-              counterpartyName: path.counterpartyName,
-              sourceType: path.sourceType,
-              sourceId: sourceOrderId,
-            },
-            tx,
-          )
-          createdSchedules.push(created)
-        }
-
-        return { order: lockedOrder, schedules: createdSchedules }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
+    return this.departureFinanceFacade.generateReceivables(
+      organizationId,
+      sourceOrderId,
+      toSourceOrderSummary,
     )
-
-    const financeMeta = await this.evaluateFinanceMeta(organizationId, sourceOrderId, order)
-
-    return {
-      schedules,
-      sourceOrder: toSourceOrderSummary(order, financeMeta),
-      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
-    }
   }
 
   /**
@@ -494,107 +388,12 @@ export class DepartureFinanceBridgeService {
     )
   }
 
+  /** @deprecated Prefer DepartureFinanceFacade.syncSourceOrderSchedules (ADR-0004). */
   async syncSourceOrderSchedules(
     organizationId: string,
     order: SourceOrderWithRelations,
   ): Promise<SourceOrderFinanceMeta> {
-    const allSchedules = await this.loadReceivableSchedules(organizationId, order.id)
-    const rebateSchedules = await this.loadRebateSchedules(organizationId, order.id)
-    if (allSchedules.length === 0 && rebateSchedules.length === 0) {
-      return this.evaluateFinanceMeta(organizationId, order.id, order)
-    }
-
-    const activeSchedules = allSchedules.filter((schedule) => schedule.cancelledAt == null)
-    const activeRebates = rebateSchedules.filter((schedule) => schedule.cancelledAt == null)
-    const schedulesForTouch = [...activeSchedules, ...activeRebates]
-
-    const touchResults = await Promise.all(
-      schedulesForTouch.map(async (schedule) => {
-        const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-          this.verificationService.getSettledAmountCents(schedule.id),
-          this.verificationService.hasVerificationHistory(schedule.id),
-        ])
-        return {
-          schedule,
-          touched: isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory),
-        }
-      }),
-    )
-    const anyTouched = touchResults.some((item) => item.touched)
-    const hasLegacyGuestCollection = touchResults.some(
-      (item) =>
-        item.schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
-    )
-
-    if (anyTouched || hasLegacyGuestCollection) {
-      // 任一节点已 finance-touch，或仍存在 pre-split legacy 游客代收：
-      // 锁定约定同步（不改金额、不增删路径，避免误取消 legacy）。
-      // 按实收结算产生的补款/返利若尚未 touch，约定变更时关闭，待再次按实收结算。
-      return this.evaluateFinanceMeta(organizationId, order.id, order)
-    }
-
-    // 未核销：按约定全量同步——改金额、关闭多余/零金额、补建缺失。
-    const expectedPaths = this.buildReceivablePaths(order)
-    const expectedByType = new Map(expectedPaths.map((path) => [path.sourceType, path]))
-    const dueDate = computeReceivableDueDate(formatDateOnly(order.departure.startDate))
-    const remainingActiveSourceTypes = new Set<string>()
-
-    for (const { schedule } of touchResults) {
-      if (schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_REBATE) {
-        await this.cancelScheduleForConventionSync(schedule.id)
-        continue
-      }
-
-      const expected = expectedByType.get(schedule.sourceType as PaymentScheduleSourceType)
-      if (
-        shouldCancelSourceOrderScheduleOnConventionSync({
-          scheduleSourceType: schedule.sourceType,
-          expectedAmountCents: expected?.amountCents,
-        })
-      ) {
-        await this.cancelScheduleForConventionSync(schedule.id)
-        continue
-      }
-      if (!expected || expected.amountCents <= 0) {
-        // 非约定管理类型（如 legacy）：保留，不参与补建去重。
-        continue
-      }
-
-      remainingActiveSourceTypes.add(schedule.sourceType)
-      if (schedule.amountCents === expected.amountCents && schedule.title === expected.title) {
-        continue
-      }
-      await this.paymentScheduleService.update(
-        organizationId,
-        PaymentScheduleDirection.receivable,
-        schedule.id,
-        { amountCents: expected.amountCents, title: expected.title },
-      )
-    }
-
-    for (const path of expectedPaths) {
-      if (path.amountCents <= 0 || remainingActiveSourceTypes.has(path.sourceType)) {
-        continue
-      }
-      await this.paymentScheduleService.create(
-        organizationId,
-        PaymentScheduleDirection.receivable,
-        {
-          departureId: order.departureId,
-          title: path.title,
-          amountCents: path.amountCents,
-          dueDate,
-          counterpartyType: path.counterpartyType,
-          counterpartyId: path.counterpartyId,
-          counterpartyName: path.counterpartyName,
-          sourceType: path.sourceType,
-          sourceId: order.id,
-        },
-      )
-      remainingActiveSourceTypes.add(path.sourceType)
-    }
-
-    return this.evaluateFinanceMeta(organizationId, order.id, order)
+    return this.departureFinanceFacade.syncSourceOrderSchedules(organizationId, order)
   }
 
   async evaluateFinanceMeta(
@@ -766,9 +565,7 @@ export class DepartureFinanceBridgeService {
     }
   }
 
-  /**
-   * Generate a resource payable by anchor sourceType (segment ∪ departure).
-   */
+  /** @deprecated Prefer DepartureFinanceFacade.generateResourcePayable (ADR-0004). */
   async generateResourcePayable(
     organizationId: string,
     params: { sourceType: string; sourceId: string },
@@ -776,197 +573,23 @@ export class DepartureFinanceBridgeService {
     schedule: PaymentScheduleSummary
     sourceAmountMismatch: boolean
   }> {
-    if (params.sourceType === PaymentScheduleSourceType.SEGMENT_RESOURCE) {
-      return this.generatePayable(organizationId, params.sourceId)
-    }
-    if (params.sourceType === PaymentScheduleSourceType.DEPARTURE_RESOURCE) {
-      return this.generateDepartureResourcePayable(organizationId, params.sourceId)
-    }
-    throw new BadRequestException('仅资源可提交应付')
+    return this.departureFinanceFacade.generateResourcePayable(organizationId, params)
   }
 
-  async generatePayable(
-    organizationId: string,
-    resourceId: string,
-  ): Promise<{
-    schedule: PaymentScheduleSummary
-    sourceAmountMismatch: boolean
-  }> {
-    const { resource, schedule } = await this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM segment_resources
-          WHERE id = ${resourceId}
-          FOR UPDATE
-        `
-
-        const lockedResource = await this.loadSegmentResourceOrThrow(
-          organizationId,
-          resourceId,
-          tx,
-        )
-        this.ensureDepartureAllowsNewObligation(lockedResource.segment.departure, '提交应付')
-
-        if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能提交应付')
-        }
-
-        const existingTrace = await this.findAnyPayableSchedule(
-          organizationId,
-          resourceId,
-          PaymentScheduleSourceType.SEGMENT_RESOURCE,
-          tx,
-        )
-        if (existingTrace) {
-          throw new ConflictException('当前资源已提交应付，不能再次提交')
-        }
-
-        const spec = this.buildPayableSpec(lockedResource)
-        const dueDate = formatDateOnly(lockedResource.segment.departure.endDate)
-        const createdSchedule = await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.payable,
-          {
-            departureId: lockedResource.segment.departure.id,
-            title: spec.title,
-            amountCents: spec.amountCents,
-            dueDate,
-            counterpartyType: spec.counterpartyType,
-            counterpartyId: spec.counterpartyId,
-            counterpartyName: spec.counterpartyName,
-            sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
-            sourceId: resourceId,
-          },
-          tx,
-        )
-
-        return { resource: lockedResource, schedule: createdSchedule }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
-    )
-
-    const financeMeta = await this.evaluateResourceFinanceMeta(
-      organizationId,
-      resourceId,
-      resource,
-    )
-
-    return {
-      schedule,
-      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
-    }
-  }
-
+  /** @deprecated Prefer DepartureFinanceFacade.syncSegmentResourceSchedule (ADR-0004). */
   async syncSegmentResourceSchedule(
     organizationId: string,
     resource: SegmentResourceWithRelations,
   ): Promise<SegmentResourceFinanceMeta> {
-    const schedule = await this.findActivePayableSchedule(
-      organizationId,
-      resource.id,
-      PaymentScheduleSourceType.SEGMENT_RESOURCE,
-    )
-    if (!schedule) {
-      return this.evaluateResourceFinanceMeta(organizationId, resource.id, resource)
-    }
-
-    const spec = this.buildPayableSpec(resource)
-    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec)
-
-    return this.evaluateResourceFinanceMeta(organizationId, resource.id, resource)
+    return this.departureFinanceFacade.syncSegmentResourceSchedule(organizationId, resource)
   }
 
-  async generateDepartureResourcePayable(
-    organizationId: string,
-    resourceId: string,
-  ): Promise<{
-    schedule: PaymentScheduleSummary
-    sourceAmountMismatch: boolean
-  }> {
-    const { resource, schedule } = await this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`
-          SELECT id
-          FROM departure_resources
-          WHERE id = ${resourceId}
-          FOR UPDATE
-        `
-
-        const lockedResource = await this.loadDepartureResourceOrThrow(
-          organizationId,
-          resourceId,
-          tx,
-        )
-        this.ensureDepartureAllowsNewObligation(lockedResource.departure, '提交应付')
-
-        if (lockedResource.amountCents <= 0) {
-          throw new BadRequestException('资源金额须大于 0 才能提交应付')
-        }
-
-        const existingTrace = await this.findAnyPayableSchedule(
-          organizationId,
-          resourceId,
-          PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-          tx,
-        )
-        if (existingTrace) {
-          throw new ConflictException('当前资源已提交应付，不能再次提交')
-        }
-
-        const spec = this.buildPayableSpec(lockedResource)
-        const dueDate = formatDateOnly(lockedResource.departure.endDate)
-        const createdSchedule = await this.paymentScheduleService.create(
-          organizationId,
-          PaymentScheduleDirection.payable,
-          {
-            departureId: lockedResource.departure.id,
-            title: spec.title,
-            amountCents: spec.amountCents,
-            dueDate,
-            counterpartyType: spec.counterpartyType,
-            counterpartyId: spec.counterpartyId,
-            counterpartyName: spec.counterpartyName,
-            sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-            sourceId: resourceId,
-          },
-          tx,
-        )
-
-        return { resource: lockedResource, schedule: createdSchedule }
-      },
-      { maxWait: 20_000, timeout: 20_000 },
-    )
-
-    const financeMeta = await this.evaluateDepartureResourceFinanceMeta(
-      organizationId,
-      resourceId,
-      resource,
-    )
-
-    return {
-      schedule,
-      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
-    }
-  }
-
+  /** @deprecated Prefer DepartureFinanceFacade.syncDepartureResourceSchedule (ADR-0004). */
   async syncDepartureResourceSchedule(
     organizationId: string,
     resource: DepartureResourceWithRelations,
   ): Promise<SegmentResourceFinanceMeta> {
-    const schedule = await this.findActivePayableSchedule(
-      organizationId,
-      resource.id,
-      PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-    )
-    if (!schedule) {
-      return this.evaluateDepartureResourceFinanceMeta(organizationId, resource.id, resource)
-    }
-
-    const spec = this.buildPayableSpec(resource)
-    await this.syncUntouchedPayableSchedule(organizationId, schedule, spec)
-
-    return this.evaluateDepartureResourceFinanceMeta(organizationId, resource.id, resource)
+    return this.departureFinanceFacade.syncDepartureResourceSchedule(organizationId, resource)
   }
 
   async evaluateResourceFinanceMeta(
@@ -1025,210 +648,6 @@ export class DepartureFinanceBridgeService {
     }
   }
 
-  private async syncUntouchedPayableSchedule(
-    organizationId: string,
-    schedule: PaymentSchedule,
-    spec: PayableSpec,
-  ): Promise<void> {
-    const [settledAmountCents, hasVerificationHistory] = await Promise.all([
-      this.verificationService.getSettledAmountCents(schedule.id),
-      this.verificationService.hasVerificationHistory(schedule.id),
-    ])
-    const touched = isFinanceTouched(schedule, settledAmountCents, hasVerificationHistory)
-    if (touched) {
-      return
-    }
-
-    const updates: {
-      amountCents?: number
-      counterpartyType?: CounterpartyType
-      counterpartyId?: string
-      counterpartyName?: string | null
-    } = {}
-
-    if (schedule.amountCents !== spec.amountCents) {
-      updates.amountCents = spec.amountCents
-    }
-    if (schedule.counterpartyType !== spec.counterpartyType) {
-      updates.counterpartyType = spec.counterpartyType
-    }
-    if (schedule.counterpartyId !== (spec.counterpartyId ?? null)) {
-      updates.counterpartyId = spec.counterpartyId
-      updates.counterpartyName = spec.counterpartyName ?? null
-    }
-
-    if (Object.keys(updates).length > 0) {
-      await this.paymentScheduleService.update(
-        organizationId,
-        PaymentScheduleDirection.payable,
-        schedule.id,
-        updates,
-      )
-    }
-  }
-
-  private buildPayableSpec(
-    resource:
-      | SegmentResourceWithRelations
-      | DepartureResourceWithRelations,
-  ): PayableSpec {
-    const isPartnerCounterparty = resource.counterpartyType === CounterpartyType.partner
-    const counterpartyName = isPartnerCounterparty
-      ? resource.partner?.name
-      : resource.supplier?.name
-
-    const title =
-      resource.title.trim() ||
-      `${this.resourceKindLabel(resource.resourceKind)}·${counterpartyName ?? '未命名'}`
-
-    if (isPartnerCounterparty) {
-      return {
-        amountCents: resource.amountCents,
-        title,
-        counterpartyType: CounterpartyType.partner,
-        counterpartyId: resource.partnerId ?? undefined,
-        counterpartyName: resource.partner?.name,
-      }
-    }
-
-    return {
-      amountCents: resource.amountCents,
-      title,
-      counterpartyType: CounterpartyType.supplier,
-      counterpartyId: resource.supplierId ?? undefined,
-      counterpartyName: resource.supplier?.name,
-    }
-  }
-
-  private resourceKindLabel(resourceKind: string): string {
-    const labels: Record<string, string> = {
-      transport: '用车',
-      hotel: '酒店',
-      guide: '导游',
-      ticket: '门票',
-      meal: '用餐',
-      insurance: '保险',
-      outsource: '拼出',
-      other: '其他',
-    }
-    return labels[resourceKind] ?? resourceKind
-  }
-
-  private async findActivePayableSchedule(
-    organizationId: string,
-    resourceId: string,
-    sourceType: string,
-  ): Promise<PaymentSchedule | null> {
-    return this.prisma.paymentSchedule.findFirst({
-      where: {
-        organizationId,
-        sourceId: resourceId,
-        sourceType,
-        direction: PaymentScheduleDirection.payable,
-        cancelledAt: null,
-        voidedAt: null,
-      },
-    })
-  }
-
-  private async findAnyPayableSchedule(
-    organizationId: string,
-    resourceId: string,
-    sourceType: string = PaymentScheduleSourceType.SEGMENT_RESOURCE,
-    client: DbClient = this.prisma,
-  ): Promise<PaymentSchedule | null> {
-    return client.paymentSchedule.findFirst({
-      where: {
-        organizationId,
-        sourceId: resourceId,
-        sourceType,
-        direction: PaymentScheduleDirection.payable,
-        voidedAt: null,
-      },
-    })
-  }
-
-  private async loadSegmentResourceOrThrow(
-    organizationId: string,
-    resourceId: string,
-    client: DbClient = this.prisma,
-  ): Promise<SegmentResourceWithRelations> {
-    const resource = await client.segmentResource.findFirst({
-      where: {
-        id: resourceId,
-        segment: { departure: { organizationId } },
-      },
-      include: {
-        partner: true,
-        supplier: true,
-        segment: {
-          select: {
-            id: true,
-            endDate: true,
-            departure: {
-              select: {
-                id: true,
-                organizationId: true,
-                status: true,
-                endDate: true,
-              },
-            },
-          },
-        },
-      },
-    })
-
-    if (!resource) {
-      throw new NotFoundException('段内资源不存在')
-    }
-
-    return resource
-  }
-
-  private async loadDepartureResourceOrThrow(
-    organizationId: string,
-    resourceId: string,
-    client: DbClient = this.prisma,
-  ): Promise<DepartureResourceWithRelations> {
-    const resource = await client.departureResource.findFirst({
-      where: {
-        id: resourceId,
-        departure: { organizationId },
-      },
-      include: {
-        partner: true,
-        supplier: true,
-        departure: {
-          select: {
-            id: true,
-            organizationId: true,
-            status: true,
-            endDate: true,
-          },
-        },
-      },
-    })
-
-    if (!resource) {
-      throw new NotFoundException('发团级资源不存在')
-    }
-
-    return resource
-  }
-
-  private buildReceivablePaths(order: SourceOrderWithRelations) {
-    return buildSourceOrderReceivablePaths({
-      sourceOrderId: order.id,
-      partnerId: order.partnerId,
-      partnerName: order.partner.name,
-      displayName: order.displayName,
-      collectionMode: order.collectionMode,
-      depositCents: order.depositCents,
-      balanceCents: order.balanceCents,
-      netReceivableCents: order.netReceivableCents,
-    })
-  }
-
   private getExpectedAmountForSchedule(
     sourceType: string,
     order: Pick<
@@ -1254,18 +673,6 @@ export class DepartureFinanceBridgeService {
       netReceivableCents: order.netReceivableCents,
     })
     return paths.find((path) => path.sourceType === sourceType)?.amountCents ?? 0
-  }
-
-  /** 约定变更同步：关闭不再适用且未 finance-touch 的节点（不走用户关闭 API）。 */
-  private async cancelScheduleForConventionSync(scheduleId: string): Promise<void> {
-    await this.prisma.paymentSchedule.update({
-      where: { id: scheduleId },
-      data: {
-        cancelledAt: new Date(),
-        closeDisposition: PaymentScheduleCloseDisposition.other,
-        cancelReason: '约定变更同步：路径不再适用',
-      },
-    })
   }
 
   private async assertSettlementNodesNotTouched(
@@ -1366,13 +773,7 @@ export class DepartureFinanceBridgeService {
     sourceOrderId: string,
     client: DbClient = this.prisma,
   ): Promise<PaymentSchedule[]> {
-    return client.paymentSchedule.findMany({
-      where: {
-        organizationId,
-        sourceId: sourceOrderId,
-        direction: PaymentScheduleDirection.receivable,
-      },
-    })
+    return loadReceivableSchedulesShared(client, organizationId, sourceOrderId)
   }
 
   private async loadRebateSchedules(
@@ -1380,14 +781,7 @@ export class DepartureFinanceBridgeService {
     sourceOrderId: string,
     client: DbClient = this.prisma,
   ): Promise<PaymentSchedule[]> {
-    return client.paymentSchedule.findMany({
-      where: {
-        organizationId,
-        sourceId: sourceOrderId,
-        sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
-        direction: PaymentScheduleDirection.payable,
-      },
-    })
+    return loadRebateSchedulesShared(client, organizationId, sourceOrderId)
   }
 
   private async loadSourceOrderOrThrow(
@@ -1395,32 +789,7 @@ export class DepartureFinanceBridgeService {
     sourceOrderId: string,
     client: DbClient = this.prisma,
   ): Promise<SourceOrderWithRelations> {
-    const order = await client.sourceOrder.findFirst({
-      where: {
-        id: sourceOrderId,
-        departure: { organizationId },
-      },
-      include: {
-        partner: true,
-        departure: {
-          select: {
-            id: true,
-            organizationId: true,
-            status: true,
-            startDate: true,
-            endDate: true,
-          },
-        },
-        fareAdjustments: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
-        guests: { orderBy: { createdAt: 'asc' }, select: { id: true, name: true } },
-      },
-    })
-
-    if (!order) {
-      throw new NotFoundException('客源单不存在')
-    }
-
-    return order
+    return loadSourceOrderOrThrowShared(client, organizationId, sourceOrderId)
   }
 
   private ensureDepartureAllowsNewObligation(

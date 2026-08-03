@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common'
 import type {
   PaymentScheduleActivityItem,
@@ -30,8 +32,14 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { NumberAllocationService } from '../number-allocation/number-allocation.service'
-import { DepartureFinanceFacade } from './departure-finance-facade.service'
+import type { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { VerificationService } from './verification.service'
+
+function departureFinanceFacadeService() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./departure-finance-facade.service')
+    .DepartureFinanceFacade as typeof import('./departure-finance-facade.service').DepartureFinanceFacade
+}
 import {
   formatDateOnly,
   getShanghaiTodayString,
@@ -97,6 +105,8 @@ export class PaymentScheduleService {
     private readonly authService: AuthService,
     private readonly verificationService: VerificationService,
     private readonly numberAllocationService: NumberAllocationService,
+    // Circular with Facade → Generation → PaymentScheduleService (C1 Generation move).
+    @Inject(forwardRef(departureFinanceFacadeService))
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 

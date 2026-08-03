@@ -7,6 +7,9 @@ describe('resource payable source dispatch (#204)', () => {
   const bridge = Object.create(
     DepartureFinanceBridgeService.prototype,
   ) as DepartureFinanceBridgeService
+  // Bridge Generation methods forward to Facade (ADR-0004 C1).
+  ;(bridge as unknown as { departureFinanceFacade: DepartureFinanceFacade }).departureFinanceFacade =
+    facade
 
   it('routes segment_resource amount sync to the segment update path', async () => {
     const syncSegment = jest
@@ -64,8 +67,8 @@ describe('resource payable source dispatch (#204)', () => {
     expect(queryRaw).toHaveBeenCalled()
   })
 
-  it('routes segment generate through generateResourcePayable', async () => {
-    const generate = jest.spyOn(bridge, 'generatePayable').mockResolvedValue({
+  it('routes segment generate through Facade generateResourcePayable', async () => {
+    const generate = jest.spyOn(facade, 'generateResourcePayable').mockResolvedValue({
       schedule: { id: 'sch-1' } as never,
       sourceAmountMismatch: false,
     })
@@ -75,22 +78,26 @@ describe('resource payable source dispatch (#204)', () => {
       sourceId: 'seg-res-1',
     })
 
-    expect(generate).toHaveBeenCalledWith('org-1', 'seg-res-1')
+    expect(generate).toHaveBeenCalledWith('org-1', {
+      sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+      sourceId: 'seg-res-1',
+    })
   })
 
-  it('routes departure generate through generateDepartureResourcePayable', async () => {
-    const generate = jest
-      .spyOn(bridge, 'generateDepartureResourcePayable')
-      .mockResolvedValue({
-        schedule: { id: 'sch-2' } as never,
-        sourceAmountMismatch: false,
-      })
+  it('routes departure generate through Facade generateResourcePayable', async () => {
+    const generate = jest.spyOn(facade, 'generateResourcePayable').mockResolvedValue({
+      schedule: { id: 'sch-2' } as never,
+      sourceAmountMismatch: false,
+    })
 
     await bridge.generateResourcePayable('org-1', {
       sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
       sourceId: 'dep-res-1',
     })
 
-    expect(generate).toHaveBeenCalledWith('org-1', 'dep-res-1')
+    expect(generate).toHaveBeenCalledWith('org-1', {
+      sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+      sourceId: 'dep-res-1',
+    })
   })
 })
