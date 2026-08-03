@@ -97,7 +97,7 @@
   departure: { resourceAmountCents, resourceCount },
   segment: { resourceAmountCents, resourceCount },
   ungeneratedCents,
-  ungeneratedCount, // subtitle: `${n} 项待生成` | `已齐`
+  ungeneratedCount, // subtitle: `${n} 项待生成` | `无待办`
 }
 ```
 

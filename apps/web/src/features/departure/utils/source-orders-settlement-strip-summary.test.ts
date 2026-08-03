@@ -89,7 +89,7 @@ describe('summarizeSourceOrdersSettlementStrip', () => {
     expect(summary.ungeneratedCents).toBe(300000)
   })
 
-  it('returns zeros for an empty list (已齐)', () => {
+  it('returns zeros for an empty list (无待办)', () => {
     expect(summarizeSourceOrdersSettlementStrip([])).toEqual({
       orderCount: 0,
       totalGuests: 0,

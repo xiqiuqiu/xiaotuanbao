@@ -102,7 +102,7 @@ describe('发团列表操作列', () => {
     expect(totalWidth).toBeLessThanOrEqual(DEPARTURE_LIST_TABLE_SCROLL_X)
   })
 
-  it('完成情况：列表只铺待办缺口 warning Tag；全齐显示「已齐」', () => {
+  it('完成情况：列表只铺待办缺口 warning Tag；全齐显示「无待办」', () => {
     const completionColumn = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true).find(
       (column) => 'key' in column && column.key === 'completionTags',
     )
@@ -140,7 +140,7 @@ describe('发团列表操作列', () => {
       },
     } as DepartureSummary
     rerender(<>{completionColumn!.render?.(undefined, completeRecord, 0)}</>)
-    expect(screen.getByText('已齐')).toBeTruthy()
+    expect(screen.getByText('无待办')).toBeTruthy()
     expect(container.querySelectorAll('.ant-tag')).toHaveLength(0)
   })
 

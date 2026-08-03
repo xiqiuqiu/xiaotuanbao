@@ -42,7 +42,7 @@ describe('SourceOrdersSettlementStrip', () => {
     expect(strip.textContent).toContain('1 单待提交')
   })
 
-  it('shows 已齐 when every listed order has receivables', () => {
+  it('shows 无待办 when every listed order has receivables', () => {
     renderStrip({
       orderCount: 1,
       totalGuests: 5,
@@ -53,7 +53,7 @@ describe('SourceOrdersSettlementStrip', () => {
       ungeneratedCents: 0,
     })
 
-    expect(screen.getByRole('list', { name: '客源结算汇总' }).textContent).toContain('已齐')
+    expect(screen.getByRole('list', { name: '客源结算汇总' }).textContent).toContain('无待办')
   })
 
   it('omits the strip when there are no listed orders', () => {

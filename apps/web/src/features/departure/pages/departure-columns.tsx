@@ -132,7 +132,7 @@ export function buildDepartureColumns(
         if (incompleteLabels.length === 0) {
           return (
             <Tooltip title={tooltip}>
-              <Typography.Text type="secondary">已齐</Typography.Text>
+              <Typography.Text type="secondary">无待办</Typography.Text>
             </Tooltip>
           )
         }

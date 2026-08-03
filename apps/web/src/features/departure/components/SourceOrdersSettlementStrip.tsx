@@ -15,7 +15,7 @@ export function SourceOrdersSettlementStrip({
   }
 
   const pendingLabel =
-    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待提交` : '已齐'
+    summary.ungeneratedCount > 0 ? `${summary.ungeneratedCount} 单待提交` : '无待办'
 
   return (
     <ul
