@@ -4,6 +4,10 @@ import {
   emptyDepartureFinanceSnapshot,
   type DepartureFinanceSnapshot,
 } from '../finance/departure-finance-facade.service'
+import {
+  emptyDepartureFinanceObligationSummary,
+  type DepartureFinanceObligationSummary,
+} from '../finance/departure-finance-obligation-summary'
 import type { DepartureOverviewCollectionStats } from './departure-overview-collection-stats'
 
 export interface ScheduleSnapshot {
@@ -213,57 +217,42 @@ export function derivePayableTagFromSchedules(
   return allSettled ? '已付清' : '应付已提交'
 }
 
+export function deriveReceivableTagFromObligation(
+  summary: Pick<
+    DepartureFinanceObligationSummary,
+    'hasReceivableSchedule' | 'allReceivablesAmountSettled'
+  >,
+): string {
+  if (!summary.hasReceivableSchedule) {
+    return '应收未提交'
+  }
+  return summary.allReceivablesAmountSettled ? '已收齐' : '应收已提交'
+}
+
+export function derivePayableTagFromObligation(
+  summary: Pick<
+    DepartureFinanceObligationSummary,
+    'hasPayableSchedule' | 'allPayablesAmountSettled'
+  >,
+): string {
+  if (!summary.hasPayableSchedule) {
+    return '应付未提交'
+  }
+  return summary.allPayablesAmountSettled ? '已付清' : '应付已提交'
+}
+
 export function deriveCompletionTags(input: {
   sourceOrderCount: number
   segmentCount: number
   resourceCount: number
-  schedules: ScheduleWithId[]
-  settledByScheduleId: Map<string, number>
+  obligationSummary: DepartureFinanceObligationSummary
 }): DepartureCompletionTags {
   return {
     sourceOrders: deriveSourceOrderTag(input.sourceOrderCount),
     segments: deriveSegmentTag(input.segmentCount),
     resources: deriveResourceTag(input.resourceCount),
-    receivables: deriveReceivableTagFromSchedules(input.schedules, input.settledByScheduleId),
-    payables: derivePayableTagFromSchedules(input.schedules, input.settledByScheduleId),
-  }
-}
-
-export function computeFinancialAmounts(
-  schedules: ScheduleWithId[],
-  settledByScheduleId: Map<string, number>,
-): Pick<
-  DepartureReadModelAggregate,
-  | 'verifiedReceivableCents'
-  | 'openUnsettledReceivableCents'
-  | 'verifiedPayableCents'
-  | 'openUnsettledPayableCents'
-> {
-  let verifiedReceivableCents = 0
-  let openUnsettledReceivableCents = 0
-  let verifiedPayableCents = 0
-  let openUnsettledPayableCents = 0
-
-  for (const schedule of schedules) {
-    const settled = settledByScheduleId.get(schedule.id) ?? 0
-    // Closed nodes keep remaining on the node itself, but open summary excludes it.
-    const openRemaining =
-      schedule.cancelledAt != null ? 0 : Math.max(schedule.amountCents - settled, 0)
-
-    if (schedule.direction === PaymentScheduleDirection.receivable) {
-      verifiedReceivableCents += settled
-      openUnsettledReceivableCents += openRemaining
-    } else {
-      verifiedPayableCents += settled
-      openUnsettledPayableCents += openRemaining
-    }
-  }
-
-  return {
-    verifiedReceivableCents,
-    openUnsettledReceivableCents,
-    verifiedPayableCents,
-    openUnsettledPayableCents,
+    receivables: deriveReceivableTagFromObligation(input.obligationSummary),
+    payables: derivePayableTagFromObligation(input.obligationSummary),
   }
 }
 
@@ -310,23 +299,15 @@ export function buildDepartureReadModelAggregate(input: {
   segmentCount: number
   resourceCount: number
   payableCents: number
-  schedules: ScheduleWithId[]
-  settledByScheduleId: Map<string, number>
-  unverifiedCash?: UnverifiedCashAggregate
+  /** Finance-owned legacy flat + settlement progress (ADR-0004 C4). */
+  obligationSummary?: DepartureFinanceObligationSummary
   financeSnapshot?: DepartureFinanceSnapshot
   overviewSourceFacts?: DepartureOverviewSourceFacts
 }): DepartureReadModelAggregate {
-  const {
-    sourceOrders,
-    segmentCount,
-    resourceCount,
-    payableCents,
-    schedules,
-    settledByScheduleId,
-    unverifiedCash = EMPTY_UNVERIFIED_CASH,
-  } = input
+  const { sourceOrders, segmentCount, resourceCount, payableCents } = input
+  const obligation =
+    input.obligationSummary ?? emptyDepartureFinanceObligationSummary()
 
-  const financial = computeFinancialAmounts(schedules, settledByScheduleId)
   const estimatedMarginCents = sourceOrders.netReceivableCents - payableCents
   const financeSnapshot = input.financeSnapshot ?? emptyDepartureFinanceSnapshot()
   const overviewSourceFacts = input.overviewSourceFacts ?? {
@@ -350,9 +331,12 @@ export function buildDepartureReadModelAggregate(input: {
     netReceivableCents: sourceOrders.netReceivableCents,
     payableCents,
     estimatedMarginCents,
-    ...financial,
-    unverifiedIncomeCents: unverifiedCash.unverifiedIncomeCents,
-    unverifiedExpenseCents: unverifiedCash.unverifiedExpenseCents,
+    verifiedReceivableCents: obligation.verifiedReceivableCents,
+    openUnsettledReceivableCents: obligation.openUnsettledReceivableCents,
+    verifiedPayableCents: obligation.verifiedPayableCents,
+    openUnsettledPayableCents: obligation.openUnsettledPayableCents,
+    unverifiedIncomeCents: obligation.unverifiedIncomeCents,
+    unverifiedExpenseCents: obligation.unverifiedExpenseCents,
     overviewStats: buildDepartureOverviewStats({
       netReceivableCents: sourceOrders.netReceivableCents,
       estimatedPayableCents: payableCents,
@@ -363,10 +347,9 @@ export function buildDepartureReadModelAggregate(input: {
       sourceOrderCount: sourceOrders.count,
       segmentCount,
       resourceCount,
-      schedules,
-      settledByScheduleId,
+      obligationSummary: obligation,
     }),
-    isFinanciallySettled: deriveIsFinanciallySettled(schedules, settledByScheduleId),
+    isFinanciallySettled: obligation.isFinanciallySettled,
   }
 }
 
@@ -376,8 +359,6 @@ export function emptyDepartureReadModelAggregate(): DepartureReadModelAggregate 
     segmentCount: 0,
     resourceCount: 0,
     payableCents: 0,
-    schedules: [],
-    settledByScheduleId: new Map(),
-    unverifiedCash: EMPTY_UNVERIFIED_CASH,
+    obligationSummary: emptyDepartureFinanceObligationSummary(),
   })
 }

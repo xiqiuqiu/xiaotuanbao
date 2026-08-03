@@ -47,6 +47,12 @@ import type {
   SourceOrderFinanceMeta,
   SourceOrderWithRelations,
 } from './departure-finance-schedule-loaders'
+import {
+  buildDepartureFinanceObligationSummary,
+  emptyDepartureFinanceObligationSummary,
+  type DepartureFinanceObligationScheduleInput,
+  type DepartureFinanceObligationSummary,
+} from './departure-finance-obligation-summary'
 import { buildSourceOrderFinanceMeta } from './source-order-finance-state'
 
 type TxClient = Prisma.TransactionClient
@@ -201,6 +207,22 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
 })
 
 /**
+ * One Facade read for Departure read model: signed snapshot (overview) +
+ * clamped obligation summary (legacy flat fields / tags / settled gate).
+ */
+export interface DepartureFinanceReadBundle {
+  snapshot: DepartureFinanceSnapshot
+  obligationSummary: DepartureFinanceObligationSummary
+}
+
+export const emptyDepartureFinanceReadBundle = (): DepartureFinanceReadBundle => ({
+  snapshot: emptyDepartureFinanceSnapshot(),
+  obligationSummary: emptyDepartureFinanceObligationSummary(),
+})
+
+export type { DepartureFinanceObligationSummary }
+
+/**
  * Authoritative Departure write gate owned by Finance (ADR-0004 / #86).
  * Archive-period mutability checks live here so callers share one judgment.
  * Snapshot, Generation, and Source Order finance-state aggregation live here;
@@ -310,13 +332,17 @@ export class DepartureFinanceFacade {
     return this.getDepartureResourceFinanceState(organizationId, resource.id, resource)
   }
 
-  async getDepartureFinanceSnapshots(
+  /**
+   * Departure finance read bundle: signed overview snapshot + clamped obligation
+   * summary for legacy flat fields / completion tags / settled gate (ADR-0004 C4).
+   */
+  async getDepartureFinanceReadBundles(
     organizationId: string,
     departureIds: string[],
-  ): Promise<Map<string, DepartureFinanceSnapshot>> {
+  ): Promise<Map<string, DepartureFinanceReadBundle>> {
     const uniqueIds = [...new Set(departureIds)]
     const result = new Map(
-      uniqueIds.map((departureId) => [departureId, emptyDepartureFinanceSnapshot()]),
+      uniqueIds.map((departureId) => [departureId, emptyDepartureFinanceReadBundle()]),
     )
     if (uniqueIds.length === 0) {
       return result
@@ -336,14 +362,16 @@ export class DepartureFinanceFacade {
           cancelledAt: true,
           sourceType: true,
           sourceId: true,
+          // Load all normal verifications; snapshot excludes voided-txn rows below,
+          // while obligationSummary keeps VerificationService.batchGetSettledAmounts
+          // semantics (status=normal only, no voidedAt filter).
           verifications: {
             where: {
               status: PrismaVerificationStatus.normal,
-              transaction: { voidedAt: null },
             },
             select: {
               amountCents: true,
-              transaction: { select: { departureId: true } },
+              transaction: { select: { departureId: true, voidedAt: true } },
             },
           },
         },
@@ -371,13 +399,35 @@ export class DepartureFinanceFacade {
       }),
     ])
 
+    const obligationSchedulesByDeparture = new Map<
+      string,
+      DepartureFinanceObligationScheduleInput[]
+    >()
+    for (const departureId of uniqueIds) {
+      obligationSchedulesByDeparture.set(departureId, [])
+    }
+
     for (const schedule of schedules) {
-      const snapshot = result.get(schedule.departureId)!
-      const receivedOrPaidCents = schedule.verifications.reduce(
+      const bundle = result.get(schedule.departureId)!
+      const snapshot = bundle.snapshot
+      const effectiveVerifications = schedule.verifications.filter(
+        (verification) => verification.transaction.voidedAt == null,
+      )
+      const receivedOrPaidCents = effectiveVerifications.reduce(
+        (sum, verification) => sum + verification.amountCents,
+        0,
+      )
+      const legacySettledCents = schedule.verifications.reduce(
         (sum, verification) => sum + verification.amountCents,
         0,
       )
       const remainingCents = schedule.amountCents - receivedOrPaidCents
+      obligationSchedulesByDeparture.get(schedule.departureId)!.push({
+        direction: schedule.direction,
+        amountCents: schedule.amountCents,
+        cancelledAt: schedule.cancelledAt,
+        settledCents: legacySettledCents,
+      })
 
       if (schedule.direction === PaymentScheduleDirection.receivable) {
         const isSourceReceivable = isSourceOrderReceivableSourceType(schedule.sourceType)
@@ -412,7 +462,7 @@ export class DepartureFinanceFacade {
         }
       }
 
-      for (const verification of schedule.verifications) {
+      for (const verification of effectiveVerifications) {
         // 无归属发团的流水同样不进本团资金卡，与他团流水合并为外部核销口径。
         if (verification.transaction.departureId !== schedule.departureId) {
           snapshot.verifiedFromExternalCents += verification.amountCents
@@ -420,25 +470,45 @@ export class DepartureFinanceFacade {
       }
     }
 
+    const clampedUnverifiedByDeparture = new Map(
+      uniqueIds.map((departureId) => [
+        departureId,
+        { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 },
+      ]),
+    )
+
     for (const transaction of transactions) {
       if (!transaction.departureId) {
         continue
       }
-      const snapshot = result.get(transaction.departureId)!
-      const allocatedCents = transaction.verifications.reduce(
+      const snapshot = result.get(transaction.departureId)!.snapshot
+      const allocatedForSnapshotCents = transaction.verifications.reduce(
         (sum, verification) =>
           verification.paymentSchedule.voidedAt == null
             ? sum + verification.amountCents
             : sum,
         0,
       )
-      const unverifiedCents = transaction.amountCents - allocatedCents
+      // Legacy flat fields match VerificationService: all normal verifications count,
+      // then clamp unallocated with Math.max (signed remainder stays on snapshot).
+      const allocatedForLegacyCents = transaction.verifications.reduce(
+        (sum, verification) => sum + verification.amountCents,
+        0,
+      )
+      const unverifiedCents = transaction.amountCents - allocatedForSnapshotCents
+      const clampedUnverifiedCents = Math.max(
+        transaction.amountCents - allocatedForLegacyCents,
+        0,
+      )
+      const clampedBucket = clampedUnverifiedByDeparture.get(transaction.departureId)!
       if (transaction.direction === TransactionDirection.inflow) {
         snapshot.incomeTransactionCents += transaction.amountCents
         snapshot.unverifiedIncomeCents += unverifiedCents
+        clampedBucket.unverifiedIncomeCents += clampedUnverifiedCents
       } else {
         snapshot.expenseTransactionCents += transaction.amountCents
         snapshot.unverifiedExpenseCents += unverifiedCents
+        clampedBucket.unverifiedExpenseCents += clampedUnverifiedCents
       }
       for (const verification of transaction.verifications) {
         if (
@@ -448,6 +518,14 @@ export class DepartureFinanceFacade {
           snapshot.verifiedToOtherDeparturesCents += verification.amountCents
         }
       }
+    }
+
+    for (const departureId of uniqueIds) {
+      const bundle = result.get(departureId)!
+      bundle.obligationSummary = buildDepartureFinanceObligationSummary({
+        schedules: obligationSchedulesByDeparture.get(departureId) ?? [],
+        unverifiedCash: clampedUnverifiedByDeparture.get(departureId),
+      })
     }
 
     return result
