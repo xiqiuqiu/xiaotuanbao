@@ -15,12 +15,7 @@ import {
   isFinanceTouched,
   isSourceOrderGuestCollectionSourceType,
   PaymentScheduleSourceType,
-  SegmentPayableStatus,
-  SourceOrderReceivableStatus,
-  deriveScheduleState,
-  deriveSourceOrderReceivableStatus,
   computeReceivableDueDate,
-  PaymentScheduleStatus,
 } from '@xiaotuanbao/shared'
 import {
   CounterpartyType,
@@ -41,20 +36,18 @@ import {
 } from '../finance/departure-finance-facade.service'
 import {
   loadReceivableSchedules as loadReceivableSchedulesShared,
-  loadRebateSchedules as loadRebateSchedulesShared,
   loadSourceOrderOrThrow as loadSourceOrderOrThrowShared,
   type SourceOrderFinanceMeta,
   type SourceOrderWithRelations,
 } from '../finance/departure-finance-schedule-loaders'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
 import { VerificationService } from '../finance/verification.service'
-import { formatDateOnly, getShanghaiTodayString } from './departure-date.utils'
+import { formatDateOnly } from './departure-date.utils'
 import {
   assertGuestNodesReadyForSettlement,
   buildActualCollectionSettlementPaths,
   buildObsoleteSettlementPathCloseData,
 } from './source-order-actual-collection-settlement'
-import { buildSourceOrderReceivablePaths } from './source-order-receivable-paths'
 import {
   resolveSourceOrderAmountChange,
   type SourceOrderAmountInput,
@@ -396,6 +389,7 @@ export class DepartureFinanceBridgeService {
     return this.departureFinanceFacade.syncSourceOrderSchedules(organizationId, order)
   }
 
+  /** @deprecated Prefer DepartureFinanceFacade.getSourceOrderFinanceState (ADR-0004 step 3). */
   async evaluateFinanceMeta(
     organizationId: string,
     sourceOrderId: string,
@@ -409,143 +403,13 @@ export class DepartureFinanceBridgeService {
       | 'guestCollectCents'
     >,
   ): Promise<SourceOrderFinanceMeta> {
-    const amounts =
-      order ??
-      (await this.prisma.sourceOrder.findFirstOrThrow({
-        where: { id: sourceOrderId },
-        select: {
-          collectionMode: true,
-          depositCents: true,
-          balanceCents: true,
-          netReceivableCents: true,
-          partnerCollectedCents: true,
-          guestCollectCents: true,
-        },
-      }))
-
-    const schedules = await this.loadReceivableSchedules(organizationId, sourceOrderId)
-    const rebateSchedules = await this.loadRebateSchedules(organizationId, sourceOrderId)
-    if (schedules.length === 0 && rebateSchedules.length === 0) {
-      return {
-        hasSchedule: false,
-        receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
-        hasSourceAmountMismatch: false,
-        amountFieldsLocked: false,
-        hasIncompleteReceivablePaths: false,
-        rebateCents: 0,
-        rebateStatus: SegmentPayableStatus.NOT_GENERATED,
-        rebateScheduleNo: null,
-      }
-    }
-
-    const activeSchedules = schedules.filter((schedule) => schedule.cancelledAt == null)
-    const activeRebates = rebateSchedules.filter((schedule) => schedule.cancelledAt == null)
-    if (activeSchedules.length === 0 && activeRebates.length === 0) {
-      return {
-        hasSchedule: true,
-        receivableStatus: SourceOrderReceivableStatus.CLOSED,
-        hasSourceAmountMismatch: false,
-        amountFieldsLocked: true,
-        hasIncompleteReceivablePaths: false,
-        rebateCents: 0,
-        rebateStatus:
-          rebateSchedules.length > 0
-            ? SegmentPayableStatus.CLOSED
-            : SegmentPayableStatus.NOT_GENERATED,
-        rebateScheduleNo: null,
-      }
-    }
-
-    const touchCandidates = [...activeSchedules, ...activeRebates]
-    const settledMap = await this.verificationService.batchGetSettledAmounts(
-      touchCandidates.map((schedule) => schedule.id),
-    )
-    const historyMap = await this.verificationService.batchHasVerificationHistory(
-      touchCandidates.map((schedule) => schedule.id),
-    )
-
-    let hasSourceAmountMismatch = false
-    let amountFieldsLocked = false
-    for (const schedule of activeRebates) {
-      const settledAmountCents = settledMap.get(schedule.id) ?? 0
-      if (
-        isFinanceTouched(schedule, settledAmountCents, historyMap.get(schedule.id) ?? false)
-      ) {
-        amountFieldsLocked = true
-      }
-    }
-
-    const scheduleStates = activeSchedules.map((schedule) => {
-      const settledAmountCents = settledMap.get(schedule.id) ?? 0
-      const touched = isFinanceTouched(
-        schedule,
-        settledAmountCents,
-        historyMap.get(schedule.id) ?? false,
+    return (
+      await this.departureFinanceFacade.getSourceOrderFinanceState(
+        organizationId,
+        sourceOrderId,
+        order,
       )
-      if (touched) {
-        amountFieldsLocked = true
-        const expectedAmount = this.getExpectedAmountForSchedule(schedule.sourceType, amounts)
-        if (expectedAmount > 0 && schedule.amountCents !== expectedAmount) {
-          hasSourceAmountMismatch = true
-        }
-      }
-
-      return {
-        amountCents: schedule.amountCents,
-        settledAmountCents,
-        status: deriveScheduleState({
-          amountCents: schedule.amountCents,
-          settledAmountCents,
-          dueDate: formatDateOnly(schedule.dueDate),
-          cancelledAt: schedule.cancelledAt,
-          businessDate: getShanghaiTodayString(),
-          direction: schedule.direction,
-        }),
-      }
-    })
-
-    let receivableStatus = SourceOrderReceivableStatus.PENDING
-    if (scheduleStates.length === 0) {
-      // 仅剩返利应付、无应收时仍视为已生成财务痕迹。
-      receivableStatus = SourceOrderReceivableStatus.PENDING
-    } else {
-      receivableStatus = deriveSourceOrderReceivableStatus(scheduleStates)
-      if (receivableStatus === SourceOrderReceivableStatus.COLLECTED) {
-        amountFieldsLocked = true
-      }
-    }
-
-    const { rebateCents, rebateStatus, rebateScheduleNo } = deriveSourceOrderRebateMeta(
-      activeRebates,
-      rebateSchedules.length > 0,
-      settledMap,
-    )
-
-    const expectedPaths = buildSourceOrderReceivablePaths({
-      sourceOrderId,
-      partnerId: 'partner',
-      partnerName: '',
-      displayName: '',
-      collectionMode: amounts.collectionMode,
-      depositCents: amounts.depositCents,
-      balanceCents: amounts.balanceCents,
-      netReceivableCents: amounts.netReceivableCents,
-    }).filter((path) => path.amountCents > 0)
-    const activeSourceTypes = new Set(activeSchedules.map((schedule) => schedule.sourceType))
-    const hasIncompleteReceivablePaths = expectedPaths.some(
-      (path) => !activeSourceTypes.has(path.sourceType),
-    )
-
-    return {
-      hasSchedule: true,
-      receivableStatus,
-      hasSourceAmountMismatch,
-      amountFieldsLocked,
-      hasIncompleteReceivablePaths,
-      rebateCents,
-      rebateStatus,
-      rebateScheduleNo,
-    }
+    ).meta
   }
 
   async assertAmountFieldsEditable(
@@ -646,33 +510,6 @@ export class DepartureFinanceBridgeService {
     if (meta.amountFieldsLocked) {
       throw new BadRequestException('当前资源已发生付款，不允许修改金额')
     }
-  }
-
-  private getExpectedAmountForSchedule(
-    sourceType: string,
-    order: Pick<
-      SourceOrder,
-      | 'collectionMode'
-      | 'depositCents'
-      | 'balanceCents'
-      | 'netReceivableCents'
-      | 'partnerCollectedCents'
-      | 'guestCollectCents'
-    > &
-      Partial<Pick<SourceOrderWithRelations, 'partner' | 'displayName' | 'id' | 'partnerId'>>,
-  ): number {
-    // evaluateFinanceMeta 可能只带金额字段；用路径构建需要的最小元数据兜底。
-    const paths = buildSourceOrderReceivablePaths({
-      sourceOrderId: order.id ?? 'source-order',
-      partnerId: order.partnerId ?? 'partner',
-      partnerName: order.partner?.name ?? '',
-      displayName: order.displayName ?? '',
-      collectionMode: order.collectionMode,
-      depositCents: order.depositCents,
-      balanceCents: order.balanceCents,
-      netReceivableCents: order.netReceivableCents,
-    })
-    return paths.find((path) => path.sourceType === sourceType)?.amountCents ?? 0
   }
 
   private async assertSettlementNodesNotTouched(
@@ -776,14 +613,6 @@ export class DepartureFinanceBridgeService {
     return loadReceivableSchedulesShared(client, organizationId, sourceOrderId)
   }
 
-  private async loadRebateSchedules(
-    organizationId: string,
-    sourceOrderId: string,
-    client: DbClient = this.prisma,
-  ): Promise<PaymentSchedule[]> {
-    return loadRebateSchedulesShared(client, organizationId, sourceOrderId)
-  }
-
   private async loadSourceOrderOrThrow(
     organizationId: string,
     sourceOrderId: string,
@@ -800,56 +629,3 @@ export class DepartureFinanceBridgeService {
   }
 }
 
-function deriveSourceOrderRebateMeta(
-  activeRebates: PaymentSchedule[],
-  hadRebateSchedule: boolean,
-  settledMap: Map<string, number>,
-): {
-  rebateCents: number
-  rebateStatus: SegmentPayableStatus
-  rebateScheduleNo: string | null
-} {
-  if (activeRebates.length === 0) {
-    return {
-      rebateCents: 0,
-      rebateStatus: hadRebateSchedule
-        ? SegmentPayableStatus.CLOSED
-        : SegmentPayableStatus.NOT_GENERATED,
-      rebateScheduleNo: null,
-    }
-  }
-
-  let rebateCents = 0
-  let anyPartial = false
-  let allPaid = true
-
-  for (const schedule of activeRebates) {
-    rebateCents += schedule.amountCents
-    const settledAmountCents = settledMap.get(schedule.id) ?? 0
-    const status = deriveScheduleState({
-      amountCents: schedule.amountCents,
-      settledAmountCents,
-      dueDate: formatDateOnly(schedule.dueDate),
-      cancelledAt: schedule.cancelledAt,
-      businessDate: getShanghaiTodayString(),
-      direction: schedule.direction,
-    })
-
-    if (status !== PaymentScheduleStatus.SETTLED) {
-      allPaid = false
-    }
-    if (settledAmountCents > 0 && settledAmountCents < schedule.amountCents) {
-      anyPartial = true
-    }
-  }
-
-  const rebateScheduleNo = activeRebates[0]?.scheduleNo ?? null
-
-  if (allPaid) {
-    return { rebateCents, rebateStatus: SegmentPayableStatus.PAID, rebateScheduleNo }
-  }
-  if (anyPartial) {
-    return { rebateCents, rebateStatus: SegmentPayableStatus.PARTIAL, rebateScheduleNo }
-  }
-  return { rebateCents, rebateStatus: SegmentPayableStatus.PENDING, rebateScheduleNo }
-}
