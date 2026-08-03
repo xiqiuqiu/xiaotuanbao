@@ -2,13 +2,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import {
   Alert,
   App,
+  Badge,
   Button,
   Card,
   Empty,
-  Flex,
   Segmented,
   Spin,
-  Typography,
   theme,
 } from 'antd'
 import { AppstoreOutlined, CalendarOutlined, PlusOutlined } from '@ant-design/icons'
@@ -80,6 +79,18 @@ interface ExecutionWorkspaceProps {
   onGenerateDaily: () => void
 }
 
+function DepartureLayerOptionLabel({ count }: { count: number }) {
+  if (count <= 0) {
+    return <span>发团级资源</span>
+  }
+  return (
+    <span className={styles.layerOptionWithBadge}>
+      发团级资源
+      <Badge count={count} size="small" />
+    </span>
+  )
+}
+
 function ExecutionWorkspace({
   departure,
   segments,
@@ -132,18 +143,12 @@ function ExecutionWorkspace({
 
   const onDepartureLayer = layer === 'departure'
 
-  const layerMeta = onDepartureLayer
-    ? departureSummary.ungeneratedPayableCount > 0
-      ? `${departureSummary.ungeneratedPayableCount} 项未提交应付`
-      : '全程统一录入'
-    : segments.length > 0
-      ? `${segments.length} 天行程`
-      : '尚未生成日程'
-
   return (
     <div className={styles.stackLayout} style={stackTokenStyle}>
-      <Flex className={styles.layerSwitch} align="center" wrap="wrap" gap={12}>
+      <div className={styles.layerSwitch}>
         <Segmented
+          block
+          size="large"
           value={layer}
           aria-label="资源层级"
           options={[
@@ -153,20 +158,14 @@ function ExecutionWorkspace({
               icon: <CalendarOutlined />,
             },
             {
-              label:
-                departureSummary.resourceCount > 0
-                  ? `发团级资源 · ${departureSummary.resourceCount}`
-                  : '发团级资源',
+              label: <DepartureLayerOptionLabel count={departureSummary.resourceCount} />,
               value: 'departure',
               icon: <AppstoreOutlined />,
             },
           ]}
           onChange={(value) => setSelectedLayer(value as ExecutionLayer)}
         />
-        <Typography.Text type="secondary" className={styles.layerMeta}>
-          {layerMeta}
-        </Typography.Text>
-      </Flex>
+      </div>
 
       {onDepartureLayer ? (
         <Card

@@ -22,9 +22,10 @@
   flex-shrink: 0;
 }
 
-.layerMeta {
-  font-size: 12px;
-  line-height: 1.5;
+.layerOptionWithBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .paneCard {
