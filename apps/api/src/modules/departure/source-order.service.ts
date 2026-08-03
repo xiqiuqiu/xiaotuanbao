@@ -822,15 +822,14 @@ export class SourceOrderService {
   }
 
   private async loadScheduleMeta(organizationId: string, sourceOrderIds: string[]) {
-    const map = new Map<string, SourceOrderFinanceMeta>()
-
-    await Promise.all(
-      sourceOrderIds.map(async (sourceOrderId) => {
-        const meta = await this.financeBridge.evaluateFinanceMeta(organizationId, sourceOrderId)
-        map.set(sourceOrderId, meta)
-      }),
+    const states = await this.departureFinanceFacade.getSourceOrderFinanceStates(
+      organizationId,
+      sourceOrderIds,
     )
-
+    const map = new Map<string, SourceOrderFinanceMeta>()
+    for (const [sourceOrderId, state] of states) {
+      map.set(sourceOrderId, state.meta)
+    }
     return map
   }
 

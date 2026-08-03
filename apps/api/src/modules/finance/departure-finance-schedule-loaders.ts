@@ -15,7 +15,7 @@ import {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 
-/** Source Order finance aggregation meta (Bridge until ADR-0004 step 3). */
+/** Source Order finance aggregation meta (Finance Facade / ADR-0004 step 3). */
 export interface SourceOrderFinanceMeta {
   hasSchedule: boolean
   receivableStatus: SourceOrderReceivableStatus

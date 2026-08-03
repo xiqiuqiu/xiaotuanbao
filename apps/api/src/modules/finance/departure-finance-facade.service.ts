@@ -47,13 +47,7 @@ import type {
   SourceOrderFinanceMeta,
   SourceOrderWithRelations,
 } from './departure-finance-schedule-loaders'
-
-/** Lazy class load — avoids Facade↔Bridge circular evaluation at module init. */
-function departureFinanceBridgeService() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('../departure/departure-finance-bridge.service')
-    .DepartureFinanceBridgeService as typeof import('../departure/departure-finance-bridge.service').DepartureFinanceBridgeService
-}
+import { buildSourceOrderFinanceMeta } from './source-order-finance-state'
 
 type TxClient = Prisma.TransactionClient
 
@@ -113,6 +107,15 @@ export interface SourceOrderPathFinanceState {
 }
 
 /**
+ * Single Source Order finance-state surface (ADR-0004 step 3 / C2).
+ * Paths for Operations Sheet / overview; aggregate meta for list + generation.
+ */
+export interface SourceOrderFinanceState {
+  paths: SourceOrderPathFinanceState[]
+  meta: SourceOrderFinanceMeta
+}
+
+/**
  * Departure-linked transaction still carrying unverified balance (#98).
  * Finance-owned; Operations Sheet must not recompute allocation rules.
  */
@@ -133,6 +136,17 @@ export interface SourceOrderPathAmountInput {
   netReceivableCents: number
   partnerCollectedCents: number
   guestCollectCents: number
+}
+
+function emptySourceOrderPathAmounts(): SourceOrderPathAmountInput {
+  return {
+    collectionMode: 'partner_settled',
+    depositCents: 0,
+    balanceCents: 0,
+    netReceivableCents: 0,
+    partnerCollectedCents: 0,
+    guestCollectCents: 0,
+  }
 }
 
 export interface DepartureFinanceSnapshot {
@@ -189,8 +203,8 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
 /**
  * Authoritative Departure write gate owned by Finance (ADR-0004 / #86).
  * Archive-period mutability checks live here so callers share one judgment.
- * Snapshot + Generation (submit receivable/payable + convention sync) live here;
- * Source Order finance-state aggregation still completes via Bridge until ADR-0004 step 3.
+ * Snapshot, Generation, and Source Order finance-state aggregation live here;
+ * Segment/Departure Resource finance-state already owned by this Facade.
  */
 @Injectable()
 export class DepartureFinanceFacade {
@@ -198,8 +212,6 @@ export class DepartureFinanceFacade {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => DepartureFinanceGenerationService))
     private readonly generation: DepartureFinanceGenerationService,
-    @Inject(forwardRef(departureFinanceBridgeService))
-    private readonly financeBridge: InstanceType<ReturnType<typeof departureFinanceBridgeService>>,
   ) {}
 
   async generateReceivables(
@@ -218,11 +230,9 @@ export class DepartureFinanceFacade {
       sourceOrderId,
       (departure, action) => this.assertAllowsNewObligation(departure, action),
     )
-    const financeMeta = await this.financeBridge.evaluateFinanceMeta(
-      organizationId,
-      sourceOrderId,
-      order,
-    )
+    const financeMeta = (
+      await this.getSourceOrderFinanceState(organizationId, sourceOrderId, order)
+    ).meta
     return {
       schedules,
       sourceOrder: toSourceOrderSummary(order, financeMeta),
@@ -235,7 +245,7 @@ export class DepartureFinanceFacade {
     order: SourceOrderWithRelations,
   ): Promise<SourceOrderFinanceMeta> {
     await this.generation.syncSourceOrderConvention(organizationId, order)
-    return this.financeBridge.evaluateFinanceMeta(organizationId, order.id, order)
+    return (await this.getSourceOrderFinanceState(organizationId, order.id, order)).meta
   }
 
   async generateResourcePayable(
@@ -1138,10 +1148,116 @@ export class DepartureFinanceFacade {
   }
 
   /**
+   * Source Order finance states — paths + aggregate meta (ADR-0004 step 3).
+   * Single deep interface for list glance and generation callbacks.
+   * Path-only callers should use {@link getSourceOrderPathFinanceStates}.
+   */
+  async getSourceOrderFinanceStates(
+    organizationId: string,
+    sourceOrderIds: string[],
+    agreedAmountsBySourceOrderId?: Map<string, SourceOrderPathAmountInput>,
+  ): Promise<Map<string, SourceOrderFinanceState>> {
+    const uniqueIds = [...new Set(sourceOrderIds)]
+    const result = new Map<string, SourceOrderFinanceState>()
+    if (uniqueIds.length === 0) {
+      return result
+    }
+
+    const amountMap =
+      agreedAmountsBySourceOrderId ?? (await this.loadSourceOrderPathAmounts(uniqueIds))
+
+    const [pathMap, receivableSchedules, rebateSchedules] = await Promise.all([
+      this.getSourceOrderPathFinanceStates(organizationId, uniqueIds, amountMap),
+      this.prisma.paymentSchedule.findMany({
+        where: {
+          organizationId,
+          sourceId: { in: uniqueIds },
+          direction: PaymentScheduleDirection.receivable,
+        },
+      }),
+      this.prisma.paymentSchedule.findMany({
+        where: {
+          organizationId,
+          sourceId: { in: uniqueIds },
+          sourceType: PaymentScheduleSourceType.SOURCE_ORDER_REBATE,
+          direction: PaymentScheduleDirection.payable,
+        },
+      }),
+    ])
+
+    const receivablesBySourceOrderId = new Map<string, PaymentSchedule[]>()
+    for (const schedule of receivableSchedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      const list = receivablesBySourceOrderId.get(schedule.sourceId) ?? []
+      list.push(schedule)
+      receivablesBySourceOrderId.set(schedule.sourceId, list)
+    }
+
+    const rebatesBySourceOrderId = new Map<string, PaymentSchedule[]>()
+    for (const schedule of rebateSchedules) {
+      if (!schedule.sourceId) {
+        continue
+      }
+      const list = rebatesBySourceOrderId.get(schedule.sourceId) ?? []
+      list.push(schedule)
+      rebatesBySourceOrderId.set(schedule.sourceId, list)
+    }
+
+    const touchScheduleIds = [...receivableSchedules, ...rebateSchedules].map(
+      (schedule) => schedule.id,
+    )
+    const [settledMap, historyMap] = await Promise.all([
+      this.batchGetSettledAmounts(touchScheduleIds),
+      this.batchHasVerificationHistory(touchScheduleIds),
+    ])
+
+    for (const sourceOrderId of uniqueIds) {
+      const amounts = amountMap.get(sourceOrderId) ?? emptySourceOrderPathAmounts()
+      result.set(sourceOrderId, {
+        paths: pathMap.get(sourceOrderId) ?? [],
+        meta: buildSourceOrderFinanceMeta({
+          amounts: { ...amounts, id: sourceOrderId },
+          receivableSchedules: receivablesBySourceOrderId.get(sourceOrderId) ?? [],
+          rebateSchedules: rebatesBySourceOrderId.get(sourceOrderId) ?? [],
+          settledMap,
+          historyMap,
+        }),
+      })
+    }
+
+    return result
+  }
+
+  async getSourceOrderFinanceState(
+    organizationId: string,
+    sourceOrderId: string,
+    order?: SourceOrderPathAmountInput,
+  ): Promise<SourceOrderFinanceState> {
+    const agreedAmounts = order ? new Map([[sourceOrderId, order]]) : undefined
+    const map = await this.getSourceOrderFinanceStates(
+      organizationId,
+      [sourceOrderId],
+      agreedAmounts,
+    )
+    return map.get(sourceOrderId) ?? {
+      paths: [],
+      meta: buildSourceOrderFinanceMeta({
+        amounts: order ?? emptySourceOrderPathAmounts(),
+        receivableSchedules: [],
+        rebateSchedules: [],
+        settledMap: new Map(),
+        historyMap: new Map(),
+      }),
+    }
+  }
+
+  /**
    * Source Order receivable-path finance states (ADR-0004 / #97).
    * Returns one entry per present business path, plus any path with an existing schedule
    * so legacy-corrupt signed source amounts do not hide finance history.
-   * Operations Sheet consumes this — it must not re-derive verification rules.
+   * Operations Sheet / overview consume this — it must not re-derive verification rules.
    */
   async getSourceOrderPathFinanceStates(
     organizationId: string,
@@ -1201,14 +1317,7 @@ export class DepartureFinanceFacade {
     ])
 
     for (const sourceOrderId of uniqueIds) {
-      const amounts = amountMap.get(sourceOrderId) ?? {
-        collectionMode: 'partner_settled',
-        depositCents: 0,
-        balanceCents: 0,
-        netReceivableCents: 0,
-        partnerCollectedCents: 0,
-        guestCollectCents: 0,
-      }
+      const amounts = amountMap.get(sourceOrderId) ?? emptySourceOrderPathAmounts()
       const paths: SourceOrderPathFinanceState[] = []
       const customerKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT}`
       const depositKey = `${sourceOrderId}::${PaymentScheduleSourceType.SOURCE_ORDER_GUEST_DEPOSIT_COLLECTION}`
