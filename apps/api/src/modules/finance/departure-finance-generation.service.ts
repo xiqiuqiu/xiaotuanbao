@@ -94,7 +94,7 @@ export class DepartureFinanceGenerationService {
         `
 
         const lockedOrder = await loadSourceOrderOrThrow(tx, organizationId, sourceOrderId)
-        assertAllowsNewObligation(lockedOrder.departure)
+        assertAllowsNewObligation(lockedOrder.departure, '提交应收')
 
         const existingSchedules = await loadReceivableSchedules(
           tx,
