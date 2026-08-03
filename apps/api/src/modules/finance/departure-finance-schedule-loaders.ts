@@ -8,8 +8,26 @@ import {
   type Prisma,
   type SourceOrder,
 } from '@prisma/client'
-import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
+import {
+  PaymentScheduleSourceType,
+  SegmentPayableStatus,
+  SourceOrderReceivableStatus,
+} from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+
+/** Source Order finance aggregation meta (Bridge until ADR-0004 step 3). */
+export interface SourceOrderFinanceMeta {
+  hasSchedule: boolean
+  receivableStatus: SourceOrderReceivableStatus
+  hasSourceAmountMismatch: boolean
+  amountFieldsLocked: boolean
+  /** 约定应收路径尚有缺失（如旧规则只建了尾款、未建客户补款） */
+  hasIncompleteReceivablePaths: boolean
+  rebateCents: number
+  rebateStatus: SegmentPayableStatus
+  /** 当前有效返利应付 scheduleNo；无有效返利时为 null */
+  rebateScheduleNo: string | null
+}
 
 export type DbClient = PrismaService | Prisma.TransactionClient
 

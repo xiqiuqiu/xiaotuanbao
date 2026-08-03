@@ -38,16 +38,22 @@ import {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
-  DepartureFinanceBridgeService,
-  type SourceOrderFinanceMeta,
-} from '../departure/departure-finance-bridge.service'
-import {
   formatDateOnly,
   getShanghaiTodayString,
 } from '../departure/departure-date.utils'
 import { reconcileUnitPricesToGross } from '../departure/source-order.utils'
 import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
-import type { SourceOrderWithRelations } from './departure-finance-schedule-loaders'
+import type {
+  SourceOrderFinanceMeta,
+  SourceOrderWithRelations,
+} from './departure-finance-schedule-loaders'
+
+/** Lazy class load — avoids Facade↔Bridge circular evaluation at module init. */
+function departureFinanceBridgeService() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('../departure/departure-finance-bridge.service')
+    .DepartureFinanceBridgeService as typeof import('../departure/departure-finance-bridge.service').DepartureFinanceBridgeService
+}
 
 type TxClient = Prisma.TransactionClient
 
@@ -190,9 +196,10 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
 export class DepartureFinanceFacade {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => DepartureFinanceGenerationService))
     private readonly generation: DepartureFinanceGenerationService,
-    @Inject(forwardRef(() => DepartureFinanceBridgeService))
-    private readonly financeBridge: DepartureFinanceBridgeService,
+    @Inject(forwardRef(departureFinanceBridgeService))
+    private readonly financeBridge: InstanceType<ReturnType<typeof departureFinanceBridgeService>>,
   ) {}
 
   async generateReceivables(

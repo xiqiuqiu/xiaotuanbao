@@ -18,8 +18,14 @@ import type {
   ConfirmPaymentDto,
   LinkTransactionDto,
 } from './dto/finance-operations.dto'
-import { DepartureFinanceFacade } from './departure-finance-facade.service'
+import type { DepartureFinanceFacade } from './departure-finance-facade.service'
 import { PaymentScheduleService } from './payment-schedule.service'
+
+function departureFinanceFacadeService() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./departure-finance-facade.service')
+    .DepartureFinanceFacade as typeof import('./departure-finance-facade.service').DepartureFinanceFacade
+}
 import { TransactionService } from './transaction.service'
 import { VerificationService } from './verification.service'
 import { FinanceIdempotencyService } from './finance-idempotency.service'
@@ -31,6 +37,7 @@ export class FinanceOperationsService {
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly transactionService: TransactionService,
     private readonly verificationService: VerificationService,
+    @Inject(forwardRef(departureFinanceFacadeService))
     private readonly departureFinanceFacade: DepartureFinanceFacade,
     private readonly financeIdempotencyService: FinanceIdempotencyService,
     @Inject(forwardRef(() => DepartureFinanceBridgeService))

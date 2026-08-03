@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common'
 import type { PaymentScheduleSummary } from '@xiaotuanbao/shared'
 import {
@@ -24,8 +26,14 @@ import {
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { formatDateOnly } from '../departure/departure-date.utils'
 import { buildSourceOrderReceivablePaths } from '../departure/source-order-receivable-paths'
-import { PaymentScheduleService } from './payment-schedule.service'
+import type { PaymentScheduleService } from './payment-schedule.service'
 import { VerificationService } from './verification.service'
+
+function paymentScheduleServiceToken() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./payment-schedule.service')
+    .PaymentScheduleService as typeof import('./payment-schedule.service').PaymentScheduleService
+}
 import {
   loadReceivableSchedules,
   loadRebateSchedules,
@@ -66,6 +74,7 @@ interface PayableSpec {
 export class DepartureFinanceGenerationService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(paymentScheduleServiceToken))
     private readonly paymentScheduleService: PaymentScheduleService,
     private readonly verificationService: VerificationService,
   ) {}

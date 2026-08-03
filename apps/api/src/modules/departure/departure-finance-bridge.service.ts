@@ -43,6 +43,7 @@ import {
   loadReceivableSchedules as loadReceivableSchedulesShared,
   loadRebateSchedules as loadRebateSchedulesShared,
   loadSourceOrderOrThrow as loadSourceOrderOrThrowShared,
+  type SourceOrderFinanceMeta,
   type SourceOrderWithRelations,
 } from '../finance/departure-finance-schedule-loaders'
 import { PaymentScheduleService } from '../finance/payment-schedule.service'
@@ -63,20 +64,7 @@ import {
 /** @deprecated Prefer SegmentResourceFinanceState from DepartureFinanceFacade (#49). */
 export type SegmentResourceFinanceMeta = SegmentResourceFinanceState
 
-export type { SourceOrderWithRelations }
-
-export interface SourceOrderFinanceMeta {
-  hasSchedule: boolean
-  receivableStatus: SourceOrderReceivableStatus
-  hasSourceAmountMismatch: boolean
-  amountFieldsLocked: boolean
-  /** 约定应收路径尚有缺失（如旧规则只建了尾款、未建客户补款） */
-  hasIncompleteReceivablePaths: boolean
-  rebateCents: number
-  rebateStatus: SegmentPayableStatus
-  /** 当前有效返利应付 scheduleNo；无有效返利时为 null */
-  rebateScheduleNo: string | null
-}
+export type { SourceOrderFinanceMeta, SourceOrderWithRelations }
 
 type SegmentResourceWithRelations = SegmentResource & {
   partner: Partner | null

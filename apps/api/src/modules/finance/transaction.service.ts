@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common'
 import type {
   FinanceTransactionDetail,
   FinanceTransactionListResult,
@@ -26,13 +32,19 @@ import {
   formatDateOnly,
   parseDateOnly,
 } from '../departure/departure-date.utils'
-import { DepartureFinanceFacade } from './departure-finance-facade.service'
+import type { DepartureFinanceFacade } from './departure-finance-facade.service'
 import type {
   CreateFinanceTransactionDto,
   ListFinanceTransactionsQueryDto,
   UpdateFinanceTransactionDto,
   VoidFinanceTransactionDto,
 } from './dto/transaction.dto'
+
+function departureFinanceFacadeService() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./departure-finance-facade.service')
+    .DepartureFinanceFacade as typeof import('./departure-finance-facade.service').DepartureFinanceFacade
+}
 import { VerificationService } from './verification.service'
 import {
   buildPendingSettlementBaseWhere,
@@ -45,6 +57,7 @@ export class TransactionService {
     private readonly prisma: PrismaService,
     private readonly verificationService: VerificationService,
     private readonly numberAllocationService: NumberAllocationService,
+    @Inject(forwardRef(departureFinanceFacadeService))
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
