@@ -1,5 +1,6 @@
 import { PaymentScheduleDirection, TransactionDirection } from '@prisma/client'
 import { emptyDepartureFinanceSnapshot } from '../finance/departure-finance-facade.service'
+import { emptyDepartureFinanceObligationSummary } from '../finance/departure-finance-obligation-summary'
 import {
   aggregateUnverifiedCashAmounts,
   buildDepartureReadModelAggregate,
@@ -77,8 +78,7 @@ describe('departure-read-model.utils', () => {
         sourceOrderCount: 3,
         segmentCount: 2,
         resourceCount: 5,
-        schedules: [],
-        settledByScheduleId: new Map(),
+        obligationSummary: emptyDepartureFinanceObligationSummary(),
       })
 
       expect(tags).toEqual({
@@ -137,60 +137,68 @@ describe('departure-read-model.utils', () => {
   })
 
   describe('buildDepartureReadModelAggregate', () => {
-    it('computes obligation-layer verified and open-unsettled amounts', () => {
+    it('aliases flat fields and tags from Facade obligationSummary (no schedule dump)', () => {
       const aggregate = buildDepartureReadModelAggregate({
         sourceOrders: {
           count: 1,
           totalGuests: 10,
-          grossReceivableCents: 1000000,
+          grossReceivableCents: 1_000_000,
           fareAdjustmentNetCents: 0,
-          discountCents: 100000,
-          netReceivableCents: 900000,
+          discountCents: 100_000,
+          netReceivableCents: 900_000,
         },
         segmentCount: 2,
         resourceCount: 3,
-        payableCents: 400000,
-        schedules: [receivableSchedule, payableSchedule],
-        settledByScheduleId: new Map([
-          ['ar-1', 600000],
-          ['ap-1', 200000],
-        ]),
-        unverifiedCash: { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 },
+        payableCents: 400_000,
+        obligationSummary: {
+          ...emptyDepartureFinanceObligationSummary(),
+          verifiedReceivableCents: 600_000,
+          openUnsettledReceivableCents: 400_000,
+          verifiedPayableCents: 200_000,
+          openUnsettledPayableCents: 300_000,
+          hasReceivableSchedule: true,
+          allReceivablesAmountSettled: false,
+          hasPayableSchedule: true,
+          allPayablesAmountSettled: false,
+          isFinanciallySettled: false,
+        },
       })
 
       expect(aggregate.totalGuests).toBe(10)
-      expect(aggregate.netReceivableCents).toBe(900000)
-      expect(aggregate.payableCents).toBe(400000)
-      expect(aggregate.estimatedMarginCents).toBe(500000)
-      expect(aggregate.verifiedReceivableCents).toBe(600000)
-      expect(aggregate.openUnsettledReceivableCents).toBe(400000)
-      expect(aggregate.verifiedPayableCents).toBe(200000)
-      expect(aggregate.openUnsettledPayableCents).toBe(300000)
+      expect(aggregate.netReceivableCents).toBe(900_000)
+      expect(aggregate.payableCents).toBe(400_000)
+      expect(aggregate.estimatedMarginCents).toBe(500_000)
+      expect(aggregate.verifiedReceivableCents).toBe(600_000)
+      expect(aggregate.openUnsettledReceivableCents).toBe(400_000)
+      expect(aggregate.verifiedPayableCents).toBe(200_000)
+      expect(aggregate.openUnsettledPayableCents).toBe(300_000)
       expect(aggregate.unverifiedIncomeCents).toBe(0)
       expect(aggregate.unverifiedExpenseCents).toBe(0)
+      expect(aggregate.completionTags.receivables).toBe('应收已提交')
+      expect(aggregate.completionTags.payables).toBe('应付已提交')
       expect(aggregate.isFinanciallySettled).toBe(false)
     })
 
     it('keeps closed-node remaining visible on the node but out of open unsettled summary', () => {
-      const closedPayable = {
-        id: 'ap-closed',
-        direction: PaymentScheduleDirection.payable,
-        amountCents: 1_000_000,
-        cancelledAt: new Date('2026-07-01'),
-      }
       const aggregate = buildDepartureReadModelAggregate({
         sourceOrders: EMPTY_SOURCE_ORDER_AGGREGATE,
         segmentCount: 1,
         resourceCount: 1,
         payableCents: 1_000_000,
-        schedules: [closedPayable],
-        settledByScheduleId: new Map([['ap-closed', 400_000]]),
-        unverifiedCash: { unverifiedIncomeCents: 0, unverifiedExpenseCents: 0 },
+        obligationSummary: {
+          ...emptyDepartureFinanceObligationSummary(),
+          verifiedPayableCents: 400_000,
+          openUnsettledPayableCents: 0,
+          hasPayableSchedule: true,
+          allPayablesAmountSettled: false,
+          isFinanciallySettled: true,
+        },
       })
 
       expect(aggregate.verifiedPayableCents).toBe(400_000)
       expect(aggregate.openUnsettledPayableCents).toBe(0)
       expect(aggregate.isFinanciallySettled).toBe(true)
+      expect(aggregate.completionTags.payables).toBe('应付已提交')
     })
 
     it('shows obligation gap and unverified cash together after revoking a 4000 verification', () => {
@@ -206,14 +214,16 @@ describe('departure-read-model.utils', () => {
         segmentCount: 1,
         resourceCount: 1,
         payableCents: 1_000_000,
-        schedules: [receivableSchedule, { ...payableSchedule, amountCents: 1_000_000 }],
-        settledByScheduleId: new Map([
-          ['ar-1', 0],
-          ['ap-1', 0],
-        ]),
-        unverifiedCash: {
+        obligationSummary: {
+          ...emptyDepartureFinanceObligationSummary(),
+          openUnsettledReceivableCents: 1_000_000,
+          openUnsettledPayableCents: 1_000_000,
           unverifiedIncomeCents: 400_000,
           unverifiedExpenseCents: 400_000,
+          hasReceivableSchedule: true,
+          allReceivablesAmountSettled: false,
+          hasPayableSchedule: true,
+          allPayablesAmountSettled: false,
         },
       })
 
@@ -240,8 +250,6 @@ describe('departure-read-model.utils', () => {
         segmentCount: 0,
         resourceCount: 0,
         payableCents: 0,
-        schedules: [],
-        settledByScheduleId: new Map(),
         financeSnapshot: {
           ...emptyDepartureFinanceSnapshot(),
           sourceReceivableReceivedCents: 620_000,
@@ -286,8 +294,6 @@ describe('departure-read-model.utils', () => {
         segmentCount: 0,
         resourceCount: 0,
         payableCents: 0,
-        schedules: [],
-        settledByScheduleId: new Map(),
         financeSnapshot: {
           ...emptyDepartureFinanceSnapshot(),
           sourceReceivableReceivedCents: 620_000,
@@ -325,8 +331,6 @@ describe('departure-read-model.utils', () => {
         segmentCount: 1,
         resourceCount: 2,
         payableCents: 600_000,
-        schedules: [],
-        settledByScheduleId: new Map(),
         financeSnapshot: {
           ...emptyDepartureFinanceSnapshot(),
           confirmedPayableCents: 500_000,

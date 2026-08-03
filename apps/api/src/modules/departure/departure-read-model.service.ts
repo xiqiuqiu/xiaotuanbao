@@ -5,17 +5,15 @@ import {
   type DepartureCompletionTags,
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import { VerificationService } from '../finance/verification.service'
 import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
+import { emptyDepartureFinanceObligationSummary } from '../finance/departure-finance-obligation-summary'
 import {
   buildDepartureReadModelAggregate,
   emptyDepartureReadModelAggregate,
   type DepartureReadModelAggregate,
   type DepartureOverviewSourceFacts,
-  type ScheduleWithId,
   type SourceOrderAggregate,
   EMPTY_OVERVIEW_COLLECTION_STATS,
-  EMPTY_UNVERIFIED_CASH,
 } from './departure-read-model.utils'
 import {
   aggregateDepartureOverviewCollectionStats,
@@ -48,7 +46,6 @@ interface SourceOrderPathFact {
 export class DepartureReadModelService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly verificationService: VerificationService,
     private readonly departureFinanceFacade: DepartureFinanceFacade,
   ) {}
 
@@ -74,78 +71,62 @@ export class DepartureReadModelService {
     }
 
     const uniqueIds = [...new Set(departureIds)]
+    const includeOverviewStats = options.includeOverviewStats ?? false
 
     const [
       sourceOrderMap,
       segmentRollupMap,
-      schedules,
-      unverifiedCashByDeparture,
-      financeSnapshotMap,
+      financeBundleMap,
       sourceOrderPathFacts,
       additionalIncomeNetTotals,
-    ] =
-      await Promise.all([
-        this.batchSourceOrderAggregates(uniqueIds),
-        this.batchSegmentRollups(uniqueIds),
-        this.prisma.paymentSchedule.findMany({
-          where: { departureId: { in: uniqueIds }, voidedAt: null },
-          select: {
-            id: true,
-            departureId: true,
-            direction: true,
-            amountCents: true,
-            cancelledAt: true,
-          },
-        }),
-        // Keep legacy flat fields on their historical clamped semantics; overviewStats
-        // consumes the facade's signed cash aggregates instead.
-        this.verificationService.batchGetUnverifiedCashByDeparture(uniqueIds),
-        options.includeOverviewStats
-          ? this.departureFinanceFacade.getDepartureFinanceSnapshots(organizationId, uniqueIds)
-          : Promise.resolve(new Map()),
-        options.includeOverviewStats
-          ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
-          : Promise.resolve([]),
-        options.includeOverviewStats
-          ? this.batchAdditionalIncomeNetTotals(organizationId, uniqueIds)
-          : Promise.resolve(new Map<string, number>()),
-      ])
+    ] = await Promise.all([
+      this.batchSourceOrderAggregates(uniqueIds),
+      this.batchSegmentRollups(uniqueIds),
+      // Finance reads only via Facade (ADR-0004 C4): snapshot + obligation summary.
+      this.departureFinanceFacade.getDepartureFinanceReadBundles(organizationId, uniqueIds),
+      includeOverviewStats
+        ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
+        : Promise.resolve([]),
+      includeOverviewStats
+        ? this.batchAdditionalIncomeNetTotals(organizationId, uniqueIds)
+        : Promise.resolve(new Map<string, number>()),
+    ])
 
     const overviewSourceFactsMap = new Map<string, DepartureOverviewSourceFacts>()
-    if (options.includeOverviewStats) {
+    if (includeOverviewStats) {
       const resources = [...segmentRollupMap.values()].flatMap((rollup) => rollup.resources)
       const segmentResources = resources.filter((resource) => resource.anchor === 'segment')
       const departureResources = resources.filter((resource) => resource.anchor === 'departure')
       const [sourceOrderStates, segmentResourceStates, departureResourceStates] =
         await Promise.all([
-        this.departureFinanceFacade.getSourceOrderPathFinanceStates(
-          organizationId,
-          sourceOrderPathFacts.map((fact) => fact.id),
-          new Map(
-            sourceOrderPathFacts.map((fact) => [
-              fact.id,
-              {
-                collectionMode: fact.collectionMode,
-                depositCents: fact.depositCents,
-                balanceCents: fact.balanceCents,
-                netReceivableCents: fact.netReceivableCents,
-                partnerCollectedCents: fact.partnerCollectedCents,
-                guestCollectCents: fact.guestCollectCents,
-              },
-            ]),
+          this.departureFinanceFacade.getSourceOrderPathFinanceStates(
+            organizationId,
+            sourceOrderPathFacts.map((fact) => fact.id),
+            new Map(
+              sourceOrderPathFacts.map((fact) => [
+                fact.id,
+                {
+                  collectionMode: fact.collectionMode,
+                  depositCents: fact.depositCents,
+                  balanceCents: fact.balanceCents,
+                  netReceivableCents: fact.netReceivableCents,
+                  partnerCollectedCents: fact.partnerCollectedCents,
+                  guestCollectCents: fact.guestCollectCents,
+                },
+              ]),
+            ),
           ),
-        ),
-        this.departureFinanceFacade.getSegmentResourceFinanceStates(
-          organizationId,
-          segmentResources.map((resource) => resource.id),
-          new Map(segmentResources.map((resource) => [resource.id, resource.amountCents])),
-        ),
-        this.departureFinanceFacade.getDepartureResourceFinanceStates(
-          organizationId,
-          departureResources.map((resource) => resource.id),
-          new Map(departureResources.map((resource) => [resource.id, resource.amountCents])),
-        ),
-      ])
+          this.departureFinanceFacade.getSegmentResourceFinanceStates(
+            organizationId,
+            segmentResources.map((resource) => resource.id),
+            new Map(segmentResources.map((resource) => [resource.id, resource.amountCents])),
+          ),
+          this.departureFinanceFacade.getDepartureResourceFinanceStates(
+            organizationId,
+            departureResources.map((resource) => resource.id),
+            new Map(departureResources.map((resource) => [resource.id, resource.amountCents])),
+          ),
+        ])
       const resourceStates = new Map([
         ...segmentResourceStates,
         ...departureResourceStates,
@@ -231,21 +212,6 @@ export class DepartureReadModelService {
       }
     }
 
-    const scheduleIds = schedules.map((schedule) => schedule.id)
-    const settledByScheduleId = await this.verificationService.batchGetSettledAmounts(scheduleIds)
-
-    const schedulesByDeparture = new Map<string, ScheduleWithId[]>()
-    for (const schedule of schedules) {
-      const list = schedulesByDeparture.get(schedule.departureId) ?? []
-      list.push({
-        id: schedule.id,
-        direction: schedule.direction,
-        amountCents: schedule.amountCents,
-        cancelledAt: schedule.cancelledAt,
-      })
-      schedulesByDeparture.set(schedule.departureId, list)
-    }
-
     for (const departureId of uniqueIds) {
       const sourceOrders = sourceOrderMap.get(departureId) ?? {
         count: 0,
@@ -261,8 +227,12 @@ export class DepartureReadModelService {
         payableCents: 0,
         resources: [],
       }
-      const departureSchedules = schedulesByDeparture.get(departureId) ?? []
-      const unverifiedCash = unverifiedCashByDeparture.get(departureId) ?? EMPTY_UNVERIFIED_CASH
+      const financeBundle = financeBundleMap.get(departureId)
+      const financeSnapshot = includeOverviewStats
+        ? financeBundle?.snapshot
+        : undefined
+      const obligationSummary =
+        financeBundle?.obligationSummary ?? emptyDepartureFinanceObligationSummary()
 
       result.set(
         departureId,
@@ -271,10 +241,8 @@ export class DepartureReadModelService {
           segmentCount: rollup.segmentCount,
           resourceCount: rollup.resourceCount,
           payableCents: rollup.payableCents,
-          schedules: departureSchedules,
-          settledByScheduleId,
-          unverifiedCash,
-          financeSnapshot: financeSnapshotMap.get(departureId),
+          obligationSummary,
+          financeSnapshot,
           overviewSourceFacts: overviewSourceFactsMap.get(departureId),
         }),
       )
