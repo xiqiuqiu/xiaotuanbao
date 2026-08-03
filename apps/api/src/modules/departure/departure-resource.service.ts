@@ -225,7 +225,7 @@ export class DepartureResourceService {
       },
     })
 
-    const financeMeta = await this.financeBridge.syncDepartureResourceSchedule(
+    const financeMeta = await this.departureFinanceFacade.syncDepartureResourceSchedule(
       organizationId,
       updated,
     )
@@ -256,13 +256,11 @@ export class DepartureResourceService {
     organizationId: string,
     resourceId: string,
   ): Promise<GenerateDeparturePayableResult> {
-    const { schedule, sourceAmountMismatch } = await this.financeBridge.generateResourcePayable(
-      organizationId,
-      {
+    const { schedule, sourceAmountMismatch } =
+      await this.departureFinanceFacade.generateResourcePayable(organizationId, {
         sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
         sourceId: resourceId,
-      },
-    )
+      })
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
     const meta = await this.departureFinanceFacade.getDepartureResourceFinanceState(
       organizationId,

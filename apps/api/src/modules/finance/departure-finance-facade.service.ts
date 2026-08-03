@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common'
 import {
   DepartureStatus,
@@ -10,10 +12,19 @@ import {
   PaymentScheduleDirection,
   TransactionDirection,
   VerificationStatus as PrismaVerificationStatus,
+  type DepartureResource,
+  type Partner,
   type PaymentSchedule,
   type Prisma,
   type SegmentResource,
+  type SourceOrder,
+  type Supplier,
 } from '@prisma/client'
+import type {
+  GenerateReceivablesResult,
+  PaymentScheduleSummary,
+  SourceOrderSummary,
+} from '@xiaotuanbao/shared'
 import {
   deriveScheduleState,
   isFinanceTouched,
@@ -27,10 +38,16 @@ import {
 } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
+  DepartureFinanceBridgeService,
+  type SourceOrderFinanceMeta,
+} from '../departure/departure-finance-bridge.service'
+import {
   formatDateOnly,
   getShanghaiTodayString,
 } from '../departure/departure-date.utils'
 import { reconcileUnitPricesToGross } from '../departure/source-order.utils'
+import { DepartureFinanceGenerationService } from './departure-finance-generation.service'
+import type { SourceOrderWithRelations } from './departure-finance-schedule-loaders'
 
 type TxClient = Prisma.TransactionClient
 
@@ -166,11 +183,115 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
 /**
  * Authoritative Departure write gate owned by Finance (ADR-0004 / #86).
  * Archive-period mutability checks live here so callers share one judgment.
- * Snapshot / generation surface from ADR-0004 migrates onto this facade later.
+ * Snapshot + Generation (submit receivable/payable + convention sync) live here;
+ * Source Order finance-state aggregation still completes via Bridge until ADR-0004 step 3.
  */
 @Injectable()
 export class DepartureFinanceFacade {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly generation: DepartureFinanceGenerationService,
+    @Inject(forwardRef(() => DepartureFinanceBridgeService))
+    private readonly financeBridge: DepartureFinanceBridgeService,
+  ) {}
+
+  async generateReceivables(
+    organizationId: string,
+    sourceOrderId: string,
+    toSourceOrderSummary: (
+      order: SourceOrder & {
+        partner: Partner
+        fareAdjustments?: SourceOrderWithRelations['fareAdjustments']
+      },
+      meta: SourceOrderFinanceMeta,
+    ) => SourceOrderSummary,
+  ): Promise<GenerateReceivablesResult> {
+    const { order, schedules } = await this.generation.generateReceivableSchedules(
+      organizationId,
+      sourceOrderId,
+      (departure, action) => this.assertAllowsNewObligation(departure, action),
+    )
+    const financeMeta = await this.financeBridge.evaluateFinanceMeta(
+      organizationId,
+      sourceOrderId,
+      order,
+    )
+    return {
+      schedules,
+      sourceOrder: toSourceOrderSummary(order, financeMeta),
+      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
+    }
+  }
+
+  async syncSourceOrderSchedules(
+    organizationId: string,
+    order: SourceOrderWithRelations,
+  ): Promise<SourceOrderFinanceMeta> {
+    await this.generation.syncSourceOrderConvention(organizationId, order)
+    return this.financeBridge.evaluateFinanceMeta(organizationId, order.id, order)
+  }
+
+  async generateResourcePayable(
+    organizationId: string,
+    params: { sourceType: string; sourceId: string },
+  ): Promise<{
+    schedule: PaymentScheduleSummary
+    sourceAmountMismatch: boolean
+  }> {
+    const result = await this.generation.generateResourcePayable(
+      organizationId,
+      params,
+      (departure, action) => this.assertAllowsNewObligation(departure, action),
+    )
+    if (result.resourceKind === 'segment') {
+      const financeMeta = await this.getSegmentResourceFinanceState(
+        organizationId,
+        params.sourceId,
+        result.resource as SegmentResource,
+      )
+      return {
+        schedule: result.schedule,
+        sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
+      }
+    }
+    const financeMeta = await this.getDepartureResourceFinanceState(
+      organizationId,
+      params.sourceId,
+      result.resource as DepartureResource,
+    )
+    return {
+      schedule: result.schedule,
+      sourceAmountMismatch: financeMeta.hasSourceAmountMismatch,
+    }
+  }
+
+  async syncSegmentResourceSchedule(
+    organizationId: string,
+    resource: SegmentResource & {
+      partner: Partner | null
+      supplier: Supplier | null
+      segment: {
+        id: string
+        endDate: Date | null
+        departure: { id: string; organizationId: string; status: string; endDate: Date }
+      }
+    },
+  ): Promise<SegmentResourceFinanceState> {
+    await this.generation.syncSegmentResourceConvention(organizationId, resource)
+    return this.getSegmentResourceFinanceState(organizationId, resource.id, resource)
+  }
+
+  async syncDepartureResourceSchedule(
+    organizationId: string,
+    resource: DepartureResource & {
+      partner: Partner | null
+      supplier: Supplier | null
+      departure: { id: string; organizationId: string; status: string; endDate: Date }
+    },
+  ): Promise<SegmentResourceFinanceState> {
+    await this.generation.syncDepartureResourceConvention(organizationId, resource)
+    return this.getDepartureResourceFinanceState(organizationId, resource.id, resource)
+  }
 
   async getDepartureFinanceSnapshots(
     organizationId: string,

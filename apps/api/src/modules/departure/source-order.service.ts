@@ -367,7 +367,7 @@ export class SourceOrderService {
     organizationId: string,
     sourceOrderId: string,
   ): Promise<GenerateReceivablesResult> {
-    return this.financeBridge.generateReceivables(
+    return this.departureFinanceFacade.generateReceivables(
       organizationId,
       sourceOrderId,
       (order, meta) => this.toSourceOrderSummary(order, meta),
@@ -640,7 +640,7 @@ export class SourceOrderService {
       })
     })
 
-    const financeMeta = await this.financeBridge.syncSourceOrderSchedules(
+    const financeMeta = await this.departureFinanceFacade.syncSourceOrderSchedules(
       organizationId,
       updated,
     )
