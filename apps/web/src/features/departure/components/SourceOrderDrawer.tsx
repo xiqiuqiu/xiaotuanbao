@@ -1669,7 +1669,7 @@ function SourceOrderDrawerSession({
           type="warning"
           showIcon
           title="来源差异警示"
-          description="客源单金额与已生成的应收节点不一致，且财务已介入，请核对后再处理。"
+          description="客源单金额与已提交的应收节点不一致，且财务已介入，请核对后再处理。"
           style={{ marginBottom: token.marginMD }}
         />
       ) : null}

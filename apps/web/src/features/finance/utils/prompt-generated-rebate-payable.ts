@@ -13,8 +13,8 @@ export function buildGeneratedRebatePayablePromptCopy(rebate: PaymentScheduleSum
   content: string
 } {
   return {
-    title: '已生成返利应付',
-    content: `游客代收已齐账，系统已生成返利应付单 ${rebate.scheduleNo}（${formatCents(rebate.amountCents)}）。请财务处理付款。`,
+    title: '已提交返利应付',
+    content: `游客代收已齐账，系统已提交返利应付单 ${rebate.scheduleNo}（${formatCents(rebate.amountCents)}）。请财务处理付款。`,
   }
 }
 

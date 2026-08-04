@@ -47,7 +47,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
           sourceId: '2',
           sourceLabel: '乙',
           outcome: 'skipped',
-          reason: '无可生成金额',
+          reason: '无可提交金额',
         },
         {
           sourceId: '3',

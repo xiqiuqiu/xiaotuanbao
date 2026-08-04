@@ -187,7 +187,7 @@ describe('ExecutionTab layout', () => {
     expect(within(dayAxis).getByText('西栅夜游')).toBeInTheDocument()
     expect(within(dayAxis).getByText('07-14')).toBeInTheDocument()
     expect(within(dayAxis).getByText('1项')).toBeInTheDocument()
-    expect(container.querySelector('[aria-label="生成 0/1"]')).toBeTruthy()
+    expect(container.querySelector('[aria-label="提交 0/1"]')).toBeTruthy()
 
     const resourceCard = resourceTitle.closest('.ant-card')
     expect(resourceCard).toBeTruthy()

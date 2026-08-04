@@ -852,7 +852,7 @@ async function seedBusinessLoop(organizationId, ownerUserId, financeUserId, dire
     },
   })
 
-  // 未生成应付的包车资源：便于测「生成应付」
+  // 未提交应付的包车资源：便于测「提交应付」
   void resBus
 
   console.log(`Departure 2 ${dep2No} pending_settlement (partial AR + unmatched TX)`)
@@ -872,7 +872,7 @@ async function seedBusinessLoop(organizationId, ownerUserId, financeUserId, dire
       dayCount: dayCount(d3Start.iso, d3End.iso),
       ownerUserId,
       status: DepartureStatus.editing,
-      notes: '测试：可手动触发生成应收/应付',
+      notes: '测试：可手动触发提交应收/应付',
     },
   })
 

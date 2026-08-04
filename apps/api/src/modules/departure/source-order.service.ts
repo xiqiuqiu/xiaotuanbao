@@ -403,7 +403,7 @@ export class SourceOrderService {
           sourceId: order.id,
           sourceLabel,
           outcome: 'skipped',
-          reason: '无可生成金额',
+          reason: '无可提交金额',
         })
         continue
       }

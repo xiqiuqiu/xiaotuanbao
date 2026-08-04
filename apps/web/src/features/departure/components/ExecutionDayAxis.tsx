@@ -199,7 +199,7 @@ function DayChip({
             <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未提交应付`}>
               <span
                 className={styles.dayChipPayableGap}
-                aria-label={`生成 ${gap.generated}/${gap.total}`}
+                aria-label={`提交 ${gap.generated}/${gap.total}`}
               >
                 <span
                   className={styles.dayChipPayableRing}

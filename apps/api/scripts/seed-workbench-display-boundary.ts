@@ -374,7 +374,7 @@ async function main() {
       },
     })
 
-  /** 关闭「待生成应收/应付」缺口，避免填充数据挤占可见队列 */
+  /** 关闭「待提交应收/应付」缺口，避免填充数据挤占可见队列 */
   const sealDepartureFinanceGaps = async (departure: {
     id: string
     sourceOrders: Array<{ id: string; netReceivableCents: number; partnerId: string }>
@@ -387,7 +387,7 @@ async function main() {
           departureId: departure.id,
           direction: PaymentScheduleDirection.receivable,
           scheduleNo: nextScheduleNo('AR'),
-          title: '已生成应收（填充封闭）',
+          title: '已提交应收（填充封闭）',
           amountCents: order.netReceivableCents,
           dueDate: asDate(today),
           counterpartyType: CounterpartyType.partner,
@@ -408,7 +408,7 @@ async function main() {
             departureId: departure.id,
             direction: PaymentScheduleDirection.payable,
             scheduleNo: nextScheduleNo('AP'),
-            title: `已生成应付（填充封闭）${resource.title}`.slice(0, 80),
+            title: `已提交应付（填充封闭）${resource.title}`.slice(0, 80),
             amountCents: resource.amountCents,
             dueDate: asDate(today),
             counterpartyType: CounterpartyType.supplier,
@@ -451,7 +451,7 @@ async function main() {
         departureId: dualGap.id,
         direction: PaymentScheduleDirection.receivable,
         scheduleNo: nextScheduleNo('AR'),
-        title: '已生成应收（双缺口团封闭）',
+        title: '已提交应收（双缺口团封闭）',
         amountCents: order.netReceivableCents,
         dueDate: asDate(today),
         counterpartyType: CounterpartyType.partner,
@@ -517,7 +517,7 @@ async function main() {
     await sealDepartureFinanceGaps(trend)
   }
 
-  // ——— B. 计调结算：可结清 ≥6、待生成应收 ≥6（长 title + 长 departureName）———
+  // ——— B. 计调结算：可结清 ≥6、待提交应收 ≥6（长 title + 长 departureName）———
   for (let i = 1; i <= 6; i += 1) {
     // endDate 升序取前 5：把超长团名放到最早结束日，确保进可见队列
     const ready = await createDeparture({
@@ -554,13 +554,13 @@ async function main() {
   for (let i = 1; i <= 6; i += 1) {
     // startDate 升序取前 5：i=1 最早出发 + 超长 displayName/发团名并排
     await createDeparture({
-      name: i === 1 ? LONG_DEPARTURE.replace('【边界】', '【待应收发团】') : `待生成应收发团 ${i}`,
+      name: i === 1 ? LONG_DEPARTURE.replace('【边界】', '【待应收发团】') : `待提交应收发团 ${i}`,
       startOffset: -12 + i,
       endOffset: -10 + i,
       status: DepartureStatus.editing,
       sourceOrder: {
         partnerId: partnerLong.id,
-        displayName: i === 1 ? LONG_ORDER : `待生成应收客源单 ${i}`,
+        displayName: i === 1 ? LONG_ORDER : `待提交应收客源单 ${i}`,
         guestCount: 1,
         recordedGuests: 1,
         unitPriceCents: 99_000 - i * 100,
@@ -667,21 +667,21 @@ async function main() {
     departureId: arClosed.id,
   })
 
-  // 待生成应付：开放团上挂未生成资源；关闭团上挂未生成客源（上面待应收已覆盖部分 generation）
+  // 待提交应付：开放团上挂未提交资源；关闭团上挂未提交客源（上面待应收已覆盖部分 generation）
   for (let i = 1; i <= 4; i += 1) {
     const gapDep = await createDeparture({
-      name: i === 1 ? '【缺口】待生成应付超长资源标题母团ABCDEF' : `账款缺口团 ${i}`,
+      name: i === 1 ? '【缺口】待提交应付超长资源标题母团ABCDEF' : `账款缺口团 ${i}`,
       startOffset: -12,
       endOffset: -10,
       status: i === 2 ? DepartureStatus.closed : DepartureStatus.editing,
-      // 不挂客源单，避免挤占「待生成应收」；只留应付资源缺口
+      // 不挂客源单，避免挤占「待提交应收」；只留应付资源缺口
       segments: [
         {
           hasResource: true,
           resourceTitle:
             i === 1
               ? '【边界资源】五星酒店连住含早及接送超长应付资源标题压测XYZ'
-              : `待生成应付资源 ${i}`,
+              : `待提交应付资源 ${i}`,
           amountCents: i === 1 ? 660_000 : 15_000 + i * 500,
         },
       ],

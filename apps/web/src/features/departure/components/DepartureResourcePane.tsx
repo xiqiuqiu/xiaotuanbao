@@ -433,7 +433,7 @@ export function DepartureResourcePane({
       })
     },
     onSuccess: () => {
-      message.success('应付已作废，可修正资源后重新生成')
+      message.success('应付已作废，可修正资源后重新提交')
       setVoidingResource(null)
       voidForm.resetFields()
       invalidateResourceQueries()
