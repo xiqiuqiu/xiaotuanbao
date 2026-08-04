@@ -1,39 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
 import {
   buildFullDepartureReceivableSettlementMetrics,
-  isUngeneratedReceivable,
   tagReceivableSettlementScope,
 } from './receivable-settlement-metrics'
-
-describe('isUngeneratedReceivable', () => {
-  it('is true when receivable has not been generated', () => {
-    expect(
-      isUngeneratedReceivable({
-        receivableStatus: SourceOrderReceivableStatus.NOT_GENERATED,
-        hasIncompleteReceivablePaths: false,
-      }),
-    ).toBe(true)
-  })
-
-  it('is true when generated paths are incomplete', () => {
-    expect(
-      isUngeneratedReceivable({
-        receivableStatus: SourceOrderReceivableStatus.PENDING,
-        hasIncompleteReceivablePaths: true,
-      }),
-    ).toBe(true)
-  })
-
-  it('is false when receivable is generated and paths are complete', () => {
-    expect(
-      isUngeneratedReceivable({
-        receivableStatus: SourceOrderReceivableStatus.PENDING,
-        hasIncompleteReceivablePaths: false,
-      }),
-    ).toBe(false)
-  })
-})
 
 describe('buildFullDepartureReceivableSettlementMetrics', () => {
   it('derives full-departure settlement and collection metrics with scope full', () => {

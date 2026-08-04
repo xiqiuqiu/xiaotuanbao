@@ -1,22 +1,5 @@
-import { SourceOrderReceivableStatus } from '@xiaotuanbao/shared'
-
 /** Overview（全团）vs 客源列表筛选；路径数不在本 module。 */
 export type ReceivableSettlementScope = 'full' | 'filter'
-
-export interface UngeneratedReceivableOrderInput {
-  receivableStatus: SourceOrderReceivableStatus | string
-  hasIncompleteReceivablePaths: boolean
-}
-
-/** 列表 glance 与 lifecycle 共用的「尚未提交应收」谓词（单数口径，非路径数）。 */
-export function isUngeneratedReceivable(
-  order: UngeneratedReceivableOrderInput,
-): boolean {
-  return (
-    order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
-    order.hasIncompleteReceivablePaths
-  )
-}
 
 export interface FullDepartureReceivableSettlementMetrics {
   scope: 'full'

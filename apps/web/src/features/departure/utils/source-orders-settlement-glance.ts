@@ -1,11 +1,25 @@
+import {
+  countSourceOrderReceivablePaths,
+  SourceOrderReceivableStatus,
+} from '@xiaotuanbao/shared'
 import type { SourceOrderSummary } from '@/types/api'
 import { sourceOrderRebateDisplayCents } from './source-order-rebate-display'
-import {
-  isUngeneratedReceivable,
-  tagReceivableSettlementScope,
-} from './receivable-settlement-metrics'
+import { tagReceivableSettlementScope } from './receivable-settlement-metrics'
 
-export { isUngeneratedReceivable }
+export interface UngeneratedReceivableOrderInput {
+  receivableStatus: SourceOrderReceivableStatus | string
+  hasIncompleteReceivablePaths: boolean
+}
+
+/** 「尚未提交应收」谓词：strip 未生成计数与路径计数共用（订单口径，非路径数）。 */
+export function isUngeneratedReceivable(
+  order: UngeneratedReceivableOrderInput,
+): boolean {
+  return (
+    order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
+    order.hasIncompleteReceivablePaths
+  )
+}
 
 /** 客源结算条：对应当前筛选列表（与表尾合计同一批；与批量提交全团路径计数解耦）。 */
 export interface SourceOrdersSettlementStripSummary {
@@ -113,4 +127,27 @@ export function buildSourceOrdersListGlance(
   )
 
   return tagReceivableSettlementScope(aggregated, 'filter')
+}
+
+/**
+ * 全团批量提交：对未生成/路径不全的客源，合计应收路径数。
+ * 与 strip 的 `ungeneratedCount`（订单数）口径不同。
+ */
+export function countPendingReceivablePaths(
+  orders: SourceOrderSummary[] | undefined,
+): number {
+  return (orders ?? []).reduce((count, order) => {
+    if (!isUngeneratedReceivable(order)) {
+      return count
+    }
+    return (
+      count +
+      countSourceOrderReceivablePaths({
+        collectionMode: order.collectionMode,
+        depositCents: order.depositCents,
+        balanceCents: order.balanceCents,
+        netReceivableCents: order.netReceivableCents,
+      })
+    )
+  }, 0)
 }

@@ -4,7 +4,7 @@ import { formatCents } from '../catalog'
 import {
   buildSourceOrdersListGlance,
   type SourceOrdersTableTotals,
-} from '../utils/source-orders-list-glance'
+} from '../utils/source-orders-settlement-glance'
 
 export type { SourceOrdersTableTotals }
 

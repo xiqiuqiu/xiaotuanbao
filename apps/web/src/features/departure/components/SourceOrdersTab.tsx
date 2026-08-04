@@ -20,10 +20,12 @@ import {
   initialDrawerState,
 } from './source-orders-tab-state'
 import { EMPTY_SOURCE_ORDER_FILTERS } from '../utils/source-order-filter-state'
-import { buildSourceOrdersListGlance } from '../utils/source-orders-list-glance'
+import {
+  buildSourceOrdersListGlance,
+  countPendingReceivablePaths,
+} from '../utils/source-orders-settlement-glance'
 import {
   confirmBatchGenerateReceivables,
-  countPendingReceivables,
   useSourceOrderSubmit,
   useSourceOrdersTabMutations,
 } from '../hooks/useSourceOrdersTabMutations'
@@ -148,7 +150,7 @@ export function SourceOrdersTab({
       drawer.editingOrder.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED)
 
   const pendingReceivableCount = useMemo(
-    () => countPendingReceivables(allOrdersForBatchCount?.items),
+    () => countPendingReceivablePaths(allOrdersForBatchCount?.items),
     [allOrdersForBatchCount?.items],
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
