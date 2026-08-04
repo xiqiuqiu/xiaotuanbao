@@ -188,7 +188,7 @@ function DepartureResourceList({
     return (
       <Empty description="暂无发团级资源" style={{ padding: '32px 0' }}>
         {resourceEditable ? (
-          <Button icon={<PlusOutlined />} onClick={onAddResource}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
           </Button>
         ) : null}
@@ -401,6 +401,8 @@ export function DepartureResourcePane({
         message.warning(text)
       } else if (result.succeeded > 0) {
         message.success(text)
+      } else if (result.skipped > 0) {
+        message.warning(text)
       } else {
         message.info(text)
       }

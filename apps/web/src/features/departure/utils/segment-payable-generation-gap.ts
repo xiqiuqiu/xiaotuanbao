@@ -26,3 +26,19 @@ export function segmentPayableGenerationGap(
     hasGap: ungenerated > 0,
   }
 }
+
+/** 各日程段待提交应付资源项合计（与日程卡片 0/N 环同一口径）。 */
+export function countSegmentListPendingPayables(
+  segments: ReadonlyArray<{
+    payableGeneratedCount: number
+    resourceCount: number
+  }>,
+): number {
+  return segments.reduce(
+    (count, segment) =>
+      count +
+      segmentPayableGenerationGap(segment.payableGeneratedCount, segment.resourceCount)
+        .ungenerated,
+    0,
+  )
+}

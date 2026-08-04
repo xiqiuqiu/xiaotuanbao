@@ -43,7 +43,7 @@ describe('ResourceKind', () => {
     expect(RESOURCE_KIND_LABELS[ResourceKind.OTHER]).toBe('其他')
   })
 
-  it('lists execution resource kinds without 购物店/演出; 拼出 stays in first five', () => {
+  it('lists execution resource kinds without 购物店/演出/景区; 拼出 stays in first five', () => {
     expect(RESOURCE_KIND_OPTIONS.map((item) => item.value)).toEqual([
       ResourceKind.TRANSPORT,
       ResourceKind.HOTEL,
@@ -51,7 +51,6 @@ describe('ResourceKind', () => {
       ResourceKind.OUTSOURCE,
       ResourceKind.TICKET,
       ResourceKind.MEAL,
-      ResourceKind.SCENIC,
       ResourceKind.INSURANCE,
       ResourceKind.OTHER,
     ])
@@ -59,6 +58,7 @@ describe('ResourceKind', () => {
     expect(RESOURCE_KIND_OPTIONS.map((item) => item.value)).not.toContain(
       ResourceKind.ENTERTAINMENT,
     )
+    expect(RESOURCE_KIND_OPTIONS.map((item) => item.value)).not.toContain(ResourceKind.SCENIC)
     expect(RESOURCE_KIND_OPTIONS.findIndex((o) => o.value === ResourceKind.OUTSOURCE)).toBeLessThan(
       5,
     )

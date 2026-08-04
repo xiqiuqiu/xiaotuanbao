@@ -47,18 +47,18 @@ describe('departure detail overview prototype removal', () => {
     expect(validated).not.toHaveProperty('variant')
   })
 
-  it('does not expose prototype:departure-overview or execution-layer-switch scripts', () => {
+  it('does not expose prototype:departure-overview script', () => {
     const pkg = JSON.parse(readFileSync(repoRootPackageJson, 'utf8')) as {
       scripts?: Record<string, string>
     }
 
     expect(pkg.scripts?.['prototype:departure-overview']).toBeUndefined()
-    expect(pkg.scripts?.['prototype:execution-layer-switch']).toBeUndefined()
     expect(
       Object.keys(pkg.scripts ?? {}).some((key) => key.includes('departure-overview')),
     ).toBe(false)
-    expect(
-      Object.keys(pkg.scripts ?? {}).some((key) => key.includes('execution-layer-switch')),
-    ).toBe(false)
+  })
+
+  it('registers execution-layer-switch as a throwaway sandbox route', () => {
+    expect(Object.keys(router.routesByPath)).toContain('/prototype/execution-layer-switch')
   })
 })

@@ -102,7 +102,7 @@ describe('发团列表操作列', () => {
     expect(totalWidth).toBeLessThanOrEqual(DEPARTURE_LIST_TABLE_SCROLL_X)
   })
 
-  it('完成情况：列表只铺待办缺口 warning Tag；全齐显示「无待办」', () => {
+  it('完成情况：仅展示四项状态文案，完成墨色、未完成 warning', () => {
     const completionColumn = buildDepartureColumns({ onCopy: vi.fn(), onPurge: vi.fn() }, true).find(
       (column) => 'key' in column && column.key === 'completionTags',
     )
@@ -122,12 +122,14 @@ describe('发团列表操作列', () => {
     const { container, rerender } = render(
       <>{completionColumn!.render?.(undefined, incompleteRecord, 0)}</>,
     )
-    const tags = Array.from(container.querySelectorAll('.ant-tag'))
-    const texts = tags.map((el) => el.textContent)
-    expect(texts).toEqual(['客源未录入', '应收未提交'])
-    expect(tags.every((el) => /ant-tag-warning/.test(el.className))).toBe(true)
-    expect(screen.queryByText('行程5段')).toBeNull()
-    expect(screen.queryByText('应付已提交')).toBeNull()
+
+    expect(screen.queryByText('客源录入')).toBeNull()
+    expect(screen.getByText('客源未录入')).toHaveClass('ant-typography-warning')
+    expect(screen.getByText('行程5段·资源2项')).not.toHaveClass('ant-typography-warning')
+    expect(screen.getByText('应收未提交')).toHaveClass('ant-typography-warning')
+    expect(screen.getByText('应付已提交')).not.toHaveClass('ant-typography-warning')
+    expect(container.querySelectorAll('.ant-tag')).toHaveLength(0)
+    expect(screen.queryByText('无待办')).toBeNull()
 
     const completeRecord = {
       id: 'departure-2',
@@ -140,8 +142,8 @@ describe('发团列表操作列', () => {
       },
     } as DepartureSummary
     rerender(<>{completionColumn!.render?.(undefined, completeRecord, 0)}</>)
-    expect(screen.getByText('无待办')).toBeTruthy()
-    expect(container.querySelectorAll('.ant-tag')).toHaveLength(0)
+    expect(screen.getByText('客源3单')).not.toHaveClass('ant-typography-warning')
+    expect(screen.queryByText('无待办')).toBeNull()
   })
 
   it('金额列标题与详情概览口径一致：结算应收 / 成本合计 / 当前毛利', () => {

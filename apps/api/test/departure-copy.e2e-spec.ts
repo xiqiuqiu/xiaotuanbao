@@ -329,6 +329,14 @@ describe('Departure copy & save template (e2e)', () => {
       .expect(200)
     expect(clearedResource.body.data.pendingCheck).toBe(false)
 
+    const segmentsAfterResourceSave = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/segments`)
+      .expect(200)
+    const segmentAfterResourceSave = segmentsAfterResourceSave.body.data.items.find(
+      (item: { id: string }) => item.id === dbCopied!.id,
+    )
+    expect(segmentAfterResourceSave.pendingCheck).toBe(false)
+
     const sourceOrders = await prisma.sourceOrder.count({
       where: { departureId: copiedDepartureId },
     })

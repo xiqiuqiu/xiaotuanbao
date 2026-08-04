@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { segmentPayableGenerationGap } from './segment-payable-generation-gap'
+import { countSegmentListPendingPayables, segmentPayableGenerationGap } from './segment-payable-generation-gap'
 
 describe('segmentPayableGenerationGap', () => {
   it('hides when there are no resources', () => {
@@ -34,5 +34,16 @@ describe('segmentPayableGenerationGap', () => {
       percent: 0,
       hasGap: true,
     })
+  })
+})
+
+describe('countSegmentListPendingPayables', () => {
+  it('sums ungenerated resources across segments', () => {
+    expect(
+      countSegmentListPendingPayables([
+        { payableGeneratedCount: 0, resourceCount: 2 },
+        { payableGeneratedCount: 1, resourceCount: 3 },
+      ]),
+    ).toBe(4)
   })
 })

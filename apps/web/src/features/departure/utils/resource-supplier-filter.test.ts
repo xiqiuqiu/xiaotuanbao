@@ -21,11 +21,12 @@ describe('resource kind → supplier filter', () => {
       ).toBe(kind.value)
       expect(SUPPLIER_ALLOWED_RESOURCE_KINDS).toContain(filter)
     }
-    // 存量购物店/演出资源仍按自身种类筛供应商
+    // 存量购物店/演出/景区资源仍按自身种类筛供应商
     expect(resolveSupplierFilterKind(ResourceKind.SHOP)).toBe(ResourceKind.SHOP)
     expect(resolveSupplierFilterKind(ResourceKind.ENTERTAINMENT)).toBe(
       ResourceKind.ENTERTAINMENT,
     )
+    expect(resolveSupplierFilterKind(ResourceKind.SCENIC)).toBe(ResourceKind.SCENIC)
   })
 
   it('ResourceDrawer lists suppliers with category containment filter from resourceKind', () => {

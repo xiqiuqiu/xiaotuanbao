@@ -32,9 +32,14 @@ import {
   validateSegmentFields,
 } from './segment.validation'
 import { hasTicketHeadcountMismatch } from './ticket-type-headcount.utils'
+import { resolveSegmentPendingCheckForDisplay } from './segment-pending-check.utils'
+import { SEGMENT_SUMMARY_RESOURCE_SELECT } from './segment-summary-resource.select'
 
 type SegmentWithResources = ItinerarySegment & {
-  resources: Pick<SegmentResource, 'id' | 'amountCents' | 'resourceKind'>[]
+  resources: Pick<
+    SegmentResource,
+    'id' | 'amountCents' | 'resourceKind' | 'pendingCheck'
+  >[]
 }
 
 @Injectable()
@@ -55,11 +60,7 @@ export class SegmentService {
       where: { departureId: departure.id },
       include: {
         resources: {
-          select: {
-            id: true,
-            amountCents: true,
-            resourceKind: true,
-          },
+          select: SEGMENT_SUMMARY_RESOURCE_SELECT,
         },
       },
       orderBy: [{ sortOrder: 'asc' }],
@@ -146,11 +147,7 @@ export class SegmentService {
       },
       include: {
         resources: {
-          select: {
-            id: true,
-            amountCents: true,
-            resourceKind: true,
-          },
+          select: SEGMENT_SUMMARY_RESOURCE_SELECT,
         },
       },
     })
@@ -227,11 +224,7 @@ export class SegmentService {
       },
       include: {
         resources: {
-          select: {
-            id: true,
-            amountCents: true,
-            resourceKind: true,
-          },
+          select: SEGMENT_SUMMARY_RESOURCE_SELECT,
         },
       },
     })
@@ -357,11 +350,7 @@ export class SegmentService {
       include: {
         departure: true,
         resources: {
-          select: {
-            id: true,
-            amountCents: true,
-            resourceKind: true,
-          },
+          select: SEGMENT_SUMMARY_RESOURCE_SELECT,
         },
       },
     })
@@ -436,7 +425,10 @@ export class SegmentService {
       notes: segment.notes,
       ...ticketCounts,
       hasTicketHeadcountMismatch: hasTicketHeadcountMismatch(ticketCounts, sourceGuestTotal),
-      pendingCheck: segment.pendingCheck,
+      pendingCheck: resolveSegmentPendingCheckForDisplay({
+        segmentPendingCheck: segment.pendingCheck,
+        resources: segment.resources,
+      }),
       resourceCount,
       outsourceCount,
       resourceAmountCents,

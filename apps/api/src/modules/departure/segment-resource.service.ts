@@ -485,6 +485,17 @@ export class SegmentResourceService {
       organizationId,
       updated,
     )
+
+    const remainingPendingResources = await this.prisma.segmentResource.count({
+      where: { segmentId: updated.segmentId, pendingCheck: true },
+    })
+    if (remainingPendingResources === 0 && updated.segment.pendingCheck) {
+      await this.prisma.itinerarySegment.update({
+        where: { id: updated.segmentId },
+        data: { pendingCheck: false },
+      })
+    }
+
     return this.toResourceSummary(updated, financeMeta)
   }
 

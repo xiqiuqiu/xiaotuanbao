@@ -1,4 +1,4 @@
-import { Button, Popconfirm, Space, Tag, Tooltip, Typography } from 'antd'
+import { Button, Popconfirm, Space, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import type { DepartureSummary } from '@/types/api'
@@ -14,11 +14,8 @@ import {
   DEPARTURE_TYPE_LABELS,
   catalogLabel,
   formatCents,
-  renderCompletionTags,
 } from '../catalog'
-import {
-  getIncompleteCompletionLabels,
-} from '../utils/departure-transition'
+import { DepartureListCompletionCell } from '../components/DepartureListCompletionCell'
 import type { DepartureListSearch } from '../utils/departure-list-search'
 
 type DepartureColumnsActions = {
@@ -31,7 +28,7 @@ type DepartureColumnsActions = {
  * 与 `buildDepartureColumns` 列宽之和对齐（含复制+删除操作列）。
  * Table `scroll.x` 不得小于此值，否则 fixed 操作列会压住左侧内容。
  * 发团视图不单独占「路线名称」列（160），路线改在团名悬停展示；
- * 完成情况只铺待办缺口 Tag，列宽收敛。
+ * 完成情况固定展示四项状态文案（完成墨色、未完成 warning）。
  */
 export const DEPARTURE_LIST_TABLE_SCROLL_X = 2020
 
@@ -118,37 +115,9 @@ export function buildDepartureColumns(
       title: '完成情况',
       key: 'completionTags',
       width: 200,
-      render: (_value, record) => {
-        const allLabels = renderCompletionTags(record.completionTags).map((tag) => tag.label)
-        const incompleteLabels = getIncompleteCompletionLabels(record.completionTags)
-        const tooltip = (
-          <Space orientation="vertical" size={2}>
-            {allLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
-          </Space>
-        )
-
-        if (incompleteLabels.length === 0) {
-          return (
-            <Tooltip title={tooltip}>
-              <Typography.Text type="secondary">无待办</Typography.Text>
-            </Tooltip>
-          )
-        }
-
-        return (
-          <Tooltip title={tooltip}>
-            <Space size={[4, 4]} wrap>
-              {incompleteLabels.map((label) => (
-                <Tag key={label} color="warning" style={{ marginInlineEnd: 0 }}>
-                  {label}
-                </Tag>
-              ))}
-            </Space>
-          </Tooltip>
-        )
-      },
+      render: (_value, record) => (
+        <DepartureListCompletionCell tags={record.completionTags} />
+      ),
     },
     { title: '结算应收', dataIndex: 'netReceivableCents', width: 110, render: (value: number) => formatCents(value) },
     { title: '成本合计', dataIndex: 'payableCents', width: 110, render: (value: number) => formatCents(value) },

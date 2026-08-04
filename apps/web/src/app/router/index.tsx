@@ -370,6 +370,21 @@ const routeLedgerModePrototypeRoute = createRoute({
   ),
 })
 
+const executionLayerSwitchPrototypeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/prototype/execution-layer-switch',
+  validateSearch: (search: Record<string, unknown>) => ({
+    variant:
+      typeof search.variant === 'string' && ['A', 'B', 'C', 'D'].includes(search.variant)
+        ? search.variant
+        : undefined,
+  }),
+  component: lazyRouteComponent(
+    () => import('@/pages/ExecutionLayerSwitchPrototypePage'),
+    'ExecutionLayerSwitchPrototypePage',
+  ),
+})
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   platformLayoutRoute.addChildren([
@@ -398,6 +413,7 @@ const routeTree = rootRoute.addChildren([
     systemOrganizationRoute,
     systemUsersRoute,
     routeLedgerModePrototypeRoute,
+    executionLayerSwitchPrototypeRoute,
   ]),
 ])
 

@@ -98,7 +98,8 @@ function ResourceDrawerFormFields({
         <Select
           options={(
             resourceKind === ResourceKind.SHOP ||
-            resourceKind === ResourceKind.ENTERTAINMENT
+            resourceKind === ResourceKind.ENTERTAINMENT ||
+            resourceKind === ResourceKind.SCENIC
               ? [
                   ...RESOURCE_KIND_OPTIONS,
                   {
