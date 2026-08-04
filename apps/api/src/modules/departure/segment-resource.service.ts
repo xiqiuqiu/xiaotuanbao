@@ -20,7 +20,6 @@ import {
 import {
   CounterpartyType,
   DirectoryProfileStatus,
-  PaymentScheduleDirection,
   ResourceKind,
   type Departure,
   type ItinerarySegment,
@@ -30,7 +29,10 @@ import {
   type Supplier,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
-import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
+import {
+  DepartureFinanceFacade,
+  resourcePresenceMapKey,
+} from '../finance/departure-finance-facade.service'
 import { formatDateOnly, parseDateOnly } from './departure-date.utils'
 import type {
   CreateSegmentResourceDto,
@@ -490,15 +492,14 @@ export class SegmentResourceService {
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
     this.ensureDepartureEditable(resource.segment.departure)
 
-    const hasSchedule = await this.prisma.paymentSchedule.count({
-      where: {
-        organizationId,
+    const presence = await this.departureFinanceFacade.getResourceFinancePresence(
+      organizationId,
+      {
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
         sourceId: resource.id,
-        direction: PaymentScheduleDirection.payable,
       },
-    })
-
-    if (hasSchedule > 0) {
+    )
+    if (presence.blocksRemoval) {
       throw new ConflictException('当前资源已提交应付，不能直接删除')
     }
 
@@ -551,20 +552,12 @@ export class SegmentResourceService {
       orderBy: [{ id: 'asc' }],
     })
 
-    const existingScheduleSourceIds = new Set(
-      (
-        await this.prisma.paymentSchedule.findMany({
-          where: {
-            organizationId,
-            departureId: segment.departureId,
-            direction: PaymentScheduleDirection.payable,
-            sourceId: { in: resources.map((resource) => resource.id) },
-            voidedAt: null,
-          },
-          select: { sourceId: true },
-          distinct: ['sourceId'],
-        })
-      ).map((row) => row.sourceId),
+    const presenceMap = await this.departureFinanceFacade.getResourceFinancePresences(
+      organizationId,
+      resources.map((resource) => ({
+        sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+        sourceId: resource.id,
+      })),
     )
 
     const items: BatchFinanceGenerationItem[] = []
@@ -577,7 +570,13 @@ export class SegmentResourceService {
         RESOURCE_KIND_LABELS[resource.resourceKind as SharedResourceKind] ||
         resource.id
 
-      if (existingScheduleSourceIds.has(resource.id)) {
+      const presence = presenceMap.get(
+        resourcePresenceMapKey(
+          PaymentScheduleSourceType.SEGMENT_RESOURCE,
+          resource.id,
+        ),
+      )
+      if (presence?.isGenerated) {
         continue
       }
 

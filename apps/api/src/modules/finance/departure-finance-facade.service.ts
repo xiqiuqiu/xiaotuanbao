@@ -61,6 +61,21 @@ import {
   type DepartureFinanceObligationSummary,
 } from './departure-finance-obligation-summary'
 import { buildSourceOrderFinanceMeta } from './source-order-finance-state'
+import {
+  EMPTY_FINANCE_SOURCE_PRESENCE,
+  loadResourceFinancePresences,
+  loadSourceOrderFinancePresences,
+  resourcePresenceMapKey,
+  type FinanceSourcePresence,
+  type ResourcePresenceKey,
+} from './departure-finance-presence'
+
+export {
+  resourcePresenceMapKey,
+  type FinanceSourcePresence,
+  type ResourcePresenceKey,
+  type ResourcePresenceSourceType,
+} from './departure-finance-presence'
 
 type TxClient = Prisma.TransactionClient
 
@@ -1320,6 +1335,54 @@ export class DepartureFinanceFacade {
       map.get(resourceId) ??
       this.toResourceFinanceState(resource?.amountCents ?? 0, null, 0, false)
     )
+  }
+
+  /**
+   * Source-order finance presence: blocksRemoval + isGenerated (ADR-0004).
+   * Departure remove / receivable gap must use this instead of Payment Schedule.
+   */
+  async getSourceOrderFinancePresence(
+    organizationId: string,
+    sourceOrderId: string,
+  ): Promise<FinanceSourcePresence> {
+    const map = await this.getSourceOrderFinancePresences(organizationId, [
+      sourceOrderId,
+    ])
+    return map.get(sourceOrderId) ?? { ...EMPTY_FINANCE_SOURCE_PRESENCE }
+  }
+
+  async getSourceOrderFinancePresences(
+    organizationId: string,
+    sourceOrderIds: string[],
+  ): Promise<Map<string, FinanceSourcePresence>> {
+    return loadSourceOrderFinancePresences(
+      this.prisma,
+      organizationId,
+      [...new Set(sourceOrderIds)],
+    )
+  }
+
+  /**
+   * Resource finance presence keyed by sourceType + sourceId (ADR-0004).
+   * Voided payable still blocks removal; isGenerated requires a non-voided node.
+   */
+  async getResourceFinancePresence(
+    organizationId: string,
+    key: ResourcePresenceKey,
+  ): Promise<FinanceSourcePresence> {
+    const map = await this.getResourceFinancePresences(organizationId, [key])
+    return (
+      map.get(resourcePresenceMapKey(key.sourceType, key.sourceId)) ?? {
+        ...EMPTY_FINANCE_SOURCE_PRESENCE,
+      }
+    )
+  }
+
+  async getResourceFinancePresences(
+    organizationId: string,
+    keys: ResourcePresenceKey[],
+  ): Promise<Map<string, FinanceSourcePresence>> {
+    return loadResourceFinancePresences(this.prisma, organizationId, keys)
   }
 
   /**

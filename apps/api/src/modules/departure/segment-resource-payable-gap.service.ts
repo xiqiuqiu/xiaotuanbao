@@ -1,19 +1,24 @@
 import { Injectable } from '@nestjs/common'
-import {
-  DepartureStatus,
-  PaymentScheduleDirection,
-} from '@prisma/client'
+import { DepartureStatus } from '@prisma/client'
 import type {
   PendingPayableSegmentResourceItem,
   PendingPayableSegmentResourceListResult,
 } from '@xiaotuanbao/shared'
 import { PaymentScheduleSourceType } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import {
+  DepartureFinanceFacade,
+  resourcePresenceMapKey,
+  type ResourcePresenceKey,
+} from '../finance/departure-finance-facade.service'
 import { formatDateOnly } from './departure-date.utils'
 
 @Injectable()
 export class SegmentResourcePayableGapService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
+  ) {}
 
   /**
    * 待提交应付：金额 > 0 且尚无有效（未作废）资源应付节点的段资源 ∪ 发团级资源。
@@ -81,37 +86,38 @@ export class SegmentResourcePayableGapService {
       }),
     ])
 
-    const sourceIds = [
-      ...segmentRows.map(({ id }) => id),
-      ...departureRows.map(({ id }) => id),
-    ]
-    if (sourceIds.length === 0) {
+    if (segmentRows.length === 0 && departureRows.length === 0) {
       return []
     }
 
-    const generatedSourceIds = new Set(
-      (
-        await this.prisma.paymentSchedule.findMany({
-          where: {
-            organizationId,
-            direction: PaymentScheduleDirection.payable,
-            sourceType: {
-              in: [
-                PaymentScheduleSourceType.SEGMENT_RESOURCE,
-                PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-              ],
-            },
-            sourceId: { in: sourceIds },
-            voidedAt: null,
-          },
-          select: { sourceId: true },
-          distinct: ['sourceId'],
-        })
-      ).flatMap(({ sourceId }) => (sourceId ? [sourceId] : [])),
+    const presenceKeys: ResourcePresenceKey[] = [
+      ...segmentRows.map(
+        ({ id }) =>
+          ({
+            sourceType: PaymentScheduleSourceType.SEGMENT_RESOURCE,
+            sourceId: id,
+          }) satisfies ResourcePresenceKey,
+      ),
+      ...departureRows.map(
+        ({ id }) =>
+          ({
+            sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
+            sourceId: id,
+          }) satisfies ResourcePresenceKey,
+      ),
+    ]
+    const presenceMap = await this.departureFinanceFacade.getResourceFinancePresences(
+      organizationId,
+      presenceKeys,
     )
 
     const segmentItems = segmentRows
-      .filter(({ id }) => !generatedSourceIds.has(id))
+      .filter(
+        ({ id }) =>
+          !presenceMap.get(
+            resourcePresenceMapKey(PaymentScheduleSourceType.SEGMENT_RESOURCE, id),
+          )?.isGenerated,
+      )
       .map((row) => {
         const departure = row.segment.departure
         return {
@@ -134,7 +140,12 @@ export class SegmentResourcePayableGapService {
       })
 
     const departureItems = departureRows
-      .filter(({ id }) => !generatedSourceIds.has(id))
+      .filter(
+        ({ id }) =>
+          !presenceMap.get(
+            resourcePresenceMapKey(PaymentScheduleSourceType.DEPARTURE_RESOURCE, id),
+          )?.isGenerated,
+      )
       .map((row) => {
         const departure = row.departure
         return {

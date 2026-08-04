@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
 import { afterEach, describe, expect, it } from 'vitest'
 import { SourceOrdersSettlementStrip } from './SourceOrdersSettlementStrip'
-import type { SourceOrdersSettlementStripSummary } from '../utils/source-orders-settlement-strip-summary'
+import type { SourceOrdersSettlementStripSummary } from '../utils/source-orders-settlement-glance'
 import { formatCents } from '../catalog'
 
 function renderStrip(summary: SourceOrdersSettlementStripSummary) {

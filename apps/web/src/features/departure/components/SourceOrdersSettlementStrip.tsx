@@ -1,5 +1,5 @@
 import { formatCents } from '../catalog'
-import type { SourceOrdersSettlementStripSummary } from '../utils/source-orders-settlement-strip-summary'
+import type { SourceOrdersSettlementStripSummary } from '../utils/source-orders-settlement-glance'
 import styles from './SourceOrdersSettlementStrip.module.css'
 
 interface SourceOrdersSettlementStripProps {

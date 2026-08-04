@@ -2,11 +2,7 @@ import { App, Space, Typography } from 'antd'
 import type { ModalFuncProps } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCallback, type MutableRefObject } from 'react'
-import {
-  countSourceOrderReceivablePaths,
-  didSourceAmountPathChange,
-  SourceOrderReceivableStatus,
-} from '@xiaotuanbao/shared'
+import { didSourceAmountPathChange } from '@xiaotuanbao/shared'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { formatCents } from '../catalog'
 import {
@@ -347,26 +343,4 @@ export function confirmBatchGenerateReceivables(
     cancelText: '取消',
     onOk: () => batchGenerateMutation.mutateAsync(),
   })
-}
-
-export function countPendingReceivables(
-  orders: SourceOrderSummary[] | undefined,
-): number {
-  return (orders ?? []).reduce((count, order) => {
-    const needsGeneration =
-      order.receivableStatus === SourceOrderReceivableStatus.NOT_GENERATED ||
-      order.hasIncompleteReceivablePaths
-    if (!needsGeneration) {
-      return count
-    }
-    return (
-      count +
-      countSourceOrderReceivablePaths({
-        collectionMode: order.collectionMode,
-        depositCents: order.depositCents,
-        balanceCents: order.balanceCents,
-        netReceivableCents: order.netReceivableCents,
-      })
-    )
-  }, 0)
 }

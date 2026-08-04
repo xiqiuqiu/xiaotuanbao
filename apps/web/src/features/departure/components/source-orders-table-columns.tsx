@@ -17,7 +17,7 @@ import {
   formatCents,
 } from '../catalog'
 import { sourceOrderRebateDisplayCents } from '../utils/source-order-rebate-display'
-import { isUngeneratedReceivable } from '../utils/source-orders-list-glance'
+import { isUngeneratedReceivable } from '../utils/source-orders-settlement-glance'
 import styles from './source-orders-table-columns.module.css'
 
 export { sourceOrderRebateDisplayCents }
