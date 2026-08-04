@@ -22,7 +22,6 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   DirectoryProfileStatus,
-  PaymentScheduleDirection,
   type Departure,
   type FareAdjustmentDirection,
   type FareAdjustmentKind,
@@ -660,15 +659,11 @@ export class SourceOrderService {
     const order = await this.findSourceOrderOrThrow(organizationId, sourceOrderId)
     this.ensureDepartureEditable(order.departure)
 
-    const hasSchedule = await this.prisma.paymentSchedule.count({
-      where: {
-        organizationId,
-        sourceId: order.id,
-        direction: PaymentScheduleDirection.receivable,
-      },
-    })
-
-    if (hasSchedule > 0) {
+    const presence = await this.departureFinanceFacade.getSourceOrderFinancePresence(
+      organizationId,
+      order.id,
+    )
+    if (presence.blocksRemoval) {
       throw new ConflictException('当前客源单已提交应收，不能直接删除')
     }
 

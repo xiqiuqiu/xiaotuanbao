@@ -16,7 +16,6 @@ import {
 import {
   CounterpartyType,
   DirectoryProfileStatus,
-  PaymentScheduleDirection,
   ResourceKind,
   type Departure,
   type DepartureResource,
@@ -234,16 +233,14 @@ export class DepartureResourceService {
     const resource = await this.findResourceOrThrow(organizationId, resourceId)
     this.ensureDepartureEditable(resource.departure)
 
-    const hasSchedule = await this.prisma.paymentSchedule.count({
-      where: {
-        organizationId,
-        sourceId: resource.id,
+    const presence = await this.departureFinanceFacade.getResourceFinancePresence(
+      organizationId,
+      {
         sourceType: PaymentScheduleSourceType.DEPARTURE_RESOURCE,
-        direction: PaymentScheduleDirection.payable,
+        sourceId: resource.id,
       },
-    })
-
-    if (hasSchedule > 0) {
+    )
+    if (presence.blocksRemoval) {
       throw new ConflictException('当前资源已提交应付，不能直接删除')
     }
 

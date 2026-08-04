@@ -1,15 +1,14 @@
 import { Injectable } from '@nestjs/common'
 import {
   DepartureStatus,
-  PaymentScheduleDirection,
   type Prisma,
 } from '@prisma/client'
 import type {
   PendingReceivableSourceOrderItem,
   PendingReceivableSourceOrderListResult,
 } from '@xiaotuanbao/shared'
-import { SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { DepartureFinanceFacade } from '../finance/departure-finance-facade.service'
 import { formatDateOnly } from './departure-date.utils'
 
 export type PendingReceivableSourceOrderRow = Prisma.SourceOrderGetPayload<{
@@ -29,7 +28,10 @@ export type PendingReceivableSourceOrderRow = Prisma.SourceOrderGetPayload<{
 
 @Injectable()
 export class SourceOrderReceivableGapService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly departureFinanceFacade: DepartureFinanceFacade,
+  ) {}
 
   async findPendingRows(organizationId: string): Promise<PendingReceivableSourceOrderRow[]> {
     const rows = await this.prisma.sourceOrder.findMany({
@@ -61,22 +63,12 @@ export class SourceOrderReceivableGapService {
       return []
     }
 
-    const generatedSourceIds = new Set(
-      (
-        await this.prisma.paymentSchedule.findMany({
-          where: {
-            organizationId,
-            direction: PaymentScheduleDirection.receivable,
-            sourceType: { in: [...SOURCE_ORDER_RECEIVABLE_SOURCE_TYPES] },
-            sourceId: { in: rows.map(({ id }) => id) },
-          },
-          select: { sourceId: true },
-          distinct: ['sourceId'],
-        })
-      ).flatMap(({ sourceId }) => (sourceId ? [sourceId] : [])),
+    const presenceMap = await this.departureFinanceFacade.getSourceOrderFinancePresences(
+      organizationId,
+      rows.map(({ id }) => id),
     )
 
-    return rows.filter(({ id }) => !generatedSourceIds.has(id))
+    return rows.filter(({ id }) => !presenceMap.get(id)?.isGenerated)
   }
 
   async listPending(
