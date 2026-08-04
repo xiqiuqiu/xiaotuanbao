@@ -38,4 +38,4 @@
 - [x] workbench / departure（主 Tab）/ finance 四页
 - [x] wangjie 手动建团（`e2e-web-` 团名）并在列表可见
 - [x] `pnpm test:e2e:web` 全绿
-- [ ] Commit
+- [x] Commit
