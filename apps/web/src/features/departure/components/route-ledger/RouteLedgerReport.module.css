@@ -3,27 +3,36 @@
   border-radius: var(--ant-border-radius-lg);
   overflow: hidden;
   background: var(--ant-color-bg-container);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
 
 .reportHeader {
   padding: 10px 16px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: linear-gradient(
-    180deg,
-    var(--ant-color-fill-quaternary) 0%,
-    var(--ant-color-bg-container) 100%
-  );
+  background: var(--ant-color-bg-container);
 }
 
-.reportTitle {
-  font-size: 15px;
-  line-height: 1.5;
-  letter-spacing: -0.01em;
+.reportIdentity {
+  min-width: 0;
+  flex: 1 1 200px;
 }
 
-.reportNumberLink {
-  display: inline;
+.reportRouteLink {
+  font-size: 14px;
+  line-height: 1.4;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reportMeta {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tableToolbar {
+  padding: 8px 16px 4px;
+  background: var(--ant-color-bg-container);
 }
 
 .reportTable :global(.ant-table) {
@@ -53,28 +62,18 @@
 }
 
 .summaryStrip {
+  flex: 0 0 auto;
   font-size: 13px;
 }
 
 .summaryMetric {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: var(--ant-color-bg-container);
-  border: 1px solid var(--ant-color-border-secondary);
-}
-
-.summaryMetricHighlight {
-  border-color: color-mix(in srgb, var(--ant-color-success) 24%, var(--ant-color-border-secondary));
-  background: color-mix(in srgb, var(--ant-color-success) 6%, var(--ant-color-bg-container));
+  white-space: nowrap;
 }
 
 .summaryMetricLabel {
-  color: var(--ant-color-text-tertiary);
   font-size: 12px;
-  white-space: nowrap;
 }
 
 .summaryMetricValue {

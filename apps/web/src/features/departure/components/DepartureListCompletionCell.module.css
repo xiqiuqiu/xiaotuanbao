@@ -1,18 +1,17 @@
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  /* 2×2：客源|执行安排 / 应收|应付，视觉两行，避免四行撑高表格 */
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  column-gap: 8px;
+  row-gap: 0;
   max-width: 100%;
-  padding-block: 2px;
+  align-items: baseline;
 }
 
 .line {
   display: block;
+  min-width: 0;
   font-size: 12px;
-  line-height: 1.5715;
+  line-height: 1.4;
   font-variant-numeric: tabular-nums;
-}
-
-.line:not(:last-child) {
-  margin-bottom: 1px;
 }

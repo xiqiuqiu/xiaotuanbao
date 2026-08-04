@@ -23,27 +23,35 @@ export function RouteLedgerFinanceSummary({
   const summary = summarizeDeparture(departure)
 
   return (
-    <Flex className={styles.summaryStrip} align="center" gap={6} wrap="wrap">
+    <Flex className={styles.summaryStrip} align="baseline" gap={16} wrap="wrap">
       <span className={styles.summaryMetric}>
-        <span className={styles.summaryMetricLabel}>结算</span>
+        <Typography.Text type="secondary" className={styles.summaryMetricLabel}>
+          结算{' '}
+        </Typography.Text>
         <Typography.Text strong className={styles.summaryMetricValue}>
           {formatCents(summary.netReceivableCents)}
         </Typography.Text>
       </span>
       <span className={styles.summaryMetric}>
-        <span className={styles.summaryMetricLabel}>成本</span>
+        <Typography.Text type="secondary" className={styles.summaryMetricLabel}>
+          成本{' '}
+        </Typography.Text>
         <Typography.Text strong className={styles.summaryMetricValue}>
           {formatCents(summary.costCents)}
         </Typography.Text>
       </span>
       <span className={styles.summaryMetric}>
-        <span className={styles.summaryMetricLabel}>拼出</span>
+        <Typography.Text type="secondary" className={styles.summaryMetricLabel}>
+          拼出{' '}
+        </Typography.Text>
         <Typography.Text strong className={styles.summaryMetricValue}>
           {formatCents(summary.outsourceCents)}
         </Typography.Text>
       </span>
-      <span className={`${styles.summaryMetric} ${styles.summaryMetricHighlight}`}>
-        <span className={styles.summaryMetricLabel}>毛利</span>
+      <span className={styles.summaryMetric}>
+        <Typography.Text type="secondary" className={styles.summaryMetricLabel}>
+          毛利{' '}
+        </Typography.Text>
         <Typography.Text
           strong
           type={summary.marginCents >= 0 ? 'success' : 'danger'}

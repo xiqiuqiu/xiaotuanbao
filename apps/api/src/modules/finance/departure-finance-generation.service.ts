@@ -164,6 +164,12 @@ export class DepartureFinanceGenerationService {
 
     const activeSchedules = allSchedules.filter((schedule) => schedule.cancelledAt == null)
     const activeRebates = rebateSchedules.filter((schedule) => schedule.cancelledAt == null)
+    // Closed history is not "never generated" (ADR-0007 / generateReceivableSchedules).
+    // Do not mint replacement paths over cancelled-only receivables.
+    if (activeSchedules.length === 0 && activeRebates.length === 0) {
+      return
+    }
+
     const schedulesForTouch = [...activeSchedules, ...activeRebates]
 
     const touchResults = await Promise.all(
@@ -179,9 +185,10 @@ export class DepartureFinanceGenerationService {
       }),
     )
     const anyTouched = touchResults.some((item) => item.touched)
-    const hasLegacyGuestCollection = touchResults.some(
-      (item) =>
-        item.schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
+    // Include cancelled legacy nodes: overview still books closed-unreceived on them.
+    const hasLegacyGuestCollection = allSchedules.some(
+      (schedule) =>
+        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_GUEST_COLLECTION,
     )
 
     if (anyTouched || hasLegacyGuestCollection) {

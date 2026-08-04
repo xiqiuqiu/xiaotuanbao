@@ -376,14 +376,17 @@ async function selectRoute(user: ReturnType<typeof userEvent.setup>) {
   })
 }
 
-/** 匹配日报表头 Typography（避免父级 Flex 同 textContent 重复命中）。 */
-function getReportTitle(title: string) {
-  return screen.getByText(
+/** 匹配日报表头身份区：路线名链接 + 团号·出团日次级行（按团号唯一定位）。 */
+function expectReportIdentity(routeName: string, departureNo: string, dateLabel: string) {
+  const meta = screen.getByText(
     (_, el) =>
       el instanceof HTMLElement
       && el.classList.contains('ant-typography')
-      && el.textContent === title,
+      && el.textContent === `${departureNo} · ${dateLabel}`,
   )
+  const identity = meta.parentElement
+  expect(identity).not.toBeNull()
+  expect(within(identity as HTMLElement).getByRole('link', { name: routeName })).toBeInTheDocument()
 }
 
 describe('RouteLedgerViewPanel', () => {
@@ -465,9 +468,7 @@ describe('RouteLedgerViewPanel', () => {
     )
 
     await waitFor(() => {
-      expect(
-        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
-      ).toBeInTheDocument()
+      expectReportIdentity('伊犁环线', 'XTB202607150001', '2026年7月15日')
     })
 
     expect(screen.queryByText('【表头冗余】同日团 A')).not.toBeInTheDocument()
@@ -480,18 +481,14 @@ describe('RouteLedgerViewPanel', () => {
     )
 
     await waitFor(() => {
-      expect(
-        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
-      ).toBeInTheDocument()
+      expectReportIdentity('伊犁环线', 'XTB202607150001', '2026年7月15日')
     })
 
     expect(getDepartureRouteLedger).toHaveBeenCalledWith(
       { routeName: '伊犁环线' },
       expect.anything(),
     )
-    expect(
-      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150002'),
-    ).toBeInTheDocument()
+    expectReportIdentity('伊犁环线', 'XTB202607150002', '2026年7月15日')
     expect(screen.getAllByText('同日团 A').length).toBeGreaterThan(0)
     expect(screen.getAllByText('同日团 B').length).toBeGreaterThan(0)
 
@@ -527,17 +524,11 @@ describe('RouteLedgerViewPanel', () => {
         { startDateFrom: '2026-07-15', startDateTo: '2026-07-15' },
         expect.anything(),
       )
-      expect(
-        getReportTitle('2026年7月15日阿勒泰拼车日报表 · XTB202607150099'),
-      ).toBeInTheDocument()
+      expectReportIdentity('阿勒泰拼车', 'XTB202607150099', '2026年7月15日')
     })
 
-    expect(
-      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150001'),
-    ).toBeInTheDocument()
-    expect(
-      getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150002'),
-    ).toBeInTheDocument()
+    expectReportIdentity('伊犁环线', 'XTB202607150001', '2026年7月15日')
+    expectReportIdentity('伊犁环线', 'XTB202607150002', '2026年7月15日')
     // 同日首日不插日期分隔；三份独立日报
     expect(screen.queryByRole('heading', { name: '2026-07-15' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('table')).toHaveLength(3)
@@ -616,20 +607,26 @@ describe('RouteLedgerViewPanel', () => {
     expect(within(tables[0]).getAllByText('900').length).toBeGreaterThan(0)
   })
 
-  it('点击团号进入发团详情，点击客源行进入客源管理路径（#185）', async () => {
+  it('点击发团名称进入发团详情，点击客源行进入客源管理路径（#185）', async () => {
     const user = userEvent.setup()
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('link', { name: 'XTB202607150001' })).toBeInTheDocument()
+      expectReportIdentity('伊犁环线', 'XTB202607150001', '2026年7月15日')
     })
 
-    expect(screen.getByRole('link', { name: 'XTB202607150001' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('dep-a'),
+    const metaA = screen.getByText(
+      (_, el) =>
+        el instanceof HTMLElement
+        && el.classList.contains('ant-typography')
+        && el.textContent === 'XTB202607150001 · 2026年7月15日',
     )
+    const linkA = within(metaA.parentElement as HTMLElement).getByRole('link', {
+      name: '伊犁环线',
+    })
+    expect(linkA).toHaveAttribute('href', expect.stringContaining('dep-a'))
 
     const tables = screen.getAllByRole('table')
     await user.click(within(tables[1]).getByText('陈志明'))
@@ -718,9 +715,7 @@ describe('RouteLedgerViewPanel', () => {
     )
 
     await waitFor(() => {
-      expect(
-        getReportTitle('2026年7月15日伊犁环线日报表 · XTB202607150000'),
-      ).toBeInTheDocument()
+      expectReportIdentity('伊犁环线', 'XTB202607150000', '2026年7月15日')
     })
     expect(screen.getByText('暂无客源单')).toBeInTheDocument()
     expect(screen.getByText('0 单')).toBeInTheDocument()

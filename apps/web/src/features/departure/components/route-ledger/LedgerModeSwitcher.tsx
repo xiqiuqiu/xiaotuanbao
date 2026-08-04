@@ -1,4 +1,4 @@
-import { Radio } from 'antd'
+import { Segmented } from 'antd'
 
 export type LedgerViewMode = 'income' | 'cost' | 'outsource'
 
@@ -13,16 +13,14 @@ type LedgerModeSwitcherProps = {
   onChange: (value: LedgerViewMode) => void
 }
 
-/** 一团日报：Radio 实心按钮组切换收入/成本/拼出。 */
+/** 一团日报：贴表 Segmented 切换收入/成本/拼出。 */
 export function LedgerModeSwitcher({ value, onChange }: LedgerModeSwitcherProps) {
   return (
-    <Radio.Group
+    <Segmented
       size="small"
-      optionType="button"
-      buttonStyle="solid"
       value={value}
-      onChange={(event) => onChange(event.target.value as LedgerViewMode)}
       options={MODE_OPTIONS}
+      onChange={(next) => onChange(next as LedgerViewMode)}
     />
   )
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Flex, Space, Table, Tooltip, Typography } from 'antd'
+import { Flex, Table, Tooltip, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { EllipsisTooltipText } from '@/components/EllipsisTooltipText'
 import nameLinkStyles from '@/layouts/TableNameLink.module.css'
@@ -20,7 +20,7 @@ import {
   formatRouteLedgerUnitPriceYuan,
   summarizeRouteLedgerUnitPrices,
 } from '../../utils/route-ledger-inbound-price-formula'
-import { formatRouteLedgerReportTitlePrefix } from '../../utils/route-ledger-reports'
+import { formatRouteLedgerChineseDate } from '../../utils/route-ledger-reports'
 import {
   flattenRouteLedgerDeparture,
   type RouteLedgerTableRow,
@@ -401,29 +401,32 @@ export function RouteLedgerDepartureReport({
 }) {
   const [mode, setMode] = useState<LedgerViewMode>('income')
   const incomeRows = useMemo(() => flattenRouteLedgerDeparture(departure), [departure])
-  const titlePrefix = formatRouteLedgerReportTitlePrefix(startDate, routeName)
+  const dateLabel = formatRouteLedgerChineseDate(startDate)
 
   return (
     <div className={styles.reportBlock}>
       <div className={styles.reportHeader}>
         <Flex align="center" justify="space-between" gap={12} wrap="wrap">
-          <Space size={12} wrap align="center">
-            <Typography.Text strong className={styles.reportTitle}>
-              {titlePrefix}
+          <Flex vertical gap={2} className={styles.reportIdentity}>
+            <Link
+              className={`${nameLinkStyles.nameLink} ${styles.reportRouteLink}`}
+              to="/departure/$departureId"
+              params={{ departureId: departure.departureId }}
+              search={{ tab: 'overview' }}
+            >
+              {routeName}
+            </Link>
+            <Typography.Text type="secondary" className={styles.reportMeta}>
+              {departure.departureNo}
               {' · '}
-              <Link
-                className={`${nameLinkStyles.nameLink} ${styles.reportNumberLink}`}
-                to="/departure/$departureId"
-                params={{ departureId: departure.departureId }}
-                search={{ tab: 'overview' }}
-              >
-                {departure.departureNo}
-              </Link>
+              {dateLabel}
             </Typography.Text>
-            <LedgerModeSwitcher value={mode} onChange={setMode} />
-          </Space>
+          </Flex>
           <RouteLedgerFinanceSummary departure={departure} />
         </Flex>
+      </div>
+      <div className={styles.tableToolbar}>
+        <LedgerModeSwitcher value={mode} onChange={setMode} />
       </div>
 
       {mode === 'income' ? (
