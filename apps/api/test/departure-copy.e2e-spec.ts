@@ -320,7 +320,12 @@ describe('Departure copy & save template (e2e)', () => {
       .patch(`/api/segments/${segmentId}`)
       .send({ name: '喀纳斯段' })
       .expect(200)
-    expect(clearedSegment.body.data.pendingCheck).toBe(false)
+    // 段字段已清 pendingCheck，但资源仍待检查 → 列表/详情展示层仍为 true
+    expect(clearedSegment.body.data.pendingCheck).toBe(true)
+    const dbSegmentAfterSave = await prisma.itinerarySegment.findUnique({
+      where: { id: segmentId },
+    })
+    expect(dbSegmentAfterSave!.pendingCheck).toBe(false)
 
     const resourceId = resourcesResponse.body.data.items[0].id as string
     const clearedResource = await authRequest(app, coordinatorToken)
