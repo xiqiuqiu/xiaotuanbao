@@ -106,6 +106,7 @@ const routeGroupFixture = {
           },
         ],
       },
+      costResources: [],
       sourceOrders: [
         {
           id: 'so-a',
@@ -171,6 +172,7 @@ const routeGroupFixture = {
           },
         ],
       },
+      costResources: [],
       sourceOrders: [
         {
           id: 'so-b',
@@ -256,7 +258,8 @@ const dateOnlyFixture: RouteLedgerResult = {
                 guestCollectCents: 0,
               },
               outsource: { totalAmountCents: 0, items: [] },
-              sourceOrders: [
+              costResources: [],
+      sourceOrders: [
                 {
                   id: 'so-other',
                   departureId: 'dep-other',
@@ -571,26 +574,27 @@ describe('RouteLedgerViewPanel', () => {
     })
   })
 
-  it('拼出挂在各发团日报条带，不进客源列、不跨团合并', async () => {
+  it('拼出仅在拼出分面展示，不进客源列、不跨团合并', async () => {
     const user = userEvent.setup()
     renderPanel(
       <StatefulPanel initial={{ routeName: '伊犁环线', startDateRange: null }} />,
     )
 
     await waitFor(() => {
-      expect(screen.getByText('2 项 · ¥2,000.00')).toBeInTheDocument()
+      expect(screen.getAllByRole('radio', { name: '拼出往来' })).toHaveLength(2)
     })
 
-    expect(screen.getByText('1 项 · ¥1,500.00')).toBeInTheDocument()
+    expect(screen.getAllByRole('radio', { name: '拼出往来' })).toHaveLength(2)
+    expect(screen.getAllByText('¥2,000.00').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('¥1,500.00').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('伊犁拼出社')).not.toBeInTheDocument()
 
-    await user.click(screen.getAllByRole('button', { name: '查看明细' })[0])
+    const outsourceTabs = screen.getAllByText('拼出往来')
+    await user.click(outsourceTabs[0])
 
-    expect(await screen.findByText('拼出明细')).toBeInTheDocument()
-    expect(screen.getByText('伊犁拼出社')).toBeInTheDocument()
+    expect(await screen.findByText('伊犁拼出社')).toBeInTheDocument()
     expect(screen.getByText('伊犁段拼出')).toBeInTheDocument()
     expect(screen.getByText('那拉提拼出社')).toBeInTheDocument()
-    expect(screen.getByText('共 2 项')).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: '拼出' })).not.toBeInTheDocument()
   })
 
@@ -605,8 +609,9 @@ describe('RouteLedgerViewPanel', () => {
 
     const tables = screen.getAllByRole('table')
     const tableB = tables[1]
-    expect(within(tableB).getByText('1000')).toBeInTheDocument()
-    expect(within(tableB).getByText('500')).toBeInTheDocument()
+    const tableBBody = tableB.querySelector('tbody')!
+    expect(within(tableBBody as HTMLElement).getByText('1000')).toBeInTheDocument()
+    expect(within(tableBBody as HTMLElement).getByText('500')).toBeInTheDocument()
     expect(within(tableB).getByText('13800002211')).toBeInTheDocument()
     expect(within(tables[0]).getAllByText('900').length).toBeGreaterThan(0)
   })
@@ -626,7 +631,8 @@ describe('RouteLedgerViewPanel', () => {
       expect.stringContaining('dep-a'),
     )
 
-    await user.click(screen.getByText('1000'))
+    const tables = screen.getAllByRole('table')
+    await user.click(within(tables[1]).getByText('陈志明'))
     expect(navigate).toHaveBeenCalledWith(
       expect.objectContaining({
         to: '/departure/$departureId',
@@ -697,7 +703,8 @@ describe('RouteLedgerViewPanel', () => {
                     guestCollectCents: 0,
                   },
                   outsource: { totalAmountCents: 0, items: [] },
-                  sourceOrders: [],
+                  costResources: [],
+      sourceOrders: [],
                 },
               ],
             },
@@ -760,9 +767,9 @@ describe('RouteLedgerViewPanel', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '2026年7月16日' })).toBeInTheDocument()
+      expect(screen.getByRole('separator', { name: '2026年7月16日' })).toBeInTheDocument()
     })
-    expect(screen.queryByRole('heading', { name: '2026年7月15日' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('separator', { name: '2026年7月15日' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('table')).toHaveLength(3)
   })
 })

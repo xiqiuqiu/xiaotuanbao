@@ -35,7 +35,16 @@ function pathnameFromLocalUrl(url: string): string {
   return url.split(/[?#]/, 1)[0] || '/'
 }
 
+/** DEV-only throwaway prototype sandboxes are not menu-gated. */
+function isDevPrototypePath(pathname: string): boolean {
+  return import.meta.env.DEV && pathname.startsWith('/prototype/')
+}
+
 function isRouteAllowed(pathname: string, menuKeys: string[], actionKeys: string[]): boolean {
+  if (isDevPrototypePath(pathname)) {
+    return true
+  }
+
   if (!isMenuPathAllowed(pathname, menuKeys)) {
     return false
   }

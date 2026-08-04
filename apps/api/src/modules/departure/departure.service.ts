@@ -55,6 +55,7 @@ import {
 import { fillMissingDailySkeletonInTx } from './daily-segment-skeleton.write'
 import { DepartureCopyService } from './departure-copy.service'
 import { RouteTemplateCopyService } from './route-template-copy.service'
+import { listRouteLedgerCostResources } from './route-ledger-arrangement-resources'
 import { assertRouteLedgerQueryAxes } from './route-ledger.validation'
 import { RouteTemplateService } from './route-template.service'
 import { DepartureReadModelService } from './departure-read-model.service'
@@ -184,13 +185,15 @@ export class DepartureService {
         },
         itinerarySegments: {
           select: {
+            name: true,
             sortOrder: true,
             resources: {
-              where: { resourceKind: ResourceKind.outsource },
               select: {
                 id: true,
+                resourceKind: true,
                 title: true,
                 amountCents: true,
+                notes: true,
                 counterpartyType: true,
                 createdAt: true,
                 partner: { select: { name: true } },
@@ -200,6 +203,20 @@ export class DepartureService {
             },
           },
           orderBy: { sortOrder: 'asc' },
+        },
+        departureResources: {
+          select: {
+            id: true,
+            resourceKind: true,
+            title: true,
+            amountCents: true,
+            notes: true,
+            counterpartyType: true,
+            createdAt: true,
+            partner: { select: { name: true } },
+            supplier: { select: { name: true } },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         },
       },
       orderBy: [{ startDate: 'asc' }, { departureNo: 'asc' }],
@@ -237,9 +254,23 @@ export class DepartureService {
           notes: order.notes,
         }
       })
-      const outsourceItems: RouteLedgerOutsourceLine[] = departure.itinerarySegments.flatMap(
-        (segment) =>
-          segment.resources.map((resource) => ({
+      const outsourceItems: RouteLedgerOutsourceLine[] = [
+        ...departure.itinerarySegments.flatMap((segment) =>
+          segment.resources
+            .filter((resource) => resource.resourceKind === ResourceKind.outsource)
+            .map((resource) => ({
+              id: resource.id,
+              supplierName:
+                resource.counterpartyType === CounterpartyType.partner
+                  ? (resource.partner?.name ?? '-')
+                  : (resource.supplier?.name ?? '-'),
+              amountCents: resource.amountCents,
+              title: resource.title,
+            })),
+        ),
+        ...departure.departureResources
+          .filter((resource) => resource.resourceKind === ResourceKind.outsource)
+          .map((resource) => ({
             id: resource.id,
             supplierName:
               resource.counterpartyType === CounterpartyType.partner
@@ -248,7 +279,8 @@ export class DepartureService {
             amountCents: resource.amountCents,
             title: resource.title,
           })),
-      )
+      ]
+      const costResources = listRouteLedgerCostResources(departure)
       const group: RouteLedgerDepartureGroup = {
         departureId: departure.id,
         departureNo: departure.departureNo,
@@ -256,6 +288,7 @@ export class DepartureService {
         startDate,
         totals: sumRouteLedgerRows(sourceOrders),
         outsource: toRouteLedgerOutsourceSummary(outsourceItems),
+        costResources,
         sourceOrders,
       }
 
