@@ -6,6 +6,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { SourceOrdersTab } from './SourceOrdersTab'
 
+/**
+ * Full Tab + Ant Table + dual list queries + userEvent.
+ * Idle ~3s / CPU-stressed ~4s; default 5s flakes under full-suite load.
+ */
+const SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS = 10_000
+
 const navigate = vi.fn()
 const listSourceOrders = vi.fn()
 
@@ -92,7 +98,7 @@ function renderTab() {
   )
 }
 
-describe('SourceOrdersTab 查看应收 navigation', () => {
+describe('SourceOrdersTab 查看应收 navigation', { timeout: SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS }, () => {
   afterEach(() => {
     cleanup()
     navigate.mockReset()
@@ -137,7 +143,7 @@ describe('SourceOrdersTab 查看应收 navigation', () => {
   })
 })
 
-describe('SourceOrdersTab 查看返利 navigation', () => {
+describe('SourceOrdersTab 查看返利 navigation', { timeout: SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS }, () => {
   afterEach(() => {
     cleanup()
     navigate.mockReset()
@@ -189,7 +195,7 @@ describe('SourceOrdersTab 查看返利 navigation', () => {
   })
 })
 
-describe('SourceOrdersTab 批量提交应收', () => {
+describe('SourceOrdersTab 批量提交应收', { timeout: SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS }, () => {
   afterEach(() => {
     cleanup()
     navigate.mockReset()

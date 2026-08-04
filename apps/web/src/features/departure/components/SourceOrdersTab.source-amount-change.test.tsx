@@ -6,6 +6,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, SourceOrderSummary } from '@/types/api'
 import { SourceOrdersTab } from './SourceOrdersTab'
 
+/**
+ * Full Tab + Drawer path + userEvent; default 5s flakes under full-suite load.
+ */
+const SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS = 10_000
+
 const navigate = vi.fn()
 const listSourceOrders = vi.fn()
 const updateSourceOrder = vi.fn()
@@ -155,7 +160,7 @@ function renderTab() {
   )
 }
 
-describe('SourceOrdersTab 金额路径变更软警示', () => {
+describe('SourceOrdersTab 金额路径变更软警示', { timeout: SOURCE_ORDERS_TAB_TEST_TIMEOUT_MS }, () => {
   afterEach(() => {
     cleanup()
     navigate.mockReset()
