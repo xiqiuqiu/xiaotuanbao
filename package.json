@@ -13,6 +13,8 @@
     "lint:web": "pnpm typecheck:web",
     "lint:api": "pnpm typecheck:api",
     "test:e2e:ci": "pnpm --filter api test:e2e:ci",
+    "test:e2e:web": "pnpm --filter web-e2e test",
+    "test:e2e:web:ui": "pnpm --filter web-e2e test:ui",
     "verify:ci": "pnpm typecheck && pnpm test:e2e:ci",
     "gen:permission-matrix": "pnpm --filter api test:permission-matrix:update",
     "check:permission-matrix": "bash scripts/check-permission-matrix.sh",

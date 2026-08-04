@@ -146,8 +146,21 @@ pnpm hooks:install   # git config core.hooksPath .githooks
 
 Currently runs the **permission-matrix guard (R2)** — the recurring `main`-reddening foot-gun. Bypass with `git push --no-verify` only for network/env issues. typecheck + Doctor remain agent/manual L2 for now (Doctor via `npx` is slow/network-bound; add to the hook if desired).
 
+## Optional local browser E2E (not C1)
+
+Manual Playwright smoke + thin create-departure flow. **Not** a required CI check; does not block merge.
+
+```bash
+# Prerequisites: db up, seed, pnpm dev:api, pnpm dev:web
+pnpm --filter web-e2e exec playwright install chromium   # once per machine
+pnpm test:e2e:web
+```
+
+See `apps/web-e2e/README.md` and `docs/superpowers/specs/2026-08-04-web-browser-e2e-design.md`.
+
 ## Upgrade checklist (second developer)
 
 - [ ] Branch protection: require ≥1 approving review (V1)
 - [ ] Extend pre-push hook with typecheck (+ Doctor) if the team wants full L2 enforced locally
 - [ ] Optional: add web unit tests as a third required check (was deferred from C1)
+- [ ] Optional: promote browser E2E smoke to a non-blocking or required CI job after the suite is stable
