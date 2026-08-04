@@ -22,10 +22,70 @@
   flex-shrink: 0;
 }
 
+.layerSwitch :global(.ant-segmented) {
+  padding: 4px;
+  background: var(--execution-segmented-track);
+  border: 1px solid var(--execution-border);
+  border-radius: var(--ant-border-radius-lg, 8px);
+}
+
+.layerSwitch :global(.ant-segmented-item-label) {
+  min-height: 36px;
+  padding-inline: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.layerSwitch :global(.ant-segmented-item) {
+  color: var(--execution-text-secondary);
+}
+
+.layerSwitch :global(.ant-segmented-item .anticon) {
+  font-size: 16px;
+  color: var(--execution-text-tertiary);
+  transition: color 120ms ease;
+}
+
+.layerSwitch :global(.ant-segmented-item:hover:not(.ant-segmented-item-selected)) {
+  color: var(--execution-text);
+}
+
+.layerSwitch :global(.ant-segmented-item:hover:not(.ant-segmented-item-selected) .anticon) {
+  color: var(--execution-text-secondary);
+}
+
+.layerSwitch :global(.ant-segmented-item-selected) {
+  color: var(--execution-text);
+}
+
+.layerSwitch :global(.ant-segmented-item-selected .anticon) {
+  color: var(--execution-primary);
+}
+
+.layerSwitch :global(.ant-segmented-item-selected .ant-segmented-item-label) {
+  font-weight: 600;
+}
+
+.layerSwitch :global(.ant-segmented-thumb) {
+  background: var(--execution-item-bg);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 4%),
+    0 0 0 1px var(--execution-border-subtle);
+}
+
 .layerOptionWithBadge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+
+.layerOptionWithBadge :global(.ant-badge-count) {
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 5px;
+  font-size: 11px;
+  line-height: 18px;
+  box-shadow: none;
 }
 
 .paneCard {
@@ -81,6 +141,7 @@
 }
 
 .dayChipWrap {
+  position: relative;
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
@@ -94,6 +155,55 @@
     background-color 100ms ease,
     border-color 100ms ease,
     box-shadow 100ms ease;
+}
+
+.dayChipDelete:global(.ant-btn) {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--execution-text-tertiary);
+  background: var(--execution-item-bg);
+  border: 1px solid var(--execution-border);
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.dayChipDelete:global(.ant-btn):hover,
+.dayChipDelete:global(.ant-btn):focus-visible {
+  color: var(--execution-error);
+  border-color: color-mix(in srgb, var(--execution-error) 40%, var(--execution-border));
+  background: var(--execution-item-bg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dayChipWrap:hover .dayChipDelete:global(.ant-btn),
+  .dayChipDelete:global(.ant-btn):focus-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dayChipWrapSelected .dayChipDelete:global(.ant-btn) {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dayChipWrap:has(.dayChipDelete) .dayChipDayRow {
+  padding-inline-end: 18px;
 }
 
 .dayChipWrapSelected {
@@ -280,6 +390,11 @@
 @media (prefers-reduced-motion: reduce) {
   .dayChipWrap {
     transition: background-color 100ms ease, border-color 100ms ease;
+  }
+
+  .dayChipDelete:global(.ant-btn) {
+    transform: none;
+    transition: opacity 120ms ease, color 120ms ease, border-color 120ms ease;
   }
 
   .dayChip:active {

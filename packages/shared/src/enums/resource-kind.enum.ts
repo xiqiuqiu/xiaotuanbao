@@ -31,12 +31,14 @@ const RESOURCE_KIND_CATALOG = [
 ] as const
 
 /**
- * 执行安排添加/编辑资源的种类下拉：不含购物店、演出（购物店返利走增收记录）。
- * 历史 shop/entertainment 行仍可读；编辑存量行时由 UI 补回当前种类选项。
+ * 执行安排添加/编辑资源的种类下拉：不含购物店、演出、景区（购物店返利走增收记录；景区与门票合并口径）。
+ * 历史 shop/entertainment/scenic 行仍可读；编辑存量行时由 UI 补回当前种类选项。
  */
 export const RESOURCE_KIND_OPTIONS = RESOURCE_KIND_CATALOG.filter(
   (item) =>
-    item.value !== ResourceKind.SHOP && item.value !== ResourceKind.ENTERTAINMENT,
+    item.value !== ResourceKind.SHOP &&
+    item.value !== ResourceKind.ENTERTAINMENT &&
+    item.value !== ResourceKind.SCENIC,
 )
 
 export const RESOURCE_KIND_LABELS = Object.fromEntries(

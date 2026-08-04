@@ -11,7 +11,6 @@ import { listSourceOrders } from '@/services/source-order.service'
 import { counterpartyFilterFromSourceOrder } from '@/features/finance/utils/payment-schedule-view-counterparty'
 import { SourceOrderDrawer } from './SourceOrderDrawer'
 import { SourceOrdersFilters } from './SourceOrdersFilters'
-import { SourceOrdersSettlementStrip } from './SourceOrdersSettlementStrip'
 import { buildSourceOrdersColumns } from './source-orders-table-columns'
 import { renderSourceOrdersTableSummary } from './source-orders-table-summary'
 import {
@@ -20,10 +19,7 @@ import {
   initialDrawerState,
 } from './source-orders-tab-state'
 import { EMPTY_SOURCE_ORDER_FILTERS } from '../utils/source-order-filter-state'
-import {
-  buildSourceOrdersListGlance,
-  countPendingReceivablePaths,
-} from '../utils/source-orders-settlement-glance'
+import { countPendingReceivablePaths } from '../utils/source-orders-settlement-glance'
 import {
   confirmBatchGenerateReceivables,
   useSourceOrderSubmit,
@@ -155,12 +151,6 @@ export function SourceOrdersTab({
   )
   const showBatchGenerate = !readOnly && pendingReceivableCount > 0
 
-  /** 结算条：当前筛选列表 glance；与批量全团路径计数解耦。表尾同模块另投影，不共用本结果。 */
-  const stripSummary = useMemo(
-    () => buildSourceOrdersListGlance(listResult?.items ?? []).stripSummary,
-    [listResult?.items],
-  )
-
   const onOpen = useCallback((order: SourceOrderSummary, viewOnly: boolean) => {
     dispatchDrawer({ type: viewOnly ? 'OPEN_VIEW' : 'OPEN_EDIT', order })
   }, [])
@@ -259,8 +249,6 @@ export function SourceOrdersTab({
           ) : undefined
         }
       />
-
-      <SourceOrdersSettlementStrip summary={stripSummary} />
 
       <Card>
         {isError && !listResult ? (

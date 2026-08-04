@@ -10,11 +10,16 @@ import {
   enablePlatformOrganization,
   getPlatformOrganization,
   updatePlatformOrganization,
+  updatePlatformOrganizationBusinessPrefix,
 } from '@/services/platform-organization.service'
 import {
   RenamePlatformOrganizationDrawer,
   type RenamePlatformOrganizationFormValues,
 } from './RenamePlatformOrganizationDrawer'
+import {
+  UpdatePlatformOrganizationBusinessPrefixDrawer,
+  type UpdatePlatformOrganizationBusinessPrefixFormValues,
+} from './UpdatePlatformOrganizationBusinessPrefixDrawer'
 
 export function PlatformOrganizationDetailPage() {
   const { message, modal } = App.useApp()
@@ -22,7 +27,9 @@ export function PlatformOrganizationDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [form] = Form.useForm<RenamePlatformOrganizationFormValues>()
+  const [prefixForm] = Form.useForm<UpdatePlatformOrganizationBusinessPrefixFormValues>()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [prefixDrawerOpen, setPrefixDrawerOpen] = useState(false)
   const goBack = () => void navigate({ to: '/platform/organizations' })
 
   const { data: organization, isLoading, isError } = useQuery({
@@ -34,6 +41,11 @@ export function PlatformOrganizationDetailPage() {
   const closeDrawer = () => {
     setDrawerOpen(false)
     form.resetFields()
+  }
+
+  const closePrefixDrawer = () => {
+    setPrefixDrawerOpen(false)
+    prefixForm.resetFields()
   }
 
   const invalidateOrganizationQueries = () => {
@@ -53,6 +65,26 @@ export function PlatformOrganizationDetailPage() {
       const errorMessage = error instanceof Error ? error.message : '更新失败'
       if (errorMessage.includes('组织名称')) {
         form.setFields([{ name: 'name', errors: [errorMessage] }])
+        return
+      }
+      message.error(errorMessage)
+    },
+  })
+
+  const prefixMutation = useMutation({
+    mutationFn: (values: UpdatePlatformOrganizationBusinessPrefixFormValues) =>
+      updatePlatformOrganizationBusinessPrefix(organizationId!, {
+        businessPrefix: values.businessPrefix.trim().toUpperCase(),
+      }),
+    onSuccess: () => {
+      message.success('业务前缀已更新')
+      closePrefixDrawer()
+      invalidateOrganizationQueries()
+    },
+    onError: (error) => {
+      const errorMessage = error instanceof Error ? error.message : '更新失败'
+      if (errorMessage.includes('业务前缀')) {
+        prefixForm.setFields([{ name: 'businessPrefix', errors: [errorMessage] }])
         return
       }
       message.error(errorMessage)
@@ -82,6 +114,7 @@ export function PlatformOrganizationDetailPage() {
   })
 
   const statusActionPending = disableMutation.isPending || enableMutation.isPending
+  const profileActionPending = renameMutation.isPending || prefixMutation.isPending
 
   const confirmDisable = () => {
     modal.confirm({
@@ -169,8 +202,18 @@ export function PlatformOrganizationDetailPage() {
                 停用组织
               </Button>
               <Button
+                loading={profileActionPending}
+                onClick={() => {
+                  prefixForm.setFieldsValue({ businessPrefix: organization.businessPrefix })
+                  setPrefixDrawerOpen(true)
+                }}
+              >
+                修改业务前缀
+              </Button>
+              <Button
                 type="primary"
                 icon={<EditOutlined />}
+                loading={profileActionPending}
                 onClick={() => {
                   form.setFieldsValue({ name: organization.name })
                   setDrawerOpen(true)
@@ -183,12 +226,22 @@ export function PlatformOrganizationDetailPage() {
             <>
               <Button
                 icon={<EditOutlined />}
+                loading={profileActionPending}
                 onClick={() => {
                   form.setFieldsValue({ name: organization.name })
                   setDrawerOpen(true)
                 }}
               >
                 修改名称
+              </Button>
+              <Button
+                loading={profileActionPending}
+                onClick={() => {
+                  prefixForm.setFieldsValue({ businessPrefix: organization.businessPrefix })
+                  setPrefixDrawerOpen(true)
+                }}
+              >
+                修改业务前缀
               </Button>
               <Button type="primary" loading={statusActionPending} onClick={confirmEnable}>
                 启用组织
@@ -198,7 +251,7 @@ export function PlatformOrganizationDetailPage() {
         </Space>
       </Space>
       <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
-        组织档案元数据；不含发团、财务、员工等业务数据。可修改名称、启用或停用；业务前缀不可改。停用后该组织用户无法登录。初始企业管理员仅只读核对，不在此管理。
+        组织档案元数据；不含发团、财务、员工等业务数据。可修改名称与业务前缀、启用或停用；业务前缀变更不改写历史编号。停用后该组织用户无法登录。初始企业管理员仅只读核对，不在此管理。
       </Typography.Paragraph>
       <Descriptions bordered column={1} size="middle">
         <Descriptions.Item label="组织名称">{organization.name}</Descriptions.Item>
@@ -233,6 +286,16 @@ export function PlatformOrganizationDetailPage() {
         onClose={closeDrawer}
         onSubmit={(values) => {
           renameMutation.mutate(values)
+        }}
+      />
+      <UpdatePlatformOrganizationBusinessPrefixDrawer
+        open={prefixDrawerOpen}
+        loading={prefixMutation.isPending}
+        currentBusinessPrefix={organization.businessPrefix}
+        form={prefixForm}
+        onClose={closePrefixDrawer}
+        onSubmit={(values) => {
+          prefixMutation.mutate(values)
         }}
       />
     </div>

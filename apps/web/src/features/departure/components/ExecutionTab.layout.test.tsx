@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { App, ConfigProvider } from 'antd'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { DepartureDetail, ItinerarySegmentSummary } from '@/types/api'
 import { ExecutionTab } from './ExecutionTab'
@@ -84,30 +84,42 @@ vi.mock('@/services/segment-resource.service', () => ({
 }))
 
 vi.mock('@/services/departure-resource.service', () => ({
-  listDepartureResources: vi.fn(async () => ({
-    items: [
-      {
-        id: 'departure-resource-1',
-        departureId: 'departure-1',
-        resourceKind: 'vehicle',
-        counterpartyType: 'supplier',
-        counterpartyId: 'supplier-2',
-        counterpartyName: '全程车队',
-        title: '全程用车',
-        amountCents: 500000,
-        payableStatus: 'not_generated',
-        notes: null,
-        hasPaymentSchedule: false,
-        amountFieldsLocked: false,
-      },
-    ],
-    total: 1,
-  })),
+  listDepartureResources: vi.fn(),
   createDepartureResource: vi.fn(),
   updateDepartureResource: vi.fn(),
   deleteDepartureResource: vi.fn(),
   generateDeparturePayable: vi.fn(),
 }))
+
+const defaultDepartureResources = {
+  items: [
+    {
+      id: 'departure-resource-1',
+      departureId: 'departure-1',
+      resourceKind: 'vehicle',
+      counterpartyType: 'supplier',
+      counterpartyId: 'supplier-2',
+      counterpartyName: '全程车队',
+      title: '全程用车',
+      amountCents: 500000,
+      payableStatus: 'pending',
+      notes: null,
+      hasPaymentSchedule: true,
+      amountFieldsLocked: false,
+    },
+  ],
+  total: 1,
+} as const
+
+async function mockDepartureResources(
+  override?: Partial<(typeof defaultDepartureResources.items)[number]>,
+) {
+  const { listDepartureResources } = await import('@/services/departure-resource.service')
+  vi.mocked(listDepartureResources).mockResolvedValue({
+    items: [{ ...defaultDepartureResources.items[0], ...override }],
+    total: 1,
+  })
+}
 
 const mockDeparture = {
   id: 'departure-1',
@@ -148,6 +160,10 @@ describe('ExecutionTab layout', () => {
     cleanup()
   })
 
+  beforeEach(async () => {
+    await mockDepartureResources()
+  })
+
   it('shows day and departure as mutually exclusive layers with a switcher', async () => {
     const user = userEvent.setup()
     renderExecutionTab()
@@ -173,8 +189,9 @@ describe('ExecutionTab layout', () => {
     expect(screen.queryByText('西栅团队票')).not.toBeInTheDocument()
 
     expect(await screen.findByLabelText('发团级资源金额汇总')).toHaveTextContent(
-      /资源 1 项.*资源金额.*¥5,000\.00.*尚未提交应付.*¥5,000\.00/,
+      /资源 1 项.*资源金额.*¥5,000\.00/,
     )
+    expect(screen.getByLabelText('发团级资源金额汇总')).not.toHaveTextContent('尚未提交应付')
     expect(screen.getAllByText('合计').length).toBeGreaterThanOrEqual(1)
   })
 
@@ -187,7 +204,7 @@ describe('ExecutionTab layout', () => {
     expect(within(dayAxis).getByText('西栅夜游')).toBeInTheDocument()
     expect(within(dayAxis).getByText('07-14')).toBeInTheDocument()
     expect(within(dayAxis).getByText('1项')).toBeInTheDocument()
-    expect(container.querySelector('[aria-label="生成 0/1"]')).toBeTruthy()
+    expect(container.querySelector('[aria-label="提交 0/1"]')).toBeTruthy()
 
     const resourceCard = resourceTitle.closest('.ant-card')
     expect(resourceCard).toBeTruthy()
@@ -265,6 +282,42 @@ describe('ExecutionTab layout', () => {
 
     expect(await screen.findByText('西栅夜游')).toBeInTheDocument()
     expect(screen.queryByText('模板')).not.toBeInTheDocument()
+  })
+
+  it('shows day layer badge when segment payables are still not generated', async () => {
+    renderExecutionTab()
+
+    await screen.findByText('西栅夜游')
+    expect(
+      within(screen.getByRole('radio', { name: /按日资源/ }).closest('label')!).getByTitle(
+        '1 项待提交应付',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('shows departure layer badge only for ungenerated payables, not total resource count', async () => {
+    renderExecutionTab()
+
+    await screen.findByText('西栅夜游')
+    expect(
+      within(screen.getByRole('radio', { name: /发团级资源/ }).closest('label')!).queryByTitle(
+        '1 项待提交应付',
+      ),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows departure layer badge when payables are still not generated', async () => {
+    await mockDepartureResources({ payableStatus: 'not_generated', hasPaymentSchedule: false })
+
+    renderExecutionTab()
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByRole('radio', { name: /发团级资源/ }).closest('label')!).getByTitle(
+          '1 项待提交应付',
+        ),
+      ).toBeInTheDocument()
+    })
   })
 
   it('keeps day selection and editing as separate keyboard actions', async () => {

@@ -31,9 +31,20 @@ export function formatBatchFinanceGenerationMessage(
     .slice(0, 2)
     .map((item) => `${item.sourceLabel}：${item.reason}`)
 
+  const skippedSample = result.items
+    .filter((item) => item.outcome === 'skipped' && item.reason)
+    .slice(0, 2)
+    .map((item) => `${item.sourceLabel}：${item.reason}`)
+
   const summary = `${noun}批量提交完成：${parts.join(' · ')}`
-  if (failedSample.length === 0) {
+  const detailSample =
+    failedSample.length > 0
+      ? failedSample
+      : result.succeeded === 0 && skippedSample.length > 0
+        ? skippedSample
+        : []
+  if (detailSample.length === 0) {
     return summary
   }
-  return `${summary}。${failedSample.join('；')}`
+  return `${summary}。${detailSample.join('；')}`
 }

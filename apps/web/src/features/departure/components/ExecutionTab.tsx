@@ -36,6 +36,7 @@ import {
 } from '../utils/execution-segment-selection'
 import { summarizeSegmentResourceAmounts } from '../utils/segment-resource-amount-summary'
 import { formValuesToPayload } from '../utils/segment-form'
+import { countSegmentListPendingPayables } from '../utils/segment-payable-generation-gap'
 import { ExecutionDayAxis } from './ExecutionDayAxis'
 import { ExecutionResourcePane } from './ExecutionResourcePane'
 import { DepartureResourcePane } from './DepartureResourcePane'
@@ -79,14 +80,23 @@ interface ExecutionWorkspaceProps {
   onGenerateDaily: () => void
 }
 
-function DepartureLayerOptionLabel({ count }: { count: number }) {
-  if (count <= 0) {
-    return <span>发团级资源</span>
+function ExecutionLayerOptionLabel({
+  label,
+  pendingPayableCount,
+}: {
+  label: string
+  pendingPayableCount: number
+}) {
+  if (pendingPayableCount <= 0) {
+    return <span>{label}</span>
   }
   return (
-    <span className={styles.layerOptionWithBadge}>
-      发团级资源
-      <Badge count={count} size="small" />
+    <span
+      className={styles.layerOptionWithBadge}
+      title={`${pendingPayableCount} 项待提交应付`}
+    >
+      {label}
+      <Badge count={pendingPayableCount} size="small" color="warning" />
     </span>
   )
 }
@@ -128,9 +138,23 @@ function ExecutionWorkspace({
     [departure.status, departureResourceList?.items],
   )
 
+  const dayPendingPayableCount = useMemo(() => {
+    if (departure.status === DepartureStatus.SETTLED) {
+      return 0
+    }
+    return countSegmentListPendingPayables(segments)
+  }, [departure.status, segments])
+
+  const departurePendingPayableCount =
+    departure.status === DepartureStatus.SETTLED
+      ? 0
+      : departureSummary.ungeneratedPayableCount
+
   const stackTokenStyle = {
     '--execution-border': token.colorBorderSecondary,
+    '--execution-border-subtle': token.colorSplit,
     '--execution-fill-hover': token.colorFillQuaternary,
+    '--execution-segmented-track': token.colorFillAlter,
     '--execution-item-bg': token.colorBgContainer,
     '--execution-text': token.colorText,
     '--execution-text-secondary': token.colorTextSecondary,
@@ -153,12 +177,22 @@ function ExecutionWorkspace({
           aria-label="资源层级"
           options={[
             {
-              label: '按日资源',
+              label: (
+                <ExecutionLayerOptionLabel
+                  label="按日资源"
+                  pendingPayableCount={dayPendingPayableCount}
+                />
+              ),
               value: 'day',
               icon: <CalendarOutlined />,
             },
             {
-              label: <DepartureLayerOptionLabel count={departureSummary.resourceCount} />,
+              label: (
+                <ExecutionLayerOptionLabel
+                  label="发团级资源"
+                  pendingPayableCount={departurePendingPayableCount}
+                />
+              ),
               value: 'departure',
               icon: <AppstoreOutlined />,
             },

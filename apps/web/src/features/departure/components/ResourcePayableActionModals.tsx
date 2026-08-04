@@ -39,7 +39,7 @@ export function VoidResourcePayableModal({ resource, form, loading, onClose, onS
             type="warning"
             showIcon
             title="作废后资源将恢复未提交"
-            description={`原应付金额 ${formatCents(resource.amountCents)} 将保留在操作记录中；之后可修正资源金额并重新生成。`}
+            description={`原应付金额 ${formatCents(resource.amountCents)} 将保留在操作记录中；之后可修正资源金额并重新提交。`}
             style={{ marginBottom: 16 }}
           />
           <Form.Item
@@ -51,7 +51,7 @@ export function VoidResourcePayableModal({ resource, form, loading, onClose, onS
               { max: 200, message: '作废原因不能超过 200 个字符' },
             ]}
           >
-            <Input.TextArea rows={3} maxLength={200} showCount placeholder="必填，请说明误生成原因" />
+            <Input.TextArea rows={3} maxLength={200} showCount placeholder="必填，请说明误提交原因" />
           </Form.Item>
         </Form>
       ) : null}

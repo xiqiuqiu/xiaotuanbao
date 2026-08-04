@@ -47,7 +47,7 @@ describe('formatBatchFinanceGenerationMessage', () => {
           sourceId: '2',
           sourceLabel: '乙',
           outcome: 'skipped',
-          reason: '无可生成金额',
+          reason: '无可提交金额',
         },
         {
           sourceId: '3',
@@ -59,6 +59,33 @@ describe('formatBatchFinanceGenerationMessage', () => {
     }
     expect(formatBatchFinanceGenerationMessage(result, '应付')).toBe(
       '应付批量提交完成：成功 2 · 跳过 1 · 失败 1。丙：网络错误',
+    )
+  })
+
+  it('samples skip reasons when nothing succeeded', () => {
+    const result: BatchFinanceGenerationResult = {
+      attempted: 2,
+      succeeded: 0,
+      generated: 0,
+      skipped: 2,
+      failed: 0,
+      items: [
+        {
+          sourceId: '1',
+          sourceLabel: '999',
+          outcome: 'skipped',
+          reason: '资源金额须大于 0 才能提交应付',
+        },
+        {
+          sourceId: '2',
+          sourceLabel: '导游',
+          outcome: 'skipped',
+          reason: '资源金额须大于 0 才能提交应付',
+        },
+      ],
+    }
+    expect(formatBatchFinanceGenerationMessage(result, '应付')).toBe(
+      '应付批量提交完成：成功 0 · 跳过 2。999：资源金额须大于 0 才能提交应付；导游：资源金额须大于 0 才能提交应付',
     )
   })
 })

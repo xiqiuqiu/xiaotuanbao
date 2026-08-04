@@ -320,7 +320,12 @@ describe('Departure copy & save template (e2e)', () => {
       .patch(`/api/segments/${segmentId}`)
       .send({ name: '喀纳斯段' })
       .expect(200)
-    expect(clearedSegment.body.data.pendingCheck).toBe(false)
+    // 段字段已清 pendingCheck，但资源仍待检查 → 列表/详情展示层仍为 true
+    expect(clearedSegment.body.data.pendingCheck).toBe(true)
+    const dbSegmentAfterSave = await prisma.itinerarySegment.findUnique({
+      where: { id: segmentId },
+    })
+    expect(dbSegmentAfterSave!.pendingCheck).toBe(false)
 
     const resourceId = resourcesResponse.body.data.items[0].id as string
     const clearedResource = await authRequest(app, coordinatorToken)
@@ -328,6 +333,14 @@ describe('Departure copy & save template (e2e)', () => {
       .send({ title: '喀纳斯酒店' })
       .expect(200)
     expect(clearedResource.body.data.pendingCheck).toBe(false)
+
+    const segmentsAfterResourceSave = await authRequest(app, coordinatorToken)
+      .get(`/api/departures/${copiedDepartureId}/segments`)
+      .expect(200)
+    const segmentAfterResourceSave = segmentsAfterResourceSave.body.data.items.find(
+      (item: { id: string }) => item.id === dbCopied!.id,
+    )
+    expect(segmentAfterResourceSave.pendingCheck).toBe(false)
 
     const sourceOrders = await prisma.sourceOrder.count({
       where: { departureId: copiedDepartureId },

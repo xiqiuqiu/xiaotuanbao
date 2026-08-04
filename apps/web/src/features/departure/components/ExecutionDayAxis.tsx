@@ -1,6 +1,6 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { App, Button, Tag, Tooltip, theme } from 'antd'
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { CloseOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { ItinerarySegmentSummary } from '@/types/api'
 import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
@@ -174,6 +174,19 @@ function DayChip({
       data-segment-id={segment.id}
       className={`${styles.dayChipWrap}${selected ? ` ${styles.dayChipWrapSelected}` : ''}`}
     >
+      {showDelete ? (
+        <Button
+          type="text"
+          size="small"
+          className={styles.dayChipDelete}
+          icon={<CloseOutlined />}
+          aria-label={`删除第${dayIndex}天`}
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete()
+          }}
+        />
+      ) : null}
       <button
         type="button"
         className={styles.dayChip}
@@ -199,7 +212,7 @@ function DayChip({
             <Tooltip title={`本段还有 ${gap.ungenerated} 项资源未提交应付`}>
               <span
                 className={styles.dayChipPayableGap}
-                aria-label={`生成 ${gap.generated}/${gap.total}`}
+                aria-label={`提交 ${gap.generated}/${gap.total}`}
               >
                 <span
                   className={styles.dayChipPayableRing}
@@ -220,27 +233,15 @@ function DayChip({
           ) : null}
         </div>
       </button>
-      {showEdit || showDelete ? (
+      {showEdit ? (
         <div className={styles.dayChipActions}>
-          {showEdit ? (
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              aria-label={`编辑${segment.name}`}
-              onClick={onEdit}
-            />
-          ) : null}
-          {showDelete ? (
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              aria-label={`删除第${dayIndex}天`}
-              onClick={onDelete}
-            />
-          ) : null}
+          <Button
+            type="text"
+            size="small"
+            icon={<EditOutlined />}
+            aria-label={`编辑${segment.name}`}
+            onClick={onEdit}
+          />
         </div>
       ) : null}
     </div>

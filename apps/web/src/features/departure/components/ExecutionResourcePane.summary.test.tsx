@@ -145,6 +145,7 @@ describe('ExecutionResourcePane amount summary', () => {
 
     expect(await screen.findByText('本段暂无资源')).toBeTruthy()
     expect(screen.queryByLabelText('本段资源金额汇总')).toBeNull()
+    expect(screen.getByRole('button', { name: /添加资源/ })).toHaveClass('ant-btn-primary')
   })
 
   it('omits 尚未提交应付 when every resource already has a payable', async () => {

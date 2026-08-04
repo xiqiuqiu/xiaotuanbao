@@ -232,7 +232,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(byId[pending.id]).toMatchObject({ outcome: 'succeeded', generatedCount: 2 })
     expect(byId[zeroAmount.id]).toMatchObject({
       outcome: 'skipped',
-      reason: '无可生成金额',
+      reason: '无可提交金额',
     })
     expect(byId[already.id]).toMatchObject({
       outcome: 'skipped',
@@ -263,7 +263,7 @@ describe('Departure batch finance generation (e2e)', () => {
     expect(secondById[zeroAmount.id]).toMatchObject({
       sourceId: zeroAmount.id,
       outcome: 'skipped',
-      reason: '无可生成金额',
+      reason: '无可提交金额',
     })
   })
 

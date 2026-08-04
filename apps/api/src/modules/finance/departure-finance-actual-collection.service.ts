@@ -106,7 +106,7 @@ export class DepartureFinanceActualCollectionService {
       if (
         message.includes('尚未结清') ||
         message.includes('全部客户结算') ||
-        message.includes('请先生成游客代收') ||
+        message.includes('请先提交游客代收') ||
         message.includes('已有有效核销') ||
         message.includes('已结清') ||
         message.includes('已关闭')
@@ -199,7 +199,7 @@ export class DepartureFinanceActualCollectionService {
         )
 
         if (guestSchedules.length === 0) {
-          throw new BadRequestException('请先生成游客代收应收，再按实收结算')
+          throw new BadRequestException('请先提交游客代收应收，再按实收结算')
         }
 
         const guestNodes = await Promise.all(

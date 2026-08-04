@@ -39,6 +39,7 @@ export type {
   PlatformOrganizationListResult,
   CreatePlatformOrganizationDto,
   UpdatePlatformOrganizationDto,
+  UpdatePlatformOrganizationBusinessPrefixDto,
   EmployeeSummary,
   EmployeeListStats,
   EmployeeListResult,

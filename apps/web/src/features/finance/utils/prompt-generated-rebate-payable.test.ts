@@ -55,7 +55,7 @@ describe('shouldPromptGeneratedRebatePayable', () => {
 describe('buildGeneratedRebatePayablePromptCopy', () => {
   it('mentions schedule no and amount for finance follow-up', () => {
     const copy = buildGeneratedRebatePayablePromptCopy(rebate())
-    expect(copy.title).toBe('已生成返利应付')
+    expect(copy.title).toBe('已提交返利应付')
     expect(copy.content).toContain('AP202607280001')
     expect(copy.content).toContain('¥1,900.00')
     expect(copy.content).toContain('请财务处理付款')

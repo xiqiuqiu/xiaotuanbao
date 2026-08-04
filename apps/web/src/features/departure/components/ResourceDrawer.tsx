@@ -98,7 +98,8 @@ function ResourceDrawerFormFields({
         <Select
           options={(
             resourceKind === ResourceKind.SHOP ||
-            resourceKind === ResourceKind.ENTERTAINMENT
+            resourceKind === ResourceKind.ENTERTAINMENT ||
+            resourceKind === ResourceKind.SCENIC
               ? [
                   ...RESOURCE_KIND_OPTIONS,
                   {
@@ -246,7 +247,7 @@ function ResourceDrawerAlerts({
           type="warning"
           showIcon
           title="来源差异警示"
-          description="资源金额与已生成的应付节点不一致，且财务已介入，请核对后再处理。"
+          description="资源金额与已提交的应付节点不一致，且财务已介入，请核对后再处理。"
           style={{ marginBottom: token.marginMD }}
         />
       ) : null}

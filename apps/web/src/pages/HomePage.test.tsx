@@ -155,7 +155,7 @@ const coordinatorDeliverySnapshot = {
         ...Array.from({ length: 7 }, (_, index) => ({
           kind: 'coordinator-receivable-pending' as const,
           id: `source-order-${index + 1}`,
-          title: `待生成客源单 ${index + 1}`,
+          title: `待提交客源单 ${index + 1}`,
           href: `/departure/departure-${index + 1}?tab=sourceOrders`,
           departureName: `关联发团 ${index + 1}`,
         })),
@@ -831,8 +831,8 @@ describe('HomePage workbench lifecycle', () => {
     expect(await screen.findByText(
       '按尚未提交应收的客源单数统计，数据来自现存客源单与应收记录。',
     )).toBeInTheDocument()
-    expect(screen.getByText('待生成客源单 5')).toBeInTheDocument()
-    expect(screen.queryByText('待生成客源单 6')).not.toBeInTheDocument()
+    expect(screen.getByText('待提交客源单 5')).toBeInTheDocument()
+    expect(screen.queryByText('待提交客源单 6')).not.toBeInTheDocument()
     expect(screen.getByText('待提交应付资源 5')).toBeInTheDocument()
     expect(screen.queryByText('待提交应付资源 6')).not.toBeInTheDocument()
     expect(screen.getByText('关联发团 1 · 行程段 1')).toBeInTheDocument()
@@ -877,7 +877,7 @@ describe('HomePage workbench lifecycle', () => {
       to: '/source-orders?receivableGeneration=not_generated',
     })
 
-    fireEvent.click(screen.getByText('待生成客源单 1').closest('button')!)
+    fireEvent.click(screen.getByText('待提交客源单 1').closest('button')!)
     expect(navigate).toHaveBeenCalledWith({
       to: '/departure/departure-1?tab=sourceOrders',
     })

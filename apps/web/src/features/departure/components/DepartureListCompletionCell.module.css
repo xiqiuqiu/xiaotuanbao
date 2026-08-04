@@ -1,0 +1,18 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 100%;
+  padding-block: 2px;
+}
+
+.line {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5715;
+  font-variant-numeric: tabular-nums;
+}
+
+.line:not(:last-child) {
+  margin-bottom: 1px;
+}

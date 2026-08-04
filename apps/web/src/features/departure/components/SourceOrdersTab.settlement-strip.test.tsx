@@ -97,13 +97,13 @@ function renderTab() {
   )
 }
 
-describe('SourceOrdersTab settlement strip wiring', () => {
+describe('SourceOrdersTab layout', () => {
   afterEach(() => {
     cleanup()
     listSourceOrders.mockReset()
   })
 
-  it('renders settlement strip between filters and table from filtered list', async () => {
+  it('does not render settlement strip; amounts stay in table summary row', async () => {
     listSourceOrders.mockResolvedValue({
       items: listItems,
       summary: {
@@ -121,38 +121,17 @@ describe('SourceOrdersTab settlement strip wiring', () => {
 
     renderTab()
 
-    const strip = await screen.findByRole('list', { name: '客源结算汇总' })
-    expect(strip.textContent).toContain('结算应收')
-    expect(strip.textContent).toContain(formatCents(1000000))
-    expect(strip.textContent).toContain('1 单待提交')
-
-    const addButton = screen.getByRole('button', { name: /添加客源单/ })
-    const table = screen.getByRole('table')
-    expect(addButton.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(strip.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('omits settlement strip when the filtered list is empty', async () => {
-    listSourceOrders.mockResolvedValue({
-      items: [],
-      summary: {
-        orderCount: 0,
-        totalGuests: 0,
-        partnerCount: 0,
-        totalGrossReceivableCents: 0,
-        totalFareAdjustmentNetCents: 0,
-        totalDiscountCents: 0,
-        totalNetReceivableCents: 0,
-        totalGuestCollectCents: 0,
-      },
-      total: 0,
+    await waitFor(() => {
+      expect(screen.getByText('杭州同行')).toBeInTheDocument()
     })
 
-    renderTab()
+    expect(screen.queryByRole('list', { name: '客源结算汇总' })).not.toBeInTheDocument()
+    expect(screen.queryByText('结算应收')).not.toBeInTheDocument()
+    expect(screen.queryByText('尚未提交应收')).not.toBeInTheDocument()
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /添加客源单/ })).toBeInTheDocument()
+      expect(screen.getByText('合计')).toBeInTheDocument()
     })
-    expect(screen.queryByRole('list', { name: '客源结算汇总' })).not.toBeInTheDocument()
+    expect(screen.getAllByText(formatCents(1000000)).length).toBeGreaterThan(0)
   })
 })

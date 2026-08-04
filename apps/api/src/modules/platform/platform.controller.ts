@@ -8,6 +8,7 @@ import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { CreatePlatformOrganizationDto } from './dto/create-platform-organization.dto'
 import { ListPlatformOrganizationsQueryDto } from './dto/list-platform-organizations.dto'
+import { UpdatePlatformOrganizationBusinessPrefixDto } from './dto/update-platform-organization-business-prefix.dto'
 import { UpdatePlatformOrganizationDto } from './dto/update-platform-organization.dto'
 import { PlatformOrganizationsService } from './platform-organizations.service'
 
@@ -49,6 +50,14 @@ export class PlatformController {
     @Body() dto: UpdatePlatformOrganizationDto,
   ): Promise<PlatformOrganizationProfile> {
     return this.platformOrganizationsService.updateName(id, dto)
+  }
+
+  @Patch('organizations/:id/business-prefix')
+  updateOrganizationBusinessPrefix(
+    @Param('id') id: string,
+    @Body() dto: UpdatePlatformOrganizationBusinessPrefixDto,
+  ): Promise<PlatformOrganizationProfile> {
+    return this.platformOrganizationsService.updateBusinessPrefix(id, dto.businessPrefix)
   }
 
   @Post('organizations/:id/disable')

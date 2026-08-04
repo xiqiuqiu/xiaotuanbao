@@ -279,6 +279,26 @@ describe('ExecutionResourcePane action buttons', () => {
     expect(screen.queryByRole('button', { name: '批量提交应付' })).toBeNull()
   })
 
+  it('hides 批量提交应付 when ungenerated resources all have zero amount', async () => {
+    listSegmentResources.mockResolvedValue({
+      items: [
+        baseResource({ id: 'resource-1', title: '999', amountCents: 0 }),
+        baseResource({ id: 'resource-2', title: '导游', amountCents: 0 }),
+      ],
+    })
+
+    renderPane({
+      resourceCount: 2,
+      payableGeneratedCount: 0,
+      payableStatus: 'not_generated',
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('999')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: '批量提交应付' })).toBeNull()
+  })
+
   it('confirms batch generate then calls segment API and shows success toast', async () => {
     const user = userEvent.setup()
     listSegmentResources.mockResolvedValue({ items: [baseResource()] })

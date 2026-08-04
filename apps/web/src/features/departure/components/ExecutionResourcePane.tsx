@@ -40,7 +40,6 @@ import {
   formatBatchFinanceGenerationConfirmContent,
   formatBatchFinanceGenerationMessage,
 } from '../utils/batch-finance-generation-message'
-import { segmentPayableGenerationGap } from '../utils/segment-payable-generation-gap'
 import { ResourceDrawer } from './ResourceDrawer'
 import { buildExecutionResourceColumns } from './execution-resource-columns'
 import { renderExecutionResourceTableSummary } from './execution-resource-table-summary'
@@ -172,7 +171,7 @@ function ExecutionResourceList({
     return (
       <Empty description="本段暂无资源" style={{ padding: '48px 0' }}>
         {resourceEditable ? (
-          <Button icon={<PlusOutlined />} onClick={onAddResource}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={onAddResource}>
             添加资源
           </Button>
         ) : null}
@@ -310,11 +309,8 @@ export function ExecutionResourcePane({
       }),
     [departure.status, listResult?.items],
   )
-  const payableGap = segmentPayableGenerationGap(
-    segment.payableGeneratedCount,
-    segment.resourceCount,
-  )
-  const showBatchGenerate = !mutationLocked && payableGap.hasGap
+  const showBatchGenerate =
+    !mutationLocked && amountSummary.ungeneratedPayableCount > 0
 
   const invalidateResourceQueries = () => {
     void queryClient.invalidateQueries({ queryKey: ['segment-resources', segment.id] })
@@ -391,6 +387,8 @@ export function ExecutionResourcePane({
         message.warning(text)
       } else if (result.succeeded > 0) {
         message.success(text)
+      } else if (result.skipped > 0) {
+        message.warning(text)
       } else {
         message.info(text)
       }
@@ -410,7 +408,7 @@ export function ExecutionResourcePane({
       })
     },
     onSuccess: () => {
-      message.success('应付已作废，可修正资源后重新生成')
+      message.success('应付已作废，可修正资源后重新提交')
       setVoidingResource(null)
       voidForm.resetFields()
       invalidateResourceQueries()
@@ -438,10 +436,13 @@ export function ExecutionResourcePane({
   })
 
   const confirmBatchGenerate = () => {
-    if (!payableGap.hasGap) return
+    if (amountSummary.ungeneratedPayableCount <= 0) return
     modal.confirm({
       title: '批量提交应付',
-      content: formatBatchFinanceGenerationConfirmContent(payableGap.ungenerated, '应付'),
+      content: formatBatchFinanceGenerationConfirmContent(
+        amountSummary.ungeneratedPayableCount,
+        '应付',
+      ),
       okText: '提交',
       cancelText: '取消',
       onOk: () => batchGenerateMutation.mutateAsync(),
