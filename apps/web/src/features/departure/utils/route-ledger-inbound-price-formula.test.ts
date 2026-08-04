@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatRouteLedgerInboundPriceFormula,
   formatRouteLedgerInboundUnitPrice,
+  summarizeRouteLedgerUnitPrices,
 } from './route-ledger-inbound-price-formula'
 
 describe('formatRouteLedgerInboundPriceFormula', () => {
@@ -71,5 +72,45 @@ describe('formatRouteLedgerInboundUnitPrice', () => {
         childUnitPriceCents: 50000,
       }),
     ).toBe('')
+  })
+})
+
+describe('summarizeRouteLedgerUnitPrices', () => {
+  it('合计行按人数加权平均成人/儿童拼入单价', () => {
+    expect(
+      summarizeRouteLedgerUnitPrices([
+        {
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 200000,
+          childUnitPriceCents: 100000,
+        },
+        {
+          adultGuestCount: 5,
+          childGuestCount: 1,
+          adultUnitPriceCents: 200000,
+          childUnitPriceCents: 100000,
+        },
+      ]),
+    ).toEqual({
+      adultUnitPriceYuan: '2000',
+      childUnitPriceYuan: '1000',
+    })
+  })
+
+  it('该侧人数为 0 时显示 -', () => {
+    expect(
+      summarizeRouteLedgerUnitPrices([
+        {
+          adultGuestCount: 2,
+          childGuestCount: 0,
+          adultUnitPriceCents: 200000,
+          childUnitPriceCents: 100000,
+        },
+      ]),
+    ).toEqual({
+      adultUnitPriceYuan: '2000',
+      childUnitPriceYuan: '-',
+    })
   })
 })

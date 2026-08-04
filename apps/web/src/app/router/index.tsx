@@ -361,6 +361,15 @@ const systemUsersRoute = createRoute({
   ),
 })
 
+const routeLedgerModePrototypeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/prototype/route-ledger-mode',
+  component: lazyRouteComponent(
+    () => import('@/pages/RouteLedgerModePrototypePage'),
+    'RouteLedgerModePrototypePage',
+  ),
+})
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   platformLayoutRoute.addChildren([
@@ -388,6 +397,7 @@ const routeTree = rootRoute.addChildren([
     productDetailRoute,
     systemOrganizationRoute,
     systemUsersRoute,
+    routeLedgerModePrototypeRoute,
   ]),
 ])
 

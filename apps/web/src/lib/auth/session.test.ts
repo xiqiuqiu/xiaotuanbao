@@ -188,4 +188,15 @@ describe('cookie-backed route session', () => {
       ),
     ).toBe('/departure/new?copyFrom=departure-1')
   })
+
+  it('preserves DEV prototype sandbox deep links without a matching menu key', () => {
+    expect(
+      resolvePostLoginDestination(
+        user,
+        ['/departure'],
+        [],
+        '/prototype/route-ledger-mode?variant=A',
+      ),
+    ).toBe('/prototype/route-ledger-mode?variant=A')
+  })
 })

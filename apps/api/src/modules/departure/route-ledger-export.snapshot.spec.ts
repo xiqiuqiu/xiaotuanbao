@@ -42,6 +42,7 @@ const ledger: RouteLedgerResult = {
                 guestCollectCents: 0,
               },
               outsource: { totalAmountCents: 0, items: [] },
+              costResources: [],
               sourceOrders: [
                 {
                   id: 'so-1',
@@ -71,6 +72,7 @@ const ledger: RouteLedgerResult = {
               startDate: '2026-08-01',
               totals: emptyTotals(),
               outsource: { totalAmountCents: 0, items: [] },
+              costResources: [],
               sourceOrders: [],
             },
           ],

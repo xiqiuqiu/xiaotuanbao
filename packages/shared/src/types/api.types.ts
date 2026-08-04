@@ -686,6 +686,18 @@ export interface RouteLedgerOutsourceLine {
   title: string
 }
 
+/** 线路视图执行成本资源行（不含拼出），对齐导出 Excel 资源区。 */
+export interface RouteLedgerResourceRow {
+  id: string
+  seq: number
+  segmentLabel: string
+  resourceKindLabel: string
+  title: string
+  supplierName: string
+  amountCents: number
+  notes: string | null
+}
+
 /** 日块 / 发团组的拼出汇总。 */
 export interface RouteLedgerOutsourceSummary {
   totalAmountCents: number
@@ -734,6 +746,8 @@ export interface RouteLedgerDepartureGroup {
   totals: RouteLedgerTotals
   /** 本发团拼出资源汇总（#184） */
   outsource: RouteLedgerOutsourceSummary
+  /** 本发团执行成本资源（不含拼出） */
+  costResources: RouteLedgerResourceRow[]
   sourceOrders: RouteLedgerSourceOrderRow[]
 }
 
