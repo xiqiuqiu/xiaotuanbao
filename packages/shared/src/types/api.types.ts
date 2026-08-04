@@ -368,6 +368,11 @@ export interface UpdatePlatformOrganizationDto {
   name: string
 }
 
+/** Platform Admin 修改客户 Organization 业务前缀（不改写历史业务编号） */
+export interface UpdatePlatformOrganizationBusinessPrefixDto {
+  businessPrefix: string
+}
+
 export interface EmployeeSummary {
   id: string
   username: string

@@ -4,6 +4,7 @@ import type {
   PlatformOrganizationDetail,
   PlatformOrganizationListResult,
   PlatformOrganizationProfile,
+  UpdatePlatformOrganizationBusinessPrefixDto,
   UpdatePlatformOrganizationDto,
 } from '@/types/api'
 
@@ -35,6 +36,16 @@ export async function updatePlatformOrganization(
   payload: UpdatePlatformOrganizationDto,
 ): Promise<PlatformOrganizationProfile> {
   return request.patch<PlatformOrganizationProfile>(`/platform/organizations/${id}`, payload)
+}
+
+export async function updatePlatformOrganizationBusinessPrefix(
+  id: string,
+  payload: UpdatePlatformOrganizationBusinessPrefixDto,
+): Promise<PlatformOrganizationProfile> {
+  return request.patch<PlatformOrganizationProfile>(
+    `/platform/organizations/${id}/business-prefix`,
+    payload,
+  )
 }
 
 export async function disablePlatformOrganization(

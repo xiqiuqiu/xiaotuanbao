@@ -139,6 +139,35 @@ export class PlatformOrganizationsService {
     }
   }
 
+  async updateBusinessPrefix(
+    id: string,
+    businessPrefix: string,
+  ): Promise<PlatformOrganizationProfile> {
+    const existing = await this.findCustomerOrganizationOrThrow(id)
+
+    if (existing.businessPrefix === businessPrefix) {
+      return this.toProfile(existing)
+    }
+
+    await this.ensureBusinessPrefixAvailable(businessPrefix, id)
+
+    try {
+      const organization = await this.prisma.organization.update({
+        where: { id },
+        data: { businessPrefix },
+      })
+      return this.toProfile(organization)
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('组织业务前缀已存在')
+      }
+      throw error
+    }
+  }
+
   async updateName(
     id: string,
     dto: UpdatePlatformOrganizationDto,
@@ -214,9 +243,13 @@ export class PlatformOrganizationsService {
     }
   }
 
-  private async ensureBusinessPrefixAvailable(businessPrefix: string) {
+  private async ensureBusinessPrefixAvailable(businessPrefix: string, excludeId?: string) {
     const existing = await this.prisma.organization.findFirst({
-      where: { businessPrefix, deletedAt: null },
+      where: {
+        businessPrefix,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
     })
     if (existing) {
       throw new ConflictException('组织业务前缀已存在')

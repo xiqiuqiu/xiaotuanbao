@@ -45,7 +45,7 @@ const {
 const prisma = new PrismaClient()
 
 const ORG_NAME = '新疆西部中旅旅游发展有限公司'
-const BUSINESS_PREFIX = 'XBZL'
+const BUSINESS_PREFIX = 'X'
 const PASSWORD = 'admin123'
 
 const USERS = [

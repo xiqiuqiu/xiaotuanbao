@@ -465,6 +465,48 @@ describe('Platform organizations catalog (e2e)', () => {
     })
   })
 
+  it('updates business prefix via dedicated endpoint', async () => {
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const businessPrefix = freshBusinessPrefix()
+
+    const created = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(onboardPayload({ name: `E2E改前缀前${stamp}`, businessPrefix }))
+      .expect(201)
+
+    const organizationId = created.body.data.id as string
+
+    const response = await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}/business-prefix`)
+      .send({ businessPrefix: 'X' })
+      .expect(200)
+
+    expect(response.body.data).toMatchObject({
+      id: organizationId,
+      businessPrefix: 'X',
+    })
+
+    await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}/business-prefix`)
+      .send({ businessPrefix: 'X' })
+      .expect(200)
+
+    const other = await authRequest(app, platformCookie)
+      .post('/api/platform/organizations')
+      .send(onboardPayload({ name: `E2E占前缀${stamp}`, businessPrefix: 'ZZZZ' }))
+      .expect(201)
+
+    await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${other.body.data.id}/business-prefix`)
+      .send({ businessPrefix: 'X' })
+      .expect(409)
+
+    await authRequest(app, platformCookie)
+      .patch(`/api/platform/organizations/${organizationId}/business-prefix`)
+      .send({ businessPrefix: 'toolong' })
+      .expect(400)
+  })
+
   it('rejects rename when organization name already exists', async () => {
     const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const firstName = `E2E改名冲突甲${stamp}`

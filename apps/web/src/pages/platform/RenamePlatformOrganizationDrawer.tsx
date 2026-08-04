@@ -38,7 +38,7 @@ export function RenamePlatformOrganizationDrawer({
       }
     >
       <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-        仅可修改组织名称。业务前缀创建后不可修改（当前：{businessPrefix}）。
+        仅可修改组织名称。业务前缀请使用「修改业务前缀」单独维护（当前：{businessPrefix}）。
       </Typography.Paragraph>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item

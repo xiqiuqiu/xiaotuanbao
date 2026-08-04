@@ -465,6 +465,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+PlatformAdminGuard",
     "requiredKey": null,
+    "route": "PATCH /api/platform/organizations/:id/business-prefix",
+  },
+  {
+    "guards": "JwtAuthGuard+PlatformAdminGuard",
+    "requiredKey": null,
     "route": "POST /api/platform/organizations/:id/disable",
   },
   {
