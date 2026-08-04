@@ -726,7 +726,7 @@ describe('Departure route ledger API (e2e)', () => {
     }
   })
 
-  it('exports route-ledger.xlsx for filtered departures with guest + resource sections', async () => {
+  it('exports route-ledger.xlsx for filtered departures with three-section layout', async () => {
     const xlsxResponse = await authRequest(app, coordinatorToken)
       .get('/api/departures/route-ledger.xlsx')
       .query({ routeName, startDateFrom: '2026-07-15', startDateTo: '2026-07-15' })
@@ -758,9 +758,16 @@ describe('Departure route ledger API (e2e)', () => {
         if (text) cellTexts.push(text)
       })
     })
-    expect(cellTexts.join('|')).toContain('发客客户')
-    expect(cellTexts.join('|')).toContain('资源安排')
-    expect(cellTexts.join('|')).not.toMatch(/已付|未付/)
+    const flat = cellTexts.join('|')
+    expect(flat).toContain('发客客户')
+    expect(flat).toContain('客源收入')
+    expect(flat).toContain('执行成本')
+    expect(flat).toContain('拼出往来')
+    expect(flat).toContain('归属日程')
+    expect(flat).toContain('合计')
+    expect(flat).not.toContain('资源安排')
+    expect(flat).not.toMatch(/已付|未付/)
+    expect(flat).not.toContain('导出人')
   })
 
   it('rejects route-ledger.xlsx when query axes are incomplete', async () => {
