@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { summarizeRouteLedgerUnitPrices } from './route-ledger-export-inbound-price-formula'
 import {
   ROUTE_LEDGER_XLSX_CONTENT_TYPE,
   type RouteLedgerExportExcelFile,
@@ -6,42 +7,119 @@ import {
   type RouteLedgerExportSnapshot,
 } from './route-ledger-export.types'
 
-const HEADER_FILL: ExcelJS.Fill = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FFECECEC' },
-}
+/** 贴近客户现有日报表：橙黄标题 + 白底黑字 + 黑色细边框。 */
+const COLORS = {
+  titleBg: 'FFFFC000',
+  sectionBg: 'FFFFE699',
+  subHeaderBg: 'FFFFF2CC',
+  totalBg: 'FFFFE699',
+  headerBg: 'FFFFFFFF',
+  bodyBg: 'FFFFFFFF',
+  border: 'FF000000',
+  text: 'FF000000',
+  mutedText: 'FF595959',
+} as const
 
-const SECTION_FILL: ExcelJS.Fill = {
-  type: 'pattern',
-  pattern: 'solid',
-  fgColor: { argb: 'FFD9D9D9' },
-}
+const FONT_FAMILY = '宋体'
 
-const GUEST_HEADERS = [
+const FONT = {
+  title: { name: FONT_FAMILY, size: 14, bold: true, color: { argb: COLORS.text } },
+  section: { name: FONT_FAMILY, size: 11, bold: true, color: { argb: COLORS.text } },
+  header: { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLORS.text } },
+  subHeader: { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLORS.text } },
+  body: { name: FONT_FAMILY, size: 10, color: { argb: COLORS.text } },
+  total: { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLORS.text } },
+  meta: { name: FONT_FAMILY, size: 10, color: { argb: COLORS.mutedText } },
+} as const
+
+const INCOME_COL_COUNT = 13
+const MONEY_FMT = '¥#,##0.00'
+const PRICE_FMT = '#,##0.##'
+
+const COST_SCOPE_COLUMN_LABEL = '归属日程'
+
+const COST_HEADERS = [
   '序号',
-  '发客客户',
-  '游客代表',
-  '电话',
-  '拼入价成人',
-  '拼入价儿童',
-  '人数成人',
-  '人数儿童',
-  '原始团款',
-  '我方代收',
-  '客户已收',
-  '结算金额',
+  COST_SCOPE_COLUMN_LABEL,
+  '资源类型',
+  '项目',
+  '供应商',
+  '金额',
   '备注',
 ] as const
 
-const RESOURCE_HEADERS = [
-  '行程段',
-  '种类',
-  '资源名称',
-  '供应商',
-  '约定金额',
-  '备注',
-] as const
+const OUTSOURCE_HEADERS = ['序号', '拼出方', '说明', '金额', '备注'] as const
+
+const INCOME_COLUMN_WIDTHS = [6, 16, 18, 22, 20, 14, 10, 10, 14, 14, 14, 14, 20] as const
+
+function solidFill(argb: string): ExcelJS.Fill {
+  return { type: 'pattern', pattern: 'solid', fgColor: { argb } }
+}
+
+function thinBorder(color = COLORS.border): Partial<ExcelJS.Borders> {
+  const side: ExcelJS.Border = { style: 'thin', color: { argb: color } }
+  return { top: side, left: side, bottom: side, right: side }
+}
+
+function mediumBorder(color = COLORS.border): Partial<ExcelJS.Borders> {
+  const side: ExcelJS.Border = { style: 'medium', color: { argb: color } }
+  return { top: side, left: side, bottom: side, right: side }
+}
+
+function setCellStyle(
+  cell: ExcelJS.Cell,
+  options: {
+    font?: Partial<ExcelJS.Font>
+    fill?: ExcelJS.Fill
+    alignment?: Partial<ExcelJS.Alignment>
+    border?: Partial<ExcelJS.Borders>
+    numFmt?: string
+  },
+) {
+  if (options.font) cell.font = { ...FONT.body, ...options.font }
+  if (options.fill) cell.fill = options.fill
+  if (options.alignment) cell.alignment = options.alignment
+  if (options.border) cell.border = options.border
+  if (options.numFmt) cell.numFmt = options.numFmt
+}
+
+function applyRangeBorder(
+  sheet: ExcelJS.Worksheet,
+  startRow: number,
+  endRow: number,
+  startCol: number,
+  endCol: number,
+) {
+  for (let row = startRow; row <= endRow; row += 1) {
+    for (let col = startCol; col <= endCol; col += 1) {
+      const cell = sheet.getCell(row, col)
+      cell.border = thinBorder()
+    }
+  }
+}
+
+function mergeAndStyle(
+  sheet: ExcelJS.Worksheet,
+  startRow: number,
+  startCol: number,
+  endRow: number,
+  endCol: number,
+  value: string,
+  style: Parameters<typeof setCellStyle>[1],
+) {
+  sheet.mergeCells(startRow, startCol, endRow, endCol)
+  const cell = sheet.getCell(startRow, startCol)
+  cell.value = value
+  setCellStyle(cell, style)
+}
+
+function setColumnWidths(sheet: ExcelJS.Worksheet, widths: readonly number[]) {
+  sheet.columns = widths.map((width) => ({ width }))
+}
+
+function yuanNumber(cents: number): number {
+  return cents / 100
+}
 
 export async function renderRouteLedgerExportExcel(
   snapshot: RouteLedgerExportSnapshot,
@@ -54,7 +132,10 @@ export async function renderRouteLedgerExportExcel(
   for (const sheet of snapshot.sheets) {
     const name = uniqueSheetName(sheet.sheetName, usedNames)
     usedNames.add(name)
-    writeDepartureSheet(workbook.addWorksheet(name), sheet, snapshot)
+    writeDepartureSheet(
+      workbook.addWorksheet(name, { views: [{ showGridLines: false }] }),
+      sheet,
+    )
   }
 
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer())
@@ -80,102 +161,317 @@ function uniqueSheetName(desired: string, used: Set<string>): string {
   return desired.slice(0, 28) + '…'
 }
 
-function writeDepartureSheet(
-  sheet: ExcelJS.Worksheet,
-  data: RouteLedgerExportSheet,
-  snapshot: RouteLedgerExportSnapshot,
-): void {
-  let row = 1
-  sheet.getCell(row, 1).value = data.title
-  sheet.getCell(row, 1).font = { bold: true, size: 12 }
-  row += 1
-  sheet.getCell(row, 1).value = `导出人：${snapshot.exportedByName || '-'}`
-  row += 1
-  sheet.getCell(row, 1).value = `导出时间：${snapshot.exportedAt}`
-  row += 2
-
-  const guestHeaderRow = sheet.getRow(row)
-  GUEST_HEADERS.forEach((label, index) => {
-    const cell = guestHeaderRow.getCell(index + 1)
-    cell.value = label
-    cell.fill = HEADER_FILL
-    cell.font = { bold: true }
+function writeSheetTitle(sheet: ExcelJS.Worksheet, title: string): number {
+  mergeAndStyle(sheet, 1, 1, 1, INCOME_COL_COUNT, title, {
+    font: FONT.title,
+    fill: solidFill(COLORS.titleBg),
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: mediumBorder(),
   })
-  row += 1
+  sheet.getRow(1).height = 30
+  return 2
+}
+
+function writeIncomeHeader(sheet: ExcelJS.Worksheet, startRow: number): number {
+  const top = startRow
+  const sub = startRow + 1
+
+  const singles = ['序号', '发客客户', '游客代表', '电话', '原始团款', '我方代收', '客户已收', '结算金额', '备注']
+  const singleCols = [1, 2, 3, 4, 9, 10, 11, 12, 13]
+
+  singleCols.forEach((col, index) => {
+    mergeAndStyle(sheet, top, col, sub, col, singles[index] ?? '', {
+      font: FONT.header,
+      fill: solidFill(COLORS.headerBg),
+      alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
+      border: thinBorder(),
+    })
+  })
+
+  mergeAndStyle(sheet, top, 5, top, 6, '人数', {
+    font: FONT.header,
+    fill: solidFill(COLORS.headerBg),
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: thinBorder(),
+  })
+  mergeAndStyle(sheet, top, 7, top, 8, '拼入价', {
+    font: FONT.header,
+    fill: solidFill(COLORS.headerBg),
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: thinBorder(),
+  })
+
+  ;[
+    { col: 5, label: '成人' },
+    { col: 6, label: '儿童' },
+    { col: 7, label: '成人' },
+    { col: 8, label: '儿童' },
+  ].forEach(({ col, label }) => {
+    const cell = sheet.getCell(sub, col)
+    cell.value = label
+    setCellStyle(cell, {
+      font: FONT.subHeader,
+      fill: solidFill(COLORS.subHeaderBg),
+      alignment: { vertical: 'middle', horizontal: 'center' },
+      border: thinBorder(),
+    })
+  })
+
+  sheet.getRow(top).height = 22
+  sheet.getRow(sub).height = 20
+  return sub + 1
+}
+
+function writeSimpleHeader(
+  sheet: ExcelJS.Worksheet,
+  row: number,
+  headers: readonly string[],
+  colCount: number,
+): number {
+  headers.forEach((label, index) => {
+    const cell = sheet.getCell(row, index + 1)
+    cell.value = label
+    setCellStyle(cell, {
+      font: FONT.header,
+      fill: solidFill(COLORS.headerBg),
+      alignment: { vertical: 'middle', horizontal: 'center', wrapText: true },
+      border: thinBorder(),
+    })
+  })
+  for (let col = headers.length + 1; col <= colCount; col += 1) {
+    setCellStyle(sheet.getCell(row, col), {
+      fill: solidFill(COLORS.headerBg),
+      border: thinBorder(),
+    })
+  }
+  sheet.getRow(row).height = 22
+  return row + 1
+}
+
+function writeSectionTitle(
+  sheet: ExcelJS.Worksheet,
+  row: number,
+  title: string,
+  colSpan: number,
+): number {
+  mergeAndStyle(sheet, row, 1, row, colSpan, title, {
+    font: FONT.section,
+    fill: solidFill(COLORS.sectionBg),
+    alignment: { vertical: 'middle', horizontal: 'center' },
+    border: thinBorder(),
+  })
+  sheet.getRow(row).height = 24
+  return row + 1
+}
+
+function styleIncomeDataRow(sheet: ExcelJS.Worksheet, row: number) {
+  for (let col = 1; col <= INCOME_COL_COUNT; col += 1) {
+    const cell = sheet.getCell(row, col)
+    const isMoney = col >= 9 && col <= 12
+    const isPrice = col === 7 || col === 8
+    setCellStyle(cell, {
+      font: FONT.body,
+      fill: solidFill(COLORS.bodyBg),
+      border: thinBorder(),
+      alignment: {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: col === 13,
+      },
+      numFmt: isMoney ? MONEY_FMT : isPrice ? PRICE_FMT : undefined,
+    })
+  }
+  sheet.getRow(row).height = 20
+}
+
+function writeIncomeSection(sheet: ExcelJS.Worksheet, data: RouteLedgerExportSheet, startRow: number): number {
+  let row = writeSectionTitle(sheet, startRow, '客源收入', INCOME_COL_COUNT)
+  row = writeIncomeHeader(sheet, row)
+  const dataStart = row
 
   for (const order of data.sourceOrders) {
-    const r = sheet.getRow(row)
-    r.getCell(1).value = order.seq
-    r.getCell(2).value = order.partnerName
-    r.getCell(3).value = order.guestRepresentativeName
-    r.getCell(4).value = order.guestRepresentativePhone
-    r.getCell(5).value = order.adultUnitPriceYuan
-    r.getCell(6).value = order.childUnitPriceYuan
-    r.getCell(7).value = order.adultGuestCount
-    r.getCell(8).value = order.childGuestCount
-    r.getCell(9).value = order.grossReceivableYuan
-    r.getCell(10).value = order.guestCollectYuan
-    r.getCell(11).value = order.partnerCollectedYuan
-    r.getCell(12).value = order.netReceivableYuan
-    r.getCell(13).value = order.notes
+    const dataRow = sheet.getRow(row)
+    dataRow.getCell(1).value = order.seq
+    dataRow.getCell(2).value = order.partnerName
+    dataRow.getCell(3).value = order.guestRepresentativeName
+    dataRow.getCell(4).value = order.guestRepresentativePhone
+    dataRow.getCell(5).value = order.adultGuestCount
+    dataRow.getCell(6).value = order.childGuestCount
+    dataRow.getCell(7).value =
+      order.adultGuestCount > 0 ? yuanNumber(order.adultUnitPriceCents) : '—'
+    dataRow.getCell(8).value =
+      order.childGuestCount > 0 ? yuanNumber(order.childUnitPriceCents) : '—'
+    dataRow.getCell(9).value = yuanNumber(order.grossReceivableCents)
+    dataRow.getCell(10).value = yuanNumber(order.guestCollectCents)
+    dataRow.getCell(11).value = yuanNumber(order.partnerCollectedCents)
+    dataRow.getCell(12).value = yuanNumber(order.netReceivableCents)
+    dataRow.getCell(13).value = order.notes
+    styleIncomeDataRow(sheet, row)
     row += 1
   }
 
+  const unitPriceSummary = summarizeRouteLedgerUnitPrices(data.sourceOrders)
   const total = data.sourceOrderTotals
   const totalRow = sheet.getRow(row)
   totalRow.getCell(1).value = '合计'
-  totalRow.getCell(7).value = total.adultGuestCount
-  totalRow.getCell(8).value = total.childGuestCount
-  totalRow.getCell(9).value = total.grossReceivableYuan
-  totalRow.getCell(10).value = total.guestCollectYuan
-  totalRow.getCell(11).value = total.partnerCollectedYuan
-  totalRow.getCell(12).value = total.netReceivableYuan
-  totalRow.font = { bold: true }
-  row += 2
+  totalRow.getCell(2).value = `${total.orderCount} 单`
+  totalRow.getCell(5).value = total.adultGuestCount
+  totalRow.getCell(6).value = total.childGuestCount
+  totalRow.getCell(7).value = unitPriceSummary.adultUnitPriceYuan
+  totalRow.getCell(8).value = unitPriceSummary.childUnitPriceYuan
+  totalRow.getCell(9).value = yuanNumber(total.grossReceivableCents)
+  totalRow.getCell(10).value = yuanNumber(total.guestCollectCents)
+  totalRow.getCell(11).value = yuanNumber(total.partnerCollectedCents)
+  totalRow.getCell(12).value = yuanNumber(total.netReceivableCents)
 
-  const section = sheet.getRow(row)
-  section.getCell(1).value = '资源安排'
-  section.getCell(1).fill = SECTION_FILL
-  section.getCell(1).font = { bold: true }
-  row += 1
+  for (let col = 1; col <= INCOME_COL_COUNT; col += 1) {
+    setCellStyle(totalRow.getCell(col), {
+      font: FONT.total,
+      fill: solidFill(COLORS.totalBg),
+      border: thinBorder(),
+      alignment: {
+        vertical: 'middle',
+        horizontal: 'center',
+      },
+      numFmt: col >= 9 && col <= 12 ? MONEY_FMT : col === 7 || col === 8 ? PRICE_FMT : undefined,
+    })
+  }
+  sheet.getRow(row).height = 22
+  applyRangeBorder(sheet, startRow, row, 1, INCOME_COL_COUNT)
+  if (data.sourceOrders.length > 0) {
+    applyRangeBorder(sheet, dataStart, row - 1, 1, INCOME_COL_COUNT)
+  }
 
-  const resourceHeaderRow = sheet.getRow(row)
-  RESOURCE_HEADERS.forEach((label, index) => {
-    const cell = resourceHeaderRow.getCell(index + 1)
-    cell.value = label
-    cell.fill = HEADER_FILL
-    cell.font = { bold: true }
-  })
-  row += 1
+  return row + 2
+}
 
-  for (const resource of data.resources) {
-    const r = sheet.getRow(row)
-    r.getCell(1).value = resource.segmentName
-    r.getCell(2).value = resource.resourceKindLabel
-    r.getCell(3).value = resource.title
-    r.getCell(4).value = resource.supplierName
-    r.getCell(5).value = resource.amountYuan
-    r.getCell(6).value = resource.notes ?? ''
+function writeTableSection(
+  sheet: ExcelJS.Worksheet,
+  options: {
+    startRow: number
+    sectionTitle: string
+    headers: readonly string[]
+    colCount: number
+    rows: Array<(row: ExcelJS.Row) => void>
+    writeTotal: (row: ExcelJS.Row) => void
+    emptyText?: string
+  },
+): number {
+  let row = writeSectionTitle(sheet, options.startRow, options.sectionTitle, options.colCount)
+  row = writeSimpleHeader(sheet, row, options.headers, options.colCount)
+
+  if (options.rows.length === 0) {
+    mergeAndStyle(sheet, row, 1, row, options.colCount, options.emptyText ?? '暂无数据', {
+      font: FONT.meta,
+      fill: solidFill(COLORS.bodyBg),
+      alignment: { vertical: 'middle', horizontal: 'center' },
+      border: thinBorder(),
+    })
+    sheet.getRow(row).height = 24
+    applyRangeBorder(sheet, options.startRow, row, 1, options.colCount)
+    return row + 2
+  }
+
+  options.rows.forEach((writeRow) => {
+    const dataRow = sheet.getRow(row)
+    writeRow(dataRow)
+    for (let col = 1; col <= options.colCount; col += 1) {
+      const cell = dataRow.getCell(col)
+      const header = options.headers[col - 1]
+      const isMoney = header === '金额'
+      setCellStyle(cell, {
+        font: FONT.body,
+        fill: solidFill(COLORS.bodyBg),
+        border: thinBorder(),
+        alignment: {
+          vertical: 'middle',
+          horizontal: 'center',
+          wrapText: true,
+        },
+        numFmt: isMoney ? MONEY_FMT : undefined,
+      })
+    }
+    sheet.getRow(row).height = 20
     row += 1
-  }
+  })
 
-  if (data.resources.length === 0) {
-    sheet.getRow(row).getCell(1).value = '暂无资源安排'
+  const totalRow = sheet.getRow(row)
+  options.writeTotal(totalRow)
+  for (let col = 1; col <= options.colCount; col += 1) {
+    setCellStyle(totalRow.getCell(col), {
+      font: FONT.total,
+      fill: solidFill(COLORS.totalBg),
+      border: thinBorder(),
+      alignment: { vertical: 'middle', horizontal: 'center' },
+      numFmt: options.headers[col - 1] === '金额' ? MONEY_FMT : undefined,
+    })
   }
+  sheet.getRow(row).height = 22
+  applyRangeBorder(sheet, options.startRow, row, 1, options.colCount)
+  return row + 2
+}
 
-  sheet.columns = [
-    { width: 10 },
-    { width: 16 },
-    { width: 12 },
-    { width: 14 },
-    { width: 12 },
-    { width: 12 },
-    { width: 10 },
-    { width: 10 },
-    { width: 12 },
-    { width: 12 },
-    { width: 12 },
-    { width: 12 },
-    { width: 20 },
-  ]
+function writeDepartureSheet(sheet: ExcelJS.Worksheet, data: RouteLedgerExportSheet): void {
+  setColumnWidths(sheet, INCOME_COLUMN_WIDTHS)
+
+  let row = writeSheetTitle(sheet, data.title)
+  row = writeIncomeSection(sheet, data, row)
+
+  row = writeTableSection(sheet, {
+    startRow: row,
+    sectionTitle: '执行成本',
+    headers: COST_HEADERS,
+    colCount: COST_HEADERS.length,
+    emptyText: '暂无执行成本资源',
+    rows: data.costRows.map(
+      (cost) => (dataRow) => {
+        dataRow.getCell(1).value = cost.seq
+        dataRow.getCell(2).value = cost.segmentLabel
+        dataRow.getCell(3).value = cost.resourceKindLabel
+        dataRow.getCell(4).value = cost.title
+        dataRow.getCell(5).value = cost.supplierName
+        dataRow.getCell(6).value = yuanNumber(cost.amountCents)
+        dataRow.getCell(7).value = cost.notes ?? ''
+      },
+    ),
+    writeTotal: (totalRow) => {
+      totalRow.getCell(1).value = '合计'
+      totalRow.getCell(2).value = `${data.costRows.length} 项`
+      totalRow.getCell(6).value = yuanNumber(
+        data.costRows.reduce((sum, item) => sum + item.amountCents, 0),
+      )
+    },
+  })
+
+  writeTableSection(sheet, {
+    startRow: row,
+    sectionTitle: '拼出往来',
+    headers: OUTSOURCE_HEADERS,
+    colCount: OUTSOURCE_HEADERS.length,
+    emptyText: '本团暂无拼出记录',
+    rows: data.outsourceRows.map(
+      (item) => (dataRow) => {
+        dataRow.getCell(1).value = item.seq
+        dataRow.getCell(2).value = item.supplierName
+        dataRow.getCell(3).value = item.title
+        dataRow.getCell(4).value = yuanNumber(item.amountCents)
+        dataRow.getCell(5).value = item.notes ?? ''
+      },
+    ),
+    writeTotal: (totalRow) => {
+      totalRow.getCell(1).value = '合计'
+      totalRow.getCell(2).value = `${data.outsourceRows.length} 项`
+      totalRow.getCell(4).value = yuanNumber(data.outsourceTotalAmountCents)
+    },
+  })
+
+  sheet.views = [{ state: 'frozen', ySplit: 1, activeCell: 'A2', showGridLines: false }]
+  sheet.pageSetup = {
+    paperSize: 9,
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
+  }
 }

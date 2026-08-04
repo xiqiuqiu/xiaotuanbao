@@ -5,33 +5,44 @@ export interface RouteLedgerExportSourceOrderRow {
   partnerName: string
   guestRepresentativeName: string
   guestRepresentativePhone: string
-  adultUnitPriceYuan: string
-  childUnitPriceYuan: string
   adultGuestCount: number
   childGuestCount: number
-  grossReceivableYuan: string
-  guestCollectYuan: string
-  partnerCollectedYuan: string
-  netReceivableYuan: string
+  adultUnitPriceCents: number
+  childUnitPriceCents: number
+  grossReceivableCents: number
+  guestCollectCents: number
+  partnerCollectedCents: number
+  netReceivableCents: number
   notes: string
 }
 
 export interface RouteLedgerExportSourceOrderTotals {
+  orderCount: number
   adultGuestCount: number
   childGuestCount: number
-  grossReceivableYuan: string
-  guestCollectYuan: string
-  partnerCollectedYuan: string
-  netReceivableYuan: string
+  grossReceivableCents: number
+  guestCollectCents: number
+  partnerCollectedCents: number
+  netReceivableCents: number
 }
 
-/** Arrangement facts only — no payable progress (ADR-0037). */
-export interface RouteLedgerExportResourceRow {
-  segmentName: string
+/** 执行成本行（不含拼出），对齐 Web UI 成本区。 */
+export interface RouteLedgerExportCostRow {
+  seq: number
+  segmentLabel: string
   resourceKindLabel: string
   title: string
   supplierName: string
-  amountYuan: string
+  amountCents: number
+  notes: string | null
+}
+
+/** 拼出往来行，对齐 Web UI 拼出区。 */
+export interface RouteLedgerExportOutsourceRow {
+  seq: number
+  supplierName: string
+  title: string
+  amountCents: number
   notes: string | null
 }
 
@@ -40,7 +51,9 @@ export interface RouteLedgerExportSheet {
   title: string
   sourceOrders: RouteLedgerExportSourceOrderRow[]
   sourceOrderTotals: RouteLedgerExportSourceOrderTotals
-  resources: RouteLedgerExportResourceRow[]
+  costRows: RouteLedgerExportCostRow[]
+  outsourceRows: RouteLedgerExportOutsourceRow[]
+  outsourceTotalAmountCents: number
 }
 
 export interface RouteLedgerExportSnapshot {
