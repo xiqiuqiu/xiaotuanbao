@@ -1,26 +1,46 @@
 /**
- * 发团详情原型已收口：详情 search 不透传 ?variant=；不注册独立 sandbox。
+ * 发团详情原型已收口：详情 search 不透传 ?variant= / ?overviewVariant=；
+ * 不注册发团概览独立 sandbox（#279）；其他原型（execution-layer-switch）仍保留。
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { router } from './index'
 
-const repoRootPackageJson = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../../package.json',
+const here = dirname(fileURLToPath(import.meta.url))
+const repoRootPackageJson = resolve(here, '../../../../../package.json')
+const overviewPrototypeDir = resolve(
+  here,
+  '../../features/departure/prototype/departure-overview',
 )
+const overviewPrototypePage = resolve(here, '../../pages/DepartureOverviewPrototypePage.tsx')
+const routerSourcePath = resolve(here, './index.tsx')
 
 describe('departure detail overview prototype removal', () => {
-  it('does not register a separate sandbox route', () => {
-    expect(Object.keys(router.routesByPath)).not.toContain('/prototype/departure-overview')
+  it('does not keep throwaway departure-overview prototype files', () => {
+    expect(existsSync(overviewPrototypeDir)).toBe(false)
+    expect(existsSync(overviewPrototypePage)).toBe(false)
   })
 
-  it('strips overview variant from departure detail search validation', () => {
+  it('does not register a separate overview sandbox route', () => {
+    const paths = Object.keys(router.routesByPath)
+    expect(paths).not.toContain('/prototype/departure-overview')
+    expect(paths).not.toContain('/prototype/departure-overview/$departureId')
+  })
+
+  it('router source does not mention overviewVariant or overview prototype page', () => {
+    const source = readFileSync(routerSourcePath, 'utf8')
+    expect(source).not.toMatch(/overviewVariant/)
+    expect(source).not.toMatch(/DepartureOverviewPrototypePage/)
+    expect(source).not.toMatch(/departure-overview\/\$departureId/)
+  })
+
+  it('strips overviewVariant from departure detail search validation', () => {
     const validated = router.routesByPath['/departure/$departureId']!.options.validateSearch!({
       tab: 'overview',
       segmentId: 'seg-1',
+      overviewVariant: 'B',
       variant: 'B',
       listReturn: '/departure',
     })
@@ -30,6 +50,7 @@ describe('departure detail overview prototype removal', () => {
       segmentId: 'seg-1',
       listReturn: '/departure',
     })
+    expect(validated).not.toHaveProperty('overviewVariant')
     expect(validated).not.toHaveProperty('variant')
   })
 

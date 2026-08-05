@@ -5,7 +5,7 @@ supersedes-partial: docs/adr/0020-departure-overview-business-and-finance-layers
 
 # 发团概览 B 款：三层结构与当前毛利含增收
 
-Grilling 确认的发团概览 B 款（原型 `overviewVariant=B`）将主视图收敛为 **待办提醒 → 经营概况横条 → 收付款进度** 三层纵向结构，并调整当前毛利与收付进度口径。本 ADR **部分 supersede ADR-0020** 的概览展示层与主收付进度定义；**ADR-0004**（Finance Facade、原子财务快照、守恒异常、经营事实与财务事实分层）与 **ADR-0011**（账款核销进度与资金进出分离）继续有效，不在此重复。
+Grilling 确认的发团概览 B 款（已落生产并移除 throwaway host；历史选型代号 B）将主视图收敛为 **待办提醒 → 经营概况横条 → 收付款进度** 三层纵向结构，并调整当前毛利与收付进度口径。本 ADR **部分 supersede ADR-0020** 的概览展示层与主收付进度定义；**ADR-0004**（Finance Facade、原子财务快照、守恒异常、经营事实与财务事实分层）与 **ADR-0011**（账款核销进度与资金进出分离）继续有效，不在此重复。
 
 ## Decision
 
@@ -54,4 +54,4 @@ Grilling 确认的发团概览 B 款（原型 `overviewVariant=B`）将主视图
 - **Supersede ADR-0020**：概览四层信息结构、主层展示总人数、主层团款收款进度/游客代收/返利/资金情况独立卡、以及收款进度口径；付款进度分子分母含义与 ADR-0020 主层一致，继续有效。
 - **ADR-0004 / ADR-0011 仍有效**：Finance Facade 原子快照、守恒异常、账款与资金分层、确认应付构成等不因概览简化而合并口径。
 - **实现分票**：UI/API 对齐见父 Spec #274 子票；`packages/shared` 中 `additionalIncomeNetCents` 等字段注释仍写「不并入当前毛利」的清理留给 **#276**，本 ADR 为权威域口径。
-- 原型 `apps/web/src/features/departure/prototype/departure-overview/` 中 B 款为结构参考；落生产后移除 throwaway host。
+- Throwaway 原型目录与 DEV 概览变体查询开关已在 #279 移除；仓库仅保留 `DepartureOverviewStatsCards` 一套实现。
