@@ -4,6 +4,7 @@ import { emptyDepartureFinanceObligationSummary } from '../finance/departure-fin
 import {
   aggregateUnverifiedCashAmounts,
   buildDepartureReadModelAggregate,
+  EMPTY_OVERVIEW_COLLECTION_STATS,
   EMPTY_SOURCE_ORDER_AGGREGATE,
   deriveCompletionTags,
   deriveIsFinanciallySettled,
@@ -367,9 +368,88 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.overviewStats.rebatePaidCents).toBe(30_000)
       expect(aggregate.overviewStats.additionalIncomeNetCents).toBe(30_000)
       expect(aggregate.overviewStats.rebateUnpaidCents).toBe(50_000)
-      // 外部核销含他团与无归属流水，合并为一个口径。
+      // 当前毛利含增收：收入合计 1_030_000 − 成本合计 600_000
+      expect(aggregate.estimatedMarginCents).toBe(430_000)
+      // 外部核销含他团与未归属流水，合并为一个口径。
       expect(aggregate.overviewStats.verifiedFromExternalCents).toBe(70_000)
       expect(aggregate.overviewStats.verifiedToOtherDeparturesCents).toBe(20_000)
+    })
+
+    it('includes additional income net in estimatedMarginCents (ADR-0038)', () => {
+      // 收入合计 = 结算应收 900_000 + 增收净收益 80_000；当前毛利 = 980_000 − 400_000
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 2,
+          grossReceivableCents: 900_000,
+          fareAdjustmentNetCents: 0,
+          discountCents: 0,
+          netReceivableCents: 900_000,
+        },
+        segmentCount: 0,
+        resourceCount: 1,
+        payableCents: 400_000,
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 900_000,
+          generatedResourceAgreedCents: 400_000,
+          additionalIncomeNetCents: 80_000,
+          collectionStats: {
+            ...EMPTY_OVERVIEW_COLLECTION_STATS,
+            settlementCollectionReceivableCents: 900_000,
+          },
+        },
+      })
+
+      expect(aggregate.estimatedMarginCents).toBe(580_000)
+      expect(aggregate.overviewStats.additionalIncomeNetCents).toBe(80_000)
+    })
+
+    it('computes estimatedMarginCents when revenue total is zero', () => {
+      // 收入合计 = 0 + 0；当前毛利 = 0 − 250_000（毛利率分母为零由 UI 处理）
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: EMPTY_SOURCE_ORDER_AGGREGATE,
+        segmentCount: 0,
+        resourceCount: 1,
+        payableCents: 250_000,
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 0,
+          generatedResourceAgreedCents: 250_000,
+          additionalIncomeNetCents: 0,
+          collectionStats: EMPTY_OVERVIEW_COLLECTION_STATS,
+        },
+      })
+
+      expect(aggregate.netReceivableCents).toBe(0)
+      expect(aggregate.overviewStats.additionalIncomeNetCents).toBe(0)
+      expect(aggregate.estimatedMarginCents).toBe(-250_000)
+    })
+
+    it('keeps negative estimatedMarginCents when costs exceed revenue total', () => {
+      // 收入合计 = 100_000 + 20_000；当前毛利 = 120_000 − 500_000
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 1,
+          totalGuests: 1,
+          grossReceivableCents: 100_000,
+          fareAdjustmentNetCents: 0,
+          discountCents: 0,
+          netReceivableCents: 100_000,
+        },
+        segmentCount: 0,
+        resourceCount: 1,
+        payableCents: 500_000,
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 100_000,
+          generatedResourceAgreedCents: 500_000,
+          additionalIncomeNetCents: 20_000,
+          collectionStats: {
+            ...EMPTY_OVERVIEW_COLLECTION_STATS,
+            settlementCollectionReceivableCents: 100_000,
+          },
+        },
+      })
+
+      expect(aggregate.estimatedMarginCents).toBe(-380_000)
     })
 
     it('returns empty aggregate defaults', () => {

@@ -47,6 +47,7 @@ export interface DepartureReadModelAggregate {
   discountCents: number
   netReceivableCents: number
   payableCents: number
+  /** 当前毛利：收入合计（结算应收 + 增收净收益）− 成本合计（ADR-0038） */
   estimatedMarginCents: number
   verifiedReceivableCents: number
   openUnsettledReceivableCents: number
@@ -76,7 +77,7 @@ export const EMPTY_UNVERIFIED_CASH: UnverifiedCashAggregate = {
 export interface DepartureOverviewSourceFacts {
   sourceReceivableUngeneratedCents: number
   generatedResourceAgreedCents: number
-  /** 增收净收益：各条公司增收合计 */
+  /** 增收净收益：各条公司增收合计；计入当前毛利，不并入结算应收 */
   additionalIncomeNetCents: number
   collectionStats: DepartureOverviewCollectionStats
 }
@@ -308,7 +309,6 @@ export function buildDepartureReadModelAggregate(input: {
   const obligation =
     input.obligationSummary ?? emptyDepartureFinanceObligationSummary()
 
-  const estimatedMarginCents = sourceOrders.netReceivableCents - payableCents
   const financeSnapshot = input.financeSnapshot ?? emptyDepartureFinanceSnapshot()
   const overviewSourceFacts = input.overviewSourceFacts ?? {
     sourceReceivableUngeneratedCents: sourceOrders.netReceivableCents,
@@ -319,6 +319,11 @@ export function buildDepartureReadModelAggregate(input: {
       settlementCollectionReceivableCents: sourceOrders.netReceivableCents,
     },
   }
+  // 当前毛利 = 收入合计 − 成本合计；收入合计 = 结算应收 + 增收净收益（ADR-0038）
+  const estimatedMarginCents =
+    sourceOrders.netReceivableCents +
+    overviewSourceFacts.additionalIncomeNetCents -
+    payableCents
 
   return {
     totalGuests: sourceOrders.totalGuests,

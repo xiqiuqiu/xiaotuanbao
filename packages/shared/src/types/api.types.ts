@@ -649,6 +649,10 @@ export interface DepartureSummary {
   completionTags: DepartureCompletionTags
   netReceivableCents: number
   payableCents: number
+  /**
+   * 当前毛利（分）：收入合计 − 成本合计。
+   * 收入合计 = 结算应收（netReceivableCents）+ 增收净收益（additionalIncomeNetCents）。
+   */
   estimatedMarginCents: number
   /**
    * Departure Purge（发团误建删除）是否可执行。
@@ -872,7 +876,10 @@ export interface DepartureOverviewStats {
   closedUnreceivedCents: number
   ungeneratedReceivableCents: number
   otherReceivableCents: number
-  /** 增收净收益（各条公司增收合计）；不并入应收、收款进度或当前毛利。 */
+  /**
+   * 增收净收益（各条公司增收合计）。
+   * 计入收入合计与当前毛利；不并入结算应收或概览收款进度分母。
+   */
   additionalIncomeNetCents: number
   /**
    * 团款收款进度分子：各单 min(Guest已收,S)+客户补款已收（单笔不超过 S）。
@@ -2110,7 +2117,7 @@ export interface DepartureOperationsSheetSnapshot {
   sourceOrders: DepartureOperationsSheetSourceOrderRow[]
   segments: DepartureOperationsSheetSegmentRow[]
   incomeRecords: DepartureOperationsSheetIncomeRecordRow[]
-  /** 增收净收益（公司增收合计） */
+  /** 增收净收益（公司增收合计）；计入收入合计与当前毛利 */
   additionalIncomeNetCents: number
   /** 发团级资源（全程用车/保险/导游等），与段资源一并进入运营表汇总。 */
   departureResources: DepartureOperationsSheetResourceRow[]
