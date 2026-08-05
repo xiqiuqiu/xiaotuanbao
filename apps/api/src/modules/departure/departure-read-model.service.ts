@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import {
   PaymentScheduleSourceType,
+  ResourceKind,
   isSourceOrderGuestCollectionSourceType,
   type DepartureCompletionTags,
 } from '@xiaotuanbao/shared'
@@ -19,14 +20,27 @@ import {
   aggregateDepartureOverviewCollectionStats,
   type DepartureOverviewSourceOrderCollectionInput,
 } from './departure-overview-collection-stats'
+import {
+  buildDepartureOverviewBSupplement,
+  EMPTY_OVERVIEW_B_SUPPLEMENT,
+} from './departure-overview-b-supplement'
+import { getShanghaiTodayString } from './departure-date.utils'
 
 interface SegmentRollup {
   segmentCount: number
   resourceCount: number
   payableCents: number
+  segments: Array<{
+    id: string
+    resourceCount: number
+    outsourceCount: number
+    resourceAmountCents: number
+    resources: Array<{ id: string; amountCents: number; resourceKind: string }>
+  }>
   resources: Array<{
     id: string
     amountCents: number
+    resourceKind: string
     anchor: 'segment' | 'departure'
   }>
 }
@@ -40,6 +54,14 @@ interface SourceOrderPathFact {
   netReceivableCents: number
   partnerCollectedCents: number
   guestCollectCents: number
+  guestCount: number
+  recordedGuestCount: number
+}
+
+interface AdditionalIncomeTotals {
+  netCents: number
+  grossCents: number
+  expenseCents: number
 }
 
 @Injectable()
@@ -78,7 +100,7 @@ export class DepartureReadModelService {
       segmentRollupMap,
       financeBundleMap,
       sourceOrderPathFacts,
-      additionalIncomeNetTotals,
+      additionalIncomeTotals,
     ] = await Promise.all([
       this.batchSourceOrderAggregates(uniqueIds),
       this.batchSegmentRollups(uniqueIds),
@@ -86,10 +108,10 @@ export class DepartureReadModelService {
       this.departureFinanceFacade.getDepartureFinanceReadBundles(organizationId, uniqueIds),
       includeOverviewStats
         ? this.loadSourceOrderPathFacts(organizationId, uniqueIds)
-        : Promise.resolve([]),
+        : Promise.resolve([] as SourceOrderPathFact[]),
       includeOverviewStats
-        ? this.batchAdditionalIncomeNetTotals(organizationId, uniqueIds)
-        : Promise.resolve(new Map<string, number>()),
+        ? this.batchAdditionalIncomeTotals(organizationId, uniqueIds)
+        : Promise.resolve(new Map<string, AdditionalIncomeTotals>()),
     ])
 
     const overviewSourceFactsMap = new Map<string, DepartureOverviewSourceFacts>()
@@ -97,9 +119,9 @@ export class DepartureReadModelService {
       const resources = [...segmentRollupMap.values()].flatMap((rollup) => rollup.resources)
       const segmentResources = resources.filter((resource) => resource.anchor === 'segment')
       const departureResources = resources.filter((resource) => resource.anchor === 'departure')
-      const [sourceOrderStates, segmentResourceStates, departureResourceStates] =
+      const [sourceOrderFinanceStates, segmentResourceStates, departureResourceStates] =
         await Promise.all([
-          this.departureFinanceFacade.getSourceOrderPathFinanceStates(
+          this.departureFinanceFacade.getSourceOrderFinanceStates(
             organizationId,
             sourceOrderPathFacts.map((fact) => fact.id),
             new Map(
@@ -136,18 +158,24 @@ export class DepartureReadModelService {
         string,
         DepartureOverviewSourceOrderCollectionInput[]
       >()
+      const sourceOrdersByDeparture = new Map<string, SourceOrderPathFact[]>()
       for (const departureId of uniqueIds) {
+        const income = additionalIncomeTotals.get(departureId)
         overviewSourceFactsMap.set(departureId, {
           sourceReceivableUngeneratedCents: 0,
           generatedResourceAgreedCents: 0,
-          additionalIncomeNetCents: additionalIncomeNetTotals.get(departureId) ?? 0,
+          additionalIncomeNetCents: income?.netCents ?? 0,
           collectionStats: { ...EMPTY_OVERVIEW_COLLECTION_STATS },
+          bSupplement: { ...EMPTY_OVERVIEW_B_SUPPLEMENT },
         })
         collectionInputsByDeparture.set(departureId, [])
+        sourceOrdersByDeparture.set(departureId, [])
       }
       for (const fact of sourceOrderPathFacts) {
+        sourceOrdersByDeparture.get(fact.departureId)!.push(fact)
         const sourceFacts = overviewSourceFactsMap.get(fact.departureId)!
-        const states = sourceOrderStates.get(fact.id) ?? []
+        const financeState = sourceOrderFinanceStates.get(fact.id)
+        const states = financeState?.paths ?? []
         const customerState = states.find(
           (state) =>
             state.pathType ===
@@ -210,6 +238,72 @@ export class DepartureReadModelService {
           }
         }
       }
+
+      const today = getShanghaiTodayString()
+
+      for (const departureId of uniqueIds) {
+        const sourceFacts = overviewSourceFactsMap.get(departureId)!
+        const rollup = segmentRollupMap.get(departureId)
+        const orders = sourceOrdersByDeparture.get(departureId) ?? []
+        const income = additionalIncomeTotals.get(departureId)
+        const financeBundle = financeBundleMap.get(departureId)
+        const financeRebateUnpaid = financeBundle?.snapshot.rebateUnpaidCents ?? 0
+        const scheduleHints = financeBundle?.overviewScheduleHints
+
+        const segmentInputs =
+          rollup?.segments.map((segment) => {
+            const payableGeneratedCount = segment.resources.filter(
+              (resource) => resourceStates.get(resource.id)?.hasSchedule,
+            ).length
+            return {
+              resourceCount: segment.resourceCount,
+              payableGeneratedCount,
+              outsourceCount: segment.outsourceCount,
+              resourceAmountCents: segment.resourceAmountCents,
+            }
+          }) ?? []
+
+        const departureResourceInputs =
+          rollup?.resources
+            .filter((resource) => resource.anchor === 'departure')
+            .map((resource) => ({
+              resourceKind: resource.resourceKind,
+              amountCents: resource.amountCents,
+              hasPaymentSchedule: resourceStates.get(resource.id)?.hasSchedule ?? false,
+            })) ?? []
+
+        const segmentResourceRows =
+          rollup?.resources
+            .filter((resource) => resource.anchor === 'segment')
+            .map((resource) => ({
+              resourceKind: resource.resourceKind,
+              amountCents: resource.amountCents,
+            })) ?? []
+
+        sourceFacts.bSupplement = buildDepartureOverviewBSupplement({
+          sourceOrders: orders.map((order) => {
+            const financeState = sourceOrderFinanceStates.get(order.id)
+            return {
+              guestCount: order.guestCount,
+              recordedGuestCount: order.recordedGuestCount,
+              hasPaymentSchedule: financeState?.meta.hasSchedule ?? false,
+              netReceivableCents: order.netReceivableCents,
+            }
+          }),
+          segments: segmentInputs,
+          departureResources: departureResourceInputs,
+          income: {
+            amountCentsTotal: income?.grossCents ?? 0,
+            commissionCentsTotal: income?.expenseCents ?? 0,
+          },
+          rebateUnpaidCents: financeRebateUnpaid,
+          segmentResourceRows:
+            segmentResourceRows.length > 0 ? segmentResourceRows : undefined,
+          today,
+          overdueAccountCount: scheduleHints?.overdueAccountCount ?? 0,
+          customerTopUpCents: scheduleHints?.customerTopUpCents ?? 0,
+        })
+      }
     }
 
     for (const departureId of uniqueIds) {
@@ -225,6 +319,7 @@ export class DepartureReadModelService {
         segmentCount: 0,
         resourceCount: 0,
         payableCents: 0,
+        segments: [],
         resources: [],
       }
       const financeBundle = financeBundleMap.get(departureId)
@@ -299,29 +394,46 @@ export class DepartureReadModelService {
     organizationId: string,
     departureIds: string[],
   ): Promise<SourceOrderPathFact[]> {
-    return this.prisma.sourceOrder.findMany({
-      where: {
-        departureId: { in: departureIds },
-        departure: { organizationId },
-      },
-      select: {
-        id: true,
-        departureId: true,
-        collectionMode: true,
-        depositCents: true,
-        balanceCents: true,
-        netReceivableCents: true,
-        partnerCollectedCents: true,
-        guestCollectCents: true,
-      },
-    })
+    return this.prisma.sourceOrder
+      .findMany({
+        where: {
+          departureId: { in: departureIds },
+          departure: { organizationId },
+        },
+        select: {
+          id: true,
+          departureId: true,
+          collectionMode: true,
+          depositCents: true,
+          balanceCents: true,
+          netReceivableCents: true,
+          partnerCollectedCents: true,
+          guestCollectCents: true,
+          guestCount: true,
+          _count: { select: { guests: true } },
+        },
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          id: row.id,
+          departureId: row.departureId,
+          collectionMode: row.collectionMode,
+          depositCents: row.depositCents,
+          balanceCents: row.balanceCents,
+          netReceivableCents: row.netReceivableCents,
+          partnerCollectedCents: row.partnerCollectedCents,
+          guestCollectCents: row.guestCollectCents,
+          guestCount: row.guestCount,
+          recordedGuestCount: row._count.guests,
+        })),
+      )
   }
 
-  /** 增收净收益 = Σ(增收金额 − 导游提成) = Σ增收 − Σ提成 */
-  private async batchAdditionalIncomeNetTotals(
+  /** 增收：gross=Σamount，expense=Σcommission，net=gross−expense */
+  private async batchAdditionalIncomeTotals(
     organizationId: string,
     departureIds: string[],
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, AdditionalIncomeTotals>> {
     const rows = await this.prisma.departureIncomeRecord.groupBy({
       by: ['departureId'],
       where: {
@@ -331,10 +443,18 @@ export class DepartureReadModelService {
       _sum: { amountCents: true, commissionCents: true },
     })
     return new Map(
-      rows.map((row) => [
-        row.departureId,
-        (row._sum.amountCents ?? 0) - (row._sum.commissionCents ?? 0),
-      ]),
+      rows.map((row) => {
+        const grossCents = row._sum.amountCents ?? 0
+        const expenseCents = row._sum.commissionCents ?? 0
+        return [
+          row.departureId,
+          {
+            grossCents,
+            expenseCents,
+            netCents: grossCents - expenseCents,
+          },
+        ]
+      }),
     )
   }
 
@@ -346,13 +466,18 @@ export class DepartureReadModelService {
           id: true,
           departureId: true,
           resources: {
-            select: { id: true, amountCents: true },
+            select: { id: true, amountCents: true, resourceKind: true },
           },
         },
       }),
       this.prisma.departureResource.findMany({
         where: { departureId: { in: departureIds } },
-        select: { id: true, departureId: true, amountCents: true },
+        select: {
+          id: true,
+          departureId: true,
+          amountCents: true,
+          resourceKind: true,
+        },
       }),
     ])
 
@@ -362,20 +487,37 @@ export class DepartureReadModelService {
         segmentCount: 0,
         resourceCount: 0,
         payableCents: 0,
+        segments: [],
         resources: [],
       })
     }
 
     for (const segment of segments) {
       const rollup = map.get(segment.departureId)!
-      rollup.segmentCount += 1
-      rollup.resourceCount += segment.resources.length
-      rollup.payableCents += segment.resources.reduce(
+      const segmentResources = segment.resources.map((resource) => ({
+        id: resource.id,
+        amountCents: resource.amountCents,
+        resourceKind: resource.resourceKind,
+      }))
+      const resourceAmountCents = segmentResources.reduce(
         (sum, resource) => sum + resource.amountCents,
         0,
       )
+      const outsourceCount = segmentResources.filter(
+        (resource) => resource.resourceKind === ResourceKind.OUTSOURCE,
+      ).length
+      rollup.segmentCount += 1
+      rollup.resourceCount += segmentResources.length
+      rollup.payableCents += resourceAmountCents
+      rollup.segments.push({
+        id: segment.id,
+        resourceCount: segmentResources.length,
+        outsourceCount,
+        resourceAmountCents,
+        resources: segmentResources,
+      })
       rollup.resources.push(
-        ...segment.resources.map((resource) => ({
+        ...segmentResources.map((resource) => ({
           ...resource,
           anchor: 'segment' as const,
         })),
@@ -389,6 +531,7 @@ export class DepartureReadModelService {
       rollup.resources.push({
         id: resource.id,
         amountCents: resource.amountCents,
+        resourceKind: resource.resourceKind,
         anchor: 'departure',
       })
     }

@@ -232,14 +232,29 @@ export const emptyDepartureFinanceSnapshot = (): DepartureFinanceSnapshot => ({
  * One Facade read for Departure read model: signed snapshot (overview) +
  * clamped obligation summary (legacy flat fields / tags / settled gate).
  */
+export interface DepartureOverviewScheduleHints {
+  /** 逾期账款条数（应收+应付，未结清且到期日早于今天、未关闭）。 */
+  overdueAccountCount: number
+  /** 客户待补款：客户结算路径未结清合计。 */
+  customerTopUpCents: number
+}
+
 export interface DepartureFinanceReadBundle {
   snapshot: DepartureFinanceSnapshot
   obligationSummary: DepartureFinanceObligationSummary
+  /** B 款概览待办/提示所需的账款聚合（ADR-0004：不向 Departure 暴露节点明细）。 */
+  overviewScheduleHints: DepartureOverviewScheduleHints
 }
+
+export const emptyDepartureOverviewScheduleHints = (): DepartureOverviewScheduleHints => ({
+  overdueAccountCount: 0,
+  customerTopUpCents: 0,
+})
 
 export const emptyDepartureFinanceReadBundle = (): DepartureFinanceReadBundle => ({
   snapshot: emptyDepartureFinanceSnapshot(),
   obligationSummary: emptyDepartureFinanceObligationSummary(),
+  overviewScheduleHints: emptyDepartureOverviewScheduleHints(),
 })
 
 export type { DepartureFinanceObligationSummary }
@@ -474,6 +489,7 @@ export class DepartureFinanceFacade {
           cancelledAt: true,
           sourceType: true,
           sourceId: true,
+          dueDate: true,
           // Load all normal verifications; snapshot excludes voided-txn rows below,
           // while obligationSummary keeps VerificationService.batchGetSettledAmounts
           // semantics (status=normal only, no voidedAt filter).
@@ -519,9 +535,12 @@ export class DepartureFinanceFacade {
       obligationSchedulesByDeparture.set(departureId, [])
     }
 
+    const today = getShanghaiTodayString()
+
     for (const schedule of schedules) {
       const bundle = result.get(schedule.departureId)!
       const snapshot = bundle.snapshot
+      const hints = bundle.overviewScheduleHints
       const effectiveVerifications = schedule.verifications.filter(
         (verification) => verification.transaction.voidedAt == null,
       )
@@ -534,12 +553,28 @@ export class DepartureFinanceFacade {
         0,
       )
       const remainingCents = schedule.amountCents - receivedOrPaidCents
+      const unsettledAmountCents = Math.max(remainingCents, 0)
       obligationSchedulesByDeparture.get(schedule.departureId)!.push({
         direction: schedule.direction,
         amountCents: schedule.amountCents,
         cancelledAt: schedule.cancelledAt,
         settledCents: legacySettledCents,
       })
+
+      if (
+        unsettledAmountCents > 0 &&
+        schedule.cancelledAt == null &&
+        formatDateOnly(schedule.dueDate) < today
+      ) {
+        hints.overdueAccountCount += 1
+      }
+      if (
+        schedule.direction === PaymentScheduleDirection.receivable &&
+        schedule.sourceType === PaymentScheduleSourceType.SOURCE_ORDER_CUSTOMER_SETTLEMENT &&
+        unsettledAmountCents > 0
+      ) {
+        hints.customerTopUpCents += unsettledAmountCents
+      }
 
       if (schedule.direction === PaymentScheduleDirection.receivable) {
         const isSourceReceivable = isSourceOrderReceivableSourceType(schedule.sourceType)
