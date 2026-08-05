@@ -9,6 +9,10 @@ import {
   type DepartureFinanceObligationSummary,
 } from '../finance/departure-finance-obligation-summary'
 import type { DepartureOverviewCollectionStats } from './departure-overview-collection-stats'
+import {
+  EMPTY_OVERVIEW_B_SUPPLEMENT,
+  type DepartureOverviewBSupplement,
+} from './departure-overview-b-supplement'
 
 export interface ScheduleSnapshot {
   direction: PaymentScheduleDirection
@@ -80,6 +84,8 @@ export interface DepartureOverviewSourceFacts {
   /** 增收净收益：各条公司增收合计；计入当前毛利，不并入结算应收 */
   additionalIncomeNetCents: number
   collectionStats: DepartureOverviewCollectionStats
+  /** B 款待办与构成补充（#277）；缺省为零。 */
+  bSupplement?: DepartureOverviewBSupplement
 }
 
 export const EMPTY_OVERVIEW_COLLECTION_STATS: DepartureOverviewCollectionStats = {
@@ -105,6 +111,7 @@ function buildDepartureOverviewStats(input: {
   const cashNetInflowCents =
     finance.incomeTransactionCents - finance.expenseTransactionCents
   const collection = input.sourceFacts.collectionStats
+  const bSupplement = input.sourceFacts.bSupplement ?? EMPTY_OVERVIEW_B_SUPPLEMENT
 
   const stats: DepartureOverviewStats = {
     receivedCents: finance.sourceReceivableReceivedCents,
@@ -113,6 +120,8 @@ function buildDepartureOverviewStats(input: {
     ungeneratedReceivableCents: input.sourceFacts.sourceReceivableUngeneratedCents,
     otherReceivableCents: finance.otherReceivableCents,
     additionalIncomeNetCents: input.sourceFacts.additionalIncomeNetCents,
+    additionalIncomeGrossCents: bSupplement.additionalIncomeGrossCents,
+    additionalIncomeExpenseCents: bSupplement.additionalIncomeExpenseCents,
     settlementCollectionReceivedCents: collection.settlementCollectionReceivedCents,
     settlementCollectionReceivableCents: collection.settlementCollectionReceivableCents,
     guestCollectionReceivedCents: collection.guestCollectionReceivedCents,
@@ -122,6 +131,16 @@ function buildDepartureOverviewStats(input: {
     confirmedRebateCents: finance.confirmedRebateCents,
     rebatePaidCents: finance.rebatePaidCents,
     rebateUnpaidCents: finance.rebateUnpaidCents,
+    customerTopUpCents: bSupplement.customerTopUpCents,
+    guestListRecorded: bSupplement.guestList.recorded,
+    guestListPlanned: bSupplement.guestList.planned,
+    guestListMissing: bSupplement.guestList.missing,
+    pendingReceivableCount: bSupplement.pendingReceivableCount,
+    pendingPayableCount: bSupplement.pendingPayableCount,
+    unassignedSegmentCount: bSupplement.unassignedSegmentCount,
+    overdueAccountCount: bSupplement.overdueAccountCount,
+    resourceCostCents: bSupplement.resourceCostCents,
+    outsourceCostCents: bSupplement.outsourceCostCents,
     confirmedPayableCents: finance.confirmedPayableCents,
     paidCents: finance.paidCents,
     resourcePaidCents: finance.resourcePaidCents,

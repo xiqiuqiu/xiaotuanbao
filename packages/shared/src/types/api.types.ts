@@ -870,6 +870,15 @@ export interface DepartureOverviewAnomaly {
   differenceCents: number
 }
 
+/**
+ * 发团概览统计（ADR-0038 / #277）。
+ *
+ * 概览收款进度（主层）：
+ * - 分子 = DepartureDetail.verifiedReceivableCents（已提交应收已核销）
+ * - 分母 = verifiedReceivableCents + openUnsettledReceivableCents + closedUnreceivedCents
+ *
+ * 收款卡提示：客户待补款 = customerTopUpCents；待返客户 = rebateUnpaidCents。
+ */
 export interface DepartureOverviewStats {
   receivedCents: number
   openUnreceivedCents: number
@@ -881,9 +890,13 @@ export interface DepartureOverviewStats {
    * 计入收入合计与当前毛利；不并入结算应收或概览收款进度分母。
    */
   additionalIncomeNetCents: number
+  /** 增收毛额（台账 amount 合计）；构成 Popover 用。 */
+  additionalIncomeGrossCents: number
+  /** 增收费用/导游提成（台账 commission 合计）；构成 Popover 用。 */
+  additionalIncomeExpenseCents: number
   /**
    * 团款收款进度分子：各单 min(Guest已收,S)+客户补款已收（单笔不超过 S）。
-   * 不含代收溢价与返利（ADR-0033 / #193）。
+   * 不含代收溢价与返利（ADR-0033 / #193）。概览主层收款进度改用已提交应收口径（ADR-0038）。
    */
   settlementCollectionReceivedCents: number
   /** 团款收款进度分母：各单结算金额 S 合计。 */
@@ -898,8 +911,28 @@ export interface DepartureOverviewStats {
   confirmedRebateCents: number
   /** 返利已付（有效核销）。 */
   rebatePaidCents: number
-  /** 返利未付（约定 − 已付）。 */
+  /** 返利未付（约定 − 已付）；B 款收款卡「待返客户」提示复用此字段。 */
   rebateUnpaidCents: number
+  /** 客户待补款：客户结算路径未结清合计（B 款收款卡提示）。 */
+  customerTopUpCents: number
+  /** B 款待办：客名单已录人数。 */
+  guestListRecorded: number
+  /** B 款待办：客名单计划人数。 */
+  guestListPlanned: number
+  /** B 款待办：客名单缺少人数 = max(计划 − 已录, 0)。 */
+  guestListMissing: number
+  /** B 款待办：待提交应收条数（无节点且净应收>0 的客源单）。 */
+  pendingReceivableCount: number
+  /** B 款待办：待提交应付条数（段内未生成 + 发团级未生成且金额>0）。 */
+  pendingPayableCount: number
+  /** B 款待办：未安排资源的行程段数。 */
+  unassignedSegmentCount: number
+  /** B 款待办：逾期账款条数（应收+应付）。 */
+  overdueAccountCount: number
+  /** 资源成本（不含拼出）；成本构成 Popover。 */
+  resourceCostCents: number
+  /** 拼出成本；成本构成 Popover。 */
+  outsourceCostCents: number
   confirmedPayableCents: number
   paidCents: number
   /** 资源应付节点的有效核销合计，主付款进度分子（ADR-0020）；不等于 paidCents。 */

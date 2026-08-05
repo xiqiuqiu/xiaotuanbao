@@ -404,6 +404,57 @@ describe('departure-read-model.utils', () => {
       expect(aggregate.overviewStats.additionalIncomeNetCents).toBe(80_000)
     })
 
+    it('exposes B-overview todo and cost-split fields from bSupplement (#277)', () => {
+      const aggregate = buildDepartureReadModelAggregate({
+        sourceOrders: {
+          count: 2,
+          totalGuests: 6,
+          grossReceivableCents: 300_000,
+          fareAdjustmentNetCents: 0,
+          discountCents: 0,
+          netReceivableCents: 300_000,
+        },
+        segmentCount: 2,
+        resourceCount: 2,
+        payableCents: 100_000,
+        overviewSourceFacts: {
+          sourceReceivableUngeneratedCents: 200_000,
+          generatedResourceAgreedCents: 0,
+          additionalIncomeNetCents: 42_000,
+          collectionStats: {
+            ...EMPTY_OVERVIEW_COLLECTION_STATS,
+            settlementCollectionReceivableCents: 300_000,
+          },
+          bSupplement: {
+            guestList: { recorded: 3, planned: 6, missing: 3 },
+            pendingReceivableCount: 1,
+            pendingPayableCount: 2,
+            unassignedSegmentCount: 1,
+            overdueAccountCount: 1,
+            resourceCostCents: 70_000,
+            outsourceCostCents: 30_000,
+            additionalIncomeGrossCents: 50_000,
+            additionalIncomeExpenseCents: 8_000,
+            customerTopUpCents: 5_000,
+            customerRebateCents: 3_000,
+          },
+        },
+      })
+
+      expect(aggregate.overviewStats.guestListMissing).toBe(3)
+      expect(aggregate.overviewStats.guestListRecorded).toBe(3)
+      expect(aggregate.overviewStats.guestListPlanned).toBe(6)
+      expect(aggregate.overviewStats.pendingReceivableCount).toBe(1)
+      expect(aggregate.overviewStats.pendingPayableCount).toBe(2)
+      expect(aggregate.overviewStats.unassignedSegmentCount).toBe(1)
+      expect(aggregate.overviewStats.overdueAccountCount).toBe(1)
+      expect(aggregate.overviewStats.resourceCostCents).toBe(70_000)
+      expect(aggregate.overviewStats.outsourceCostCents).toBe(30_000)
+      expect(aggregate.overviewStats.additionalIncomeGrossCents).toBe(50_000)
+      expect(aggregate.overviewStats.additionalIncomeExpenseCents).toBe(8_000)
+      expect(aggregate.overviewStats.customerTopUpCents).toBe(5_000)
+    })
+
     it('computes estimatedMarginCents when revenue total is zero', () => {
       // 收入合计 = 0 + 0；当前毛利 = 0 − 250_000（毛利率分母为零由 UI 处理）
       const aggregate = buildDepartureReadModelAggregate({
