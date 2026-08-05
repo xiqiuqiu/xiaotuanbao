@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: partially superseded by ADR-0038
 ---
 
 # 发团概览采用经营主指标与财务明细双层口径
