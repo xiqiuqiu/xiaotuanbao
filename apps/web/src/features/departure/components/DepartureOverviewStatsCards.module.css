@@ -1,38 +1,344 @@
-.metricCardEnter {
-  animation: metric-card-enter 180ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
+.layoutRoot {
+  width: 100%;
 }
 
-/* ⓘ 与相邻标题同色（Statistic description / Title heading） */
-.calcInfoButton {
+.sectionCard {
+  border-radius: var(--ant-border-radius-lg, 8px);
+  border-color: var(--ant-color-border-secondary, #f0f0f0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.sectionCardEnter {
+  animation: metric-card-enter 180ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1))
+    both;
+}
+
+.businessSection.sectionCardEnter {
+  animation-delay: 60ms;
+}
+
+.sectionHeader {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
+}
+
+.sectionTitle {
+  margin: 0 !important;
+  font-weight: 600 !important;
+}
+
+.todoBoard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.todoBoard .todoLink {
+  min-width: 0;
+}
+
+.todoBoardHead {
+  width: 100%;
+}
+
+.todoBoardValue {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.todoLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.todoLink:hover {
   color: inherit;
 }
 
-.calcInfoButton:global(.ant-btn-text):not(:disabled):not(:global(.ant-btn-disabled)):hover,
-.calcInfoButton:global(.ant-btn-text):not(:disabled):not(:global(.ant-btn-disabled)):active {
-  color: inherit;
+.todoChipWarn,
+.todoChipOk {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  border-radius: var(--ant-border-radius-lg, 8px);
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  background: var(--ant-color-fill-quaternary, #fafafa);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
-.cashBreakdown {
-  min-width: 144px;
-  margin-inline-start: auto;
+.todoChipWarn {
+  border-inline-start-width: 3px;
 }
 
-.progressBreakdown {
-  margin-top: 8px;
+.todoChipOk {
+  opacity: 0.92;
 }
 
-.progressSection + .progressSection {
-  padding-top: 16px;
-  border-top: 1px solid var(--ant-color-split, rgba(5, 5, 5, 0.06));
+.todoLink:hover .todoChipWarn,
+.todoLink:hover .todoChipOk {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.todoChipIcon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.todoChipLabel {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.todoChipArrow {
+  flex-shrink: 0;
+  margin-inline-start: 2px;
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary, #bfbfbf);
+}
+
+.todoLink:hover .todoChipArrow {
+  color: var(--ant-color-text-tertiary, #8c8c8c);
+}
+
+.todoTileHead {
+  min-width: 0;
+}
+
+.compositionMetricStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto minmax(0, 0.85fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.compositionStripCell,
+.compositionStripCellTotal,
+.compositionStripCellFeatured {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--ant-color-fill-quaternary, #fafafa);
+}
+
+.compositionStripCellTotal {
+  background: var(--ant-color-bg-container, #fff);
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.compositionStripCellFeatured {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ant-color-primary-border, #91caff);
+}
+
+.compositionStripCellFeatured::before {
+  content: '';
+  position: absolute;
+  inset-block: 10px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--ant-color-primary, #1464d9);
+}
+
+.compositionStripHead {
+  min-height: 24px;
+}
+
+.compositionStripLabel {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.compositionStripLabelHint {
+  font-size: 12px;
+  line-height: 1.3;
+  border-bottom: 1px dashed var(--ant-color-text-quaternary, #bfbfbf);
+  cursor: help;
+}
+
+.compositionStripValue {
+  font-size: 15px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.compositionStripValueFeatured {
+  font-size: 16px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.compositionStripValueHint {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.compositionStripDivider {
+  width: 1px;
+  margin: 4px 0;
+  background: var(--ant-color-split, rgba(5, 5, 5, 0.06));
+}
+
+.compositionDetailIcon {
+  flex-shrink: 0;
+  width: 24px !important;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 !important;
+  color: var(--ant-color-text-tertiary, #8c8c8c);
+}
+
+.compositionDetailIcon:hover {
+  color: var(--ant-color-primary, #1464d9) !important;
+}
+
+.compositionPopover {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 260px;
+}
+
+.metricLineAux {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.businessPaymentDivider {
+  height: 1px;
+  margin: 14px 0 12px;
+  background: var(--ant-color-split, rgba(5, 5, 5, 0.06));
+}
+
+.progressSectionLabel {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.progressSection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.progressPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 12px 14px;
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--ant-color-bg-container, #fff);
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.progressPanelCollection {
+  border-inline-start: 3px solid var(--ant-color-primary, #1677ff);
+}
+
+.progressPanelPayment {
+  border-inline-start: 3px solid var(--ant-color-border, #d9d9d9);
+}
+
+.progressHead {
+  min-height: 24px;
+}
+
+.progressTitle {
+  font-size: 13px;
+}
+
+.progressPercentBadge {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressBarWrap {
+  padding: 8px 10px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--ant-color-fill-quaternary, #fafafa);
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.progressAmountMeta {
+  padding: 8px 10px;
+  border-radius: var(--ant-border-radius, 6px);
+  background: var(--ant-color-fill-quaternary, #fafafa);
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.progressAmountInline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 0;
+}
+
+.progressAmountItemWrap {
+  flex: 0 0 auto;
+}
+
+.progressAmountItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.progressAmountSep {
+  margin: 0 8px;
+  font-size: 12px;
+  user-select: none;
+}
+
+.progressBar {
+  margin: 0;
 }
 
 .progressLoad :global(.ant-progress-track) {
   transform-origin: left center;
   animation: progress-load 240ms var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)) both;
+  animation-delay: 120ms;
 }
 
 :global([dir='rtl']) .progressLoad :global(.ant-progress-track) {
   transform-origin: right center;
+}
+
+.collectionHints {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px dashed var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.collectionHintItem {
+  padding: 7px 10px;
+  border-radius: var(--ant-border-radius, 6px);
+  border: 1px solid transparent;
+  font-size: 12px;
 }
 
 @keyframes progress-load {
@@ -43,46 +349,6 @@
   to {
     transform: scaleX(1);
   }
-}
-
-.firstRow > :global(.ant-col):nth-child(2) .metricCardEnter {
-  animation-delay: 30ms;
-}
-
-.firstRow > :global(.ant-col):nth-child(3) .metricCardEnter {
-  animation-delay: 60ms;
-}
-
-.firstRow > :global(.ant-col):nth-child(4) .metricCardEnter {
-  animation-delay: 90ms;
-}
-
-.compositionCard.metricCardEnter {
-  animation-delay: 105ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(1) .metricCardEnter {
-  animation-delay: 120ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(1) .progressSection:nth-child(1) .progressLoad :global(.ant-progress-track) {
-  animation-delay: 180ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(1) .progressSection:nth-child(2) .progressLoad :global(.ant-progress-track) {
-  animation-delay: 210ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(2) .metricCardEnter {
-  animation-delay: 150ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(2) .progressLoad :global(.ant-progress-track) {
-  animation-delay: 240ms;
-}
-
-.thirdRow > :global(.ant-col):nth-child(3) .metricCardEnter {
-  animation-delay: 180ms;
 }
 
 @keyframes metric-card-enter {
@@ -97,25 +363,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .metricCardEnter {
-    animation-name: metric-card-fade;
-    animation-duration: 120ms;
-    animation-delay: 0ms;
-  }
-
-  .progressLoad :global(.ant-progress-track) {
-    animation: none;
-  }
-}
-
-@media (max-width: 575px) {
-  .cashBreakdown {
-    width: 100%;
-    margin-inline-start: 0;
-  }
-}
-
 @keyframes metric-card-fade {
   from {
     opacity: 0;
@@ -123,5 +370,45 @@
 
   to {
     opacity: 1;
+  }
+}
+
+@media (max-width: 991px) {
+  .todoBoard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compositionMetricStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .compositionStripDivider {
+    display: none;
+  }
+
+  .progressSection {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 575px) {
+  .todoBoard {
+    grid-template-columns: 1fr;
+  }
+
+  .compositionMetricStrip {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sectionCardEnter {
+    animation-name: metric-card-fade;
+    animation-duration: 120ms;
+    animation-delay: 0ms;
+  }
+
+  .progressLoad :global(.ant-progress-track) {
+    animation: none;
   }
 }

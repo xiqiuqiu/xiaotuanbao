@@ -1,44 +1,59 @@
+import { Link } from '@tanstack/react-router'
 import {
   Alert,
   Button,
   Card,
-  Col,
   Flex,
   Popover,
   Progress,
-  Row,
-  Space,
-  Statistic,
   Tooltip,
   Typography,
   theme,
 } from 'antd'
-import { EllipsisOutlined, InfoCircleOutlined } from '@ant-design/icons'
-import { TransactionDirection } from '@xiaotuanbao/shared'
+import {
+  CheckCircleFilled,
+  ExclamationCircleFilled,
+  InfoCircleOutlined,
+  RightOutlined,
+} from '@ant-design/icons'
 import type { DepartureDetail, DepartureOverviewAnomaly } from '@xiaotuanbao/shared'
 import { formatCents as formatUnsignedCents } from '../catalog'
-import { DepartureTransactionsLink } from '../utils/departure-transactions-link'
+import {
+  buildDepartureOverviewViewModel,
+  type DepartureOverviewViewModel,
+} from '../utils/departure-overview-view-model'
 import { formatReceivableBalanceAnomalyCopy } from '../utils/format-receivable-balance-anomaly'
 import { RECEIVABLE_SETTLEMENT_CALCULATION_GUIDE as CALCULATION_GUIDE } from '../utils/receivable-settlement-metrics.copy'
-import {
-  buildFullDepartureReceivableSettlementMetrics,
-  type FullDepartureReceivableSettlementMetrics,
-} from '../utils/receivable-settlement-metrics'
 import styles from './DepartureOverviewStatsCards.module.css'
 
 const { Text, Title } = Typography
-const EQUAL_HEIGHT_CARD_STYLE = { height: '100%' } as const
 
 function formatCents(cents: number): string {
   return cents < 0 ? `-${formatUnsignedCents(Math.abs(cents))}` : formatUnsignedCents(cents)
 }
 
-/** 分母为零返回 null（展示「暂无数据」）；否则固定 1 位小数，保留负数与超 100% 真实值。 */
-function formatPercent(numerator: number, denominator: number): string | null {
-  if (denominator === 0) {
-    return null
+type CompositionDetailItem = { label: string; value: string }
+
+function buildCompositionDetails(vm: DepartureOverviewViewModel) {
+  return {
+    settlement: [
+      { label: '原始团款', value: formatCents(vm.income.grossReceivableCents) },
+      { label: '优惠合计', value: formatCents(vm.income.discountCents) },
+      { label: '团款调整', value: formatCents(vm.income.fareAdjustmentNetCents) },
+    ],
+    additional: [
+      { label: '增收收入', value: formatCents(vm.income.additionalGrossCents) },
+      { label: '增收支出', value: formatCents(vm.income.additionalExpenseCents) },
+    ],
+    revenue: [
+      { label: '结算应收', value: formatCents(vm.income.settlementReceivableCents) },
+      { label: '增收净收益', value: formatCents(vm.income.additionalNetCents) },
+    ],
+    cost: [
+      { label: '资源成本', value: formatCents(vm.cost.resourceCostCents) },
+      { label: '拼出成本', value: formatCents(vm.cost.outsourceCostCents) },
+    ],
   }
-  return `${((numerator / denominator) * 100).toFixed(1)}%`
 }
 
 interface DepartureOverviewStatsCardsProps {
@@ -47,212 +62,316 @@ interface DepartureOverviewStatsCardsProps {
   animateEnter?: boolean
 }
 
-interface AmountDetailProps {
-  label: string
-  amountCents: number
-  danger?: boolean
-  /** 待提交缺口等提醒项：金额用系统 warning（#FAAD14 / token.colorWarning） */
-  warning?: boolean
-  transactionLink?: {
-    departureId: string
-    direction: TransactionDirection
-  }
+function SectionShell({
+  title,
+  children,
+  className,
+  animateEnter = false,
+}: {
+  title: string
+  children: React.ReactNode
+  className?: string
+  animateEnter?: boolean
+}) {
+  return (
+    <Card
+      className={[
+        styles.sectionCard,
+        animateEnter ? styles.sectionCardEnter : '',
+        className ?? '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      styles={{ body: { padding: '14px 16px' } }}
+    >
+      <Flex justify="space-between" align="center" gap={12} className={styles.sectionHeader}>
+        <Title level={5} className={styles.sectionTitle}>
+          {title}
+        </Title>
+      </Flex>
+      {children}
+    </Card>
+  )
 }
 
-function AmountDetail({
-  label,
-  amountCents,
-  danger = false,
-  warning = false,
-  transactionLink,
-}: AmountDetailProps) {
-  const { token } = theme.useToken()
-  if (amountCents === 0) {
-    return null
-  }
-
+function MetricLine({ label, value }: { label: string; value: string }) {
   return (
-    <Flex justify="space-between" gap={8} wrap>
-      <Text
-        type={danger ? 'danger' : warning ? undefined : 'secondary'}
-        style={warning ? { color: token.colorWarning } : undefined}
-      >
-        {label} {formatCents(amountCents)}
-      </Text>
-      {transactionLink ? (
-        <DepartureTransactionsLink
-          departureId={transactionLink.departureId}
-          direction={transactionLink.direction}
-        >
-          查看流水
-        </DepartureTransactionsLink>
-      ) : null}
+    <Flex justify="space-between" gap={12} className={styles.metricLineAux}>
+      <Text type="secondary">{label}</Text>
+      <Text>{value}</Text>
     </Flex>
   )
 }
 
-function OverviewDetailsPopover({
+function CompositionDetailsPopover({
   title,
   buttonLabel,
-  children,
+  items,
 }: {
   title: string
   buttonLabel: string
-  children: React.ReactNode
+  items: CompositionDetailItem[]
 }) {
+  if (items.length === 0) {
+    return null
+  }
+
   return (
     <Popover
       trigger="click"
       placement="bottomRight"
       title={title}
       content={
-        <Space orientation="vertical" size={8} style={{ width: 280 }}>
-          {children}
-        </Space>
+        <div className={styles.compositionPopover}>
+          {items.map((item) => (
+            <MetricLine key={item.label} label={item.label} value={item.value} />
+          ))}
+        </div>
       }
     >
       <Button
         type="text"
         size="small"
-        icon={<EllipsisOutlined />}
+        icon={<InfoCircleOutlined />}
         aria-label={buttonLabel}
-        style={{ width: 24, minWidth: 24, height: 24, padding: 0 }}
+        className={styles.compositionDetailIcon}
       />
     </Popover>
   )
 }
 
-function CalculationTitle({
+function CompositionMetricCell({
   label,
-  description,
-  asHeading = false,
+  value,
+  popoverTitle,
+  popoverLabel,
+  details = [],
+  total = false,
+  featured = false,
+  hint,
+  valueHint,
 }: {
   label: string
-  description: string
-  /** 进度区小节标题用 h5，统计卡标题保持普通文案 */
-  asHeading?: boolean
+  value: string
+  popoverTitle?: string
+  popoverLabel?: string
+  details?: CompositionDetailItem[]
+  total?: boolean
+  featured?: boolean
+  hint?: string
+  valueHint?: string
 }) {
-  const infoButton = (
-    <Tooltip title={description} styles={{ root: { maxWidth: 420 } }}>
-      <Button
-        type="text"
-        size="small"
-        className={styles.calcInfoButton}
-        icon={<InfoCircleOutlined />}
-        aria-label={`查看${label}说明`}
-        style={{ width: 24, minWidth: 24, height: 24, padding: 0 }}
-      />
+  const { token } = theme.useToken()
+  const labelNode = hint ? (
+    <Tooltip title={hint}>
+      <Text type="secondary" className={styles.compositionStripLabelHint}>
+        {label}
+      </Text>
     </Tooltip>
-  )
-
-  const content = (
-    <Flex component="span" align="center" gap={2}>
-      <span>{label}</span>
-      {infoButton}
-    </Flex>
-  )
-
-  if (asHeading) {
-    return (
-      <Title level={5} style={{ margin: 0 }}>
-        {content}
-      </Title>
-    )
-  }
-
-  return content
-}
-
-function ProgressValue({
-  numerator,
-  denominator,
-  animate,
-}: {
-  numerator: number
-  denominator: number
-  animate: boolean
-}) {
-  const hasData = denominator !== 0
-  const actualPercent = hasData ? (numerator / denominator) * 100 : 0
-  const visualPercent = Math.min(100, Math.max(0, actualPercent))
-
-  if (!hasData) {
-    return <Text strong>暂无数据</Text>
-  }
-
-  return (
-    <Flex align="center" gap={12}>
-      <Progress
-        className={animate ? styles.progressLoad : undefined}
-        percent={visualPercent}
-        showInfo={false}
-        style={{ flex: 1 }}
-      />
-      <Text strong>{`${actualPercent.toFixed(1)}%`}</Text>
-    </Flex>
-  )
-}
-
-/** 进度条下方的金额构成行：已收/未收、已付/未付，保留有符号真实金额。 */
-function ProgressBreakdown({
-  items,
-}: {
-  items: { label: string; amountCents: number }[]
-}) {
-  return (
-    <Flex justify="space-between" gap={12} wrap className={styles.progressBreakdown}>
-      {items.map(({ label, amountCents }) => (
-        <Flex key={label} align="baseline" gap={8}>
-          <Text type="secondary">{label}</Text>
-          <Text strong>{formatCents(amountCents)}</Text>
-        </Flex>
-      ))}
-    </Flex>
-  )
-}
-
-function SummaryCard({
-  title,
-  value,
-  suffix,
-  equationDescription,
-  entry,
-  animateEnter = false,
-}: {
-  title: string
-  value: string | number
-  suffix?: string
-  equationDescription?: string
-  /** 卡片右上角的明细入口图标按钮 */
-  entry?: React.ReactNode
-  animateEnter?: boolean
-}) {
-  const titleNode = equationDescription ? (
-    <CalculationTitle label={title} description={equationDescription} />
   ) : (
-    <span>{title}</span>
+    <Text type="secondary" className={styles.compositionStripLabel}>
+      {label}
+    </Text>
   )
 
+  const cellClass = featured
+    ? styles.compositionStripCellFeatured
+    : total
+      ? styles.compositionStripCellTotal
+      : styles.compositionStripCell
+
   return (
-    <Card
-      className={animateEnter ? styles.metricCardEnter : undefined}
-      style={EQUAL_HEIGHT_CARD_STYLE}
+    <div
+      className={cellClass}
+      style={
+        featured
+          ? {
+              borderColor: token.colorPrimaryBorder,
+              background: token.colorPrimaryBg,
+            }
+          : undefined
+      }
     >
-      <Statistic
-        title={
-          entry ? (
-            <Flex component="span" align="center" justify="space-between" style={{ width: '100%' }}>
-              {titleNode}
-              {entry}
-            </Flex>
-          ) : (
-            titleNode
+      <Flex justify="space-between" align="center" gap={4} className={styles.compositionStripHead}>
+        {labelNode}
+        {details.length > 0 && popoverTitle && popoverLabel ? (
+          <CompositionDetailsPopover
+            title={popoverTitle}
+            buttonLabel={popoverLabel}
+            items={details}
+          />
+        ) : null}
+      </Flex>
+      <Text
+        strong
+        className={featured ? styles.compositionStripValueFeatured : styles.compositionStripValue}
+      >
+        {value}
+      </Text>
+      {valueHint ? (
+        <Text
+          type="secondary"
+          className={styles.compositionStripValueHint}
+          style={{ color: token.colorPrimary }}
+        >
+          {valueHint}
+        </Text>
+      ) : null}
+    </div>
+  )
+}
+
+function TodoReminderSection({
+  vm,
+  animateEnter,
+}: {
+  vm: DepartureOverviewViewModel
+  animateEnter: boolean
+}) {
+  const { token } = theme.useToken()
+
+  return (
+    <SectionShell title="待办提醒" animateEnter={animateEnter}>
+      <div className={styles.todoBoard}>
+        {vm.todos.map((todo) => {
+          const hasIssue = todo.count > 0
+          return (
+            <Link
+              key={todo.key}
+              to="/departure/$departureId"
+              params={{ departureId: vm.departureId }}
+              search={{ tab: todo.tab }}
+              className={styles.todoLink}
+            >
+              <div
+                className={hasIssue ? styles.todoChipWarn : styles.todoChipOk}
+                style={
+                  hasIssue
+                    ? {
+                        borderColor: token.colorWarningBorder,
+                        background: token.colorWarningBg,
+                      }
+                    : undefined
+                }
+              >
+                <Flex
+                  justify="space-between"
+                  align="flex-start"
+                  gap={8}
+                  className={styles.todoBoardHead}
+                >
+                  <Flex align="center" gap={6} className={styles.todoTileHead}>
+                    {hasIssue ? (
+                      <ExclamationCircleFilled
+                        className={styles.todoChipIcon}
+                        style={{ color: token.colorWarning }}
+                      />
+                    ) : (
+                      <CheckCircleFilled
+                        className={styles.todoChipIcon}
+                        style={{ color: token.colorSuccess }}
+                      />
+                    )}
+                    <Text type="secondary" className={styles.todoChipLabel}>
+                      {todo.label}
+                    </Text>
+                  </Flex>
+                  <RightOutlined className={styles.todoChipArrow} />
+                </Flex>
+                <Text
+                  strong
+                  className={styles.todoBoardValue}
+                  style={hasIssue ? { color: token.colorWarning } : undefined}
+                >
+                  {hasIssue ? todo.detail : '正常'}
+                </Text>
+              </div>
+            </Link>
           )
-        }
-        value={value}
-        suffix={suffix}
+        })}
+      </div>
+    </SectionShell>
+  )
+}
+
+function BusinessMetricsStrip({ vm }: { vm: DepartureOverviewViewModel }) {
+  const details = buildCompositionDetails(vm)
+
+  return (
+    <div className={styles.compositionMetricStrip}>
+      <CompositionMetricCell
+        label="结算应收"
+        value={formatCents(vm.income.settlementReceivableCents)}
+        popoverTitle="团款组成"
+        popoverLabel="查看团款组成"
+        details={details.settlement}
+        hint={CALCULATION_GUIDE.结算应收简}
       />
-    </Card>
+      <CompositionMetricCell
+        label="增收净收益"
+        value={formatCents(vm.income.additionalNetCents)}
+        popoverTitle="增收组成"
+        popoverLabel="查看增收组成"
+        details={details.additional}
+      />
+      <CompositionMetricCell
+        label="收入合计"
+        value={formatCents(vm.income.revenueTotalCents)}
+        popoverTitle="收入组成"
+        popoverLabel="查看收入组成"
+        details={details.revenue}
+        total
+        hint={CALCULATION_GUIDE.收入合计简}
+      />
+      <div className={styles.compositionStripDivider} aria-hidden />
+      <CompositionMetricCell
+        label="成本合计"
+        value={formatCents(vm.cost.costTotalCents)}
+        popoverTitle="成本组成"
+        popoverLabel="查看成本组成"
+        details={details.cost}
+        total
+      />
+      <CompositionMetricCell
+        label="当前毛利"
+        value={formatCents(vm.margin.currentMarginCents)}
+        featured
+        hint={CALCULATION_GUIDE.当前毛利简}
+        valueHint={vm.margin.marginRate ? `毛利率 ${vm.margin.marginRate}` : undefined}
+      />
+    </div>
+  )
+}
+
+function shortenProgressLabel(label: string): string {
+  return label.replace('合计', '').replace('金额', '')
+}
+
+function ProgressAmountStrip({ rows }: { rows: { label: string; amountCents: number }[] }) {
+  const { token } = theme.useToken()
+
+  return (
+    <div className={styles.progressAmountInline}>
+      {rows.map((row, index) => {
+        const isOutstanding = row.label.includes('未收') || row.label.includes('未付')
+        const highlight = isOutstanding && row.amountCents > 0
+        return (
+          <Flex key={row.label} align="center" gap={0} className={styles.progressAmountItemWrap}>
+            {index > 0 ? (
+              <Text type="secondary" className={styles.progressAmountSep}>
+                ·
+              </Text>
+            ) : null}
+            <span className={styles.progressAmountItem}>
+              <Text type="secondary">{shortenProgressLabel(row.label)}</Text>
+              <Text strong style={highlight ? { color: token.colorWarning } : undefined}>
+                {formatCents(row.amountCents)}
+              </Text>
+            </span>
+          </Flex>
+        )
+      })}
+    </div>
   )
 }
 
@@ -264,372 +383,143 @@ function ReceivableAnomalyAlert({ anomaly }: { anomaly: DepartureOverviewAnomaly
       showIcon
       title={copy.title}
       description={copy.description}
-      style={{ marginTop: 12 }}
+      style={{ marginTop: 4 }}
     />
   )
 }
 
-interface OverviewSectionProps {
-  departure: DepartureDetail
+function ProgressPanel({
+  title,
+  progress,
+  rows,
+  hints,
+  variant,
+  anomaly,
+  animateEnter,
+}: {
+  title: string
+  progress: string | null
+  rows: { label: string; amountCents: number }[]
+  hints?: { label: string; amountCents: number }[]
+  variant: 'collection' | 'payment'
+  anomaly?: DepartureOverviewAnomaly
   animateEnter: boolean
-  receivableSettlement: FullDepartureReceivableSettlementMetrics
-}
-
-function OverviewSummaryRows({
-  departure,
-  animateEnter,
-  receivableSettlement,
-}: OverviewSectionProps) {
-  const stats = departure.overviewStats
-  const hasCostDetails =
-    stats.confirmedPayableCents !== 0 ||
-    stats.ungeneratedPayableCents !== 0 ||
-    stats.otherPayableCents !== 0 ||
-    stats.resourcePayableDifferenceCents !== 0
-  const marginRateLabel = formatPercent(
-    departure.estimatedMarginCents,
-    receivableSettlement.settlementReceivableCents,
-  )
-
-  return (
-    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <Row gutter={[16, 16]} className={styles.firstRow}>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="总人数"
-            value={departure.totalGuests}
-            suffix="人"
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="结算应收"
-            value={formatCents(receivableSettlement.settlementReceivableCents)}
-            equationDescription={CALCULATION_GUIDE.结算应收}
-            animateEnter={animateEnter}
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="成本合计"
-            value={formatCents(departure.payableCents)}
-            equationDescription={CALCULATION_GUIDE.成本合计}
-            animateEnter={animateEnter}
-            entry={
-              hasCostDetails ? (
-                <OverviewDetailsPopover title="成本组成" buttonLabel="查看成本组成">
-                  <AmountDetail label="确认应付" amountCents={stats.confirmedPayableCents} />
-                  <AmountDetail label="尚未提交应付" amountCents={stats.ungeneratedPayableCents} warning />
-                  <AmountDetail label="其他应付" amountCents={stats.otherPayableCents} />
-                  <AmountDetail
-                    label="资源账款差异"
-                    amountCents={stats.resourcePayableDifferenceCents}
-                  />
-                </OverviewDetailsPopover>
-              ) : null
-            }
-          />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <SummaryCard
-            title="当前毛利"
-            value={formatCents(departure.estimatedMarginCents)}
-            equationDescription={CALCULATION_GUIDE.当前毛利}
-            animateEnter={animateEnter}
-            entry={
-              stats.confirmedPayableCents !== 0 ? (
-                <OverviewDetailsPopover title="毛利对照" buttonLabel="查看毛利对照">
-                  <Text type="secondary">
-                    确认毛利 {formatCents(stats.confirmedMarginCents)}
-                  </Text>
-                  <Text type="secondary">确认毛利 = 结算应收 − 确认应付</Text>
-                </OverviewDetailsPopover>
-              ) : null
-            }
-          />
-        </Col>
-      </Row>
-
-      <Card
-        role="group"
-        aria-label="经营构成"
-        title="经营构成"
-        className={`${styles.compositionCard} ${animateEnter ? styles.metricCardEnter : ''}`}
-      >
-        <Row gutter={[16, 16]} className={styles.secondRow}>
-          <Col xs={12} sm={6}>
-            <Statistic title="原始团款" value={formatCents(departure.grossReceivableCents)} />
-          </Col>
-          <Col xs={12} sm={6}>
-            <Statistic title="优惠合计" value={formatCents(departure.discountCents)} />
-          </Col>
-          <Col xs={12} sm={6}>
-            <Statistic
-              title={
-                <CalculationTitle label="毛利率" description={CALCULATION_GUIDE.毛利率} />
-              }
-              value={marginRateLabel ?? '暂无数据'}
-            />
-          </Col>
-          <Col xs={12} sm={6}>
-            <Statistic
-              title={
-                <CalculationTitle
-                  label="增收净收益"
-                  description={CALCULATION_GUIDE.增收净收益}
-                />
-              }
-              value={formatCents(stats.additionalIncomeNetCents)}
-            />
-          </Col>
-        </Row>
-      </Card>
-    </Space>
-  )
-}
-
-function PaymentAndCashRow({
-  departure,
-  animateEnter,
-  receivableSettlement,
-}: OverviewSectionProps) {
+}) {
   const { token } = theme.useToken()
-  const stats = departure.overviewStats
-  const settlementReceivableCents = receivableSettlement.collectionReceivableCents
-  const settlementReceivedCents = receivableSettlement.collectionReceivedCents
-  const settlementUnreceivedCents = receivableSettlement.collectionUnreceivedCents
-  const guestCollectionUnreceivedCents =
-    stats.guestCollectionAgreedCents - stats.guestCollectionReceivedCents
-  const hasRebateDetails =
-    stats.estimatedRebateCents !== 0 ||
-    stats.confirmedRebateCents !== 0 ||
-    stats.rebatePaidCents !== 0 ||
-    stats.rebateUnpaidCents !== 0
-  const hasReceivableDetails =
-    receivableSettlement.ungeneratedReceivableCents !== 0 ||
-    stats.closedUnreceivedCents !== 0 ||
-    stats.otherReceivableCents !== 0
-  const hasPaymentDetails =
-    stats.confirmedPayableCents !== 0 || stats.closedUnpaidCents !== 0
-  const hasCashHints =
-    stats.unverifiedIncomeCents !== 0 ||
-    stats.unverifiedExpenseCents !== 0 ||
-    stats.verifiedFromExternalCents !== 0 ||
-    stats.verifiedToOtherDeparturesCents !== 0
-  const allPayableProgressLabel = formatPercent(stats.paidCents, stats.confirmedPayableCents)
-  const receivableAnomaly = stats.anomalies.find(({ code }) => code === 'receivable_balance')
-  const collectionCardStyle = receivableAnomaly
-    ? { ...EQUAL_HEIGHT_CARD_STYLE, borderColor: token.colorError }
-    : EQUAL_HEIGHT_CARD_STYLE
+  const visualPercent = progress != null ? Math.min(100, Math.max(0, parseFloat(progress))) : 0
+  const complete = visualPercent >= 100
+  const panelClass = `${styles.progressPanel} ${
+    variant === 'collection' ? styles.progressPanelCollection : styles.progressPanelPayment
+  }`
+
+  const percentTone =
+    variant === 'collection'
+      ? complete
+        ? { color: token.colorSuccess, background: token.colorSuccessBg }
+        : { color: token.colorPrimary, background: token.colorPrimaryBg }
+      : complete
+        ? { color: token.colorSuccess, background: token.colorSuccessBg }
+        : { color: token.colorTextSecondary, background: token.colorFillQuaternary }
 
   return (
-    <Row gutter={[16, 16]} className={styles.thirdRow}>
-      <Col xs={24} lg={8}>
-        <Card
-          title="收款"
-          role="region"
-          aria-label="收款"
-          className={animateEnter ? styles.metricCardEnter : undefined}
-          style={collectionCardStyle}
-        >
-          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-            <div
-              className={styles.progressSection}
-              role="group"
-              aria-label={receivableAnomaly ? '团款收款进度（数据异常）' : '团款收款进度'}
-            >
-              <Flex align="center" justify="space-between" gap={8}>
-                <CalculationTitle
-                  label="团款收款进度"
-                  description={CALCULATION_GUIDE.团款收款进度}
-                  asHeading
-                />
-                {hasReceivableDetails ? (
-                  <OverviewDetailsPopover title="收款组成" buttonLabel="查看收款组成">
-                    <AmountDetail
-                      label="尚未提交应收"
-                      amountCents={receivableSettlement.ungeneratedReceivableCents}
-                      warning
-                    />
-                    <AmountDetail
-                      label="其中已关闭未收"
-                      amountCents={stats.closedUnreceivedCents}
-                      danger
-                    />
-                    <AmountDetail label="其他应收" amountCents={stats.otherReceivableCents} />
-                  </OverviewDetailsPopover>
-                ) : null}
-              </Flex>
-              <ProgressValue
-                numerator={settlementReceivedCents}
-                denominator={settlementReceivableCents}
-                animate={animateEnter}
-              />
-              <ProgressBreakdown
-                items={[
-                  { label: '已收', amountCents: settlementReceivedCents },
-                  { label: '未收', amountCents: settlementUnreceivedCents },
-                ]}
-              />
-              {receivableAnomaly ? <ReceivableAnomalyAlert anomaly={receivableAnomaly} /> : null}
-            </div>
-
-            <div className={styles.progressSection} role="group" aria-label="游客代收进度">
-              <CalculationTitle
-                label="游客代收进度"
-                description={CALCULATION_GUIDE.游客代收进度}
-                asHeading
-              />
-              <ProgressValue
-                numerator={stats.guestCollectionReceivedCents}
-                denominator={stats.guestCollectionAgreedCents}
-                animate={animateEnter}
-              />
-              <ProgressBreakdown
-                items={[
-                  { label: '已收', amountCents: stats.guestCollectionReceivedCents },
-                  { label: '未收', amountCents: guestCollectionUnreceivedCents },
-                ]}
-              />
-            </div>
-          </Space>
-        </Card>
-      </Col>
-
-      <Col xs={24} lg={8}>
-        <Card
-          title="付款"
-          role="region"
-          aria-label="付款"
-          className={animateEnter ? styles.metricCardEnter : undefined}
-          style={EQUAL_HEIGHT_CARD_STYLE}
-        >
-          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-            <div className={styles.progressSection} role="group" aria-label="资源付款">
-              <Flex align="center" justify="space-between" gap={8}>
-                <CalculationTitle
-                  label="资源付款"
-                  description={CALCULATION_GUIDE.资源付款}
-                  asHeading
-                />
-                {hasPaymentDetails ? (
-                  <OverviewDetailsPopover title="付款组成" buttonLabel="查看付款组成">
-                    {allPayableProgressLabel != null ? (
-                      <Text type="secondary">
-                        全部应付核销进度 {allPayableProgressLabel}（全部已付{' '}
-                        {formatCents(stats.paidCents)} ÷ 确认应付{' '}
-                        {formatCents(stats.confirmedPayableCents)}）
-                      </Text>
-                    ) : null}
-                    <AmountDetail
-                      label="其中已关闭未付"
-                      amountCents={stats.closedUnpaidCents}
-                      danger
-                    />
-                  </OverviewDetailsPopover>
-                ) : null}
-              </Flex>
-              <ProgressValue
-                numerator={stats.resourcePaidCents}
-                denominator={departure.payableCents}
-                animate={animateEnter}
-              />
-              <ProgressBreakdown
-                items={[
-                  { label: '已付', amountCents: stats.resourcePaidCents },
-                  { label: '未付', amountCents: departure.payableCents - stats.resourcePaidCents },
-                ]}
-              />
-            </div>
-
-            <div className={styles.progressSection} role="group" aria-label="返利">
-              <CalculationTitle label="返利" description={CALCULATION_GUIDE.返利} asHeading />
-              {hasRebateDetails ? (
-                <ProgressBreakdown
-                  items={[
-                    { label: '预估', amountCents: stats.estimatedRebateCents },
-                    { label: '已确认', amountCents: stats.confirmedRebateCents },
-                    { label: '已付', amountCents: stats.rebatePaidCents },
-                    { label: '未付', amountCents: stats.rebateUnpaidCents },
-                  ]}
-                />
-              ) : (
-                <Text strong>暂无数据</Text>
-              )}
-            </div>
-          </Space>
-        </Card>
-      </Col>
-
-      <Col xs={24} lg={8}>
-        <Card
-          title="现金"
-          role="region"
-          aria-label="现金"
-          className={animateEnter ? styles.metricCardEnter : undefined}
-          style={EQUAL_HEIGHT_CARD_STYLE}
-          extra={
-            hasCashHints ? (
-              <OverviewDetailsPopover title="资金提示" buttonLabel="查看资金提示">
-                <AmountDetail
-                  label="未核销收入"
-                  amountCents={stats.unverifiedIncomeCents}
-                  transactionLink={{
-                    departureId: departure.id,
-                    direction: TransactionDirection.INFLOW,
-                  }}
-                />
-                <AmountDetail
-                  label="未核销支出"
-                  amountCents={stats.unverifiedExpenseCents}
-                  transactionLink={{
-                    departureId: departure.id,
-                    direction: TransactionDirection.OUTFLOW,
-                  }}
-                />
-                <AmountDetail
-                  label="核销自外部流水"
-                  amountCents={stats.verifiedFromExternalCents}
-                />
-                <AmountDetail
-                  label="本团流水核销至他团"
-                  amountCents={stats.verifiedToOtherDeparturesCents}
-                />
-              </OverviewDetailsPopover>
-            ) : null
+    <div className={panelClass} role="region" aria-label={title}>
+      <Flex justify="space-between" align="center" gap={8} className={styles.progressHead}>
+        <Text strong className={styles.progressTitle}>
+          {title}
+        </Text>
+        <Text strong className={styles.progressPercentBadge} style={percentTone}>
+          {progress ?? '暂无数据'}
+        </Text>
+      </Flex>
+      <div className={styles.progressBarWrap}>
+        <Progress
+          percent={visualPercent}
+          showInfo={false}
+          strokeColor={
+            complete
+              ? token.colorSuccess
+              : variant === 'payment' && visualPercent === 0
+                ? token.colorTextQuaternary
+                : token.colorPrimary
           }
-        >
-          <Flex align="center" justify="space-between" gap={16} wrap>
-            <Statistic
-              title={
-                <CalculationTitle
-                  label="现金净流入"
-                  description={CALCULATION_GUIDE.现金净流入}
-                />
-              }
-              value={formatCents(stats.cashNetInflowCents)}
-            />
+          railColor={token.colorFillSecondary}
+          className={animateEnter ? `${styles.progressBar} ${styles.progressLoad}` : styles.progressBar}
+          strokeLinecap="round"
+        />
+      </div>
+      <div className={styles.progressAmountMeta}>
+        <ProgressAmountStrip rows={rows} />
+      </div>
+      {hints && hints.length > 0 ? (
+        <Flex vertical gap={6} className={styles.collectionHints}>
+          {hints.map((hint) => (
             <Flex
-              vertical
-              gap={4}
-              role="group"
-              aria-label="资金收支明细"
-              className={styles.cashBreakdown}
+              key={hint.label}
+              align="center"
+              gap={8}
+              className={styles.collectionHintItem}
+              style={{
+                borderColor: token.colorWarningBorder,
+                background: token.colorWarningBg,
+              }}
             >
-              <Flex justify="space-between" gap={12}>
-                <Text type="secondary">有效收入</Text>
-                <Text strong>{formatCents(stats.incomeTransactionCents)}</Text>
-              </Flex>
-              <Flex justify="space-between" gap={12}>
-                <Text type="secondary">有效支出</Text>
-                <Text strong>{formatCents(stats.expenseTransactionCents)}</Text>
-              </Flex>
+              <ExclamationCircleFilled style={{ color: token.colorWarning }} />
+              <Text>
+                {hint.label}{' '}
+                <Text strong style={{ color: token.colorWarning }}>
+                  {formatCents(hint.amountCents)}
+                </Text>
+              </Text>
             </Flex>
-          </Flex>
-        </Card>
-      </Col>
-    </Row>
+          ))}
+        </Flex>
+      ) : null}
+      {anomaly ? <ReceivableAnomalyAlert anomaly={anomaly} /> : null}
+    </div>
+  )
+}
+
+function BusinessAndPaymentSection({
+  vm,
+  animateEnter,
+}: {
+  vm: DepartureOverviewViewModel
+  animateEnter: boolean
+}) {
+  return (
+    <SectionShell title="经营概况" animateEnter={animateEnter} className={styles.businessSection}>
+      <BusinessMetricsStrip vm={vm} />
+      <div className={styles.businessPaymentDivider} />
+      <Text type="secondary" className={styles.progressSectionLabel}>
+        收付款进度
+      </Text>
+      <div className={styles.progressSection}>
+        <ProgressPanel
+          variant="collection"
+          title="收款进度"
+          progress={vm.collection.progress}
+          rows={[
+            { label: '应收合计', amountCents: vm.collection.totalCents },
+            { label: '已收金额', amountCents: vm.collection.receivedCents },
+            { label: '未收金额', amountCents: vm.collection.unreceivedCents },
+          ]}
+          hints={vm.collection.hints}
+          anomaly={vm.receivableAnomaly}
+          animateEnter={animateEnter}
+        />
+        <ProgressPanel
+          variant="payment"
+          title="付款进度"
+          progress={vm.payment.progress}
+          rows={[
+            { label: '应付合计', amountCents: vm.payment.totalCents },
+            { label: '已付金额', amountCents: vm.payment.paidCents },
+            { label: '未付金额', amountCents: vm.payment.unpaidCents },
+          ]}
+          animateEnter={animateEnter}
+        />
+      </div>
+    </SectionShell>
   )
 }
 
@@ -637,27 +527,12 @@ export function DepartureOverviewStatsCards({
   departure,
   animateEnter = false,
 }: DepartureOverviewStatsCardsProps) {
-  const receivableSettlement = buildFullDepartureReceivableSettlementMetrics({
-    netReceivableCents: departure.netReceivableCents,
-    settlementCollectionReceivableCents:
-      departure.overviewStats.settlementCollectionReceivableCents,
-    settlementCollectionReceivedCents:
-      departure.overviewStats.settlementCollectionReceivedCents,
-    ungeneratedReceivableCents: departure.overviewStats.ungeneratedReceivableCents,
-  })
+  const vm = buildDepartureOverviewViewModel(departure)
 
   return (
-    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-      <OverviewSummaryRows
-        departure={departure}
-        animateEnter={animateEnter}
-        receivableSettlement={receivableSettlement}
-      />
-      <PaymentAndCashRow
-        departure={departure}
-        animateEnter={animateEnter}
-        receivableSettlement={receivableSettlement}
-      />
-    </Space>
+    <Flex vertical gap={12} className={styles.layoutRoot}>
+      <TodoReminderSection vm={vm} animateEnter={animateEnter} />
+      <BusinessAndPaymentSection vm={vm} animateEnter={animateEnter} />
+    </Flex>
   )
 }
