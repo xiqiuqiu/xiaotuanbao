@@ -8,10 +8,9 @@ describe('DepartureOverviewStatsCards motion CSS', () => {
     'utf8',
   )
 
-  it('gates card enter on .metricCardEnter and staggers that class', () => {
-    expect(css).toMatch(/\.metricCardEnter\s*\{[^}]*metric-card-enter/)
-    expect(css).toContain('.metricCardEnter')
-    expect(css).toContain('.firstRow > :global(.ant-col):nth-child(2) .metricCardEnter')
+  it('gates section enter on .sectionCardEnter', () => {
+    expect(css).toMatch(/\.sectionCardEnter\s*\{[^}]*metric-card-enter/)
+    expect(css).toContain('.sectionCardEnter')
     expect(css).not.toMatch(/\.metricCard\s*\{[^}]*animation:\s*metric-card-enter/)
   })
 
