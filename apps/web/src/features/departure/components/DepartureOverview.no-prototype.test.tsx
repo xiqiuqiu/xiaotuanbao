@@ -1,7 +1,10 @@
 /**
- * 正式发团概览不应挂载 throwaway 原型切换条 / host 徽标。
- * （对照：增收记录、客源已收口；概览 host 仍挂在主路径上时本用例应红。）
+ * 正式发团概览不应挂载 throwaway 原型切换条 / host（#279）。
+ * B 款生产组件为唯一实现；?overviewVariant= 不得切回原型。
  */
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { cleanup, render, screen } from '@testing-library/react'
 import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -10,10 +13,12 @@ import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureDetail } from '@/types/api'
 import { DepartureOverview } from './DepartureOverview'
 
+const overviewSourcePath = resolve(dirname(fileURLToPath(import.meta.url)), './DepartureOverview.tsx')
+
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
   useParams: () => ({ departureId: 'departure-88' }),
-  useSearch: () => ({ tab: 'overview', variant: 'A' }),
+  useSearch: () => ({ tab: 'overview', overviewVariant: 'B' }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 
@@ -66,6 +71,8 @@ function makeDeparture(): DepartureDetail {
       ungeneratedReceivableCents: 0,
       otherReceivableCents: 0,
       additionalIncomeNetCents: 0,
+      additionalIncomeGrossCents: 0,
+      additionalIncomeExpenseCents: 0,
       settlementCollectionReceivedCents: 0,
       settlementCollectionReceivableCents: 1_200_000,
       guestCollectionReceivedCents: 0,
@@ -74,6 +81,16 @@ function makeDeparture(): DepartureDetail {
       confirmedRebateCents: 0,
       rebatePaidCents: 0,
       rebateUnpaidCents: 0,
+      customerTopUpCents: 0,
+      guestListRecorded: 0,
+      guestListPlanned: 0,
+      guestListMissing: 0,
+      pendingReceivableCount: 0,
+      pendingPayableCount: 0,
+      unassignedSegmentCount: 0,
+      overdueAccountCount: 0,
+      resourceCostCents: 700_000,
+      outsourceCostCents: 0,
       confirmedPayableCents: 700_000,
       paidCents: 0,
       resourcePaidCents: 0,
@@ -103,7 +120,14 @@ afterEach(() => {
 })
 
 describe('DepartureOverview prototype removal', () => {
-  it('does not show PrototypeSwitcher or A/B/C chrome even when ?variant=A', () => {
+  it('source does not import throwaway overview prototype host or overviewVariant', () => {
+    const source = readFileSync(overviewSourcePath, 'utf8')
+    expect(source).not.toMatch(/DepartureOverviewPrototypeHost/)
+    expect(source).not.toMatch(/overviewVariant/)
+    expect(source).not.toMatch(/prototype\/departure-overview/)
+  })
+
+  it('renders production B overview without prototype chrome', () => {
     render(
       <ConfigProvider locale={zhCN}>
         <DepartureOverview
@@ -114,10 +138,11 @@ describe('DepartureOverview prototype removal', () => {
       </ConfigProvider>,
     )
 
-    // Formal overview still renders
-    expect(screen.getByText('总人数')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '待办提醒' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '经营概况' })).toBeInTheDocument()
+    expect(screen.getByText('收付款进度')).toBeInTheDocument()
+    expect(screen.queryByText('总人数')).not.toBeInTheDocument()
 
-    // Throwaway prototype chrome must not appear
     expect(screen.queryByLabelText('上一方案')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('下一方案')).not.toBeInTheDocument()
     expect(screen.queryByText(/overview prototype/i)).not.toBeInTheDocument()
