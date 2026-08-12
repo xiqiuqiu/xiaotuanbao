@@ -103,8 +103,14 @@ const departureRoute = createRoute({
 const departureNewRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure/new',
-  validateSearch: (search: Record<string, unknown>): { copyFrom?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { copyFrom?: string; prototype?: string; variant?: string } => ({
     copyFrom: typeof search.copyFrom === 'string' ? search.copyFrom : undefined,
+    prototype:
+      search.prototype === 'ai-assisted-create' ? search.prototype : undefined,
+    variant:
+      typeof search.variant === 'string' && ['A', 'B', 'C', 'D'].includes(search.variant)
+        ? search.variant
+        : undefined,
   }),
   component: lazyRouteComponent(
     () => import('@/features/departure/pages/CreateDeparturePage'),

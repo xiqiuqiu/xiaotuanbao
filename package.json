@@ -33,7 +33,8 @@
     "docker:migrate": "docker compose exec api pnpm exec prisma migrate deploy",
     "docker:seed": "docker compose exec api pnpm exec prisma db seed",
     "prototype:route-ledger-mode": "pnpm --filter web dev",
-    "prototype:execution-layer-switch": "pnpm --filter web dev"
+    "prototype:execution-layer-switch": "pnpm --filter web dev",
+    "prototype:ai-assisted-create": "pnpm --filter web dev"
   },
   "engines": {
     "node": ">=22.13"
