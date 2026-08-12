@@ -814,6 +814,55 @@ export interface CopyDepartureDto {
   notes?: string
 }
 
+/** 发团创建草稿规范化快照（正式 Departure 创建前）。 */
+export interface DepartureCreationDraftSnapshot {
+  mode: 'manual' | 'template' | 'copy'
+  routeName: string
+  templateId?: string | null
+  copyFromDepartureId?: string | null
+  name?: string | null
+  startDate?: string | null
+  endDate?: string | null
+  ownerUserId?: string | null
+  departureType?: string | null
+  notes?: string | null
+  driverSupplierId?: string | null
+  guideSupplierId?: string | null
+  vehiclePlate?: string | null
+  contactPhone?: string | null
+  /** 预计人数提示：仅草稿，不写入 Departure 正式人数或备注。 */
+  expectedGuestCountHint?: number | null
+}
+
+export interface DepartureCreationDraftView {
+  version: number
+  snapshot: DepartureCreationDraftSnapshot
+  updatedAt: string
+}
+
+export interface AiCreateTaskSummary {
+  id: string
+  status: 'in_progress' | 'completed' | 'abandoned'
+  currentPhase: 'basic_info'
+  departureId: string | null
+  creatorUserId: string
+  createdAt: string
+  updatedAt: string
+  draft: DepartureCreationDraftView
+}
+
+export interface SaveDepartureCreationDraftDto {
+  /** 已有任务时必填；缺省表示首次有效保存并创建任务。 */
+  taskId?: string
+  /** 已有任务时必填，须匹配当前草稿对象版本。 */
+  expectedVersion?: number
+  draft: DepartureCreationDraftSnapshot
+}
+
+export interface ConfirmAiCreateTaskDto {
+  expectedVersion: number
+}
+
 export interface UpdateDepartureDto {
   name?: string
   routeName?: string

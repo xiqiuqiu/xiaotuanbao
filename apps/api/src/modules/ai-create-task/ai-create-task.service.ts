@@ -1,0 +1,455 @@
+import { createHash } from 'node:crypto'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
+import type {
+  AiCreateTaskSummary,
+  DepartureCreationDraftSnapshot,
+  DepartureSummary,
+} from '@xiaotuanbao/shared'
+import {
+  AiCreatePhase,
+  AiCreateTaskStatus,
+  DepartureCreationDraftMode,
+  DepartureType,
+} from '@xiaotuanbao/shared'
+import type { AiCreateTask, DepartureCreationDraft, Prisma } from '@prisma/client'
+import { DepartureType as PrismaDepartureType } from '@prisma/client'
+import { PrismaService } from '../../database/prisma/prisma.service'
+import { DepartureService } from '../departure/departure.service'
+import type {
+  ConfirmAiCreateTaskDto,
+  DepartureCreationDraftSnapshotDto,
+  SaveDepartureCreationDraftDto,
+} from './dto/ai-create-task.dto'
+
+const CONFIRM_OPERATION = 'ai-create-task.confirm'
+
+type TaskWithDraft = AiCreateTask & { draft: DepartureCreationDraft | null }
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize)
+  }
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalize(entry)]),
+    )
+  }
+  return value
+}
+
+function requestHash(payload: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalize(payload)))
+    .digest('hex')
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+  if (value == null) return null
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+@Injectable()
+export class AiCreateTaskService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly departureService: DepartureService,
+  ) {}
+
+  async saveDraft(
+    organizationId: string,
+    userId: string,
+    dto: SaveDepartureCreationDraftDto,
+  ): Promise<AiCreateTaskSummary> {
+    const snapshot = this.normalizeSnapshot(dto.draft)
+    this.assertValidDraft(snapshot)
+
+    if (!dto.taskId) {
+      return this.createTaskWithDraft(organizationId, userId, snapshot)
+    }
+
+    if (dto.expectedVersion === undefined) {
+      throw new BadRequestException('更新草稿必须提供 expectedVersion')
+    }
+
+    return this.updateDraft(
+      organizationId,
+      userId,
+      dto.taskId,
+      dto.expectedVersion,
+      snapshot,
+    )
+  }
+
+  async getTask(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<AiCreateTaskSummary> {
+    const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
+    return this.toSummary(task)
+  }
+
+  async confirm(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    dto: ConfirmAiCreateTaskDto,
+    idempotencyKey?: string,
+  ): Promise<DepartureSummary> {
+    const key = idempotencyKey?.trim()
+    if (!key) {
+      throw new BadRequestException('确认创建必须提供 Idempotency-Key 幂等键')
+    }
+    if (key.length > 200) {
+      throw new BadRequestException('幂等键长度不能超过 200 个字符')
+    }
+
+    const hash = requestHash({ taskId, expectedVersion: dto.expectedVersion })
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const lockScope = `${organizationId}|${CONFIRM_OPERATION}|${key}`
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
+        `
+
+        const record = await tx.aiCreateIdempotencyRecord.upsert({
+          where: {
+            organizationId_operation_idempotencyKey: {
+              organizationId,
+              operation: CONFIRM_OPERATION,
+              idempotencyKey: key,
+            },
+          },
+          create: {
+            organizationId,
+            taskId,
+            operation: CONFIRM_OPERATION,
+            idempotencyKey: key,
+            requestHash: hash,
+          },
+          update: {},
+        })
+
+        if (record.taskId !== taskId) {
+          throw new ConflictException('幂等键已被其他任务使用')
+        }
+        if (record.requestHash !== hash) {
+          throw new ConflictException('幂等键已被其他请求载荷使用')
+        }
+        if (record.completedAt) {
+          if (!record.resultJson || Array.isArray(record.resultJson)) {
+            throw new ConflictException('幂等请求结果不可用，请联系管理员')
+          }
+          return record.resultJson as unknown as DepartureSummary
+        }
+
+        const task = await tx.aiCreateTask.findFirst({
+          where: { id: taskId, organizationId },
+          include: { draft: true },
+        })
+        if (!task || !task.draft) {
+          throw new NotFoundException('AI 建团任务不存在')
+        }
+        if (task.creatorUserId !== userId) {
+          throw new ForbiddenException('仅任务创建者可确认创建发团')
+        }
+        if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+          throw new BadRequestException('仅进行中的 AI 建团任务可确认创建')
+        }
+        if (task.departureId) {
+          const created = await tx.departure.findUniqueOrThrow({
+            where: { id: task.departureId },
+          })
+          const summary = this.departureService.toFreshDepartureSummary(created)
+          await tx.aiCreateIdempotencyRecord.update({
+            where: { id: record.id },
+            data: {
+              resultJson: canonicalize(summary) as Prisma.InputJsonValue,
+              completedAt: new Date(),
+            },
+          })
+          return summary
+        }
+        if (task.draft.version !== dto.expectedVersion) {
+          throw new ConflictException({
+            message: '草稿版本已变化，请基于最新快照重试',
+            data: this.toSummary(task),
+          })
+        }
+
+        const snapshot = this.parseSnapshot(task.draft.snapshot)
+        this.assertConfirmable(snapshot)
+
+        const created = await this.createDepartureRecordFromSnapshot(
+          organizationId,
+          snapshot,
+          tx,
+        )
+        const summary = this.departureService.toFreshDepartureSummary(created)
+
+        await tx.aiCreateTask.update({
+          where: { id: taskId },
+          data: { departureId: created.id },
+        })
+
+        await tx.aiCreateIdempotencyRecord.update({
+          where: { id: record.id },
+          data: {
+            resultJson: canonicalize(summary) as Prisma.InputJsonValue,
+            completedAt: new Date(),
+          },
+        })
+
+        return summary
+      },
+      { maxWait: 20_000, timeout: 20_000 },
+    )
+  }
+
+  private async createDepartureRecordFromSnapshot(
+    organizationId: string,
+    snapshot: DepartureCreationDraftSnapshot,
+    tx: Prisma.TransactionClient,
+  ) {
+    const name = snapshot.name?.trim()
+    const startDate = snapshot.startDate?.trim()
+    const endDate = snapshot.endDate?.trim()
+    const ownerUserId = snapshot.ownerUserId?.trim()
+
+    if (!name || !startDate || !endDate || !ownerUserId) {
+      throw new BadRequestException('确认创建前须填写团名、出团日期、结束日期和负责人')
+    }
+
+    const departureType = this.toPrismaDepartureType(snapshot.departureType)
+
+    if (snapshot.mode === DepartureCreationDraftMode.COPY) {
+      const copyFromDepartureId = snapshot.copyFromDepartureId?.trim()
+      if (!copyFromDepartureId) {
+        throw new BadRequestException('复制发团缺少来源发团')
+      }
+      return this.departureService.copyRecord(
+        organizationId,
+        copyFromDepartureId,
+        {
+          name,
+          startDate,
+          endDate,
+          ownerUserId,
+          departureType,
+          notes: snapshot.notes ?? undefined,
+        },
+        tx,
+      )
+    }
+
+    return this.departureService.createRecord(
+      organizationId,
+      {
+        name,
+        routeName: snapshot.routeName.trim(),
+        startDate,
+        endDate,
+        ownerUserId,
+        departureType,
+        notes: snapshot.notes ?? undefined,
+        templateId:
+          snapshot.mode === DepartureCreationDraftMode.TEMPLATE
+            ? snapshot.templateId ?? undefined
+            : undefined,
+        driverSupplierId: snapshot.driverSupplierId ?? undefined,
+        guideSupplierId: snapshot.guideSupplierId ?? undefined,
+        vehiclePlate: snapshot.vehiclePlate ?? undefined,
+        contactPhone: snapshot.contactPhone ?? undefined,
+      },
+      tx,
+    )
+  }
+
+  private toPrismaDepartureType(
+    value: string | null | undefined,
+  ): PrismaDepartureType | undefined {
+    if (!value) return undefined
+    if (value === PrismaDepartureType.combined || value === PrismaDepartureType.independent) {
+      return value
+    }
+    throw new BadRequestException('发团类型无效')
+  }
+
+  private async createTaskWithDraft(
+    organizationId: string,
+    userId: string,
+    snapshot: DepartureCreationDraftSnapshot,
+  ): Promise<AiCreateTaskSummary> {
+    const task = await this.prisma.aiCreateTask.create({
+      data: {
+        organizationId,
+        creatorUserId: userId,
+        status: AiCreateTaskStatus.IN_PROGRESS,
+        currentPhase: AiCreatePhase.BASIC_INFO,
+        draft: {
+          create: {
+            version: 1,
+            snapshot: snapshot as unknown as Prisma.InputJsonValue,
+          },
+        },
+      },
+      include: { draft: true },
+    })
+    return this.toSummary(task)
+  }
+
+  private async updateDraft(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    expectedVersion: number,
+    snapshot: DepartureCreationDraftSnapshot,
+  ): Promise<AiCreateTaskSummary> {
+    const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
+    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可保存草稿')
+    }
+    if (task.departureId) {
+      throw new BadRequestException('已创建正式发团的任务不可再修改创建草稿')
+    }
+    if (!task.draft) {
+      throw new NotFoundException('发团创建草稿不存在')
+    }
+    if (task.draft.version !== expectedVersion) {
+      throw new ConflictException({
+        message: '草稿版本已变化，请基于最新快照重试',
+        data: this.toSummary(task),
+      })
+    }
+
+    const updated = await this.prisma.departureCreationDraft.update({
+      where: { id: task.draft.id },
+      data: {
+        version: { increment: 1 },
+        snapshot: snapshot as unknown as Prisma.InputJsonValue,
+      },
+    })
+
+    return this.toSummary({ ...task, draft: updated })
+  }
+
+  private async findOwnedTaskOrThrow(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<TaskWithDraft> {
+    const task = await this.prisma.aiCreateTask.findFirst({
+      where: { id: taskId, organizationId },
+      include: { draft: true },
+    })
+    if (!task || !task.draft) {
+      throw new NotFoundException('AI 建团任务不存在')
+    }
+    if (task.creatorUserId !== userId) {
+      throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
+    }
+    return task
+  }
+
+  private normalizeSnapshot(
+    draft: DepartureCreationDraftSnapshotDto,
+  ): DepartureCreationDraftSnapshot {
+    const mode = draft.mode
+    return {
+      mode,
+      routeName: draft.routeName?.trim() ?? '',
+      templateId: emptyToNull(draft.templateId),
+      copyFromDepartureId: emptyToNull(draft.copyFromDepartureId),
+      name: emptyToNull(draft.name),
+      startDate: emptyToNull(draft.startDate),
+      endDate: emptyToNull(draft.endDate),
+      ownerUserId: emptyToNull(draft.ownerUserId),
+      departureType: draft.departureType ?? DepartureType.COMBINED,
+      notes: emptyToNull(draft.notes),
+      driverSupplierId: emptyToNull(draft.driverSupplierId),
+      guideSupplierId: emptyToNull(draft.guideSupplierId),
+      vehiclePlate: emptyToNull(draft.vehiclePlate),
+      contactPhone: emptyToNull(draft.contactPhone),
+      expectedGuestCountHint:
+        draft.expectedGuestCountHint === undefined || draft.expectedGuestCountHint === null
+          ? null
+          : draft.expectedGuestCountHint,
+    }
+  }
+
+  private assertValidDraft(snapshot: DepartureCreationDraftSnapshot): void {
+    if (snapshot.mode === DepartureCreationDraftMode.TEMPLATE) {
+      if (!snapshot.templateId) {
+        throw new BadRequestException('选择路线模板时须提供 templateId')
+      }
+      return
+    }
+    if (snapshot.mode === DepartureCreationDraftMode.COPY) {
+      if (!snapshot.copyFromDepartureId) {
+        throw new BadRequestException('复制发团时须提供 copyFromDepartureId')
+      }
+      return
+    }
+    if (!snapshot.routeName.trim()) {
+      throw new BadRequestException('手动路线须填写路线名称')
+    }
+  }
+
+  private assertConfirmable(snapshot: DepartureCreationDraftSnapshot): void {
+    this.assertValidDraft(snapshot)
+    if (!snapshot.name?.trim()) {
+      throw new BadRequestException('团名不能为空')
+    }
+    if (!snapshot.startDate || !snapshot.endDate) {
+      throw new BadRequestException('出团日期与结束日期不能为空')
+    }
+    if (snapshot.endDate < snapshot.startDate) {
+      throw new BadRequestException('结束日期不能早于出团日期')
+    }
+    if (!snapshot.ownerUserId?.trim()) {
+      throw new BadRequestException('负责人不能为空')
+    }
+  }
+
+  private parseSnapshot(raw: Prisma.JsonValue): DepartureCreationDraftSnapshot {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new BadRequestException('发团创建草稿快照损坏')
+    }
+    return this.normalizeSnapshot(raw as unknown as DepartureCreationDraftSnapshotDto)
+  }
+
+  private toSummary(task: TaskWithDraft): AiCreateTaskSummary {
+    if (!task.draft) {
+      throw new BadRequestException('发团创建草稿不存在')
+    }
+    const snapshot = this.parseSnapshot(task.draft.snapshot)
+    return {
+      id: task.id,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      departureId: task.departureId,
+      creatorUserId: task.creatorUserId,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString(),
+      draft: {
+        version: task.draft.version,
+        snapshot,
+        updatedAt: task.draft.updatedAt.toISOString(),
+      },
+    }
+  }
+}

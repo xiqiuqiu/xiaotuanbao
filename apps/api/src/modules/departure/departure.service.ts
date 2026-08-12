@@ -459,6 +459,20 @@ export class DepartureService {
   }
 
   async create(organizationId: string, dto: CreateDepartureDto): Promise<DepartureSummary> {
+    const departure = await this.prisma.$transaction(async (tx) =>
+      this.createRecord(organizationId, dto, tx),
+    )
+
+    const [summary] = await this.enrichSummaries([departure])
+    return summary
+  }
+
+  /** 在调用方事务内创建发团记录（含团号、模板复制与日骨架）。 */
+  async createRecord(
+    organizationId: string,
+    dto: CreateDepartureDto,
+    tx: Prisma.TransactionClient,
+  ): Promise<Departure> {
     const name = dto.name.trim()
     let routeName = dto.routeName.trim()
 
@@ -511,53 +525,48 @@ export class DepartureService {
 
     const dayCount = computeDayCount(startDate, endDate)
 
-    const departure = await this.prisma.$transaction(async (tx) => {
-      const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
+    const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
 
-      const created = await tx.departure.create({
-        data: {
-          organizationId,
-          departureNo,
-          name,
-          routeName,
-          routeSource,
-          sourceTemplateId,
-          departureType: dto.departureType ?? DepartureType.combined,
-          startDate,
-          endDate,
-          dayCount,
-          ownerUserId: dto.ownerUserId,
-          status: DepartureStatus.editing,
-          notes: dto.notes?.trim() || null,
-          driverSupplierId: dto.driverSupplierId || null,
-          guideSupplierId: dto.guideSupplierId || null,
-          vehiclePlate: dto.vehiclePlate?.trim() || null,
-          contactPhone: dto.contactPhone?.trim() || null,
-        },
-      })
-
-      if (templateId) {
-        await this.routeTemplateCopyService.copyToDeparture({
-          tx,
-          organizationId,
-          departureId: created.id,
-          departureStartDate: startDate,
-          templateId,
-        })
-
-        await tx.routeTemplate.update({
-          where: { id: templateId },
-          data: { usageCount: { increment: 1 } },
-        })
-      }
-
-      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
-
-      return created
+    const created = await tx.departure.create({
+      data: {
+        organizationId,
+        departureNo,
+        name,
+        routeName,
+        routeSource,
+        sourceTemplateId,
+        departureType: dto.departureType ?? DepartureType.combined,
+        startDate,
+        endDate,
+        dayCount,
+        ownerUserId: dto.ownerUserId,
+        status: DepartureStatus.editing,
+        notes: dto.notes?.trim() || null,
+        driverSupplierId: dto.driverSupplierId || null,
+        guideSupplierId: dto.guideSupplierId || null,
+        vehiclePlate: dto.vehiclePlate?.trim() || null,
+        contactPhone: dto.contactPhone?.trim() || null,
+      },
     })
 
-    const [summary] = await this.enrichSummaries([departure])
-    return summary
+    if (templateId) {
+      await this.routeTemplateCopyService.copyToDeparture({
+        tx,
+        organizationId,
+        departureId: created.id,
+        departureStartDate: startDate,
+        templateId,
+      })
+
+      await tx.routeTemplate.update({
+        where: { id: templateId },
+        data: { usageCount: { increment: 1 } },
+      })
+    }
+
+    await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
+
+    return created
   }
 
   async copy(
@@ -565,6 +574,21 @@ export class DepartureService {
     sourceDepartureId: string,
     dto: CopyDepartureDto,
   ): Promise<DepartureSummary> {
+    const departure = await this.prisma.$transaction(async (tx) =>
+      this.copyRecord(organizationId, sourceDepartureId, dto, tx),
+    )
+
+    const [summary] = await this.enrichSummaries([departure])
+    return summary
+  }
+
+  /** 在调用方事务内复制发团记录。 */
+  async copyRecord(
+    organizationId: string,
+    sourceDepartureId: string,
+    dto: CopyDepartureDto,
+    tx: Prisma.TransactionClient,
+  ): Promise<Departure> {
     const sourceDeparture = await this.departureCopyService.findForCopy(
       organizationId,
       sourceDepartureId,
@@ -586,42 +610,42 @@ export class DepartureService {
 
     const dayCount = computeDayCount(startDate, endDate)
 
-    const departure = await this.prisma.$transaction(async (tx) => {
-      const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
+    const departureNo = await this.numberAllocationService.allocateDepartureNo(organizationId, tx)
 
-      const created = await tx.departure.create({
-        data: {
-          organizationId,
-          departureNo,
-          name,
-          routeName: sourceDeparture.routeName,
-          routeSource: DepartureRouteSource.copy,
-          sourceTemplateId: null,
-          departureType: dto.departureType ?? sourceDeparture.departureType,
-          startDate,
-          endDate,
-          dayCount,
-          ownerUserId: dto.ownerUserId,
-          status: DepartureStatus.editing,
-          notes: dto.notes?.trim() || null,
-        },
-      })
-
-      await this.departureCopyService.copyToDeparture({
-        tx,
+    const created = await tx.departure.create({
+      data: {
         organizationId,
-        sourceDepartureId,
-        targetDepartureId: created.id,
-        targetStartDate: startDate,
-      })
-
-      await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
-
-      return created
+        departureNo,
+        name,
+        routeName: sourceDeparture.routeName,
+        routeSource: DepartureRouteSource.copy,
+        sourceTemplateId: null,
+        departureType: dto.departureType ?? sourceDeparture.departureType,
+        startDate,
+        endDate,
+        dayCount,
+        ownerUserId: dto.ownerUserId,
+        status: DepartureStatus.editing,
+        notes: dto.notes?.trim() || null,
+      },
     })
 
-    const [summary] = await this.enrichSummaries([departure])
-    return summary
+    await this.departureCopyService.copyToDeparture({
+      tx,
+      organizationId,
+      sourceDepartureId,
+      targetDepartureId: created.id,
+      targetStartDate: startDate,
+    })
+
+    await fillMissingDailySkeletonInTx(tx, created.id, startDate, endDate)
+
+    return created
+  }
+
+  /** 新建发团后、读模型计数仍为空时的摘要映射（供确认事务内幂等缓存）。 */
+  toFreshDepartureSummary(departure: Departure): DepartureSummary {
+    return this.toDepartureSummary(departure)
   }
 
   async getById(organizationId: string, departureId: string): Promise<DepartureDetail> {

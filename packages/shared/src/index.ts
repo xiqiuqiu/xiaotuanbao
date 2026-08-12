@@ -87,6 +87,11 @@ export type {
   UpdateDepartureIncomeRecordDto,
   CreateDepartureDto,
   CopyDepartureDto,
+  DepartureCreationDraftSnapshot,
+  DepartureCreationDraftView,
+  AiCreateTaskSummary,
+  SaveDepartureCreationDraftDto,
+  ConfirmAiCreateTaskDto,
   UpdateDepartureDto,
   TransitionDepartureDto,
   CloseDepartureDto,
@@ -232,6 +237,9 @@ export { PartnerContactRole } from './enums/partner-contact-role.enum'
 export { DepartureStatus } from './enums/departure-status.enum'
 export { DepartureArchiveAction } from './enums/departure-archive-action.enum'
 export { DepartureType } from './enums/departure-type.enum'
+export { AiCreateTaskStatus } from './enums/ai-create-task-status.enum'
+export { AiCreatePhase } from './enums/ai-create-phase.enum'
+export { DepartureCreationDraftMode } from './enums/departure-creation-draft-mode.enum'
 export { ProductType } from './enums/product-type.enum'
 export { ProductStatus } from './enums/product-status.enum'
 export { ProductScheduleStatus } from './enums/product-schedule-status.enum'

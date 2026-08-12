@@ -328,6 +328,8 @@ model Organization {
   products Product[]
   productImportSessions ProductImportSession[]
   bookingNoticeTemplates BookingNoticeTemplate[]
+  aiCreateTasks AiCreateTask[]
+  aiCreateIdempotencyRecords AiCreateIdempotencyRecord[]
 
   @@map("organizations")
 }
@@ -401,6 +403,7 @@ model User {
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
+  createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -607,6 +610,7 @@ model Departure {
   incomeRecords       DepartureIncomeRecord[]
   archiveHistories    DepartureArchiveHistory[]
   settlementHistories DepartureSettlementHistory[]
+  aiCreateTask        AiCreateTask?
 
   @@unique([organizationId, departureNo])
   @@map("departures")
@@ -1045,3 +1049,70 @@ model ProductSchedule {
   @@index([productId, status])
   @@map("product_schedules")
 }
+
+enum AiCreateTaskStatus {
+  in_progress
+  completed
+  abandoned
+
+  @@map("ai_create_task_status")
+}
+
+enum AiCreatePhase {
+  basic_info
+
+  @@map("ai_create_phase")
+}
+
+/// AI 建团任务：表单/AI 共用的可恢复任务壳；正式 Departure 创建前关联发团创建草稿。
+model AiCreateTask {
+  id             String            @id @default(cuid())
+  organizationId String            @map("organization_id")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  creatorUserId  String            @map("creator_user_id")
+  creator        User              @relation("AiCreateTaskCreator", fields: [creatorUserId], references: [id])
+  status         AiCreateTaskStatus @default(in_progress)
+  currentPhase   AiCreatePhase     @default(basic_info) @map("current_phase")
+  departureId    String?           @unique @map("departure_id")
+  departure      Departure?        @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  draft          DepartureCreationDraft?
+  idempotencyRecords AiCreateIdempotencyRecord[]
+
+  @@index([organizationId, creatorUserId, status, updatedAt])
+  @@map("ai_create_tasks")
+}
+
+/// 发团创建草稿：正式 Departure 创建前的结构化建团资料；不预占正式团号。
+model DepartureCreationDraft {
+  id        String       @id @default(cuid())
+  taskId    String       @unique @map("task_id")
+  task      AiCreateTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version   Int          @default(1)
+  snapshot  Json
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  @@map("departure_creation_drafts")
+}
+
+model AiCreateIdempotencyRecord {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskId         String       @map("task_id")
+  task           AiCreateTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  operation      String
+  idempotencyKey String       @map("idempotency_key")
+  requestHash    String       @map("request_hash")
+  resultJson     Json?        @map("result_json")
+  completedAt    DateTime?    @map("completed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([organizationId, operation, idempotencyKey])
+  @@index([taskId])
+  @@index([organizationId, createdAt])
+  @@map("ai_create_idempotency_records")
+}
+
