@@ -38,6 +38,7 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   // AI 业务工具：双重身份（编排服务 + 短期 User 委托）替代浏览器 CSRF/@RequireMenu。
   'POST /api/ai-tools/v1/get-task-context',
   'POST /api/ai-tools/v1/submit-review-package',
+  'POST /api/ai-tools/v1/search-route-templates',
 ])
 
 /**

@@ -887,6 +887,7 @@ export interface AiCreateAssistSession {
 export type AiReviewableBasicInfoField =
   | 'name'
   | 'routeName'
+  | 'templateId'
   | 'startDate'
   | 'endDate'
   | 'expectedGuestCountHint'

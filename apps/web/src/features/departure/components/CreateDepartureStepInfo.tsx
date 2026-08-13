@@ -24,6 +24,7 @@ import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
 import type { AiReviewPackageView, AiReviewableBasicInfoField, SupplierSummary } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSuppliers } from '@/services/supplier.service'
+import { getRouteTemplate } from '@/services/route-template.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
@@ -97,10 +98,20 @@ function RouteSourceFields({
   onRouteChange: (values: RouteStepValues) => void
   onOpenTemplatePicker: () => void
 }) {
-  const sourceValue =
-    route.mode === 'template' || templatePickerOpen ? 'template' : 'manual'
-  const copySummary = buildRouteSummary(route)
   const routeNameCandidate = findReviewCandidate(pendingReview, 'routeName')
+  const templateIdCandidate = findReviewCandidate(pendingReview, 'templateId')
+  const proposedTemplateId =
+    templateIdCandidate && typeof templateIdCandidate.proposedValue === 'string'
+      ? templateIdCandidate.proposedValue
+      : ''
+  const templateQuery = useQuery({
+    queryKey: ['route-templates', proposedTemplateId],
+    queryFn: ({ signal }) => getRouteTemplate(proposedTemplateId, signal),
+    enabled: Boolean(proposedTemplateId),
+  })
+  const sourceValue =
+    templateIdCandidate || route.mode === 'template' || templatePickerOpen ? 'template' : 'manual'
+  const copySummary = buildRouteSummary(route)
 
   return (
     <>
@@ -122,7 +133,17 @@ function RouteSourceFields({
         />
       </Form.Item>
 
-      {sourceValue === 'template' && route.templateId ? (
+      {templateIdCandidate && onCorrectCandidate ? (
+        <Form.Item label="常用路线" required>
+          <PendingCandidateOverlay
+            fieldKey="templateId"
+            candidate={templateIdCandidate}
+            displayValue={templateQuery.data?.name}
+            savedDisplay={route.templateId ? route.routeName : '未选择'}
+            onCorrect={(value) => onCorrectCandidate('templateId', value)}
+          />
+        </Form.Item>
+      ) : sourceValue === 'template' && route.templateId ? (
         <Form.Item label="常用路线" required>
           <div className={styles.selectedTemplate}>
             <Typography.Text strong>{route.routeName}</Typography.Text>

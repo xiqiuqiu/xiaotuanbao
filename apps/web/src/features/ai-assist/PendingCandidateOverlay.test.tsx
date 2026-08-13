@@ -119,4 +119,27 @@ describe('PendingCandidateOverlay', () => {
     fireEvent.change(screen.getByLabelText('预计人数提示候选'), { target: { value: '' } })
     expect(onCorrect).toHaveBeenCalledWith(null)
   })
+
+  it('shows a templateId candidate as read-only text without a write input', () => {
+    const onCorrect = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="templateId"
+          candidate={candidate({
+            fieldKey: 'templateId',
+            proposedValue: 'tpl-1',
+            evidence: [{ kind: 'system_derivation', rule: 'searchRouteTemplates:name_contains_token:川西' }],
+          })}
+          displayValue="川西稻城线"
+          savedDisplay="未选择"
+          onCorrect={onCorrect}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByLabelText('常用路线候选')).toHaveTextContent('川西稻城线')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(onCorrect).not.toHaveBeenCalled()
+  })
 })

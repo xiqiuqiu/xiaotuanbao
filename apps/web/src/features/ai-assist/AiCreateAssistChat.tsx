@@ -14,9 +14,12 @@ import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
   awaitReviewPackageDecisionInputSchema,
   aiCreateSharedLightStateSchema,
+  searchRouteTemplatesModelInputSchema,
   submitReviewPackageModelInputSchema,
   type AiCreateSharedLightState,
   type ReviewPackageDecision,
+  type SearchRouteTemplatesOutput,
+  type RouteTemplateMatchReason,
 } from '@xiaotuanbao/ai-contracts'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
@@ -167,6 +170,60 @@ function AssistLightState({
   return null
 }
 
+function formatMatchReason(reason: RouteTemplateMatchReason): string {
+  if (reason.code === 'name_contains_token') {
+    return `名称包含「${reason.token}」`
+  }
+  if (reason.code === 'segment_name_contains_token') {
+    return `行程段「${reason.segmentName}」包含「${reason.token}」`
+  }
+  if (reason.code === 'destination_contains_token') {
+    return `目的地「${reason.destination}」包含「${reason.token}」`
+  }
+  return `默认 ${reason.dayCount} 天`
+}
+
+function SearchRouteTemplatesNotice({ agentId }: { agentId: string }) {
+  useRenderTool(
+    {
+      name: 'searchRouteTemplates',
+      parameters: searchRouteTemplatesModelInputSchema,
+      agentId,
+      render: ({ status, result }) => {
+        if (status === 'inProgress' || status === 'executing') {
+          return <p className={styles.notice}>正在查找常用路线…</p>
+        }
+        const items =
+          result && typeof result === 'object' && 'items' in result
+            ? ((result as SearchRouteTemplatesOutput).items ?? [])
+            : []
+        if (items.length === 0) {
+          return (
+            <p className={styles.notice}>
+              没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。
+            </p>
+          )
+        }
+        return (
+          <div className={styles.reviewCardBody}>
+            <p className={styles.notice}>组织内常用路线候选（回复要用哪一条；确认与拒绝只在中间表单）：</p>
+            {items.map((item) => (
+              <p key={item.id} className={styles.notice}>
+                {item.name} · {item.defaultDayCount} 天 · 用过 {item.usageCount} 次
+                {item.matchReasons.length > 0
+                  ? ` · ${item.matchReasons.map(formatMatchReason).join('；')}`
+                  : ''}
+              </p>
+            ))}
+          </div>
+        )
+      },
+    },
+    [agentId],
+  )
+  return null
+}
+
 function submittedReviewNoticeKey(result: unknown): string | null {
   if (typeof result === 'object' && result !== null && 'reviewPackageId' in result) {
     const id = result.reviewPackageId
@@ -306,6 +363,7 @@ export function AiCreateAssistChat({
           reviewPackageId={reviewPackageId}
           progress={progress}
         />
+        <SearchRouteTemplatesNotice agentId={AGENT_ID} />
         <ReviewPackageNotice agentId={AGENT_ID} onSubmitted={onReviewPackageSubmitted} />
         <ReviewDecisionGate
           agentId={AGENT_ID}

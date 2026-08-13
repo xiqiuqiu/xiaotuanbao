@@ -55,6 +55,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "AgentServiceIdentityGuard+AiOperationDelegationGuard",
     "requiredKey": null,
+    "route": "POST /api/ai-tools/v1/search-route-templates",
+  },
+  {
+    "guards": "AgentServiceIdentityGuard+AiOperationDelegationGuard",
+    "requiredKey": null,
     "route": "POST /api/ai-tools/v1/submit-review-package",
   },
   {
@@ -848,6 +853,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/assist-session [departure:write]",
     "POST /api/ai-create-tasks/draft [departure:write]",
     "POST /api/ai-tools/v1/get-task-context [—]",
+    "POST /api/ai-tools/v1/search-route-templates [—]",
     "POST /api/ai-tools/v1/submit-review-package [—]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",
@@ -1008,6 +1014,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/assist-session [departure:write]",
     "POST /api/ai-create-tasks/draft [departure:write]",
     "POST /api/ai-tools/v1/get-task-context [—]",
+    "POST /api/ai-tools/v1/search-route-templates [—]",
     "POST /api/ai-tools/v1/submit-review-package [—]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",
@@ -1129,6 +1136,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/account-generation-gaps [/departure]",
     "GET /api/ai-create-tasks/assist-availability [—]",
     "POST /api/ai-tools/v1/get-task-context [—]",
+    "POST /api/ai-tools/v1/search-route-templates [—]",
     "POST /api/ai-tools/v1/submit-review-package [—]",
     "POST /api/auth/login [—]",
     "POST /api/auth/logout [—]",

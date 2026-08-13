@@ -10,6 +10,7 @@ export interface PendingCandidateOverlayProps {
   fieldKey: AiReviewableBasicInfoField
   candidate: AiReviewCandidateView
   savedDisplay: string
+  displayValue?: string
   onCorrect: (value: string | number | null) => void
 }
 
@@ -23,6 +24,7 @@ export function PendingCandidateOverlay({
   fieldKey,
   candidate,
   savedDisplay,
+  displayValue,
   onCorrect,
 }: PendingCandidateOverlayProps) {
   const { token } = theme.useToken()
@@ -57,6 +59,10 @@ export function PendingCandidateOverlay({
           value={typeof value === 'string' && value ? dayjs(value) : null}
           onChange={(next: Dayjs | null) => onCorrect(next?.format('YYYY-MM-DD') ?? null)}
         />
+      ) : fieldKey === 'templateId' ? (
+        <Typography.Text aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}>
+          {displayValue ?? String(value ?? '')}
+        </Typography.Text>
       ) : (
         <Input
           aria-label={`${REVIEW_FIELD_LABELS[fieldKey]}候选`}

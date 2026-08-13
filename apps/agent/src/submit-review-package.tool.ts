@@ -43,6 +43,11 @@ const candidateInputSchema = z.discriminatedUnion('fieldKey', [
     ...candidateBase,
   }),
   z.object({
+    fieldKey: z.literal('templateId'),
+    proposedValue: z.string().trim().min(1).max(200),
+    ...candidateBase,
+  }),
+  z.object({
     fieldKey: z.literal('startDate'),
     proposedValue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     ...candidateBase,
