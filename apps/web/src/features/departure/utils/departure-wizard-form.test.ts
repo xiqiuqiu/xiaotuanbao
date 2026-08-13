@@ -155,6 +155,18 @@ describe('departure-wizard-form', () => {
     )
   })
 
+  it('does not keep an end date that would fall before the new start', () => {
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-20', '2026-08-12', 6)).toBe(
+      '2026-08-25',
+    )
+    expect(resolveEndDateAfterStartChange(undefined, '2026-08-20', '2026-08-12', 10)).toBe(
+      '2026-08-29',
+    )
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-20', '2026-08-12', undefined)).toBe(
+      '2026-08-20',
+    )
+  })
+
   it('builds create payload from route and info values including crew fields', () => {
     const payload = buildCreateDeparturePayload(
       { mode: 'manual', routeName: '喀纳斯阿勒泰10日线', defaultDayCount: 10 },

@@ -475,7 +475,7 @@ export function CreateDepartureStepInfo({
   const committedStartDateRef = useRef<string | undefined>(undefined)
   const watchedStartDate = Form.useWatch('startDate', form)
   useEffect(() => {
-    if (committedStartDateRef.current === undefined && watchedStartDate) {
+    if (typeof watchedStartDate === 'string' && watchedStartDate) {
       committedStartDateRef.current = watchedStartDate
     }
   }, [watchedStartDate])

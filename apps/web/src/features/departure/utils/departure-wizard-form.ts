@@ -88,7 +88,11 @@ export function resolveEndDateAfterStartChange(
   currentEndDate: string | undefined,
   defaultDayCount: number | undefined,
 ): string | undefined {
-  if (!currentEndDate || currentEndDate === previousStartDate) {
+  if (
+    !currentEndDate ||
+    currentEndDate === previousStartDate ||
+    isEndDateBeforeStartDate(nextStartDate, currentEndDate)
+  ) {
     if (defaultDayCount && defaultDayCount > 0) {
       return computeEndDateFromDefaultDays(nextStartDate, defaultDayCount)
     }
