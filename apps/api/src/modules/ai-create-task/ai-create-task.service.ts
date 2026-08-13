@@ -789,7 +789,7 @@ export class AiCreateTaskService {
 
       const task = await tx.aiCreateTask.findFirst({
         where: { id: taskId, organizationId },
-        include: { draft: true },
+        include: TASK_WITH_PENDING_INCLUDE,
       })
       if (!task || !task.draft) {
         throw new NotFoundException('发团创建草稿不存在')
@@ -820,7 +820,7 @@ export class AiCreateTaskService {
       if (updated.count !== 1) {
         const latest = await tx.aiCreateTask.findFirst({
           where: { id: taskId, organizationId },
-          include: { draft: true },
+          include: TASK_WITH_PENDING_INCLUDE,
         })
         throw new ConflictException({
           message: '草稿版本已变化，请基于最新快照重试',

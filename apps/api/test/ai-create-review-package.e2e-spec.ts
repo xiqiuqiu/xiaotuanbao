@@ -314,7 +314,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     }).expect(200)
     const packageId = submitted.body.data.reviewPackageId as string
 
-    await authRequest(app, coordinatorToken)
+    const saved = await authRequest(app, coordinatorToken)
       .post('/api/ai-create-tasks/draft')
       .send({
         taskId: opened.taskId,
@@ -330,6 +330,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
         },
       })
       .expect(200)
+    expect(saved.body.data.pendingReview.id).toBe(packageId)
 
     const conflict = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
