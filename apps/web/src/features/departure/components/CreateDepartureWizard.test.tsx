@@ -655,4 +655,51 @@ describe('CreateDepartureWizard', () => {
       expectedVersion: 3,
     })
   })
+
+  it('retries confirm after a 409 with the latest version and a new idempotency key', async () => {
+    const user = userEvent.setup()
+    const conflict = new ApiError('草稿版本已变化，请基于最新快照重试', 409, {
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 3,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    vi.mocked(confirmAiCreateTask).mockRejectedValueOnce(conflict).mockResolvedValueOnce(mockDeparture)
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalledTimes(2)
+    })
+
+    const confirmCalls = vi.mocked(confirmAiCreateTask).mock.calls
+    expect(confirmCalls[0]?.[1]).toMatchObject({ expectedVersion: 1 })
+    expect(confirmCalls[1]?.[1]?.expectedVersion).toBeGreaterThanOrEqual(3)
+    expect(confirmCalls[1]?.[2]).toEqual(expect.any(String))
+    expect(confirmCalls[1]?.[2]).not.toBe(confirmCalls[0]?.[2])
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/departure/$departureId',
+        params: { departureId: 'departure-1' },
+        search: { tab: 'overview' },
+      })
+    })
+  })
 })

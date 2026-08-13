@@ -27,7 +27,6 @@ import {
   type RouteStepValues,
 } from '../utils/departure-wizard-form'
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
-import { ApiError } from '@/lib/request'
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 const AUTOSAVE_DEBOUNCE_MS = 800
@@ -47,6 +46,12 @@ const focusRouteStepGap = (nextRouteValues: RouteStepValues) => {
 }
 
 type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+function newConfirmIdempotencyKey(taskId: string): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `confirm-${taskId}-${Date.now()}`
+}
 
 export function CreateDepartureWizard() {
   const screens = Grid.useBreakpoint()
@@ -374,23 +379,35 @@ export function CreateDepartureWizard() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      await flushDraft()
-      const currentTaskId = taskIdRef.current
-      const currentVersion = draftVersionRef.current
-      if (!currentTaskId || currentVersion == null) {
-        throw new Error('发团创建草稿尚未保存，请稍后再试')
+      const runConfirm = async () => {
+        await flushDraft()
+        const currentTaskId = taskIdRef.current
+        const currentVersion = draftVersionRef.current
+        if (!currentTaskId || currentVersion == null) {
+          throw new Error('发团创建草稿尚未保存，请稍后再试')
+        }
+        if (!confirmIdempotencyKeyRef.current) {
+          confirmIdempotencyKeyRef.current = newConfirmIdempotencyKey(currentTaskId)
+        }
+        return confirmAiCreateTask(
+          currentTaskId,
+          { expectedVersion: currentVersion },
+          confirmIdempotencyKeyRef.current,
+          { silentError: true },
+        )
       }
-      if (!confirmIdempotencyKeyRef.current) {
-        confirmIdempotencyKeyRef.current =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `confirm-${currentTaskId}-${Date.now()}`
+
+      try {
+        return await runConfirm()
+      } catch (error) {
+        const conflict = readAiCreateTaskConflict(error)
+        if (!conflict) {
+          throw error
+        }
+        applySavedDraft(conflict, { keepDirty: true })
+        confirmIdempotencyKeyRef.current = null
+        return runConfirm()
       }
-      return confirmAiCreateTask(
-        currentTaskId,
-        { expectedVersion: currentVersion },
-        confirmIdempotencyKeyRef.current,
-      )
     },
     onSuccess: (departure) => {
       message.success('发团已创建')
@@ -408,10 +425,9 @@ export function CreateDepartureWizard() {
       const conflict = readAiCreateTaskConflict(error)
       if (conflict) {
         applySavedDraft(conflict, { keepDirty: true })
+        confirmIdempotencyKeyRef.current = null
       }
-      if (!(error instanceof ApiError)) {
-        message.error(error instanceof Error ? error.message : '创建失败')
-      }
+      message.error(error instanceof Error ? error.message : '创建失败')
     },
   })
 

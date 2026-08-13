@@ -21,8 +21,10 @@ export async function confirmAiCreateTask(
   taskId: string,
   payload: ConfirmAiCreateTaskDto,
   idempotencyKey: string,
+  config?: RequestConfig,
 ): Promise<DepartureSummary> {
   return request.post<DepartureSummary>(`/ai-create-tasks/${taskId}/confirm`, payload, {
-    headers: { 'Idempotency-Key': idempotencyKey },
+    ...config,
+    headers: { ...config?.headers, 'Idempotency-Key': idempotencyKey },
   })
 }
