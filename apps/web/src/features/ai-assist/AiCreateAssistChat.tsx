@@ -167,6 +167,19 @@ function AssistLightState({
   return null
 }
 
+function submittedReviewNoticeKey(result: unknown): string | null {
+  if (typeof result === 'object' && result !== null && 'reviewPackageId' in result) {
+    const id = result.reviewPackageId
+    if (typeof id === 'string' && id.length > 0) {
+      return id
+    }
+  }
+  if (typeof result === 'string' && result.length > 0 && result !== '[object Object]') {
+    return result
+  }
+  return null
+}
+
 function ReviewPackageNotice({
   agentId,
   onSubmitted,
@@ -183,8 +196,9 @@ function ReviewPackageNotice({
       render: ({ status, parameters, result }) => {
         const fieldKeys = parameters?.candidates?.map((candidate) => candidate.fieldKey) ?? []
         const labels = formatReviewFieldList(fieldKeys)
-        if (status === 'complete' && result && notifiedRef.current !== String(result)) {
-          notifiedRef.current = String(result)
+        const noticeKey = submittedReviewNoticeKey(result)
+        if (status === 'complete' && noticeKey && notifiedRef.current !== noticeKey) {
+          notifiedRef.current = noticeKey
           queueMicrotask(() => onSubmitted?.())
         }
         if (status === 'inProgress' || status === 'executing') {

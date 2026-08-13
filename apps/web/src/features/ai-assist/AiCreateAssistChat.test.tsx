@@ -200,6 +200,47 @@ describe('AiCreateAssistChat', () => {
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
   })
 
+  it('notifies again when a later submitReviewPackage completes with a different package', async () => {
+    const onReviewPackageSubmitted = vi.fn()
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-notice-second"
+        onReviewPackageSubmitted={onReviewPackageSubmitted}
+      />,
+    )
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'name' }] },
+      result: { reviewPackageId: 'pkg-1', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-2', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-2', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
+  })
+
   it('shows a waiting state and responds after the form confirms', async () => {
     const respond = vi.fn().mockResolvedValue(undefined)
     const { rerender } = render(
