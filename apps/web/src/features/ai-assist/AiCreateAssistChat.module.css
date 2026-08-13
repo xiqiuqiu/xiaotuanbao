@@ -1,0 +1,17 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.error {
+  margin: 0 0 8px;
+  flex-shrink: 0;
+}
+
+.chat {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}

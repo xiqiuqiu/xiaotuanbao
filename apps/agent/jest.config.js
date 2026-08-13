@@ -11,3 +11,5 @@ module.exports = {
     '^@xiaotuanbao/ai-contracts$': '<rootDir>/../../../packages/ai-contracts/src/index.ts',
   },
 }
+
+

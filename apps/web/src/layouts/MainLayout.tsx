@@ -4,6 +4,7 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   UserOutlined,
+  CommentOutlined,
 } from '@ant-design/icons'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import type { CSSProperties, PropsWithChildren } from 'react'
@@ -15,6 +16,8 @@ import { useUiStore } from '@/app/store/ui.store'
 import { filterMenuItems, findMenuKeyForPathname } from '@/utils/menu-permission'
 import { logout as logoutSession } from '@/services/auth.service'
 import { queryClient } from '@/lib/query/client'
+import { AssistPane } from './AssistPane'
+import { AssistPaneSlotProvider } from './assist-pane-slot'
 import styles from './MainLayout.module.css'
 
 const { Header, Sider } = Layout
@@ -31,6 +34,8 @@ export function MainLayout({ children }: PropsWithChildren) {
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed)
   const toggleSidebar = useUiStore((state) => state.toggleSidebar)
   const setSidebarCollapsed = useUiStore((state) => state.setSidebarCollapsed)
+  const toggleAssistPane = useUiStore((state) => state.toggleAssistPane)
+  const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
   const logoutPendingRef = useRef(false)
 
   const visibleMenuItems = useMemo(
@@ -41,6 +46,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const menuSelectedKey = findMenuKeyForPathname(pathname, menuKeys) ?? pathname
   const selectedKeys = [menuSelectedKey]
   const sidebarToggleLabel = sidebarCollapsed ? '展开侧边栏' : '折叠侧边栏'
+  const assistToggleLabel = assistPaneCollapsed ? '展开电子化助理' : '收起电子化助理'
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     if (pathname.startsWith('/finance')) return ['finance']
     if (pathname.startsWith('/system')) return ['system']
@@ -108,127 +114,139 @@ export function MainLayout({ children }: PropsWithChildren) {
   ]
 
   return (
-    <Layout
-      className={styles.shell}
-      style={{
-        '--shell-border': token.colorBorderSecondary,
-        '--shell-text': token.colorText,
-        '--shell-overlay-shadow': token.boxShadowSecondary,
-      } as CSSProperties}
-    >
-      <Sider
-        className={styles.sider}
-        collapsible
-        collapsed={sidebarCollapsed}
-        trigger={null}
-        width={220}
-        collapsedWidth={0}
-        breakpoint="md"
-        onBreakpoint={(broken) => {
-          if (broken) {
-            setSidebarCollapsed(true)
-          }
-        }}
-        theme="light"
+    <AssistPaneSlotProvider>
+      <Layout
+        className={styles.shell}
+        style={{
+          '--shell-border': token.colorBorderSecondary,
+          '--shell-text': token.colorText,
+          '--shell-overlay-shadow': token.boxShadowSecondary,
+        } as CSSProperties}
       >
-        <div
-          className={`${styles.brand} ${sidebarCollapsed ? styles.brandCollapsed : ''}`}
-          aria-label={env.appName}
-        >
-          <img
-            className={styles.brandLockup}
-            src="/xiaotuanbao-brand-lockup-transparent-v2.png"
-            alt=""
-            aria-hidden="true"
-          />
-        </div>
-        <Menu
-          mode="inline"
-          selectedKeys={selectedKeys}
-          openKeys={openKeys}
-          onOpenChange={setOpenKeys}
-          items={visibleMenuItems}
-          onClick={({ key }) => {
-            if (key.startsWith('/')) {
-              navigate({ to: key })
-              if (isNarrowViewport) {
-                setSidebarCollapsed(true)
-              }
+        <Sider
+          className={styles.sider}
+          collapsible
+          collapsed={sidebarCollapsed}
+          trigger={null}
+          width={220}
+          collapsedWidth={0}
+          breakpoint="md"
+          onBreakpoint={(broken) => {
+            if (broken) {
+              setSidebarCollapsed(true)
             }
           }}
-        />
-      </Sider>
-
-      {!sidebarCollapsed && isNarrowViewport ? (
-        <button
-          type="button"
-          className={styles.siderMask}
-          aria-label="关闭侧边栏"
-          onClick={() => setSidebarCollapsed(true)}
-        />
-      ) : null}
-
-      <Layout className={styles.main}>
-        <Header
-          className={styles.header}
+          theme="light"
         >
-          <div className={styles.headerLeading}>
-            <Tooltip title={sidebarToggleLabel} placement="bottom">
-              <Button
-                className={styles.collapseButton}
-                type="text"
-                icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                onClick={toggleSidebar}
-                aria-label={sidebarToggleLabel}
-              />
-            </Tooltip>
-            <Breadcrumb className={styles.breadcrumb} items={breadcrumbItems} />
-          </div>
-
-          <Dropdown
-            menu={{
-              items: [
-                {
-                  key: 'logout',
-                  icon: <LogoutOutlined />,
-                  label: '退出登录',
-                  onClick: async () => {
-                    if (logoutPendingRef.current) {
-                      return
-                    }
-                    logoutPendingRef.current = true
-                    try {
-                      // Abort in-flight queries before clearing the cookie so
-                      // Jwt-guarded responses cannot toast "Unauthorized" on /login.
-                      await queryClient.cancelQueries()
-                      clearSession()
-                      await logoutSession()
-                    } catch {
-                      message.warning('服务器会话可能未清除，请勿在公共设备上继续使用')
-                    } finally {
-                      queryClient.clear()
-                      navigate({ to: '/login' })
-                      logoutPendingRef.current = false
-                    }
-                  },
-                },
-              ],
-            }}
+          <div
+            className={`${styles.brand} ${sidebarCollapsed ? styles.brandCollapsed : ''}`}
+            aria-label={env.appName}
           >
-            {/* 用原生 title 展示截断全名：antd Tooltip 会在点击打开下拉时盖住「退出登录」。 */}
-            <Button
-              className={styles.userButton}
-              type="text"
-              icon={<UserOutlined />}
-              title={user?.name ?? '用户'}
-            >
-              <span className={styles.userName}>{user?.name ?? '用户'}</span>
-            </Button>
-          </Dropdown>
-        </Header>
+            <img
+              className={styles.brandLockup}
+              src="/xiaotuanbao-brand-lockup-transparent-v2.png"
+              alt=""
+              aria-hidden="true"
+            />
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={selectedKeys}
+            openKeys={openKeys}
+            onOpenChange={setOpenKeys}
+            items={visibleMenuItems}
+            onClick={({ key }) => {
+              if (key.startsWith('/')) {
+                navigate({ to: key })
+                if (isNarrowViewport) {
+                  setSidebarCollapsed(true)
+                }
+              }
+            }}
+          />
+        </Sider>
 
-        {children}
+        {!sidebarCollapsed && isNarrowViewport ? (
+          <button
+            type="button"
+            className={styles.siderMask}
+            aria-label="关闭侧边栏"
+            onClick={() => setSidebarCollapsed(true)}
+          />
+        ) : null}
+
+        <Layout className={styles.main}>
+          <Header className={styles.header}>
+            <div className={styles.headerLeading}>
+              <Tooltip title={sidebarToggleLabel} placement="bottom">
+                <Button
+                  className={styles.collapseButton}
+                  type="text"
+                  icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  onClick={toggleSidebar}
+                  aria-label={sidebarToggleLabel}
+                />
+              </Tooltip>
+              <Breadcrumb className={styles.breadcrumb} items={breadcrumbItems} />
+            </div>
+
+            <div className={styles.headerTrailing}>
+              <Tooltip title={assistToggleLabel} placement="bottom">
+                <Button
+                  className={styles.assistToggle}
+                  type="text"
+                  icon={<CommentOutlined />}
+                  onClick={toggleAssistPane}
+                  aria-label={assistToggleLabel}
+                />
+              </Tooltip>
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'logout',
+                      icon: <LogoutOutlined />,
+                      label: '退出登录',
+                      onClick: async () => {
+                        if (logoutPendingRef.current) {
+                          return
+                        }
+                        logoutPendingRef.current = true
+                        try {
+                          // Abort in-flight queries before clearing the cookie so
+                          // Jwt-guarded responses cannot toast "Unauthorized" on the login page.
+                          await queryClient.cancelQueries()
+                          clearSession()
+                          await logoutSession()
+                        } catch {
+                          message.warning('服务器会话可能未清除，请勿在公共设备上继续使用')
+                        } finally {
+                          queryClient.clear()
+                          navigate({ to: '/login' })
+                          logoutPendingRef.current = false
+                        }
+                      },
+                    },
+                  ],
+                }}
+              >
+              {/* 用原生 title 展示截断全名：antd Tooltip 会在点击打开下拉时盖住「退出登录」。 */}
+              <Button
+                className={styles.userButton}
+                type="text"
+                icon={<UserOutlined />}
+                title={user?.name ?? '用户'}
+              >
+                <span className={styles.userName}>{user?.name ?? '用户'}</span>
+              </Button>
+            </Dropdown>
+            </div>
+          </Header>
+
+          {children}
+        </Layout>
+        <AssistPane />
       </Layout>
-    </Layout>
+    </AssistPaneSlotProvider>
   )
 }

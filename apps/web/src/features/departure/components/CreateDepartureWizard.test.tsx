@@ -1,15 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Modal, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { StrictMode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
 import { ApiError } from '@/lib/request'
+import { useUiStore } from '@/app/store/ui.store'
+import { AssistPane } from '@/layouts/AssistPane'
+import { AssistPaneSlotProvider } from '@/layouts/assist-pane-slot'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
@@ -63,9 +66,19 @@ vi.mock('@/services/route-template.service', () => ({
   deleteRouteTemplate: vi.fn(),
 }))
 
-vi.mock('../utils/ai-create-assist-stream', () => ({
-  streamAiCreateAssistTurn: vi.fn(),
+vi.mock('@copilotkit/react-core/v2', () => ({
+  CopilotKit: ({ children }: { children: ReactNode }) => (
+    <div data-testid="copilot-kit">{children}</div>
+  ),
+  CopilotChat: ({ agentId }: { agentId?: string }) => (
+    <div data-testid="copilot-chat" data-agent-id={agentId} />
+  ),
+  useAgentContext: vi.fn(),
+  useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
+  useCopilotKit: () => ({ copilotkit: { runAgent: vi.fn() } }),
 }))
+
+vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
 
 vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn(),
@@ -89,7 +102,6 @@ import {
   startAiCreateAssistSession,
 } from '@/services/ai-create-task.service'
 import { listEmployeeOptions } from '@/services/employee.service'
-import { streamAiCreateAssistTurn } from '../utils/ai-create-assist-stream'
 import { listSegments } from '@/services/segment.service'
 import {
   deleteRouteTemplate,
@@ -137,11 +149,14 @@ function renderWizard({ strict = false }: { strict?: boolean } = {}) {
   })
 
   const tree = (
-    <QueryClientProvider client={queryClient}>
-      <ConfigProvider locale={zhCN}>
-        <CreateDepartureWizard />
-      </ConfigProvider>
-    </QueryClientProvider>
+    <AssistPaneSlotProvider>
+      <QueryClientProvider client={queryClient}>
+        <ConfigProvider locale={zhCN}>
+          <CreateDepartureWizard />
+          <AssistPane />
+        </ConfigProvider>
+      </QueryClientProvider>
+    </AssistPaneSlotProvider>
   )
 
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
@@ -166,10 +181,12 @@ describe('CreateDepartureWizard', () => {
     Modal.destroyAll()
     message.destroy()
     mockSearch = {}
+    useUiStore.setState({ assistPaneCollapsed: true })
   })
 
   beforeEach(() => {
     mockSearch = {}
+    useUiStore.setState({ assistPaneCollapsed: true })
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
@@ -726,6 +743,86 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('opens AI assist from an empty template step without posting an invalid draft', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: {
+        id: 'task-assist',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: { mode: 'template', routeName: '' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+
+    expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
+    expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
+    expect(startAiCreateAssistSession).toHaveBeenCalledWith({
+      taskId: undefined,
+      draft: expect.objectContaining({ mode: 'template', routeName: '' }),
+    })
+  })
+
+  it('starts assist when the pane expands without clicking AI 辅助', async () => {
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: {
+        id: 'task-assist',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: { mode: 'template', routeName: '' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+
+    renderWizard()
+    await screen.findByRole('button', { name: /AI 辅助/ })
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
+
+    act(() => {
+      useUiStore.setState({ assistPaneCollapsed: false })
+    })
+
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(startAiCreateAssistSession).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
+    expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
+  })
+
   it('opens the AI sidebar without losing the form edit buffer', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
@@ -756,11 +853,6 @@ describe('CreateDepartureWizard', () => {
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
     })
-    vi.mocked(streamAiCreateAssistTurn).mockImplementation(async ({ onEvent }) => {
-      onEvent({ type: 'run.started', runStatus: 'running' })
-      onEvent({ type: 'message.delta', text: '已填写：团名、路线。' })
-      onEvent({ type: 'run.completed', runStatus: 'completed' })
-    })
 
     renderWizard()
     await fillManualRouteAndContinue(user)
@@ -769,10 +861,10 @@ describe('CreateDepartureWizard', () => {
     await user.type(nameInput, '侧栏打开后仍在')
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByText('已填写：团名、路线。')).toBeInTheDocument()
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
 
-    await user.click(screen.getByRole('button', { name: /关闭|Close/i }))
+    await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
     expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
   })
 
@@ -782,47 +874,76 @@ describe('CreateDepartureWizard', () => {
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
     })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: {
-        id: 'task-assist',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        departureId: null,
-        creatorUserId: 'user-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        draft: {
-          version: 1,
-          snapshot: { mode: 'manual', routeName: '喀纳斯阿勒泰10日线' },
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-      },
-      runId: 'run-1',
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
-    })
-    vi.mocked(streamAiCreateAssistTurn).mockImplementation(async ({ onEvent }) => {
-      onEvent({
-        type: 'run.failed',
-        runStatus: 'failed',
-        error: {
-          code: 'AGENT_UNAVAILABLE',
-          message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
-          retryable: true,
-        },
-      })
-    })
+    vi.mocked(startAiCreateAssistSession).mockRejectedValue(new Error('Agent unavailable'))
 
     renderWizard()
     await fillManualRouteAndContinue(user)
     await screen.findByLabelText('团名')
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByText('AI 辅助暂时不可用，请稍后重试或继续使用表单')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(startAiCreateAssistSession).toHaveBeenCalled()
+    })
 
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
       expect(confirmAiCreateTask).toHaveBeenCalled()
     })
+  })
+
+  it('shows the agreed assist error in the pane when bootstrap fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockRejectedValue(new Error('Agent unavailable'))
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+
+    expect(await screen.findByText('Agent unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /创建发团/ })).toBeInTheDocument()
+  })
+
+  it('replaces Copilot chat with the error copy when a later bootstrap fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession)
+      .mockResolvedValueOnce({
+        task: {
+          id: 'task-assist',
+          status: 'in_progress',
+          currentPhase: 'basic_info',
+          departureId: null,
+          creatorUserId: 'user-1',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          draft: {
+            version: 1,
+            snapshot: { mode: 'template', routeName: '' },
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        runId: 'run-1',
+        delegationToken: 'deleg-1',
+        agentRuntimeUrl: '/copilotkit',
+        expiresAt: '2026-01-01T00:10:00.000Z',
+      })
+      .mockRejectedValueOnce(new Error('委托已过期'))
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByText('委托已过期')).toBeInTheDocument()
+    expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 })

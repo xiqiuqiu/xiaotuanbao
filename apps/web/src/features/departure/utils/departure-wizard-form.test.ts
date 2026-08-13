@@ -6,6 +6,7 @@ import {
   buildCreateDeparturePayload,
   buildDefaultDepartureName,
   buildDepartureCreationDraftSnapshot,
+  canPersistDepartureCreationDraft,
   buildInitialInfoValues,
   canProceedFromRouteStep,
   computeDayCount,
@@ -171,5 +172,44 @@ describe('departure-wizard-form', () => {
       defaultDayCount: 6,
       startDate: '2026-08-01',
     })
+  })
+
+  it('does not persist empty template or copy drafts that the API would reject', () => {
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot({ mode: 'template', routeName: '' }, {}),
+      ),
+    ).toBe(false)
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot(
+          { mode: 'template', routeName: '西安线', templateId: 'template-1' },
+          {},
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot({ mode: 'copy', routeName: '' }, {}),
+      ),
+    ).toBe(false)
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot(
+          { mode: 'copy', routeName: '旧团', copyFromDepartureId: 'dep-1' },
+          {},
+        ),
+      ),
+    ).toBe(true)
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot({ mode: 'manual', routeName: '' }, { startDate: '2026-08-01' }),
+      ),
+    ).toBe(false)
+    expect(
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot({ mode: 'manual', routeName: '喀纳斯线' }, {}),
+      ),
+    ).toBe(true)
   })
 })

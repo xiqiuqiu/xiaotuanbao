@@ -21,6 +21,22 @@ export function mapAgentFetchError(payload: unknown): AiCollaborationError {
   return AiCollaborationError.fromCode('AGENT_UNAVAILABLE')
 }
 
+export function mapModelError(error: unknown): AiCollaborationError {
+  if (error instanceof AiCollaborationError) {
+    return error
+  }
+
+  const name = error instanceof Error ? error.name : ''
+  const message = error instanceof Error ? error.message : String(error)
+  if (name === 'TimeoutError' || name === 'AbortError' || /timeout|aborted/i.test(message)) {
+    return AiCollaborationError.fromCode('MODEL_TIMEOUT')
+  }
+  if (/refus|content.?filter|safety|policy/i.test(message)) {
+    return AiCollaborationError.fromCode('MODEL_REFUSED')
+  }
+  return AiCollaborationError.fromCode('AGENT_UNAVAILABLE')
+}
+
 function isCollaborationCode(code: unknown): code is AiCollaborationErrorCode {
   return (
     code === 'AGENT_UNAVAILABLE' ||

@@ -18,3 +18,4 @@ allowBuilds:
   prisma: true
   '@prisma/client': true
   '@prisma/engines': true
+  '@scarf/scarf': false

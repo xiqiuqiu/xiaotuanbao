@@ -84,6 +84,10 @@ services:
       API_BASE_URL: http://api:3000
       AGENT_SERVICE_SECRET: ${AGENT_SERVICE_SECRET:-dev-agent-service-secret-change-me}
       WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      AI_MODEL: ${AI_MODEL:-deepseek/deepseek-chat}
+      AI_MODEL_BASE_URL: ${AI_MODEL_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      COPILOTKIT_TELEMETRY_DISABLED: ${COPILOTKIT_TELEMETRY_DISABLED:-true}
     depends_on:
       api:
         condition: service_healthy

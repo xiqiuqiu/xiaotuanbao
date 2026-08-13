@@ -15,15 +15,15 @@ COPY --from=deps /app/ ./
 COPY apps/agent ./apps/agent
 COPY packages/ai-contracts ./packages/ai-contracts
 COPY packages/config ./packages/config
-WORKDIR /app/apps/agent
-RUN pnpm --filter @xiaotuanbao/ai-contracts build && pnpm build
+RUN pnpm --filter @xiaotuanbao/ai-contracts build
+
+FROM build AS deploy
+WORKDIR /app
+RUN pnpm --filter agent deploy --prod --legacy /out
 
 FROM node:22-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/apps/agent/dist ./dist
-COPY --from=build /app/apps/agent/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages/ai-contracts ./packages/ai-contracts
+COPY --from=deploy /out/ ./
 EXPOSE 4111
-CMD ["node", "dist/main.js"]
+CMD ["./node_modules/.bin/tsx", "src/main.ts"]

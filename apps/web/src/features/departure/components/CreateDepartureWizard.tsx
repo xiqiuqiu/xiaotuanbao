@@ -4,12 +4,16 @@ import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
+import { useUiStore } from '@/app/store/ui.store'
+import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
+import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
+import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
+import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
 import {
   confirmAiCreateTask,
   getAiCreateAssistAvailability,
   getAiCreateTask,
   saveDepartureCreationDraft,
-  startAiCreateAssistSession,
 } from '@/services/ai-create-task.service'
 import { previewDepartureNo } from '@/services/departure.service'
 import { getRouteTemplate } from '@/services/route-template.service'
@@ -21,6 +25,7 @@ import {
   applyDraftSnapshotToInfoForm,
   applyDraftSnapshotToRoute,
   buildDepartureCreationDraftSnapshot,
+  canPersistDepartureCreationDraft,
   canProceedFromRouteStep,
   createInfoFormValues,
   type InfoFormValues,
@@ -29,9 +34,6 @@ import {
   type RouteStepValues,
 } from '../utils/departure-wizard-form'
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
-import { streamAiCreateAssistTurn } from '../utils/ai-create-assist-stream'
-import { AiCreateAssistDrawer } from './AiCreateAssistDrawer'
-import type { AiCollaborationErrorJson, AssistStreamEvent } from '@xiaotuanbao/ai-contracts'
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 const AUTOSAVE_DEBOUNCE_MS = 800
@@ -64,6 +66,9 @@ export function CreateDepartureWizard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
+  const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
+  const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
+  const { setContent } = useAssistPaneSlot()
   const search = useSearch({ strict: false }) as { copyFrom?: string; taskId?: string }
   const copyFromId = search.copyFrom?.trim()
   const searchTaskId = search.taskId?.trim()
@@ -77,10 +82,6 @@ export function CreateDepartureWizard() {
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
-  const [assistOpen, setAssistOpen] = useState(false)
-  const [assistLoading, setAssistLoading] = useState(false)
-  const [assistEvents, setAssistEvents] = useState<AssistStreamEvent[]>([])
-  const [assistError, setAssistError] = useState<AiCollaborationErrorJson | null>(null)
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -150,12 +151,7 @@ export function CreateDepartureWizard() {
     const run = (async () => {
       const info = infoForm.getFieldsValue(true)
       const draft = buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
-      if (
-        draft.mode === 'manual' &&
-        !draft.routeName &&
-        !draft.name &&
-        !draft.startDate
-      ) {
+      if (!canPersistDepartureCreationDraft(draft)) {
         return
       }
 
@@ -469,46 +465,74 @@ export function CreateDepartureWizard() {
     queryFn: getAiCreateAssistAvailability,
   })
 
-  const runAssistTurn = useCallback(async () => {
-    setAssistLoading(true)
-    setAssistError(null)
-    setAssistEvents([])
-    try {
-      await flushDraft()
-      const info = infoForm.getFieldsValue(true)
-      const session = await startAiCreateAssistSession({
-        taskId: taskIdRef.current ?? undefined,
-        draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
-      })
-      applySavedDraft(session.task)
-      syncTaskSearch(session.task.id)
-      await streamAiCreateAssistTurn({
-        agentRuntimeUrl: session.agentRuntimeUrl,
-        delegationToken: session.delegationToken,
-        taskId: session.task.id,
-        runId: session.runId,
-        onEvent: (event) => {
-          setAssistEvents((current) => [...current, event])
-          if (event.type === 'run.failed') {
-            setAssistError(event.error)
-          }
-        },
-      })
-    } catch (error) {
-      setAssistError({
-        code: 'AGENT_UNAVAILABLE',
-        message: error instanceof Error ? error.message : 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
-        retryable: true,
-      })
-    } finally {
-      setAssistLoading(false)
-    }
-  }, [applySavedDraft, flushDraft, infoForm, syncTaskSearch])
+  const buildAssistDraft = useCallback(
+    () => buildDepartureCreationDraftSnapshot(routeValuesRef.current, infoForm.getFieldsValue(true)),
+    [infoForm],
+  )
+
+  const getAssistTaskId = useCallback(() => taskIdRef.current, [])
+
+  const { bootstrap, session, error } = useAiCreateAssistBootstrap({
+    enabled: Boolean(assistAvailability?.enabled),
+    flushDraft,
+    buildDraft: buildAssistDraft,
+    getTaskId: getAssistTaskId,
+    applySavedDraft,
+    syncTaskSearch,
+  })
+  const bootstrapRef = useRef(bootstrap)
+  bootstrapRef.current = bootstrap
 
   const openAssist = useCallback(() => {
-    setAssistOpen(true)
-    void runAssistTurn()
-  }, [runAssistTurn])
+    setAssistPaneCollapsed(false)
+    void bootstrap()
+  }, [bootstrap, setAssistPaneCollapsed])
+
+  useEffect(() => {
+    if (!assistAvailability?.enabled || assistPaneCollapsed || session || error) {
+      return
+    }
+    void bootstrap()
+  }, [assistAvailability?.enabled, assistPaneCollapsed, bootstrap, error, session])
+
+  useEffect(() => {
+    if (!assistAvailability?.enabled) {
+      return
+    }
+
+    if (session) {
+      setContent(
+        <AiCreateAssistChat
+          agentRuntimeUrl={session.agentRuntimeUrl}
+          delegationToken={session.delegationToken}
+          taskId={session.task.id}
+          runId={session.runId}
+          snapshotVersion={session.task.draft.version}
+          stageKey="basic_info"
+          runStatus="idle"
+        />,
+      )
+
+      return () => {
+        setContent(null)
+      }
+    }
+
+    if (error) {
+      setContent(
+        <>
+          <p role="alert">{error.message.trim() || ASSIST_ERROR_TEXT}</p>
+          <Button aria-label="重试" onClick={() => void bootstrapRef.current()}>
+            重试
+          </Button>
+        </>,
+      )
+
+      return () => {
+        setContent(null)
+      }
+    }
+  }, [assistAvailability?.enabled, error, session, setContent])
 
   const showSteps = !isCopyMode && !copyFromId && !searchTaskId
   const stepEnterKey = showCopyBootstrap
@@ -646,15 +670,6 @@ export function CreateDepartureWizard() {
           </div>
         </footer>
       </Card>
-
-      <AiCreateAssistDrawer
-        open={assistOpen}
-        loading={assistLoading}
-        events={assistEvents}
-        error={assistError}
-        onClose={() => setAssistOpen(false)}
-        onRetry={() => void runAssistTurn()}
-      />
     </div>
   )
 }

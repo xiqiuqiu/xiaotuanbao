@@ -75,6 +75,19 @@ cp .env.example .env
 | `SEED_ADMIN_PASSWORD` | 否 | admin123 | 演示管理员密码 |
 | `SEED_ADMIN_NAME` | 否 | 演示管理员 | 演示管理员显示名 |
 
+### AI 建团辅助（#297）
+
+| 变量 | 必填 | 默认值 | 说明 |
+| ---- | ---- | ------ | ---- |
+| `AI_CREATE_ASSIST_ENABLED` | 否 | `false` | 为 `true` 时，具备 `departure:write` 的 User 可看到新建发团「AI 辅助」入口 |
+| `AI_CREATE_ASSIST_USER_IDS` | 否 | 空 | 逗号分隔 User id 白名单；空表示开关打开后对所有具备写权限的 User 生效 |
+| `AGENT_SERVICE_SECRET` | 开辅助时必填 | — | Agent 调 NestJS 工具的服务密钥，API 与 Agent 必须相同 |
+| `AGENT_RUNTIME_URL` | 否 | `/copilotkit` | 浏览器访问 Agent 的同域路径；本地 Vite / Caddy 再转到 4111 |
+| `AI_MODEL` | 否 | `deepseek/deepseek-chat` | 预览环境单一模型，Mastra Model Router id |
+| `AI_MODEL_BASE_URL` | 否 | `https://api.deepseek.com` | OpenAI 兼容网关根地址 |
+| `DEEPSEEK_API_KEY` | 开辅助对话时必填 | — | DeepSeek 密钥，只放 `.env`，不要提交 |
+| `COPILOTKIT_TELEMETRY_DISABLED` | 否 | `true` | 关闭 CopilotKit Runtime 遥测 |
+
 ## 两种运行场景
 
 ### 场景 A：本地开发（pnpm dev:api + pnpm dev:web）

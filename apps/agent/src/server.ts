@@ -1,25 +1,42 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import {
-  AiCollaborationError,
-  assistStreamEventSchema,
-  type AssistStreamEvent,
-} from '@xiaotuanbao/ai-contracts'
+import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { CopilotRuntime, createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
+import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
+import { MastraAgent } from '@ag-ui/mastra'
+import { runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
-import { mapAgentFetchError } from './map-agent-error'
-import { buildReadonlyAssistReply } from './readonly-turn'
+import { createAiCreateMastra } from './mastra-agent'
+import { mapAgentFetchError, mapModelError } from './map-agent-error'
 
 export interface AgentServerConfig {
   port: number
   apiBaseUrl: string
   serviceSecret: string
   allowedOrigins: string[]
+  model?: string
+  modelApiKey?: string
+  modelBaseUrl?: string
 }
 
 const READONLY_TOOLS = ['getTaskContext'] as const
+const ALLOWED_HEADERS = 'Authorization, Content-Type, X-Ai-Task-Id, X-Ai-Run-Id'
 
 export function createAgentServer(config: AgentServerConfig) {
+  const mastra = createAiCreateMastra(config)
+  const runtime = new CopilotRuntime({
+    agents: MastraAgent.getLocalAgents({
+      mastra,
+      resourceId: 'ai-create-readonly-assist',
+    }),
+  })
+  const copilotFetch = createCopilotRuntimeHandler({
+    runtime,
+    basePath: '/copilotkit',
+  })
+  const copilotNode = createCopilotNodeHandler(copilotFetch)
+
   return createServer((request, response) => {
-    void handleRequest(config, request, response)
+    void handleRequest(config, copilotNode, request, response)
   })
 }
 
@@ -29,6 +46,7 @@ export function listAgentTools(): readonly string[] {
 
 async function handleRequest(
   config: AgentServerConfig,
+  copilotNode: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
   request: IncomingMessage,
   response: ServerResponse,
 ) {
@@ -36,7 +54,7 @@ async function handleRequest(
   if (origin && config.allowedOrigins.includes(origin)) {
     response.setHeader('Access-Control-Allow-Origin', origin)
     response.setHeader('Vary', 'Origin')
-    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+    response.setHeader('Access-Control-Allow-Headers', ALLOWED_HEADERS)
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   }
 
@@ -52,73 +70,91 @@ async function handleRequest(
     return
   }
 
-  if (request.method === 'POST' && (url.pathname === '/copilotkit' || url.pathname === '/v1/assist-turns')) {
-    await handleAssistTurn(config, request, response)
+  if (url.pathname === '/copilotkit' || url.pathname.startsWith('/copilotkit/')) {
+    await handleCopilotkit(config, copilotNode, request, response, url)
     return
   }
 
   json(response, 404, { message: 'not found' })
 }
 
-async function handleAssistTurn(
+function isCopilotkitInfoDiscovery(method: string | undefined, pathname: string): boolean {
+  return (
+    (method === 'GET' || method === 'HEAD') &&
+    (pathname === '/copilotkit/info' || pathname === '/copilotkit/info/')
+  )
+}
+
+async function handleCopilotkit(
   config: AgentServerConfig,
+  copilotNode: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
   request: IncomingMessage,
   response: ServerResponse,
+  url: URL,
 ) {
+  if (isCopilotkitInfoDiscovery(request.method, url.pathname)) {
+    await invokeCopilotNode(response, () => copilotNode(request, response))
+    return
+  }
+
   const delegationToken = readBearer(request)
   if (!delegationToken) {
     json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
     return
   }
 
-  let body: { taskId?: string; runId?: string }
-  try {
-    body = JSON.parse(await readBody(request)) as { taskId?: string; runId?: string }
-  } catch {
+  const taskId = readHeader(request, 'x-ai-task-id')
+  const runId = readHeader(request, 'x-ai-run-id')
+  if (!taskId || !runId) {
     json(response, 400, { data: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON() })
     return
   }
 
-  if (!body.taskId || !body.runId) {
-    json(response, 400, { data: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON() })
-    return
-  }
-
-  response.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  })
-  writeEvent(response, { type: 'run.started', runStatus: 'running' })
-
   try {
-    const context = await fetchTaskContext(
+    await fetchTaskContext(
       {
         apiBaseUrl: config.apiBaseUrl,
         serviceSecret: config.serviceSecret,
         delegationToken,
       },
-      { taskId: body.taskId, runId: body.runId },
+      { taskId, runId },
     )
-    const reply = buildReadonlyAssistReply(context)
-    writeEvent(response, { type: 'message.delta', text: reply })
-    writeEvent(response, { type: 'run.completed', runStatus: 'completed' })
   } catch (error) {
-    const mapped =
-      error instanceof AiCollaborationError ? error : mapAgentFetchError(error)
-    writeEvent(response, {
-      type: 'run.failed',
-      runStatus: 'failed',
-      error: mapped.toJSON(),
-    })
+    const mapped = error instanceof AiCollaborationError ? error : mapAgentFetchError(error)
+    json(response, statusForCollaborationError(mapped), { data: mapped.toJSON() })
+    return
   }
 
-  response.end()
+  await invokeCopilotNode(response, () =>
+    runWithAssistRequestContext({ delegationToken, taskId, runId }, async () => {
+      await copilotNode(request, response)
+    }),
+  )
 }
 
-function writeEvent(response: ServerResponse, event: AssistStreamEvent) {
-  const parsed = assistStreamEventSchema.parse(event)
-  response.write(`data: ${JSON.stringify(parsed)}\n\n`)
+function statusForCollaborationError(error: AiCollaborationError): number {
+  if (error.code === 'DELEGATION_INVALID') {
+    return 401
+  }
+  if (error.code === 'PERMISSION_DENIED' || error.code === 'SERVICE_IDENTITY_INVALID') {
+    return 403
+  }
+  return error.retryable ? 503 : 400
+}
+
+async function invokeCopilotNode(response: ServerResponse, run: () => Promise<void>) {
+  try {
+    await run()
+  } catch (error) {
+    if (response.headersSent) {
+      if (!response.writableEnded && !response.destroyed) {
+        response.destroy()
+      }
+      return
+    }
+    const mapped = error instanceof AiCollaborationError ? error : mapModelError(error)
+    json(response, mapped.retryable ? 503 : 400, { data: mapped.toJSON() })
+  }
 }
 
 function json(response: ServerResponse, status: number, payload: unknown) {
@@ -131,13 +167,12 @@ function readBearer(request: IncomingMessage): string {
   return header.startsWith('Bearer ') ? header.slice(7).trim() : ''
 }
 
-function readBody(request: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
-    request.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
-    request.on('error', reject)
-  })
+function readHeader(request: IncomingMessage, name: string): string {
+  const value = request.headers[name]
+  if (Array.isArray(value)) {
+    return value[0]?.trim() ?? ''
+  }
+  return value?.trim() ?? ''
 }
 
 export function loadAgentConfigFromEnv(): AgentServerConfig {
@@ -149,5 +184,8 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
       .split(',')
       .map((value) => value.trim())
       .filter(Boolean),
+    model: process.env.AI_MODEL ?? 'deepseek/deepseek-chat',
+    modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
+    modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
   }
 }

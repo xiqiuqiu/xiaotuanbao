@@ -334,4 +334,35 @@ describe('MainLayout 侧栏开关', () => {
     const childItem = await screen.findByRole('menuitem', { name: childLabel })
     expect(childItem).toHaveClass('ant-menu-item-selected')
   })
+
+  it('默认两列；从中间顶栏展开后右栏与顶栏同高且主内容仍可访问', async () => {
+    const user = userEvent.setup()
+    render(
+      <ConfigProvider>
+        <MainLayout>
+          <main>内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByRole('menuitem', { name: /工作台$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
+    expect(screen.getByText('内容')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: '展开电子化助理' }))
+    const pane = screen.getByRole('complementary', { name: '电子化助理' })
+    const mainColumn = pane.previousElementSibling as HTMLElement
+    expect(within(mainColumn).getByRole('banner')).toBeInTheDocument()
+    expect(within(mainColumn).getByText('内容')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '关闭侧边栏' })).not.toBeInTheDocument()
+  })
+
+  it('persist 默认收起电子化助理', () => {
+    expect(useUiStore.getInitialState().assistPaneCollapsed).toBe(true)
+    const partialize = useUiStore.persist.getOptions().partialize
+    expect(partialize?.(useUiStore.getInitialState())).toEqual(
+      expect.objectContaining({ assistPaneCollapsed: true }),
+    )
+  })
 })
+
