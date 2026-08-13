@@ -528,7 +528,7 @@ export function CreateDepartureWizard() {
       }
       correctTimerRef.current = setTimeout(() => {
         void patchAiReviewPackage(taskId, pendingReview.id, {
-          corrections: { [fieldKey]: value },
+          corrections: { ...pendingCorrectionsRef.current },
         })
           .then((summary) => {
             queryClient.setQueryData(['ai-create-task', summary.id], summary)

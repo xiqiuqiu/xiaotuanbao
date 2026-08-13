@@ -1355,4 +1355,74 @@ describe('CreateDepartureWizard', () => {
     })
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
   })
+
+  it('patches every field corrected inside the same debounce window', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '八月川西团',
+          userCorrectedValue: null,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+        },
+        {
+          fieldKey: 'expectedGuestCountHint',
+          proposedValue: 8,
+          userCorrectedValue: null,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({
+      ...restored,
+      pendingReview: {
+        ...pending,
+        candidates: pending.candidates.map((candidate) =>
+          candidate.fieldKey in payload.corrections
+            ? { ...candidate, userCorrectedValue: payload.corrections[candidate.fieldKey] ?? null }
+            : candidate,
+        ),
+      },
+    }))
+
+    renderWizard()
+    fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
+    fireEvent.change(await screen.findByLabelText('预计人数提示候选'), { target: { value: '12' } })
+
+    await waitFor(() => {
+      expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        corrections: { name: '修正团名', expectedGuestCountHint: 12 },
+      })
+    })
+    expect(screen.getByLabelText('团名候选')).toHaveValue('修正团名')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('12')
+  })
 })
