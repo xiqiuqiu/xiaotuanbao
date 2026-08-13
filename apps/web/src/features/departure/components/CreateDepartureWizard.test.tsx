@@ -49,6 +49,8 @@ vi.mock('@/services/ai-create-task.service', () => ({
   saveDepartureCreationDraft: vi.fn(),
   getAiCreateTask: vi.fn(),
   confirmAiCreateTask: vi.fn(),
+  getAiCreateAssistAvailability: vi.fn(),
+  startAiCreateAssistSession: vi.fn(),
 }))
 
 vi.mock('@/services/segment.service', () => ({
@@ -59,6 +61,10 @@ vi.mock('@/services/route-template.service', () => ({
   listRouteTemplates: vi.fn(),
   getRouteTemplate: vi.fn(),
   deleteRouteTemplate: vi.fn(),
+}))
+
+vi.mock('../utils/ai-create-assist-stream', () => ({
+  streamAiCreateAssistTurn: vi.fn(),
 }))
 
 vi.mock('@/services/employee.service', () => ({
@@ -77,10 +83,13 @@ import {
 } from '@/services/departure.service'
 import {
   confirmAiCreateTask,
+  getAiCreateAssistAvailability,
   getAiCreateTask,
   saveDepartureCreationDraft,
+  startAiCreateAssistSession,
 } from '@/services/ai-create-task.service'
 import { listEmployeeOptions } from '@/services/employee.service'
+import { streamAiCreateAssistTurn } from '../utils/ai-create-assist-stream'
 import { listSegments } from '@/services/segment.service'
 import {
   deleteRouteTemplate,
@@ -155,6 +164,7 @@ describe('CreateDepartureWizard', () => {
     cleanup()
     vi.clearAllMocks()
     Modal.destroyAll()
+    message.destroy()
     mockSearch = {}
   })
 
@@ -198,6 +208,10 @@ describe('CreateDepartureWizard', () => {
         },
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+    })
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: false,
+      agentRuntimeUrl: null,
     })
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
@@ -709,6 +723,106 @@ describe('CreateDepartureWizard', () => {
         params: { departureId: 'departure-1' },
         search: { tab: 'overview' },
       })
+    })
+  })
+
+  it('opens the AI sidebar without losing the form edit buffer', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: {
+        id: 'task-assist',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: {
+            mode: 'manual',
+            routeName: '喀纳斯阿勒泰10日线',
+            name: '喀纳斯阿勒泰10日线',
+          },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+    vi.mocked(streamAiCreateAssistTurn).mockImplementation(async ({ onEvent }) => {
+      onEvent({ type: 'run.started', runStatus: 'running' })
+      onEvent({ type: 'message.delta', text: '已填写：团名、路线。' })
+      onEvent({ type: 'run.completed', runStatus: 'completed' })
+    })
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    const nameInput = await screen.findByLabelText('团名')
+    await user.clear(nameInput)
+    await user.type(nameInput, '侧栏打开后仍在')
+
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByText('已填写：团名、路线。')).toBeInTheDocument()
+    expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
+
+    await user.click(screen.getByRole('button', { name: /关闭|Close/i }))
+    expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
+  })
+
+  it('keeps create departure available after a structured agent failure', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: {
+        id: 'task-assist',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: { mode: 'manual', routeName: '喀纳斯阿勒泰10日线' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+    vi.mocked(streamAiCreateAssistTurn).mockImplementation(async ({ onEvent }) => {
+      onEvent({
+        type: 'run.failed',
+        runStatus: 'failed',
+        error: {
+          code: 'AGENT_UNAVAILABLE',
+          message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+          retryable: true,
+        },
+      })
+    })
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByText('AI 辅助暂时不可用，请稍后重试或继续使用表单')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
     })
   })
 })

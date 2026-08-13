@@ -4,6 +4,9 @@ import type {
   ConfirmAiCreateTaskDto,
   DepartureSummary,
   SaveDepartureCreationDraftDto,
+  AiCreateAssistAvailability,
+  StartAiCreateAssistSessionDto,
+  AiCreateAssistSession,
 } from '@/types/api'
 
 export async function saveDepartureCreationDraft(
@@ -27,4 +30,14 @@ export async function confirmAiCreateTask(
     ...config,
     headers: { ...config?.headers, 'Idempotency-Key': idempotencyKey },
   })
+}
+
+export async function getAiCreateAssistAvailability(): Promise<AiCreateAssistAvailability> {
+  return request.get<AiCreateAssistAvailability>('/ai-create-tasks/assist-availability')
+}
+
+export async function startAiCreateAssistSession(
+  payload: StartAiCreateAssistSessionDto = {},
+): Promise<AiCreateAssistSession> {
+  return request.post<AiCreateAssistSession>('/ai-create-tasks/assist-session', payload)
 }

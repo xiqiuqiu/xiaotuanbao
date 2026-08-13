@@ -6,7 +6,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
+import { ConfigService } from '@nestjs/config'
 import type {
+  AiCreateAssistAvailability,
+  AiCreateAssistSession,
   AiCreateTaskSummary,
   DepartureCreationDraftSnapshot,
   DepartureSummary,
@@ -17,15 +21,26 @@ import {
   DepartureCreationDraftMode,
   DepartureType,
 } from '@xiaotuanbao/shared'
+import {
+  classifyDraftFields,
+  getTaskContextInputSchema,
+  getTaskContextOutputSchema,
+  type GetTaskContextOutput,
+} from '@xiaotuanbao/ai-contracts'
 import type { AiCreateTask, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { DepartureType as PrismaDepartureType } from '@prisma/client'
+import { AiCreateActivityRunStatus, DepartureType as PrismaDepartureType } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import type {
   ConfirmAiCreateTaskDto,
   DepartureCreationDraftSnapshotDto,
   SaveDepartureCreationDraftDto,
+  StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
+import { AuthService } from '../auth/auth.service'
+import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
+import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
 const TASK_LOCK_OPERATION = 'ai-create-task'
@@ -85,6 +100,9 @@ export class AiCreateTaskService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly departureService: DepartureService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly authService: AuthService,
   ) {}
 
   async saveDraft(
@@ -119,6 +137,127 @@ export class AiCreateTaskService {
   ): Promise<AiCreateTaskSummary> {
     const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
     return this.toSummary(task)
+  }
+
+  async getAssistAvailability(userId: string): Promise<AiCreateAssistAvailability> {
+    const enabled = await this.canUseAssist(userId)
+    return {
+      enabled,
+      agentRuntimeUrl: enabled ? this.agentRuntimeUrl() : null,
+    }
+  }
+
+  async startAssistSession(
+    organizationId: string,
+    userId: string,
+    dto: StartAiCreateAssistSessionDto,
+  ): Promise<AiCreateAssistSession> {
+    if (!(await this.canUseAssist(userId))) {
+      throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
+    }
+
+    const task = dto.taskId
+      ? await this.findOwnedInProgressTask(organizationId, userId, dto.taskId)
+      : await this.createTaskWithDraft(
+          organizationId,
+          userId,
+          this.normalizeSnapshot(dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' }),
+        ).then((summary) => this.findOwnedTaskOrThrow(organizationId, userId, summary.id))
+
+    const runTimeoutMs = this.configService.get<number>('app.aiCreateAssist.runTimeoutMs') ?? 120_000
+    const staleBefore = new Date(Date.now() - runTimeoutMs)
+
+    const run = await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, organizationId, task.id)
+      await tx.aiCreateActivityRun.updateMany({
+        where: {
+          taskId: task.id,
+          status: AiCreateActivityRunStatus.running,
+          startedAt: { lt: staleBefore },
+        },
+        data: {
+          status: AiCreateActivityRunStatus.failed,
+          endedAt: new Date(),
+          errorCode: 'MODEL_TIMEOUT',
+        },
+      })
+      await tx.aiCreateActivityRun.updateMany({
+        where: { taskId: task.id, status: AiCreateActivityRunStatus.running },
+        data: {
+          status: AiCreateActivityRunStatus.failed,
+          endedAt: new Date(),
+          errorCode: 'AGENT_UNAVAILABLE',
+        },
+      })
+      return tx.aiCreateActivityRun.create({
+        data: {
+          organizationId,
+          taskId: task.id,
+          creatorUserId: userId,
+        },
+      })
+    })
+
+    const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
+    const payload: AiOperationDelegationPayload = {
+      typ: 'ai-op-delegation',
+      sub: userId,
+      organizationId,
+      taskId: task.id,
+      runId: run.id,
+    }
+    const delegationToken = await this.jwtService.signAsync(payload, { expiresIn: ttlSec })
+
+    return {
+      task: this.toSummary(task),
+      runId: run.id,
+      delegationToken,
+      agentRuntimeUrl: this.agentRuntimeUrl(),
+      expiresAt: new Date(Date.now() + ttlSec * 1000).toISOString(),
+    }
+  }
+
+  async getTaskContextForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<GetTaskContextOutput> {
+    let input: { taskId: string; runId: string }
+    try {
+      input = getTaskContextInputSchema.parse(rawInput)
+    } catch {
+      throw new BadRequestException('getTaskContext 参数无效')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
+    const run = await this.prisma.aiCreateActivityRun.findFirst({
+      where: {
+        id: caller.runId,
+        taskId: caller.taskId,
+        organizationId: caller.organizationId,
+        creatorUserId: caller.userId,
+      },
+    })
+    if (!run || run.status !== AiCreateActivityRunStatus.running) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const summary = this.toSummary(task)
+    return getTaskContextOutputSchema.parse({
+      task: {
+        id: summary.id,
+        status: summary.status,
+        currentPhase: summary.currentPhase,
+        creatorUserId: summary.creatorUserId,
+      },
+      snapshot: summary.draft.snapshot,
+      objectVersion: summary.draft.version,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext'],
+      fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+    })
   }
 
   async confirm(
@@ -402,6 +541,31 @@ export class AiCreateTaskService {
       throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
     }
     return task
+  }
+
+  private async findOwnedInProgressTask(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<TaskWithDraft> {
+    const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
+    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可启动 AI 辅助')
+    }
+    if (task.departureId) {
+      throw new BadRequestException('已创建正式发团的任务不可再启动 AI 辅助')
+    }
+    return task
+  }
+
+  private async canUseAssist(userId: string): Promise<boolean> {
+    if (!isAiCreateAssistEnabledForUser(this.configService, userId)) return false
+    const permissionKeys = await this.authService.getPermissionKeysForUser(userId)
+    return permissionKeys.includes('departure:write')
+  }
+
+  private agentRuntimeUrl(): string {
+    return this.configService.get<string>('app.aiCreateAssist.agentRuntimeUrl') ?? '/copilotkit'
   }
 
   private normalizeSnapshot(

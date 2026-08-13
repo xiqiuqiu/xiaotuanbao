@@ -11,6 +11,10 @@
 .pageHeader {
   flex-shrink: 0;
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .title {

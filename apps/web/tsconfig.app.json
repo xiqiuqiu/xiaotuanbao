@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@xiaotuanbao/shared": ["../../packages/shared/src/index.ts"]
+      "@xiaotuanbao/shared": ["../../packages/shared/src/index.ts"],
+      "@xiaotuanbao/ai-contracts": ["../../packages/ai-contracts/src/index.ts"]
     }
   },
   "include": ["src"],

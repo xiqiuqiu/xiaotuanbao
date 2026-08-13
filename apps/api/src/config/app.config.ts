@@ -84,5 +84,16 @@ export default registerAs('app', () => {
     authCookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,
     authAllowedOrigins: parseOrigins(process.env.WEB_ORIGINS, nodeEnv),
     authAllowLegacyBearer: process.env.AUTH_ALLOW_LEGACY_BEARER === 'true',
+    aiCreateAssist: {
+      enabled: process.env.AI_CREATE_ASSIST_ENABLED === 'true',
+      userIds: (process.env.AI_CREATE_ASSIST_USER_IDS ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+      agentServiceSecret: process.env.AGENT_SERVICE_SECRET?.trim() ?? '',
+      agentRuntimeUrl: (process.env.AGENT_RUNTIME_URL ?? '/copilotkit').trim(),
+      delegationTtlSec: Number(process.env.AI_CREATE_ASSIST_DELEGATION_TTL_SEC ?? 600),
+      runTimeoutMs: Number(process.env.AI_CREATE_ASSIST_RUN_TIMEOUT_MS ?? 120_000),
+    },
   }
 })

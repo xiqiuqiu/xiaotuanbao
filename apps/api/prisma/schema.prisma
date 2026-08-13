@@ -330,6 +330,7 @@ model Organization {
   bookingNoticeTemplates BookingNoticeTemplate[]
   aiCreateTasks AiCreateTask[]
   aiCreateIdempotencyRecords AiCreateIdempotencyRecord[]
+  aiCreateActivityRuns AiCreateActivityRun[]
 
   @@map("organizations")
 }
@@ -404,6 +405,7 @@ model User {
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
   createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
+  aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -1064,6 +1066,14 @@ enum AiCreatePhase {
   @@map("ai_create_phase")
 }
 
+enum AiCreateActivityRunStatus {
+  running
+  completed
+  failed
+
+  @@map("ai_create_activity_run_status")
+}
+
 /// AI 建团任务：表单/AI 共用的可恢复任务壳；正式 Departure 创建前关联发团创建草稿。
 model AiCreateTask {
   id             String            @id @default(cuid())
@@ -1079,6 +1089,7 @@ model AiCreateTask {
   updatedAt      DateTime          @updatedAt @map("updated_at")
   draft          DepartureCreationDraft?
   idempotencyRecords AiCreateIdempotencyRecord[]
+  activityRuns   AiCreateActivityRun[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1114,5 +1125,24 @@ model AiCreateIdempotencyRecord {
   @@index([taskId])
   @@index([organizationId, createdAt])
   @@map("ai_create_idempotency_records")
+}
+
+/// AI 建团活动运行：同一任务同一时间至多一个 running。
+model AiCreateActivityRun {
+  id             String                     @id @default(cuid())
+  organizationId String                     @map("organization_id")
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  taskId         String                     @map("task_id")
+  task           AiCreateTask               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creatorUserId  String                     @map("creator_user_id")
+  creator        User                       @relation("AiCreateActivityRunCreator", fields: [creatorUserId], references: [id])
+  status         AiCreateActivityRunStatus  @default(running)
+  startedAt      DateTime                   @default(now()) @map("started_at")
+  endedAt        DateTime?                  @map("ended_at")
+  errorCode      String?                    @map("error_code")
+
+  @@index([taskId, status])
+  @@index([organizationId, startedAt])
+  @@map("ai_create_activity_runs")
 }
 

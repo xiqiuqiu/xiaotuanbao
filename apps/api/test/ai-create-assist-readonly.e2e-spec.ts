@@ -1,0 +1,173 @@
+import type { INestApplication } from '@nestjs/common'
+import { DepartureType, PrismaClient } from '@prisma/client'
+import request from 'supertest'
+import { authRequest, createTestApp, loginAs } from './helpers'
+
+const AGENT_SECRET = 'e2e-agent-service-secret'
+
+describe('AI create readonly tool chain (e2e) #297', () => {
+  let app: INestApplication
+  let prisma: PrismaClient
+  let coordinatorToken: string
+  let financeToken: string
+  let organizationId: string
+  let ownerUserId: string
+  const testPrefix = `e2e-ai-assist-${Date.now()}`
+
+  beforeAll(async () => {
+    process.env.AI_CREATE_ASSIST_ENABLED = 'true'
+    process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
+    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:4111/copilotkit'
+
+    app = await createTestApp()
+    prisma = new PrismaClient()
+    coordinatorToken = await loginAs(app, 'wangjie')
+    financeToken = await loginAs(app, 'acai')
+
+    const user = await prisma.user.findFirst({
+      where: { username: 'wangjie', deletedAt: null },
+    })
+    if (!user) {
+      throw new Error('Seed user wangjie not found')
+    }
+    organizationId = user.organizationId
+    ownerUserId = user.id
+  })
+
+  afterAll(async () => {
+    await prisma.aiCreateActivityRun.deleteMany({
+      where: { task: { organizationId, creatorUserId: ownerUserId } },
+    })
+    await prisma.departureCreationDraft.deleteMany({
+      where: { task: { organizationId, creatorUserId: ownerUserId } },
+    })
+    await prisma.aiCreateTask.deleteMany({
+      where: { organizationId, creatorUserId: ownerUserId },
+    })
+    await prisma.$disconnect()
+    await app.close()
+  })
+
+  function agentContextRequest(delegationToken: string, body: Record<string, unknown>, serviceKey = AGENT_SECRET) {
+    return request(app.getHttpServer())
+      .post('/api/ai-tools/v1/get-task-context')
+      .set('X-Agent-Service-Key', serviceKey)
+      .set('Authorization', `Bearer ${delegationToken}`)
+      .send(body)
+  }
+
+  it('hides the assist entry from users without departure:write', async () => {
+    const response = await authRequest(app, financeToken)
+      .get('/api/ai-create-tasks/assist-availability')
+      .expect(200)
+
+    expect(response.body.data).toEqual({ enabled: false, agentRuntimeUrl: null })
+  })
+
+  it('lets a flagged coordinator open an assist session without a complete draft', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/assist-session')
+      .send({
+        draft: {
+          mode: 'manual',
+          routeName: '',
+          name: `${testPrefix}-partial`,
+        },
+      })
+      .expect(201)
+
+    expect(response.body.data).toMatchObject({
+      runId: expect.any(String),
+      delegationToken: expect.any(String),
+      agentRuntimeUrl: 'http://127.0.0.1:4111/copilotkit',
+      task: {
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        draft: {
+          version: 1,
+          snapshot: {
+            name: `${testPrefix}-partial`,
+            routeName: '',
+          },
+        },
+      },
+    })
+  })
+
+  it('returns min task context, does not mutate the draft, and rejects untrusted callers', async () => {
+    const created = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({
+        draft: {
+          mode: 'manual',
+          routeName: `${testPrefix}-路线`,
+          name: `${testPrefix}-完整`,
+          startDate: '2026-09-01',
+          endDate: '2026-09-05',
+          ownerUserId,
+          departureType: DepartureType.combined,
+          expectedGuestCountHint: 8,
+        },
+      })
+      .expect(201)
+
+    const taskId = created.body.data.id as string
+    const versionBefore = created.body.data.draft.version as number
+
+    const session = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/assist-session')
+      .send({ taskId })
+      .expect(201)
+
+    const { runId, delegationToken } = session.body.data as {
+      runId: string
+      delegationToken: string
+    }
+
+    await agentContextRequest(delegationToken, { taskId, runId, organizationId: 'leak' }).expect(200)
+      .then((response) => {
+        expect(response.body.data).toMatchObject({
+          task: {
+            id: taskId,
+            status: 'in_progress',
+            currentPhase: 'basic_info',
+            creatorUserId: ownerUserId,
+          },
+          objectVersion: versionBefore,
+          availableCapabilities: ['getTaskContext'],
+          pending: { hasPendingReview: false, reviewPackageId: null },
+          fieldCoverage: {
+            filled: ['name', 'routeName', 'startDate', 'endDate', 'ownerUserId', 'departureType'],
+            missing: [],
+            optionalPresent: ['expectedGuestCountHint'],
+          },
+        })
+        expect(response.body.data).not.toHaveProperty('organizationId')
+        expect(response.body.data.snapshot.name).toBe(`${testPrefix}-完整`)
+      })
+
+    const after = await authRequest(app, coordinatorToken)
+      .get(`/api/ai-create-tasks/${taskId}`)
+      .expect(200)
+    expect(after.body.data.draft.version).toBe(versionBefore)
+    expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-完整`)
+
+    const untrusted = await agentContextRequest(delegationToken, { taskId, runId }, 'wrong-secret')
+    expect(untrusted.status).toBe(401)
+    expect(untrusted.body.data).toMatchObject({ code: 'SERVICE_IDENTITY_INVALID' })
+
+    const noDelegation = await request(app.getHttpServer())
+      .post('/api/ai-tools/v1/get-task-context')
+      .set('X-Agent-Service-Key', AGENT_SECRET)
+      .send({ taskId, runId })
+    expect(noDelegation.status).toBe(401)
+    expect(noDelegation.body.data).toMatchObject({ code: 'DELEGATION_INVALID' })
+  })
+
+  it('forbids finance from starting an assist session', async () => {
+    await authRequest(app, financeToken)
+      .post('/api/ai-create-tasks/assist-session')
+      .send({ draft: { mode: 'manual', routeName: `${testPrefix}-finance` } })
+      .expect(403)
+  })
+})

@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
 import {
   confirmAiCreateTask,
+  getAiCreateAssistAvailability,
   getAiCreateTask,
   saveDepartureCreationDraft,
+  startAiCreateAssistSession,
 } from '@/services/ai-create-task.service'
 import { previewDepartureNo } from '@/services/departure.service'
 import { getRouteTemplate } from '@/services/route-template.service'
@@ -27,6 +29,9 @@ import {
   type RouteStepValues,
 } from '../utils/departure-wizard-form'
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
+import { streamAiCreateAssistTurn } from '../utils/ai-create-assist-stream'
+import { AiCreateAssistDrawer } from './AiCreateAssistDrawer'
+import type { AiCollaborationErrorJson, AssistStreamEvent } from '@xiaotuanbao/ai-contracts'
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 const AUTOSAVE_DEBOUNCE_MS = 800
@@ -72,6 +77,10 @@ export function CreateDepartureWizard() {
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
+  const [assistOpen, setAssistOpen] = useState(false)
+  const [assistLoading, setAssistLoading] = useState(false)
+  const [assistEvents, setAssistEvents] = useState<AssistStreamEvent[]>([])
+  const [assistError, setAssistError] = useState<AiCollaborationErrorJson | null>(null)
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -455,6 +464,52 @@ export function CreateDepartureWizard() {
       })
   }, [flushDraft, navigate])
 
+  const { data: assistAvailability } = useQuery({
+    queryKey: ['ai-create-assist-availability'],
+    queryFn: getAiCreateAssistAvailability,
+  })
+
+  const runAssistTurn = useCallback(async () => {
+    setAssistLoading(true)
+    setAssistError(null)
+    setAssistEvents([])
+    try {
+      await flushDraft()
+      const info = infoForm.getFieldsValue(true)
+      const session = await startAiCreateAssistSession({
+        taskId: taskIdRef.current ?? undefined,
+        draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
+      })
+      applySavedDraft(session.task)
+      syncTaskSearch(session.task.id)
+      await streamAiCreateAssistTurn({
+        agentRuntimeUrl: session.agentRuntimeUrl,
+        delegationToken: session.delegationToken,
+        taskId: session.task.id,
+        runId: session.runId,
+        onEvent: (event) => {
+          setAssistEvents((current) => [...current, event])
+          if (event.type === 'run.failed') {
+            setAssistError(event.error)
+          }
+        },
+      })
+    } catch (error) {
+      setAssistError({
+        code: 'AGENT_UNAVAILABLE',
+        message: error instanceof Error ? error.message : 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        retryable: true,
+      })
+    } finally {
+      setAssistLoading(false)
+    }
+  }, [applySavedDraft, flushDraft, infoForm, syncTaskSearch])
+
+  const openAssist = useCallback(() => {
+    setAssistOpen(true)
+    void runAssistTurn()
+  }, [runAssistTurn])
+
   const showSteps = !isCopyMode && !copyFromId && !searchTaskId
   const stepEnterKey = showCopyBootstrap
     ? 'bootstrap'
@@ -477,17 +532,24 @@ export function CreateDepartureWizard() {
       style={{ '--wizard-border': token.colorBorderSecondary } as CSSProperties}
     >
       <div className={styles.pageHeader}>
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          style={{ paddingInlineStart: 0 }}
-          onClick={goBack}
-        >
-          返回发团列表
-        </Button>
-        <Typography.Title level={4} className={styles.title}>
-          {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
-        </Typography.Title>
+        <div>
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            style={{ paddingInlineStart: 0 }}
+            onClick={goBack}
+          >
+            返回发团列表
+          </Button>
+          <Typography.Title level={4} className={styles.title}>
+            {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
+          </Typography.Title>
+        </div>
+        {assistAvailability?.enabled ? (
+          <Button aria-label="AI 辅助" icon={<CommentOutlined />} onClick={openAssist}>
+            AI 辅助
+          </Button>
+        ) : null}
       </div>
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>
@@ -584,6 +646,15 @@ export function CreateDepartureWizard() {
           </div>
         </footer>
       </Card>
+
+      <AiCreateAssistDrawer
+        open={assistOpen}
+        loading={assistLoading}
+        events={assistEvents}
+        error={assistError}
+        onClose={() => setAssistOpen(false)}
+        onRetry={() => void runAssistTurn()}
+      />
     </div>
   )
 }

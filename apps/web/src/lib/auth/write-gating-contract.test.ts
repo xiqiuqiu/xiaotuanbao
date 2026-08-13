@@ -66,6 +66,9 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   deleteSourceOrderGuest: { gating: 'departureWrite', endpointKey: 'departure:write' },
   saveRouteTemplateFromDeparture: { gating: 'departureWrite', endpointKey: 'departure:write' },
   deleteRouteTemplate: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  saveDepartureCreationDraft: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  confirmAiCreateTask: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  startAiCreateAssistSession: { gating: 'departureWrite', endpointKey: 'departure:write' },
   // 资源应付作废：路径在 /finance 下，但后端要 departure:write（作废属发团编辑）。
   voidResourcePayable: { gating: 'departureWrite', endpointKey: 'departure:write' },
 
@@ -128,6 +131,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   // ---- 平台守卫 ----
   createPlatformOrganization: { gating: 'platform', endpointKey: null },
   updatePlatformOrganization: { gating: 'platform', endpointKey: null },
+  updatePlatformOrganizationBusinessPrefix: { gating: 'platform', endpointKey: null },
   disablePlatformOrganization: { gating: 'platform', endpointKey: null },
   enablePlatformOrganization: { gating: 'platform', endpointKey: null },
 
@@ -165,7 +169,7 @@ const MUTATION_HOOKS: Record<string, string> = {
 
 /** gating 意识 token：出现其一即认为该模块「知道要 gating」。刻意不含泛化的 disabled/loading。 */
 const GATING_TOKEN =
-  /\b(canEditDeparture|canEditPartner|canEditSupplier|canEditProduct|canMutateFinance|canPerformCapability|canEdit|canWrite|readOnly|financeReadOnly|amountReadOnly|mutationLocked|resourceEditable)\b/
+  /\b(canEditDeparture|canEditPartner|canEditSupplier|canEditProduct|canMutateFinance|canPerformCapability|canEdit|canWritePartner|canWriteSupplier|canWrite|readOnly|financeReadOnly|amountReadOnly|mutationLocked|resourceEditable)\b/
 
 /**
  * 「文件内无 gating token 但由祖先 gate 覆盖」的合法豁免，逐条登记理由。

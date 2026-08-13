@@ -6,6 +6,10 @@
         reverse_proxy api:3000
     }
 
+    handle /copilotkit* {
+        reverse_proxy agent:4111
+    }
+
     handle {
         try_files {path} /index.html
         file_server

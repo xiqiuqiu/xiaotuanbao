@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@xiaotuanbao/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@xiaotuanbao/ai-contracts': path.resolve(__dirname, '../../packages/ai-contracts/src/index.ts'),
     },
   },
   server: {
@@ -17,6 +18,10 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/copilotkit': {
+        target: 'http://localhost:4111',
         changeOrigin: true,
       },
     },
