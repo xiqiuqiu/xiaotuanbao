@@ -326,6 +326,7 @@ describe('CreateDepartureWizard', () => {
       mode: 'template',
       templateId: 'template-1',
       routeName: '西安-青海湖-茶卡6日游',
+      defaultDayCount: 6,
     })
     expect(createDeparture).not.toHaveBeenCalled()
   })
@@ -573,6 +574,7 @@ describe('CreateDepartureWizard', () => {
   })
 
   it('restores template defaultDayCount from the server draft snapshot', async () => {
+    const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }
     vi.mocked(getAiCreateTask).mockResolvedValue({
       id: 'task-1',
@@ -602,6 +604,13 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByLabelText('团名')).toBeInTheDocument()
     expect(screen.getByText('默认 6 天')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('出团日期'))
+    await user.click(await screen.findByTitle('2026-08-10'))
+
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-08-15')
+    expect(screen.getByLabelText('天数')).toHaveValue('6')
+    expect(screen.getByLabelText('团名')).toHaveValue('2026年8月10日 西安-青海湖-茶卡6日游')
   })
 
   it('adopts the latest draft version after a 409 so later saves can proceed', async () => {
