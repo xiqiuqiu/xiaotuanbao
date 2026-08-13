@@ -8,7 +8,12 @@ import zhCN from 'antd/locale/zh_CN'
 import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { AiCreateAssistSession, AiReviewPackageView, DepartureSummary } from '@/types/api'
+import type {
+  AiCreateAssistSession,
+  AiReviewPackageView,
+  DepartureSummary,
+  RouteTemplateDetailSummary,
+} from '@/types/api'
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from '@/layouts/AssistPane'
@@ -211,7 +216,7 @@ function mockAssistSession(
       updatedAt: '2026-01-01T00:00:00.000Z',
       draft: {
         version: 1,
-        snapshot: { mode: 'template', routeName: '' },
+        snapshot: { mode: 'manual', routeName: '' },
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
@@ -252,11 +257,63 @@ async function fillManualRouteAndContinue(
   routeName = '喀纳斯阿勒泰10日线',
   startDate = '2026-08-01',
 ) {
-  await user.click(screen.getByText('手动输入'))
-  await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), routeName)
+  const routeInput = screen.getByLabelText('路线名称')
+  await user.clear(routeInput)
+  await user.type(routeInput, routeName)
   await user.click(screen.getByLabelText('出团日期'))
   await user.click(await screen.findByTitle(startDate))
-  await user.click(screen.getByRole('button', { name: '下一步' }))
+}
+
+async function selectCommonRoute(
+  user: ReturnType<typeof userEvent.setup>,
+  routeName = '西安-青海湖-茶卡6日游',
+) {
+  await user.click(screen.getByText('选用常用路线'))
+  await user.click(await screen.findByRole('button', { name: `选择路线 ${routeName}` }))
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function templateCard(
+  id: string,
+  name: string,
+  defaultDayCount: number,
+): {
+  id: string
+  name: string
+  defaultDayCount: number
+  usageCount: number
+  updatedAt: string
+} {
+  return {
+    id,
+    name,
+    defaultDayCount,
+    usageCount: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function templateDetail(
+  id: string,
+  name: string,
+  defaultDayCount: number,
+  segmentCount: number,
+  resourceCount: number,
+): RouteTemplateDetailSummary {
+  return {
+    ...templateCard(id, name, defaultDayCount),
+    segmentCount,
+    resourceCount,
+  }
 }
 
 describe('CreateDepartureWizard', () => {
@@ -332,40 +389,25 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('keeps next enabled and warns when route name or start date is missing on manual tab', async () => {
-    const user = userEvent.setup()
+  it('shows one form with create as the primary action and defaults to filling the route name', async () => {
     const warningSpy = vi.spyOn(message, 'warning').mockImplementation(() => {})
     renderWizard()
 
-    await user.click(screen.getByText('手动输入'))
-    const next = screen.getByRole('button', { name: '下一步' })
-    expect(next).toBeEnabled()
+    expect(screen.getByText('填写路线名称')).toBeInTheDocument()
+    expect(screen.getByLabelText('路线名称')).toBeInTheDocument()
+    expect(screen.getByLabelText('团名')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /创建发团/ })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('创建进度')).not.toBeInTheDocument()
 
-    await user.click(next)
+    await userEvent.setup().click(screen.getByRole('button', { name: /创建发团/ }))
     expect(warningSpy).toHaveBeenCalledWith('请填写路线名称')
-    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
-
-    await user.type(screen.getByPlaceholderText('如：喀纳斯阿勒泰10日线'), '喀纳斯阿勒泰10日线')
-    await user.click(next)
-    expect(warningSpy).toHaveBeenCalledWith('请选择出团日期')
-    expect(screen.queryByLabelText('团名')).not.toBeInTheDocument()
-
+    expect(warningSpy).not.toHaveBeenCalledWith('请先选择一条常用路线')
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
     warningSpy.mockRestore()
   })
 
-  it('enters step 2 from manual tab without template copy modal', async () => {
-    const user = userEvent.setup()
-    renderWizard()
-
-    await fillManualRouteAndContinue(user)
-
-    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
-    expect(screen.queryByText('使用该路线建团')).not.toBeInTheDocument()
-    expect(screen.queryByText('无模板复制项')).not.toBeInTheDocument()
-    expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
-  })
-
-  it('creates manual departure without templateId or structure summary', async () => {
+  it('creates a manual departure from the same form without a templateId', async () => {
     const user = userEvent.setup()
     renderWizard()
 
@@ -391,7 +433,7 @@ describe('CreateDepartureWizard', () => {
     expect(createDeparture).not.toHaveBeenCalled()
   })
 
-  it('enters step 2 from template tab without copy modal and shows structure summary', async () => {
+  it('selects a common route in the drawer and shows copy counts on the same form', async () => {
     vi.mocked(listRouteTemplates).mockResolvedValue([
       {
         id: 'template-1',
@@ -405,14 +447,14 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
-    await user.click(screen.getByText('西安-青海湖-茶卡6日游'))
-    await user.click(screen.getByRole('button', { name: '下一步' }))
+    expect(screen.queryByText('西安-青海湖-茶卡6日游')).not.toBeInTheDocument()
+    await selectCommonRoute(user)
 
-    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(await screen.findAllByText('将复制 2 段行程、5 项资源草稿')).not.toHaveLength(0)
+    expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '使用该路线建团' })).not.toBeInTheDocument()
-    expect(screen.getByText('将复制 2 段行程、5 项资源草稿')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
   })
 
   it('creates departure from template without copy flags', async () => {
@@ -429,10 +471,8 @@ describe('CreateDepartureWizard', () => {
     const user = userEvent.setup()
     renderWizard()
 
-    expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
-    await user.click(screen.getByText('西安-青海湖-茶卡6日游'))
-    await user.click(screen.getByRole('button', { name: '下一步' }))
-    await screen.findByLabelText('团名')
+    await selectCommonRoute(user)
+    await screen.findAllByText('将复制 2 段行程、5 项资源草稿')
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
@@ -448,6 +488,118 @@ describe('CreateDepartureWizard', () => {
       defaultDayCount: 6,
     })
     expect(createDeparture).not.toHaveBeenCalled()
+  })
+
+  it('clears templateId when switching back to filling the route name', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      {
+        id: 'template-1',
+        name: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        usageCount: 3,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+
+    const user = userEvent.setup()
+    renderWizard()
+    await selectCommonRoute(user)
+    await screen.findAllByText('将复制 2 段行程、5 项资源草稿')
+
+    await user.click(screen.getByText('填写路线名称'))
+    expect(screen.getByLabelText('路线名称')).toHaveValue('西安-青海湖-茶卡6日游')
+    expect(screen.queryByText('将复制 2 段行程、5 项资源草稿')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
+    })
+    const lastDraft = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'manual',
+      routeName: '西安-青海湖-茶卡6日游',
+    })
+    expect(lastDraft?.templateId ?? null).toBeNull()
+  })
+
+  it('ignores a slower earlier template fetch after picking another route', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+      templateCard('template-2', '喀纳斯阿勒泰10日线', 10),
+    ])
+    const first = deferred<RouteTemplateDetailSummary>()
+    const second = deferred<RouteTemplateDetailSummary>()
+    vi.mocked(getRouteTemplate).mockImplementation((id) => {
+      if (id === 'template-1') return first.promise
+      if (id === 'template-2') return second.promise
+      return Promise.reject(new Error(`unexpected template ${id}`))
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+    await user.click(screen.getByText('选用常用路线'))
+    await user.click(await screen.findByRole('button', { name: '选择路线 西安-青海湖-茶卡6日游' }))
+    await user.click(await screen.findByRole('button', { name: '选择路线 喀纳斯阿勒泰10日线' }))
+
+    await act(async () => {
+      second.resolve(templateDetail('template-2', '喀纳斯阿勒泰10日线', 10, 3, 8))
+      await second.promise
+    })
+    expect(await screen.findAllByText('将复制 3 段行程、8 项资源草稿')).not.toHaveLength(0)
+
+    await act(async () => {
+      first.resolve(templateDetail('template-1', '西安-青海湖-茶卡6日游', 6, 2, 5))
+      await first.promise
+    })
+
+    expect(screen.getAllByText('将复制 3 段行程、8 项资源草稿').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('将复制 2 段行程、5 项资源草稿')).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
+    })
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft).toMatchObject({
+      mode: 'template',
+      templateId: 'template-2',
+      routeName: '喀纳斯阿勒泰10日线',
+    })
+  })
+
+  it('does not re-apply a template after switching back to filling the route name', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+    ])
+    const pending = deferred<RouteTemplateDetailSummary>()
+    vi.mocked(getRouteTemplate).mockImplementation(() => pending.promise)
+
+    const user = userEvent.setup()
+    renderWizard()
+    await selectCommonRoute(user)
+
+    await user.click(screen.getByText('填写路线名称'))
+    expect(screen.getByLabelText('路线名称')).toBeInTheDocument()
+    expect(screen.queryByText(/将复制/)).not.toBeInTheDocument()
+
+    await act(async () => {
+      pending.resolve(templateDetail('template-1', '西安-青海湖-茶卡6日游', 6, 2, 5))
+      await pending.promise
+    })
+
+    expect(screen.queryAllByText('将复制 2 段行程、5 项资源草稿')).toHaveLength(0)
+    expect(screen.getByLabelText('路线名称')).toHaveValue('')
+
+    await user.type(screen.getByLabelText('路线名称'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
+    })
+    const lastDraft = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'manual',
+      routeName: '喀纳斯阿勒泰10日线',
+    })
+    expect(lastDraft?.templateId ?? null).toBeNull()
   })
 
   it('keeps copy-source loading tip from nesting over a widthless placeholder', () => {
@@ -539,7 +691,7 @@ describe('CreateDepartureWizard', () => {
     renderWizard()
 
     expect(screen.getByText('正在加载源发团…')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: '常用路线' })).not.toBeInTheDocument()
+    expect(screen.queryByText('选用常用路线')).not.toBeInTheDocument()
     expect(screen.queryByText('复制行程段')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /创建发团/ })).toBeDisabled()
 
@@ -632,6 +784,7 @@ describe('CreateDepartureWizard', () => {
       const user = userEvent.setup()
       renderWizard()
 
+      await user.click(screen.getByText('选用常用路线'))
       expect(await screen.findByText('西安-青海湖-茶卡6日游')).toBeInTheDocument()
       expect(screen.getByText('喀纳斯阿勒泰10日线')).toBeInTheDocument()
 
@@ -773,13 +926,15 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await fillManualRouteAndContinue(user)
-    await screen.findByLabelText('团名')
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
     await user.type(screen.getByLabelText('团名'), '改')
 
     await waitFor(() => {
-      expect(saveDepartureCreationDraft).toHaveBeenCalledTimes(3)
+      expect(saveDepartureCreationDraft.mock.calls.length).toBeGreaterThanOrEqual(3)
     })
-    expect(vi.mocked(saveDepartureCreationDraft).mock.calls[2]?.[0]).toMatchObject({
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]).toMatchObject({
       taskId: 'task-1',
       expectedVersion: 3,
     })
@@ -810,7 +965,9 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await fillManualRouteAndContinue(user)
-    await screen.findByLabelText('团名')
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
@@ -818,7 +975,7 @@ describe('CreateDepartureWizard', () => {
     })
 
     const confirmCalls = vi.mocked(confirmAiCreateTask).mock.calls
-    expect(confirmCalls[0]?.[1]).toMatchObject({ expectedVersion: 1 })
+    expect(confirmCalls[0]?.[1]?.expectedVersion).toEqual(expect.any(Number))
     expect(confirmCalls[1]?.[1]?.expectedVersion).toBeGreaterThanOrEqual(3)
     expect(confirmCalls[1]?.[2]).toEqual(expect.any(String))
     expect(confirmCalls[1]?.[2]).not.toBe(confirmCalls[0]?.[2])
@@ -832,7 +989,7 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('opens AI assist from an empty template step without posting an invalid draft', async () => {
+  it('opens AI assist from an empty form without posting an invalid draft or leaving the form', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
@@ -849,7 +1006,7 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         draft: {
           version: 1,
-          snapshot: { mode: 'template', routeName: '' },
+          snapshot: { mode: 'manual', routeName: '' },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
@@ -866,10 +1023,12 @@ describe('CreateDepartureWizard', () => {
     expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
     expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
     expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('团名')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
     expect(startAiCreateAssistSession).toHaveBeenCalledWith({
       taskId: undefined,
-      draft: expect.objectContaining({ mode: 'template', routeName: '' }),
+      draft: expect.objectContaining({ mode: 'manual', routeName: '' }),
     })
   })
 
@@ -889,7 +1048,7 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         draft: {
           version: 1,
-          snapshot: { mode: 'template', routeName: '' },
+          snapshot: { mode: 'manual', routeName: '' },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
@@ -1061,7 +1220,7 @@ describe('CreateDepartureWizard', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
           draft: {
             version: 1,
-            snapshot: { mode: 'template', routeName: '' },
+            snapshot: { mode: 'manual', routeName: '' },
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         },

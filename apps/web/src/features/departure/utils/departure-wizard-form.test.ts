@@ -3,16 +3,22 @@ import { describe, expect, it } from 'vitest'
 import {
   addDays,
   applyDraftSnapshotToRoute,
+  applySelectedRouteTemplate,
   buildCreateDeparturePayload,
   buildDefaultDepartureName,
   buildDepartureCreationDraftSnapshot,
+  buildRouteSummary,
   canPersistDepartureCreationDraft,
   buildInitialInfoValues,
-  canProceedFromRouteStep,
+  createInitialRouteStepValues,
+  hasUsableRouteSource,
   computeDayCount,
   computeEndDateFromDefaultDays,
   formatChineseMonthDay,
   isEndDateBeforeStartDate,
+  resolveEndDateAfterStartChange,
+  resolveEndDateAfterTemplateSelect,
+  switchRouteSourceToManual,
 } from './departure-wizard-form'
 
 describe('departure-wizard-form', () => {
@@ -65,22 +71,100 @@ describe('departure-wizard-form', () => {
     })
   })
 
-  it('requires startDate for manual route step before proceed', () => {
+  it('defaults a blank form to filling the route name by hand', () => {
+    expect(createInitialRouteStepValues()).toEqual({ mode: 'manual', routeName: '' })
+    expect(hasUsableRouteSource(createInitialRouteStepValues())).toBe(false)
     expect(
-      canProceedFromRouteStep({
+      canPersistDepartureCreationDraft(
+        buildDepartureCreationDraftSnapshot(createInitialRouteStepValues(), {}),
+      ),
+    ).toBe(false)
+  })
+
+  it('allows creating from a filled manual route name without a templateId', () => {
+    expect(
+      hasUsableRouteSource({
         mode: 'manual',
         routeName: '喀纳斯阿勒泰10日线',
-        defaultDayCount: 10,
+      }),
+    ).toBe(true)
+    expect(
+      hasUsableRouteSource({
+        mode: 'template',
+        routeName: '西安-青海湖-茶卡6日游',
       }),
     ).toBe(false)
     expect(
-      canProceedFromRouteStep({
-        mode: 'manual',
-        routeName: '喀纳斯阿勒泰10日线',
-        defaultDayCount: 10,
-        startDate: '2026-07-30',
+      hasUsableRouteSource({
+        mode: 'template',
+        routeName: '西安-青海湖-茶卡6日游',
+        templateId: 'template-1',
       }),
     ).toBe(true)
+  })
+
+  it('writes template draft fields on select and clears them when switching back to manual', () => {
+    const selected = applySelectedRouteTemplate(
+      { mode: 'manual', routeName: '临时线' },
+      {
+        id: 'template-1',
+        name: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        segmentCount: 2,
+        resourceCount: 5,
+      },
+    )
+
+    expect(selected).toMatchObject({
+      mode: 'template',
+      templateId: 'template-1',
+      routeName: '西安-青海湖-茶卡6日游',
+      defaultDayCount: 6,
+      previewSegmentCount: 2,
+      previewResourceCount: 5,
+    })
+    expect(buildRouteSummary(selected)).toBe('将复制 2 段行程、5 项资源草稿')
+
+    const manual = switchRouteSourceToManual(selected)
+    expect(manual).toMatchObject({
+      mode: 'manual',
+      routeName: '西安-青海湖-茶卡6日游',
+    })
+    expect(manual.templateId).toBeUndefined()
+    expect(manual.defaultDayCount).toBeUndefined()
+    expect(manual.previewSegmentCount).toBeUndefined()
+    expect(manual.previewResourceCount).toBeUndefined()
+    expect(buildRouteSummary(manual)).toBe('填写路线名称，不带出执行安排')
+  })
+
+  it('backfills end date from template days only when it is empty or still equal to start date', () => {
+    expect(resolveEndDateAfterTemplateSelect('2026-08-01', undefined, 6)).toBe('2026-08-06')
+    expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-01', 6)).toBe('2026-08-06')
+    expect(resolveEndDateAfterTemplateSelect('2026-08-01', '2026-08-10', 6)).toBe('2026-08-10')
+  })
+
+  it('recomputes a generated end date when start date changes, but keeps a user-edited end date', () => {
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-10', '2026-08-06', 6)).toBe(
+      '2026-08-15',
+    )
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-10', '2026-08-12', 6)).toBe(
+      '2026-08-12',
+    )
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-10', '2026-08-01', undefined)).toBe(
+      '2026-08-10',
+    )
+  })
+
+  it('does not keep an end date that would fall before the new start', () => {
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-20', '2026-08-12', 6)).toBe(
+      '2026-08-25',
+    )
+    expect(resolveEndDateAfterStartChange(undefined, '2026-08-20', '2026-08-12', 10)).toBe(
+      '2026-08-29',
+    )
+    expect(resolveEndDateAfterStartChange('2026-08-01', '2026-08-20', '2026-08-12', undefined)).toBe(
+      '2026-08-20',
+    )
   })
 
   it('builds create payload from route and info values including crew fields', () => {

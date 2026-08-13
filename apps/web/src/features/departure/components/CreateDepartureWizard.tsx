@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
+import { Button, Card, Drawer, Form, Spin, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import type { AiCreateTaskSummary, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
 import type { ReviewPackageDecision } from '@xiaotuanbao/ai-contracts'
@@ -32,33 +32,23 @@ import styles from './CreateDepartureWizard.module.css'
 import {
   applyDraftSnapshotToInfoForm,
   applyDraftSnapshotToRoute,
+  applySelectedRouteTemplate,
+  buildDefaultDepartureName,
   buildDepartureCreationDraftSnapshot,
   canPersistDepartureCreationDraft,
-  canProceedFromRouteStep,
+  computeDayCount,
   createInfoFormValues,
   type InfoFormValues,
   createInitialRouteStepValues,
   getShanghaiTodayString,
+  hasUsableRouteSource,
+  resolveEndDateAfterTemplateSelect,
   type RouteStepValues,
+  switchRouteSourceToManual,
 } from '../utils/departure-wizard-form'
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
 
-const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 const AUTOSAVE_DEBOUNCE_MS = 800
-
-const focusRouteStepGap = (nextRouteValues: RouteStepValues) => {
-  if (nextRouteValues.mode === 'template') {
-    document.querySelector<HTMLElement>('[aria-label^="选择路线 "]')?.focus()
-    return
-  }
-
-  if (!nextRouteValues.routeName.trim()) {
-    document.querySelector<HTMLElement>('[aria-label="路线名称"]')?.focus()
-    return
-  }
-
-  document.querySelector<HTMLElement>('[aria-label="出团日期"]')?.focus()
-}
 
 type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -69,7 +59,6 @@ function newConfirmIdempotencyKey(taskId: string): string {
 }
 
 export function CreateDepartureWizard() {
-  const screens = Grid.useBreakpoint()
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -81,9 +70,9 @@ export function CreateDepartureWizard() {
   const copyFromId = search.copyFrom?.trim()
   const searchTaskId = search.taskId?.trim()
 
-  const [currentStep, setCurrentStep] = useState(0)
   const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
-  const [initializingStep2, setInitializingStep2] = useState(
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [initializingForm, setInitializingForm] = useState(
     () => Boolean(copyFromId) || Boolean(searchTaskId),
   )
   const [restoringTask, setRestoringTask] = useState(() => Boolean(searchTaskId))
@@ -99,6 +88,8 @@ export function CreateDepartureWizard() {
   const taskIdRef = useRef(taskId)
   const draftVersionRef = useRef(draftVersion)
   const routeValuesRef = useRef(routeValues)
+  const templateSelectGenerationRef = useRef(0)
+  const templateSelectAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     taskIdRef.current = taskId
@@ -112,13 +103,15 @@ export function CreateDepartureWizard() {
     routeValuesRef.current = routeValues
   }, [routeValues])
 
+  useEffect(() => {
+    return () => {
+      templateSelectAbortRef.current?.abort()
+    }
+  }, [])
+
   const isCopyMode = routeValues.mode === 'copy'
-  const canProceed = canProceedFromRouteStep(routeValues)
   const awaitingCopySource = Boolean(copyFromId) && !isCopyMode && !searchTaskId
-  const showCopyBootstrap =
-    awaitingCopySource ||
-    restoringTask ||
-    (isCopyMode && (initializingStep2 || currentStep === 0))
+  const showCopyBootstrap = awaitingCopySource || restoringTask || (isCopyMode && initializingForm)
 
   const syncTaskSearch = useCallback(
     (nextTaskId: string) => {
@@ -253,7 +246,7 @@ export function CreateDepartureWizard() {
         return
       }
 
-      setInitializingStep2(true)
+      setInitializingForm(true)
       try {
         const startDate = nextRouteValues.startDate ?? getShanghaiTodayString()
         const initialValues = createInfoFormValues(
@@ -266,20 +259,19 @@ export function CreateDepartureWizard() {
         await loadDepartureNo()
         setRouteValues(nextRouteValues)
         routeValuesRef.current = nextRouteValues
-        setCurrentStep(1)
         dirtyRef.current = true
         await persistDraft()
       } catch (error) {
         message.error(error instanceof Error ? error.message : '发团创建草稿保存失败')
       } finally {
-        setInitializingStep2(false)
+        setInitializingForm(false)
       }
     },
     [infoForm, loadDepartureNo, persistDraft, user],
   )
 
   const handleCopyLoadError = useCallback(() => {
-    setInitializingStep2(false)
+    setInitializingForm(false)
   }, [])
 
   useCopyFromDepartureSearch({
@@ -321,7 +313,6 @@ export function CreateDepartureWizard() {
         draftVersionRef.current = task.draft.version
         dirtyRef.current = false
         setSaveStatus('saved')
-        setCurrentStep(1)
         try {
           await loadDepartureNo()
         } catch {
@@ -335,7 +326,7 @@ export function CreateDepartureWizard() {
       .finally(() => {
         if (!cancelled) {
           setRestoringTask(false)
-          setInitializingStep2(false)
+          setInitializingForm(false)
         }
       })
 
@@ -359,37 +350,112 @@ export function CreateDepartureWizard() {
     }
   }, [])
 
-  const handleRouteStepNext = async () => {
-    if (!canProceed) {
-      if (routeValues.mode === 'template') {
-        message.warning('请先选择一条常用路线')
-      } else if (!routeValues.routeName.trim()) {
-        message.warning('请填写路线名称')
-      } else {
-        message.warning('请选择出团日期')
-      }
-      focusRouteStepGap(routeValues)
+  const formInitializedRef = useRef(false)
+
+  useEffect(() => {
+    if (formInitializedRef.current || copyFromId || searchTaskId || !user) {
       return
     }
 
-    if (routeValues.mode === 'template' && routeValues.templateId) {
-      try {
-        const detail = await getRouteTemplate(routeValues.templateId)
-        const nextRouteValues: RouteStepValues = {
-          ...routeValues,
-          previewSegmentCount: detail.segmentCount,
-          previewResourceCount: detail.resourceCount,
+    formInitializedRef.current = true
+    const startDate = getShanghaiTodayString()
+    infoForm.setFieldsValue(createInfoFormValues(createInitialRouteStepValues(), user.id, startDate, ''))
+    void loadDepartureNo().catch(() => {
+      // 预览团号失败不阻断空表
+    })
+  }, [copyFromId, infoForm, loadDepartureNo, searchTaskId, user])
+
+  const applyRouteToInfoForm = useCallback(
+    (previous: RouteStepValues, next: RouteStepValues) => {
+      const startDate = infoForm.getFieldValue('startDate') as string | undefined
+      const endDate = infoForm.getFieldValue('endDate') as string | undefined
+      const name = infoForm.getFieldValue('name') as string | undefined
+      const updates: Partial<InfoFormValues> = {}
+
+      if (next.mode === 'template') {
+        const nextEndDate = resolveEndDateAfterTemplateSelect(
+          startDate,
+          endDate,
+          next.defaultDayCount,
+        )
+        if (nextEndDate && nextEndDate !== endDate) {
+          updates.endDate = nextEndDate
+          if (startDate) updates.dayCount = computeDayCount(startDate, nextEndDate)
         }
-        setRouteValues(nextRouteValues)
-        await enterInfoStep(nextRouteValues)
+      }
+
+      const previousDefaultName = buildDefaultDepartureName(previous.routeName, startDate)
+      if (startDate && next.routeName.trim() && (!name?.trim() || name === previousDefaultName)) {
+        updates.name = buildDefaultDepartureName(next.routeName, startDate)
+      }
+
+      if (Object.keys(updates).length > 0) {
+        infoForm.setFieldsValue(updates)
+      }
+    },
+    [infoForm],
+  )
+
+  const invalidateTemplateSelect = useCallback(() => {
+    templateSelectAbortRef.current?.abort()
+    templateSelectAbortRef.current = null
+    templateSelectGenerationRef.current += 1
+  }, [])
+
+  const handleRouteChange = useCallback(
+    (next: RouteStepValues) => {
+      if (next.mode !== 'template') {
+        invalidateTemplateSelect()
+      }
+      const previous = routeValuesRef.current
+      setRouteValues(next)
+      routeValuesRef.current = next
+      setTemplatePickerOpen(false)
+      applyRouteToInfoForm(previous, next)
+      scheduleAutosave()
+    },
+    [applyRouteToInfoForm, invalidateTemplateSelect, scheduleAutosave],
+  )
+
+  const handleSelectTemplate = useCallback(
+    async (template: {
+      id: string
+      name: string
+      defaultDayCount: number
+      segmentCount?: number
+      resourceCount?: number
+    }) => {
+      templateSelectAbortRef.current?.abort()
+      const controller = new AbortController()
+      templateSelectAbortRef.current = controller
+      const generation = ++templateSelectGenerationRef.current
+
+      let next = applySelectedRouteTemplate(routeValuesRef.current, template)
+      try {
+        const detail = await getRouteTemplate(template.id, controller.signal)
+        if (generation !== templateSelectGenerationRef.current) return
+        next = applySelectedRouteTemplate(routeValuesRef.current, {
+          id: detail.id,
+          name: detail.name,
+          defaultDayCount: detail.defaultDayCount,
+          segmentCount: detail.segmentCount,
+          resourceCount: detail.resourceCount,
+        })
       } catch (error) {
+        if (controller.signal.aborted || generation !== templateSelectGenerationRef.current) {
+          return
+        }
         message.error(error instanceof Error ? error.message : '加载路线详情失败')
       }
-      return
-    }
+      if (generation !== templateSelectGenerationRef.current) return
+      handleRouteChange(next)
+    },
+    [handleRouteChange],
+  )
 
-    await enterInfoStep(routeValues)
-  }
+  const handleClearSelectedTemplate = useCallback(() => {
+    handleRouteChange(switchRouteSourceToManual(routeValuesRef.current))
+  }, [handleRouteChange])
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -446,6 +512,12 @@ export function CreateDepartureWizard() {
   })
 
   const handleCreate = async () => {
+    if (!hasUsableRouteSource(routeValues)) {
+      message.warning('请填写路线名称')
+      document.querySelector<HTMLElement>('[aria-label="路线名称"]')?.focus()
+      return
+    }
+
     try {
       await infoForm.validateFields()
       createMutation.mutate()
@@ -711,12 +783,7 @@ export function CreateDepartureWizard() {
     taskReview,
   ])
 
-  const showSteps = !isCopyMode && !copyFromId && !searchTaskId
-  const stepEnterKey = showCopyBootstrap
-    ? 'bootstrap'
-    : !isCopyMode && currentStep === 0
-      ? 'route'
-      : 'info'
+  const stepEnterKey = showCopyBootstrap ? 'bootstrap' : 'form'
 
   const saveStatusLabel =
     saveStatus === 'saving'
@@ -754,25 +821,7 @@ export function CreateDepartureWizard() {
       </div>
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>
-        <div
-          className={
-            showSteps ? styles.wizardBody : `${styles.wizardBody} ${styles.wizardBodyNoRail}`
-          }
-        >
-          {showSteps ? (
-            <aside className={styles.stepRail} aria-label="创建进度">
-              <Steps
-                current={currentStep}
-                orientation={screens.lg ? 'vertical' : 'horizontal'}
-                responsive={false}
-                items={[
-                  { title: STEP_ITEMS[0].title, content: '选择或输入本次发团路线' },
-                  { title: STEP_ITEMS[1].title, content: '填写发团基础信息' },
-                ]}
-              />
-            </aside>
-          ) : null}
-
+        <div className={`${styles.wizardBody} ${styles.wizardBodyNoRail}`}>
           <section className={styles.workspace} aria-label="发团创建内容">
             {pendingReview && draftVersion != null ? (
               <AiReviewStickyBar
@@ -783,9 +832,6 @@ export function CreateDepartureWizard() {
                 onReject={() => rejectReviewMutation.mutate()}
               />
             ) : null}
-            {currentStep === 0 || showCopyBootstrap ? (
-              <Form form={infoForm} className={styles.hiddenForm} aria-hidden />
-            ) : null}
             <div key={stepEnterKey} className={styles.stepEnter}>
               {showCopyBootstrap ? (
                 <div className={styles.loadingState}>
@@ -793,18 +839,14 @@ export function CreateDepartureWizard() {
                     description={restoringTask ? '正在恢复发团创建草稿…' : '正在加载源发团…'}
                   />
                 </div>
-              ) : !isCopyMode && currentStep === 0 ? (
-                <CreateDepartureStepRoute
-                  values={routeValues}
-                  onChange={setRouteValues}
-                  pendingReview={pendingReview}
-                  onCorrectCandidate={handleCorrectCandidate}
-                />
               ) : (
                 <CreateDepartureStepInfo
                   form={infoForm}
                   route={routeValues}
                   onValuesChange={scheduleAutosave}
+                  onRouteChange={handleRouteChange}
+                  onOpenTemplatePicker={() => setTemplatePickerOpen(true)}
+                  templatePickerOpen={templatePickerOpen}
                   pendingReview={pendingReview}
                   onCorrectCandidate={handleCorrectCandidate}
                 />
@@ -815,23 +857,7 @@ export function CreateDepartureWizard() {
 
         <footer className={styles.wizardFooter}>
           <div>
-            {showSteps && currentStep === 1 ? (
-              <Button
-                onClick={() => {
-                  void flushDraft()
-                    .then(() => setCurrentStep(0))
-                    .catch((error) => {
-                      message.error(
-                        error instanceof Error ? error.message : '发团创建草稿保存失败，请处理后再返回',
-                      )
-                    })
-                }}
-              >
-                上一步
-              </Button>
-            ) : (
-              <Button onClick={goBack}>返回</Button>
-            )}
+            <Button onClick={goBack}>返回</Button>
             {saveStatusLabel ? (
               <Typography.Text
                 type={saveStatus === 'error' ? 'danger' : 'secondary'}
@@ -842,27 +868,34 @@ export function CreateDepartureWizard() {
             ) : null}
           </div>
           <div>
-            {!isCopyMode && !copyFromId && !searchTaskId && currentStep === 0 ? (
-              <Button
-                type={pendingReview ? 'default' : 'primary'}
-                loading={initializingStep2}
-                onClick={() => void handleRouteStepNext()}
-              >
-                下一步
-              </Button>
-            ) : (
-              <Button
-                type={pendingReview ? 'default' : 'primary'}
-                loading={createMutation.isPending}
-                disabled={showCopyBootstrap || initializingStep2}
-                onClick={() => void handleCreate()}
-              >
-                创建发团
-              </Button>
-            )}
+            <Button
+              type={pendingReview ? 'default' : 'primary'}
+              loading={createMutation.isPending}
+              disabled={showCopyBootstrap || initializingForm}
+              onClick={() => void handleCreate()}
+            >
+              创建发团
+            </Button>
           </div>
         </footer>
       </Card>
+
+      <Drawer
+        title="选用常用路线"
+        open={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        size="min(720px, 100vw)"
+        destroyOnHidden
+      >
+        <CreateDepartureStepRoute
+          values={routeValues}
+          enabled={templatePickerOpen}
+          onSelect={(template) => {
+            void handleSelectTemplate(template)
+          }}
+          onClearSelected={handleClearSelectedTemplate}
+        />
+      </Drawer>
     </div>
   )
 }

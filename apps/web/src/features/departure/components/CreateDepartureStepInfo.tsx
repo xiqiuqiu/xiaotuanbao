@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { CalendarOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons'
 import {
   Alert,
@@ -10,6 +10,7 @@ import {
   Input,
   InputNumber,
   Row,
+  Segmented,
   Select,
   Space,
   Typography,
@@ -30,8 +31,9 @@ import {
   buildDefaultDepartureName,
   buildRouteSummary,
   computeDayCount,
-  computeEndDateFromDefaultDays,
   isEndDateBeforeStartDate,
+  resolveEndDateAfterStartChange,
+  switchRouteSourceToManual,
 } from '../utils/departure-wizard-form'
 import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
 import { PendingCandidateOverlay } from '@/features/ai-assist/PendingCandidateOverlay'
@@ -42,6 +44,9 @@ interface CreateDepartureStepInfoProps {
   form: FormInstance<InfoFormValues>
   route: RouteStepValues
   onValuesChange?: () => void
+  onRouteChange?: (values: RouteStepValues) => void
+  onOpenTemplatePicker?: () => void
+  templatePickerOpen?: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
 }
@@ -52,6 +57,7 @@ function toDayjs(value?: string): Dayjs | null {
 
 interface DepartureInfoFormProps {
   form: FormInstance<InfoFormValues>
+  route: RouteStepValues
   employeeOptions: Array<{ value: string; label: string }>
   helperTextStyle: CSSProperties
   hasSupplierError: boolean
@@ -67,12 +73,95 @@ interface DepartureInfoFormProps {
   onStartDateChange: (value: Dayjs | null) => void
   onEndDateChange: (value: Dayjs | null) => void
   onValuesChange?: () => void
+  onRouteChange?: (values: RouteStepValues) => void
+  onOpenTemplatePicker?: () => void
+  templatePickerOpen?: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
 }
 
+function RouteSourceFields({
+  route,
+  helperTextStyle,
+  templatePickerOpen,
+  pendingReview,
+  onCorrectCandidate,
+  onRouteChange,
+  onOpenTemplatePicker,
+}: {
+  route: RouteStepValues
+  helperTextStyle: CSSProperties
+  templatePickerOpen: boolean
+  pendingReview?: AiReviewPackageView | null
+  onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
+  onRouteChange: (values: RouteStepValues) => void
+  onOpenTemplatePicker: () => void
+}) {
+  const sourceValue =
+    route.mode === 'template' || templatePickerOpen ? 'template' : 'manual'
+  const copySummary = buildRouteSummary(route)
+  const routeNameCandidate = findReviewCandidate(pendingReview, 'routeName')
+
+  return (
+    <>
+      <Form.Item label="路线来源" required>
+        <Segmented
+          block
+          value={sourceValue}
+          options={[
+            { label: '填写路线名称', value: 'manual' },
+            { label: '选用常用路线', value: 'template' },
+          ]}
+          onChange={(value) => {
+            if (String(value) === 'template') {
+              onOpenTemplatePicker()
+              return
+            }
+            onRouteChange(switchRouteSourceToManual(route))
+          }}
+        />
+      </Form.Item>
+
+      {sourceValue === 'template' && route.templateId ? (
+        <Form.Item label="常用路线" required>
+          <div className={styles.selectedTemplate}>
+            <Typography.Text strong>{route.routeName}</Typography.Text>
+            {copySummary ? (
+              <Typography.Text style={helperTextStyle}>{copySummary}</Typography.Text>
+            ) : null}
+            <Button type="link" onClick={onOpenTemplatePicker}>
+              更换常用路线
+            </Button>
+          </div>
+        </Form.Item>
+      ) : (
+        <Form.Item label="路线名称" required>
+          {routeNameCandidate && onCorrectCandidate ? (
+            <PendingCandidateOverlay
+              fieldKey="routeName"
+              candidate={routeNameCandidate}
+              savedDisplay={route.routeName}
+              onCorrect={(value) => onCorrectCandidate('routeName', value)}
+            />
+          ) : (
+            <Input
+              aria-label="路线名称"
+              placeholder="如：喀纳斯阿勒泰10日线"
+              value={route.routeName}
+              onChange={(event) =>
+                onRouteChange({ ...route, mode: 'manual', routeName: event.target.value })
+              }
+            />
+          )}
+        </Form.Item>
+      )}
+    </>
+  )
+}
+
 function DepartureInfoForm({
   form,
+  route,
   employeeOptions,
   helperTextStyle,
   hasSupplierError,
@@ -88,6 +177,9 @@ function DepartureInfoForm({
   onStartDateChange,
   onEndDateChange,
   onValuesChange,
+  onRouteChange,
+  onOpenTemplatePicker,
+  templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
 }: DepartureInfoFormProps) {
@@ -134,6 +226,18 @@ function DepartureInfoForm({
               </Button>
             }
             style={{ marginBottom: 16 }}
+          />
+        ) : null}
+
+        {route.mode !== 'copy' && onRouteChange && onOpenTemplatePicker ? (
+          <RouteSourceFields
+            route={route}
+            helperTextStyle={helperTextStyle}
+            templatePickerOpen={Boolean(templatePickerOpen)}
+            pendingReview={pendingReview}
+            onCorrectCandidate={onCorrectCandidate}
+            onRouteChange={onRouteChange}
+            onOpenTemplatePicker={onOpenTemplatePicker}
           />
         ) : null}
 
@@ -309,7 +413,9 @@ function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSumm
     <Card size="small" title="本次发团摘要" className={styles.summaryCard}>
       <Space orientation="vertical" size={16} className={styles.summaryContent}>
         <div>
-          <Typography.Text style={helperTextStyle}>所选路线</Typography.Text>
+          <Typography.Text style={helperTextStyle}>
+            {route.mode === 'template' ? '已选路线' : '所选路线'}
+          </Typography.Text>
           <Typography.Title level={5} className={styles.routeName}>
             {route.routeName || '-'}
           </Typography.Title>
@@ -323,7 +429,7 @@ function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSumm
           {route.mode === 'template' ? (
             <Typography.Text>
               <FileTextOutlined className={styles.summaryIcon} aria-hidden />
-              路线内容将在创建后带入
+              将带出执行安排结构（资源金额为 0）
             </Typography.Text>
           ) : null}
           {route.mode === 'copy' ? (
@@ -352,6 +458,9 @@ export function CreateDepartureStepInfo({
   form,
   route,
   onValuesChange,
+  onRouteChange,
+  onOpenTemplatePicker,
+  templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
 }: CreateDepartureStepInfoProps) {
@@ -363,6 +472,13 @@ export function CreateDepartureStepInfo({
   const debouncedDriverSearch = useDebouncedValue(driverSearch.trim())
   const debouncedGuideSearch = useDebouncedValue(guideSearch.trim())
   const helperTextStyle = { color: token.colorTextSecondary }
+  const committedStartDateRef = useRef<string | undefined>(undefined)
+  const watchedStartDate = Form.useWatch('startDate', form)
+  useEffect(() => {
+    if (typeof watchedStartDate === 'string' && watchedStartDate) {
+      committedStartDateRef.current = watchedStartDate
+    }
+  }, [watchedStartDate])
 
   const { data: employeeOptionsResult } = useQuery({
     queryKey: ['employees', 'options', 'create-departure'],
@@ -409,17 +525,24 @@ export function CreateDepartureStepInfo({
     const startDate = value?.format('YYYY-MM-DD')
     if (!startDate) return
 
+    const previousStartDate = committedStartDateRef.current
+    const currentEndDate = form.getFieldValue('endDate') as string | undefined
     const updates: Partial<InfoFormValues> = { startDate }
     const routeName = route.routeName.trim()
     if (routeName) updates.name = buildDefaultDepartureName(routeName, startDate)
 
-    if (defaultDayCount && defaultDayCount > 0) {
-      updates.endDate = computeEndDateFromDefaultDays(startDate, defaultDayCount)
-      updates.dayCount = defaultDayCount
-    } else {
-      const currentEndDate = form.getFieldValue('endDate') as string | undefined
-      if (currentEndDate) updates.dayCount = computeDayCount(startDate, currentEndDate)
+    const nextEndDate = resolveEndDateAfterStartChange(
+      previousStartDate,
+      startDate,
+      currentEndDate,
+      defaultDayCount,
+    )
+    if (nextEndDate) {
+      updates.endDate = nextEndDate
+      updates.dayCount = computeDayCount(startDate, nextEndDate)
     }
+
+    committedStartDateRef.current = startDate
 
     form.setFieldsValue(updates)
     void form.validateFields(['endDate']).catch(() => undefined)
@@ -453,6 +576,7 @@ export function CreateDepartureStepInfo({
         <Col xs={24} xl={16}>
           <DepartureInfoForm
             form={form}
+            route={route}
             employeeOptions={employeeOptions}
             helperTextStyle={helperTextStyle}
             hasSupplierError={isDriverSuppliersError || isGuideSuppliersError}
@@ -470,6 +594,9 @@ export function CreateDepartureStepInfo({
             onStartDateChange={handleStartDateChange}
             onEndDateChange={handleEndDateChange}
             onValuesChange={onValuesChange}
+            onRouteChange={onRouteChange}
+            onOpenTemplatePicker={onOpenTemplatePicker}
+            templatePickerOpen={templatePickerOpen}
             pendingReview={pendingReview}
             onCorrectCandidate={onCorrectCandidate}
           />

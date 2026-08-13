@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Form } from 'antd'
 import type { FormInstance } from 'antd/es/form'
 import zhCN from 'antd/locale/zh_CN'
@@ -52,7 +53,9 @@ function renderStep(values: InfoFormValues = initialValues) {
   }
 
   render(<Harness />)
-  formRef?.setFieldsValue(values)
+  act(() => {
+    formRef?.setFieldsValue(values)
+  })
   return formRef
 }
 
@@ -91,5 +94,33 @@ describe('CreateDepartureStepInfo', () => {
 
     await expect(form!.validateFields(['endDate'])).rejects.toBeTruthy()
     expect(await screen.findByText('结束日期不能早于出团日期')).toBeInTheDocument()
+  })
+
+  it('外部写入出团日后，再改出团日仍按刚写入的日期重算结束日', async () => {
+    const user = userEvent.setup()
+    const form = renderStep()
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('结束日期')).toHaveValue('2026-08-02')
+    })
+
+    act(() => {
+      form!.setFieldsValue({
+        startDate: '2026-09-01',
+        endDate: '2026-09-10',
+        dayCount: 10,
+      })
+    })
+
+    await waitFor(() => {
+      expect(form!.getFieldValue('startDate')).toBe('2026-09-01')
+      expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-10')
+    })
+
+    await user.click(screen.getByLabelText('出团日期'))
+    await user.click(await screen.findByTitle('2026-09-03'))
+
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-12')
+    expect(screen.getByLabelText('天数')).toHaveValue('10')
   })
 })

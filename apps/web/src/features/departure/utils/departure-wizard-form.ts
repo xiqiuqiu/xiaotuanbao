@@ -7,7 +7,7 @@ export interface RouteStepValues {
   mode: RouteStepMode
   routeName: string
   defaultDayCount?: number
-  /** 手动输入路线时必填；进入填写步后写入出团日期。 */
+  /** 手动填写路线时由基础信息表写入出团日期。 */
   startDate?: string
   templateId?: string
   copyFromDepartureId?: string
@@ -37,7 +37,78 @@ export type InfoFormValues = InfoStepValues & {
 }
 
 export function createInitialRouteStepValues(): RouteStepValues {
-  return { mode: 'template', routeName: '' }
+  return { mode: 'manual', routeName: '' }
+}
+
+export function applySelectedRouteTemplate(
+  current: RouteStepValues,
+  template: {
+    id: string
+    name: string
+    defaultDayCount: number
+    segmentCount?: number
+    resourceCount?: number
+  },
+): RouteStepValues {
+  return {
+    ...current,
+    mode: 'template',
+    templateId: template.id,
+    routeName: template.name,
+    defaultDayCount: template.defaultDayCount,
+    previewSegmentCount: template.segmentCount,
+    previewResourceCount: template.resourceCount,
+  }
+}
+
+export function switchRouteSourceToManual(current: RouteStepValues): RouteStepValues {
+  return {
+    ...current,
+    mode: 'manual',
+    templateId: undefined,
+    defaultDayCount: undefined,
+    previewSegmentCount: undefined,
+    previewResourceCount: undefined,
+  }
+}
+
+export function resolveEndDateAfterTemplateSelect(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  defaultDayCount: number | undefined,
+): string | undefined {
+  if (!startDate || !defaultDayCount || defaultDayCount <= 0) return endDate
+  if (endDate && endDate !== startDate) return endDate
+  return computeEndDateFromDefaultDays(startDate, defaultDayCount)
+}
+
+export function resolveEndDateAfterStartChange(
+  previousStartDate: string | undefined,
+  nextStartDate: string,
+  currentEndDate: string | undefined,
+  defaultDayCount: number | undefined,
+): string | undefined {
+  if (
+    !currentEndDate ||
+    currentEndDate === previousStartDate ||
+    isEndDateBeforeStartDate(nextStartDate, currentEndDate)
+  ) {
+    if (defaultDayCount && defaultDayCount > 0) {
+      return computeEndDateFromDefaultDays(nextStartDate, defaultDayCount)
+    }
+    return nextStartDate
+  }
+
+  if (
+    defaultDayCount &&
+    defaultDayCount > 0 &&
+    previousStartDate &&
+    currentEndDate === computeEndDateFromDefaultDays(previousStartDate, defaultDayCount)
+  ) {
+    return computeEndDateFromDefaultDays(nextStartDate, defaultDayCount)
+  }
+
+  return currentEndDate
 }
 
 export function formatChineseMonthDay(dateStr: string): string {
@@ -105,12 +176,14 @@ export function buildInitialInfoValues(
   }
 }
 
-export function canProceedFromRouteStep(route: RouteStepValues): boolean {
+export function hasUsableRouteSource(route: RouteStepValues): boolean {
   if (route.mode === 'template') {
     return Boolean(route.templateId)
   }
-
-  return route.routeName.trim().length > 0 && Boolean(route.startDate)
+  if (route.mode === 'copy') {
+    return Boolean(route.copyFromDepartureId)
+  }
+  return route.routeName.trim().length > 0
 }
 
 export function buildCreateDeparturePayload(
@@ -249,7 +322,7 @@ export function createInfoFormValues(
       : startDate
 
   return {
-    name: buildDefaultDepartureName(route.routeName, startDate),
+    name: route.routeName.trim() ? buildDefaultDepartureName(route.routeName, startDate) : '',
     departureNo,
     departureType: DepartureType.COMBINED,
     startDate,
@@ -263,6 +336,10 @@ export function createInfoFormValues(
 export function buildRouteSummary(route: RouteStepValues): string | null {
   if (route.mode === 'copy' && route.sourceDepartureNo) {
     return `复制自发团 ${route.sourceDepartureNo}，不含客源与财务`
+  }
+
+  if (route.mode === 'manual') {
+    return route.routeName.trim() ? '填写路线名称，不带出执行安排' : null
   }
 
   return buildTemplateCopySummary(route)

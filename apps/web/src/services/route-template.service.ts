@@ -13,8 +13,11 @@ export async function listRouteTemplates(
   })
 }
 
-export async function getRouteTemplate(id: string): Promise<RouteTemplateDetailSummary> {
-  return request.get<RouteTemplateDetailSummary>(`/route-templates/${id}`)
+export async function getRouteTemplate(
+  id: string,
+  signal?: AbortSignal,
+): Promise<RouteTemplateDetailSummary> {
+  return request.get<RouteTemplateDetailSummary>(`/route-templates/${id}`, { signal })
 }
 
 export async function saveRouteTemplateFromDeparture(
