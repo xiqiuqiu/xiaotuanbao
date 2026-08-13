@@ -1,0 +1,1 @@
+"""Xiaotuanbao local OCR service."""

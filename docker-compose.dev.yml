@@ -3,3 +3,32 @@ services:
   postgres:
     ports:
       - "5432:5432"
+
+  ocr:
+    profiles: ["ocr"]
+    build:
+      context: .
+      dockerfile: services/ocr/Dockerfile
+    container_name: xiaotuanbao-ocr
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8089:8089"
+    environment:
+      OCR_MAX_FILE_BYTES: 20971520
+      OCR_MAX_IMAGE_PIXELS: 12000000
+      OCR_MAX_PDF_PAGES: 20
+      OCR_MAX_PDF_PAGE_PIXELS: 8000000
+      OCR_PDF_RENDER_DPI: 144
+      OCR_TMP_DIR: /tmp/ocr
+    volumes:
+      - ./tmp/ocr:/tmp/ocr
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
