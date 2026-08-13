@@ -472,7 +472,7 @@ export function CreateDepartureWizard() {
 
   const getAssistTaskId = useCallback(() => taskIdRef.current, [])
 
-  const { bootstrap, session, error } = useAiCreateAssistBootstrap({
+  const { bootstrap, reset, session, error } = useAiCreateAssistBootstrap({
     enabled: Boolean(assistAvailability?.enabled),
     flushDraft,
     buildDraft: buildAssistDraft,
@@ -487,6 +487,12 @@ export function CreateDepartureWizard() {
     setAssistPaneCollapsed(false)
     void bootstrap()
   }, [bootstrap, setAssistPaneCollapsed])
+
+  useEffect(() => {
+    if (assistPaneCollapsed) {
+      reset()
+    }
+  }, [assistPaneCollapsed, reset])
 
   useEffect(() => {
     if (!assistAvailability?.enabled || assistPaneCollapsed || session || error) {

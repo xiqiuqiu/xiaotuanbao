@@ -217,4 +217,92 @@ describe('useAiCreateAssistBootstrap', () => {
     expect(result.current.session).toBeNull()
     expect(result.current.error?.message).toBe('委托已过期')
   })
+
+  it('clears the session so a later bootstrap can start a new one', async () => {
+    const secondSession: AiCreateAssistSession = {
+      ...mockSession,
+      runId: 'run-2',
+      delegationToken: 'deleg-2',
+    }
+    vi.mocked(startAiCreateAssistSession)
+      .mockResolvedValueOnce(mockSession)
+      .mockResolvedValueOnce(secondSession)
+    const { result } = renderHook(() =>
+      useAiCreateAssistBootstrap({
+        enabled: true,
+        flushDraft: vi.fn().mockResolvedValue(undefined),
+        buildDraft: () => ({ mode: 'manual', routeName: '喀纳斯阿勒泰10日线' }),
+        getTaskId: () => 'task-1',
+        applySavedDraft: vi.fn(),
+        syncTaskSearch: vi.fn(),
+      }),
+    )
+
+    await act(async () => {
+      await result.current.bootstrap()
+    })
+    expect(result.current.session?.runId).toBe('run-1')
+
+    act(() => {
+      result.current.reset()
+    })
+    expect(result.current.session).toBeNull()
+
+    await act(async () => {
+      await result.current.bootstrap()
+    })
+    expect(result.current.session?.runId).toBe('run-2')
+    expect(result.current.session?.delegationToken).toBe('deleg-2')
+    expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('discards an in-flight session after reset so the next bootstrap is not blocked', async () => {
+    let resolveSession!: (value: AiCreateAssistSession) => void
+    vi.mocked(startAiCreateAssistSession).mockImplementation(
+      () =>
+        new Promise<AiCreateAssistSession>((resolve) => {
+          resolveSession = resolve
+        }),
+    )
+    const applySavedDraft = vi.fn()
+    const { result } = renderHook(() =>
+      useAiCreateAssistBootstrap({
+        enabled: true,
+        flushDraft: vi.fn().mockResolvedValue(undefined),
+        buildDraft: () => ({ mode: 'manual', routeName: '喀纳斯阿勒泰10日线' }),
+        getTaskId: () => 'task-1',
+        applySavedDraft,
+        syncTaskSearch: vi.fn(),
+      }),
+    )
+
+    let first!: Promise<void>
+    act(() => {
+      first = result.current.bootstrap()
+    })
+    await waitFor(() => {
+      expect(startAiCreateAssistSession).toHaveBeenCalledTimes(1)
+    })
+
+    act(() => {
+      result.current.reset()
+    })
+
+    await act(async () => {
+      resolveSession(mockSession)
+      await first
+    })
+    expect(result.current.session).toBeNull()
+
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      ...mockSession,
+      runId: 'run-2',
+      delegationToken: 'deleg-2',
+    })
+    await act(async () => {
+      await result.current.bootstrap()
+    })
+    expect(result.current.session?.runId).toBe('run-2')
+    expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
+  })
 })

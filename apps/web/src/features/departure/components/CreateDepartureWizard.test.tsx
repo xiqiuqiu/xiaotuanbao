@@ -8,7 +8,7 @@ import zhCN from 'antd/locale/zh_CN'
 import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { DepartureSummary } from '@/types/api'
+import type { AiCreateAssistSession, DepartureSummary } from '@/types/api'
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from '@/layouts/AssistPane'
@@ -67,8 +67,20 @@ vi.mock('@/services/route-template.service', () => ({
 }))
 
 vi.mock('@copilotkit/react-core/v2', () => ({
-  CopilotKit: ({ children }: { children: ReactNode }) => (
-    <div data-testid="copilot-kit">{children}</div>
+  CopilotKit: ({
+    children,
+    headers,
+  }: {
+    children: ReactNode
+    headers?: Record<string, string>
+  }) => (
+    <div
+      data-testid="copilot-kit"
+      data-authorization={headers?.Authorization}
+      data-run-id={headers?.['X-Ai-Run-Id']}
+    >
+      {children}
+    </div>
   ),
   CopilotChat: ({ agentId }: { agentId?: string }) => (
     <div data-testid="copilot-chat" data-agent-id={agentId} />
@@ -160,6 +172,32 @@ function renderWizard({ strict = false }: { strict?: boolean } = {}) {
   )
 
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
+}
+
+function mockAssistSession(
+  overrides: Partial<Pick<AiCreateAssistSession, 'runId' | 'delegationToken'>> = {},
+): AiCreateAssistSession {
+  return {
+    task: {
+      id: 'task-assist',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 1,
+        snapshot: { mode: 'template', routeName: '' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    },
+    runId: 'run-1',
+    delegationToken: 'deleg-1',
+    agentRuntimeUrl: '/copilotkit',
+    expiresAt: '2026-01-01T00:10:00.000Z',
+    ...overrides,
+  }
 }
 
 async function fillManualRouteAndContinue(
@@ -821,6 +859,47 @@ describe('CreateDepartureWizard', () => {
     expect(startAiCreateAssistSession).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
     expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
+  })
+
+  it('starts a new assist session when the header toggle reopens the pane', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession)
+      .mockResolvedValueOnce(mockAssistSession())
+      .mockResolvedValueOnce(
+        mockAssistSession({ runId: 'run-2', delegationToken: 'deleg-2' }),
+      )
+
+    renderWizard()
+    await screen.findByRole('button', { name: /AI 辅助/ })
+
+    act(() => {
+      useUiStore.setState({ assistPaneCollapsed: false })
+    })
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
+      'data-authorization',
+      'Bearer deleg-1',
+    )
+    expect(screen.getByTestId('copilot-kit')).toHaveAttribute('data-run-id', 'run-1')
+
+    await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
+    expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+
+    act(() => {
+      useUiStore.setState({ assistPaneCollapsed: false })
+    })
+
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
+      'data-authorization',
+      'Bearer deleg-2',
+    )
+    expect(screen.getByTestId('copilot-kit')).toHaveAttribute('data-run-id', 'run-2')
   })
 
   it('opens the AI sidebar without losing the form edit buffer', async () => {
