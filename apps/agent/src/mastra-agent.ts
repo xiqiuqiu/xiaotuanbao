@@ -4,6 +4,7 @@ import { createGetTaskContextTool, type GetTaskContextToolConfig } from './get-t
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 import { READONLY_ASSIST_INSTRUCTIONS } from './readonly-turn'
+import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
 import { wrapAgentExecutionWithoutInboundAuth } from './sanitize-model-headers'
 
 const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
@@ -30,6 +31,7 @@ export function createAiCreateMastra(config: AiCreateMastraConfig) {
   })
 
   wrapAgentExecutionWithoutInboundAuth(agent)
+  wrapAgentStreamToRestoreToolReasoning(agent)
 
   return new Mastra({
     agents: { [AI_CREATE_AGENT_ID]: agent },
