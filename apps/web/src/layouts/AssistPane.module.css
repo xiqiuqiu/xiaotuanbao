@@ -1,13 +1,35 @@
-.pane {
+.slot {
   flex: none;
   align-self: stretch;
-  width: 480px;
+  position: relative;
+  width: 0;
   min-height: 0;
+  overflow: hidden;
+  border-inline-start: 0 solid var(--assist-border);
+}
+
+.slot[data-open] {
+  width: 480px;
+  border-inline-start-width: 1px;
+}
+
+.slot[data-motion] {
+  transition:
+    width var(--ant-motion-duration-slow, 0.3s)
+      var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)),
+    border-inline-start-width var(--ant-motion-duration-slow, 0.3s)
+      var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.pane {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 480px;
   display: flex;
   flex-direction: column;
   background: var(--assist-bg);
-  border-inline-start: 1px solid var(--assist-border);
-  overflow: hidden;
+  min-height: 0;
 }
 
 .paneHeader {
@@ -42,16 +64,43 @@
 }
 
 @media (max-width: 767px) {
-  .pane {
+  .slot {
     position: absolute;
     inset-block: 0;
     inset-inline-end: 0;
     z-index: 20;
+    width: min(480px, 100%);
     max-width: 100%;
+    border-inline-start-width: 1px;
+    transform: translateX(100%);
+    pointer-events: none;
+  }
+
+  .slot[data-open] {
+    width: min(480px, 100%);
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .slot[data-motion] {
+    transition: transform var(--ant-motion-duration-slow, 0.3s)
+      var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
+  }
+
+  .pane {
+    position: relative;
+    inset: auto;
+    width: 100%;
   }
 
   .close {
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot[data-motion] {
+    transition: none;
   }
 }
