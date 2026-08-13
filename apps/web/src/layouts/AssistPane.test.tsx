@@ -21,7 +21,7 @@ describe('AssistPane', () => {
   })
   afterEach(() => cleanup())
 
-  it('is omitted when collapsed so the main column keeps full width', () => {
+  it('hides the complementary role when collapsed so the main column keeps full width', () => {
     render(
       <AssistPaneSlotProvider>
         <main>发团表单</main>
@@ -30,6 +30,9 @@ describe('AssistPane', () => {
     )
     expect(screen.getByText('发团表单')).toBeVisible()
     expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
+    const slot = document.querySelector('aside[aria-label="电子化助理"]')
+    expect(slot).toBeInTheDocument()
+    expect(slot).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('closes from its own header without masking the main content', async () => {
