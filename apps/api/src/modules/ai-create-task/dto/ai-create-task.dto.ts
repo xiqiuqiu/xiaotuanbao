@@ -120,3 +120,19 @@ export class StartAiCreateAssistSessionDto {
   @Type(() => DepartureCreationDraftSnapshotDto)
   draft?: DepartureCreationDraftSnapshotDto
 }
+
+export class ConfirmAiReviewPackageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number
+
+  @IsOptional()
+  @IsObject()
+  corrections?: Record<string, string | number | null>
+}
+
+export class PatchAiReviewPackageDto {
+  @IsObject()
+  corrections!: Record<string, string | number | null>
+}

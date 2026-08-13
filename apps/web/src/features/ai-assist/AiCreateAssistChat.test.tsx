@@ -1,7 +1,8 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
-import { StrictMode, type ReactNode } from 'react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
+import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
 
@@ -19,6 +20,26 @@ let capturedKit: {
   onError?: (event: { error: Error }) => void
 } = {}
 let capturedChat: { agentId?: string; onError?: (event: { error: Error }) => void } = {}
+let capturedRenderTool: {
+  name?: string
+  render?: (props: {
+    status: string
+    parameters?: { candidates?: Array<{ fieldKey: string }> }
+    result?: unknown
+  }) => ReactNode
+} = {}
+let capturedHumanInTheLoop: {
+  name?: string
+  render?: ComponentType<{
+    name: string
+    description: string
+    toolCallId: string
+    args: { reviewPackageId: string }
+    status: 'executing'
+    result: undefined
+    respond: (result: unknown) => Promise<void>
+  }>
+} = {}
 
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotKit: ({
@@ -58,6 +79,12 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgentContext: (...args: unknown[]) => useAgentContext(...args),
   useAgent: () => ({ agent: { addMessage }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent } }),
+  useRenderTool: (config: typeof capturedRenderTool) => {
+    capturedRenderTool = config
+  },
+  useHumanInTheLoop: (config: typeof capturedHumanInTheLoop) => {
+    capturedHumanInTheLoop = config
+  },
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -72,12 +99,32 @@ const chatProps = {
   runStatus: 'idle' as const,
 }
 
+const pendingReview: AiReviewPackageView = {
+  id: 'pkg-1',
+  status: 'pending',
+  confirmationUnit: 'basic_info_draft',
+  baseObjectVersion: 1,
+  runId: 'run-1',
+  candidates: [
+    {
+      fieldKey: 'name',
+      proposedValue: '八月川西团',
+      userCorrectedValue: null,
+      clarity: 'clear',
+      status: 'pending',
+      evidence: [{ kind: 'user_message', excerpt: '八月川西团' }],
+    },
+  ],
+}
+
 describe('AiCreateAssistChat', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
     capturedKit = {}
     capturedChat = {}
+    capturedRenderTool = {}
+    capturedHumanInTheLoop = {}
   })
 
   it('passes runtimeUrl, identity headers and the readonly agent id', () => {
@@ -96,7 +143,7 @@ describe('AiCreateAssistChat', () => {
   })
 
   it('exposes only shared light state to CopilotKit, never the draft snapshot', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-light" />)
+    render(<AiCreateAssistChat {...chatProps} runId="run-light" reviewPackageId="pkg-1" />)
 
     expect(useAgentContext).toHaveBeenCalled()
     const readable = useAgentContext.mock.calls[0]?.[0] as { value?: unknown }
@@ -105,12 +152,195 @@ describe('AiCreateAssistChat', () => {
       taskId: 'task-assist',
       stageKey: 'basic_info',
       runStatus: 'idle',
-      reviewPackageId: null,
+      reviewPackageId: 'pkg-1',
       snapshotVersion: 1,
       progress: 'collecting',
     })
     expect(parsed).not.toHaveProperty('draft')
     expect(JSON.stringify(parsed)).not.toContain('routeName')
+  })
+
+  it('renders a thin notice that confirmation belongs on the form', async () => {
+    const onReviewPackageSubmitted = vi.fn()
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-notice"
+        onReviewPackageSubmitted={onReviewPackageSubmitted}
+      />,
+    )
+
+    expect(capturedRenderTool.name).toBe('submitReviewPackage')
+    const inProgress = capturedRenderTool.render?.({
+      status: 'inProgress',
+      parameters: { candidates: [{ fieldKey: 'name' }] },
+    })
+    const complete = capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'name' }, { fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-1' },
+    })
+
+    render(
+      <>
+        {inProgress}
+        {complete}
+      </>,
+    )
+    expect(screen.getByText('正在整理审核建议…')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '已建议修改团名、路线。请到中间表单确认，不会自动写入发团创建草稿。',
+      ),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
+  })
+
+  it('notifies again when a later submitReviewPackage completes with a different package', async () => {
+    const onReviewPackageSubmitted = vi.fn()
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-notice-second"
+        onReviewPackageSubmitted={onReviewPackageSubmitted}
+      />,
+    )
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'name' }] },
+      result: { reviewPackageId: 'pkg-1', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-2', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
+
+    capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-2', status: 'pending' },
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows a waiting state and responds after the form confirms', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-hitl"
+        pendingReview={{
+          ...pendingReview,
+          candidates: pendingReview.candidates.map((candidate) => ({
+            ...candidate,
+            clarity: 'needs_confirmation' as const,
+          })),
+        }}
+      />,
+    )
+
+    expect(capturedHumanInTheLoop.name).toBe('awaitReviewPackageDecision')
+    const RenderHitl = capturedHumanInTheLoop.render!
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-1',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const card = render(createElement(RenderHitl, hitlProps))
+
+    expect(screen.getByText('AI 建议待审核')).toBeInTheDocument()
+    expect(screen.getByText('已建议修改团名')).toBeInTheDocument()
+    expect(screen.getByText('其中 1 项需要重点核对')).toBeInTheDocument()
+    expect(screen.getByText('等待你在发团表单中完成审核')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认写入草稿' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝建议' })).not.toBeInTheDocument()
+    expect(card.container.querySelector('button')).toBeNull()
+    expect(respond).not.toHaveBeenCalled()
+
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-hitl"
+        pendingReview={null}
+        reviewDecision={{
+          reviewPackageId: 'pkg-1',
+          status: 'confirmed',
+          snapshotVersion: 2,
+        }}
+      />,
+    )
+    const UpdatedRenderHitl = capturedHumanInTheLoop.render!
+    card.rerender(createElement(UpdatedRenderHitl, hitlProps))
+
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({
+        reviewPackageId: 'pkg-1',
+        status: 'confirmed',
+        snapshotVersion: 2,
+      })
+    })
+    expect(respond).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps waiting without a decision and returns a rejection only after the user API succeeds', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-reject"
+        pendingReview={pendingReview}
+        reviewDecision={null}
+      />,
+    )
+    const RenderHitl = capturedHumanInTheLoop.render!
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-reject',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const card = render(createElement(RenderHitl, hitlProps))
+
+    expect(respond).not.toHaveBeenCalled()
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-reject"
+        pendingReview={null}
+        reviewDecision={{ reviewPackageId: 'pkg-1', status: 'rejected' }}
+      />,
+    )
+    card.rerender(createElement(capturedHumanInTheLoop.render!, hitlProps))
+
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({ reviewPackageId: 'pkg-1', status: 'rejected' })
+    })
+    expect(screen.getByText('本次建议已放弃，草稿未修改。')).toBeInTheDocument()
   })
 
   it('sends the first-turn prompt once even under StrictMode', () => {

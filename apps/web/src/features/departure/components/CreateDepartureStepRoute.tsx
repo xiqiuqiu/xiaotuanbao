@@ -21,14 +21,24 @@ import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { deleteRouteTemplate, listRouteTemplates } from '@/services/route-template.service'
 import type { RouteStepValues } from '../utils/departure-wizard-form'
+import type { AiReviewPackageView, AiReviewableBasicInfoField } from '@/types/api'
+import { PendingCandidateOverlay } from '@/features/ai-assist/PendingCandidateOverlay'
+import { findReviewCandidate } from '@/features/ai-assist/review-field-labels'
 import styles from './CreateDepartureStepRoute.module.css'
 
 interface CreateDepartureStepRouteProps {
   values: RouteStepValues
   onChange: (values: RouteStepValues) => void
+  pendingReview?: AiReviewPackageView | null
+  onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
 }
 
-export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureStepRouteProps) {
+export function CreateDepartureStepRoute({
+  values,
+  onChange,
+  pendingReview,
+  onCorrectCandidate,
+}: CreateDepartureStepRouteProps) {
   const { token } = theme.useToken()
   const queryClient = useQueryClient()
   const [keyword, setKeyword] = useState('')
@@ -163,6 +173,19 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
         />
       </div>
 
+      {activeTab === 'template' &&
+      findReviewCandidate(pendingReview, 'routeName') &&
+      onCorrectCandidate ? (
+        <div className={styles.search}>
+          <PendingCandidateOverlay
+            fieldKey="routeName"
+            candidate={findReviewCandidate(pendingReview, 'routeName')!}
+            savedDisplay={values.routeName}
+            onCorrect={(value) => onCorrectCandidate('routeName', value)}
+          />
+        </div>
+      ) : null}
+
       {activeTab === 'template' ? (
         <div>
           <Input.Search
@@ -266,32 +289,50 @@ export function CreateDepartureStepRoute({ values, onChange }: CreateDepartureSt
           </Typography.Paragraph>
           <Form layout="vertical" className={styles.manualForm}>
             <Form.Item label="路线名称" required>
-              <Input
-                aria-label="路线名称"
-                placeholder="如：喀纳斯阿勒泰10日线"
-                value={values.routeName}
-                onChange={(event) =>
-                  onChange({ ...values, mode: 'manual', routeName: event.target.value })
-                }
-              />
+              {findReviewCandidate(pendingReview, 'routeName') && onCorrectCandidate ? (
+                <PendingCandidateOverlay
+                  fieldKey="routeName"
+                  candidate={findReviewCandidate(pendingReview, 'routeName')!}
+                  savedDisplay={values.routeName}
+                  onCorrect={(value) => onCorrectCandidate('routeName', value)}
+                />
+              ) : (
+                <Input
+                  aria-label="路线名称"
+                  placeholder="如：喀纳斯阿勒泰10日线"
+                  value={values.routeName}
+                  onChange={(event) =>
+                    onChange({ ...values, mode: 'manual', routeName: event.target.value })
+                  }
+                />
+              )}
             </Form.Item>
             <Form.Item
               label="出团日期"
               required
               extra="必填，将带入下一步并用于默认团名"
             >
-              <DatePicker
-                className={styles.fullWidth}
-                aria-label="出团日期"
-                value={values.startDate ? dayjs(values.startDate) : null}
-                onChange={(value: Dayjs | null) =>
-                  onChange({
-                    ...values,
-                    mode: 'manual',
-                    startDate: value?.format('YYYY-MM-DD'),
-                  })
-                }
-              />
+              {findReviewCandidate(pendingReview, 'startDate') && onCorrectCandidate ? (
+                <PendingCandidateOverlay
+                  fieldKey="startDate"
+                  candidate={findReviewCandidate(pendingReview, 'startDate')!}
+                  savedDisplay={values.startDate ?? ''}
+                  onCorrect={(value) => onCorrectCandidate('startDate', value)}
+                />
+              ) : (
+                <DatePicker
+                  className={styles.fullWidth}
+                  aria-label="出团日期"
+                  value={values.startDate ? dayjs(values.startDate) : null}
+                  onChange={(value: Dayjs | null) =>
+                    onChange({
+                      ...values,
+                      mode: 'manual',
+                      startDate: value?.format('YYYY-MM-DD'),
+                    })
+                  }
+                />
+              )}
             </Form.Item>
             <Form.Item label="默认天数" extra="可选，用于下一步自动计算结束日期">
               <InputNumber

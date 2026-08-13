@@ -65,36 +65,42 @@ describe('getTaskContext contract v1', () => {
     expect(parsed.objectVersion).toBe(3)
   })
 
-  it('rejects write tools in availableCapabilities for this slice', () => {
+  it('allows submitReviewPackage and rejects confirm or other write tools', () => {
+    const parsed = getTaskContextOutputSchema.parse({
+      task: {
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        creatorUserId: 'user-1',
+      },
+      snapshot: {
+        mode: 'manual',
+        routeName: '川西线',
+        templateId: null,
+        copyFromDepartureId: null,
+        name: null,
+        startDate: null,
+        endDate: null,
+        ownerUserId: null,
+        departureType: 'combined',
+        expectedGuestCountHint: null,
+        notes: null,
+        driverSupplierId: null,
+        guideSupplierId: null,
+        vehiclePlate: null,
+        contactPhone: null,
+      },
+      objectVersion: 1,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext', 'submitReviewPackage'],
+      fieldCoverage: { filled: ['routeName', 'departureType'], missing: ['name'], optionalPresent: [] },
+    })
+    expect(parsed.availableCapabilities).toEqual(['getTaskContext', 'submitReviewPackage'])
+
     expect(() =>
       getTaskContextOutputSchema.parse({
-        task: {
-          id: 'task-1',
-          status: 'in_progress',
-          currentPhase: 'basic_info',
-          creatorUserId: 'user-1',
-        },
-        snapshot: {
-          mode: 'manual',
-          routeName: '川西线',
-          templateId: null,
-          copyFromDepartureId: null,
-          name: null,
-          startDate: null,
-          endDate: null,
-          ownerUserId: null,
-          departureType: 'combined',
-          expectedGuestCountHint: null,
-          notes: null,
-          driverSupplierId: null,
-          guideSupplierId: null,
-          vehiclePlate: null,
-          contactPhone: null,
-        },
-        objectVersion: 1,
-        pending: { hasPendingReview: false, reviewPackageId: null },
-        availableCapabilities: ['getTaskContext', 'submitReviewPackage'],
-        fieldCoverage: { filled: ['routeName', 'departureType'], missing: ['name'], optionalPresent: [] },
+        ...parsed,
+        availableCapabilities: ['getTaskContext', 'confirmReviewPackage'],
       }),
     ).toThrow()
   })

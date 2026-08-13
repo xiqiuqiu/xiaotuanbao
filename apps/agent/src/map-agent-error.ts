@@ -45,6 +45,8 @@ function isCollaborationCode(code: unknown): code is AiCollaborationErrorCode {
     code === 'INVALID_FORMAT' ||
     code === 'PERMISSION_DENIED' ||
     code === 'DELEGATION_INVALID' ||
-    code === 'SERVICE_IDENTITY_INVALID'
+    code === 'SERVICE_IDENTITY_INVALID' ||
+    code === 'VERSION_CONFLICT' ||
+    code === 'REVIEW_PENDING'
   )
 }

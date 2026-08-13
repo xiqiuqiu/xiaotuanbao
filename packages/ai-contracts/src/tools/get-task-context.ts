@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { aiCreateToolNameSchema } from './review-package'
 
 export const GET_TASK_CONTEXT_TOOL = {
   name: 'getTaskContext',
@@ -52,7 +53,7 @@ export const getTaskContextOutputSchema = z
         reviewPackageId: z.string().nullable(),
       })
       .strip(),
-    availableCapabilities: z.tuple([z.literal('getTaskContext')]),
+    availableCapabilities: z.array(aiCreateToolNameSchema).min(1),
     fieldCoverage: z
       .object({
         filled: z.array(z.string()),

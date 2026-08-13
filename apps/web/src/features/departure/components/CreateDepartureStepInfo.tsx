@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { CalendarOutlined, CopyOutlined, FileTextOutlined } from '@ant-design/icons'
 import {
   Alert,
@@ -20,7 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
-import type { SupplierSummary } from '@/types/api'
+import type { AiReviewPackageView, AiReviewableBasicInfoField, SupplierSummary } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSuppliers } from '@/services/supplier.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -34,12 +34,16 @@ import {
   isEndDateBeforeStartDate,
 } from '../utils/departure-wizard-form'
 import { SupplierQuickCreateSelect } from './SupplierQuickCreateSelect'
+import { PendingCandidateOverlay } from '@/features/ai-assist/PendingCandidateOverlay'
+import { findReviewCandidate } from '@/features/ai-assist/review-field-labels'
 import styles from './CreateDepartureStepInfo.module.css'
 
 interface CreateDepartureStepInfoProps {
   form: FormInstance<InfoFormValues>
   route: RouteStepValues
   onValuesChange?: () => void
+  pendingReview?: AiReviewPackageView | null
+  onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
 }
 
 function toDayjs(value?: string): Dayjs | null {
@@ -63,6 +67,8 @@ interface DepartureInfoFormProps {
   onStartDateChange: (value: Dayjs | null) => void
   onEndDateChange: (value: Dayjs | null) => void
   onValuesChange?: () => void
+  pendingReview?: AiReviewPackageView | null
+  onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
 }
 
 function DepartureInfoForm({
@@ -82,7 +88,30 @@ function DepartureInfoForm({
   onStartDateChange,
   onEndDateChange,
   onValuesChange,
+  pendingReview,
+  onCorrectCandidate,
 }: DepartureInfoFormProps) {
+  const savedName = Form.useWatch('name', form) as string | undefined
+  const savedStartDate = Form.useWatch('startDate', form) as string | undefined
+  const savedEndDate = Form.useWatch('endDate', form) as string | undefined
+  const savedGuestHint = Form.useWatch('expectedGuestCountHint', form) as number | undefined
+
+  const renderPending = (
+    fieldKey: AiReviewableBasicInfoField,
+    savedDisplay: string,
+    control: ReactNode,
+  ) => {
+    const candidate = findReviewCandidate(pendingReview, fieldKey)
+    if (!candidate || !onCorrectCandidate) return control
+    return (
+      <PendingCandidateOverlay
+        fieldKey={fieldKey}
+        candidate={candidate}
+        savedDisplay={savedDisplay}
+        onCorrect={(value) => onCorrectCandidate(fieldKey, value)}
+      />
+    )
+  }
   return (
     <>
       <div className={styles.sectionHeader}>
@@ -111,7 +140,11 @@ function DepartureInfoForm({
         <Row gutter={16}>
           <Col xs={24} md={16}>
             <Form.Item name="name" label="团名" rules={[{ required: true, message: '请输入团名' }]}>
-              <Input placeholder="出团日期 + 路线名称，可按实际调整" />
+              {renderPending(
+                'name',
+                savedName ?? '',
+                <Input placeholder="出团日期 + 路线名称，可按实际调整" />,
+              )}
             </Form.Item>
           </Col>
 
@@ -152,7 +185,11 @@ function DepartureInfoForm({
               rules={[{ required: true, message: '请选择出团日期' }]}
               getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
             >
-              <DatePicker className={styles.fullWidth} onChange={onStartDateChange} />
+              {renderPending(
+                'startDate',
+                savedStartDate ?? '',
+                <DatePicker className={styles.fullWidth} onChange={onStartDateChange} />,
+              )}
             </Form.Item>
           </Col>
 
@@ -176,7 +213,11 @@ function DepartureInfoForm({
               ]}
               getValueProps={(value: string | undefined) => ({ value: toDayjs(value) })}
             >
-              <DatePicker className={styles.fullWidth} onChange={onEndDateChange} />
+              {renderPending(
+                'endDate',
+                savedEndDate ?? '',
+                <DatePicker className={styles.fullWidth} onChange={onEndDateChange} />,
+              )}
             </Form.Item>
           </Col>
 
@@ -238,7 +279,11 @@ function DepartureInfoForm({
               label="预计人数提示"
               extra="仅保存在发团创建草稿，不写入正式发团人数或备注"
             >
-              <InputNumber min={0} max={9999} precision={0} style={{ width: '100%' }} placeholder="可选" />
+              {renderPending(
+                'expectedGuestCountHint',
+                savedGuestHint == null ? '' : String(savedGuestHint),
+                <InputNumber min={0} max={9999} precision={0} style={{ width: '100%' }} placeholder="可选" />,
+              )}
             </Form.Item>
           </Col>
 
@@ -307,6 +352,8 @@ export function CreateDepartureStepInfo({
   form,
   route,
   onValuesChange,
+  pendingReview,
+  onCorrectCandidate,
 }: CreateDepartureStepInfoProps) {
   const { token } = theme.useToken()
   const defaultDayCount = route.defaultDayCount
@@ -423,6 +470,8 @@ export function CreateDepartureStepInfo({
             onStartDateChange={handleStartDateChange}
             onEndDateChange={handleEndDateChange}
             onValuesChange={onValuesChange}
+            pendingReview={pendingReview}
+            onCorrectCandidate={onCorrectCandidate}
           />
         </Col>
 

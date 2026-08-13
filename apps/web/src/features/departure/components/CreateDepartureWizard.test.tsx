@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Modal, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { StrictMode, type ReactNode } from 'react'
+import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { AiCreateAssistSession, DepartureSummary } from '@/types/api'
+import type { AiCreateAssistSession, AiReviewPackageView, DepartureSummary } from '@/types/api'
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from '@/layouts/AssistPane'
@@ -17,6 +17,19 @@ import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
 let mockSearch: { copyFrom?: string; taskId?: string } = {}
+const hitlRegistration = vi.hoisted(() => ({
+  current: null as null | {
+    render: ComponentType<{
+      name: string
+      description: string
+      toolCallId: string
+      args: { reviewPackageId: string }
+      status: 'executing'
+      result: undefined
+      respond: (result: unknown) => Promise<void>
+    }>
+  },
+}))
 
 const mockUser = {
   id: 'user-1',
@@ -54,6 +67,9 @@ vi.mock('@/services/ai-create-task.service', () => ({
   confirmAiCreateTask: vi.fn(),
   getAiCreateAssistAvailability: vi.fn(),
   startAiCreateAssistSession: vi.fn(),
+  patchAiReviewPackage: vi.fn(),
+  confirmAiReviewPackage: vi.fn(),
+  rejectAiReviewPackage: vi.fn(),
 }))
 
 vi.mock('@/services/segment.service', () => ({
@@ -88,6 +104,10 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgentContext: vi.fn(),
   useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent: vi.fn() } }),
+  useRenderTool: vi.fn(),
+  useHumanInTheLoop: (config: NonNullable<typeof hitlRegistration.current>) => {
+    hitlRegistration.current = config
+  },
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -108,8 +128,11 @@ import {
 } from '@/services/departure.service'
 import {
   confirmAiCreateTask,
+  confirmAiReviewPackage,
   getAiCreateAssistAvailability,
   getAiCreateTask,
+  patchAiReviewPackage,
+  rejectAiReviewPackage,
   saveDepartureCreationDraft,
   startAiCreateAssistSession,
 } from '@/services/ai-create-task.service'
@@ -191,11 +214,35 @@ function mockAssistSession(
         snapshot: { mode: 'template', routeName: '' },
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      pendingReview: null,
     },
     runId: 'run-1',
     delegationToken: 'deleg-1',
     agentRuntimeUrl: '/copilotkit',
     expiresAt: '2026-01-01T00:10:00.000Z',
+    ...overrides,
+  }
+}
+
+function mockPendingReview(
+  overrides: Partial<AiReviewPackageView> = {},
+): AiReviewPackageView {
+  return {
+    id: 'pkg-1',
+    status: 'pending',
+    confirmationUnit: 'basic_info_draft',
+    baseObjectVersion: 1,
+    runId: 'run-1',
+    candidates: [
+      {
+        fieldKey: 'name',
+        proposedValue: '八月川西团',
+        userCorrectedValue: undefined,
+        clarity: 'clear',
+        status: 'pending',
+        evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+      },
+    ],
     ...overrides,
   }
 }
@@ -220,6 +267,7 @@ describe('CreateDepartureWizard', () => {
     message.destroy()
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
+    hitlRegistration.current = null
   })
 
   beforeEach(() => {
@@ -241,6 +289,7 @@ describe('CreateDepartureWizard', () => {
         snapshot: payload.draft,
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      pendingReview: null,
     }))
     vi.mocked(confirmAiCreateTask).mockResolvedValue(mockDeparture)
     vi.mocked(getAiCreateTask).mockResolvedValue({
@@ -263,6 +312,7 @@ describe('CreateDepartureWizard', () => {
         },
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      pendingReview: null,
     })
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: false,
@@ -667,6 +717,7 @@ describe('CreateDepartureWizard', () => {
         },
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      pendingReview: null,
     })
 
     renderWizard()
@@ -801,6 +852,7 @@ describe('CreateDepartureWizard', () => {
           snapshot: { mode: 'template', routeName: '' },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
+        pendingReview: null,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -840,6 +892,7 @@ describe('CreateDepartureWizard', () => {
           snapshot: { mode: 'template', routeName: '' },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
+        pendingReview: null,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -928,6 +981,7 @@ describe('CreateDepartureWizard', () => {
           },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
+        pendingReview: null,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1052,6 +1106,7 @@ describe('CreateDepartureWizard', () => {
           },
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
+        pendingReview: null,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1075,5 +1130,360 @@ describe('CreateDepartureWizard', () => {
     mockNavigate.mockClear()
     await user.click(screen.getByRole('button', { name: /返回发团列表/ }))
     expect(mockNavigate).not.toHaveBeenCalledWith({ to: '/departure' })
+  })
+
+  it('shows the pending review overlay and sticky bar from the restored task, not the saved form value', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    })
+
+    renderWizard()
+
+    expect(await screen.findByRole('region', { name: 'AI 阶段审核包' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '确认写入草稿' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('团名候选')).toHaveValue('八月川西团')
+    expect(screen.getByText('已保存：喀纳斯阿勒泰10日线 8月1日团')).toBeInTheDocument()
+    expect(
+      screen.queryByPlaceholderText('出团日期 + 路线名称，可按实际调整'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('负责人')).toBeInTheDocument()
+    expect(screen.getByLabelText('发团类型')).toBeInTheDocument()
+  })
+
+  it('confirms the pending package through the user API and writes the returned snapshot', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({ baseObjectVersion: 2 })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: restored,
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+    vi.mocked(confirmAiReviewPackage).mockResolvedValue({
+      ...restored,
+      draft: {
+        version: 3,
+        snapshot: {
+          ...restored.draft.snapshot,
+          name: '八月川西团',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    renderWizard()
+    await screen.findByRole('button', { name: '确认写入草稿' })
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    await screen.findByTestId('copilot-chat')
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-1',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const hitl = render(createElement(hitlRegistration.current!.render, hitlProps))
+    fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
+    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
+
+    await waitFor(() => {
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedVersion: 2,
+        corrections: { name: '修正团名' },
+      })
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
+    })
+    hitl.rerender(createElement(hitlRegistration.current!.render, hitlProps))
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({
+        reviewPackageId: 'pkg-1',
+        status: 'confirmed',
+        snapshotVersion: 3,
+      })
+    })
+    expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
+  })
+
+  it('rejects the pending package without writing the candidate into the draft', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(rejectAiReviewPackage).mockResolvedValue({
+      ...restored,
+      pendingReview: null,
+    })
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: '拒绝建议' }))
+
+    await waitFor(() => {
+      expect(rejectAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1')
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('团名')).toHaveValue('喀纳斯阿勒泰10日线 8月1日团')
+    expect(confirmAiReviewPackage).not.toHaveBeenCalled()
+  })
+
+  it('patches candidate corrections without autosaving them into the draft snapshot', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview()
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(patchAiReviewPackage).mockResolvedValue({
+      ...restored,
+      pendingReview: {
+        ...pending,
+        candidates: [
+          {
+            ...pending.candidates[0]!,
+            userCorrectedValue: '修正团名',
+          },
+        ],
+      },
+    })
+
+    renderWizard()
+    const input = await screen.findByLabelText('团名候选')
+    fireEvent.change(input, { target: { value: '修正团名' } })
+
+    await waitFor(() => {
+      expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        corrections: { name: '修正团名' },
+      })
+    })
+    expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
+  })
+
+  it('patches every field corrected inside the same debounce window', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '八月川西团',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+        },
+        {
+          fieldKey: 'expectedGuestCountHint',
+          proposedValue: 8,
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({
+      ...restored,
+      pendingReview: {
+        ...pending,
+        candidates: pending.candidates.map((candidate) =>
+          candidate.fieldKey in payload.corrections
+            ? { ...candidate, userCorrectedValue: payload.corrections[candidate.fieldKey] ?? null }
+            : candidate,
+        ),
+      },
+    }))
+
+    renderWizard()
+    fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
+    fireEvent.change(await screen.findByLabelText('预计人数提示候选'), { target: { value: '12' } })
+
+    await waitFor(() => {
+      expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        corrections: { name: '修正团名', expectedGuestCountHint: 12 },
+      })
+    })
+    expect(screen.getByLabelText('团名候选')).toHaveValue('修正团名')
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('12')
+  })
+
+  it('keeps an explicit guest-count clear through patch instead of restoring the proposal', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({
+      candidates: [
+        {
+          fieldKey: 'expectedGuestCountHint',
+          proposedValue: 8,
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '大概8人' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+          expectedGuestCountHint: 8,
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({
+      ...restored,
+      pendingReview: {
+        ...pending,
+        candidates: pending.candidates.map((item) =>
+          item.fieldKey in payload.corrections
+            ? { ...item, userCorrectedValue: payload.corrections[item.fieldKey] ?? null }
+            : item,
+        ),
+      },
+    }))
+
+    renderWizard()
+    fireEvent.change(await screen.findByLabelText('预计人数提示候选'), { target: { value: '' } })
+
+    await waitFor(() => {
+      expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        corrections: { expectedGuestCountHint: null },
+      })
+    })
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
   })
 })

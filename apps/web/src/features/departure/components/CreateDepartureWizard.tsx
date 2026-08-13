@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
+import type { AiCreateTaskSummary, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
+import type { ReviewPackageDecision } from '@xiaotuanbao/ai-contracts'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
 import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
+import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
+import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
 import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
 import {
   confirmAiCreateTask,
+  confirmAiReviewPackage,
   getAiCreateAssistAvailability,
   getAiCreateTask,
+  patchAiReviewPackage,
+  rejectAiReviewPackage,
   saveDepartureCreationDraft,
 } from '@/services/ai-create-task.service'
 import { previewDepartureNo } from '@/services/departure.service'
@@ -20,6 +27,7 @@ import { getRouteTemplate } from '@/services/route-template.service'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
 import { CreateDepartureStepRoute } from './CreateDepartureStepRoute'
 import { useCopyFromDepartureSearch } from '../hooks/useCopyFromDepartureSearch'
+import { ApiError } from '@/lib/request'
 import styles from './CreateDepartureWizard.module.css'
 import {
   applyDraftSnapshotToInfoForm,
@@ -82,6 +90,7 @@ export function CreateDepartureWizard() {
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
+  const [reviewDecision, setReviewDecision] = useState<ReviewPackageDecision | null>(null)
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -483,6 +492,140 @@ export function CreateDepartureWizard() {
   const bootstrapRef = useRef(bootstrap)
   bootstrapRef.current = bootstrap
 
+  const { data: taskReview, refetch: refetchTaskReview } = useQuery({
+    queryKey: ['ai-create-task', taskId],
+    queryFn: () => getAiCreateTask(taskId!),
+    enabled: Boolean(taskId),
+    refetchInterval: session && !assistPaneCollapsed ? 2500 : false,
+  })
+  const pendingReview = taskReview?.pendingReview ?? null
+  const refetchTaskReviewRef = useRef(refetchTaskReview)
+  refetchTaskReviewRef.current = refetchTaskReview
+  const pendingCorrectionsRef = useRef<
+    Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+  >({})
+
+  const applyConfirmedTask = useCallback(
+    (summary: AiCreateTaskSummary) => {
+      applySavedDraft(summary)
+      const nextRoute = applyDraftSnapshotToRoute(summary.draft.snapshot)
+      setRouteValues(nextRoute)
+      if (user) {
+        infoForm.setFieldsValue(applyDraftSnapshotToInfoForm(summary.draft.snapshot, user.id))
+      }
+      queryClient.setQueryData(['ai-create-task', summary.id], summary)
+    },
+    [applySavedDraft, infoForm, queryClient, user],
+  )
+
+  const correctTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handleCorrectCandidate = useCallback(
+    (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => {
+      if (!taskId || !pendingReview) return
+      pendingCorrectionsRef.current = { ...pendingCorrectionsRef.current, [fieldKey]: value }
+      if (correctTimerRef.current) {
+        clearTimeout(correctTimerRef.current)
+      }
+      correctTimerRef.current = setTimeout(() => {
+        void patchAiReviewPackage(taskId, pendingReview.id, {
+          corrections: { ...pendingCorrectionsRef.current },
+        })
+          .then((summary) => {
+            queryClient.setQueryData(['ai-create-task', summary.id], summary)
+          })
+          .catch((caught) => {
+            message.error(caught instanceof Error ? caught.message : '修正候选失败')
+          })
+      }, 300)
+    },
+    [pendingReview, queryClient, taskId],
+  )
+
+  useEffect(() => {
+    pendingCorrectionsRef.current = {}
+  }, [pendingReview?.id])
+
+  useEffect(() => {
+    return () => {
+      if (correctTimerRef.current) {
+        clearTimeout(correctTimerRef.current)
+      }
+    }
+  }, [])
+
+  const confirmReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!taskId || !pendingReview || draftVersion == null) {
+        throw new Error('没有待确认的审核包')
+      }
+      if (correctTimerRef.current) {
+        clearTimeout(correctTimerRef.current)
+        correctTimerRef.current = null
+      }
+      const corrections = pendingCorrectionsRef.current
+      pendingCorrectionsRef.current = {}
+      return confirmAiReviewPackage(taskId, pendingReview.id, {
+        expectedVersion: draftVersion,
+        ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
+      })
+    },
+    onSuccess: (summary) => {
+      if (pendingReview) {
+        setReviewDecision({
+          reviewPackageId: pendingReview.id,
+          status: 'confirmed',
+          snapshotVersion: summary.draft.version,
+        })
+      }
+      applyConfirmedTask(summary)
+      message.success('已将确认值写入发团创建草稿')
+    },
+    onError: (caught) => {
+      const conflict = readAiCreateTaskConflict(caught)
+      if (conflict) {
+        queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
+        const fields =
+          caught instanceof ApiError &&
+          caught.data &&
+          typeof caught.data === 'object' &&
+          'reviewConflict' in caught.data
+            ? (caught.data as { reviewConflict?: { conflictFields?: string[] } }).reviewConflict
+                ?.conflictFields
+            : undefined
+        const labels = (fields ?? [])
+          .map((field) => REVIEW_FIELD_LABELS[field as AiReviewableBasicInfoField] ?? field)
+          .join('、')
+        message.error(
+          labels
+            ? `草稿在候选产生后已变化（${labels}），旧候选不能覆盖新值`
+            : '草稿已变化，旧候选不能覆盖新值',
+        )
+        return
+      }
+      message.error(caught instanceof Error ? caught.message : '确认审核包失败')
+    },
+  })
+
+  const rejectReviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!taskId || !pendingReview) {
+        throw new Error('没有待确认的审核包')
+      }
+      return rejectAiReviewPackage(taskId, pendingReview.id)
+    },
+    onSuccess: (summary) => {
+      if (pendingReview) {
+        setReviewDecision({ reviewPackageId: pendingReview.id, status: 'rejected' })
+      }
+      applySavedDraft(summary)
+      queryClient.setQueryData(['ai-create-task', summary.id], summary)
+      message.success('已拒绝 AI 建议，发团创建草稿未改动')
+    },
+    onError: (caught) => {
+      message.error(caught instanceof Error ? caught.message : '拒绝审核包失败')
+    },
+  })
+
   const openAssist = useCallback(() => {
     setAssistPaneCollapsed(false)
     void bootstrap()
@@ -519,15 +662,24 @@ export function CreateDepartureWizard() {
     }
 
     if (session) {
+      const currentTask = taskReview ?? session.task
       setContent(
         <AiCreateAssistChat
           agentRuntimeUrl={session.agentRuntimeUrl}
           delegationToken={session.delegationToken}
           taskId={session.task.id}
           runId={session.runId}
-          snapshotVersion={session.task.draft.version}
+          snapshotVersion={currentTask.draft.version}
           stageKey="basic_info"
           runStatus="idle"
+          reviewPackageId={currentTask.pendingReview?.id ?? null}
+          progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
+          pendingReview={currentTask.pendingReview}
+          reviewDecision={reviewDecision}
+          onReviewPackageSubmitted={() => {
+            setReviewDecision(null)
+            void refetchTaskReviewRef.current()
+          }}
         />,
       )
 
@@ -550,7 +702,14 @@ export function CreateDepartureWizard() {
         setContent(null)
       }
     }
-  }, [assistAvailability?.enabled, error, session, setContent])
+  }, [
+    assistAvailability?.enabled,
+    error,
+    reviewDecision,
+    session,
+    setContent,
+    taskReview,
+  ])
 
   const showSteps = !isCopyMode && !copyFromId && !searchTaskId
   const stepEnterKey = showCopyBootstrap
@@ -615,6 +774,15 @@ export function CreateDepartureWizard() {
           ) : null}
 
           <section className={styles.workspace} aria-label="发团创建内容">
+            {pendingReview && draftVersion != null ? (
+              <AiReviewStickyBar
+                pendingReview={pendingReview}
+                confirming={confirmReviewMutation.isPending}
+                rejecting={rejectReviewMutation.isPending}
+                onConfirm={() => confirmReviewMutation.mutate()}
+                onReject={() => rejectReviewMutation.mutate()}
+              />
+            ) : null}
             {currentStep === 0 || showCopyBootstrap ? (
               <Form form={infoForm} className={styles.hiddenForm} aria-hidden />
             ) : null}
@@ -626,12 +794,19 @@ export function CreateDepartureWizard() {
                   />
                 </div>
               ) : !isCopyMode && currentStep === 0 ? (
-                <CreateDepartureStepRoute values={routeValues} onChange={setRouteValues} />
+                <CreateDepartureStepRoute
+                  values={routeValues}
+                  onChange={setRouteValues}
+                  pendingReview={pendingReview}
+                  onCorrectCandidate={handleCorrectCandidate}
+                />
               ) : (
                 <CreateDepartureStepInfo
                   form={infoForm}
                   route={routeValues}
                   onValuesChange={scheduleAutosave}
+                  pendingReview={pendingReview}
+                  onCorrectCandidate={handleCorrectCandidate}
                 />
               )}
             </div>
@@ -669,7 +844,7 @@ export function CreateDepartureWizard() {
           <div>
             {!isCopyMode && !copyFromId && !searchTaskId && currentStep === 0 ? (
               <Button
-                type="primary"
+                type={pendingReview ? 'default' : 'primary'}
                 loading={initializingStep2}
                 onClick={() => void handleRouteStepNext()}
               >
@@ -677,7 +852,7 @@ export function CreateDepartureWizard() {
               </Button>
             ) : (
               <Button
-                type="primary"
+                type={pendingReview ? 'default' : 'primary'}
                 loading={createMutation.isPending}
                 disabled={showCopyBootstrap || initializingStep2}
                 onClick={() => void handleCreate()}

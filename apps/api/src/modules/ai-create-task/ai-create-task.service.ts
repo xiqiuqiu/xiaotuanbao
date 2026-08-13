@@ -23,12 +23,19 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   classifyDraftFields,
+  capabilitiesForPendingReview,
+  evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
   getTaskContextOutputSchema,
+  submitReviewPackageInputSchema,
+  submitReviewPackageOutputSchema,
+  AI_REVIEWABLE_BASIC_INFO_FIELDS,
   type GetTaskContextOutput,
+  type SubmitReviewPackageOutput,
+  type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
-import type { AiCreateTask, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AiCreateActivityRunStatus, DepartureType as PrismaDepartureType } from '@prisma/client'
+import type { AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
+import { AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { AuthService } from '../auth/auth.service'
@@ -39,17 +46,38 @@ import {
 import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import type {
   ConfirmAiCreateTaskDto,
+  ConfirmAiReviewPackageDto,
   DepartureCreationDraftSnapshotDto,
+  PatchAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
   StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import {
+  parseStoredCandidates,
+  reviewConfirmValues,
+  toReviewPackageView,
+  toStoredCandidates,
+  type StoredReviewCandidate,
+} from './review-package.mapper'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
 const TASK_LOCK_OPERATION = 'ai-create-task'
 
-type TaskWithDraft = AiCreateTask & { draft: DepartureCreationDraft | null }
+type TaskWithDraft = AiCreateTask & {
+  draft: DepartureCreationDraft | null
+  reviewPackages?: AiReviewPackage[]
+}
+
+const TASK_WITH_PENDING_INCLUDE = {
+  draft: true,
+  reviewPackages: {
+    where: { status: AiReviewPackageStatus.pending },
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+  },
+} satisfies Prisma.AiCreateTaskInclude
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -253,6 +281,7 @@ export class AiCreateTaskService {
     }
 
     const summary = this.toSummary(task)
+    const pending = summary.pendingReview
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -262,9 +291,282 @@ export class AiCreateTaskService {
       },
       snapshot: summary.draft.snapshot,
       objectVersion: summary.draft.version,
-      pending: { hasPendingReview: false, reviewPackageId: null },
-      availableCapabilities: ['getTaskContext'],
+      pending: {
+        hasPendingReview: Boolean(pending),
+        reviewPackageId: pending?.id ?? null,
+      },
+      availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+    })
+  }
+
+  async submitReviewPackageForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<SubmitReviewPackageOutput> {
+    let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
+    try {
+      input = submitReviewPackageInputSchema.parse(rawInput)
+    } catch {
+      throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, caller.organizationId, caller.taskId)
+
+      const task = await tx.aiCreateTask.findFirst({
+        where: { id: caller.taskId, organizationId: caller.organizationId },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
+      if (!task || !task.draft) {
+        throw new NotFoundException('AI 建团任务不存在')
+      }
+      if (task.creatorUserId !== caller.userId) {
+        throw new ForbiddenException('仅任务创建者可提交审核包')
+      }
+      if (task.status !== AiCreateTaskStatus.IN_PROGRESS || task.departureId) {
+        throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+      }
+
+      const run = await tx.aiCreateActivityRun.findFirst({
+        where: {
+          id: caller.runId,
+          taskId: caller.taskId,
+          organizationId: caller.organizationId,
+          creatorUserId: caller.userId,
+        },
+      })
+      if (!run || run.status !== AiCreateActivityRunStatus.running) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+
+      if (task.draft.version !== input.objectVersion) {
+        throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+      }
+
+      const pending = task.reviewPackages?.[0]
+      if (pending) {
+        throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
+      }
+
+      const stored = toStoredCandidates(input.candidates)
+      const created = await tx.aiReviewPackage.create({
+        data: {
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          runId: caller.runId,
+          status: AiReviewPackageStatus.pending,
+          confirmationUnit: input.confirmationUnit,
+          baseObjectVersion: task.draft.version,
+          baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
+          candidates: stored as unknown as Prisma.InputJsonValue,
+        },
+      })
+
+      return submitReviewPackageOutputSchema.parse({
+        reviewPackageId: created.id,
+        status: 'pending',
+        objectVersion: task.draft.version,
+        fieldKeys: stored.map((candidate) => candidate.fieldKey),
+      })
+    })
+  }
+
+  async patchReviewPackage(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    packageId: string,
+    dto: PatchAiReviewPackageDto,
+  ): Promise<AiCreateTaskSummary> {
+    const corrections = this.parseCorrections(dto.corrections)
+    return this.prisma.$transaction(async (tx) => {
+      const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+      const candidates = this.applyCorrections(parseStoredCandidates(pkg.candidates), corrections)
+      await tx.aiReviewPackage.update({
+        where: { id: pkg.id },
+        data: { candidates: candidates as unknown as Prisma.InputJsonValue },
+      })
+      const task = await tx.aiCreateTask.findFirstOrThrow({
+        where: { id: taskId, organizationId },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
+      return this.toSummary(task)
+    })
+  }
+
+  async rejectReviewPackage(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    packageId: string,
+  ): Promise<AiCreateTaskSummary> {
+    return this.prisma.$transaction(async (tx) => {
+      const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+      const candidates = parseStoredCandidates(pkg.candidates).map((candidate) => ({
+        ...candidate,
+        status: 'rejected' as const,
+      }))
+      await tx.aiReviewPackage.update({
+        where: { id: pkg.id },
+        data: {
+          status: AiReviewPackageStatus.rejected,
+          candidates: candidates as unknown as Prisma.InputJsonValue,
+        },
+      })
+      await this.writeReviewRecord(tx, {
+        organizationId,
+        packageId: pkg.id,
+        operatorUserId: userId,
+        action: AiReviewRecordAction.reject,
+        candidates,
+        corrections: {},
+        submittedValues: {},
+        objectVersion: pkg.baseObjectVersion,
+        writeResult: AiReviewWriteResult.rejected,
+      })
+      const task = await tx.aiCreateTask.findFirstOrThrow({
+        where: { id: taskId, organizationId },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
+      return this.toSummary(task)
+    })
+  }
+
+  async confirmReviewPackage(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    packageId: string,
+    dto: ConfirmAiReviewPackageDto,
+  ): Promise<AiCreateTaskSummary> {
+    const requestCorrections = this.parseCorrections(dto.corrections)
+    return this.prisma.$transaction(async (tx) => {
+      const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+      const task = await tx.aiCreateTask.findFirstOrThrow({
+        where: { id: taskId, organizationId },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
+      if (!task.draft) {
+        throw new NotFoundException('发团创建草稿不存在')
+      }
+
+      const candidates = this.applyCorrections(
+        parseStoredCandidates(pkg.candidates),
+        requestCorrections,
+      )
+      const { corrections, submissions } = reviewConfirmValues(candidates)
+
+      if (task.draft.version !== dto.expectedVersion) {
+        await this.writeReviewRecord(tx, {
+          organizationId,
+          packageId: pkg.id,
+          operatorUserId: userId,
+          action: AiReviewRecordAction.confirm,
+          candidates,
+          corrections,
+          submittedValues: submissions,
+          objectVersion: task.draft.version,
+          writeResult: AiReviewWriteResult.conflict,
+          conflictFields: [],
+        })
+        throw new ConflictException({
+          message: '草稿版本已变化，请基于最新快照重试',
+          data: {
+            ...this.toSummary(task),
+            reviewConflict: { status: 'draft_version', conflictFields: [] },
+          },
+        })
+      }
+
+      const baseline = this.parseSnapshot(pkg.baselineSnapshot)
+      const current = this.parseSnapshot(task.draft.snapshot)
+      const merge = evaluateReviewConfirmMerge({
+        baselineSnapshot: baseline,
+        currentSnapshot: current,
+        submissions,
+      })
+
+      if (merge.status === 'conflict') {
+        await this.writeReviewRecord(tx, {
+          organizationId,
+          packageId: pkg.id,
+          operatorUserId: userId,
+          action: AiReviewRecordAction.confirm,
+          candidates,
+          corrections,
+          submittedValues: submissions,
+          objectVersion: task.draft.version,
+          writeResult: AiReviewWriteResult.conflict,
+          conflictFields: merge.conflictFields,
+        })
+        throw new ConflictException({
+          message: '草稿在候选产生后已变化，旧候选不能覆盖新值',
+          data: {
+            ...this.toSummary(task),
+            reviewConflict: {
+              status: 'candidate_stale',
+              conflictFields: merge.conflictFields,
+            },
+          },
+        })
+      }
+
+      try {
+        this.assertValidDraft(merge.nextSnapshot)
+      } catch (error) {
+        await this.writeReviewRecord(tx, {
+          organizationId,
+          packageId: pkg.id,
+          operatorUserId: userId,
+          action: AiReviewRecordAction.confirm,
+          candidates,
+          corrections,
+          submittedValues: submissions,
+          objectVersion: task.draft.version,
+          writeResult: AiReviewWriteResult.validation_failed,
+        })
+        throw error
+      }
+
+      const nextVersion = task.draft.version + 1
+      await tx.departureCreationDraft.update({
+        where: { id: task.draft.id },
+        data: {
+          version: nextVersion,
+          snapshot: merge.nextSnapshot as unknown as Prisma.InputJsonValue,
+        },
+      })
+      await tx.aiReviewPackage.update({
+        where: { id: pkg.id },
+        data: {
+          status: AiReviewPackageStatus.confirmed,
+          candidates: candidates.map((candidate) => ({
+            ...candidate,
+            status: 'confirmed',
+          })) as unknown as Prisma.InputJsonValue,
+        },
+      })
+      await this.writeReviewRecord(tx, {
+        organizationId,
+        packageId: pkg.id,
+        operatorUserId: userId,
+        action: AiReviewRecordAction.confirm,
+        candidates,
+        corrections,
+        submittedValues: submissions,
+        objectVersion: nextVersion,
+        writeResult: AiReviewWriteResult.success,
+      })
+
+      const updated = await tx.aiCreateTask.findFirstOrThrow({
+        where: { id: taskId, organizationId },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
+      return this.toSummary(updated)
     })
   }
 
@@ -487,7 +789,7 @@ export class AiCreateTaskService {
 
       const task = await tx.aiCreateTask.findFirst({
         where: { id: taskId, organizationId },
-        include: { draft: true },
+        include: TASK_WITH_PENDING_INCLUDE,
       })
       if (!task || !task.draft) {
         throw new NotFoundException('发团创建草稿不存在')
@@ -518,7 +820,7 @@ export class AiCreateTaskService {
       if (updated.count !== 1) {
         const latest = await tx.aiCreateTask.findFirst({
           where: { id: taskId, organizationId },
-          include: { draft: true },
+          include: TASK_WITH_PENDING_INCLUDE,
         })
         throw new ConflictException({
           message: '草稿版本已变化，请基于最新快照重试',
@@ -540,7 +842,7 @@ export class AiCreateTaskService {
   ): Promise<TaskWithDraft> {
     const task = await this.prisma.aiCreateTask.findFirst({
       where: { id: taskId, organizationId },
-      include: { draft: true },
+      include: TASK_WITH_PENDING_INCLUDE,
     })
     if (!task || !task.draft) {
       throw new NotFoundException('AI 建团任务不存在')
@@ -647,11 +949,107 @@ export class AiCreateTaskService {
     return this.normalizeSnapshot(raw as unknown as DepartureCreationDraftSnapshotDto)
   }
 
+  private async lockPendingPackage(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    packageId: string,
+  ): Promise<AiReviewPackage> {
+    await lockAiCreateTask(tx, organizationId, taskId)
+    const task = await tx.aiCreateTask.findFirst({
+      where: { id: taskId, organizationId },
+    })
+    if (!task) {
+      throw new NotFoundException('AI 建团任务不存在')
+    }
+    if (task.creatorUserId !== userId) {
+      throw new ForbiddenException('仅任务创建者可处理审核包')
+    }
+    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可处理审核包')
+    }
+    const pkg = await tx.aiReviewPackage.findFirst({
+      where: { id: packageId, taskId, organizationId },
+    })
+    if (!pkg) {
+      throw new NotFoundException('审核包不存在')
+    }
+    if (pkg.status !== AiReviewPackageStatus.pending) {
+      throw new BadRequestException('仅待确认审核包可处理')
+    }
+    return pkg
+  }
+
+  private parseCorrections(
+    raw: Record<string, string | number | null> | undefined,
+  ): Partial<Record<AiReviewableBasicInfoField, string | number | null>> {
+    if (!raw) return {}
+    const allowed = new Set<string>(AI_REVIEWABLE_BASIC_INFO_FIELDS)
+    const corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>> = {}
+    for (const [key, value] of Object.entries(raw)) {
+      if (!allowed.has(key)) {
+        throw new BadRequestException('不能修正负责人和发团类型等系统关联字段')
+      }
+      corrections[key as AiReviewableBasicInfoField] = value
+    }
+    return corrections
+  }
+
+  private applyCorrections(
+    candidates: StoredReviewCandidate[],
+    corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>,
+  ): StoredReviewCandidate[] {
+    return candidates.map((candidate) => {
+      if (!(candidate.fieldKey in corrections)) return candidate
+      return {
+        ...candidate,
+        userCorrectedValue: corrections[candidate.fieldKey] ?? null,
+      }
+    })
+  }
+
+  private async writeReviewRecord(
+    tx: Prisma.TransactionClient,
+    args: {
+      organizationId: string
+      packageId: string
+      operatorUserId: string
+      action: AiReviewRecordAction
+      candidates: StoredReviewCandidate[]
+      corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+      submittedValues: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+      objectVersion: number
+      writeResult: AiReviewWriteResult
+      conflictFields?: string[]
+    },
+  ): Promise<void> {
+    await tx.aiReviewRecord.create({
+      data: {
+        organizationId: args.organizationId,
+        packageId: args.packageId,
+        operatorUserId: args.operatorUserId,
+        action: args.action,
+        originalCandidates: args.candidates.map((candidate) => ({
+          fieldKey: candidate.fieldKey,
+          proposedValue: candidate.proposedValue,
+        })) as Prisma.InputJsonValue,
+        userCorrections: args.corrections as Prisma.InputJsonValue,
+        submittedValues: args.submittedValues as Prisma.InputJsonValue,
+        evidence: args.candidates.flatMap((candidate) => candidate.evidence) as Prisma.InputJsonValue,
+        objectVersion: args.objectVersion,
+        writeResult: args.writeResult,
+        conflictFields: args.conflictFields as Prisma.InputJsonValue | undefined,
+      },
+    })
+  }
+
   private toSummary(task: TaskWithDraft): AiCreateTaskSummary {
     if (!task.draft) {
       throw new BadRequestException('发团创建草稿不存在')
     }
     const snapshot = this.parseSnapshot(task.draft.snapshot)
+    const pending = task.reviewPackages?.[0]
     return {
       id: task.id,
       status: task.status,
@@ -665,6 +1063,7 @@ export class AiCreateTaskService {
         snapshot,
         updatedAt: task.draft.updatedAt.toISOString(),
       },
+      pendingReview: pending ? toReviewPackageView(pending) : null,
     }
   }
 }

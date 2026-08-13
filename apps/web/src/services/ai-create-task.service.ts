@@ -2,7 +2,9 @@ import { request, type RequestConfig } from '@/lib/request'
 import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
+  ConfirmAiReviewPackageDto,
   DepartureSummary,
+  PatchAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
   AiCreateAssistAvailability,
   StartAiCreateAssistSessionDto,
@@ -40,4 +42,35 @@ export async function startAiCreateAssistSession(
   payload: StartAiCreateAssistSessionDto = {},
 ): Promise<AiCreateAssistSession> {
   return request.post<AiCreateAssistSession>('/ai-create-tasks/assist-session', payload)
+}
+
+export async function patchAiReviewPackage(
+  taskId: string,
+  packageId: string,
+  payload: PatchAiReviewPackageDto,
+): Promise<AiCreateTaskSummary> {
+  return request.patch<AiCreateTaskSummary>(
+    `/ai-create-tasks/${taskId}/review-packages/${packageId}`,
+    payload,
+  )
+}
+
+export async function confirmAiReviewPackage(
+  taskId: string,
+  packageId: string,
+  payload: ConfirmAiReviewPackageDto,
+): Promise<AiCreateTaskSummary> {
+  return request.post<AiCreateTaskSummary>(
+    `/ai-create-tasks/${taskId}/review-packages/${packageId}/confirm`,
+    payload,
+  )
+}
+
+export async function rejectAiReviewPackage(
+  taskId: string,
+  packageId: string,
+): Promise<AiCreateTaskSummary> {
+  return request.post<AiCreateTaskSummary>(
+    `/ai-create-tasks/${taskId}/review-packages/${packageId}/reject`,
+  )
 }

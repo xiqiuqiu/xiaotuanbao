@@ -87,8 +87,8 @@ describe('createGetTaskContextTool', () => {
     ).not.toThrow()
   })
 
-  it('still exposes only getTaskContext', () => {
-    expect(listAgentTools()).toEqual(['getTaskContext'])
+  it('exposes getTaskContext and submitReviewPackage', () => {
+    expect(listAgentTools()).toEqual(['getTaskContext', 'submitReviewPackage'])
   })
 
   it('fails closed when the model key is missing', async () => {
