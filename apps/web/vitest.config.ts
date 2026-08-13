@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@xiaotuanbao/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@xiaotuanbao/ai-contracts': path.resolve(__dirname, '../../packages/ai-contracts/src/index.ts'),
     },
   },
   test: {

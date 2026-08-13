@@ -2,8 +2,10 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { CsrfOriginGuard } from './csrf-origin.guard'
 
-function context(method: string, origin?: string): ExecutionContext {
+function context(method: string, origin?: string, skipCsrf = false): ExecutionContext {
   return {
+    getHandler: () => (skipCsrf ? { skipCsrf: true } : {}),
+    getClass: () => ({}),
     switchToHttp: () => ({
       getRequest: () => ({ method, headers: { origin } }),
     }),
@@ -11,8 +13,15 @@ function context(method: string, origin?: string): ExecutionContext {
 }
 
 describe('CsrfOriginGuard', () => {
+  const reflector = {
+    getAllAndOverride: (_key: string, targets: unknown[]) => {
+      const handler = targets[0] as { skipCsrf?: boolean }
+      return Boolean(handler?.skipCsrf)
+    },
+  }
   const guard = new CsrfOriginGuard(
     new ConfigService({ app: { authAllowedOrigins: ['https://app.example.com'] } }),
+    reflector as never,
   )
 
   it('allows safe methods without Origin', () => {
@@ -29,4 +38,8 @@ describe('CsrfOriginGuard', () => {
       expect(() => guard.canActivate(context('PATCH', origin))).toThrow(ForbiddenException)
     },
   )
+
+  it('skips Origin checks for internal AI tool routes', () => {
+    expect(guard.canActivate(context('POST', undefined, true))).toBe(true)
+  })
 })

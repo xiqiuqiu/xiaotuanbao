@@ -188,6 +188,19 @@ export function buildDepartureCreationDraftSnapshot(
   }
 }
 
+/** Matches API `saveDraft` / `assertValidDraft`: incomplete snapshots must not POST /draft. */
+export function canPersistDepartureCreationDraft(
+  draft: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
+): boolean {
+  if (draft.mode === 'template') {
+    return Boolean(draft.templateId)
+  }
+  if (draft.mode === 'copy') {
+    return Boolean(draft.copyFromDepartureId)
+  }
+  return Boolean(draft.routeName.trim())
+}
+
 export function applyDraftSnapshotToRoute(
   snapshot: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
 ): RouteStepValues {

@@ -107,3 +107,16 @@ export class ConfirmAiCreateTaskDto {
   @Min(1)
   expectedVersion!: number
 }
+
+export class StartAiCreateAssistSessionDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  taskId?: string
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DepartureCreationDraftSnapshotDto)
+  draft?: DepartureCreationDraftSnapshotDto
+}

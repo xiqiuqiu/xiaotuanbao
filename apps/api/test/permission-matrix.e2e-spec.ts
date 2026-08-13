@@ -35,6 +35,8 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   // Platform FileStore slice (#156 / ADR-0027): any authenticated org member; no product menu yet.
   'POST /api/stored-objects',
   'DELETE /api/stored-objects/:id',
+  // AI 业务工具：双重身份（编排服务 + 短期 User 委托）替代浏览器 CSRF/@RequireMenu。
+  'POST /api/ai-tools/v1/get-task-context',
 ])
 
 /**
@@ -44,6 +46,7 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
 const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: string }>> = {
   departureWrite: [
     { method: 'POST', path: '/api/departures' },
+    { method: 'POST', path: '/api/ai-create-tasks/assist-session' },
     { method: 'POST', path: '/api/departures/:id/copy' },
     { method: 'PATCH', path: '/api/departures/:id' },
     { method: 'DELETE', path: '/api/departures/:id' },

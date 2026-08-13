@@ -865,6 +865,24 @@ export interface ConfirmAiCreateTaskDto {
   expectedVersion: number
 }
 
+export interface AiCreateAssistAvailability {
+  enabled: boolean
+  agentRuntimeUrl: string | null
+}
+
+export interface StartAiCreateAssistSessionDto {
+  taskId?: string
+  draft?: DepartureCreationDraftSnapshot
+}
+
+export interface AiCreateAssistSession {
+  task: AiCreateTaskSummary
+  runId: string
+  delegationToken: string
+  agentRuntimeUrl: string
+  expiresAt: string
+}
+
 export interface UpdateDepartureDto {
   name?: string
   routeName?: string

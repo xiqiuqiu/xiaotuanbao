@@ -7,6 +7,7 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/ai-contracts/package.json ./packages/ai-contracts/
 COPY packages/config/package.json ./packages/config/
 RUN pnpm install --frozen-lockfile --filter api...
 
@@ -14,6 +15,7 @@ FROM base AS build
 COPY --from=deps /app/ ./
 COPY apps/api ./apps/api
 COPY packages/shared ./packages/shared
+COPY packages/ai-contracts ./packages/ai-contracts
 COPY packages/config ./packages/config
 WORKDIR /app/apps/api
 RUN pnpm exec prisma generate && pnpm build

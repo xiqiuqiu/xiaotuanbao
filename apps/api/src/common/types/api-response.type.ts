@@ -9,3 +9,12 @@ export interface JwtPayload {
   organizationId: string
   isPlatformAdmin: boolean
 }
+
+export interface AiOperationDelegationPayload {
+  typ: 'ai-op-delegation'
+  aud?: 'ai-op-delegation'
+  sub: string
+  organizationId: string
+  taskId: string
+  runId: string
+}

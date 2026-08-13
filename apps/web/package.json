@@ -15,8 +15,10 @@
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
     "@ant-design/plots": "^2.6.8",
+    "@copilotkit/react-core": "^1.67.1",
     "@tanstack/react-query": "^5.80.7",
     "@tanstack/react-router": "^1.121.27",
+    "@xiaotuanbao/ai-contracts": "workspace:*",
     "@xiaotuanbao/shared": "workspace:*",
     "antd": "^6.5.0",
     "axios": "^1.18.1",

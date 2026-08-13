@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
+import { useUiStore } from '@/app/store/ui.store'
+import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
+import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
+import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
+import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
 import {
   confirmAiCreateTask,
+  getAiCreateAssistAvailability,
   getAiCreateTask,
   saveDepartureCreationDraft,
 } from '@/services/ai-create-task.service'
@@ -19,6 +25,7 @@ import {
   applyDraftSnapshotToInfoForm,
   applyDraftSnapshotToRoute,
   buildDepartureCreationDraftSnapshot,
+  canPersistDepartureCreationDraft,
   canProceedFromRouteStep,
   createInfoFormValues,
   type InfoFormValues,
@@ -59,6 +66,9 @@ export function CreateDepartureWizard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
+  const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
+  const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
+  const { setContent } = useAssistPaneSlot()
   const search = useSearch({ strict: false }) as { copyFrom?: string; taskId?: string }
   const copyFromId = search.copyFrom?.trim()
   const searchTaskId = search.taskId?.trim()
@@ -141,12 +151,7 @@ export function CreateDepartureWizard() {
     const run = (async () => {
       const info = infoForm.getFieldsValue(true)
       const draft = buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
-      if (
-        draft.mode === 'manual' &&
-        !draft.routeName &&
-        !draft.name &&
-        !draft.startDate
-      ) {
+      if (!canPersistDepartureCreationDraft(draft)) {
         return
       }
 
@@ -455,6 +460,86 @@ export function CreateDepartureWizard() {
       })
   }, [flushDraft, navigate])
 
+  const { data: assistAvailability } = useQuery({
+    queryKey: ['ai-create-assist-availability'],
+    queryFn: getAiCreateAssistAvailability,
+  })
+
+  const buildAssistDraft = useCallback(
+    () => buildDepartureCreationDraftSnapshot(routeValuesRef.current, infoForm.getFieldsValue(true)),
+    [infoForm],
+  )
+
+  const getAssistTaskId = useCallback(() => taskIdRef.current, [])
+
+  const { bootstrap, reset, session, error } = useAiCreateAssistBootstrap({
+    enabled: Boolean(assistAvailability?.enabled),
+    flushDraft,
+    buildDraft: buildAssistDraft,
+    getTaskId: getAssistTaskId,
+    applySavedDraft,
+    syncTaskSearch,
+  })
+  const bootstrapRef = useRef(bootstrap)
+  bootstrapRef.current = bootstrap
+
+  const openAssist = useCallback(() => {
+    setAssistPaneCollapsed(false)
+    void bootstrap()
+  }, [bootstrap, setAssistPaneCollapsed])
+
+  useEffect(() => {
+    if (assistPaneCollapsed) {
+      reset()
+    }
+  }, [assistPaneCollapsed, reset])
+
+  useEffect(() => {
+    if (!assistAvailability?.enabled || assistPaneCollapsed || session || error) {
+      return
+    }
+    void bootstrap()
+  }, [assistAvailability?.enabled, assistPaneCollapsed, bootstrap, error, session])
+
+  useEffect(() => {
+    if (!assistAvailability?.enabled) {
+      return
+    }
+
+    if (session) {
+      setContent(
+        <AiCreateAssistChat
+          agentRuntimeUrl={session.agentRuntimeUrl}
+          delegationToken={session.delegationToken}
+          taskId={session.task.id}
+          runId={session.runId}
+          snapshotVersion={session.task.draft.version}
+          stageKey="basic_info"
+          runStatus="idle"
+        />,
+      )
+
+      return () => {
+        setContent(null)
+      }
+    }
+
+    if (error) {
+      setContent(
+        <>
+          <p role="alert">{error.message.trim() || ASSIST_ERROR_TEXT}</p>
+          <Button aria-label="重试" onClick={() => void bootstrapRef.current()}>
+            重试
+          </Button>
+        </>,
+      )
+
+      return () => {
+        setContent(null)
+      }
+    }
+  }, [assistAvailability?.enabled, error, session, setContent])
+
   const showSteps = !isCopyMode && !copyFromId && !searchTaskId
   const stepEnterKey = showCopyBootstrap
     ? 'bootstrap'
@@ -477,17 +562,24 @@ export function CreateDepartureWizard() {
       style={{ '--wizard-border': token.colorBorderSecondary } as CSSProperties}
     >
       <div className={styles.pageHeader}>
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          style={{ paddingInlineStart: 0 }}
-          onClick={goBack}
-        >
-          返回发团列表
-        </Button>
-        <Typography.Title level={4} className={styles.title}>
-          {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
-        </Typography.Title>
+        <div>
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            style={{ paddingInlineStart: 0 }}
+            onClick={goBack}
+          >
+            返回发团列表
+          </Button>
+          <Typography.Title level={4} className={styles.title}>
+            {isCopyMode || copyFromId ? '复制发团' : '新建发团'}
+          </Typography.Title>
+        </div>
+        {assistAvailability?.enabled ? (
+          <Button aria-label="AI 辅助" icon={<CommentOutlined />} onClick={openAssist}>
+            AI 辅助
+          </Button>
+        ) : null}
       </div>
 
       <Card className={styles.wizardCard} styles={{ body: { padding: 0, height: '100%' } }}>

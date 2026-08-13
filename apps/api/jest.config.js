@@ -9,5 +9,6 @@ module.exports = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^@xiaotuanbao/ai-contracts$': '<rootDir>/../../packages/ai-contracts/src/index.ts',
   },
 }
