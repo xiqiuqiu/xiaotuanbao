@@ -9,6 +9,7 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
+import { ApiError } from '@/lib/request'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
@@ -568,6 +569,90 @@ describe('CreateDepartureWizard', () => {
         params: { departureId: 'departure-1' },
         search: { tab: 'overview' },
       })
+    })
+  })
+
+  it('restores template defaultDayCount from the server draft snapshot', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'template',
+          routeName: '西安-青海湖-茶卡6日游',
+          templateId: 'template-1',
+          defaultDayCount: 6,
+          name: '2026年8月1日 西安-青海湖-茶卡6日游',
+          startDate: '2026-08-01',
+          endDate: '2026-08-06',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    renderWizard()
+
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.getByText('默认 6 天')).toBeInTheDocument()
+  })
+
+  it('adopts the latest draft version after a 409 so later saves can proceed', async () => {
+    const user = userEvent.setup()
+    const conflict = new ApiError('草稿版本已变化，请基于最新快照重试', 409, {
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 3,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    vi.mocked(saveDepartureCreationDraft)
+      .mockImplementationOnce(async (payload) => ({
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: payload.draft,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      }))
+      .mockRejectedValueOnce(conflict)
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.type(screen.getByLabelText('团名'), '改')
+
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalledTimes(3)
+    })
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls[2]?.[0]).toMatchObject({
+      taskId: 'task-1',
+      expectedVersion: 3,
     })
   })
 })

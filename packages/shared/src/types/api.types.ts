@@ -820,6 +820,8 @@ export interface DepartureCreationDraftSnapshot {
   routeName: string
   templateId?: string | null
   copyFromDepartureId?: string | null
+  /** 路线模板默认天数；恢复草稿后变更出团日期时用于重算结束日期。 */
+  defaultDayCount?: number | null
   name?: string | null
   startDate?: string | null
   endDate?: string | null

@@ -170,6 +170,7 @@ export function buildDepartureCreationDraftSnapshot(
     routeName: route.routeName.trim(),
     templateId: route.templateId ?? null,
     copyFromDepartureId: route.copyFromDepartureId ?? null,
+    defaultDayCount: route.defaultDayCount ?? null,
     name: info.name?.trim() || null,
     startDate: info.startDate || null,
     endDate: info.endDate || null,
@@ -195,6 +196,7 @@ export function applyDraftSnapshotToRoute(
     routeName: snapshot.routeName,
     templateId: snapshot.templateId ?? undefined,
     copyFromDepartureId: snapshot.copyFromDepartureId ?? undefined,
+    defaultDayCount: snapshot.defaultDayCount ?? undefined,
     startDate: snapshot.startDate ?? undefined,
   }
 }

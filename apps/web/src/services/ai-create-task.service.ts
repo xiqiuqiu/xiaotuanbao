@@ -1,4 +1,4 @@
-import { request } from '@/lib/request'
+import { request, type RequestConfig } from '@/lib/request'
 import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
@@ -8,8 +8,9 @@ import type {
 
 export async function saveDepartureCreationDraft(
   payload: SaveDepartureCreationDraftDto,
+  config?: RequestConfig,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>('/ai-create-tasks/draft', payload)
+  return request.post<AiCreateTaskSummary>('/ai-create-tasks/draft', payload, config)
 }
 
 export async function getAiCreateTask(taskId: string): Promise<AiCreateTaskSummary> {

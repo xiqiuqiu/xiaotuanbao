@@ -28,6 +28,7 @@ import type {
 } from './dto/ai-create-task.dto'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
+const TASK_LOCK_OPERATION = 'ai-create-task'
 
 type TaskWithDraft = AiCreateTask & { draft: DepartureCreationDraft | null }
 
@@ -59,6 +60,24 @@ function emptyToNull(value: string | null | undefined): string | null {
   if (value == null) return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+async function lockAiCreateTask(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  taskId: string,
+): Promise<void> {
+  const lockScope = `${organizationId}|${TASK_LOCK_OPERATION}|${taskId}`
+  await tx.$queryRaw`
+    SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
+  `
+  await tx.$queryRaw`
+    SELECT id
+    FROM ai_create_tasks
+    WHERE id = ${taskId}
+      AND organization_id = ${organizationId}
+    FOR UPDATE
+  `
 }
 
 @Injectable()
@@ -121,10 +140,7 @@ export class AiCreateTaskService {
 
     return this.prisma.$transaction(
       async (tx) => {
-        const lockScope = `${organizationId}|${CONFIRM_OPERATION}|${key}`
-        await tx.$queryRaw`
-          SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
-        `
+        await lockAiCreateTask(tx, organizationId, taskId)
 
         const record = await tx.aiCreateIdempotencyRecord.upsert({
           where: {
@@ -319,32 +335,55 @@ export class AiCreateTaskService {
     expectedVersion: number,
     snapshot: DepartureCreationDraftSnapshot,
   ): Promise<AiCreateTaskSummary> {
-    const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
-    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
-      throw new BadRequestException('仅进行中的 AI 建团任务可保存草稿')
-    }
-    if (task.departureId) {
-      throw new BadRequestException('已创建正式发团的任务不可再修改创建草稿')
-    }
-    if (!task.draft) {
-      throw new NotFoundException('发团创建草稿不存在')
-    }
-    if (task.draft.version !== expectedVersion) {
-      throw new ConflictException({
-        message: '草稿版本已变化，请基于最新快照重试',
-        data: this.toSummary(task),
+    return this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, organizationId, taskId)
+
+      const task = await tx.aiCreateTask.findFirst({
+        where: { id: taskId, organizationId },
+        include: { draft: true },
       })
-    }
+      if (!task || !task.draft) {
+        throw new NotFoundException('发团创建草稿不存在')
+      }
+      if (task.creatorUserId !== userId) {
+        throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
+      }
+      if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+        throw new BadRequestException('仅进行中的 AI 建团任务可保存草稿')
+      }
+      if (task.departureId) {
+        throw new BadRequestException('已创建正式发团的任务不可再修改创建草稿')
+      }
+      if (task.draft.version !== expectedVersion) {
+        throw new ConflictException({
+          message: '草稿版本已变化，请基于最新快照重试',
+          data: this.toSummary(task),
+        })
+      }
 
-    const updated = await this.prisma.departureCreationDraft.update({
-      where: { id: task.draft.id },
-      data: {
-        version: { increment: 1 },
-        snapshot: snapshot as unknown as Prisma.InputJsonValue,
-      },
+      const updated = await tx.departureCreationDraft.updateMany({
+        where: { id: task.draft.id, version: expectedVersion },
+        data: {
+          version: expectedVersion + 1,
+          snapshot: snapshot as unknown as Prisma.InputJsonValue,
+        },
+      })
+      if (updated.count !== 1) {
+        const latest = await tx.aiCreateTask.findFirst({
+          where: { id: taskId, organizationId },
+          include: { draft: true },
+        })
+        throw new ConflictException({
+          message: '草稿版本已变化，请基于最新快照重试',
+          data: latest?.draft ? this.toSummary(latest) : this.toSummary(task),
+        })
+      }
+
+      const draft = await tx.departureCreationDraft.findUniqueOrThrow({
+        where: { id: task.draft.id },
+      })
+      return this.toSummary({ ...task, draft })
     })
-
-    return this.toSummary({ ...task, draft: updated })
   }
 
   private async findOwnedTaskOrThrow(
@@ -374,6 +413,10 @@ export class AiCreateTaskService {
       routeName: draft.routeName?.trim() ?? '',
       templateId: emptyToNull(draft.templateId),
       copyFromDepartureId: emptyToNull(draft.copyFromDepartureId),
+      defaultDayCount:
+        draft.defaultDayCount === undefined || draft.defaultDayCount === null
+          ? null
+          : draft.defaultDayCount,
       name: emptyToNull(draft.name),
       startDate: emptyToNull(draft.startDate),
       endDate: emptyToNull(draft.endDate),

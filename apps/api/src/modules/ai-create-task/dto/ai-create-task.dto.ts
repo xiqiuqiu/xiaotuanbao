@@ -29,6 +29,13 @@ export class DepartureCreationDraftSnapshotDto {
   copyFromDepartureId?: string | null
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(999)
+  defaultDayCount?: number | null
+
+  @IsOptional()
   @IsString()
   name?: string | null
 

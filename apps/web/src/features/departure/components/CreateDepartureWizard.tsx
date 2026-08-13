@@ -26,6 +26,8 @@ import {
   getShanghaiTodayString,
   type RouteStepValues,
 } from '../utils/departure-wizard-form'
+import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
+import { ApiError } from '@/lib/request'
 
 const STEP_ITEMS = [{ title: '选择路线' }, { title: '填写信息' }]
 const AUTOSAVE_DEBOUNCE_MS = 800
@@ -108,6 +110,20 @@ export function CreateDepartureWizard() {
     [copyFromId, navigate],
   )
 
+  const applySavedDraft = useCallback(
+    (result: { id: string; draft: { version: number } }, options?: { keepDirty?: boolean }) => {
+      setTaskId(result.id)
+      setDraftVersion(result.draft.version)
+      taskIdRef.current = result.id
+      draftVersionRef.current = result.draft.version
+      if (!options?.keepDirty) {
+        dirtyRef.current = false
+        setSaveStatus('saved')
+      }
+    },
+    [],
+  )
+
   const persistDraft = useCallback(async () => {
     if (!user) {
       throw new Error('请先登录')
@@ -133,21 +149,42 @@ export function CreateDepartureWizard() {
       try {
         const currentTaskId = taskIdRef.current
         const currentVersion = draftVersionRef.current
-        const result = await saveDepartureCreationDraft({
-          taskId: currentTaskId ?? undefined,
-          expectedVersion: currentTaskId ? (currentVersion ?? undefined) : undefined,
-          draft,
-        })
-        setTaskId(result.id)
-        setDraftVersion(result.draft.version)
-        taskIdRef.current = result.id
-        draftVersionRef.current = result.draft.version
-        dirtyRef.current = false
-        setSaveStatus('saved')
+        const result = await saveDepartureCreationDraft(
+          {
+            taskId: currentTaskId ?? undefined,
+            expectedVersion: currentTaskId ? (currentVersion ?? undefined) : undefined,
+            draft,
+          },
+          { silentError: true },
+        )
+        applySavedDraft(result)
         if (!currentTaskId) {
           syncTaskSearch(result.id)
         }
       } catch (error) {
+        const conflict = readAiCreateTaskConflict(error)
+        if (conflict) {
+          applySavedDraft(conflict, { keepDirty: true })
+          try {
+            const retried = await saveDepartureCreationDraft(
+              {
+                taskId: conflict.id,
+                expectedVersion: conflict.draft.version,
+                draft,
+              },
+              { silentError: true },
+            )
+            applySavedDraft(retried)
+            return
+          } catch (retryError) {
+            const retryConflict = readAiCreateTaskConflict(retryError)
+            if (retryConflict) {
+              applySavedDraft(retryConflict, { keepDirty: true })
+            }
+            setSaveStatus('error')
+            throw retryError
+          }
+        }
         setSaveStatus('error')
         throw error
       }
@@ -159,7 +196,7 @@ export function CreateDepartureWizard() {
       }
     })
     await persistInFlightRef.current
-  }, [infoForm, syncTaskSearch, user])
+  }, [applySavedDraft, infoForm, syncTaskSearch, user])
 
   const scheduleAutosave = useCallback(() => {
     dirtyRef.current = true
@@ -368,7 +405,13 @@ export function CreateDepartureWizard() {
       })
     },
     onError: (error) => {
-      message.error(error instanceof Error ? error.message : '创建失败')
+      const conflict = readAiCreateTaskConflict(error)
+      if (conflict) {
+        applySavedDraft(conflict, { keepDirty: true })
+      }
+      if (!(error instanceof ApiError)) {
+        message.error(error instanceof Error ? error.message : '创建失败')
+      }
     },
   })
 

@@ -259,4 +259,66 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
     })
     expect(count).toBe(0)
   })
+
+  it('serializes concurrent confirms with different idempotency keys into one Departure', async () => {
+    const created = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({ draft: draftBody({ name: `${testPrefix}-concurrent-confirm` }) })
+      .expect(201)
+
+    const taskId = created.body.data.id as string
+
+    const responses = await Promise.all(
+      [`${testPrefix}-confirm-a`, `${testPrefix}-confirm-b`].map((key) =>
+        authRequest(app, coordinatorToken)
+          .post(`/api/ai-create-tasks/${taskId}/confirm`)
+          .set('Idempotency-Key', key)
+          .send({ expectedVersion: 1 }),
+      ),
+    )
+
+    expect(responses.every((response) => response.status === 201)).toBe(true)
+    const departureIds = new Set(responses.map((response) => response.body.data.id))
+    expect(departureIds.size).toBe(1)
+
+    const count = await prisma.departure.count({
+      where: { organizationId, name: `${testPrefix}-concurrent-confirm` },
+    })
+    expect(count).toBe(1)
+  })
+
+  it('rejects concurrent draft saves with the same expectedVersion', async () => {
+    const created = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({ draft: draftBody({ name: `${testPrefix}-cas` }) })
+      .expect(201)
+
+    const taskId = created.body.data.id as string
+
+    const responses = await Promise.all(
+      [`${testPrefix}-cas-a`, `${testPrefix}-cas-b`].map((name) =>
+        authRequest(app, coordinatorToken)
+          .post('/api/ai-create-tasks/draft')
+          .send({
+            taskId,
+            expectedVersion: 1,
+            draft: draftBody({ name }),
+          }),
+      ),
+    )
+
+    const statuses = responses.map((response) => response.status).sort()
+    expect(statuses).toEqual([200, 409])
+
+    const winner = responses.find((response) => response.status === 200)
+    const conflict = responses.find((response) => response.status === 409)
+    expect(winner?.body.data.draft.version).toBe(2)
+    expect(conflict?.body.data.draft.version).toBe(2)
+    expect(conflict?.body.data.draft.snapshot.name).toBe(winner?.body.data.draft.snapshot.name)
+
+    const draft = await prisma.departureCreationDraft.findUnique({
+      where: { taskId },
+    })
+    expect(draft?.version).toBe(2)
+  })
 })
