@@ -88,6 +88,8 @@ export function CreateDepartureWizard() {
   const taskIdRef = useRef(taskId)
   const draftVersionRef = useRef(draftVersion)
   const routeValuesRef = useRef(routeValues)
+  const templateSelectGenerationRef = useRef(0)
+  const templateSelectAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     taskIdRef.current = taskId
@@ -100,6 +102,12 @@ export function CreateDepartureWizard() {
   useEffect(() => {
     routeValuesRef.current = routeValues
   }, [routeValues])
+
+  useEffect(() => {
+    return () => {
+      templateSelectAbortRef.current?.abort()
+    }
+  }, [])
 
   const isCopyMode = routeValues.mode === 'copy'
   const awaitingCopySource = Boolean(copyFromId) && !isCopyMode && !searchTaskId
@@ -388,8 +396,17 @@ export function CreateDepartureWizard() {
     [infoForm],
   )
 
+  const invalidateTemplateSelect = useCallback(() => {
+    templateSelectAbortRef.current?.abort()
+    templateSelectAbortRef.current = null
+    templateSelectGenerationRef.current += 1
+  }, [])
+
   const handleRouteChange = useCallback(
     (next: RouteStepValues) => {
+      if (next.mode !== 'template') {
+        invalidateTemplateSelect()
+      }
       const previous = routeValuesRef.current
       setRouteValues(next)
       routeValuesRef.current = next
@@ -397,7 +414,7 @@ export function CreateDepartureWizard() {
       applyRouteToInfoForm(previous, next)
       scheduleAutosave()
     },
-    [applyRouteToInfoForm, scheduleAutosave],
+    [applyRouteToInfoForm, invalidateTemplateSelect, scheduleAutosave],
   )
 
   const handleSelectTemplate = useCallback(
@@ -408,9 +425,15 @@ export function CreateDepartureWizard() {
       segmentCount?: number
       resourceCount?: number
     }) => {
+      templateSelectAbortRef.current?.abort()
+      const controller = new AbortController()
+      templateSelectAbortRef.current = controller
+      const generation = ++templateSelectGenerationRef.current
+
       let next = applySelectedRouteTemplate(routeValuesRef.current, template)
       try {
-        const detail = await getRouteTemplate(template.id)
+        const detail = await getRouteTemplate(template.id, controller.signal)
+        if (generation !== templateSelectGenerationRef.current) return
         next = applySelectedRouteTemplate(routeValuesRef.current, {
           id: detail.id,
           name: detail.name,
@@ -419,8 +442,12 @@ export function CreateDepartureWizard() {
           resourceCount: detail.resourceCount,
         })
       } catch (error) {
+        if (controller.signal.aborted || generation !== templateSelectGenerationRef.current) {
+          return
+        }
         message.error(error instanceof Error ? error.message : '加载路线详情失败')
       }
+      if (generation !== templateSelectGenerationRef.current) return
       handleRouteChange(next)
     },
     [handleRouteChange],

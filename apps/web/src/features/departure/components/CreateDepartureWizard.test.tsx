@@ -8,7 +8,12 @@ import zhCN from 'antd/locale/zh_CN'
 import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { AiCreateAssistSession, AiReviewPackageView, DepartureSummary } from '@/types/api'
+import type {
+  AiCreateAssistSession,
+  AiReviewPackageView,
+  DepartureSummary,
+  RouteTemplateDetailSummary,
+} from '@/types/api'
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from '@/layouts/AssistPane'
@@ -267,6 +272,50 @@ async function selectCommonRoute(
   await user.click(await screen.findByRole('button', { name: `选择路线 ${routeName}` }))
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+function templateCard(
+  id: string,
+  name: string,
+  defaultDayCount: number,
+): {
+  id: string
+  name: string
+  defaultDayCount: number
+  usageCount: number
+  updatedAt: string
+} {
+  return {
+    id,
+    name,
+    defaultDayCount,
+    usageCount: 1,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function templateDetail(
+  id: string,
+  name: string,
+  defaultDayCount: number,
+  segmentCount: number,
+  resourceCount: number,
+): RouteTemplateDetailSummary {
+  return {
+    ...templateCard(id, name, defaultDayCount),
+    segmentCount,
+    resourceCount,
+  }
+}
+
 describe('CreateDepartureWizard', () => {
   afterEach(() => {
     cleanup()
@@ -469,6 +518,86 @@ describe('CreateDepartureWizard', () => {
     expect(lastDraft).toMatchObject({
       mode: 'manual',
       routeName: '西安-青海湖-茶卡6日游',
+    })
+    expect(lastDraft?.templateId ?? null).toBeNull()
+  })
+
+  it('ignores a slower earlier template fetch after picking another route', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+      templateCard('template-2', '喀纳斯阿勒泰10日线', 10),
+    ])
+    const first = deferred<RouteTemplateDetailSummary>()
+    const second = deferred<RouteTemplateDetailSummary>()
+    vi.mocked(getRouteTemplate).mockImplementation((id) => {
+      if (id === 'template-1') return first.promise
+      if (id === 'template-2') return second.promise
+      return Promise.reject(new Error(`unexpected template ${id}`))
+    })
+
+    const user = userEvent.setup()
+    renderWizard()
+    await user.click(screen.getByText('选用常用路线'))
+    await user.click(await screen.findByRole('button', { name: '选择路线 西安-青海湖-茶卡6日游' }))
+    await user.click(await screen.findByRole('button', { name: '选择路线 喀纳斯阿勒泰10日线' }))
+
+    await act(async () => {
+      second.resolve(templateDetail('template-2', '喀纳斯阿勒泰10日线', 10, 3, 8))
+      await second.promise
+    })
+    expect(await screen.findAllByText('将复制 3 段行程、8 项资源草稿')).not.toHaveLength(0)
+
+    await act(async () => {
+      first.resolve(templateDetail('template-1', '西安-青海湖-茶卡6日游', 6, 2, 5))
+      await first.promise
+    })
+
+    expect(screen.getAllByText('将复制 3 段行程、8 项资源草稿').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('将复制 2 段行程、5 项资源草稿')).toHaveLength(0)
+
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
+    })
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft).toMatchObject({
+      mode: 'template',
+      templateId: 'template-2',
+      routeName: '喀纳斯阿勒泰10日线',
+    })
+  })
+
+  it('does not re-apply a template after switching back to filling the route name', async () => {
+    vi.mocked(listRouteTemplates).mockResolvedValue([
+      templateCard('template-1', '西安-青海湖-茶卡6日游', 6),
+    ])
+    const pending = deferred<RouteTemplateDetailSummary>()
+    vi.mocked(getRouteTemplate).mockImplementation(() => pending.promise)
+
+    const user = userEvent.setup()
+    renderWizard()
+    await selectCommonRoute(user)
+
+    await user.click(screen.getByText('填写路线名称'))
+    expect(screen.getByLabelText('路线名称')).toBeInTheDocument()
+    expect(screen.queryByText(/将复制/)).not.toBeInTheDocument()
+
+    await act(async () => {
+      pending.resolve(templateDetail('template-1', '西安-青海湖-茶卡6日游', 6, 2, 5))
+      await pending.promise
+    })
+
+    expect(screen.queryAllByText('将复制 2 段行程、5 项资源草稿')).toHaveLength(0)
+    expect(screen.getByLabelText('路线名称')).toHaveValue('')
+
+    await user.type(screen.getByLabelText('路线名称'), '喀纳斯阿勒泰10日线')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalled()
+    })
+    const lastDraft = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'manual',
+      routeName: '喀纳斯阿勒泰10日线',
     })
     expect(lastDraft?.templateId ?? null).toBeNull()
   })
