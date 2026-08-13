@@ -14,10 +14,11 @@
 }
 
 .slot[data-motion] {
+  /* 480px layout slide: 400ms sits in the drawer band (200–500ms), slower than DESIGN Drawer 300ms */
   transition:
-    width var(--ant-motion-duration-slow, 0.3s)
+    width 0.4s
       var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)),
-    border-inline-start-width var(--ant-motion-duration-slow, 0.3s)
+    border-inline-start-width 0.4s
       var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
@@ -83,7 +84,7 @@
   }
 
   .slot[data-motion] {
-    transition: transform var(--ant-motion-duration-slow, 0.3s)
+    transition: transform 0.4s
       var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
   }
 

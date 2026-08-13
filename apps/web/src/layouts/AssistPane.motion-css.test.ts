@@ -8,9 +8,10 @@ describe('AssistPane motion CSS', () => {
   const desktopCss = mobileIndex === -1 ? css : css.slice(0, mobileIndex)
   const mobileCss = mobileIndex === -1 ? '' : css.slice(mobileIndex)
 
-  it('slides the desktop slot with 300ms ease-out-quint on width only', () => {
+  it('slides the desktop slot with 400ms ease-out-quint on width only', () => {
     expect(css).toContain('var(--ant-motion-ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1))')
-    expect(css).toContain('var(--ant-motion-duration-slow, 0.3s)')
+    expect(css).toContain('0.4s')
+    expect(css).not.toContain('0.3s')
     expect(css).not.toContain('transition: all')
     expect(css).not.toContain('ease-in')
     expect(css).not.toContain('scale(')

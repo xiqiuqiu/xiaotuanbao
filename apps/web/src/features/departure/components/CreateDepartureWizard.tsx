@@ -488,7 +488,7 @@ export function CreateDepartureWizard() {
     void bootstrap()
   }, [bootstrap, setAssistPaneCollapsed])
 
-  const ASSIST_PANE_EXIT_MS = 300 /* DESIGN.md Drawer/Modal 300ms; must match AssistPane.module.css */
+  const ASSIST_PANE_EXIT_MS = 400 /* 480px slide; must match AssistPane.module.css 0.4s */
 
   useEffect(() => {
     if (!assistPaneCollapsed) {
