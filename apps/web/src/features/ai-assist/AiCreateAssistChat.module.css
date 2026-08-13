@@ -23,14 +23,12 @@
 }
 
 .reviewCard {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 12px;
+  width: 100%;
 }
 
-.reviewLink {
-  height: auto;
-  padding: 0;
+.reviewCardBody {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }

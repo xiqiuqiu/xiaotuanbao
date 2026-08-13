@@ -631,12 +631,6 @@ export function CreateDepartureWizard() {
     void bootstrap()
   }, [bootstrap, setAssistPaneCollapsed])
 
-  const showReviewWorkspace = useCallback(() => {
-    const reviewRegion = document.querySelector<HTMLElement>('[aria-label="AI 阶段审核包"]')
-    reviewRegion?.scrollIntoView({ block: 'start' })
-    reviewRegion?.focus({ preventScroll: true })
-  }, [])
-
   const ASSIST_PANE_EXIT_MS = 400 /* 480px slide; must match AssistPane.module.css 0.4s */
 
   useEffect(() => {
@@ -682,7 +676,6 @@ export function CreateDepartureWizard() {
           progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
           pendingReview={currentTask.pendingReview}
           reviewDecision={reviewDecision}
-          onReviewRequested={showReviewWorkspace}
           onReviewPackageSubmitted={() => {
             setReviewDecision(null)
             void refetchTaskReviewRef.current()
@@ -715,7 +708,6 @@ export function CreateDepartureWizard() {
     reviewDecision,
     session,
     setContent,
-    showReviewWorkspace,
     taskReview,
   ])
 

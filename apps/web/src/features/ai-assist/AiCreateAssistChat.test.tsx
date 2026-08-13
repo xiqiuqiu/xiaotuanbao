@@ -1,5 +1,4 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
@@ -201,9 +200,7 @@ describe('AiCreateAssistChat', () => {
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
   })
 
-  it('waits for the form decision, opens the review area, and responds after confirmation', async () => {
-    const user = userEvent.setup()
-    const onReviewRequested = vi.fn()
+  it('shows a waiting state and responds after the form confirms', async () => {
     const respond = vi.fn().mockResolvedValue(undefined)
     const { rerender } = render(
       <AiCreateAssistChat
@@ -216,7 +213,6 @@ describe('AiCreateAssistChat', () => {
             clarity: 'needs_confirmation' as const,
           })),
         }}
-        onReviewRequested={onReviewRequested}
       />,
     )
 
@@ -233,13 +229,13 @@ describe('AiCreateAssistChat', () => {
     }
     const card = render(createElement(RenderHitl, hitlProps))
 
-    expect(screen.getByText('待确认 AI 建议')).toBeInTheDocument()
+    expect(screen.getByText('AI 建议待审核')).toBeInTheDocument()
     expect(screen.getByText('已建议修改团名')).toBeInTheDocument()
     expect(screen.getByText('其中 1 项需要重点核对')).toBeInTheDocument()
+    expect(screen.getByText('等待你在发团表单中完成审核')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入草稿' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '拒绝建议' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '查看审核内容' }))
-    expect(onReviewRequested).toHaveBeenCalledTimes(1)
+    expect(card.container.querySelector('button')).toBeNull()
     expect(respond).not.toHaveBeenCalled()
 
     rerender(
@@ -252,7 +248,6 @@ describe('AiCreateAssistChat', () => {
           status: 'confirmed',
           snapshotVersion: 2,
         }}
-        onReviewRequested={onReviewRequested}
       />,
     )
     const UpdatedRenderHitl = capturedHumanInTheLoop.render!

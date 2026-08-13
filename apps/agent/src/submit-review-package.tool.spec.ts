@@ -71,12 +71,50 @@ describe('createSubmitReviewPackageTool', () => {
     const tool = createSubmitReviewPackageTool(toolConfig)
     expect(tool.inputSchema).toBeDefined()
     expect('_zod' in tool.inputSchema!).toBe(true)
-    expect(() =>
-      standardSchemaToJSONSchema(tool.inputSchema as never, { io: 'input' }),
-    ).not.toThrow()
+    const jsonSchema = standardSchemaToJSONSchema(tool.inputSchema as never, { io: 'input' })
+    expect(jsonSchema).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          candidates: expect.objectContaining({
+            items: expect.objectContaining({
+              oneOf: expect.arrayContaining([
+                expect.objectContaining({
+                  properties: expect.objectContaining({
+                    fieldKey: expect.objectContaining({ const: 'expectedGuestCountHint' }),
+                    proposedValue: expect.objectContaining({ type: 'integer' }),
+                  }),
+                }),
+              ]),
+            }),
+          }),
+        }),
+      }),
+    )
   })
 
-  it('rejects candidates that pass the model schema but fail the contract', async () => {
+  it('rejects a textual guest count at the model-facing schema boundary', () => {
+    const tool = createSubmitReviewPackageTool(toolConfig)
+    const modelFacingSchema = tool.inputSchema as unknown as {
+      safeParse: (input: unknown) => { success: boolean }
+    }
+
+    expect(
+      modelFacingSchema.safeParse({
+        objectVersion: 1,
+        candidates: [
+          {
+            fieldKey: 'expectedGuestCountHint',
+            proposedValue: '约12人',
+            clarity: 'needs_confirmation',
+            evidence: [{ kind: 'user_message', excerpt: '预计人数大概12个人' }],
+          },
+        ],
+      }).success,
+    ).toBe(false)
+    expect(mockSubmit).not.toHaveBeenCalled()
+  })
+
+  it('keeps contract validation as a defense-in-depth guard', async () => {
     const tool = createSubmitReviewPackageTool(toolConfig)
 
     await expect(
@@ -91,7 +129,13 @@ describe('createSubmitReviewPackageTool', () => {
                   fieldKey: 'name',
                   proposedValue: '八月川西团',
                   clarity: 'clear',
-                  evidence: [{ kind: 'user_message' }],
+                  evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+                },
+                {
+                  fieldKey: 'name',
+                  proposedValue: '八月川西团备选',
+                  clarity: 'needs_confirmation',
+                  evidence: [{ kind: 'user_message', excerpt: '也可以用备选团名' }],
                 },
               ],
             } as never,

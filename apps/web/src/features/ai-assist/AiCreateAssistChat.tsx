@@ -8,7 +8,7 @@ import {
   useHumanInTheLoop,
   useRenderTool,
 } from '@copilotkit/react-core/v2'
-import { Button, Typography } from 'antd'
+import { Badge, Card, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -40,7 +40,6 @@ export interface AiCreateAssistChatProps {
   pendingReview?: AiReviewPackageView | null
   reviewDecision?: ReviewPackageDecision | null
   onReviewPackageSubmitted?: () => void
-  onReviewRequested?: () => void
 }
 
 function ReviewDecisionCard({
@@ -48,13 +47,11 @@ function ReviewDecisionCard({
   pendingReview,
   reviewDecision,
   respond,
-  onReviewRequested,
 }: {
   reviewPackageId: string
   pendingReview?: AiReviewPackageView | null
   reviewDecision?: ReviewPackageDecision | null
   respond?: (result: unknown) => Promise<void>
-  onReviewRequested?: () => void
 }) {
   const respondedRef = useRef(false)
   const matchingReview = pendingReview?.id === reviewPackageId ? pendingReview : null
@@ -74,16 +71,20 @@ function ReviewDecisionCard({
   )
   const needsReviewCount =
     matchingReview?.candidates.filter((candidate) => candidate.clarity !== 'clear').length ?? 0
+  const cardTitle = matchingDecision
+    ? matchingDecision.status === 'confirmed'
+      ? 'AI 建议已确认'
+      : 'AI 建议已放弃'
+    : 'AI 建议待审核'
 
   return (
-    <div className={styles.reviewCard} role="status">
-      <Typography.Text strong>待确认 AI 建议</Typography.Text>
-      <Typography.Text type="secondary">
-        {labels ? `已建议修改${labels}` : '请在中间表单审核本次建议'}
-      </Typography.Text>
-      {needsReviewCount > 0 ? (
-        <Typography.Text type="warning">其中 {needsReviewCount} 项需要重点核对</Typography.Text>
-      ) : null}
+    <Card
+      className={styles.reviewCard}
+      classNames={{ body: styles.reviewCardBody }}
+      size="small"
+      title={cardTitle}
+      role="status"
+    >
       {matchingDecision ? (
         <Typography.Text type="secondary">
           {matchingDecision.status === 'confirmed'
@@ -91,11 +92,17 @@ function ReviewDecisionCard({
             : '本次建议已放弃，草稿未修改。'}
         </Typography.Text>
       ) : (
-        <Button type="link" size="small" className={styles.reviewLink} onClick={onReviewRequested}>
-          查看审核内容
-        </Button>
+        <>
+          <Typography.Text type="secondary">
+            {labels ? `已建议修改${labels}` : '请在中间表单审核本次建议'}
+          </Typography.Text>
+          {needsReviewCount > 0 ? (
+            <Typography.Text type="warning">其中 {needsReviewCount} 项需要重点核对</Typography.Text>
+          ) : null}
+          <Badge status="processing" text="等待你在发团表单中完成审核" />
+        </>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -103,12 +110,10 @@ function ReviewDecisionGate({
   agentId,
   pendingReview,
   reviewDecision,
-  onReviewRequested,
 }: {
   agentId: string
   pendingReview?: AiReviewPackageView | null
   reviewDecision?: ReviewPackageDecision | null
-  onReviewRequested?: () => void
 }) {
   useHumanInTheLoop(
     {
@@ -122,11 +127,10 @@ function ReviewDecisionGate({
           pendingReview={pendingReview}
           reviewDecision={reviewDecision}
           respond={status === 'executing' ? respond : undefined}
-          onReviewRequested={onReviewRequested}
         />
       ),
     },
-    [agentId, onReviewRequested, pendingReview, reviewDecision],
+    [agentId, pendingReview, reviewDecision],
   )
   return null
 }
@@ -246,7 +250,6 @@ export function AiCreateAssistChat({
   pendingReview,
   reviewDecision,
   onReviewPackageSubmitted,
-  onReviewRequested,
 }: AiCreateAssistChatProps) {
   const headers = useMemo(
     () => ({
@@ -294,7 +297,6 @@ export function AiCreateAssistChat({
           agentId={AGENT_ID}
           pendingReview={pendingReview}
           reviewDecision={reviewDecision}
-          onReviewRequested={onReviewRequested}
         />
         <FirstTurnSender agentId={AGENT_ID} runId={runId} />
         <CopilotChat

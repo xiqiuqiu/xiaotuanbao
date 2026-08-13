@@ -10,21 +10,59 @@ export interface SubmitReviewPackageToolConfig {
   modelApiKey?: string
 }
 
-const candidateInputSchema = z.object({
-  fieldKey: z.enum(['name', 'routeName', 'startDate', 'endDate', 'expectedGuestCountHint']),
-  proposedValue: z.union([z.string(), z.number()]),
+const evidenceInputSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('user_message'),
+      excerpt: z.string().trim().min(1).max(2000),
+      messageId: z.string().min(1).optional(),
+    })
+    .strip(),
+  z
+    .object({
+      kind: z.literal('system_derivation'),
+      rule: z.string().trim().min(1).max(200),
+    })
+    .strip(),
+])
+
+const candidateBase = {
   clarity: z.enum(['clear', 'needs_confirmation', 'undetermined']),
-  evidence: z
-    .array(
-      z.object({
-        kind: z.enum(['user_message', 'system_derivation']),
-        excerpt: z.string().optional(),
-        messageId: z.string().optional(),
-        rule: z.string().optional(),
-      }),
-    )
-    .min(1),
-})
+  evidence: z.array(evidenceInputSchema).min(1),
+}
+
+const candidateInputSchema = z.discriminatedUnion('fieldKey', [
+  z.object({
+    fieldKey: z.literal('name'),
+    proposedValue: z.string().trim().min(1).max(200),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('routeName'),
+    proposedValue: z.string().trim().min(1).max(200),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('startDate'),
+    proposedValue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('endDate'),
+    proposedValue: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    ...candidateBase,
+  }),
+  z.object({
+    fieldKey: z.literal('expectedGuestCountHint'),
+    proposedValue: z
+      .number()
+      .int()
+      .min(0)
+      .max(9999)
+      .describe('预计人数的数字，例如 12；不要输出“约12人”等文本'),
+    ...candidateBase,
+  }),
+])
 
 export function createSubmitReviewPackageTool(config: SubmitReviewPackageToolConfig) {
   return createTool({
