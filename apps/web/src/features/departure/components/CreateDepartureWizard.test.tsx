@@ -946,4 +946,53 @@ describe('CreateDepartureWizard', () => {
     expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
+
+  it('does not mark the form saved when assist bootstrap flush fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: {
+        id: 'task-assist',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 2,
+          snapshot: {
+            mode: 'manual',
+            routeName: '喀纳斯阿勒泰10日线',
+            name: '未落盘的团名',
+          },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    const nameInput = await screen.findByLabelText('团名')
+
+    vi.mocked(saveDepartureCreationDraft).mockRejectedValue(new Error('发团创建草稿保存失败'))
+    await user.clear(nameInput)
+    await user.type(nameInput, '未落盘的团名')
+
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(screen.queryByText('发团创建草稿已保存')).not.toBeInTheDocument()
+    expect(screen.getByText('发团创建草稿保存失败')).toBeInTheDocument()
+
+    mockNavigate.mockClear()
+    await user.click(screen.getByRole('button', { name: /返回发团列表/ }))
+    expect(mockNavigate).not.toHaveBeenCalledWith({ to: '/departure' })
+  })
 })

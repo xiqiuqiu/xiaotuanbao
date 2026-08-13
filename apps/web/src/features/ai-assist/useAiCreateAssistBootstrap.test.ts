@@ -66,21 +66,22 @@ describe('useAiCreateAssistBootstrap', () => {
     })
 
     expect(order).toEqual(['flush', 'session'])
-    expect(applySavedDraft).toHaveBeenCalledWith(mockSession.task)
+    expect(applySavedDraft).toHaveBeenCalledWith(mockSession.task, { keepDirty: true })
     expect(syncTaskSearch).toHaveBeenCalledWith('task-assist')
   })
 
-  it('still starts a session when flushDraft throws', async () => {
+  it('still starts a session when flushDraft throws without marking the form saved', async () => {
     const flushDraft = vi.fn(async () => {
       throw new Error('发团创建草稿保存失败')
     })
+    const applySavedDraft = vi.fn()
     const { result } = renderHook(() =>
       useAiCreateAssistBootstrap({
         enabled: true,
         flushDraft,
         buildDraft: () => ({ mode: 'template', routeName: '' }),
         getTaskId: () => null,
-        applySavedDraft: vi.fn(),
+        applySavedDraft,
         syncTaskSearch: vi.fn(),
       }),
     )
@@ -90,6 +91,7 @@ describe('useAiCreateAssistBootstrap', () => {
     })
 
     expect(startAiCreateAssistSession).toHaveBeenCalled()
+    expect(applySavedDraft).toHaveBeenCalledWith(mockSession.task, { keepDirty: true })
     expect(result.current.session?.delegationToken).toBe('deleg-1')
     expect(result.current.error).toBeNull()
   })

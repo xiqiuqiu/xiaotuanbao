@@ -47,7 +47,8 @@ export function useAiCreateAssistBootstrap({
           taskId: getTaskId() ?? undefined,
           draft: buildDraft(),
         })
-        applySavedDraft(nextSession.task)
+        // 只绑定会话 taskId/version；flush 失败或跳过时不得把表单标成已保存。
+        applySavedDraft(nextSession.task, { keepDirty: true })
         syncTaskSearch(nextSession.task.id)
         setSession(nextSession)
         setError(null)
