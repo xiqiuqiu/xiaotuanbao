@@ -25,6 +25,13 @@
   width: 100%;
 }
 
+.selectedTemplate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
 .summaryCard {
   position: sticky;
   top: 16px;

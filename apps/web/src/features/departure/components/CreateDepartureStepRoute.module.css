@@ -2,11 +2,6 @@
   min-width: 0;
 }
 
-.modeBar {
-  width: 280px;
-  margin-bottom: 16px;
-}
-
 .search {
   width: 100%;
   margin-bottom: 16px;
@@ -73,29 +68,6 @@
   z-index: 1;
 }
 
-.selectedTemplateBanner {
-  margin-top: 16px;
-  padding: 16px;
-  background: var(--route-fill);
-  border: 1px solid var(--route-border);
-  border-radius: var(--route-radius);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.selectedTemplateBanner > div {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.selectedMeta {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
 .templateMeta {
   display: flex;
   flex-wrap: wrap;
@@ -103,44 +75,9 @@
   margin-top: 12px;
 }
 
-.manualPanel {
-  max-width: 640px;
-  padding-top: 8px;
-}
-
-.manualPanel h5 {
-  margin-top: 0;
-  margin-bottom: 4px;
-}
-
-.manualForm {
-  margin-top: 24px;
-}
-
-.fullWidth {
-  width: 100%;
-}
-
 @media (max-width: 575px) {
-  .modeBar {
-    width: 100%;
-  }
-
-  .selectedTemplateBanner,
-  .selectedTemplateBanner > div {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .selectedMeta {
-    justify-content: flex-start;
-  }
-
   /* Avoid iOS Safari zooming the page when focusing inputs below 16px. */
-  .routeStep :global(.ant-input),
-  .routeStep :global(.ant-input-number-input),
-  .routeStep :global(.ant-picker-input > input),
-  .routeStep :global(.ant-select-selection-search-input) {
+  .routeStep :global(.ant-input) {
     font-size: 16px;
   }
 }

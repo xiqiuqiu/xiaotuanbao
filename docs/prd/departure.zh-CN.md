@@ -183,7 +183,8 @@ Departure 接口 `@RequireMenu('/departure')`；Finance mutation 接口 `@Requir
 
 | 路径 | 说明 |
 | ---- | ---- |
-| `/departure` | 发团列表 + **新建向导**（两步：选路线 → 填信息；宽 Drawer 或 Modal） |
+| `/departure` | 发团列表 |
+| `/departure/new` | 新建发团（一张表 + 路线来源；复制发团 `?copyFrom=`） |
 | `/departure/$departureId` | 详情页（Tab）；query `tab` 切换 |
 | `/departure/$departureId?tab=overview` | 概览 |
 | `/departure/$departureId?tab=sourceOrders` | 客源管理 |
