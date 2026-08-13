@@ -5,6 +5,7 @@ export interface AiCreateDraftSnapshot {
   routeName: string
   templateId?: string | null
   copyFromDepartureId?: string | null
+  defaultDayCount?: number | null
   name?: string | null
   startDate?: string | null
   endDate?: string | null

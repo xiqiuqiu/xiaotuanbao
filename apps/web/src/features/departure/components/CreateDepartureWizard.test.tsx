@@ -1330,6 +1330,61 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByLabelText('发团类型')).toBeInTheDocument()
   })
 
+  it('shows a read-only templateId overlay on the form without chat write buttons', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({
+      candidates: [
+        {
+          fieldKey: 'templateId',
+          proposedValue: 'tpl-1',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'system_derivation', rule: 'searchRouteTemplates:name_contains_token:川西' }],
+        },
+      ],
+    })
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    })
+
+    vi.mocked(getRouteTemplate).mockResolvedValue({
+      id: 'tpl-1',
+      name: '川西稻城线',
+      defaultDayCount: 8,
+      usageCount: 4,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      segmentCount: 2,
+      resourceCount: 1,
+    })
+
+    renderWizard()
+
+    expect(await screen.findByRole('region', { name: 'AI 阶段审核包' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('常用路线候选')).toHaveTextContent('川西稻城线')
+    expect(screen.getByRole('button', { name: '确认写入草稿' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '采用' })).not.toBeInTheDocument()
+  })
+
   it('confirms the pending package through the user API and writes the returned snapshot', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }

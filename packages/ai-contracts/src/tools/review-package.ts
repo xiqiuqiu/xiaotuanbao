@@ -10,12 +10,17 @@ export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
   version: 1,
 } as const
 
-export const AI_CREATE_TOOL_NAMES = ['getTaskContext', 'submitReviewPackage'] as const
+export const AI_CREATE_TOOL_NAMES = [
+  'getTaskContext',
+  'searchRouteTemplates',
+  'submitReviewPackage',
+] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
 
 export const AI_REVIEWABLE_BASIC_INFO_FIELDS = [
   'name',
   'routeName',
+  'templateId',
   'startDate',
   'endDate',
   'expectedGuestCountHint',
@@ -72,6 +77,13 @@ export const aiReviewCandidateInputSchema = z.discriminatedUnion('fieldKey', [
   z
     .object({
       fieldKey: z.literal('routeName'),
+      proposedValue: z.string().trim().min(1).max(200),
+      ...candidateBase,
+    })
+    .strip(),
+  z
+    .object({
+      fieldKey: z.literal('templateId'),
       proposedValue: z.string().trim().min(1).max(200),
       ...candidateBase,
     })
@@ -182,9 +194,9 @@ export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
 export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreateToolName[] {
   if (hasPendingReview) {
-    return ['getTaskContext']
+    return ['getTaskContext', 'searchRouteTemplates']
   }
-  return ['getTaskContext', 'submitReviewPackage']
+  return ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage']
 }
 
 export type AiCandidateEvidence = z.infer<typeof aiCandidateEvidenceSchema>

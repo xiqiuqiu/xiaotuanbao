@@ -28,6 +28,13 @@ let capturedRenderTool: {
     result?: unknown
   }) => ReactNode
 } = {}
+let capturedSearchRenderTool: {
+  name?: string
+  render?: (props: {
+    status: string
+    result?: unknown
+  }) => ReactNode
+} = {}
 let capturedHumanInTheLoop: {
   name?: string
   render?: ComponentType<{
@@ -79,7 +86,11 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgentContext: (...args: unknown[]) => useAgentContext(...args),
   useAgent: () => ({ agent: { addMessage }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent } }),
-  useRenderTool: (config: typeof capturedRenderTool) => {
+  useRenderTool: (config: { name?: string; render?: (props: never) => ReactNode }) => {
+    if (config.name === 'searchRouteTemplates') {
+      capturedSearchRenderTool = config
+      return
+    }
     capturedRenderTool = config
   },
   useHumanInTheLoop: (config: typeof capturedHumanInTheLoop) => {
@@ -124,6 +135,7 @@ describe('AiCreateAssistChat', () => {
     capturedKit = {}
     capturedChat = {}
     capturedRenderTool = {}
+    capturedSearchRenderTool = {}
     capturedHumanInTheLoop = {}
   })
 
@@ -382,5 +394,41 @@ describe('AiCreateAssistChat', () => {
       screen.getByRole('button', { name: '触发协助错误' }).click()
     })
     expect(screen.getByText('AI 辅助暂时不可用，请稍后重试或继续使用表单')).toBeInTheDocument()
+  })
+
+  it('renders searchRouteTemplates results as read-only chat copy without adopt buttons', () => {
+    render(<AiCreateAssistChat {...chatProps} runId="run-search" />)
+
+    expect(capturedSearchRenderTool.name).toBe('searchRouteTemplates')
+    const empty = capturedSearchRenderTool.render?.({
+      status: 'complete',
+      result: { items: [] },
+    })
+    const results = capturedSearchRenderTool.render?.({
+      status: 'complete',
+      result: {
+        items: [
+          {
+            id: 'tpl-1',
+            name: '川西稻城线',
+            defaultDayCount: 8,
+            usageCount: 4,
+            updatedAt: '2026-08-01T00:00:00.000Z',
+            matchReasons: [{ code: 'name_contains_token', token: '川西' }],
+          },
+        ],
+      },
+    })
+
+    render(
+      <>
+        {empty}
+        {results}
+      </>,
+    )
+    expect(screen.getByText(/没有匹配的常用路线/)).toBeInTheDocument()
+    expect(screen.getByText(/川西稻城线 · 8 天 · 用过 4 次/)).toBeInTheDocument()
+    expect(screen.getByText(/名称包含「川西」/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /采用|确认|选择/ })).not.toBeInTheDocument()
   })
 })

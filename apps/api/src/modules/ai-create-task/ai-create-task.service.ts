@@ -27,10 +27,13 @@ import {
   evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
   getTaskContextOutputSchema,
+  searchRouteTemplatesInputSchema,
+  searchRouteTemplatesOutputSchema,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   type GetTaskContextOutput,
+  type SearchRouteTemplatesOutput,
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
@@ -38,6 +41,7 @@ import type { AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } fr
 import { AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
+import { RouteTemplateService } from '../departure/route-template.service'
 import { AuthService } from '../auth/auth.service'
 import {
   AI_OP_DELEGATION_JWT_AUD,
@@ -132,6 +136,7 @@ export class AiCreateTaskService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly departureService: DepartureService,
+    private readonly routeTemplateService: RouteTemplateService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
@@ -298,6 +303,43 @@ export class AiCreateTaskService {
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
     })
+  }
+
+  async searchRouteTemplatesForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<SearchRouteTemplatesOutput> {
+    let input: ReturnType<typeof searchRouteTemplatesInputSchema.parse>
+    try {
+      input = searchRouteTemplatesInputSchema.parse(rawInput)
+    } catch {
+      throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
+    if (task.status !== AiCreateTaskStatus.IN_PROGRESS || task.departureId) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可查询常用路线')
+    }
+    const run = await this.prisma.aiCreateActivityRun.findFirst({
+      where: {
+        id: caller.runId,
+        taskId: caller.taskId,
+        organizationId: caller.organizationId,
+        creatorUserId: caller.userId,
+      },
+    })
+    if (!run || run.status !== AiCreateActivityRunStatus.running) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const items = await this.routeTemplateService.searchForAgent(caller.organizationId, {
+      keyword: input.keyword,
+      dayCount: input.dayCount,
+    })
+    return searchRouteTemplatesOutputSchema.parse({ items })
   }
 
   async submitReviewPackageForAgent(
@@ -513,6 +555,32 @@ export class AiCreateTaskService {
             },
           },
         })
+      }
+
+      const adoptedTemplateId =
+        typeof submissions.templateId === 'string' ? submissions.templateId.trim() : ''
+      if (adoptedTemplateId) {
+        const template = await tx.routeTemplate.findFirst({
+          where: { id: adoptedTemplateId, organizationId },
+        })
+        if (!template) {
+          await this.writeReviewRecord(tx, {
+            organizationId,
+            packageId: pkg.id,
+            operatorUserId: userId,
+            action: AiReviewRecordAction.confirm,
+            candidates,
+            corrections,
+            submittedValues: submissions,
+            objectVersion: task.draft.version,
+            writeResult: AiReviewWriteResult.validation_failed,
+          })
+          throw new BadRequestException('常用路线已不可用，请重新选择后确认')
+        }
+        merge.nextSnapshot.mode = DepartureCreationDraftMode.TEMPLATE
+        merge.nextSnapshot.templateId = template.id
+        merge.nextSnapshot.routeName = template.name
+        merge.nextSnapshot.defaultDayCount = template.defaultDayCount
       }
 
       try {

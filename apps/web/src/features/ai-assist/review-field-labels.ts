@@ -3,6 +3,7 @@ import type { AiReviewCandidateView, AiReviewableBasicInfoField } from '@xiaotua
 export const REVIEW_FIELD_LABELS: Record<AiReviewableBasicInfoField, string> = {
   name: '团名',
   routeName: '路线',
+  templateId: '常用路线',
   startDate: '出团日期',
   endDate: '结束日期',
   expectedGuestCountHint: '预计人数提示',

@@ -14,6 +14,21 @@ export {
   type GetTaskContextOutput,
 } from './tools/get-task-context'
 export {
+  SEARCH_ROUTE_TEMPLATES_TOOL,
+  SEARCH_ROUTE_TEMPLATES_LIMIT,
+  ROUTE_TEMPLATE_MATCH_REASON_CODES,
+  routeTemplateMatchReasonSchema,
+  searchRouteTemplatesItemSchema,
+  searchRouteTemplatesInputSchema,
+  searchRouteTemplatesModelInputSchema,
+  searchRouteTemplatesOutputSchema,
+  type RouteTemplateMatchReason,
+  type SearchRouteTemplatesItem,
+  type SearchRouteTemplatesInput,
+  type SearchRouteTemplatesModelInput,
+  type SearchRouteTemplatesOutput,
+} from './tools/search-route-templates'
+export {
   SUBMIT_REVIEW_PACKAGE_TOOL,
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
   AI_CREATE_TOOL_NAMES,
@@ -46,6 +61,7 @@ export {
 } from './tools/review-package'
 export {
   DATE_CONSISTENCY_GROUP,
+  ROUTE_CONSISTENCY_GROUP,
   evaluateReviewConfirmMerge,
   type ReviewConfirmSubmission,
   type ReviewConfirmMergeResult,

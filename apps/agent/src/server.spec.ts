@@ -62,8 +62,12 @@ describe('agent server', () => {
     mockFetchTaskContext.mockReset()
   })
 
-  it('exposes getTaskContext and submitReviewPackage', () => {
-    expect(listAgentTools()).toEqual(['getTaskContext', 'submitReviewPackage'])
+  it('exposes getTaskContext, searchRouteTemplates and submitReviewPackage', () => {
+    expect(listAgentTools()).toEqual([
+      'getTaskContext',
+      'searchRouteTemplates',
+      'submitReviewPackage',
+    ])
   })
 
   it('reports health with the readonly tool list without a model key', async () => {
@@ -80,7 +84,7 @@ describe('agent server', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({
         status: 'ok',
-        tools: ['getTaskContext', 'submitReviewPackage'],
+        tools: ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'],
       })
     } finally {
       await new Promise<void>((resolve, reject) =>

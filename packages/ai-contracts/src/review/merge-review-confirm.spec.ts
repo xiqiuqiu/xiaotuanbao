@@ -76,6 +76,83 @@ describe('evaluateReviewConfirmMerge', () => {
     }
   })
 
+  it('treats templateId and routeName as one consistency group', () => {
+    const withTemplate: AiCreateDraftSnapshot = {
+      ...baseline,
+      mode: 'template',
+      templateId: 'tpl-1',
+      routeName: '川西线',
+      defaultDayCount: 8,
+    }
+
+    const routeConflict = evaluateReviewConfirmMerge({
+      baselineSnapshot: withTemplate,
+      currentSnapshot: { ...withTemplate, routeName: '表单已改路线' },
+      submissions: { templateId: 'tpl-2' },
+    })
+    expect(routeConflict).toEqual({
+      status: 'conflict',
+      conflictFields: ['routeName'],
+    })
+
+    const templateConflict = evaluateReviewConfirmMerge({
+      baselineSnapshot: withTemplate,
+      currentSnapshot: { ...withTemplate, templateId: 'tpl-other' },
+      submissions: { routeName: '川西稻城线' },
+    })
+    expect(templateConflict).toEqual({
+      status: 'conflict',
+      conflictFields: ['templateId'],
+    })
+  })
+
+  it('does not rewrite startDate or endDate when adopting a template', () => {
+    const result = evaluateReviewConfirmMerge({
+      baselineSnapshot: baseline,
+      currentSnapshot: baseline,
+      submissions: { templateId: 'tpl-1' },
+    })
+
+    expect(result).toEqual({
+      status: 'ok',
+      nextSnapshot: {
+        ...baseline,
+        mode: 'template',
+        templateId: 'tpl-1',
+      },
+    })
+    if (result.status === 'ok') {
+      expect(result.nextSnapshot.startDate).toBe('2026-09-01')
+      expect(result.nextSnapshot.endDate).toBe('2026-09-05')
+    }
+  })
+
+  it('clears template selection when only a manual routeName is submitted', () => {
+    const withTemplate: AiCreateDraftSnapshot = {
+      ...baseline,
+      mode: 'template',
+      templateId: 'tpl-1',
+      defaultDayCount: 8,
+    }
+
+    const result = evaluateReviewConfirmMerge({
+      baselineSnapshot: withTemplate,
+      currentSnapshot: withTemplate,
+      submissions: { routeName: '手工川西线' },
+    })
+
+    expect(result).toEqual({
+      status: 'ok',
+      nextSnapshot: {
+        ...withTemplate,
+        mode: 'manual',
+        templateId: null,
+        routeName: '手工川西线',
+        defaultDayCount: null,
+      },
+    })
+  })
+
   it('writes explicit null submissions for dates and expectedGuestCountHint', () => {
     const result = evaluateReviewConfirmMerge({
       baselineSnapshot: baseline,

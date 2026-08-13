@@ -1,7 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import type { SearchRouteTemplatesItem } from '@xiaotuanbao/ai-contracts'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type { CreateRouteTemplateDto } from './dto/route-template.dto'
+import { searchRouteTemplates } from './route-template-search'
 
 export interface RouteTemplateCardSummary {
   id: string
@@ -37,6 +39,36 @@ export class RouteTemplateService {
     })
 
     return templates.map((template) => this.toCardSummary(template))
+  }
+
+  async searchForAgent(
+    organizationId: string,
+    query: { keyword?: string; dayCount?: number },
+  ): Promise<SearchRouteTemplatesItem[]> {
+    const templates = await this.prisma.routeTemplate.findMany({
+      where: { organizationId },
+      include: {
+        segments: {
+          select: {
+            sortOrder: true,
+            name: true,
+            destination: true,
+          },
+        },
+      },
+    })
+
+    return searchRouteTemplates(
+      templates.map((template) => ({
+        id: template.id,
+        name: template.name,
+        defaultDayCount: template.defaultDayCount,
+        usageCount: template.usageCount,
+        updatedAt: template.updatedAt,
+        segments: template.segments,
+      })),
+      query,
+    )
   }
 
   async getById(organizationId: string, id: string): Promise<RouteTemplateDetailSummary> {

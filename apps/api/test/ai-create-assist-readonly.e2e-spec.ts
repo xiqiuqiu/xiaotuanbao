@@ -137,7 +137,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
             creatorUserId: ownerUserId,
           },
           objectVersion: versionBefore,
-          availableCapabilities: ['getTaskContext', 'submitReviewPackage'],
+          availableCapabilities: ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'],
           pending: { hasPendingReview: false, reviewPackageId: null },
           fieldCoverage: {
             filled: ['name', 'routeName', 'startDate', 'endDate', 'ownerUserId', 'departureType'],

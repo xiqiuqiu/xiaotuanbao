@@ -9,6 +9,11 @@ export const DATE_CONSISTENCY_GROUP: readonly AiReviewableBasicInfoField[] = [
   'endDate',
 ]
 
+export const ROUTE_CONSISTENCY_GROUP: readonly AiReviewableBasicInfoField[] = [
+  'templateId',
+  'routeName',
+]
+
 export type ReviewConfirmSubmission = Partial<
   Record<AiReviewableBasicInfoField, string | number | null>
 >
@@ -40,7 +45,19 @@ function fieldsToGuard(
       guarded.add(field)
     }
   }
+  if (ROUTE_CONSISTENCY_GROUP.some((field) => guarded.has(field))) {
+    for (const field of ROUTE_CONSISTENCY_GROUP) {
+      guarded.add(field)
+    }
+  }
   return guarded
+}
+
+function adoptingTemplateId(submissions: ReviewConfirmSubmission): string | null {
+  const value = submissions.templateId
+  if (typeof value !== 'string') return null
+  const text = value.trim()
+  return text.length > 0 ? text : null
 }
 
 export function evaluateReviewConfirmMerge(args: {
@@ -61,6 +78,8 @@ export function evaluateReviewConfirmMerge(args: {
   }
 
   const nextSnapshot: AiCreateDraftSnapshot = { ...args.currentSnapshot }
+  const templateId = adoptingTemplateId(args.submissions)
+
   for (const field of submittedFields) {
     const value = args.submissions[field]
     if (value === undefined) continue
@@ -69,9 +88,21 @@ export function evaluateReviewConfirmMerge(args: {
         value === null || value === '' ? null : Number(value)
       continue
     }
+    if (field === 'templateId') {
+      if (templateId) {
+        nextSnapshot.mode = 'template'
+        nextSnapshot.templateId = templateId
+      }
+      continue
+    }
     const text = value == null ? '' : String(value).trim()
     if (field === 'routeName') {
       nextSnapshot.routeName = text
+      if (!templateId) {
+        nextSnapshot.mode = 'manual'
+        nextSnapshot.templateId = null
+        nextSnapshot.defaultDayCount = null
+      }
       continue
     }
     if (field === 'name') {
@@ -82,7 +113,9 @@ export function evaluateReviewConfirmMerge(args: {
       nextSnapshot.startDate = text.length > 0 ? text : null
       continue
     }
-    nextSnapshot.endDate = text.length > 0 ? text : null
+    if (field === 'endDate') {
+      nextSnapshot.endDate = text.length > 0 ? text : null
+    }
   }
 
   return { status: 'ok', nextSnapshot }

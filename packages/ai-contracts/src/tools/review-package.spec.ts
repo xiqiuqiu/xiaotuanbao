@@ -49,7 +49,11 @@ describe('submitReviewPackage contract v1', () => {
       name: 'submitReviewPackage',
       version: 1,
     })
-    expect(AI_CREATE_TOOL_NAMES).toEqual(['getTaskContext', 'submitReviewPackage'])
+    expect(AI_CREATE_TOOL_NAMES).toEqual([
+      'getTaskContext',
+      'searchRouteTemplates',
+      'submitReviewPackage',
+    ])
   })
 
   it('accepts basic-info candidates with message evidence and strips confirm actions', () => {
@@ -178,8 +182,36 @@ describe('submitReviewPackage contract v1', () => {
   it('freezes submitReviewPackage while a package is pending', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
+      'searchRouteTemplates',
       'submitReviewPackage',
     ])
-    expect(capabilitiesForPendingReview(true)).toEqual(['getTaskContext'])
+    expect(capabilitiesForPendingReview(true)).toEqual([
+      'getTaskContext',
+      'searchRouteTemplates',
+    ])
+  })
+
+  it('accepts templateId in the same basic_info_draft unit as name and dates', () => {
+    const parsed = submitReviewPackageInputSchema.parse({
+      taskId: 'task-1',
+      runId: 'run-1',
+      objectVersion: 2,
+      candidates: [
+        validCandidate,
+        {
+          fieldKey: 'templateId',
+          proposedValue: 'tpl-1',
+          clarity: 'clear',
+          evidence: [
+            { kind: 'system_derivation', rule: 'searchRouteTemplates:name_contains_token:川西' },
+          ],
+        },
+      ],
+    })
+
+    expect(parsed.candidates.map((candidate) => candidate.fieldKey)).toEqual([
+      'name',
+      'templateId',
+    ])
   })
 })

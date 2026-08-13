@@ -151,7 +151,10 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       runId: opened.runId,
     }).expect(200)
     expect(context.body.data.pending.hasPendingReview).toBe(true)
-    expect(context.body.data.availableCapabilities).toEqual(['getTaskContext'])
+    expect(context.body.data.availableCapabilities).toEqual([
+      'getTaskContext',
+      'searchRouteTemplates',
+    ])
   })
 
   it('freezes a second submit until the pending package is rejected', async () => {

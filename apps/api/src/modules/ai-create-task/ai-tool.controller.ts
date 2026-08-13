@@ -33,4 +33,13 @@ export class AiToolController {
   ) {
     return this.aiCreateTaskService.submitReviewPackageForAgent(request.user, body)
   }
+
+  @Post('v1/search-route-templates')
+  @HttpCode(200)
+  searchRouteTemplates(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiCreateTaskService.searchRouteTemplatesForAgent(request.user, body)
+  }
 }
