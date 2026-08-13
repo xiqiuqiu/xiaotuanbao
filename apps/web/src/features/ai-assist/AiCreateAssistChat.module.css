@@ -21,3 +21,16 @@
   font-size: 12px;
   color: inherit;
 }
+
+.reviewCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+}
+
+.reviewLink {
+  height: auto;
+  padding: 0;
+}

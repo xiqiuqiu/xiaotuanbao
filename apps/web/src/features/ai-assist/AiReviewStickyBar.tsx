@@ -26,6 +26,7 @@ export function AiReviewStickyBar({
       className={styles.bar}
       role="region"
       aria-label="AI 阶段审核包"
+      tabIndex={-1}
       style={{
         background: token.colorBgContainer,
         borderBottomColor: token.colorBorderSecondary,

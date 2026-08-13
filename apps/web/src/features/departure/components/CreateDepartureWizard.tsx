@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { Button, Card, Form, Grid, Spin, Steps, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import type { AiCreateTaskSummary, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
+import type { ReviewPackageDecision } from '@xiaotuanbao/ai-contracts'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -89,6 +90,7 @@ export function CreateDepartureWizard() {
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
+  const [reviewDecision, setReviewDecision] = useState<ReviewPackageDecision | null>(null)
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -568,6 +570,13 @@ export function CreateDepartureWizard() {
       })
     },
     onSuccess: (summary) => {
+      if (pendingReview) {
+        setReviewDecision({
+          reviewPackageId: pendingReview.id,
+          status: 'confirmed',
+          snapshotVersion: summary.draft.version,
+        })
+      }
       applyConfirmedTask(summary)
       message.success('已将确认值写入发团创建草稿')
     },
@@ -605,6 +614,9 @@ export function CreateDepartureWizard() {
       return rejectAiReviewPackage(taskId, pendingReview.id)
     },
     onSuccess: (summary) => {
+      if (pendingReview) {
+        setReviewDecision({ reviewPackageId: pendingReview.id, status: 'rejected' })
+      }
       applySavedDraft(summary)
       queryClient.setQueryData(['ai-create-task', summary.id], summary)
       message.success('已拒绝 AI 建议，发团创建草稿未改动')
@@ -618,6 +630,12 @@ export function CreateDepartureWizard() {
     setAssistPaneCollapsed(false)
     void bootstrap()
   }, [bootstrap, setAssistPaneCollapsed])
+
+  const showReviewWorkspace = useCallback(() => {
+    const reviewRegion = document.querySelector<HTMLElement>('[aria-label="AI 阶段审核包"]')
+    reviewRegion?.scrollIntoView({ block: 'start' })
+    reviewRegion?.focus({ preventScroll: true })
+  }, [])
 
   const ASSIST_PANE_EXIT_MS = 400 /* 480px slide; must match AssistPane.module.css 0.4s */
 
@@ -650,17 +668,23 @@ export function CreateDepartureWizard() {
     }
 
     if (session) {
+      const currentTask = taskReview ?? session.task
       setContent(
         <AiCreateAssistChat
           agentRuntimeUrl={session.agentRuntimeUrl}
           delegationToken={session.delegationToken}
           taskId={session.task.id}
           runId={session.runId}
-          snapshotVersion={session.task.draft.version}
+          snapshotVersion={currentTask.draft.version}
           stageKey="basic_info"
           runStatus="idle"
-          reviewPackageId={session.task.pendingReview?.id ?? null}
+          reviewPackageId={currentTask.pendingReview?.id ?? null}
+          progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
+          pendingReview={currentTask.pendingReview}
+          reviewDecision={reviewDecision}
+          onReviewRequested={showReviewWorkspace}
           onReviewPackageSubmitted={() => {
+            setReviewDecision(null)
             void refetchTaskReviewRef.current()
           }}
         />,
@@ -685,7 +709,15 @@ export function CreateDepartureWizard() {
         setContent(null)
       }
     }
-  }, [assistAvailability?.enabled, error, session, setContent])
+  }, [
+    assistAvailability?.enabled,
+    error,
+    reviewDecision,
+    session,
+    setContent,
+    showReviewWorkspace,
+    taskReview,
+  ])
 
   const showSteps = !isCopyMode && !copyFromId && !searchTaskId
   const stepEnterKey = showCopyBootstrap

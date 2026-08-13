@@ -15,6 +15,7 @@ export {
 } from './tools/get-task-context'
 export {
   SUBMIT_REVIEW_PACKAGE_TOOL,
+  AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
   AI_CREATE_TOOL_NAMES,
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   AI_USER_ONLY_BASIC_INFO_FIELDS,
@@ -28,6 +29,8 @@ export {
   submitReviewPackageInputSchema,
   submitReviewPackageModelInputSchema,
   submitReviewPackageOutputSchema,
+  awaitReviewPackageDecisionInputSchema,
+  reviewPackageDecisionSchema,
   type AiCreateToolName,
   type AiReviewableBasicInfoField,
   type AiCandidateClarity,
@@ -38,6 +41,8 @@ export {
   type SubmitReviewPackageInput,
   type SubmitReviewPackageModelInput,
   type SubmitReviewPackageOutput,
+  type AwaitReviewPackageDecisionInput,
+  type ReviewPackageDecision,
 } from './tools/review-package'
 export {
   DATE_CONSISTENCY_GROUP,

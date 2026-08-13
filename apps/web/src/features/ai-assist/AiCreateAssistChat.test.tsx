@@ -1,7 +1,9 @@
-import { act, cleanup, render, screen } from '@testing-library/react'
-import { StrictMode, type ReactNode } from 'react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
+import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
 
@@ -26,6 +28,18 @@ let capturedRenderTool: {
     parameters?: { candidates?: Array<{ fieldKey: string }> }
     result?: unknown
   }) => ReactNode
+} = {}
+let capturedHumanInTheLoop: {
+  name?: string
+  render?: ComponentType<{
+    name: string
+    description: string
+    toolCallId: string
+    args: { reviewPackageId: string }
+    status: 'executing'
+    result: undefined
+    respond: (result: unknown) => Promise<void>
+  }>
 } = {}
 
 vi.mock('@copilotkit/react-core/v2', () => ({
@@ -69,6 +83,9 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useRenderTool: (config: typeof capturedRenderTool) => {
     capturedRenderTool = config
   },
+  useHumanInTheLoop: (config: typeof capturedHumanInTheLoop) => {
+    capturedHumanInTheLoop = config
+  },
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -83,6 +100,24 @@ const chatProps = {
   runStatus: 'idle' as const,
 }
 
+const pendingReview: AiReviewPackageView = {
+  id: 'pkg-1',
+  status: 'pending',
+  confirmationUnit: 'basic_info_draft',
+  baseObjectVersion: 1,
+  runId: 'run-1',
+  candidates: [
+    {
+      fieldKey: 'name',
+      proposedValue: '八月川西团',
+      userCorrectedValue: null,
+      clarity: 'clear',
+      status: 'pending',
+      evidence: [{ kind: 'user_message', excerpt: '八月川西团' }],
+    },
+  ],
+}
+
 describe('AiCreateAssistChat', () => {
   afterEach(() => {
     cleanup()
@@ -90,6 +125,7 @@ describe('AiCreateAssistChat', () => {
     capturedKit = {}
     capturedChat = {}
     capturedRenderTool = {}
+    capturedHumanInTheLoop = {}
   })
 
   it('passes runtimeUrl, identity headers and the readonly agent id', () => {
@@ -163,6 +199,112 @@ describe('AiCreateAssistChat', () => {
       await Promise.resolve()
     })
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for the form decision, opens the review area, and responds after confirmation', async () => {
+    const user = userEvent.setup()
+    const onReviewRequested = vi.fn()
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-hitl"
+        pendingReview={{
+          ...pendingReview,
+          candidates: pendingReview.candidates.map((candidate) => ({
+            ...candidate,
+            clarity: 'needs_confirmation' as const,
+          })),
+        }}
+        onReviewRequested={onReviewRequested}
+      />,
+    )
+
+    expect(capturedHumanInTheLoop.name).toBe('awaitReviewPackageDecision')
+    const RenderHitl = capturedHumanInTheLoop.render!
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-1',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const card = render(createElement(RenderHitl, hitlProps))
+
+    expect(screen.getByText('待确认 AI 建议')).toBeInTheDocument()
+    expect(screen.getByText('已建议修改团名')).toBeInTheDocument()
+    expect(screen.getByText('其中 1 项需要重点核对')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认写入草稿' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝建议' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '查看审核内容' }))
+    expect(onReviewRequested).toHaveBeenCalledTimes(1)
+    expect(respond).not.toHaveBeenCalled()
+
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-hitl"
+        pendingReview={null}
+        reviewDecision={{
+          reviewPackageId: 'pkg-1',
+          status: 'confirmed',
+          snapshotVersion: 2,
+        }}
+        onReviewRequested={onReviewRequested}
+      />,
+    )
+    const UpdatedRenderHitl = capturedHumanInTheLoop.render!
+    card.rerender(createElement(UpdatedRenderHitl, hitlProps))
+
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({
+        reviewPackageId: 'pkg-1',
+        status: 'confirmed',
+        snapshotVersion: 2,
+      })
+    })
+    expect(respond).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps waiting without a decision and returns a rejection only after the user API succeeds', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-reject"
+        pendingReview={pendingReview}
+        reviewDecision={null}
+      />,
+    )
+    const RenderHitl = capturedHumanInTheLoop.render!
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-reject',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const card = render(createElement(RenderHitl, hitlProps))
+
+    expect(respond).not.toHaveBeenCalled()
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-reject"
+        pendingReview={null}
+        reviewDecision={{ reviewPackageId: 'pkg-1', status: 'rejected' }}
+      />,
+    )
+    card.rerender(createElement(capturedHumanInTheLoop.render!, hitlProps))
+
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({ reviewPackageId: 'pkg-1', status: 'rejected' })
+    })
+    expect(screen.getByText('本次建议已放弃，草稿未修改。')).toBeInTheDocument()
   })
 
   it('sends the first-turn prompt once even under StrictMode', () => {

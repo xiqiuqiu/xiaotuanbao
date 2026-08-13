@@ -1,9 +1,12 @@
 import {
+  AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
   AI_CREATE_TOOL_NAMES,
   SUBMIT_REVIEW_PACKAGE_TOOL,
   capabilitiesForPendingReview,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
+  awaitReviewPackageDecisionInputSchema,
+  reviewPackageDecisionSchema,
 } from './review-package'
 
 const validCandidate = {
@@ -14,6 +17,33 @@ const validCandidate = {
 }
 
 describe('submitReviewPackage contract v1', () => {
+  it('defines a frontend HITL decision contract without granting a business write capability', () => {
+    expect(AWAIT_REVIEW_PACKAGE_DECISION_TOOL).toEqual({
+      name: 'awaitReviewPackageDecision',
+      version: 1,
+    })
+    expect(
+      awaitReviewPackageDecisionInputSchema.parse({
+        reviewPackageId: 'pkg-1',
+        ignored: 'stripped',
+      }),
+    ).toEqual({ reviewPackageId: 'pkg-1' })
+    expect(
+      reviewPackageDecisionSchema.parse({
+        reviewPackageId: 'pkg-1',
+        status: 'confirmed',
+        snapshotVersion: 3,
+      }),
+    ).toEqual({ reviewPackageId: 'pkg-1', status: 'confirmed', snapshotVersion: 3 })
+    expect(
+      reviewPackageDecisionSchema.parse({
+        reviewPackageId: 'pkg-1',
+        status: 'rejected',
+      }),
+    ).toEqual({ reviewPackageId: 'pkg-1', status: 'rejected' })
+    expect(AI_CREATE_TOOL_NAMES).not.toContain('awaitReviewPackageDecision')
+  })
+
   it('declares the versioned tool name among AI create tools', () => {
     expect(SUBMIT_REVIEW_PACKAGE_TOOL).toEqual({
       name: 'submitReviewPackage',

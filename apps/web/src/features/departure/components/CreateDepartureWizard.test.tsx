@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Modal, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { StrictMode, type ReactNode } from 'react'
+import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { AiCreateAssistSession, AiReviewPackageView, DepartureSummary } from '@/types/api'
@@ -17,6 +17,19 @@ import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
 let mockSearch: { copyFrom?: string; taskId?: string } = {}
+const hitlRegistration = vi.hoisted(() => ({
+  current: null as null | {
+    render: ComponentType<{
+      name: string
+      description: string
+      toolCallId: string
+      args: { reviewPackageId: string }
+      status: 'executing'
+      result: undefined
+      respond: (result: unknown) => Promise<void>
+    }>
+  },
+}))
 
 const mockUser = {
   id: 'user-1',
@@ -92,6 +105,9 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent: vi.fn() } }),
   useRenderTool: vi.fn(),
+  useHumanInTheLoop: (config: NonNullable<typeof hitlRegistration.current>) => {
+    hitlRegistration.current = config
+  },
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -251,6 +267,7 @@ describe('CreateDepartureWizard', () => {
     message.destroy()
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
+    hitlRegistration.current = null
   })
 
   beforeEach(() => {
@@ -1181,6 +1198,17 @@ describe('CreateDepartureWizard', () => {
       pendingReview: pending,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: restored,
+      runId: 'run-1',
+      delegationToken: 'deleg-1',
+      agentRuntimeUrl: '/copilotkit',
+      expiresAt: '2026-01-01T00:10:00.000Z',
+    })
     vi.mocked(confirmAiReviewPackage).mockResolvedValue({
       ...restored,
       draft: {
@@ -1196,6 +1224,19 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await screen.findByRole('button', { name: '确认写入草稿' })
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    await screen.findByTestId('copilot-chat')
+    const respond = vi.fn().mockResolvedValue(undefined)
+    const hitlProps = {
+      name: 'awaitReviewPackageDecision',
+      description: '等待 User 审核 AI 候选',
+      toolCallId: 'call-1',
+      args: { reviewPackageId: 'pkg-1' },
+      status: 'executing' as const,
+      result: undefined,
+      respond,
+    }
+    const hitl = render(createElement(hitlRegistration.current!.render, hitlProps))
     fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
 
@@ -1207,6 +1248,14 @@ describe('CreateDepartureWizard', () => {
     })
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
+    })
+    hitl.rerender(createElement(hitlRegistration.current!.render, hitlProps))
+    await waitFor(() => {
+      expect(respond).toHaveBeenCalledWith({
+        reviewPackageId: 'pkg-1',
+        status: 'confirmed',
+        snapshotVersion: 3,
+      })
     })
     expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
   })

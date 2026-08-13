@@ -5,6 +5,11 @@ export const SUBMIT_REVIEW_PACKAGE_TOOL = {
   version: 1,
 } as const
 
+export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
+  name: 'awaitReviewPackageDecision',
+  version: 1,
+} as const
+
 export const AI_CREATE_TOOL_NAMES = ['getTaskContext', 'submitReviewPackage'] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
 
@@ -151,6 +156,28 @@ export const submitReviewPackageOutputSchema = z
   })
   .strip()
 
+export const awaitReviewPackageDecisionInputSchema = z
+  .object({
+    reviewPackageId: z.string().min(1),
+  })
+  .strip()
+
+export const reviewPackageDecisionSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      reviewPackageId: z.string().min(1),
+      status: z.literal('confirmed'),
+      snapshotVersion: z.number().int().positive(),
+    })
+    .strip(),
+  z
+    .object({
+      reviewPackageId: z.string().min(1),
+      status: z.literal('rejected'),
+    })
+    .strip(),
+])
+
 export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
 export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreateToolName[] {
@@ -165,3 +192,7 @@ export type AiReviewCandidateInput = z.infer<typeof aiReviewCandidateInputSchema
 export type SubmitReviewPackageInput = z.infer<typeof submitReviewPackageInputSchema>
 export type SubmitReviewPackageModelInput = z.infer<typeof submitReviewPackageModelInputSchema>
 export type SubmitReviewPackageOutput = z.infer<typeof submitReviewPackageOutputSchema>
+export type AwaitReviewPackageDecisionInput = z.infer<
+  typeof awaitReviewPackageDecisionInputSchema
+>
+export type ReviewPackageDecision = z.infer<typeof reviewPackageDecisionSchema>
