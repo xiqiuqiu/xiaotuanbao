@@ -141,10 +141,10 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
         {
           fieldKey: 'name',
           proposedValue: `${testPrefix}-候选团名`,
-          userCorrectedValue: null,
         },
       ],
     })
+    expect(after.body.data.pendingReview.candidates[0].userCorrectedValue).toBeUndefined()
 
     const context = await agentContext(opened.delegationToken, {
       taskId: opened.taskId,
@@ -252,6 +252,56 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       writeResult: 'success',
       operatorUserId: ownerUserId,
     })
+  })
+
+  it('lets the user clear a date and guest-count candidate through patch and confirm', async () => {
+    const opened = await openTask()
+    const submitted = await agentSubmit(opened.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.runId,
+      objectVersion: opened.version,
+      candidates: [
+        {
+          fieldKey: 'startDate',
+          proposedValue: '2026-09-08',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', excerpt: '9月8日出团' }],
+        },
+        {
+          fieldKey: 'expectedGuestCountHint',
+          proposedValue: 12,
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
+        },
+      ],
+    }).expect(200)
+    const packageId = submitted.body.data.reviewPackageId as string
+
+    const patched = await authRequest(app, coordinatorToken)
+      .patch(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}`)
+      .send({ corrections: { startDate: null, expectedGuestCountHint: null } })
+      .expect(200)
+    expect(patched.body.data.draft.snapshot.startDate).toBe('2026-09-01')
+    expect(patched.body.data.draft.snapshot.expectedGuestCountHint).toBe(8)
+    expect(patched.body.data.pendingReview.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: 'startDate', userCorrectedValue: null }),
+        expect.objectContaining({ fieldKey: 'expectedGuestCountHint', userCorrectedValue: null }),
+      ]),
+    )
+
+    const confirmed = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .send({
+        expectedVersion: opened.version,
+        corrections: { startDate: null, expectedGuestCountHint: null },
+      })
+      .expect(200)
+
+    expect(confirmed.body.data.pendingReview).toBeNull()
+    expect(confirmed.body.data.draft.snapshot.startDate).toBeNull()
+    expect(confirmed.body.data.draft.snapshot.expectedGuestCountHint).toBeNull()
+    expect(confirmed.body.data.draft.snapshot.endDate).toBe('2026-09-05')
   })
 
   it('rejects stale candidates after overlapping draft changes and keeps them out of the draft', async () => {

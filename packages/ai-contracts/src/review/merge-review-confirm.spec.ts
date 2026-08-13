@@ -75,4 +75,21 @@ describe('evaluateReviewConfirmMerge', () => {
       expect(result.nextSnapshot.name).toBe('八月川西团')
     }
   })
+
+  it('writes explicit null submissions for dates and expectedGuestCountHint', () => {
+    const result = evaluateReviewConfirmMerge({
+      baselineSnapshot: baseline,
+      currentSnapshot: baseline,
+      submissions: { startDate: null, expectedGuestCountHint: null },
+    })
+
+    expect(result).toEqual({
+      status: 'ok',
+      nextSnapshot: {
+        ...baseline,
+        startDate: null,
+        expectedGuestCountHint: null,
+      },
+    })
+  })
 })

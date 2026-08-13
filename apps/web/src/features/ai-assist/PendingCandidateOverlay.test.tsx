@@ -6,13 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AiReviewCandidateView } from '@xiaotuanbao/shared'
 import { PendingCandidateOverlay } from './PendingCandidateOverlay'
 
-const candidate: AiReviewCandidateView = {
-  fieldKey: 'name',
-  proposedValue: '八月川西团',
-  userCorrectedValue: null,
-  clarity: 'clear',
-  status: 'pending',
-  evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+function candidate(
+  overrides: Partial<AiReviewCandidateView> & Pick<AiReviewCandidateView, 'fieldKey' | 'proposedValue'>,
+): AiReviewCandidateView {
+  return {
+    clarity: 'clear',
+    status: 'pending',
+    evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+    ...overrides,
+  }
 }
 
 describe('PendingCandidateOverlay', () => {
@@ -27,7 +29,7 @@ describe('PendingCandidateOverlay', () => {
       <ConfigProvider locale={zhCN}>
         <PendingCandidateOverlay
           fieldKey="name"
-          candidate={candidate}
+          candidate={candidate({ fieldKey: 'name', proposedValue: '八月川西团' })}
           savedDisplay="喀纳斯阿勒泰10日线 8月1日团"
           onCorrect={onCorrect}
         />
@@ -44,5 +46,77 @@ describe('PendingCandidateOverlay', () => {
 
     fireEvent.change(input, { target: { value: '修正团名' } })
     expect(onCorrect).toHaveBeenCalledWith('修正团名')
+  })
+
+  it('keeps an explicit date clear empty instead of restoring the proposed value', () => {
+    const onCorrect = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="startDate"
+          candidate={candidate({
+            fieldKey: 'startDate',
+            proposedValue: '2026-09-01',
+            userCorrectedValue: null,
+          })}
+          savedDisplay="2026-08-01"
+          onCorrect={onCorrect}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByLabelText('出团日期候选')).toHaveValue('')
+  })
+
+  it('keeps an explicit guest-count clear empty instead of restoring the proposed value', () => {
+    const onCorrect = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="expectedGuestCountHint"
+          candidate={candidate({
+            fieldKey: 'expectedGuestCountHint',
+            proposedValue: 8,
+            userCorrectedValue: null,
+          })}
+          savedDisplay="8"
+          onCorrect={onCorrect}
+        />
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
+  })
+
+  it('reports clearing a date and guest-count candidate as null', () => {
+    const onCorrect = vi.fn()
+    const { rerender } = render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="startDate"
+          candidate={candidate({ fieldKey: 'startDate', proposedValue: '2026-09-01' })}
+          savedDisplay="2026-08-01"
+          onCorrect={onCorrect}
+        />
+      </ConfigProvider>,
+    )
+
+    fireEvent.mouseDown(screen.getByLabelText('出团日期候选'))
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    expect(onCorrect).toHaveBeenCalledWith(null)
+
+    onCorrect.mockClear()
+    rerender(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="expectedGuestCountHint"
+          candidate={candidate({ fieldKey: 'expectedGuestCountHint', proposedValue: 8 })}
+          savedDisplay="8"
+          onCorrect={onCorrect}
+        />
+      </ConfigProvider>,
+    )
+    fireEvent.change(screen.getByLabelText('预计人数提示候选'), { target: { value: '' } })
+    expect(onCorrect).toHaveBeenCalledWith(null)
   })
 })

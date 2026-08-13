@@ -237,7 +237,7 @@ function mockPendingReview(
       {
         fieldKey: 'name',
         proposedValue: '八月川西团',
-        userCorrectedValue: null,
+        userCorrectedValue: undefined,
         clarity: 'clear',
         status: 'pending',
         evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
@@ -1363,7 +1363,7 @@ describe('CreateDepartureWizard', () => {
         {
           fieldKey: 'name',
           proposedValue: '八月川西团',
-          userCorrectedValue: null,
+          userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
           evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
@@ -1371,7 +1371,7 @@ describe('CreateDepartureWizard', () => {
         {
           fieldKey: 'expectedGuestCountHint',
           proposedValue: 8,
-          userCorrectedValue: null,
+          userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
           evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
@@ -1424,5 +1424,66 @@ describe('CreateDepartureWizard', () => {
     })
     expect(screen.getByLabelText('团名候选')).toHaveValue('修正团名')
     expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('12')
+  })
+
+  it('keeps an explicit guest-count clear through patch instead of restoring the proposal', async () => {
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({
+      candidates: [
+        {
+          fieldKey: 'expectedGuestCountHint',
+          proposedValue: 8,
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', excerpt: '大概8人' }],
+        },
+      ],
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+          expectedGuestCountHint: 8,
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({
+      ...restored,
+      pendingReview: {
+        ...pending,
+        candidates: pending.candidates.map((item) =>
+          item.fieldKey in payload.corrections
+            ? { ...item, userCorrectedValue: payload.corrections[item.fieldKey] ?? null }
+            : item,
+        ),
+      },
+    }))
+
+    renderWizard()
+    fireEvent.change(await screen.findByLabelText('预计人数提示候选'), { target: { value: '' } })
+
+    await waitFor(() => {
+      expect(patchAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        corrections: { expectedGuestCountHint: null },
+      })
+    })
+    expect(screen.getByLabelText('预计人数提示候选')).toHaveValue('')
   })
 })

@@ -27,7 +27,10 @@ export function PendingCandidateOverlay({
 }: PendingCandidateOverlayProps) {
   const { token } = theme.useToken()
   const [evidenceOpen, setEvidenceOpen] = useState(false)
-  const value = candidate.userCorrectedValue ?? candidate.proposedValue
+  const value =
+    candidate.userCorrectedValue !== undefined
+      ? candidate.userCorrectedValue
+      : candidate.proposedValue
 
   return (
     <div
@@ -44,7 +47,7 @@ export function PendingCandidateOverlay({
           max={9999}
           precision={0}
           style={{ width: '100%' }}
-          value={typeof value === 'number' ? value : Number(value)}
+          value={value == null ? null : Number(value)}
           onChange={(next) => onCorrect(next)}
         />
       ) : fieldKey === 'startDate' || fieldKey === 'endDate' ? (

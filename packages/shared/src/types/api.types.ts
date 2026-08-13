@@ -902,7 +902,7 @@ export type AiCandidateEvidence =
 export interface AiReviewCandidateView {
   fieldKey: AiReviewableBasicInfoField
   proposedValue: string | number
-  userCorrectedValue: string | number | null
+  userCorrectedValue?: string | number | null
   clarity: AiCandidateClarity
   status: 'pending' | 'confirmed' | 'rejected' | 'superseded'
   evidence: AiCandidateEvidence[]

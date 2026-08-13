@@ -8,7 +8,7 @@ import type { AiReviewCandidateView, AiReviewPackageView } from '@xiaotuanbao/sh
 export interface StoredReviewCandidate {
   fieldKey: AiReviewableBasicInfoField
   proposedValue: string | number
-  userCorrectedValue: string | number | null
+  userCorrectedValue?: string | number | null
   clarity: 'clear' | 'needs_confirmation' | 'undetermined'
   status: 'pending' | 'confirmed' | 'rejected' | 'superseded'
   evidence: AiReviewCandidateView['evidence']
@@ -18,7 +18,6 @@ export function toStoredCandidates(candidates: AiReviewCandidateInput[]): Stored
   return candidates.map((candidate) => ({
     fieldKey: candidate.fieldKey,
     proposedValue: candidate.proposedValue,
-    userCorrectedValue: null,
     clarity: candidate.clarity,
     status: 'pending',
     evidence: candidate.evidence,
@@ -34,8 +33,28 @@ export function parseStoredCandidates(raw: unknown): StoredReviewCandidate[] {
   })
 }
 
-export function effectiveCandidateValue(candidate: StoredReviewCandidate): string | number {
-  return candidate.userCorrectedValue ?? candidate.proposedValue
+export function effectiveCandidateValue(
+  candidate: StoredReviewCandidate,
+): string | number | null {
+  return candidate.userCorrectedValue !== undefined
+    ? candidate.userCorrectedValue
+    : candidate.proposedValue
+}
+
+export function reviewConfirmValues(candidates: StoredReviewCandidate[]): {
+  corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+  submissions: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+} {
+  return {
+    corrections: Object.fromEntries(
+      candidates
+        .filter((candidate) => candidate.userCorrectedValue !== undefined)
+        .map((candidate) => [candidate.fieldKey, candidate.userCorrectedValue]),
+    ),
+    submissions: Object.fromEntries(
+      candidates.map((candidate) => [candidate.fieldKey, effectiveCandidateValue(candidate)]),
+    ),
+  }
 }
 
 export function toReviewPackageView(pkg: {

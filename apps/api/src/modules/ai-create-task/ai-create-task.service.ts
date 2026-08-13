@@ -55,8 +55,8 @@ import type {
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import {
-  effectiveCandidateValue,
   parseStoredCandidates,
+  reviewConfirmValues,
   toReviewPackageView,
   toStoredCandidates,
   type StoredReviewCandidate,
@@ -458,14 +458,7 @@ export class AiCreateTaskService {
         parseStoredCandidates(pkg.candidates),
         requestCorrections,
       )
-      const corrections = Object.fromEntries(
-        candidates
-          .filter((candidate) => candidate.userCorrectedValue != null)
-          .map((candidate) => [candidate.fieldKey, candidate.userCorrectedValue]),
-      ) as Partial<Record<AiReviewableBasicInfoField, string | number | null>>
-      const submissions = Object.fromEntries(
-        candidates.map((candidate) => [candidate.fieldKey, effectiveCandidateValue(candidate)]),
-      ) as Partial<Record<AiReviewableBasicInfoField, string | number>>
+      const { corrections, submissions } = reviewConfirmValues(candidates)
 
       if (task.draft.version !== dto.expectedVersion) {
         await this.writeReviewRecord(tx, {
