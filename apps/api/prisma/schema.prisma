@@ -331,6 +331,8 @@ model Organization {
   aiCreateTasks AiCreateTask[]
   aiCreateIdempotencyRecords AiCreateIdempotencyRecord[]
   aiCreateActivityRuns AiCreateActivityRun[]
+  aiReviewPackages AiReviewPackage[]
+  aiReviewRecords AiReviewRecord[]
 
   @@map("organizations")
 }
@@ -406,6 +408,7 @@ model User {
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
   createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
+  aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -1090,6 +1093,7 @@ model AiCreateTask {
   draft          DepartureCreationDraft?
   idempotencyRecords AiCreateIdempotencyRecord[]
   activityRuns   AiCreateActivityRun[]
+  reviewPackages AiReviewPackage[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1140,9 +1144,83 @@ model AiCreateActivityRun {
   startedAt      DateTime                   @default(now()) @map("started_at")
   endedAt        DateTime?                  @map("ended_at")
   errorCode      String?                    @map("error_code")
+  reviewPackages AiReviewPackage[]
 
   @@index([taskId, status])
   @@index([organizationId, startedAt])
   @@map("ai_create_activity_runs")
+}
+
+enum AiReviewPackageStatus {
+  pending
+  confirmed
+  rejected
+  superseded
+
+  @@map("ai_review_package_status")
+}
+
+enum AiReviewRecordAction {
+  confirm
+  reject
+
+  @@map("ai_review_record_action")
+}
+
+enum AiReviewWriteResult {
+  success
+  conflict
+  permission_denied
+  validation_failed
+  rejected
+
+  @@map("ai_review_write_result")
+}
+
+/// AI 阶段审核包：待确认候选，确认前不写入发团创建草稿。
+model AiReviewPackage {
+  id                 String                @id @default(cuid())
+  organizationId     String                @map("organization_id")
+  organization       Organization          @relation(fields: [organizationId], references: [id])
+  taskId             String                @map("task_id")
+  task               AiCreateTask          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  runId              String                @map("run_id")
+  run                AiCreateActivityRun   @relation(fields: [runId], references: [id])
+  status             AiReviewPackageStatus @default(pending)
+  confirmationUnit   String                @default("basic_info_draft") @map("confirmation_unit")
+  baseObjectVersion  Int                   @map("base_object_version")
+  baselineSnapshot   Json                  @map("baseline_snapshot")
+  candidates         Json
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  records            AiReviewRecord[]
+
+  @@index([taskId, status])
+  @@index([organizationId, createdAt])
+  @@map("ai_review_packages")
+}
+
+/// AI 审核记录：只读处置历史，成功与失败均保留。
+model AiReviewRecord {
+  id                 String              @id @default(cuid())
+  organizationId     String              @map("organization_id")
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  packageId          String              @map("package_id")
+  package            AiReviewPackage     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  operatorUserId     String              @map("operator_user_id")
+  operator           User                @relation("AiReviewRecordOperator", fields: [operatorUserId], references: [id])
+  action             AiReviewRecordAction
+  originalCandidates Json                @map("original_candidates")
+  userCorrections    Json                @map("user_corrections")
+  submittedValues    Json                @map("submitted_values")
+  evidence           Json
+  objectVersion      Int                 @map("object_version")
+  writeResult        AiReviewWriteResult @map("write_result")
+  conflictFields     Json?               @map("conflict_fields")
+  createdAt          DateTime            @default(now()) @map("created_at")
+
+  @@index([packageId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("ai_review_records")
 }
 

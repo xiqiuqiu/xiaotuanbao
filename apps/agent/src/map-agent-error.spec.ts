@@ -7,6 +7,8 @@ describe('mapAgentFetchError', () => {
       'SERVICE_IDENTITY_INVALID',
     )
     expect(mapAgentFetchError({ code: 'DELEGATION_INVALID' }).code).toBe('DELEGATION_INVALID')
+    expect(mapAgentFetchError({ code: 'VERSION_CONFLICT' }).code).toBe('VERSION_CONFLICT')
+    expect(mapAgentFetchError({ code: 'REVIEW_PENDING' }).code).toBe('REVIEW_PENDING')
   })
 
   it('maps transport failures to AGENT_UNAVAILABLE', () => {

@@ -8,6 +8,8 @@ export const AI_COLLABORATION_ERROR_CODES = [
   'PERMISSION_DENIED',
   'DELEGATION_INVALID',
   'SERVICE_IDENTITY_INVALID',
+  'VERSION_CONFLICT',
+  'REVIEW_PENDING',
 ] as const
 
 export type AiCollaborationErrorCode = (typeof AI_COLLABORATION_ERROR_CODES)[number]
@@ -20,11 +22,14 @@ const MESSAGES: Record<AiCollaborationErrorCode, string> = {
   PERMISSION_DENIED: '当前账号无权使用 AI 建团辅助',
   DELEGATION_INVALID: 'AI 操作委托无效或已过期，请重新打开侧栏',
   SERVICE_IDENTITY_INVALID: '不受信任的 AI 编排服务',
+  VERSION_CONFLICT: '草稿版本已变化，请重新读取任务上下文后再提交候选',
+  REVIEW_PENDING: '已有待确认审核包，请先在表单拒绝或确认后再提交新候选',
 }
 
 const RETRYABLE: ReadonlySet<AiCollaborationErrorCode> = new Set([
   'AGENT_UNAVAILABLE',
   'MODEL_TIMEOUT',
+  'VERSION_CONFLICT',
 ])
 
 export const aiCollaborationErrorSchema = z

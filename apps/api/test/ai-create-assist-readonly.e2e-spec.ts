@@ -35,6 +35,9 @@ describe('AI create readonly tool chain (e2e) #297', () => {
   })
 
   afterAll(async () => {
+    await prisma.aiReviewPackage.deleteMany({
+      where: { task: { organizationId, creatorUserId: ownerUserId } },
+    })
     await prisma.aiCreateActivityRun.deleteMany({
       where: { task: { organizationId, creatorUserId: ownerUserId } },
     })
@@ -134,7 +137,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
             creatorUserId: ownerUserId,
           },
           objectVersion: versionBefore,
-          availableCapabilities: ['getTaskContext'],
+          availableCapabilities: ['getTaskContext', 'submitReviewPackage'],
           pending: { hasPendingReview: false, reviewPackageId: null },
           fieldCoverage: {
             filled: ['name', 'routeName', 'startDate', 'endDate', 'ownerUserId', 'departureType'],

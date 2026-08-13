@@ -1,0 +1,27 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid;
+  border-radius: 6px;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.saved {
+  font-size: 12px;
+}
+
+.evidenceToggle {
+  align-self: flex-start;
+  padding-inline: 0;
+  height: auto;
+}
+
+.evidence {
+  margin-bottom: 0;
+  font-size: 12px;
+}

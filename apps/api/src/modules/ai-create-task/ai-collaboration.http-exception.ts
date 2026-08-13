@@ -12,6 +12,8 @@ const STATUS_BY_CODE: Record<AiCollaborationErrorCode, HttpStatus> = {
   PERMISSION_DENIED: HttpStatus.FORBIDDEN,
   DELEGATION_INVALID: HttpStatus.UNAUTHORIZED,
   SERVICE_IDENTITY_INVALID: HttpStatus.UNAUTHORIZED,
+  VERSION_CONFLICT: HttpStatus.CONFLICT,
+  REVIEW_PENDING: HttpStatus.CONFLICT,
 }
 
 export class AiCollaborationHttpException extends HttpException {

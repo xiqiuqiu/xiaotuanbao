@@ -15,3 +15,9 @@
   min-height: 0;
   height: 100%;
 }
+
+.notice {
+  margin: 0;
+  font-size: 12px;
+  color: inherit;
+}

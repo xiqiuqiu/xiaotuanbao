@@ -19,6 +19,14 @@ let capturedKit: {
   onError?: (event: { error: Error }) => void
 } = {}
 let capturedChat: { agentId?: string; onError?: (event: { error: Error }) => void } = {}
+let capturedRenderTool: {
+  name?: string
+  render?: (props: {
+    status: string
+    parameters?: { candidates?: Array<{ fieldKey: string }> }
+    result?: unknown
+  }) => ReactNode
+} = {}
 
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotKit: ({
@@ -58,6 +66,9 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgentContext: (...args: unknown[]) => useAgentContext(...args),
   useAgent: () => ({ agent: { addMessage }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent } }),
+  useRenderTool: (config: typeof capturedRenderTool) => {
+    capturedRenderTool = config
+  },
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -78,6 +89,7 @@ describe('AiCreateAssistChat', () => {
     vi.clearAllMocks()
     capturedKit = {}
     capturedChat = {}
+    capturedRenderTool = {}
   })
 
   it('passes runtimeUrl, identity headers and the readonly agent id', () => {
@@ -96,7 +108,7 @@ describe('AiCreateAssistChat', () => {
   })
 
   it('exposes only shared light state to CopilotKit, never the draft snapshot', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-light" />)
+    render(<AiCreateAssistChat {...chatProps} runId="run-light" reviewPackageId="pkg-1" />)
 
     expect(useAgentContext).toHaveBeenCalled()
     const readable = useAgentContext.mock.calls[0]?.[0] as { value?: unknown }
@@ -105,12 +117,52 @@ describe('AiCreateAssistChat', () => {
       taskId: 'task-assist',
       stageKey: 'basic_info',
       runStatus: 'idle',
-      reviewPackageId: null,
+      reviewPackageId: 'pkg-1',
       snapshotVersion: 1,
       progress: 'collecting',
     })
     expect(parsed).not.toHaveProperty('draft')
     expect(JSON.stringify(parsed)).not.toContain('routeName')
+  })
+
+  it('renders a thin notice that confirmation belongs on the form', async () => {
+    const onReviewPackageSubmitted = vi.fn()
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-notice"
+        onReviewPackageSubmitted={onReviewPackageSubmitted}
+      />,
+    )
+
+    expect(capturedRenderTool.name).toBe('submitReviewPackage')
+    const inProgress = capturedRenderTool.render?.({
+      status: 'inProgress',
+      parameters: { candidates: [{ fieldKey: 'name' }] },
+    })
+    const complete = capturedRenderTool.render?.({
+      status: 'complete',
+      parameters: { candidates: [{ fieldKey: 'name' }, { fieldKey: 'routeName' }] },
+      result: { reviewPackageId: 'pkg-1' },
+    })
+
+    render(
+      <>
+        {inProgress}
+        {complete}
+      </>,
+    )
+    expect(screen.getByText('正在整理审核建议…')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '已建议修改团名、路线。请到中间表单确认，不会自动写入发团创建草稿。',
+      ),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
   })
 
   it('sends the first-turn prompt once even under StrictMode', () => {

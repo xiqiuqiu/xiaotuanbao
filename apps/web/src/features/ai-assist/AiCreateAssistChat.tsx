@@ -5,11 +5,17 @@ import {
   useAgent,
   useAgentContext,
   useCopilotKit,
+  useRenderTool,
 } from '@copilotkit/react-core/v2'
 import '@copilotkit/react-core/v2/styles.css'
-import { aiCreateSharedLightStateSchema, type AiCreateSharedLightState } from '@xiaotuanbao/ai-contracts'
+import {
+  aiCreateSharedLightStateSchema,
+  submitReviewPackageModelInputSchema,
+  type AiCreateSharedLightState,
+} from '@xiaotuanbao/ai-contracts'
 import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
+import { formatReviewFieldList } from './review-field-labels'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
@@ -23,6 +29,9 @@ export interface AiCreateAssistChatProps {
   snapshotVersion: number
   stageKey: AiCreateSharedLightState['stageKey']
   runStatus: AiCreateSharedLightState['runStatus']
+  reviewPackageId?: string | null
+  progress?: AiCreateSharedLightState['progress']
+  onReviewPackageSubmitted?: () => void
 }
 
 function AssistLightState({
@@ -30,18 +39,23 @@ function AssistLightState({
   snapshotVersion,
   stageKey,
   runStatus,
-}: Pick<AiCreateAssistChatProps, 'taskId' | 'snapshotVersion' | 'stageKey' | 'runStatus'>) {
+  reviewPackageId,
+  progress,
+}: Pick<
+  AiCreateAssistChatProps,
+  'taskId' | 'snapshotVersion' | 'stageKey' | 'runStatus' | 'reviewPackageId' | 'progress'
+>) {
   const value = useMemo(
     () =>
       aiCreateSharedLightStateSchema.parse({
         taskId,
         stageKey,
         runStatus,
-        reviewPackageId: null,
+        reviewPackageId: reviewPackageId ?? null,
         snapshotVersion,
-        progress: 'collecting',
+        progress: progress ?? 'collecting',
       }),
-    [runStatus, snapshotVersion, stageKey, taskId],
+    [progress, reviewPackageId, runStatus, snapshotVersion, stageKey, taskId],
   )
 
   useAgentContext({
@@ -49,6 +63,41 @@ function AssistLightState({
     value,
   })
 
+  return null
+}
+
+function ReviewPackageNotice({
+  agentId,
+  onSubmitted,
+}: {
+  agentId: string
+  onSubmitted?: () => void
+}) {
+  const notifiedRef = useRef<string | null>(null)
+  useRenderTool(
+    {
+      name: 'submitReviewPackage',
+      parameters: submitReviewPackageModelInputSchema,
+      agentId,
+      render: ({ status, parameters, result }) => {
+        const fieldKeys = parameters?.candidates?.map((candidate) => candidate.fieldKey) ?? []
+        const labels = formatReviewFieldList(fieldKeys)
+        if (status === 'complete' && result && notifiedRef.current !== String(result)) {
+          notifiedRef.current = String(result)
+          queueMicrotask(() => onSubmitted?.())
+        }
+        if (status === 'inProgress' || status === 'executing') {
+          return <p className={styles.notice}>正在整理审核建议…</p>
+        }
+        return (
+          <p className={styles.notice}>
+            已建议修改{labels || '基础信息'}。请到中间表单确认，不会自动写入发团创建草稿。
+          </p>
+        )
+      },
+    },
+    [agentId, onSubmitted],
+  )
   return null
 }
 
@@ -95,6 +144,9 @@ export function AiCreateAssistChat({
   snapshotVersion,
   stageKey,
   runStatus,
+  reviewPackageId,
+  progress,
+  onReviewPackageSubmitted,
 }: AiCreateAssistChatProps) {
   const headers = useMemo(
     () => ({
@@ -134,7 +186,10 @@ export function AiCreateAssistChat({
           snapshotVersion={snapshotVersion}
           stageKey={stageKey}
           runStatus={runStatus}
+          reviewPackageId={reviewPackageId}
+          progress={progress}
         />
+        <ReviewPackageNotice agentId={AGENT_ID} onSubmitted={onReviewPackageSubmitted} />
         <FirstTurnSender agentId={AGENT_ID} runId={runId} />
         <CopilotChat
           agentId={AGENT_ID}

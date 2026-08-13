@@ -14,6 +14,38 @@ export {
   type GetTaskContextOutput,
 } from './tools/get-task-context'
 export {
+  SUBMIT_REVIEW_PACKAGE_TOOL,
+  AI_CREATE_TOOL_NAMES,
+  AI_REVIEWABLE_BASIC_INFO_FIELDS,
+  AI_USER_ONLY_BASIC_INFO_FIELDS,
+  AI_CANDIDATE_CLARITY,
+  AI_REVIEW_PACKAGE_STATUS,
+  AI_CANDIDATE_STATUS,
+  AI_REVIEW_CONFIRMATION_UNIT,
+  capabilitiesForPendingReview,
+  aiCandidateEvidenceSchema,
+  aiReviewCandidateInputSchema,
+  submitReviewPackageInputSchema,
+  submitReviewPackageModelInputSchema,
+  submitReviewPackageOutputSchema,
+  type AiCreateToolName,
+  type AiReviewableBasicInfoField,
+  type AiCandidateClarity,
+  type AiReviewPackageStatus,
+  type AiCandidateStatus,
+  type AiCandidateEvidence,
+  type AiReviewCandidateInput,
+  type SubmitReviewPackageInput,
+  type SubmitReviewPackageModelInput,
+  type SubmitReviewPackageOutput,
+} from './tools/review-package'
+export {
+  DATE_CONSISTENCY_GROUP,
+  evaluateReviewConfirmMerge,
+  type ReviewConfirmSubmission,
+  type ReviewConfirmMergeResult,
+} from './review/merge-review-confirm'
+export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,
   aiCollaborationErrorSchema,

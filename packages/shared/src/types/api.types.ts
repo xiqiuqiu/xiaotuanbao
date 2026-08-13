@@ -851,6 +851,7 @@ export interface AiCreateTaskSummary {
   createdAt: string
   updatedAt: string
   draft: DepartureCreationDraftView
+  pendingReview: AiReviewPackageView | null
 }
 
 export interface SaveDepartureCreationDraftDto {
@@ -881,6 +882,48 @@ export interface AiCreateAssistSession {
   delegationToken: string
   agentRuntimeUrl: string
   expiresAt: string
+}
+
+export type AiReviewableBasicInfoField =
+  | 'name'
+  | 'routeName'
+  | 'startDate'
+  | 'endDate'
+  | 'expectedGuestCountHint'
+
+export type AiCandidateClarity = 'clear' | 'needs_confirmation' | 'undetermined'
+
+export type AiReviewPackageStatus = 'pending' | 'confirmed' | 'rejected' | 'superseded'
+
+export type AiCandidateEvidence =
+  | { kind: 'user_message'; excerpt: string; messageId?: string }
+  | { kind: 'system_derivation'; rule: string }
+
+export interface AiReviewCandidateView {
+  fieldKey: AiReviewableBasicInfoField
+  proposedValue: string | number
+  userCorrectedValue: string | number | null
+  clarity: AiCandidateClarity
+  status: 'pending' | 'confirmed' | 'rejected' | 'superseded'
+  evidence: AiCandidateEvidence[]
+}
+
+export interface AiReviewPackageView {
+  id: string
+  status: AiReviewPackageStatus
+  confirmationUnit: 'basic_info_draft'
+  baseObjectVersion: number
+  runId: string
+  candidates: AiReviewCandidateView[]
+}
+
+export interface ConfirmAiReviewPackageDto {
+  expectedVersion: number
+  corrections?: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+}
+
+export interface PatchAiReviewPackageDto {
+  corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
 }
 
 export interface UpdateDepartureDto {

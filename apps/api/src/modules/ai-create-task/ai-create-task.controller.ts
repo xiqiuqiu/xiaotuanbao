@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -16,7 +17,13 @@ import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { AiCreateTaskService } from './ai-create-task.service'
-import { ConfirmAiCreateTaskDto, SaveDepartureCreationDraftDto, StartAiCreateAssistSessionDto } from './dto/ai-create-task.dto'
+import {
+  ConfirmAiCreateTaskDto,
+  ConfirmAiReviewPackageDto,
+  PatchAiReviewPackageDto,
+  SaveDepartureCreationDraftDto,
+  StartAiCreateAssistSessionDto,
+} from './dto/ai-create-task.dto'
 
 @Controller('ai-create-tasks')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
@@ -88,6 +95,57 @@ export class AiCreateTaskController {
       taskId,
       dto,
       idempotencyKey,
+    )
+  }
+
+  @Patch(':taskId/review-packages/:packageId')
+  @RequireMenu('departure:write')
+  patchReviewPackage(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('packageId') packageId: string,
+    @Body() dto: PatchAiReviewPackageDto,
+  ): Promise<AiCreateTaskSummary> {
+    return this.aiCreateTaskService.patchReviewPackage(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      packageId,
+      dto,
+    )
+  }
+
+  @Post(':taskId/review-packages/:packageId/confirm')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  confirmReviewPackage(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('packageId') packageId: string,
+    @Body() dto: ConfirmAiReviewPackageDto,
+  ): Promise<AiCreateTaskSummary> {
+    return this.aiCreateTaskService.confirmReviewPackage(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      packageId,
+      dto,
+    )
+  }
+
+  @Post(':taskId/review-packages/:packageId/reject')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  rejectReviewPackage(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('packageId') packageId: string,
+  ): Promise<AiCreateTaskSummary> {
+    return this.aiCreateTaskService.rejectReviewPackage(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      packageId,
     )
   }
 }

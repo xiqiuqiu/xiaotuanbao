@@ -18,7 +18,7 @@ export interface AgentServerConfig {
   modelBaseUrl?: string
 }
 
-const READONLY_TOOLS = ['getTaskContext'] as const
+const AI_CREATE_TOOLS = ['getTaskContext', 'submitReviewPackage'] as const
 const ALLOWED_HEADERS = 'Authorization, Content-Type, X-Ai-Task-Id, X-Ai-Run-Id'
 
 export function createAgentServer(config: AgentServerConfig) {
@@ -41,7 +41,7 @@ export function createAgentServer(config: AgentServerConfig) {
 }
 
 export function listAgentTools(): readonly string[] {
-  return READONLY_TOOLS
+  return AI_CREATE_TOOLS
 }
 
 async function handleRequest(
@@ -135,6 +135,9 @@ async function handleCopilotkit(
 function statusForCollaborationError(error: AiCollaborationError): number {
   if (error.code === 'DELEGATION_INVALID') {
     return 401
+  }
+  if (error.code === 'VERSION_CONFLICT' || error.code === 'REVIEW_PENDING') {
+    return 409
   }
   if (error.code === 'PERMISSION_DENIED' || error.code === 'SERVICE_IDENTITY_INVALID') {
     return 403

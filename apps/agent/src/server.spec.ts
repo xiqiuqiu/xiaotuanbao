@@ -62,8 +62,8 @@ describe('agent server', () => {
     mockFetchTaskContext.mockReset()
   })
 
-  it('only exposes the readonly getTaskContext tool', () => {
-    expect(listAgentTools()).toEqual(['getTaskContext'])
+  it('exposes getTaskContext and submitReviewPackage', () => {
+    expect(listAgentTools()).toEqual(['getTaskContext', 'submitReviewPackage'])
   })
 
   it('reports health with the readonly tool list without a model key', async () => {
@@ -78,7 +78,10 @@ describe('agent server', () => {
     try {
       const response = await originalFetch(`http://127.0.0.1:${port}/health`)
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ status: 'ok', tools: ['getTaskContext'] })
+      expect(await response.json()).toEqual({
+        status: 'ok',
+        tools: ['getTaskContext', 'submitReviewPackage'],
+      })
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
