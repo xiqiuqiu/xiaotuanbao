@@ -3,9 +3,12 @@ import { ConfigService } from '@nestjs/config'
 import { PassportStrategy } from '@nestjs/passport'
 import { OrganizationStatus, UserStatus } from '@prisma/client'
 import { ExtractJwt, Strategy } from 'passport-jwt'
+import { isSessionJwtPayload } from '../../common/jwt-claims'
 import type { JwtPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { extractAuthCookie } from './auth-cookie'
+
+type IncomingJwtPayload = JwtPayload & { typ?: unknown; aud?: unknown }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -24,7 +27,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     })
   }
 
-  async validate(payload: JwtPayload) {
+  async validate(payload: IncomingJwtPayload) {
+    if (!isSessionJwtPayload(payload)) {
+      throw new UnauthorizedException('用户不存在或已失效')
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         id: payload.sub,

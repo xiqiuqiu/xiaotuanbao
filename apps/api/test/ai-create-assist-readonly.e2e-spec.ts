@@ -164,6 +164,33 @@ describe('AI create readonly tool chain (e2e) #297', () => {
     expect(noDelegation.body.data).toMatchObject({ code: 'DELEGATION_INVALID' })
   })
 
+  it('rejects a delegation token replayed as an xtb_session cookie', async () => {
+    const session = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/assist-session')
+      .send({
+        draft: {
+          mode: 'manual',
+          routeName: '',
+          name: `${testPrefix}-delegation-replay`,
+        },
+      })
+      .expect(201)
+
+    const { delegationToken } = session.body.data as { delegationToken: string }
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Cookie', `xtb_session=${delegationToken}`)
+      .expect(401)
+
+    await request(app.getHttpServer())
+      .post('/api/ai-create-tasks/draft')
+      .set('Cookie', `xtb_session=${delegationToken}`)
+      .set('Origin', 'http://localhost:5173')
+      .send({ draft: { mode: 'manual', routeName: `${testPrefix}-escalation` } })
+      .expect(401)
+  })
+
   it('forbids finance from starting an assist session', async () => {
     await authRequest(app, financeToken)
       .post('/api/ai-create-tasks/assist-session')

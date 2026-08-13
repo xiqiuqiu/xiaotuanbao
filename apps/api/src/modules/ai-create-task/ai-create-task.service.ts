@@ -31,16 +31,20 @@ import type { AiCreateTask, DepartureCreationDraft, Prisma } from '@prisma/clien
 import { AiCreateActivityRunStatus, DepartureType as PrismaDepartureType } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
+import { AuthService } from '../auth/auth.service'
+import {
+  AI_OP_DELEGATION_JWT_AUD,
+  AI_OP_DELEGATION_JWT_TYP,
+} from '../../common/jwt-claims'
+import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import type {
   ConfirmAiCreateTaskDto,
   DepartureCreationDraftSnapshotDto,
   SaveDepartureCreationDraftDto,
   StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
-import { AuthService } from '../auth/auth.service'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
 const TASK_LOCK_OPERATION = 'ai-create-task'
@@ -200,13 +204,17 @@ export class AiCreateTaskService {
 
     const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
     const payload: AiOperationDelegationPayload = {
-      typ: 'ai-op-delegation',
+      typ: AI_OP_DELEGATION_JWT_TYP,
       sub: userId,
       organizationId,
       taskId: task.id,
       runId: run.id,
     }
-    const delegationToken = await this.jwtService.signAsync(payload, { expiresIn: ttlSec })
+    const delegationToken = await this.jwtService.signAsync(payload, {
+      expiresIn: ttlSec,
+      secret: this.configService.getOrThrow<string>('app.jwtDelegationSecret'),
+      audience: AI_OP_DELEGATION_JWT_AUD,
+    })
 
     return {
       task: this.toSummary(task),

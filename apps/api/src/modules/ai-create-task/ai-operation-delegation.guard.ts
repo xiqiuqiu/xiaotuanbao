@@ -3,6 +3,10 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
 import { OrganizationStatus, UserStatus } from '@prisma/client'
+import {
+  AI_OP_DELEGATION_JWT_AUD,
+  AI_OP_DELEGATION_JWT_TYP,
+} from '../../common/jwt-claims'
 import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
@@ -35,13 +39,16 @@ export class AiOperationDelegationGuard implements CanActivate {
 
     let payload: AiOperationDelegationPayload
     try {
-      payload = await this.jwtService.verifyAsync<AiOperationDelegationPayload>(token)
+      payload = await this.jwtService.verifyAsync<AiOperationDelegationPayload>(token, {
+        secret: this.configService.getOrThrow<string>('app.jwtDelegationSecret'),
+        audience: AI_OP_DELEGATION_JWT_AUD,
+      })
     } catch {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
     if (
-      payload.typ !== 'ai-op-delegation' ||
+      payload.typ !== AI_OP_DELEGATION_JWT_TYP ||
       !payload.sub ||
       !payload.organizationId ||
       !payload.taskId ||

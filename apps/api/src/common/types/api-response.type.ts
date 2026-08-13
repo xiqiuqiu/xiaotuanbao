@@ -12,6 +12,7 @@ export interface JwtPayload {
 
 export interface AiOperationDelegationPayload {
   typ: 'ai-op-delegation'
+  aud?: 'ai-op-delegation'
   sub: string
   organizationId: string
   taskId: string

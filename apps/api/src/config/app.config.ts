@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config'
+import { deriveAiOperationDelegationJwtSecret } from '../common/jwt-claims'
 import { STORED_OBJECT_MAX_UPLOAD_BYTES } from '../modules/stored-object/stored-object.constants'
 
 const DEFAULT_JWT_SECRET = 'please-change-this-secret'
@@ -33,6 +34,8 @@ function parseDurationMs(value: string): number {
 export default registerAs('app', () => {
   const nodeEnv = process.env.NODE_ENV ?? 'development'
   const jwtSecret = process.env.JWT_SECRET ?? DEFAULT_JWT_SECRET
+  const jwtDelegationSecret =
+    process.env.JWT_DELEGATION_SECRET?.trim() || deriveAiOperationDelegationJwtSecret(jwtSecret)
   const jwtExpiresIn = process.env.JWT_EXPIRES_IN ?? '7d'
   const authCookieSecure = process.env.AUTH_COOKIE_SECURE
     ? process.env.AUTH_COOKIE_SECURE === 'true'
@@ -41,6 +44,9 @@ export default registerAs('app', () => {
 
   if (nodeEnv === 'production' && jwtSecret === DEFAULT_JWT_SECRET) {
     throw new Error('生产环境必须配置非默认 JWT_SECRET')
+  }
+  if (jwtDelegationSecret === jwtSecret) {
+    throw new Error('JWT_DELEGATION_SECRET 不得与 JWT_SECRET 相同')
   }
   if (!['lax', 'strict', 'none'].includes(authCookieSameSite)) {
     throw new Error(`AUTH_COOKIE_SAME_SITE 无效：${authCookieSameSite}`)
@@ -68,6 +74,7 @@ export default registerAs('app', () => {
     nodeEnv,
     port: Number(process.env.API_PORT ?? 3000),
     jwtSecret,
+    jwtDelegationSecret,
     jwtExpiresIn,
     jwtExpiresInMs: parseDurationMs(jwtExpiresIn),
     uploadDir: process.env.UPLOAD_DIR ?? './uploads',
