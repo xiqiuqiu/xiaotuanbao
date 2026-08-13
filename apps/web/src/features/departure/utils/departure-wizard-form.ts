@@ -28,6 +28,8 @@ export interface InfoStepValues {
   guideSupplierId?: string
   vehiclePlate?: string
   contactPhone?: string
+  /** 预计人数提示：仅发团创建草稿，不写入正式 Departure。 */
+  expectedGuestCountHint?: number | null
 }
 
 export type InfoFormValues = InfoStepValues & {
@@ -156,6 +158,69 @@ export function buildCopyDeparturePayload(
     ownerUserId: info.ownerUserId,
     departureType: info.departureType,
     notes: info.notes?.trim() || undefined,
+  }
+}
+
+export function buildDepartureCreationDraftSnapshot(
+  route: RouteStepValues,
+  info: Partial<InfoStepValues>,
+): import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot {
+  return {
+    mode: route.mode,
+    routeName: route.routeName.trim(),
+    templateId: route.templateId ?? null,
+    copyFromDepartureId: route.copyFromDepartureId ?? null,
+    defaultDayCount: route.defaultDayCount ?? null,
+    name: info.name?.trim() || null,
+    startDate: info.startDate || null,
+    endDate: info.endDate || null,
+    ownerUserId: info.ownerUserId || null,
+    departureType: info.departureType ?? null,
+    notes: info.notes?.trim() || null,
+    driverSupplierId: info.driverSupplierId || null,
+    guideSupplierId: info.guideSupplierId || null,
+    vehiclePlate: info.vehiclePlate?.trim() || null,
+    contactPhone: info.contactPhone?.trim() || null,
+    expectedGuestCountHint:
+      info.expectedGuestCountHint === undefined || info.expectedGuestCountHint === null
+        ? null
+        : info.expectedGuestCountHint,
+  }
+}
+
+export function applyDraftSnapshotToRoute(
+  snapshot: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
+): RouteStepValues {
+  return {
+    mode: snapshot.mode,
+    routeName: snapshot.routeName,
+    templateId: snapshot.templateId ?? undefined,
+    copyFromDepartureId: snapshot.copyFromDepartureId ?? undefined,
+    defaultDayCount: snapshot.defaultDayCount ?? undefined,
+    startDate: snapshot.startDate ?? undefined,
+  }
+}
+
+export function applyDraftSnapshotToInfoForm(
+  snapshot: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
+  ownerUserIdFallback: string,
+): InfoFormValues {
+  const startDate = snapshot.startDate || getShanghaiTodayString()
+  const endDate = snapshot.endDate || startDate
+  return {
+    name: snapshot.name?.trim() || buildDefaultDepartureName(snapshot.routeName, startDate),
+    departureNo: '',
+    departureType: (snapshot.departureType as DepartureType | null) ?? DepartureType.COMBINED,
+    startDate,
+    endDate,
+    dayCount: computeDayCount(startDate, endDate),
+    ownerUserId: snapshot.ownerUserId || ownerUserIdFallback,
+    notes: snapshot.notes ?? undefined,
+    driverSupplierId: snapshot.driverSupplierId ?? undefined,
+    guideSupplierId: snapshot.guideSupplierId ?? undefined,
+    vehiclePlate: snapshot.vehiclePlate ?? undefined,
+    contactPhone: snapshot.contactPhone ?? undefined,
+    expectedGuestCountHint: snapshot.expectedGuestCountHint ?? null,
   }
 }
 

@@ -22,6 +22,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status: number = HttpStatus.INTERNAL_SERVER_ERROR
     let message = '服务器内部错误'
     let code = status
+    let data: unknown = null
 
     if (exception instanceof HttpException) {
       status = exception.getStatus()
@@ -35,8 +36,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         exceptionResponse !== null &&
         'message' in exceptionResponse
       ) {
-        const rawMessage = (exceptionResponse as { message?: string | string[] }).message
+        const payload = exceptionResponse as {
+          message?: string | string[]
+          data?: unknown
+        }
+        const rawMessage = payload.message
         message = Array.isArray(rawMessage) ? rawMessage.join('; ') : rawMessage ?? message
+        if ('data' in payload) {
+          data = payload.data ?? null
+        }
       }
       if (status === HttpStatus.PAYLOAD_TOO_LARGE) {
         message = `文件过大，最大允许 ${STORED_OBJECT_MAX_UPLOAD_MB}MB`
@@ -57,10 +65,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error('Unknown exception', String(exception))
     }
 
-    const body: ApiResponse<null> = {
+    const body: ApiResponse<unknown> = {
       code,
       message,
-      data: null,
+      data,
     }
 
     response.status(status).json(body)

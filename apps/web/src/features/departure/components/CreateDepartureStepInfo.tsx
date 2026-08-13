@@ -8,6 +8,7 @@ import {
   DatePicker,
   Form,
   Input,
+  InputNumber,
   Row,
   Select,
   Space,
@@ -38,6 +39,7 @@ import styles from './CreateDepartureStepInfo.module.css'
 interface CreateDepartureStepInfoProps {
   form: FormInstance<InfoFormValues>
   route: RouteStepValues
+  onValuesChange?: () => void
 }
 
 function toDayjs(value?: string): Dayjs | null {
@@ -60,6 +62,7 @@ interface DepartureInfoFormProps {
   isGuideSuppliersLoading: boolean
   onStartDateChange: (value: Dayjs | null) => void
   onEndDateChange: (value: Dayjs | null) => void
+  onValuesChange?: () => void
 }
 
 function DepartureInfoForm({
@@ -78,6 +81,7 @@ function DepartureInfoForm({
   isGuideSuppliersLoading,
   onStartDateChange,
   onEndDateChange,
+  onValuesChange,
 }: DepartureInfoFormProps) {
   return (
     <>
@@ -88,7 +92,7 @@ function DepartureInfoForm({
         </Typography.Paragraph>
       </div>
 
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" onValuesChange={onValuesChange}>
         {hasSupplierError ? (
           <Alert
             type="error"
@@ -228,6 +232,16 @@ function DepartureInfoForm({
             </Form.Item>
           </Col>
 
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="expectedGuestCountHint"
+              label="预计人数提示"
+              extra="仅保存在发团创建草稿，不写入正式发团人数或备注"
+            >
+              <InputNumber min={0} max={9999} precision={0} style={{ width: '100%' }} placeholder="可选" />
+            </Form.Item>
+          </Col>
+
           <Col span={24}>
             <Form.Item name="notes" label="备注">
               <Input.TextArea rows={3} placeholder="如：客人集合时间、特殊接待要求" />
@@ -289,7 +303,11 @@ function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSumm
   )
 }
 
-export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfoProps) {
+export function CreateDepartureStepInfo({
+  form,
+  route,
+  onValuesChange,
+}: CreateDepartureStepInfoProps) {
   const { token } = theme.useToken()
   const defaultDayCount = route.defaultDayCount
   const copySummary = buildRouteSummary(route)
@@ -404,6 +422,7 @@ export function CreateDepartureStepInfo({ form, route }: CreateDepartureStepInfo
             isGuideSuppliersLoading={isGuideSuppliersLoading}
             onStartDateChange={handleStartDateChange}
             onEndDateChange={handleEndDateChange}
+            onValuesChange={onValuesChange}
           />
         </Col>
 

@@ -216,5 +216,39 @@ describe('authenticated request client', () => {
     })
     expect(mocks.messageError).not.toHaveBeenCalled()
   })
+
+  it('preserves conflict payload data on 409 ApiError', async () => {
+    await import('./client')
+    const errorHandler = mocks.responseInterceptor.mock.calls[0]?.[1] as (
+      error: AxiosError,
+    ) => Promise<unknown>
+
+    const conflictData = {
+      id: 'task-1',
+      draft: { version: 4, snapshot: { mode: 'manual', routeName: '南疆6日游' } },
+    }
+    const conflictError = {
+      message: 'Request failed with status code 409',
+      name: 'AxiosError',
+      isAxiosError: true,
+      config: { url: '/ai-create-tasks/draft' },
+      response: {
+        status: 409,
+        data: {
+          code: 409,
+          message: '草稿版本已变化，请基于最新快照重试',
+          data: conflictData,
+        },
+      },
+      toJSON: () => ({}),
+    } as AxiosError
+
+    await expect(errorHandler(conflictError)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: '草稿版本已变化，请基于最新快照重试',
+      code: 409,
+      data: conflictData,
+    })
+  })
 })
 

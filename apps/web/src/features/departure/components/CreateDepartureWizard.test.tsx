@@ -9,10 +9,11 @@ import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { DepartureSummary } from '@/types/api'
+import { ApiError } from '@/lib/request'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
 
 const mockNavigate = vi.fn()
-let mockSearch: { copyFrom?: string } = {}
+let mockSearch: { copyFrom?: string; taskId?: string } = {}
 
 const mockUser = {
   id: 'user-1',
@@ -44,6 +45,12 @@ vi.mock('@/services/departure.service', () => ({
   getDeparture: vi.fn(),
 }))
 
+vi.mock('@/services/ai-create-task.service', () => ({
+  saveDepartureCreationDraft: vi.fn(),
+  getAiCreateTask: vi.fn(),
+  confirmAiCreateTask: vi.fn(),
+}))
+
 vi.mock('@/services/segment.service', () => ({
   listSegments: vi.fn(),
 }))
@@ -68,6 +75,11 @@ import {
   getDeparture,
   previewDepartureNo,
 } from '@/services/departure.service'
+import {
+  confirmAiCreateTask,
+  getAiCreateTask,
+  saveDepartureCreationDraft,
+} from '@/services/ai-create-task.service'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSegments } from '@/services/segment.service'
 import {
@@ -151,6 +163,42 @@ describe('CreateDepartureWizard', () => {
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
+    vi.mocked(saveDepartureCreationDraft).mockImplementation(async (payload) => ({
+      id: payload.taskId ?? 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: payload.taskId ? (payload.expectedVersion ?? 0) + 1 : 1,
+        snapshot: payload.draft,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    }))
+    vi.mocked(confirmAiCreateTask).mockResolvedValue(mockDeparture)
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 1,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线',
+          startDate: '2026-08-01',
+          endDate: '2026-08-01',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
     vi.mocked(listEmployeeOptions).mockResolvedValue([{ id: 'user-1', name: '王杰' }])
@@ -211,17 +259,17 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
-      expect(createDeparture).toHaveBeenCalled()
+      expect(confirmAiCreateTask).toHaveBeenCalled()
     })
 
-    const payload = vi.mocked(createDeparture).mock.calls[0]?.[0]
-    expect(payload).toMatchObject({
+    const draftPayloads = vi.mocked(saveDepartureCreationDraft).mock.calls.map((call) => call[0])
+    const lastDraft = draftPayloads.at(-1)?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'manual',
       routeName: '喀纳斯阿勒泰10日线',
     })
-    expect(payload).not.toHaveProperty('templateId')
-    expect(payload).not.toHaveProperty('copySegments')
-    expect(payload).not.toHaveProperty('copyResources')
-    expect(payload).not.toHaveProperty('copyReferencePrices')
+    expect(lastDraft).not.toHaveProperty('templateId', expect.anything())
+    expect(createDeparture).not.toHaveBeenCalled()
   })
 
   it('enters step 2 from template tab without copy modal and shows structure summary', async () => {
@@ -269,17 +317,18 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
-      expect(createDeparture).toHaveBeenCalled()
+      expect(confirmAiCreateTask).toHaveBeenCalled()
     })
 
-    const payload = vi.mocked(createDeparture).mock.calls[0]?.[0]
-    expect(payload).toMatchObject({
+    const draftPayloads = vi.mocked(saveDepartureCreationDraft).mock.calls.map((call) => call[0])
+    const lastDraft = draftPayloads.at(-1)?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'template',
       templateId: 'template-1',
       routeName: '西安-青海湖-茶卡6日游',
+      defaultDayCount: 6,
     })
-    expect(payload).not.toHaveProperty('copySegments')
-    expect(payload).not.toHaveProperty('copyResources')
-    expect(payload).not.toHaveProperty('copyReferencePrices')
+    expect(createDeparture).not.toHaveBeenCalled()
   })
 
   it('keeps copy-source loading tip from nesting over a widthless placeholder', () => {
@@ -408,14 +457,16 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
-      expect(copyDeparture).toHaveBeenCalled()
+      expect(confirmAiCreateTask).toHaveBeenCalled()
     })
 
-    expect(vi.mocked(copyDeparture).mock.calls[0]?.[0]).toBe('source-departure-1')
-    const payload = vi.mocked(copyDeparture).mock.calls[0]?.[1]
-    expect(payload).not.toHaveProperty('copySegments')
-    expect(payload).not.toHaveProperty('copyResources')
-    expect(payload).not.toHaveProperty('copyReferencePrices')
+    const draftPayloads = vi.mocked(saveDepartureCreationDraft).mock.calls.map((call) => call[0])
+    const lastDraft = draftPayloads.at(-1)?.draft
+    expect(lastDraft).toMatchObject({
+      mode: 'copy',
+      copyFromDepartureId: 'source-departure-1',
+    })
+    expect(copyDeparture).not.toHaveBeenCalled()
   })
 
   it('removes route template card from list after confirmed delete', async () => {
@@ -497,7 +548,7 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     expect(await screen.findByText('请输入团名')).toBeInTheDocument()
-    expect(createDeparture).not.toHaveBeenCalled()
+    expect(confirmAiCreateTask).not.toHaveBeenCalled()
   })
 
   it('navigates to departure detail after successful create', async () => {
@@ -510,8 +561,147 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
-      expect(createDeparture).toHaveBeenCalled()
+      expect(confirmAiCreateTask).toHaveBeenCalled()
     })
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/departure/$departureId',
+        params: { departureId: 'departure-1' },
+        search: { tab: 'overview' },
+      })
+    })
+  })
+
+  it('restores template defaultDayCount from the server draft snapshot', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'template',
+          routeName: '西安-青海湖-茶卡6日游',
+          templateId: 'template-1',
+          defaultDayCount: 6,
+          name: '2026年8月1日 西安-青海湖-茶卡6日游',
+          startDate: '2026-08-01',
+          endDate: '2026-08-06',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    renderWizard()
+
+    expect(await screen.findByLabelText('团名')).toBeInTheDocument()
+    expect(screen.getByText('默认 6 天')).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('出团日期'))
+    await user.click(await screen.findByTitle('2026-08-10'))
+
+    expect(screen.getByLabelText('结束日期')).toHaveValue('2026-08-15')
+    expect(screen.getByLabelText('天数')).toHaveValue('6')
+    expect(screen.getByLabelText('团名')).toHaveValue('2026年8月10日 西安-青海湖-茶卡6日游')
+  })
+
+  it('adopts the latest draft version after a 409 so later saves can proceed', async () => {
+    const user = userEvent.setup()
+    const conflict = new ApiError('草稿版本已变化，请基于最新快照重试', 409, {
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 3,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    vi.mocked(saveDepartureCreationDraft)
+      .mockImplementationOnce(async (payload) => ({
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        departureId: null,
+        creatorUserId: 'user-1',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        draft: {
+          version: 1,
+          snapshot: payload.draft,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      }))
+      .mockRejectedValueOnce(conflict)
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.type(screen.getByLabelText('团名'), '改')
+
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalledTimes(3)
+    })
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls[2]?.[0]).toMatchObject({
+      taskId: 'task-1',
+      expectedVersion: 3,
+    })
+  })
+
+  it('retries confirm after a 409 with the latest version and a new idempotency key', async () => {
+    const user = userEvent.setup()
+    const conflict = new ApiError('草稿版本已变化，请基于最新快照重试', 409, {
+      id: 'task-1',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 3,
+        snapshot: {
+          mode: 'manual',
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    vi.mocked(confirmAiCreateTask).mockRejectedValueOnce(conflict).mockResolvedValueOnce(mockDeparture)
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await screen.findByLabelText('团名')
+    await user.click(screen.getByRole('button', { name: /创建发团/ }))
+
+    await waitFor(() => {
+      expect(confirmAiCreateTask).toHaveBeenCalledTimes(2)
+    })
+
+    const confirmCalls = vi.mocked(confirmAiCreateTask).mock.calls
+    expect(confirmCalls[0]?.[1]).toMatchObject({ expectedVersion: 1 })
+    expect(confirmCalls[1]?.[1]?.expectedVersion).toBeGreaterThanOrEqual(3)
+    expect(confirmCalls[1]?.[2]).toEqual(expect.any(String))
+    expect(confirmCalls[1]?.[2]).not.toBe(confirmCalls[0]?.[2])
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({

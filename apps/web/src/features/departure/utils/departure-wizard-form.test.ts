@@ -2,8 +2,10 @@ import { DepartureType } from '@xiaotuanbao/shared'
 import { describe, expect, it } from 'vitest'
 import {
   addDays,
+  applyDraftSnapshotToRoute,
   buildCreateDeparturePayload,
   buildDefaultDepartureName,
+  buildDepartureCreationDraftSnapshot,
   buildInitialInfoValues,
   canProceedFromRouteStep,
   computeDayCount,
@@ -144,5 +146,30 @@ describe('departure-wizard-form', () => {
     expect(payload).not.toHaveProperty('copySegments')
     expect(payload).not.toHaveProperty('copyResources')
     expect(payload).not.toHaveProperty('copyReferencePrices')
+  })
+
+  it('persists and restores template defaultDayCount on the draft snapshot', () => {
+    const snapshot = buildDepartureCreationDraftSnapshot(
+      {
+        mode: 'template',
+        routeName: '西安-青海湖-茶卡6日游',
+        defaultDayCount: 6,
+        templateId: 'template-1',
+      },
+      {
+        name: '2026年8月1日 西安-青海湖-茶卡6日游',
+        startDate: '2026-08-01',
+        endDate: '2026-08-06',
+        ownerUserId: 'user-1',
+      },
+    )
+
+    expect(snapshot.defaultDayCount).toBe(6)
+    expect(applyDraftSnapshotToRoute(snapshot)).toMatchObject({
+      mode: 'template',
+      templateId: 'template-1',
+      defaultDayCount: 6,
+      startDate: '2026-08-01',
+    })
   })
 })

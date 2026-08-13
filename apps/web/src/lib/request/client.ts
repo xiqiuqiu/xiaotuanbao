@@ -8,6 +8,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public code: number,
+    public data?: unknown,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -50,7 +51,9 @@ http.interceptors.response.use(
 
     if (payload && typeof payload.code === 'number') {
       if (payload.code !== 0) {
-        return Promise.reject(new ApiError(payload.message || '请求失败', payload.code))
+        return Promise.reject(
+          new ApiError(payload.message || '请求失败', payload.code, payload.data),
+        )
       }
       return payload.data
     }
@@ -97,7 +100,7 @@ http.interceptors.response.use(
       typeof error.response?.data?.code === 'number'
         ? error.response.data.code
         : (status ?? -1)
-    const apiError = new ApiError(errorMessage, errorCode)
+    const apiError = new ApiError(errorMessage, errorCode, error.response?.data?.data)
 
     if (silentError || (status === 401 && sessionAlreadyCleared)) {
       return Promise.reject(apiError)
