@@ -1,6 +1,6 @@
 # 015 — Slide the assist pane open and closed along the same path
 
-- **Status**: DONE（已 rebase 到 `15fd4cf`，待合入 `feat/297`）— 分支 `anim/015-assist-pane-slide`；review-animations **Approve**
+- **Status**: DONE（已基于 `main` `22ba35c` 重放，待合入）— 分支 `anim/015-assist-pane-from-main`；review-animations **Approve**
 - **Commit**: `7c44b42`
 - **Severity**: HIGH
 - **Category**: Missed opportunities / Spatial consistency / Interruptibility

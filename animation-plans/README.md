@@ -29,7 +29,7 @@ Execution target: `apps/web` only. Do **not** invent a parallel CSS token system
 
 当前优先：
 
-1. **015** — 已 rebase 到 `feat/297`（`15fd4cf`），分支 `anim/015-assist-pane-slide`；待合入。
+1. **015** — 已基于最新 `main`（`22ba35c` / #305）重放，分支 `anim/015-assist-pane-from-main`；待合入。
 2. **013** — 若工作台 CSS 仍未合入，仍优先于 014。
 3. **014** — 可与 013 同 PR。
 
