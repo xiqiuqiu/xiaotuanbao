@@ -488,9 +488,21 @@ export function CreateDepartureWizard() {
     void bootstrap()
   }, [bootstrap, setAssistPaneCollapsed])
 
+  const ASSIST_PANE_EXIT_MS = 400 /* 480px slide; must match AssistPane.module.css 0.4s */
+
   useEffect(() => {
-    if (assistPaneCollapsed) {
+    if (!assistPaneCollapsed) {
+      return
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       reset()
+      return
+    }
+    const id = window.setTimeout(() => {
+      reset()
+    }, ASSIST_PANE_EXIT_MS)
+    return () => {
+      window.clearTimeout(id)
     }
   }, [assistPaneCollapsed, reset])
 

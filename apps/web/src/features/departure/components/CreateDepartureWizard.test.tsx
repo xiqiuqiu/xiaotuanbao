@@ -887,7 +887,9 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByTestId('copilot-kit')).toHaveAttribute('data-run-id', 'run-1')
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
-    expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+    }, { timeout: 700 })
 
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
