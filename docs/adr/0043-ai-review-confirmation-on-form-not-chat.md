@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: partially superseded by ADR-0046
 ---
 
 # AI 候选在表单审核，聊天 HITL 等待处置
+
+> **ADR-0046 部分取代本 ADR。** 「审核包是服务端事实源、候选只在中间表单修正/确认/拒绝、拒绝后等待 User 下一条指令」继续有效；CopilotKit `useHumanInTheLoop` / `respond()` 承担运行暂停与续跑、关闭后新建活动运行的机制不再作为可靠性边界。Agent 现在以持久化批次结束于 `awaiting_review`，表单处置写入服务端事件后由后台工作流决定是否继续。
 
 AI 阶段审核包由 Agent 经 `submitReviewPackage` 持久化为待确认候选，服务端审核包是跨刷新恢复的事实源。右侧会话通过 CopilotKit HITL 展示候选摘要、风险与「查看审核内容」入口，并等待 User 处置；高密度的候选查看、修正、确认与拒绝仍统一落在中间表单，聊天不提供第二套确认或拒绝按钮。
 
