@@ -83,7 +83,22 @@ export function toCopilotChatMessages(
   pendingUploadCount = 0,
 ): ChatMessage[] {
   const messages: ChatMessage[] = []
-  let sawBatchStatus = false
+  let statusSlot = -1
+  const upsertStatus = (label: string) => {
+    const item: ChatMessage = {
+      id: 'batch-status-current',
+      role: 'activity',
+      activityType: BATCH_STATUS_ACTIVITY_TYPE,
+      content: { label },
+    }
+    if (statusSlot >= 0) {
+      messages[statusSlot] = item
+      return
+    }
+    statusSlot = messages.length
+    messages.push(item)
+  }
+
   for (const event of events) {
     if (event.kind === 'user_message') {
       messages.push({
@@ -91,6 +106,7 @@ export function toCopilotChatMessages(
         role: 'user',
         content: String(event.payload.text ?? ''),
       })
+      statusSlot = -1
       continue
     }
     if (event.kind === 'agent_message') {
@@ -99,26 +115,28 @@ export function toCopilotChatMessages(
         role: 'assistant',
         content: String(event.payload.text ?? ''),
       })
+      statusSlot = -1
       continue
     }
-    const label =
-      event.kind === 'error'
-        ? '本批处理失败，可修改后重试'
-        : event.kind === 'batch_status'
-          ? batchStatusLabel(String(event.payload.status ?? ''), progressFromPayload(event.payload))
-          : null
-    if (!label) {
+    if (event.kind === 'error') {
+      messages.push({
+        id: `event-${event.sequence}`,
+        role: 'activity',
+        activityType: BATCH_STATUS_ACTIVITY_TYPE,
+        content: { label: '本批处理失败，可修改后重试' },
+      })
+      statusSlot = -1
       continue
     }
     if (event.kind === 'batch_status') {
-      sawBatchStatus = true
+      const label = batchStatusLabel(
+        String(event.payload.status ?? ''),
+        progressFromPayload(event.payload),
+      )
+      if (label) {
+        upsertStatus(label)
+      }
     }
-    messages.push({
-      id: `event-${event.sequence}`,
-      role: 'activity',
-      activityType: BATCH_STATUS_ACTIVITY_TYPE,
-      content: { label },
-    })
   }
   if (pendingText) {
     messages.push({
@@ -127,15 +145,10 @@ export function toCopilotChatMessages(
       activityType: BATCH_STATUS_ACTIVITY_TYPE,
       content: { label: pendingSendLabel(pendingUploadCount) },
     })
-  } else if (!sawBatchStatus && activeBatch) {
+  } else if (statusSlot < 0 && activeBatch) {
     const label = batchStatusLabel(activeBatch.status, activeBatch.materialProgress)
     if (label) {
-      messages.push({
-        id: `batch-${activeBatch.id}`,
-        role: 'activity',
-        activityType: BATCH_STATUS_ACTIVITY_TYPE,
-        content: { label },
-      })
+      upsertStatus(label)
     }
   }
   return messages

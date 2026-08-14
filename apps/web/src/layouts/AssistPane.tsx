@@ -9,7 +9,7 @@ export function AssistPane() {
   const { token } = theme.useToken()
   const collapsed = useUiStore((state) => state.assistPaneCollapsed)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
-  const { content } = useAssistPaneSlot()
+  const { content, headerExtra } = useAssistPaneSlot()
   const [motionReady, setMotionReady] = useState(false)
   useEffect(() => {
     setMotionReady(true)
@@ -34,13 +34,16 @@ export function AssistPane() {
       <div className={styles.pane}>
         <div className={styles.paneHeader}>
           <Typography.Text className={styles.paneTitle}>电子化助理</Typography.Text>
-          <Button
-            className={styles.close}
-            type="text"
-            icon={<CloseOutlined />}
-            onClick={() => setAssistPaneCollapsed(true)}
-            aria-label="收起电子化助理"
-          />
+          <div className={styles.headerActions}>
+            {headerExtra}
+            <Button
+              className={styles.close}
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={() => setAssistPaneCollapsed(true)}
+              aria-label="收起电子化助理"
+            />
+          </div>
         </div>
         <div className={styles.body}>
           {content ?? <p className={styles.placeholder}>当前页尚未接入业务辅助</p>}

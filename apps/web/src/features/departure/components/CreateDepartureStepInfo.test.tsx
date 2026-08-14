@@ -8,12 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
 import { CreateDepartureStepInfo } from './CreateDepartureStepInfo'
-import { listDepartureMaterials, previewDepartureMaterial } from '@/services/ai-create-task.service'
-
-vi.mock('@/services/ai-create-task.service', () => ({
-  listDepartureMaterials: vi.fn().mockResolvedValue([]),
-  previewDepartureMaterial: vi.fn(),
-}))
 
 vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn().mockResolvedValue([{ id: 'user-1', name: '阿财' }]),
@@ -41,7 +35,7 @@ const initialValues: InfoFormValues = {
   dayCount: 10,
 }
 
-function renderStep(values: InfoFormValues = initialValues, taskId?: string) {
+function renderStep(values: InfoFormValues = initialValues) {
   let formRef: FormInstance<InfoFormValues> | undefined
 
   function Harness() {
@@ -52,7 +46,7 @@ function renderStep(values: InfoFormValues = initialValues, taskId?: string) {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <ConfigProvider locale={zhCN}>
-          <CreateDepartureStepInfo form={form} route={route} taskId={taskId} />
+          <CreateDepartureStepInfo form={form} route={route} />
         </ConfigProvider>
       </QueryClientProvider>
     )
@@ -128,90 +122,5 @@ describe('CreateDepartureStepInfo', () => {
 
     expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-12')
     expect(screen.getByLabelText('天数')).toHaveValue('10')
-  })
-
-  it('lists archived materials and opens a preview', async () => {
-    vi.mocked(listDepartureMaterials).mockResolvedValue([
-      {
-        id: 'mat-1',
-        originalFilename: '团期.png',
-        contentType: 'image/png',
-        status: 'available',
-        statusVersion: 1,
-        sha256: 'abc',
-        sizeBytes: 12,
-        createdAt: '2026-08-14T00:00:00.000Z',
-        latestResultVersion: 1,
-      },
-    ])
-    vi.mocked(previewDepartureMaterial).mockResolvedValue({
-      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
-      filename: '团期.png',
-    })
-
-    renderStep(initialValues, 'task-1')
-
-    expect(await screen.findByText('发团资料')).toBeInTheDocument()
-    expect(screen.getByText('团期.png')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '预览' }))
-    await waitFor(() => {
-      expect(previewDepartureMaterial).toHaveBeenCalledWith('task-1', 'mat-1')
-    })
-    expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
-  })
-
-  it('shows loading and error for archived materials, and allows preview while parsing', async () => {
-    let resolveList!: (value: Awaited<ReturnType<typeof listDepartureMaterials>>) => void
-    vi.mocked(listDepartureMaterials).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveList = resolve
-        }),
-    )
-
-    renderStep(initialValues, 'task-1')
-    expect(await screen.findByText('发团资料')).toBeInTheDocument()
-
-    await act(async () => {
-      resolveList([])
-    })
-    await waitFor(() => {
-      expect(screen.queryByText('发团资料')).not.toBeInTheDocument()
-    })
-
-    cleanup()
-    vi.mocked(listDepartureMaterials).mockRejectedValueOnce(new Error('network'))
-    renderStep(initialValues, 'task-2')
-    expect(await screen.findByText('发团资料加载失败')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
-  })
-
-  it('previews original bytes while a material is still parsing', async () => {
-    vi.mocked(listDepartureMaterials).mockResolvedValue([
-      {
-        id: 'mat-1',
-        originalFilename: '团期.png',
-        contentType: 'image/png',
-        status: 'parsing',
-        statusVersion: 1,
-        sha256: 'abc',
-        sizeBytes: 12,
-        createdAt: '2026-08-14T00:00:00.000Z',
-        latestResultVersion: null,
-      },
-    ])
-    vi.mocked(previewDepartureMaterial).mockResolvedValue({
-      blob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
-      filename: '团期.png',
-    })
-
-    renderStep(initialValues, 'task-1')
-
-    expect(await screen.findByText('解析中')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: '预览' }))
-    await waitFor(() => {
-      expect(previewDepartureMaterial).toHaveBeenCalledWith('task-1', 'mat-1')
-    })
-    expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
   })
 })

@@ -797,6 +797,58 @@ describe('AiCreateAssistChat', () => {
     expect(capturedView.isRunning).toBe(true)
   })
 
+  it('updates parse progress in place when a later batch_status event arrives', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'waiting_for_materials', readyCount: 1, totalCount: 1 },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('已上传 1 个，解析 1/1')).toBeInTheDocument()
+    expect(screen.queryByText('已上传 1 个，解析 0/1')).not.toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'agent_running' },
+          createdAt: '2026-08-14T00:00:02.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('AI 处理中')).toBeInTheDocument()
+    expect(screen.queryByText('已上传 1 个，解析 1/1')).not.toBeInTheDocument()
+  })
+
   it('sends local files with the message and does not call runAgent', async () => {
     const file = new File([new Uint8Array([1, 2, 3])], '团期.png', { type: 'image/png' })
     queuedFiles = [file]

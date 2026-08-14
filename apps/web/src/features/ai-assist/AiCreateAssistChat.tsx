@@ -28,6 +28,7 @@ import type {
   AiReviewPackageView,
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
+import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
 import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
@@ -37,6 +38,7 @@ import {
   toCopilotChatMessages,
 } from './ai-create-copilot-messages'
 import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
+import { AssistMaterialsTrigger } from './AssistMaterialsTrigger'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
@@ -344,6 +346,13 @@ function filesFromAttachmentSources(
   })
 }
 
+function dropPreviewKey(filesByKey: Map<string, File>, key: string) {
+  filesByKey.delete(key)
+  if (key.startsWith('blob:')) {
+    URL.revokeObjectURL(key)
+  }
+}
+
 function ChatComposer({
   messages,
   isRunning,
@@ -380,12 +389,21 @@ function ChatComposer({
       accept: MATERIAL_ACCEPT,
       maxSize: MATERIAL_MAX_BYTES,
       onUpload: async (file) => {
-        const key = `local-file:${crypto.randomUUID()}`
-        filesByKeyRef.current.set(key, file)
-        return { type: 'url', value: key, mimeType: file.type }
+        const url = URL.createObjectURL(file)
+        filesByKeyRef.current.set(url, file)
+        return { type: 'url', value: url, mimeType: file.type }
       },
     },
   })
+
+  useEffect(() => {
+    const filesByKey = filesByKeyRef.current
+    return () => {
+      for (const key of [...filesByKey.keys()]) {
+        dropPreviewKey(filesByKey, key)
+      }
+    }
+  }, [])
 
   return (
     <div
@@ -418,7 +436,7 @@ function ChatComposer({
           const files = filesFromAttachmentSources(ready, filesByKeyRef.current)
           for (const item of ready) {
             const key = typeof item.source?.value === 'string' ? item.source.value : ''
-            filesByKeyRef.current.delete(key)
+            dropPreviewKey(filesByKeyRef.current, key)
           }
           void onSend(value, files, () => processFiles(files))
         }}
@@ -427,7 +445,7 @@ function ChatComposer({
         onRemoveAttachment={(id) => {
           const current = attachments.find((item) => item.id === id)
           const key = typeof current?.source?.value === 'string' ? current.source.value : ''
-          filesByKeyRef.current.delete(key)
+          dropPreviewKey(filesByKeyRef.current, key)
           removeAttachment(id)
         }}
         onAddFile={() => fileInputRef.current?.click()}
@@ -482,6 +500,9 @@ export function AiCreateAssistChat({
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
   const [errorText, setErrorText] = useState<string | null>(null)
+  const assistPane = useOptionalAssistPaneSlot()
+  const setHeaderExtra = assistPane?.setHeaderExtra
+  const [materialsRefreshKey, setMaterialsRefreshKey] = useState(0)
   const idempotencyKeyRef = useRef<string | null>(null)
   const sendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
@@ -489,6 +510,14 @@ export function AiCreateAssistChat({
   useEffect(() => {
     lastSequenceRef.current = events.reduce((max, event) => Math.max(max, event.sequence), 0)
   }, [events])
+
+  useEffect(() => {
+    if (!setHeaderExtra) {
+      return
+    }
+    setHeaderExtra(<AssistMaterialsTrigger taskId={taskId} refreshKey={materialsRefreshKey} />)
+    return () => setHeaderExtra(null)
+  }, [materialsRefreshKey, setHeaderExtra, taskId])
 
   useEffect(() => {
     const abort = new AbortController()
@@ -502,6 +531,9 @@ export function AiCreateAssistChat({
         .then((page) => {
           if (!abort.signal.aborted && page.events.length > 0) {
             setEvents((current) => mergeEvents(current, page.events))
+            if (page.events.some((event) => event.kind === 'batch_status')) {
+              setMaterialsRefreshKey((key) => key + 1)
+            }
           }
         })
         .catch(() => undefined)
@@ -515,6 +547,9 @@ export function AiCreateAssistChat({
         const parsed = JSON.parse(message.data) as AiConversationEventView
         if (typeof parsed.sequence === 'number' && typeof parsed.kind === 'string') {
           setEvents((current) => mergeEvents(current, [parsed]))
+          if (parsed.kind === 'batch_status') {
+            setMaterialsRefreshKey((key) => key + 1)
+          }
         }
       } catch {
         // ignore malformed frames
@@ -563,6 +598,9 @@ export function AiCreateAssistChat({
         setPendingText(null)
         setPendingUploadCount(0)
         idempotencyKeyRef.current = null
+        if (files.length > 0 || result.events.some((event) => event.kind === 'batch_status')) {
+          setMaterialsRefreshKey((key) => key + 1)
+        }
       } catch {
         setErrorText(ASSIST_ERROR_TEXT)
         setDraft(nextText)

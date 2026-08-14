@@ -1,0 +1,55 @@
+.panel {
+  width: 320px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.list {
+  width: 100%;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-block: 4px;
+}
+
+.icon {
+  flex: none;
+  color: var(--ant-color-text-secondary);
+}
+
+.filename {
+  flex: 1;
+  min-width: 0;
+}
+
+.status {
+  flex: none;
+  white-space: nowrap;
+}
+
+.preview {
+  flex: none;
+  padding-inline: 0;
+}
+
+.previewImage {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.previewFrame {
+  width: 100%;
+  height: 480px;
+  border: 0;
+}

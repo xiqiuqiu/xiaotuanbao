@@ -1097,6 +1097,7 @@ describe('CreateDepartureWizard', () => {
 
     expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
     expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '发团资料' })).toBeInTheDocument()
     expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()

@@ -9,7 +9,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Row,
   Segmented,
   Select,
@@ -22,11 +21,10 @@ import { useQuery } from '@tanstack/react-query'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { DirectoryProfileStatus, ResourceKind } from '@xiaotuanbao/shared'
-import type { AiReviewPackageView, AiReviewableBasicInfoField, DepartureMaterialView, SupplierSummary } from '@/types/api'
+import type { AiReviewPackageView, AiReviewableBasicInfoField, SupplierSummary } from '@/types/api'
 import { listEmployeeOptions } from '@/services/employee.service'
 import { listSuppliers } from '@/services/supplier.service'
 import { getRouteTemplate } from '@/services/route-template.service'
-import { listDepartureMaterials, previewDepartureMaterial } from '@/services/ai-create-task.service'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { DEPARTURE_TYPE_OPTIONS } from '../catalog'
 import type { InfoFormValues, RouteStepValues } from '../utils/departure-wizard-form'
@@ -52,7 +50,6 @@ interface CreateDepartureStepInfoProps {
   templatePickerOpen?: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
-  taskId?: string | null
 }
 
 function toDayjs(value?: string): Dayjs | null {
@@ -478,144 +475,6 @@ function DepartureSummary({ route, copySummary, helperTextStyle }: DepartureSumm
   )
 }
 
-function materialStatusLabel(status: DepartureMaterialView['status']): string {
-  if (status === 'available') return '已解析'
-  if (status === 'partially_available') return '部分可解析'
-  if (status === 'parsing') return '解析中'
-  if (status === 'queued' || status === 'uploaded') return '排队中'
-  if (status === 'failed') return '解析失败'
-  return '处理中'
-}
-
-function ArchivedMaterialsCard({ taskId }: { taskId: string }) {
-  const [preview, setPreview] = useState<{
-    filename: string
-    contentType: string
-    url: string
-  } | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const query = useQuery({
-    queryKey: ['ai-create-materials', taskId],
-    queryFn: () => listDepartureMaterials(taskId),
-    enabled: Boolean(taskId),
-    refetchInterval: (current) => {
-      const items = current.state.data ?? []
-      return items.some(
-        (item) =>
-          item.status === 'queued' || item.status === 'uploaded' || item.status === 'parsing',
-      )
-        ? 2000
-        : false
-    },
-  })
-  const materials = query.data ?? []
-
-  useEffect(() => {
-    return () => {
-      if (preview) {
-        URL.revokeObjectURL(preview.url)
-      }
-    }
-  }, [preview])
-
-  const openPreview = (material: DepartureMaterialView) => {
-    setPreviewError(null)
-    void previewDepartureMaterial(taskId, material.id)
-      .then(({ blob, filename }) => {
-        setPreview({
-          filename: filename || material.originalFilename,
-          contentType: material.contentType,
-          url: URL.createObjectURL(blob),
-        })
-      })
-      .catch(() => {
-        setPreviewError('发团资料预览失败，请稍后重试')
-      })
-  }
-
-  if (query.isError && !query.data) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        className={styles.materialsCard}
-        title="发团资料加载失败"
-        action={
-          <Button size="small" aria-label="重试" onClick={() => void query.refetch()}>
-            重试
-          </Button>
-        }
-      />
-    )
-  }
-
-  if (query.isPending) {
-    return <Card size="small" title="发团资料" loading className={styles.materialsCard} />
-  }
-
-  if (materials.length === 0) {
-    return null
-  }
-
-  return (
-    <>
-      <Card size="small" title="发团资料" className={styles.materialsCard}>
-        <Space orientation="vertical" size={8} className={styles.summaryContent}>
-          {previewError ? (
-            <Alert type="error" showIcon title={previewError} />
-          ) : null}
-          {query.isError ? (
-            <Alert
-              type="error"
-              showIcon
-              title="发团资料刷新失败"
-              action={
-                <Button size="small" aria-label="重试" onClick={() => void query.refetch()}>
-                  重试
-                </Button>
-              }
-            />
-          ) : null}
-          {materials.map((material) => (
-            <div key={material.id} className={styles.materialRow}>
-              <Typography.Text ellipsis={{ tooltip: material.originalFilename }}>
-                {material.originalFilename}
-              </Typography.Text>
-              <Space size={4}>
-                <Typography.Text type="secondary">
-                  {materialStatusLabel(material.status)}
-                </Typography.Text>
-                <Button type="link" onClick={() => openPreview(material)}>
-                  预览
-                </Button>
-              </Space>
-            </div>
-          ))}
-        </Space>
-      </Card>
-      <Modal
-        title={preview?.filename}
-        open={Boolean(preview)}
-        footer={null}
-        onCancel={() => setPreview(null)}
-        width={720}
-      >
-        {preview?.contentType.startsWith('image/') ? (
-          <img src={preview.url} alt={preview.filename} className={styles.materialPreview} />
-        ) : preview ? (
-          <object
-            data={preview.url}
-            type={preview.contentType}
-            className={styles.materialPreviewFrame}
-          >
-            无法预览该文件
-          </object>
-        ) : null}
-      </Modal>
-    </>
-  )
-}
-
 export function CreateDepartureStepInfo({
   form,
   route,
@@ -625,7 +484,6 @@ export function CreateDepartureStepInfo({
   templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
-  taskId,
 }: CreateDepartureStepInfoProps) {
   const { token } = theme.useToken()
   const defaultDayCount = route.defaultDayCount
@@ -771,7 +629,6 @@ export function CreateDepartureStepInfo({
             copySummary={copySummary}
             helperTextStyle={helperTextStyle}
           />
-          {taskId ? <ArchivedMaterialsCard taskId={taskId} /> : null}
         </Col>
       </Row>
     </div>
