@@ -8,6 +8,8 @@ import {
   type HeadlessExecutionResult,
 } from '@xiaotuanbao/ai-contracts'
 
+const DEFAULT_RUN_TIMEOUT_MS = 120_000
+
 @Injectable()
 export class AiHeadlessClient {
   constructor(private readonly configService: ConfigService) {}
@@ -19,52 +21,69 @@ export class AiHeadlessClient {
     const parsedIdentity = headlessExecutionIdentitySchema.parse(identity)
     const url = this.headlessRunUrl()
     const secret = this.configService.get<string>('app.aiCreateAssist.agentServiceSecret') ?? ''
-    let response: Response
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.runTimeoutMs())
     try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${delegationToken}`,
-          'Content-Type': 'application/json',
-          'X-Agent-Service-Key': secret,
-        },
-        body: JSON.stringify(parsedIdentity),
-      })
-    } catch {
-      return {
-        kind: 'failed',
-        error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
-      }
-    }
-
-    let payload: unknown
-    try {
-      payload = await response.json()
-    } catch {
-      return {
-        kind: 'failed',
-        error: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON(),
-      }
-    }
-
-    const data =
-      payload && typeof payload === 'object' && 'data' in payload
-        ? (payload as { data: unknown }).data
-        : payload
-    const parsed = headlessExecutionResultSchema.safeParse(data)
-    if (!parsed.success) {
-      if (!response.ok) {
+      let response: Response
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${delegationToken}`,
+            'Content-Type': 'application/json',
+            'X-Agent-Service-Key': secret,
+          },
+          body: JSON.stringify(parsedIdentity),
+          signal: controller.signal,
+        })
+      } catch {
         return {
           kind: 'failed',
           error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
         }
       }
-      return {
-        kind: 'failed',
-        error: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON(),
+
+      let payload: unknown
+      try {
+        payload = await response.json()
+      } catch {
+        return {
+          kind: 'failed',
+          error: AiCollaborationError.fromCode(
+            controller.signal.aborted ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
+          ).toJSON(),
+        }
       }
+
+      const data =
+        payload && typeof payload === 'object' && 'data' in payload
+          ? (payload as { data: unknown }).data
+          : payload
+      const parsed = headlessExecutionResultSchema.safeParse(data)
+      if (!parsed.success) {
+        if (!response.ok) {
+          return {
+            kind: 'failed',
+            error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
+          }
+        }
+        return {
+          kind: 'failed',
+          error: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON(),
+        }
+      }
+      return parsed.data
+    } finally {
+      clearTimeout(timer)
     }
-    return parsed.data
+  }
+
+  private runTimeoutMs(): number {
+    const configured = this.configService.get<number>('app.aiCreateAssist.runTimeoutMs')
+    if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+      return configured
+    }
+    return DEFAULT_RUN_TIMEOUT_MS
   }
 
   private headlessRunUrl(): string {
