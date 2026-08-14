@@ -1,4 +1,8 @@
 export const SEND_TEXT_OPERATION = 'ai-conversation.send-text'
+export const RETRY_FAILED_MATERIALS_OPERATION = 'ai-conversation.retry-failed-materials'
+export const REMOVE_BATCH_MATERIALS_OPERATION = 'ai-conversation.remove-materials'
+export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
+export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
 
 /** 同一会话中仍会占用 Worker 的在途批次上限（排队 + 执行中，不含等待用户的暂停态）。 */
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3

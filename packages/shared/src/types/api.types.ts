@@ -906,6 +906,18 @@ export interface AiConversationEventView {
   createdAt: string
 }
 
+export type AiInputBatchMaterialReadyStatus = 'pending' | 'ready' | 'failed'
+
+export interface AiInputBatchMaterialView {
+  materialId: string
+  originalFilename: string
+  required: boolean
+  parseResultVersion: number | null
+  status: AiInputBatchMaterialReadyStatus
+  errorCode: string | null
+  errorMessage: string | null
+}
+
 export interface AiInputBatchView {
   id: string
   status: AiInputBatchStatus
@@ -913,7 +925,9 @@ export interface AiInputBatchView {
   materialProgress?: {
     ready: number
     total: number
+    failed: number
   }
+  materials?: AiInputBatchMaterialView[]
 }
 
 export interface AiConversationView {

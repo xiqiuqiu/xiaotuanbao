@@ -9,7 +9,7 @@ import {
   useRenderTool,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
-import { Alert, Badge, Card, Typography } from 'antd'
+import { Alert, Badge, Button, Card, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -29,13 +29,21 @@ import type {
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
-import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
+import {
+  abandonConversationBatch,
+  listAiConversationEvents,
+  removeConversationMaterials,
+  retryFailedConversationMaterials,
+  sendAiConversationMessage,
+  stopConversationBatch,
+} from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
 import {
   BATCH_STATUS_ACTIVITY_TYPE,
   isCopilotChatRunning,
   toCopilotChatMessages,
+  type BatchStatusActivityContent,
 } from './ai-create-copilot-messages'
 import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import { AssistMaterialsTrigger } from './AssistMaterialsTrigger'
@@ -300,32 +308,93 @@ function mergeEvents(
   return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
 }
 
-const batchStatusActivityRenderer: ReactActivityMessageRenderer<{ label: string }> = {
-  activityType: BATCH_STATUS_ACTIVITY_TYPE,
-  content: {
-    '~standard': {
-      version: 1,
-      vendor: 'xiaotuanbao',
-      validate(value) {
-        if (
-          value &&
-          typeof value === 'object' &&
-          typeof (value as { label?: unknown }).label === 'string'
-        ) {
-          return { value: value as { label: string } }
-        }
-        return { issues: [{ message: 'invalid batch status activity' }] }
+function createBatchStatusActivityRenderer(handlers: {
+  pending: boolean
+  onRetry: (batchId: string) => void
+  onRemove: (batchId: string, materialId: string) => void
+  onAbandon: (batchId: string) => void
+  onStop: (batchId: string) => void
+}): ReactActivityMessageRenderer<BatchStatusActivityContent> {
+  return {
+    activityType: BATCH_STATUS_ACTIVITY_TYPE,
+    content: {
+      '~standard': {
+        version: 1,
+        vendor: 'xiaotuanbao',
+        validate(value) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as { label?: unknown }).label === 'string'
+          ) {
+            return { value: value as BatchStatusActivityContent }
+          }
+          return { issues: [{ message: 'invalid batch status activity' }] }
+        },
       },
     },
-  },
-  render: ({ content }) => (
-    <p className={styles.notice} role="status">
-      {content.label}
-    </p>
-  ),
+    render: ({ content }) => (
+      <div className={styles.noticeBlock}>
+        <p className={styles.notice} role="status">
+          {content.label}
+        </p>
+        {content.failedMaterials?.map((item) => (
+          <div key={item.materialId} className={styles.failedMaterial}>
+            <p className={styles.failedMaterialName}>
+              {item.originalFilename}
+              {item.errorMessage ? `：${item.errorMessage}` : ''}
+            </p>
+            {content.showMaterialActions && content.batchId ? (
+              <Space size={4}>
+                <Button
+                  type="link"
+                  size="small"
+                  loading={handlers.pending}
+                  disabled={handlers.pending}
+                  onClick={() => handlers.onRemove(content.batchId!, item.materialId)}
+                >
+                  移除
+                </Button>
+              </Space>
+            ) : null}
+          </div>
+        ))}
+        {content.showMaterialActions && content.batchId ? (
+          <Space size={8} className={styles.failedActions}>
+            <Button
+              type="primary"
+              size="small"
+              loading={handlers.pending}
+              onClick={() => handlers.onRetry(content.batchId!)}
+            >
+              重试失败资料
+            </Button>
+            <Button
+              danger
+              size="small"
+              loading={handlers.pending}
+              onClick={() => handlers.onAbandon(content.batchId!)}
+            >
+              放弃本批
+            </Button>
+          </Space>
+        ) : null}
+        {content.showStopAction && content.batchId ? (
+          <Space size={8} className={styles.failedActions}>
+            <Button
+              danger
+              size="small"
+              loading={handlers.pending}
+              onClick={() => handlers.onStop(content.batchId!)}
+            >
+              停止当前处理
+            </Button>
+          </Space>
+        ) : null}
+      </div>
+    ),
+  }
 }
-
-const activityRenderers = [batchStatusActivityRenderer]
 const EVENT_CATCH_UP_POLL_MS = 1_000
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
@@ -499,6 +568,7 @@ export function AiCreateAssistChat({
   const [draft, setDraft] = useState('')
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
+  const [commandPending, setCommandPending] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
   const assistPane = useOptionalAssistPaneSlot()
   const setHeaderExtra = assistPane?.setHeaderExtra
@@ -618,6 +688,73 @@ export function AiCreateAssistChat({
   useEffect(() => {
     sendRef.current = send
   }, [send])
+
+  const applyCommandResult = useCallback((result: { events: AiConversationEventView[] }) => {
+    setEvents((current) => mergeEvents(current, result.events))
+    setMaterialsRefreshKey((key) => key + 1)
+  }, [])
+
+  const runBatchCommand = useCallback(
+    async (execute: () => Promise<{ events: AiConversationEventView[] }>) => {
+      if (sendingRef.current) {
+        return
+      }
+      sendingRef.current = true
+      setCommandPending(true)
+      setErrorText(null)
+      try {
+        applyCommandResult(await execute())
+      } catch {
+        setErrorText(ASSIST_ERROR_TEXT)
+      } finally {
+        sendingRef.current = false
+        setCommandPending(false)
+      }
+    },
+    [applyCommandResult],
+  )
+
+  const activityRenderers = useMemo(
+    () => [
+      createBatchStatusActivityRenderer({
+        pending: commandPending,
+        onRetry: (batchId) => {
+          void runBatchCommand(() =>
+            retryFailedConversationMaterials(
+              taskId,
+              conversationId,
+              batchId,
+              undefined,
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onRemove: (batchId, materialId) => {
+          void runBatchCommand(() =>
+            removeConversationMaterials(
+              taskId,
+              conversationId,
+              batchId,
+              [materialId],
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onAbandon: (batchId) => {
+          void runBatchCommand(() =>
+            abandonConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+          )
+        },
+        onStop: (batchId) => {
+          void runBatchCommand(() =>
+            stopConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+          )
+        },
+      }),
+    ],
+    [commandPending, conversationId, runBatchCommand, taskId],
+  )
+
   const WelcomeScreen = useMemo(
     () =>
       function WelcomeScreenSlot({ input }: { input?: ReactNode }) {

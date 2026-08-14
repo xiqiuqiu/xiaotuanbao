@@ -100,6 +100,8 @@ export type {
   AiInputBatchStatus,
   AiConversationEventView,
   AiInputBatchView,
+  AiInputBatchMaterialView,
+  AiInputBatchMaterialReadyStatus,
   AiConversationView,
   SendAiConversationMessageDto,
   SendAiConversationMessageResult,

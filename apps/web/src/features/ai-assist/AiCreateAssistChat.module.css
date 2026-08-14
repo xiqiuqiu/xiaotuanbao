@@ -55,6 +55,29 @@
   color: inherit;
 }
 
+.noticeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.failedMaterial {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.failedMaterialName {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ant-color-error);
+}
+
+.failedActions {
+  margin-top: 4px;
+}
+
 .reviewCard {
   width: 100%;
 }

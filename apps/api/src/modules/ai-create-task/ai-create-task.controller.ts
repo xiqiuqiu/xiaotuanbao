@@ -41,6 +41,8 @@ import {
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
   PatchAiReviewPackageDto,
+  RetryFailedMaterialsDto,
+  RemoveBatchMaterialsDto,
   SaveDepartureCreationDraftDto,
   SendAiConversationMessageDto,
   ListAiConversationEventsQueryDto,
@@ -110,6 +112,90 @@ export class AiCreateTaskController {
         buffer: file.buffer,
         size: file.size,
       })),
+    )
+  }
+
+  @Post(':taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  retryFailedMaterials(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: RetryFailedMaterialsDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.retryFailedMaterials(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      batchId,
+      dto.materialIds,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':taskId/conversations/:conversationId/batches/:batchId/remove-materials')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  removeBatchMaterials(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: RemoveBatchMaterialsDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.removeMaterials(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      batchId,
+      dto.materialIds,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':taskId/conversations/:conversationId/batches/:batchId/abandon')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  abandonBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.abandonBatch(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':taskId/conversations/:conversationId/batches/:batchId/stop')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  stopBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.stopBatch(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      batchId,
+      idempotencyKey,
     )
   }
 

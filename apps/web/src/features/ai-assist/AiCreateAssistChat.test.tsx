@@ -149,11 +149,27 @@ vi.mock('@copilotkit/react-core/v2', () => ({
         <div role="log">
           {messages.map((message) => {
             if (message.role === 'activity' && message.content && typeof message.content === 'object') {
-              const label = (message.content as { label?: unknown }).label
+              const content = message.content as {
+                label?: unknown
+                failedMaterials?: Array<{ originalFilename: string; errorMessage: string | null }>
+                showMaterialActions?: boolean
+              }
               return (
-                <p key={message.id} role="status">
-                  {typeof label === 'string' ? label : ''}
-                </p>
+                <div key={message.id}>
+                  <p role="status">{typeof content.label === 'string' ? content.label : ''}</p>
+                  {content.failedMaterials?.map((item) => (
+                    <p key={item.originalFilename}>
+                      {item.originalFilename}
+                      {item.errorMessage ? `：${item.errorMessage}` : ''}
+                    </p>
+                  ))}
+                  {content.showMaterialActions ? (
+                    <>
+                      <button type="button">重试失败资料</button>
+                      <button type="button">放弃本批</button>
+                    </>
+                  ) : null}
+                </div>
               )
             }
             return (
@@ -825,7 +841,12 @@ describe('AiCreateAssistChat', () => {
         data: JSON.stringify({
           sequence: 3,
           kind: 'error',
-          payload: { errorCode: 'PARSE_FAILED' },
+          payload: {
+            errorCode: 'PARSE_FAILED',
+            materialId: 'mat-1',
+            originalFilename: '空白.png',
+            errorMessage: '无法从该资料提取可用文字',
+          },
           createdAt: '2026-08-14T00:00:01.000Z',
         }),
       } as MessageEvent)
@@ -833,14 +854,30 @@ describe('AiCreateAssistChat', () => {
         data: JSON.stringify({
           sequence: 4,
           kind: 'batch_status',
-          payload: { status: 'failed', errorCode: 'PARSE_FAILED' },
+          payload: {
+            status: 'waiting_for_materials',
+            batchId: 'batch-1',
+            readyCount: 0,
+            totalCount: 1,
+            failedCount: 1,
+            failedMaterials: [
+              {
+                materialId: 'mat-1',
+                originalFilename: '空白.png',
+                errorCode: 'PARSE_FAILED',
+                errorMessage: '无法从该资料提取可用文字',
+              },
+            ],
+          },
           createdAt: '2026-08-14T00:00:01.000Z',
         }),
       } as MessageEvent)
     })
 
-    expect(screen.getByText('本批处理失败，可修改后重试')).toBeInTheDocument()
-    expect(screen.getByText('处理失败')).toBeInTheDocument()
+    expect(screen.getByText('有 1 个资料解析失败，请重试、移除后继续或放弃本批')).toBeInTheDocument()
+    expect(screen.getByText('空白.png：无法从该资料提取可用文字')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试失败资料' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '放弃本批' })).toBeInTheDocument()
     expect(capturedView.isRunning).toBe(false)
   })
 
