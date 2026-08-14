@@ -83,6 +83,7 @@ export type {
   DepartureCreationDraftSnapshot,
   DepartureCreationDraftView,
   AiCreateTaskSummary,
+  DepartureMaterialView,
   SaveDepartureCreationDraftDto,
   ConfirmAiCreateTaskDto,
   AiCreateAssistAvailability,

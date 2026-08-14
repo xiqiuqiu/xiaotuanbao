@@ -16,6 +16,7 @@ describe('searchRouteTemplates contract v1', () => {
     expect(AI_CREATE_TOOL_NAMES).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
     expect(SEARCH_ROUTE_TEMPLATES_LIMIT).toBe(5)
@@ -25,11 +26,13 @@ describe('searchRouteTemplates contract v1', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
     ])
   })
 

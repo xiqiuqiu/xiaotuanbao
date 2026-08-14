@@ -142,4 +142,37 @@ describe('PendingCandidateOverlay', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(onCorrect).not.toHaveBeenCalled()
   })
+
+  it('shows material region excerpt, page number, and a preview action', async () => {
+    const user = userEvent.setup()
+    const onPreviewMaterial = vi.fn()
+    render(
+      <ConfigProvider locale={zhCN}>
+        <PendingCandidateOverlay
+          fieldKey="name"
+          candidate={candidate({
+            fieldKey: 'name',
+            proposedValue: '八月川西团',
+            evidence: [
+              {
+                kind: 'material_region',
+                materialId: 'mat-1',
+                pageNumber: 2,
+                excerpt: '八月川西团',
+                coordinateSystem: 'pdf_point',
+              },
+            ],
+          })}
+          savedDisplay="未填写"
+          onCorrect={vi.fn()}
+          onPreviewMaterial={onPreviewMaterial}
+        />
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '查看证据' }))
+    expect(screen.getByText('「八月川西团」第 2 页')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '预览档案' }))
+    expect(onPreviewMaterial).toHaveBeenCalledWith('mat-1')
+  })
 })

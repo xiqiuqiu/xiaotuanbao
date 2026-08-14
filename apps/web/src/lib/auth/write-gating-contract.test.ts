@@ -72,6 +72,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  uploadDepartureMaterial: { gating: 'departureWrite', endpointKey: 'departure:write' },
   // 资源应付作废：路径在 /finance 下，但后端要 departure:write（作废属发团编辑）。
   voidResourcePayable: { gating: 'departureWrite', endpointKey: 'departure:write' },
 
@@ -183,6 +184,8 @@ const GATING_AWARENESS_ALLOWLIST: Record<string, string> = {
     '新建/复制发团属 departure:write；本向导仅由 CreateDeparturePage 渲染，后者已做页面级 canEditDeparture 403，财务无法进入',
   '/src/features/ai-assist/useAiCreateAssistBootstrap.ts':
     '协助会话由 CreateDepartureWizard 调用，页面级 canEditDeparture 已挡住无写权限角色',
+  '/src/features/ai-assist/AiCreateAssistChat.tsx':
+    '聊天附件上传发团资料由协助会话触发，页面级 canEditDeparture 已挡住无写权限角色',
   '/src/features/departure/components/CreateDepartureStepRoute.tsx':
     '删除常用路线属 departure:write；整个新建向导由 CreateDeparturePage 页面级 canEditDeparture 挡住，财务无法进入',
   '/src/features/departure/components/SaveAsRouteTemplateModal.tsx':

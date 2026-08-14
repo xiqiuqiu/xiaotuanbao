@@ -61,6 +61,28 @@ export const getTaskContextOutputSchema = z
         optionalPresent: z.array(z.string()),
       })
       .strip(),
+    materials: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            originalFilename: z.string(),
+            contentType: z.string(),
+            status: z.enum([
+              'uploaded',
+              'queued',
+              'parsing',
+              'available',
+              'partially_available',
+              'failed',
+              'isolated',
+            ]),
+            latestResultVersion: z.number().int().positive().nullable(),
+          })
+          .strip(),
+      )
+      .default([]),
+    materialConsumePending: z.boolean().default(false),
   })
   .strip()
 

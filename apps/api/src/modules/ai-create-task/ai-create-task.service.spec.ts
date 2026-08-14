@@ -102,6 +102,7 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     )
     return { service, findFirst, tx }
   }
@@ -158,5 +159,94 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       }
       expect(body.data.pendingReview).toMatchObject({ id: packageId })
     }
+  })
+})
+
+describe('AiCreateTaskService.getTaskContextForAgent materials', () => {
+  const organizationId = 'org-1'
+  const userId = 'user-1'
+  const taskId = 'task-1'
+  const runId = 'run-2'
+  const now = new Date('2026-08-14T01:00:00.000Z')
+
+  it('only returns archives created in the current assist window', async () => {
+    const snapshot = {
+      mode: DepartureCreationDraftMode.MANUAL,
+      routeName: '川西',
+    }
+    const task = {
+      id: taskId,
+      organizationId,
+      creatorUserId: userId,
+      status: PrismaTaskStatus.in_progress,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot,
+        createdAt: now,
+        updatedAt: now,
+      },
+      reviewPackages: [],
+    }
+    const windowMaterial = {
+      id: 'mat-new',
+      originalFilename: '行程.pdf',
+      contentType: 'application/pdf',
+      status: 'available',
+      latestResultVersion: 1,
+    }
+    const listForTask = jest
+      .fn()
+      .mockResolvedValueOnce([
+        { ...windowMaterial, id: 'mat-old' },
+        windowMaterial,
+      ])
+      .mockResolvedValueOnce([windowMaterial])
+    const isConsumePending = jest.fn().mockResolvedValue(false)
+    const prisma = {
+      aiCreateTask: { findFirst: jest.fn().mockResolvedValue(task) },
+      aiCreateActivityRun: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: runId,
+          taskId,
+          organizationId,
+          creatorUserId: userId,
+          status: 'running',
+          startedAt: now,
+        }),
+      },
+    }
+    const service = new AiCreateTaskService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { listForTask, isConsumePending } as never,
+    )
+
+    const result = await service.getTaskContextForAgent(
+      { userId, organizationId, taskId, runId },
+      { taskId, runId },
+    )
+
+    expect(listForTask).toHaveBeenNthCalledWith(2, organizationId, taskId, { createdAtGte: now })
+    expect(isConsumePending).toHaveBeenCalledWith(organizationId, taskId, { createdAtGte: now })
+    expect(result.materials).toEqual([
+      {
+        id: 'mat-new',
+        originalFilename: '行程.pdf',
+        contentType: 'application/pdf',
+        status: 'available',
+        latestResultVersion: 1,
+      },
+    ])
+    expect(result.materialConsumePending).toBe(false)
   })
 })

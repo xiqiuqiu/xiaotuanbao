@@ -9,10 +9,12 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
 import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
+import { MaterialPreviewModal } from '@/features/ai-assist/MaterialPreviewModal'
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
 import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
+import { openedMaterialIds, windowMaterialConsume } from '@/features/ai-assist/window-material-consume'
 import {
   confirmAiCreateTask,
   confirmAiReviewPackage,
@@ -72,6 +74,7 @@ export function CreateDepartureWizard() {
 
   const [routeValues, setRouteValues] = useState<RouteStepValues>(() => createInitialRouteStepValues())
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null)
   const [initializingForm, setInitializingForm] = useState(
     () => Boolean(copyFromId) || Boolean(searchTaskId),
   )
@@ -735,6 +738,10 @@ export function CreateDepartureWizard() {
 
     if (session) {
       const currentTask = taskReview ?? session.task
+      const consume = windowMaterialConsume({
+        materials: currentTask.materials,
+        openedMaterialIds: openedMaterialIds(session.task.materials),
+      })
       setContent(
         <AiCreateAssistChat
           agentRuntimeUrl={session.agentRuntimeUrl}
@@ -748,6 +755,8 @@ export function CreateDepartureWizard() {
           progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
           pendingReview={currentTask.pendingReview}
           reviewDecision={reviewDecision}
+          materialConsumePending={consume.pending}
+          materialConsumeKey={consume.key}
           onReviewPackageSubmitted={() => {
             setReviewDecision(null)
             void refetchTaskReviewRef.current()
@@ -849,6 +858,7 @@ export function CreateDepartureWizard() {
                   templatePickerOpen={templatePickerOpen}
                   pendingReview={pendingReview}
                   onCorrectCandidate={handleCorrectCandidate}
+                  onPreviewMaterial={setPreviewMaterialId}
                 />
               )}
             </div>
@@ -896,6 +906,13 @@ export function CreateDepartureWizard() {
           onClearSelected={handleClearSelectedTemplate}
         />
       </Drawer>
+      {taskId ? (
+        <MaterialPreviewModal
+          taskId={taskId}
+          materialId={previewMaterialId}
+          onClose={() => setPreviewMaterialId(null)}
+        />
+      ) : null}
     </div>
   )
 }

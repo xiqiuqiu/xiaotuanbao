@@ -39,6 +39,7 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   'POST /api/ai-tools/v1/get-task-context',
   'POST /api/ai-tools/v1/submit-review-package',
   'POST /api/ai-tools/v1/search-route-templates',
+  'POST /api/ai-tools/v1/get-material-parse-result',
 ])
 
 /**
@@ -49,6 +50,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
   departureWrite: [
     { method: 'POST', path: '/api/departures' },
     { method: 'POST', path: '/api/ai-create-tasks/assist-session' },
+    { method: 'POST', path: '/api/ai-create-tasks/:taskId/materials' },
     { method: 'PATCH', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/confirm' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/reject' },

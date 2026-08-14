@@ -18,7 +18,12 @@ export interface AgentServerConfig {
   modelBaseUrl?: string
 }
 
-const AI_CREATE_TOOLS = ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'] as const
+const AI_CREATE_TOOLS = [
+  'getTaskContext',
+  'searchRouteTemplates',
+  'getMaterialParseResult',
+  'submitReviewPackage',
+] as const
 const ALLOWED_HEADERS = 'Authorization, Content-Type, X-Ai-Task-Id, X-Ai-Run-Id'
 
 export function createAgentServer(config: AgentServerConfig) {

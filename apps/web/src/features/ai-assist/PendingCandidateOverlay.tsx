@@ -2,7 +2,11 @@ import { Button, DatePicker, Input, InputNumber, Typography, theme } from 'antd'
 import { useState } from 'react'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import type { AiReviewCandidateView, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
+import type {
+  AiCandidateEvidence,
+  AiReviewCandidateView,
+  AiReviewableBasicInfoField,
+} from '@xiaotuanbao/shared'
 import { formatSavedValue, REVIEW_FIELD_LABELS } from './review-field-labels'
 import styles from './PendingCandidateOverlay.module.css'
 
@@ -12,12 +16,17 @@ export interface PendingCandidateOverlayProps {
   savedDisplay: string
   displayValue?: string
   onCorrect: (value: string | number | null) => void
+  onPreviewMaterial?: (materialId: string) => void
 }
 
-function evidenceText(candidate: AiReviewCandidateView): string {
-  return candidate.evidence
-    .map((item) => (item.kind === 'user_message' ? item.excerpt : item.rule))
-    .join('；')
+function evidenceLabel(item: AiCandidateEvidence): string {
+  if (item.kind === 'user_message') {
+    return item.excerpt
+  }
+  if (item.kind === 'system_derivation') {
+    return item.rule
+  }
+  return `「${item.excerpt}」第 ${item.pageNumber} 页`
 }
 
 export function PendingCandidateOverlay({
@@ -26,6 +35,7 @@ export function PendingCandidateOverlay({
   savedDisplay,
   displayValue,
   onCorrect,
+  onPreviewMaterial,
 }: PendingCandidateOverlayProps) {
   const { token } = theme.useToken()
   const [evidenceOpen, setEvidenceOpen] = useState(false)
@@ -82,9 +92,33 @@ export function PendingCandidateOverlay({
         {evidenceOpen ? '收起证据' : '查看证据'}
       </Button>
       {evidenceOpen ? (
-        <Typography.Paragraph type="secondary" className={styles.evidence}>
-          {evidenceText(candidate)}
-        </Typography.Paragraph>
+        <div className={styles.evidence}>
+          {candidate.evidence.map((item) => (
+            <Typography.Paragraph
+              key={
+                item.kind === 'material_region'
+                  ? `${item.materialId}:${item.pageNumber}:${item.excerpt}`
+                  : item.kind === 'user_message'
+                    ? `user:${item.messageId ?? item.excerpt}`
+                    : `rule:${item.rule}`
+              }
+              type="secondary"
+              className={styles.evidenceItem}
+            >
+              {evidenceLabel(item)}
+              {item.kind === 'material_region' && onPreviewMaterial ? (
+                <Button
+                  type="link"
+                  size="small"
+                  className={styles.evidenceToggle}
+                  onClick={() => onPreviewMaterial(item.materialId)}
+                >
+                  预览档案
+                </Button>
+              ) : null}
+            </Typography.Paragraph>
+          ))}
+        </div>
       ) : null}
     </div>
   )

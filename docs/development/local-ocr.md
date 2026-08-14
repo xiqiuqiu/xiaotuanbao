@@ -17,6 +17,7 @@ pnpm ocr:smoke
 ```dotenv
 OCR_BASE_URL=http://127.0.0.1:8089
 OCR_REQUEST_TIMEOUT_MS=60000
+PARSE_SERVICE_TOKEN=
 ```
 
 如果 NestJS 也运行在同一个 Compose 网络中，则使用 `http://ocr:8089`。预览服务器仍使用已确认的 `http://host.docker.internal:8089`，生产地址由部署环境单独配置。
@@ -24,8 +25,9 @@ OCR_REQUEST_TIMEOUT_MS=60000
 ## 识别接口
 
 - `GET /health`：服务、RapidOCR 与推理后端版本。
-- `POST /v1/ocr`：multipart 字段 `file`，支持 PNG、JPEG、WebP、TIFF 和 PDF。
-- 返回逐页文本行、四点坐标、置信度、耗时与引擎版本，供 NestJS 转换为版本化证据。
+- `POST /v1/parse`：发团资料解析。PDF 先走 pdf-inspector 1.14.2 按页路由，`needsOcr` 页和图片再进 RapidOCR。设置 `PARSE_SERVICE_TOKEN` 后要求 `Authorization: Bearer`。
+- `POST /v1/ocr`：兼容全页 OCR。multipart 字段 `file`，支持 PNG、JPEG、WebP、TIFF 和 PDF。
+- 返回逐页文本行、坐标、来源（`native_pdf` / `ocr`）与解析器版本，供 NestJS 转为发团资料解析结果。
 
 ```bash
 curl --form 'file=@/absolute/path/to/sample.png' http://127.0.0.1:8089/v1/ocr

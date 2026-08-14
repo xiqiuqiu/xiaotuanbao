@@ -50,6 +50,7 @@ interface CreateDepartureStepInfoProps {
   templatePickerOpen?: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
+  onPreviewMaterial?: (materialId: string) => void
 }
 
 function toDayjs(value?: string): Dayjs | null {
@@ -79,6 +80,7 @@ interface DepartureInfoFormProps {
   templatePickerOpen?: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
+  onPreviewMaterial?: (materialId: string) => void
 }
 
 function RouteSourceFields({
@@ -87,6 +89,7 @@ function RouteSourceFields({
   templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
+  onPreviewMaterial,
   onRouteChange,
   onOpenTemplatePicker,
 }: {
@@ -95,6 +98,7 @@ function RouteSourceFields({
   templatePickerOpen: boolean
   pendingReview?: AiReviewPackageView | null
   onCorrectCandidate?: (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => void
+  onPreviewMaterial?: (materialId: string) => void
   onRouteChange: (values: RouteStepValues) => void
   onOpenTemplatePicker: () => void
 }) {
@@ -141,6 +145,7 @@ function RouteSourceFields({
             displayValue={templateQuery.data?.name}
             savedDisplay={route.templateId ? route.routeName : '未选择'}
             onCorrect={(value) => onCorrectCandidate('templateId', value)}
+            onPreviewMaterial={onPreviewMaterial}
           />
         </Form.Item>
       ) : sourceValue === 'template' && route.templateId ? (
@@ -163,6 +168,7 @@ function RouteSourceFields({
               candidate={routeNameCandidate}
               savedDisplay={route.routeName}
               onCorrect={(value) => onCorrectCandidate('routeName', value)}
+              onPreviewMaterial={onPreviewMaterial}
             />
           ) : (
             <Input
@@ -203,6 +209,7 @@ function DepartureInfoForm({
   templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
+  onPreviewMaterial,
 }: DepartureInfoFormProps) {
   const savedName = Form.useWatch('name', form) as string | undefined
   const savedStartDate = Form.useWatch('startDate', form) as string | undefined
@@ -222,6 +229,7 @@ function DepartureInfoForm({
         candidate={candidate}
         savedDisplay={savedDisplay}
         onCorrect={(value) => onCorrectCandidate(fieldKey, value)}
+        onPreviewMaterial={onPreviewMaterial}
       />
     )
   }
@@ -257,6 +265,7 @@ function DepartureInfoForm({
             templatePickerOpen={Boolean(templatePickerOpen)}
             pendingReview={pendingReview}
             onCorrectCandidate={onCorrectCandidate}
+            onPreviewMaterial={onPreviewMaterial}
             onRouteChange={onRouteChange}
             onOpenTemplatePicker={onOpenTemplatePicker}
           />
@@ -484,6 +493,7 @@ export function CreateDepartureStepInfo({
   templatePickerOpen,
   pendingReview,
   onCorrectCandidate,
+  onPreviewMaterial,
 }: CreateDepartureStepInfoProps) {
   const { token } = theme.useToken()
   const defaultDayCount = route.defaultDayCount
@@ -620,6 +630,7 @@ export function CreateDepartureStepInfo({
             templatePickerOpen={templatePickerOpen}
             pendingReview={pendingReview}
             onCorrectCandidate={onCorrectCandidate}
+            onPreviewMaterial={onPreviewMaterial}
           />
         </Col>
 

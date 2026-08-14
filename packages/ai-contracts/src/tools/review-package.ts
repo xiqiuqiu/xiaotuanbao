@@ -13,6 +13,7 @@ export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
 export const AI_CREATE_TOOL_NAMES = [
   'getTaskContext',
   'searchRouteTemplates',
+  'getMaterialParseResult',
   'submitReviewPackage',
 ] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
@@ -55,6 +56,16 @@ export const aiCandidateEvidenceSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('system_derivation'),
       rule: z.string().trim().min(1).max(200),
+    })
+    .strip(),
+  z
+    .object({
+      kind: z.literal('material_region'),
+      materialId: z.string().min(1),
+      pageNumber: z.number().int().positive(),
+      excerpt: z.string().trim().min(1).max(2000),
+      box: z.array(z.number()).min(4).max(8).optional(),
+      coordinateSystem: z.enum(['pdf_point', 'pixel']),
     })
     .strip(),
 ])
@@ -194,9 +205,9 @@ export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
 export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreateToolName[] {
   if (hasPendingReview) {
-    return ['getTaskContext', 'searchRouteTemplates']
+    return ['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult']
   }
-  return ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage']
+  return ['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult', 'submitReviewPackage']
 }
 
 export type AiCandidateEvidence = z.infer<typeof aiCandidateEvidenceSchema>

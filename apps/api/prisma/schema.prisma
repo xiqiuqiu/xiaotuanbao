@@ -325,6 +325,8 @@ model Organization {
   financeIdempotencyRecords FinanceIdempotencyRecord[]
   documentSequences DocumentSequence[]
   storedObjects StoredObject[]
+  departureMaterials DepartureMaterial[]
+  departureMaterialParseRuns DepartureMaterialParseRun[]
   products Product[]
   productImportSessions ProductImportSession[]
   bookingNoticeTemplates BookingNoticeTemplate[]
@@ -405,6 +407,7 @@ model User {
   paymentScheduleVoids PaymentSchedule[] @relation("PaymentScheduleVoidOperator")
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
+  createdDepartureMaterials DepartureMaterial[] @relation("DepartureMaterialCreator")
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
   createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
@@ -424,13 +427,16 @@ model StoredObject {
   originalFilename String       @map("original_filename")
   contentType      String       @map("content_type")
   sizeBytes        Int          @map("size_bytes")
+  contentSha256    String?      @map("content_sha256")
   createdByUserId  String       @map("created_by_user_id")
   createdByUser    User         @relation("StoredObjectCreator", fields: [createdByUserId], references: [id])
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
   productImportSessions ProductImportSession[]
+  departureMaterials DepartureMaterial[]
 
   @@index([organizationId, createdAt])
+  @@index([organizationId, contentSha256])
   @@map("stored_objects")
 }
 
@@ -1094,6 +1100,7 @@ model AiCreateTask {
   idempotencyRecords AiCreateIdempotencyRecord[]
   activityRuns   AiCreateActivityRun[]
   reviewPackages AiReviewPackage[]
+  materials      DepartureMaterial[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1222,5 +1229,73 @@ model AiReviewRecord {
   @@index([packageId, createdAt])
   @@index([organizationId, createdAt])
   @@map("ai_review_records")
+}
+
+enum DepartureMaterialStatus {
+  uploaded
+  queued
+  parsing
+  available
+  partially_available
+  failed
+  isolated
+
+  @@map("departure_material_status")
+}
+
+enum DepartureMaterialParseRunStatus {
+  queued
+  running
+  succeeded
+  failed
+
+  @@map("departure_material_parse_run_status")
+}
+
+/// 发团资料档案：归属一个 AI 建团任务的不可变原件。
+model DepartureMaterial {
+  id               String                   @id @default(cuid())
+  organizationId   String                   @map("organization_id")
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskId           String                   @map("task_id")
+  task             AiCreateTask             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  storedObjectId   String                   @map("stored_object_id")
+  storedObject     StoredObject             @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
+  originalFilename String                   @map("original_filename")
+  contentType      String                   @map("content_type")
+  status           DepartureMaterialStatus  @default(uploaded)
+  statusVersion    Int                      @default(1) @map("status_version")
+  createdByUserId  String                   @map("created_by_user_id")
+  createdByUser    User                     @relation("DepartureMaterialCreator", fields: [createdByUserId], references: [id])
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+  parseRuns        DepartureMaterialParseRun[]
+
+  @@index([taskId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("departure_materials")
+}
+
+/// 发团资料解析运行：一次后台提取，成功则形成新版本结果。
+model DepartureMaterialParseRun {
+  id              String                            @id @default(cuid())
+  organizationId  String                            @map("organization_id")
+  organization    Organization                      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  materialId      String                            @map("material_id")
+  material        DepartureMaterial                 @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  status          DepartureMaterialParseRunStatus   @default(queued)
+  resultVersion   Int                               @map("result_version")
+  pages           Json?
+  parserVersions  Json                              @map("parser_versions")
+  errorCode       String?                           @map("error_code")
+  errorMessage    String?                           @map("error_message")
+  consumeStartedAt DateTime?                        @map("consume_started_at")
+  startedAt       DateTime?                         @map("started_at")
+  endedAt         DateTime?                         @map("ended_at")
+  createdAt       DateTime                          @default(now()) @map("created_at")
+
+  @@index([materialId, resultVersion])
+  @@index([organizationId, createdAt])
+  @@map("departure_material_parse_runs")
 }
 

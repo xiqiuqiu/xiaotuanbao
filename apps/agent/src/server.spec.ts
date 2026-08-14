@@ -51,6 +51,8 @@ describe('agent server', () => {
       objectVersion: 1,
       pending: { hasPendingReview: false, reviewPackageId: null },
       availableCapabilities: ['getTaskContext'],
+      materials: [],
+      materialConsumePending: false,
       fieldCoverage: { filled: [], missing: [], optionalPresent: [] },
     })
   })
@@ -62,10 +64,11 @@ describe('agent server', () => {
     mockFetchTaskContext.mockReset()
   })
 
-  it('exposes getTaskContext, searchRouteTemplates and submitReviewPackage', () => {
+  it('exposes getTaskContext, searchRouteTemplates, getMaterialParseResult and submitReviewPackage', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
   })
@@ -84,7 +87,12 @@ describe('agent server', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({
         status: 'ok',
-        tools: ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'],
+        tools: [
+          'getTaskContext',
+          'searchRouteTemplates',
+          'getMaterialParseResult',
+          'submitReviewPackage',
+        ],
       })
     } finally {
       await new Promise<void>((resolve, reject) =>

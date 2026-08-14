@@ -20,6 +20,7 @@ services:
       OCR_MAX_PDF_PAGE_PIXELS: 8000000
       OCR_PDF_RENDER_DPI: 144
       OCR_TMP_DIR: /tmp/ocr
+      PARSE_SERVICE_TOKEN: ${PARSE_SERVICE_TOKEN:-}
     volumes:
       - ./tmp/ocr:/tmp/ocr
     deploy:

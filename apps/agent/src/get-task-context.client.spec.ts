@@ -28,6 +28,8 @@ describe('fetchTaskContext', () => {
       objectVersion: 2,
       pending: { hasPendingReview: false, reviewPackageId: null },
       availableCapabilities: ['getTaskContext'],
+      materials: [],
+      materialConsumePending: false,
       fieldCoverage: {
         filled: ['name', 'routeName', 'startDate', 'endDate', 'ownerUserId', 'departureType'],
         missing: [],

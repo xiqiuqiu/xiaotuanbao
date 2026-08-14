@@ -12,12 +12,12 @@ from typing import Annotated, Any
 
 import fitz
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 from rapidocr import RapidOCR
 
-SERVICE_VERSION = "1.0.0"
+SERVICE_VERSION = "1.1.0"
 ENGINE_VERSION = "3.9.2"
 MAX_FILE_BYTES = int(os.getenv("OCR_MAX_FILE_BYTES", str(20 * 1024 * 1024)))
 MAX_IMAGE_PIXELS = int(os.getenv("OCR_MAX_IMAGE_PIXELS", "12000000"))
@@ -27,6 +27,7 @@ PDF_RENDER_DPI = int(os.getenv("OCR_PDF_RENDER_DPI", "144"))
 TMP_DIR = Path(os.getenv("OCR_TMP_DIR", "/tmp/ocr"))
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/tiff"}
 ALLOWED_PDF_TYPES = {"application/pdf"}
+PARSE_SERVICE_TOKEN = os.getenv("PARSE_SERVICE_TOKEN", "").strip()
 
 
 class ErrorDetail(BaseModel):
@@ -148,6 +149,47 @@ app = FastAPI(title="Xiaotuanbao Local OCR", version=SERVICE_VERSION, lifespan=l
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", serviceVersion=SERVICE_VERSION, engine="RapidOCR", engineVersion=ENGINE_VERSION, backend="ONNX Runtime CPU", maxConcurrency=1)
+
+
+def require_parse_token(authorization: str | None) -> None:
+    if not PARSE_SERVICE_TOKEN:
+        return
+    expected = f"Bearer {PARSE_SERVICE_TOKEN}"
+    if authorization != expected:
+        raise structured_error(401, "PARSE_UNAUTHORIZED", "解析服务认证失败")
+
+
+@app.post("/v1/parse")
+async def parse_document(
+    file: Annotated[UploadFile, File(...)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    require_parse_token(authorization)
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_IMAGE_TYPES | ALLOWED_PDF_TYPES:
+        raise structured_error(415, "OCR_UNSUPPORTED_MEDIA_TYPE", "仅支持 PNG、JPEG、WebP、TIFF 和 PDF")
+
+    from .parse import parse_image, parse_pdf_with_fallback
+
+    path = await save_upload(file)
+    request_id = str(uuid.uuid4())
+    started_at = time.perf_counter()
+    try:
+        async with app.state.inference_semaphore:
+            parsed = await asyncio.to_thread(
+                parse_pdf_with_fallback if content_type in ALLOWED_PDF_TYPES else parse_image,
+                path,
+                app.state.engine,
+            )
+        return {
+            "requestId": request_id,
+            "parserVersions": parsed["parserVersions"],
+            "fallbackUsed": parsed["fallbackUsed"],
+            "pages": parsed["pages"],
+            "totalElapsedMs": round((time.perf_counter() - started_at) * 1000),
+        }
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @app.post("/v1/ocr")

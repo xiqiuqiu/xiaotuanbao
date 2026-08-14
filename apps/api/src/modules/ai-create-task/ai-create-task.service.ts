@@ -27,12 +27,15 @@ import {
   evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
   getTaskContextOutputSchema,
+  getMaterialParseResultInputSchema,
+  getMaterialParseResultOutputSchema,
   searchRouteTemplatesInputSchema,
   searchRouteTemplatesOutputSchema,
   submitReviewPackageInputSchema,
   submitReviewPackageOutputSchema,
   AI_REVIEWABLE_BASIC_INFO_FIELDS,
   type GetTaskContextOutput,
+  type GetMaterialParseResultOutput,
   type SearchRouteTemplatesOutput,
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
@@ -56,6 +59,7 @@ import type {
   SaveDepartureCreationDraftDto,
   StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
+import { DepartureMaterialService } from './departure-material.service'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import {
@@ -140,6 +144,7 @@ export class AiCreateTaskService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    private readonly departureMaterialService: DepartureMaterialService,
   ) {}
 
   async saveDraft(
@@ -173,7 +178,7 @@ export class AiCreateTaskService {
     taskId: string,
   ): Promise<AiCreateTaskSummary> {
     const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
-    return this.toSummary(task)
+    return this.enrichSummary(task)
   }
 
   async getAssistAvailability(userId: string): Promise<AiCreateAssistAvailability> {
@@ -250,7 +255,7 @@ export class AiCreateTaskService {
     })
 
     return {
-      task: this.toSummary(task),
+      task: await this.enrichSummary(task),
       runId: run.id,
       delegationToken,
       agentRuntimeUrl: this.agentRuntimeUrl(),
@@ -285,8 +290,13 @@ export class AiCreateTaskService {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
-    const summary = this.toSummary(task)
+    const summary = await this.enrichSummary(task)
     const pending = summary.pendingReview
+    const materials = await this.departureMaterialService.listForTask(
+      caller.organizationId,
+      caller.taskId,
+      { createdAtGte: run.startedAt },
+    )
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -302,7 +312,53 @@ export class AiCreateTaskService {
       },
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+      materials: materials.map((material) => ({
+        id: material.id,
+        originalFilename: material.originalFilename,
+        contentType: material.contentType,
+        status: material.status,
+        latestResultVersion: material.latestResultVersion,
+      })),
+      materialConsumePending: await this.departureMaterialService.isConsumePending(
+        caller.organizationId,
+        caller.taskId,
+        { createdAtGte: run.startedAt },
+      ),
     })
+  }
+
+  async getMaterialParseResultForAgent(
+    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    rawInput: unknown,
+  ): Promise<GetMaterialParseResultOutput> {
+    let input: { taskId: string; runId: string; materialId: string }
+    try {
+      input = getMaterialParseResultInputSchema.parse(rawInput)
+    } catch {
+      throw new BadRequestException('getMaterialParseResult 参数无效')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const run = await this.prisma.aiCreateActivityRun.findFirst({
+      where: {
+        id: caller.runId,
+        taskId: caller.taskId,
+        organizationId: caller.organizationId,
+        creatorUserId: caller.userId,
+      },
+    })
+    if (!run || run.status !== AiCreateActivityRunStatus.running) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const result = await this.departureMaterialService.getParseResult(
+      caller.organizationId,
+      caller.userId,
+      caller.taskId,
+      input.materialId,
+      { createdAtGte: run.startedAt },
+    )
+    return getMaterialParseResultOutputSchema.parse(result)
   }
 
   async searchRouteTemplatesForAgent(
@@ -1132,6 +1188,21 @@ export class AiCreateTaskService {
         updatedAt: task.draft.updatedAt.toISOString(),
       },
       pendingReview: pending ? toReviewPackageView(pending) : null,
+      materials: [],
+      materialConsumePending: false,
+    }
+  }
+
+  private async enrichSummary(task: TaskWithDraft): Promise<AiCreateTaskSummary> {
+    const summary = this.toSummary(task)
+    const materials = await this.departureMaterialService.listForTask(task.organizationId, task.id)
+    return {
+      ...summary,
+      materials,
+      materialConsumePending: await this.departureMaterialService.isConsumePending(
+        task.organizationId,
+        task.id,
+      ),
     }
   }
 }

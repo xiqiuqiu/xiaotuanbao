@@ -91,6 +91,11 @@ export default registerAs('app', () => {
     authCookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,
     authAllowedOrigins: parseOrigins(process.env.WEB_ORIGINS, nodeEnv),
     authAllowLegacyBearer: process.env.AUTH_ALLOW_LEGACY_BEARER === 'true',
+    materialParse: {
+      baseUrl: (process.env.OCR_BASE_URL ?? 'http://127.0.0.1:8089').replace(/\/$/, ''),
+      requestTimeoutMs: Number(process.env.OCR_REQUEST_TIMEOUT_MS ?? 60_000),
+      serviceToken: process.env.PARSE_SERVICE_TOKEN?.trim() ?? '',
+    },
     aiCreateAssist: {
       enabled: process.env.AI_CREATE_ASSIST_ENABLED === 'true',
       userIds: (process.env.AI_CREATE_ASSIST_USER_IDS ?? '')

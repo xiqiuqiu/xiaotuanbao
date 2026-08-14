@@ -52,6 +52,8 @@ describe('createGetTaskContextTool', () => {
       objectVersion: 1,
       pending: { hasPendingReview: false, reviewPackageId: null },
       availableCapabilities: ['getTaskContext'],
+      materials: [],
+      materialConsumePending: false,
       fieldCoverage: { filled: ['routeName'], missing: ['name'], optionalPresent: [] },
     })
   })
@@ -87,10 +89,11 @@ describe('createGetTaskContextTool', () => {
     ).not.toThrow()
   })
 
-  it('exposes getTaskContext, searchRouteTemplates and submitReviewPackage', () => {
+  it('exposes getTaskContext, searchRouteTemplates, getMaterialParseResult and submitReviewPackage', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
   })

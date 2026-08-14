@@ -52,6 +52,7 @@ describe('submitReviewPackage contract v1', () => {
     expect(AI_CREATE_TOOL_NAMES).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
   })
@@ -183,12 +184,41 @@ describe('submitReviewPackage contract v1', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
       'submitReviewPackage',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
     ])
+  })
+
+  it('accepts material_region evidence with page and excerpt', () => {
+    const parsed = submitReviewPackageInputSchema.parse({
+      taskId: 'task-1',
+      runId: 'run-1',
+      objectVersion: 2,
+      candidates: [
+        {
+          ...validCandidate,
+          evidence: [
+            {
+              kind: 'material_region',
+              materialId: 'mat-1',
+              pageNumber: 1,
+              excerpt: '八月川西团',
+              coordinateSystem: 'pdf_point',
+            },
+          ],
+        },
+      ],
+    })
+    expect(parsed.candidates[0]?.evidence[0]).toMatchObject({
+      kind: 'material_region',
+      materialId: 'mat-1',
+      pageNumber: 1,
+    })
   })
 
   it('accepts templateId in the same basic_info_draft unit as name and dates', () => {

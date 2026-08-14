@@ -75,6 +75,8 @@ vi.mock('@/services/ai-create-task.service', () => ({
   patchAiReviewPackage: vi.fn(),
   confirmAiReviewPackage: vi.fn(),
   rejectAiReviewPackage: vi.fn(),
+  uploadDepartureMaterial: vi.fn(),
+  downloadDepartureMaterialPreview: vi.fn(),
 }))
 
 vi.mock('@/services/segment.service', () => ({
@@ -103,6 +105,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       {children}
     </div>
   ),
+  CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
   CopilotChat: ({ agentId }: { agentId?: string }) => (
     <div data-testid="copilot-chat" data-agent-id={agentId} />
   ),
@@ -220,6 +223,8 @@ function mockAssistSession(
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     },
     runId: 'run-1',
     delegationToken: 'deleg-1',
@@ -347,6 +352,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     }))
     vi.mocked(confirmAiCreateTask).mockResolvedValue(mockDeparture)
     vi.mocked(getAiCreateTask).mockResolvedValue({
@@ -370,6 +377,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     })
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: false,
@@ -871,6 +880,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     })
 
     renderWizard()
@@ -1010,6 +1021,8 @@ describe('CreateDepartureWizard', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1052,6 +1065,8 @@ describe('CreateDepartureWizard', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1141,6 +1156,8 @@ describe('CreateDepartureWizard', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1266,6 +1283,8 @@ describe('CreateDepartureWizard', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
       },
       runId: 'run-1',
       delegationToken: 'deleg-1',
@@ -1315,6 +1334,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     })
 
     renderWizard()
@@ -1365,6 +1386,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     })
 
     vi.mocked(getRouteTemplate).mockResolvedValue({
@@ -1410,6 +1433,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
@@ -1434,6 +1459,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     })
 
     renderWizard()
@@ -1499,11 +1526,15 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
     vi.mocked(rejectAiReviewPackage).mockResolvedValue({
       ...restored,
       pendingReview: null,
+      materials: [],
+      materialConsumePending: false,
     })
 
     renderWizard()
@@ -1543,6 +1574,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
     vi.mocked(patchAiReviewPackage).mockResolvedValue({
@@ -1613,6 +1646,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
     vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({
@@ -1676,6 +1711,8 @@ describe('CreateDepartureWizard', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       pendingReview: pending,
+      materials: [],
+      materialConsumePending: false,
     }
     vi.mocked(getAiCreateTask).mockResolvedValue(restored)
     vi.mocked(patchAiReviewPackage).mockImplementation(async (_taskId, _packageId, payload) => ({

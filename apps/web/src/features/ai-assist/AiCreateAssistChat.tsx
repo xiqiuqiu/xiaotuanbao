@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import {
   CopilotChat,
+  CopilotChatConfigurationProvider,
   CopilotKit,
   useAgent,
   useAgentContext,
@@ -8,7 +9,7 @@ import {
   useHumanInTheLoop,
   useRenderTool,
 } from '@copilotkit/react-core/v2'
-import { Badge, Card, Typography } from 'antd'
+import { Badge, Card, Typography, message } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -23,12 +24,22 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
+import { commitPendingMaterials, collectSentAttachmentBlobUrls } from './commit-sent-materials'
+import { canStartConsumeRun } from './consume-materials-run'
+import { createPreviewObjectUrl, type PreviewObjectUrl } from './preview-object-url'
+import { uploadDepartureMaterial } from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
+const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
 const sentFirstTurns = new Set<string>()
+const sentConsumeKeys = new Set<string>()
+
+function consumeTurnKey(runId: string, consumeKey: string): string {
+  return `${runId}:${consumeKey}`
+}
 
 export interface AiCreateAssistChatProps {
   agentRuntimeUrl: string
@@ -42,6 +53,8 @@ export interface AiCreateAssistChatProps {
   progress?: AiCreateSharedLightState['progress']
   pendingReview?: AiReviewPackageView | null
   reviewDecision?: ReviewPackageDecision | null
+  materialConsumePending?: boolean
+  materialConsumeKey?: string | null
   onReviewPackageSubmitted?: () => void
 }
 
@@ -273,7 +286,15 @@ function ReviewPackageNotice({
   return null
 }
 
-function FirstTurnSender({ agentId, runId }: { agentId: string; runId: string }) {
+function FirstTurnSender({
+  agentId,
+  runId,
+  consumeKey,
+}: {
+  agentId: string
+  runId: string
+  consumeKey?: string | null
+}) {
   const sentRef = useRef(false)
   const { agent, isReady } = useAgent({ agentId })
   const { copilotkit } = useCopilotKit()
@@ -291,6 +312,9 @@ function FirstTurnSender({ agentId, runId }: { agentId: string; runId: string })
     }
     sentRef.current = true
     sentFirstTurns.add(runId)
+    if (consumeKey) {
+      sentConsumeKeys.add(consumeTurnKey(runId, consumeKey))
+    }
     agent.addMessage({
       id: crypto.randomUUID(),
       role: 'user',
@@ -303,7 +327,87 @@ function FirstTurnSender({ agentId, runId }: { agentId: string; runId: string })
         sentFirstTurns.delete(runId)
       }, 0)
     }
-  }, [agent, copilotkit, isReady, runId])
+  }, [agent, consumeKey, copilotkit, isReady, runId])
+
+  return null
+}
+
+function CommitMaterialsOnSend({
+  agentId,
+  taskId,
+  pendingFilesRef,
+}: {
+  agentId: string
+  taskId: string
+  pendingFilesRef: MutableRefObject<Map<string, File>>
+}) {
+  const { agent } = useAgent({ agentId })
+  const committedUrlsRef = useRef(new Set<string>())
+  const committingRef = useRef(false)
+  const messages = Array.isArray(agent.messages) ? agent.messages : []
+  const blobUrls = messages.flatMap((message) => {
+    if (!message || typeof message !== 'object' || !('content' in message)) {
+      return []
+    }
+    return collectSentAttachmentBlobUrls(message.content)
+  })
+  const blobKey = blobUrls.join('\0')
+
+  useEffect(() => {
+    if (!blobKey || committingRef.current) {
+      return
+    }
+
+    committingRef.current = true
+    void commitPendingMaterials({
+      taskId,
+      blobUrls: blobKey.split('\0'),
+      pendingFiles: pendingFilesRef.current,
+      committedUrls: committedUrlsRef.current,
+      upload: uploadDepartureMaterial,
+    })
+      .catch(() => {
+        message.error('附件提交失败，可继续用表单填写')
+      })
+      .finally(() => {
+        committingRef.current = false
+      })
+  }, [blobKey, pendingFilesRef, taskId])
+
+  return null
+}
+
+function ConsumeMaterialsSender({
+  agentId,
+  runId,
+  consumeKey,
+}: {
+  agentId: string
+  runId: string
+  consumeKey?: string | null
+}) {
+  const { agent, isReady } = useAgent({ agentId })
+  const { copilotkit } = useCopilotKit()
+  const isRunning = Boolean(agent.isRunning)
+
+  useEffect(() => {
+    if (isReady === false) {
+      return
+    }
+    const key = consumeKey ? consumeTurnKey(runId, consumeKey) : ''
+    if (
+      !canStartConsumeRun({
+        consumeKey,
+        firstTurnSent: sentFirstTurns.has(runId),
+        alreadySent: key ? sentConsumeKeys.has(key) : true,
+        isRunning,
+      })
+    ) {
+      return
+    }
+    sentConsumeKeys.add(key)
+    void copilotkit.runAgent({ agent })
+  }, [agent, consumeKey, copilotkit, isReady, isRunning, runId])
 
   return null
 }
@@ -320,6 +424,8 @@ export function AiCreateAssistChat({
   progress,
   pendingReview,
   reviewDecision,
+  materialConsumePending,
+  materialConsumeKey,
   onReviewPackageSubmitted,
 }: AiCreateAssistChatProps) {
   const headers = useMemo(
@@ -341,6 +447,30 @@ export function AiCreateAssistChat({
   const handleError = useCallback(() => {
     setErrorText(ASSIST_ERROR_TEXT)
   }, [])
+  const consumeKey = materialConsumePending ? materialConsumeKey ?? 'pending' : null
+  const previewUrlsRef = useRef<PreviewObjectUrl[]>([])
+  const pendingFilesRef = useRef(new Map<string, File>())
+  useEffect(() => {
+    const urls = previewUrlsRef.current
+    const pendingFiles = pendingFilesRef.current
+    return () => {
+      for (const url of urls) {
+        url.revoke()
+      }
+      pendingFiles.clear()
+    }
+  }, [])
+  const handleUpload = useCallback(async (file: File) => {
+    const previewUrl = createPreviewObjectUrl(file)
+    previewUrlsRef.current.push(previewUrl)
+    pendingFilesRef.current.set(previewUrl.value, file)
+    return {
+      type: 'url' as const,
+      value: previewUrl.value,
+      mimeType: file.type,
+      metadata: { filename: file.name },
+    }
+  }, [])
 
   return (
     <div className={styles.root}>
@@ -354,6 +484,8 @@ export function AiCreateAssistChat({
         headers={headers}
         properties={properties}
         useSingleEndpoint={false}
+        showDevConsole={import.meta.env.DEV}
+        debug={{ events: true, lifecycle: true, verbose: false }}
       >
         <AssistLightState
           taskId={taskId}
@@ -370,13 +502,31 @@ export function AiCreateAssistChat({
           pendingReview={pendingReview}
           reviewDecision={reviewDecision}
         />
-        <FirstTurnSender agentId={AGENT_ID} runId={runId} />
-        <CopilotChat
-          agentId={AGENT_ID}
-          className={styles.chat}
-          labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
-          onError={handleError}
-        />
+        <CopilotChatConfigurationProvider agentId={AGENT_ID} threadId={runId}>
+          <FirstTurnSender agentId={AGENT_ID} runId={runId} consumeKey={consumeKey} />
+          <CommitMaterialsOnSend
+            agentId={AGENT_ID}
+            taskId={taskId}
+            pendingFilesRef={pendingFilesRef}
+          />
+          <ConsumeMaterialsSender agentId={AGENT_ID} runId={runId} consumeKey={consumeKey} />
+          <CopilotChat
+            agentId={AGENT_ID}
+            threadId={runId}
+            className={styles.chat}
+            labels={{ chatInputPlaceholder: '询问当前发团草稿，或附上图片、PDF…' }}
+            onError={handleError}
+            attachments={{
+              enabled: true,
+              accept: 'image/*,application/pdf',
+              maxSize: MATERIAL_MAX_BYTES,
+              onUpload: handleUpload,
+              onUploadFailed: () => {
+                message.error('附件上传失败，可继续用表单填写')
+              },
+            }}
+          />
+        </CopilotChatConfigurationProvider>
       </CopilotKit>
     </div>
   )

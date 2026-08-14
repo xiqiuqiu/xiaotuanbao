@@ -852,6 +852,8 @@ export interface AiCreateTaskSummary {
   updatedAt: string
   draft: DepartureCreationDraftView
   pendingReview: AiReviewPackageView | null
+  materials: DepartureMaterialView[]
+  materialConsumePending: boolean
 }
 
 export interface SaveDepartureCreationDraftDto {
@@ -896,9 +898,54 @@ export type AiCandidateClarity = 'clear' | 'needs_confirmation' | 'undetermined'
 
 export type AiReviewPackageStatus = 'pending' | 'confirmed' | 'rejected' | 'superseded'
 
+export type DepartureMaterialStatus =
+  | 'uploaded'
+  | 'queued'
+  | 'parsing'
+  | 'available'
+  | 'partially_available'
+  | 'failed'
+  | 'isolated'
+
+export type DepartureMaterialPageSource = 'native_pdf' | 'ocr'
+
+export interface DepartureMaterialPageView {
+  pageNumber: number
+  source: DepartureMaterialPageSource
+  text: string
+  markdown?: string
+  width?: number
+  height?: number
+  dpi?: number
+  lines: Array<{
+    text: string
+    score?: number
+    box?: number[]
+    coordinateSystem: 'pdf_point' | 'pixel'
+  }>
+}
+
+export interface DepartureMaterialView {
+  id: string
+  originalFilename: string
+  contentType: string
+  status: DepartureMaterialStatus
+  statusVersion: number
+  createdAt: string
+  latestResultVersion: number | null
+}
+
 export type AiCandidateEvidence =
   | { kind: 'user_message'; excerpt: string; messageId?: string }
   | { kind: 'system_derivation'; rule: string }
+  | {
+      kind: 'material_region'
+      materialId: string
+      pageNumber: number
+      excerpt: string
+      box?: number[]
+      coordinateSystem: 'pdf_point' | 'pixel'
+    }
 
 export interface AiReviewCandidateView {
   fieldKey: AiReviewableBasicInfoField

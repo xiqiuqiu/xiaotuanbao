@@ -3,14 +3,21 @@ import { createElement, StrictMode, type ComponentType, type ReactNode } from 'r
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
-import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
+import { uploadDepartureMaterial } from '@/services/ai-create-task.service'
+import { AI_CREATE_CONSUME_MATERIALS_TURN, AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
 
-const { addMessage, runAgent, useAgentContext } = vi.hoisted(() => ({
-  addMessage: vi.fn(),
-  runAgent: vi.fn(),
-  useAgentContext: vi.fn(),
-}))
+const { addMessage, runAgent, useAgentContext, agentMessages, agentState } = vi.hoisted(() => {
+  const addMessage = vi.fn()
+  const agentMessages: unknown[] = []
+  return {
+    addMessage,
+    runAgent: vi.fn(),
+    useAgentContext: vi.fn(),
+    agentMessages,
+    agentState: { addMessage, messages: agentMessages, isRunning: false },
+  }
+})
 
 let capturedKit: {
   runtimeUrl?: string
@@ -19,7 +26,17 @@ let capturedKit: {
   useSingleEndpoint?: boolean
   onError?: (event: { error: Error }) => void
 } = {}
-let capturedChat: { agentId?: string; onError?: (event: { error: Error }) => void } = {}
+let capturedChat: {
+  agentId?: string
+  threadId?: string
+  onError?: (event: { error: Error }) => void
+  attachments?: {
+    enabled?: boolean
+    accept?: string
+    maxSize?: number
+    onUpload?: (file: File) => Promise<unknown>
+  }
+} = {}
 let capturedRenderTool: {
   name?: string
   render?: (props: {
@@ -67,14 +84,24 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     capturedKit = { runtimeUrl, headers, properties, useSingleEndpoint, onError }
     return <div data-testid="copilot-kit">{children}</div>
   },
+  CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
   CopilotChat: ({
     agentId,
+    threadId,
     onError,
+    attachments,
   }: {
     agentId?: string
+    threadId?: string
     onError?: (event: { error: Error }) => void
+    attachments?: {
+      enabled?: boolean
+      accept?: string
+      maxSize?: number
+      onUpload?: (file: File) => Promise<unknown>
+    }
   }) => {
-    capturedChat = { agentId, onError }
+    capturedChat = { agentId, threadId, onError, attachments }
     return (
       <div data-testid="copilot-chat" data-agent-id={agentId}>
         <button type="button" onClick={() => onError?.({ error: new Error('runtime down') })}>
@@ -84,7 +111,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     )
   },
   useAgentContext: (...args: unknown[]) => useAgentContext(...args),
-  useAgent: () => ({ agent: { addMessage }, isReady: true }),
+  useAgent: () => ({ agent: agentState, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent } }),
   useRenderTool: (config: { name?: string; render?: (props: never) => ReactNode }) => {
     if (config.name === 'searchRouteTemplates') {
@@ -99,6 +126,10 @@ vi.mock('@copilotkit/react-core/v2', () => ({
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
+
+vi.mock('@/services/ai-create-task.service', () => ({
+  uploadDepartureMaterial: vi.fn(),
+}))
 
 const chatProps = {
   agentRuntimeUrl: '/copilotkit',
@@ -137,6 +168,8 @@ describe('AiCreateAssistChat', () => {
     capturedRenderTool = {}
     capturedSearchRenderTool = {}
     capturedHumanInTheLoop = {}
+    agentMessages.length = 0
+    agentState.isRunning = false
   })
 
   it('passes runtimeUrl, identity headers and the readonly agent id', () => {
@@ -151,6 +184,7 @@ describe('AiCreateAssistChat', () => {
     expect(capturedKit.runtimeUrl).toBe('/copilotkit')
     expect(capturedKit.useSingleEndpoint).toBe(false)
     expect(capturedChat.agentId).toBe('ai-create-readonly-assist')
+    expect(capturedChat.threadId).toBe('run-headers')
     expect(screen.getByTestId('copilot-chat')).toBeInTheDocument()
   })
 
@@ -430,5 +464,121 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByText(/川西稻城线 · 8 天 · 用过 4 次/)).toBeInTheDocument()
     expect(screen.getByText(/名称包含「川西」/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /采用|确认|选择/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps composer attachments local until the user sends the message', async () => {
+    const createObjectURL = vi.fn().mockReturnValue('blob:preview')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+
+    const { unmount } = render(<AiCreateAssistChat {...chatProps} runId="run-attach" />)
+
+    expect(capturedChat.attachments).toMatchObject({
+      enabled: true,
+      accept: 'image/*,application/pdf',
+      maxSize: 20 * 1024 * 1024,
+    })
+    const result = await capturedChat.attachments?.onUpload?.(
+      new File(['png'], '行程.png', { type: 'image/png' }),
+    )
+    expect(uploadDepartureMaterial).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      type: 'url',
+      value: 'blob:preview',
+      mimeType: 'image/png',
+      metadata: { filename: '行程.png' },
+    })
+    unmount()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+    vi.unstubAllGlobals()
+  })
+
+  it('uploads attached files to the material archive after the user sends them', async () => {
+    vi.mocked(uploadDepartureMaterial).mockResolvedValue({
+      id: 'mat-1',
+      originalFilename: '行程.png',
+      contentType: 'image/png',
+      status: 'queued',
+      statusVersion: 1,
+      createdAt: '2026-08-14T00:00:00.000Z',
+      latestResultVersion: 1,
+    })
+    const createObjectURL = vi.fn().mockReturnValue('blob:sent')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    agentMessages.length = 0
+
+    const { rerender, unmount } = render(
+      <AiCreateAssistChat {...chatProps} runId="run-commit" />,
+    )
+    await capturedChat.attachments?.onUpload?.(
+      new File(['png'], '行程.png', { type: 'image/png' }),
+    )
+    expect(uploadDepartureMaterial).not.toHaveBeenCalled()
+
+    agentMessages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: '帮我看看' },
+        { type: 'document', source: { type: 'url', value: 'blob:sent' } },
+      ],
+    })
+    rerender(<AiCreateAssistChat {...chatProps} runId="run-commit" />)
+
+    await waitFor(() => {
+      expect(uploadDepartureMaterial).toHaveBeenCalledWith('task-assist', expect.any(File))
+    })
+    unmount()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:sent')
+    vi.unstubAllGlobals()
+  })
+
+  it('does not dump the consume-materials instruction into the chat after a user turn', async () => {
+    const { rerender } = render(<AiCreateAssistChat {...chatProps} runId="run-consume" />)
+    expect(addMessage.mock.calls[0]?.[0]).toMatchObject({ content: AI_CREATE_FIRST_TURN })
+
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-consume"
+        materialConsumePending
+        materialConsumeKey="mat-1:1"
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const contents = addMessage.mock.calls.map((call) => {
+      const message = call[0] as { content?: string }
+      return message.content
+    })
+    expect(contents).not.toContain(AI_CREATE_CONSUME_MATERIALS_TURN)
+    expect(runAgent).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not start a consume run while the agent thread is already running', async () => {
+    agentState.isRunning = true
+    const { rerender } = render(<AiCreateAssistChat {...chatProps} runId="run-busy" />)
+    expect(runAgent).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-busy"
+        materialConsumePending
+        materialConsumeKey="mat-1:1"
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(runAgent).toHaveBeenCalledTimes(1)
+    expect(
+      addMessage.mock.calls.map((call) => (call[0] as { content?: string }).content),
+    ).not.toContain(AI_CREATE_CONSUME_MATERIALS_TURN)
   })
 })

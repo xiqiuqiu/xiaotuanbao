@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { StoredObjectSummary } from '@xiaotuanbao/shared'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { FILE_STORE, type FileStore } from './file-store'
 import { STORED_OBJECT_MAX_UPLOAD_MB } from './stored-object.constants'
@@ -51,6 +51,15 @@ export class StoredObjectService {
       throw new BadRequestException(`文件过大，最大允许 ${STORED_OBJECT_MAX_UPLOAD_MB}MB`)
     }
 
+    const contentSha256 = createHash('sha256').update(file.buffer).digest('hex')
+    const reused = await this.prisma.storedObject.findFirst({
+      where: { organizationId, contentSha256 },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (reused) {
+      return toSummary(reused)
+    }
+
     const objectKey = buildStoredObjectKey(organizationId, randomUUID())
     const originalFilename = sanitizeStoredObjectFilename(file.originalname || 'file')
     const contentType = sanitizeContentType(file.mimetype)
@@ -70,6 +79,7 @@ export class StoredObjectService {
           originalFilename,
           contentType,
           sizeBytes,
+          contentSha256,
           createdByUserId: userId,
         },
       })

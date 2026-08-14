@@ -1,8 +1,10 @@
 import { request, type RequestConfig } from '@/lib/request'
+import { downloadBinary, type BinaryDownload } from '@/lib/request'
 import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
+  DepartureMaterialView,
   DepartureSummary,
   PatchAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
@@ -73,4 +75,23 @@ export async function rejectAiReviewPackage(
   return request.post<AiCreateTaskSummary>(
     `/ai-create-tasks/${taskId}/review-packages/${packageId}/reject`,
   )
+}
+
+export async function uploadDepartureMaterial(
+  taskId: string,
+  file: File,
+): Promise<DepartureMaterialView> {
+  const form = new FormData()
+  form.append('file', file)
+  return request.post<DepartureMaterialView>(`/ai-create-tasks/${taskId}/materials`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120_000,
+  })
+}
+
+export async function downloadDepartureMaterialPreview(
+  taskId: string,
+  materialId: string,
+): Promise<BinaryDownload> {
+  return downloadBinary(`/ai-create-tasks/${taskId}/materials/${materialId}/preview`)
 }
