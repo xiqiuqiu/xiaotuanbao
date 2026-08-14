@@ -17,6 +17,7 @@ describe('searchRouteTemplates contract v1', () => {
       'getTaskContext',
       'searchRouteTemplates',
       'submitReviewPackage',
+      'getMaterialParseResult',
     ])
     expect(SEARCH_ROUTE_TEMPLATES_LIMIT).toBe(5)
   })
@@ -26,10 +27,12 @@ describe('searchRouteTemplates contract v1', () => {
       'getTaskContext',
       'searchRouteTemplates',
       'submitReviewPackage',
+      'getMaterialParseResult',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
     ])
   })
 

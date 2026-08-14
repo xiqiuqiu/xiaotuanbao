@@ -336,9 +336,12 @@ model Organization {
   aiConversations AiConversation[]
   aiConversationEvents AiConversationEvent[]
   aiInputBatches AiInputBatch[]
+  aiInputBatchMaterials AiInputBatchMaterial[]
   aiWorkflowJobs AiWorkflowJob[]
   aiAgentAttempts AiAgentAttempt[]
   aiContextManifests AiContextManifest[]
+  departureMaterials DepartureMaterial[]
+  departureMaterialParseRuns DepartureMaterialParseRun[]
 
   @@map("organizations")
 }
@@ -417,6 +420,7 @@ model User {
   aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
   createdAiConversations AiConversation[] @relation("AiConversationCreator")
   createdAiInputBatches AiInputBatch[] @relation("AiInputBatchCreator")
+  createdDepartureMaterials DepartureMaterial[] @relation("DepartureMaterialCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -437,6 +441,7 @@ model StoredObject {
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
   productImportSessions ProductImportSession[]
+  departureMaterials DepartureMaterial[]
 
   @@index([organizationId, createdAt])
   @@map("stored_objects")
@@ -1107,6 +1112,7 @@ model AiCreateTask {
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
+  departureMaterials DepartureMaterial[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1270,6 +1276,7 @@ enum AiInputBatchStatus {
 
 enum AiWorkflowJobType {
   agent_batch
+  material_parse
 
   @@map("ai_workflow_job_type")
 }
@@ -1349,6 +1356,7 @@ model AiInputBatch {
   status               AiInputBatchStatus  @default(ready_for_agent)
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
+  materials            AiInputBatchMaterial[]
   workflowJobs         AiWorkflowJob[]
   agentAttempts        AiAgentAttempt[]
   contextManifests     AiContextManifest[]
@@ -1370,7 +1378,10 @@ model AiWorkflowJob {
   conversation   AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId   String              @map("input_batch_id")
   inputBatch     AiInputBatch        @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  materialId     String?             @map("material_id")
+  material       DepartureMaterial?  @relation(fields: [materialId], references: [id], onDelete: Cascade)
   type           AiWorkflowJobType   @default(agent_batch)
+  jobKey         String              @unique @map("job_key")
   status         AiWorkflowJobStatus @default(pending)
   attemptCount   Int                 @default(0) @map("attempt_count")
   claimedAt      DateTime?           @map("claimed_at")
@@ -1382,10 +1393,10 @@ model AiWorkflowJob {
   updatedAt      DateTime            @updatedAt @map("updated_at")
   attempts       AiAgentAttempt[]
 
-  @@unique([inputBatchId, type])
   @@index([status, nextAttemptAt, type])
   @@index([taskId, status])
   @@index([organizationId, createdAt])
+  @@index([materialId])
   @@map("ai_workflow_jobs")
 }
 
@@ -1409,6 +1420,7 @@ model AiContextManifest {
   modelId                  String         @map("model_id")
   inputHash                String         @map("input_hash")
   truncationReasons        Json           @map("truncation_reasons")
+  materialVersions         Json           @default("[]") @map("material_versions")
   createdAt                DateTime       @default(now()) @map("created_at")
   attempt                  AiAgentAttempt?
 
@@ -1444,5 +1456,95 @@ model AiAgentAttempt {
   @@index([jobId, startedAt])
   @@index([organizationId, startedAt])
   @@map("ai_agent_attempts")
+}
+
+enum DepartureMaterialStatus {
+  uploaded
+  queued
+  parsing
+  available
+  partially_available
+  failed
+  isolated
+
+  @@map("departure_material_status")
+}
+
+enum DepartureMaterialParseRunStatus {
+  queued
+  running
+  succeeded
+  failed
+
+  @@map("departure_material_parse_run_status")
+}
+
+/// 发团资料档案：归属于 AI 建团任务的不可修改原件。
+model DepartureMaterial {
+  id               String                  @id @default(cuid())
+  organizationId   String                  @map("organization_id")
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskId           String                  @map("task_id")
+  task             AiCreateTask            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  storedObjectId   String                  @map("stored_object_id")
+  storedObject     StoredObject            @relation(fields: [storedObjectId], references: [id], onDelete: Restrict)
+  originalFilename String                  @map("original_filename")
+  contentType      String                  @map("content_type")
+  sizeBytes        Int                     @map("size_bytes")
+  sha256           String
+  status           DepartureMaterialStatus @default(uploaded)
+  statusVersion    Int                     @default(1) @map("status_version")
+  createdByUserId  String                  @map("created_by_user_id")
+  createdByUser    User                    @relation("DepartureMaterialCreator", fields: [createdByUserId], references: [id])
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  parseRuns        DepartureMaterialParseRun[]
+  batchMaterials   AiInputBatchMaterial[]
+  workflowJobs     AiWorkflowJob[]
+
+  @@unique([taskId, sha256, sizeBytes, contentType])
+  @@index([taskId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("departure_materials")
+}
+
+/// 发团资料解析运行：一次后台提取，成功则形成新版本结果。
+model DepartureMaterialParseRun {
+  id              String                          @id @default(cuid())
+  organizationId  String                          @map("organization_id")
+  organization    Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  materialId      String                          @map("material_id")
+  material        DepartureMaterial               @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  status          DepartureMaterialParseRunStatus @default(queued)
+  resultVersion   Int                             @map("result_version")
+  pages           Json?
+  parserVersions  Json                            @map("parser_versions")
+  errorCode       String?                         @map("error_code")
+  startedAt       DateTime?                       @map("started_at")
+  endedAt         DateTime?                       @map("ended_at")
+  createdAt       DateTime                        @default(now()) @map("created_at")
+
+  @@index([materialId, resultVersion])
+  @@index([organizationId, createdAt])
+  @@map("departure_material_parse_runs")
+}
+
+/// AI 批次资料依赖：档案及其固定解析版本参与某个输入批次。
+model AiInputBatchMaterial {
+  id                 String            @id @default(cuid())
+  organizationId     String            @map("organization_id")
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputBatchId       String            @map("input_batch_id")
+  inputBatch         AiInputBatch      @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  materialId         String            @map("material_id")
+  material           DepartureMaterial @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  required           Boolean           @default(true)
+  parseResultVersion Int?              @map("parse_result_version")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  @@unique([inputBatchId, materialId])
+  @@index([materialId])
+  @@index([organizationId, createdAt])
+  @@map("ai_input_batch_materials")
 }
 

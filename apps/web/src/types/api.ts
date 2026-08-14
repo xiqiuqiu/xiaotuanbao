@@ -96,6 +96,8 @@ export type {
   AiConversationView,
   SendAiConversationMessageDto,
   SendAiConversationMessageResult,
+  DepartureMaterialStatus,
+  DepartureMaterialView,
   AiReviewableBasicInfoField,
   AiReviewCandidateView,
   AiReviewPackageView,

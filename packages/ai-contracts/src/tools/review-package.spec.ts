@@ -53,6 +53,7 @@ describe('submitReviewPackage contract v1', () => {
       'getTaskContext',
       'searchRouteTemplates',
       'submitReviewPackage',
+      'getMaterialParseResult',
     ])
   })
 
@@ -184,10 +185,12 @@ describe('submitReviewPackage contract v1', () => {
       'getTaskContext',
       'searchRouteTemplates',
       'submitReviewPackage',
+      'getMaterialParseResult',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
     ])
   })
 
@@ -212,6 +215,37 @@ describe('submitReviewPackage contract v1', () => {
     expect(parsed.candidates.map((candidate) => candidate.fieldKey)).toEqual([
       'name',
       'templateId',
+    ])
+  })
+
+  it('accepts material_region evidence from a pinned parse version', () => {
+    const parsed = submitReviewPackageInputSchema.parse({
+      taskId: 'task-1',
+      runId: 'run-1',
+      objectVersion: 2,
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '九月川西团',
+          clarity: 'clear',
+          evidence: [
+            {
+              kind: 'material_region',
+              materialId: 'mat-1',
+              pageNumber: 1,
+              excerpt: '九月川西线',
+            },
+          ],
+        },
+      ],
+    })
+    expect(parsed.candidates[0]?.evidence).toEqual([
+      {
+        kind: 'material_region',
+        materialId: 'mat-1',
+        pageNumber: 1,
+        excerpt: '九月川西线',
+      },
     ])
   })
 })

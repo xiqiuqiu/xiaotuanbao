@@ -27,6 +27,8 @@ import {
   evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
   getTaskContextOutputSchema,
+  getMaterialParseResultInputSchema,
+  getMaterialParseResultOutputSchema,
   searchRouteTemplatesInputSchema,
   searchRouteTemplatesOutputSchema,
   submitReviewPackageInputSchema,
@@ -61,6 +63,7 @@ import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { parseEventSequences, projectConversationEventsForAgent } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { lockAiCreateTask } from './ai-create-task.lock'
+import { DepartureMaterialService } from './departure-material.service'
 import {
   parseStoredCandidates,
   reviewConfirmValues,
@@ -125,6 +128,7 @@ export class AiCreateTaskService {
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
     private readonly conversationService: AiConversationService,
+    private readonly materialService: DepartureMaterialService,
   ) {}
 
   async saveDraft(
@@ -276,6 +280,7 @@ export class AiCreateTaskService {
       caller.inputBatchId,
     )
     const conversationEvents = await this.conversationEventsForAttempt(caller)
+    const materials = await this.pinnedMaterialsForBatch(caller)
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -293,7 +298,45 @@ export class AiCreateTaskService {
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
       ...(currentUserMessage ? { currentUserMessage } : {}),
       ...(conversationEvents.length ? { conversationEvents } : {}),
+      ...(materials.length ? { materials } : {}),
     })
+  }
+
+  async getMaterialParseResultForAgent(
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      inputBatchId?: string
+    },
+    rawInput: unknown,
+  ) {
+    let input: {
+      taskId: string
+      runId: string
+      materialId: string
+      parseResultVersion: number
+    }
+    try {
+      input = getMaterialParseResultInputSchema.parse(rawInput)
+    } catch {
+      throw new BadRequestException('getMaterialParseResult 参数无效')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (!caller.inputBatchId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const result = await this.materialService.getPinnedParseResult({
+      organizationId: caller.organizationId,
+      taskId: caller.taskId,
+      inputBatchId: caller.inputBatchId,
+      materialId: input.materialId,
+      parseResultVersion: input.parseResultVersion,
+    })
+    return getMaterialParseResultOutputSchema.parse(result)
   }
 
   private async conversationEventsForAttempt(caller: {
@@ -317,6 +360,28 @@ export class AiCreateTaskService {
       select: { sequence: true, kind: true, payload: true },
     })
     return projectConversationEventsForAgent(events)
+  }
+
+  private async pinnedMaterialsForBatch(caller: {
+    organizationId: string
+    inputBatchId?: string
+  }) {
+    if (!caller.inputBatchId) {
+      return []
+    }
+    const deps = await this.prisma.aiInputBatchMaterial.findMany({
+      where: {
+        organizationId: caller.organizationId,
+        inputBatchId: caller.inputBatchId,
+        required: true,
+        parseResultVersion: { not: null },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    return deps.map((item) => ({
+      materialId: item.materialId,
+      parseResultVersion: item.parseResultVersion as number,
+    }))
   }
 
   private async pinnedEventSequences(caller: {

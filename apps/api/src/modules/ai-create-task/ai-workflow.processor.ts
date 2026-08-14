@@ -12,6 +12,7 @@ import {
   AiCreateActivityRunStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
+  AiWorkflowJobType,
   OrganizationStatus,
   UserStatus,
   type AiInputBatch,
@@ -31,6 +32,7 @@ import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.cons
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { AiHeadlessClient } from './ai-headless.client'
+import { DepartureMaterialService } from './departure-material.service'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -46,12 +48,13 @@ export class AiWorkflowProcessor {
     private readonly authService: AuthService,
     private readonly conversationService: AiConversationService,
     private readonly headlessClient: AiHeadlessClient,
+    private readonly materialService: DepartureMaterialService,
   ) {}
 
   async processDueJobs(limit = 10): Promise<number> {
     let processed = 0
     for (let index = 0; index < limit; index += 1) {
-      const claimed = await this.claimNext()
+      const claimed = (await this.claimNextParse()) ?? (await this.claimNextAgent())
       if (!claimed) {
         break
       }
@@ -61,7 +64,57 @@ export class AiWorkflowProcessor {
     return processed
   }
 
-  private async claimNext(): Promise<ClaimedJob | null> {
+  private async claimNextParse(): Promise<ClaimedJob | null> {
+    try {
+      const claimed = await this.prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          SELECT j.id
+          FROM ai_workflow_jobs j
+          WHERE j.type = 'material_parse'::ai_workflow_job_type
+            AND (
+              (
+                j.status = 'pending'::ai_workflow_job_status
+                AND j.next_attempt_at <= NOW()
+              )
+              OR (
+                j.status = 'claimed'::ai_workflow_job_status
+                AND j.lease_expires_at IS NOT NULL
+                AND j.lease_expires_at <= NOW()
+              )
+            )
+          ORDER BY j.created_at ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        `
+        if (rows.length === 0) {
+          return null
+        }
+        const job = await tx.aiWorkflowJob.findUniqueOrThrow({
+          where: { id: rows[0].id },
+          include: { inputBatch: true },
+        })
+        const claimedJob = await tx.aiWorkflowJob.update({
+          where: { id: job.id },
+          data: {
+            status: AiWorkflowJobStatus.claimed,
+            claimedAt: new Date(),
+            claimedBy: this.workerId,
+            leaseExpiresAt: this.leaseUntil(),
+            attemptCount: { increment: 1 },
+          },
+        })
+        return { ...job, ...claimedJob, inputBatch: job.inputBatch }
+      })
+      return claimed
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return null
+      }
+      throw error
+    }
+  }
+
+  private async claimNextAgent(): Promise<ClaimedJob | null> {
     try {
       const published: { conversationId: string; eventId: string }[] = []
       const claimed = await this.prisma.$transaction(async (tx) => {
@@ -173,6 +226,10 @@ export class AiWorkflowProcessor {
   }
 
   private async executeClaimed(job: ClaimedJob): Promise<void> {
+    if (job.type === AiWorkflowJobType.material_parse) {
+      await this.executeParse(job)
+      return
+    }
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       await this.persistFailure(job, 'AGENT_UNAVAILABLE')
       return
@@ -195,6 +252,59 @@ export class AiWorkflowProcessor {
     } catch (error) {
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)
       await this.persistFailure(job, 'AGENT_UNAVAILABLE')
+    }
+  }
+
+  private async executeParse(job: ClaimedJob): Promise<void> {
+    if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
+      await this.prisma.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          status: AiWorkflowJobStatus.failed,
+          lastErrorCode: 'PARSE_FAILED',
+          leaseExpiresAt: null,
+        },
+      })
+      return
+    }
+    try {
+      const parsed = await this.materialService.executeParseJob(job)
+      if (!parsed) {
+        return
+      }
+      const batchIds = await this.materialService.pinMaterialVersion(
+        parsed.materialId,
+        parsed.parseResultVersion,
+      )
+      for (const batchId of batchIds) {
+        const published = await this.prisma.$transaction(async (tx) => {
+          const batch = await tx.aiInputBatch.findUnique({ where: { id: batchId } })
+          if (!batch) {
+            return []
+          }
+          await lockAiCreateTask(tx, batch.organizationId, batch.taskId)
+          return this.conversationService.tryPromoteBatch(tx, batchId)
+        })
+        for (const item of published) {
+          const event = await this.prisma.aiConversationEvent.findUnique({
+            where: { id: item.eventId },
+          })
+          if (event) {
+            this.conversationService.publish(item.conversationId, event)
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`资料解析失败 job=${job.id}: ${String(error)}`)
+      await this.prisma.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          status: AiWorkflowJobStatus.pending,
+          lastErrorCode: 'PARSE_FAILED',
+          leaseExpiresAt: null,
+          nextAttemptAt: new Date(Date.now() + 5_000),
+        },
+      })
     }
   }
 
@@ -256,6 +366,18 @@ export class AiWorkflowProcessor {
     }
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
+    const pinnedMaterials = await this.prisma.aiInputBatchMaterial.findMany({
+      where: {
+        inputBatchId: job.inputBatchId,
+        required: true,
+        parseResultVersion: { not: null },
+      },
+      select: { materialId: true, parseResultVersion: true },
+    })
+    const materialVersions = pinnedMaterials.map((item) => ({
+      materialId: item.materialId,
+      parseResultVersion: item.parseResultVersion as number,
+    }))
     const manifestRecord = buildPlaintextContextManifest({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
@@ -264,6 +386,7 @@ export class AiWorkflowProcessor {
       userText,
       businessSnapshotVersion: task.draft.version,
       modelId,
+      materialVersions,
     })
 
     const prepared = await this.prisma.$transaction(async (tx) => {
@@ -289,6 +412,7 @@ export class AiWorkflowProcessor {
           modelId: manifestRecord.modelId,
           inputHash: manifestRecord.inputHash,
           truncationReasons: manifestRecord.truncationReasons,
+          materialVersions,
         },
       })
       const attempt = await tx.aiAgentAttempt.create({

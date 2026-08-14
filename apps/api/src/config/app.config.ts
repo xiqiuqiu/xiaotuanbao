@@ -104,5 +104,10 @@ export default registerAs('app', () => {
       delegationTtlSec: Number(process.env.AI_CREATE_ASSIST_DELEGATION_TTL_SEC ?? 600),
       runTimeoutMs: Number(process.env.AI_CREATE_ASSIST_RUN_TIMEOUT_MS ?? 120_000),
     },
+    materialParse: {
+      baseUrl: (process.env.OCR_BASE_URL ?? 'http://127.0.0.1:8089').trim(),
+      requestTimeoutMs: Number(process.env.OCR_REQUEST_TIMEOUT_MS ?? 60_000),
+      serviceToken: process.env.OCR_SERVICE_TOKEN?.trim() ?? '',
+    },
   }
 })

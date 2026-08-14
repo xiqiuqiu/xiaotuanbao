@@ -198,6 +198,7 @@ describe('headless Agent runtime contract', () => {
         'getTaskContext',
         'searchRouteTemplates',
         'submitReviewPackage',
+        'getMaterialParseResult',
       ])
     } finally {
       await runtime.close()

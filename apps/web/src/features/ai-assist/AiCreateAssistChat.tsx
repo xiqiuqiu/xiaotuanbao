@@ -4,6 +4,7 @@ import {
   CopilotChatView,
   CopilotKit,
   useAgentContext,
+  useAttachments,
   useHumanInTheLoop,
   useRenderTool,
   type ReactActivityMessageRenderer,
@@ -324,6 +325,125 @@ const batchStatusActivityRenderer: ReactActivityMessageRenderer<{ label: string 
 
 const activityRenderers = [batchStatusActivityRenderer]
 const EVENT_CATCH_UP_POLL_MS = 1_000
+const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
+const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
+const DEFAULT_ATTACHMENT_TEXT = '请根据附件整理发团资料。'
+
+function filesFromAttachmentSources(
+  ready: Array<{ source?: { value?: unknown }; metadata?: Record<string, unknown> }>,
+  filesByKey: Map<string, File>,
+): File[] {
+  return ready.flatMap((item) => {
+    const key = typeof item.source?.value === 'string' ? item.source.value : ''
+    const fromKey = filesByKey.get(key)
+    if (fromKey) {
+      return [fromKey]
+    }
+    const metaFile = item.metadata?.file
+    return metaFile instanceof File ? [metaFile] : []
+  })
+}
+
+function ChatComposer({
+  messages,
+  isRunning,
+  draft,
+  pendingText,
+  setDraft,
+  onSend,
+  WelcomeScreen,
+}: {
+  messages: ReturnType<typeof toCopilotChatMessages>
+  isRunning: boolean
+  draft: string
+  pendingText: string | null
+  setDraft: (value: string) => void
+  onSend: (text: string, files: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  WelcomeScreen: (props: { input?: ReactNode }) => ReactNode
+}) {
+  const filesByKeyRef = useRef(new Map<string, File>())
+  const {
+    attachments,
+    consumeAttachments,
+    processFiles,
+    removeAttachment,
+    handleFileUpload,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    dragOver,
+    fileInputRef,
+    containerRef,
+  } = useAttachments({
+    config: {
+      enabled: true,
+      accept: MATERIAL_ACCEPT,
+      maxSize: MATERIAL_MAX_BYTES,
+      onUpload: async (file) => {
+        const key = `local-file:${crypto.randomUUID()}`
+        filesByKeyRef.current.set(key, file)
+        return { type: 'url', value: key, mimeType: file.type }
+      },
+    },
+  })
+
+  return (
+    <div
+      ref={containerRef}
+      className={styles.chat}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={(event) => {
+        void handleDrop(event)
+      }}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        hidden
+        multiple
+        accept={MATERIAL_ACCEPT}
+        onChange={(event) => {
+          void handleFileUpload(event)
+        }}
+      />
+      <CopilotChatView
+        className={styles.chat}
+        messages={messages}
+        isRunning={isRunning}
+        inputValue={pendingText ? '' : draft}
+        onInputChange={setDraft}
+        onSubmitMessage={(value) => {
+          const ready = consumeAttachments()
+          const files = filesFromAttachmentSources(ready, filesByKeyRef.current)
+          for (const item of ready) {
+            const key = typeof item.source?.value === 'string' ? item.source.value : ''
+            filesByKeyRef.current.delete(key)
+          }
+          void onSend(value, files, () => processFiles(files))
+        }}
+        welcomeScreen={WelcomeScreen}
+        attachments={attachments}
+        onRemoveAttachment={(id) => {
+          const current = attachments.find((item) => item.id === id)
+          const key = typeof current?.source?.value === 'string' ? current.source.value : ''
+          filesByKeyRef.current.delete(key)
+          removeAttachment(id)
+        }}
+        onAddFile={() => fileInputRef.current?.click()}
+        dragOver={dragOver}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(event) => {
+          void handleDrop(event)
+        }}
+        input={{
+          textArea: { 'aria-label': '询问当前发团草稿' },
+        }}
+      />
+    </div>
+  )
+}
 
 export function AiCreateAssistChat({
   agentRuntimeUrl,
@@ -360,6 +480,7 @@ export function AiCreateAssistChat({
   const [events, setEvents] = useState<AiConversationEventView[]>(initialEvents)
   const [draft, setDraft] = useState('')
   const [pendingText, setPendingText] = useState<string | null>(null)
+  const [pendingUploadCount, setPendingUploadCount] = useState(0)
   const [errorText, setErrorText] = useState<string | null>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
   const sendingRef = useRef(false)
@@ -414,14 +535,19 @@ export function AiCreateAssistChat({
   }, [conversationId, taskId])
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, files: File[] = [], restoreFiles?: () => Promise<void>) => {
       const nextText = (text || pendingText || draft).trim()
-      if (!nextText || sendingRef.current) {
+      if (sendingRef.current) {
+        return
+      }
+      if (!nextText && files.length === 0) {
         return
       }
       sendingRef.current = true
       setErrorText(null)
-      setPendingText(nextText)
+      const outboundText = nextText || DEFAULT_ATTACHMENT_TEXT
+      setPendingText(outboundText)
+      setPendingUploadCount(files.length)
       setDraft('')
       if (!idempotencyKeyRef.current) {
         idempotencyKeyRef.current = crypto.randomUUID()
@@ -430,16 +556,19 @@ export function AiCreateAssistChat({
         const result = await sendAiConversationMessage(
           taskId,
           conversationId,
-          { text: nextText },
+          files.length > 0 ? { text: outboundText, files } : { text: outboundText },
           idempotencyKeyRef.current,
         )
         setEvents((current) => mergeEvents(current, result.events))
         setPendingText(null)
+        setPendingUploadCount(0)
         idempotencyKeyRef.current = null
       } catch {
         setErrorText(ASSIST_ERROR_TEXT)
         setDraft(nextText)
         setPendingText(null)
+        setPendingUploadCount(0)
+        await restoreFiles?.()
       } finally {
         sendingRef.current = false
       }
@@ -458,7 +587,7 @@ export function AiCreateAssistChat({
           <AiCreateAssistWelcome
             input={input}
             onSelectSuggestion={(suggestion) => {
-              void sendRef.current(suggestion.message)
+              void sendRef.current(suggestion.message, [])
             }}
           />
         )
@@ -467,8 +596,8 @@ export function AiCreateAssistChat({
   )
 
   const messages = useMemo(
-    () => toCopilotChatMessages(events, pendingText, initialActiveBatch),
-    [events, initialActiveBatch, pendingText],
+    () => toCopilotChatMessages(events, pendingText, initialActiveBatch, pendingUploadCount),
+    [events, initialActiveBatch, pendingText, pendingUploadCount],
   )
   const isRunning = isCopilotChatRunning(events, initialActiveBatch, pendingText)
 
@@ -505,19 +634,14 @@ export function AiCreateAssistChat({
           threadId={conversationId}
           labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
         >
-          <CopilotChatView
-            className={styles.chat}
+          <ChatComposer
             messages={messages}
             isRunning={isRunning}
-            inputValue={pendingText ? '' : draft}
-            onInputChange={setDraft}
-            onSubmitMessage={(value) => {
-              void send(value)
-            }}
-            welcomeScreen={WelcomeScreen}
-            input={{
-              textArea: { 'aria-label': '询问当前发团草稿' },
-            }}
+            draft={draft}
+            pendingText={pendingText}
+            setDraft={setDraft}
+            onSend={send}
+            WelcomeScreen={WelcomeScreen}
           />
         </CopilotChatConfigurationProvider>
       </CopilotKit>

@@ -862,6 +862,7 @@ export function CreateDepartureWizard() {
                   templatePickerOpen={templatePickerOpen}
                   pendingReview={pendingReview}
                   onCorrectCandidate={handleCorrectCandidate}
+                  taskId={taskId}
                 />
               )}
             </div>

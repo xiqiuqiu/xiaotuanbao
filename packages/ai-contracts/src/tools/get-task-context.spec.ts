@@ -147,4 +147,35 @@ describe('getTaskContext contract v1', () => {
       }),
     ).toThrow()
   })
+
+  it('exposes pinned material pointers without original bytes', () => {
+    const parsed = getTaskContextOutputSchema.parse({
+      task: {
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        creatorUserId: 'user-1',
+      },
+      snapshot: { mode: 'manual', routeName: '川西线' },
+      objectVersion: 1,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext', 'getMaterialParseResult'],
+      fieldCoverage: { filled: ['routeName'], missing: ['name'], optionalPresent: [] },
+      materials: [
+        {
+          materialId: 'mat-1',
+          parseResultVersion: 1,
+          originalFilename: '团期.png',
+          bytes: 'must-not-pass',
+        },
+      ],
+    })
+
+    expect(parsed.materials).toEqual([
+      {
+        materialId: 'mat-1',
+        parseResultVersion: 1,
+      },
+    ])
+  })
 })

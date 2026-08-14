@@ -1,8 +1,9 @@
-import { request, type RequestConfig } from '@/lib/request'
+import { downloadBinary, request, type RequestConfig } from '@/lib/request'
 import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
+  DepartureMaterialView,
   DepartureSummary,
   PatchAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
@@ -50,12 +51,28 @@ export async function startAiCreateAssistSession(
 export async function sendAiConversationMessage(
   taskId: string,
   conversationId: string,
-  payload: { text: string },
+  payload: { text: string; files?: File[] },
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
+  const files = payload.files ?? []
+  if (files.length > 0) {
+    const form = new FormData()
+    form.append('text', payload.text)
+    for (const file of files) {
+      form.append('files', file)
+    }
+    return request.post<SendAiConversationMessageResult>(
+      `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
+      form,
+      {
+        silentError: true,
+        headers: { 'Idempotency-Key': idempotencyKey, 'Content-Type': 'multipart/form-data' },
+      },
+    )
+  }
   return request.post<SendAiConversationMessageResult>(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
-    payload,
+    { text: payload.text },
     {
       silentError: true,
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -78,6 +95,17 @@ export async function listAiConversationEvents(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/events`,
     { ...config, params: { afterSequence, ...config?.params } },
   )
+}
+
+export async function listDepartureMaterials(taskId: string): Promise<DepartureMaterialView[]> {
+  return request.get<DepartureMaterialView[]>(`/ai-create-tasks/${taskId}/materials`)
+}
+
+export async function previewDepartureMaterial(
+  taskId: string,
+  materialId: string,
+): Promise<{ blob: Blob; filename: string | null }> {
+  return downloadBinary(`/ai-create-tasks/${taskId}/materials/${materialId}/preview`)
 }
 
 export async function patchAiReviewPackage(

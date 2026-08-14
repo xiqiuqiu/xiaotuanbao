@@ -139,10 +139,10 @@ export class PatchAiReviewPackageDto {
 }
 
 export class SendAiConversationMessageDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(8000)
-  text!: string
+  text?: string
 }
 
 export class ListAiConversationEventsQueryDto {
