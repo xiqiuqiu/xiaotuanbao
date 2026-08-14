@@ -27,7 +27,7 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { buildPlaintextContextManifest } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
-import { WORKFLOW_LEASE_MS } from './ai-conversation.constants'
+import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { AiHeadlessClient } from './ai-headless.client'
@@ -68,14 +68,24 @@ export class AiWorkflowProcessor {
         const rows = await tx.$queryRaw<{ id: string }[]>`
           SELECT j.id
           FROM ai_workflow_jobs j
-          WHERE j.status = 'pending'::ai_workflow_job_status
-            AND j.type = 'agent_batch'::ai_workflow_job_type
-            AND j.next_attempt_at <= NOW()
+          WHERE j.type = 'agent_batch'::ai_workflow_job_type
+            AND (
+              (
+                j.status = 'pending'::ai_workflow_job_status
+                AND j.next_attempt_at <= NOW()
+              )
+              OR (
+                j.status = 'claimed'::ai_workflow_job_status
+                AND j.lease_expires_at IS NOT NULL
+                AND j.lease_expires_at <= NOW()
+              )
+            )
             AND NOT EXISTS (
               SELECT 1
               FROM ai_input_batches b
               WHERE b.task_id = j.task_id
                 AND b.status = 'agent_running'::ai_input_batch_status
+                AND b.id <> j.input_batch_id
             )
           ORDER BY j.created_at ASC
           FOR UPDATE SKIP LOCKED
@@ -91,35 +101,56 @@ export class AiWorkflowProcessor {
         })
         await lockAiCreateTask(tx, job.organizationId, job.taskId)
         const running = await tx.aiInputBatch.findFirst({
-          where: { taskId: job.taskId, status: AiInputBatchStatus.agent_running },
+          where: {
+            taskId: job.taskId,
+            status: AiInputBatchStatus.agent_running,
+            id: { not: job.inputBatchId },
+          },
           select: { id: true },
         })
         if (running) {
           return null
         }
 
-        await tx.aiWorkflowJob.update({
+        if (job.status === AiWorkflowJobStatus.claimed) {
+          await tx.aiAgentAttempt.updateMany({
+            where: { jobId: job.id, status: AiAgentAttemptStatus.running },
+            data: {
+              status: AiAgentAttemptStatus.failed,
+              errorCode: 'AGENT_UNAVAILABLE',
+              endedAt: new Date(),
+            },
+          })
+        }
+
+        const claimedJob = await tx.aiWorkflowJob.update({
           where: { id: job.id },
           data: {
             status: AiWorkflowJobStatus.claimed,
             claimedAt: new Date(),
             claimedBy: this.workerId,
-            leaseExpiresAt: new Date(Date.now() + WORKFLOW_LEASE_MS),
+            leaseExpiresAt: this.leaseUntil(),
             attemptCount: { increment: 1 },
           },
         })
-        await tx.aiInputBatch.update({
-          where: { id: job.inputBatchId },
-          data: { status: AiInputBatchStatus.agent_running },
-        })
-        const statusEvent = await this.conversationService.appendEvent(tx, {
-          organizationId: job.organizationId,
-          conversationId: job.conversationId,
-          kind: AiConversationEventKind.batch_status,
-          payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.agent_running },
-        })
-        published.push({ conversationId: job.conversationId, eventId: statusEvent.id })
-        return { ...job, inputBatch: { ...job.inputBatch, status: AiInputBatchStatus.agent_running } }
+        if (job.inputBatch.status !== AiInputBatchStatus.agent_running) {
+          await tx.aiInputBatch.update({
+            where: { id: job.inputBatchId },
+            data: { status: AiInputBatchStatus.agent_running },
+          })
+          const statusEvent = await this.conversationService.appendEvent(tx, {
+            organizationId: job.organizationId,
+            conversationId: job.conversationId,
+            kind: AiConversationEventKind.batch_status,
+            payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.agent_running },
+          })
+          published.push({ conversationId: job.conversationId, eventId: statusEvent.id })
+        }
+        return {
+          ...job,
+          ...claimedJob,
+          inputBatch: { ...job.inputBatch, status: AiInputBatchStatus.agent_running },
+        }
       })
 
       if (claimed) {
@@ -142,6 +173,11 @@ export class AiWorkflowProcessor {
   }
 
   private async executeClaimed(job: ClaimedJob): Promise<void> {
+    if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
+      await this.persistFailure(job, 'AGENT_UNAVAILABLE')
+      return
+    }
+
     const authorized = await this.recheckAuthorization(job)
     if (!authorized.ok) {
       await this.persistFailure(job, authorized.errorCode)
@@ -150,6 +186,10 @@ export class AiWorkflowProcessor {
 
     try {
       const prepared = await this.prepareAttempt(job)
+      const renewed = await this.renewLease(job.id)
+      if (!renewed) {
+        return
+      }
       const result = await this.headlessClient.run(prepared.identity, prepared.delegationToken)
       await this.persistOutcome(job, prepared.attemptId, result)
     } catch (error) {
@@ -323,6 +363,9 @@ export class AiWorkflowProcessor {
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
       const batchStatus = batchStatusForResult(result)
       const message =
         result.kind === 'completed'
@@ -397,6 +440,9 @@ export class AiWorkflowProcessor {
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
       const errorEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -459,6 +505,34 @@ export class AiWorkflowProcessor {
         this.conversationService.publish(job.conversationId, event)
       }
     }
+  }
+
+  private leaseUntil(): Date {
+    return new Date(Date.now() + WORKFLOW_LEASE_MS)
+  }
+
+  private async renewLease(jobId: string): Promise<boolean> {
+    const result = await this.prisma.aiWorkflowJob.updateMany({
+      where: {
+        id: jobId,
+        status: AiWorkflowJobStatus.claimed,
+        claimedBy: this.workerId,
+      },
+      data: { leaseExpiresAt: this.leaseUntil() },
+    })
+    return result.count === 1
+  }
+
+  private async ownsClaimedJob(tx: Prisma.TransactionClient, jobId: string): Promise<boolean> {
+    const owned = await tx.aiWorkflowJob.findFirst({
+      where: {
+        id: jobId,
+        status: AiWorkflowJobStatus.claimed,
+        claimedBy: this.workerId,
+      },
+      select: { id: true },
+    })
+    return owned !== null
   }
 }
 

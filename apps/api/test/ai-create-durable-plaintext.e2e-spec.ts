@@ -253,6 +253,49 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     expect(done).toBe(0)
   })
 
+  it('reclaims an expired worker lease so a later batch on the same task can run', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendText(taskId, conversationId, '崩溃前的第一批', `e2e-lease-a-${taskId}`).expect(201)
+    await sendText(taskId, conversationId, '崩溃后仍应执行的第二批', `e2e-lease-b-${taskId}`).expect(201)
+
+    const firstJob = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+    })
+    await prisma.aiInputBatch.update({
+      where: { id: firstJob.inputBatchId },
+      data: { status: 'agent_running' },
+    })
+    await prisma.aiWorkflowJob.update({
+      where: { id: firstJob.id },
+      data: {
+        status: 'claimed',
+        claimedAt: new Date(Date.now() - 130_000),
+        claimedBy: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 10_000),
+        attemptCount: 1,
+      },
+    })
+
+    const beforeWorker = agent.callCount()
+    await processor.processDueJobs(5)
+    expect(agent.callCount()).toBe(beforeWorker + 2)
+
+    const batches = await prisma.aiInputBatch.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
+    const jobs = await prisma.aiWorkflowJob.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+    })
+    expect(jobs.map((job) => job.status)).toEqual(['succeeded', 'succeeded'])
+  })
+
   it('persists Agent failure as a server-side batch fact and allows a new send', async () => {
     agent.setOutcome({
       kind: 'failed',
