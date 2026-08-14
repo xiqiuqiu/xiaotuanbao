@@ -8,6 +8,7 @@ export async function startDeterministicParseWorker(options?: {
   holdNextCall: () => void
   release: () => void
   setPageText: (text: string) => void
+  queuePageTexts: (texts: string[]) => void
   callCount: () => number
   receivedFilenames: () => string[]
   close: () => Promise<void>
@@ -17,6 +18,7 @@ export async function startDeterministicParseWorker(options?: {
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
   let pageText = options?.text ?? '九月川西线 预计 12 人'
+  let queuedTexts: string[] = []
 
   const server = createServer((request, response) => {
     void handle(request, response)
@@ -32,13 +34,14 @@ export async function startDeterministicParseWorker(options?: {
       if (hold) {
         await hold
       }
+      const text = queuedTexts.length > 0 ? queuedTexts.shift()! : pageText
       json(response, 200, {
         parserVersions: { deterministic: '1' },
         pages: [
           {
             pageNumber: 1,
             source: 'ocr',
-            text: pageText,
+            text,
           },
         ],
       })
@@ -66,6 +69,10 @@ export async function startDeterministicParseWorker(options?: {
     },
     setPageText: (text: string) => {
       pageText = text
+      queuedTexts = []
+    },
+    queuePageTexts: (texts: string[]) => {
+      queuedTexts = [...texts]
     },
     callCount: () => callCount,
     receivedFilenames: () => [...receivedFilenames],

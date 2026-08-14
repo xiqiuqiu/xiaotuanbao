@@ -2,6 +2,7 @@ import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { AddressInfo } from 'node:net'
 import { getAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
+import { fetchMaterialParseResult } from './get-material-parse-result.client'
 import * as mastraAgent from './mastra-agent'
 import {
   createAgentServer,
@@ -44,7 +45,12 @@ jest.mock('./get-task-context.client', () => ({
   fetchTaskContext: jest.fn(),
 }))
 
+jest.mock('./get-material-parse-result.client', () => ({
+  fetchMaterialParseResult: jest.fn(),
+}))
+
 const mockFetchTaskContext = fetchTaskContext as jest.MockedFunction<typeof fetchTaskContext>
+const mockFetchParseResult = fetchMaterialParseResult as jest.MockedFunction<typeof fetchMaterialParseResult>
 const mockMastraGenerate = (mastraAgent as unknown as { mastraGenerateMock: jest.Mock }).mastraGenerateMock
 
 const IDENTITY = {
@@ -173,6 +179,7 @@ describe('headless Agent runtime contract', () => {
   afterEach(() => {
     global.fetch = originalFetch
     mockFetchTaskContext.mockReset()
+    mockFetchParseResult.mockReset()
   })
 
   it('accepts a trusted service identity plus matching short-lived delegation and returns a completed outcome', async () => {
@@ -476,6 +483,68 @@ describe('headless Agent runtime contract', () => {
         },
       })
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
+  })
+
+  it('injects a ready parse index into the Mastra input without loading full page bodies', async () => {
+    mockMastraGenerate.mockClear()
+    mockFetchTaskContext.mockResolvedValue({
+      task: {
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        creatorUserId: 'user-1',
+      },
+      snapshot: { mode: 'manual', routeName: '川西线' },
+      objectVersion: 1,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext', 'getMaterialParseResult'],
+      fieldCoverage: { filled: [], missing: [], optionalPresent: [] },
+      materials: [
+        {
+          materialId: 'mat-1',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '喀纳斯10日游6月4日团',
+          truncated: false,
+        },
+        {
+          materialId: 'mat-2',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 2,
+          excerpt: '喀纳斯10日游7月14日团',
+          truncated: true,
+        },
+      ],
+    })
+
+    const server = createAgentServer({
+      port: 0,
+      apiBaseUrl: 'http://api.local',
+      serviceSecret: 'secret',
+      allowedOrigins: ['http://localhost:5173'],
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await postHeadless(port)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ data: { kind: 'completed' } })
+      expect(mockFetchParseResult).not.toHaveBeenCalled()
+      expect(mockMastraGenerate).toHaveBeenCalledTimes(1)
+      const synced = mockMastraGenerate.mock.calls[0]?.[0] as string
+      expect(synced).toContain(USER_TEXT)
+      expect(synced).toContain('喀纳斯10日游6月4日团')
+      expect(synced).toContain('已解析完成')
+      expect(synced).toContain('getMaterialParseResult')
+      expect(synced).toContain('摘录已裁剪')
+      expect(synced).toContain('禁止把它们说成待解析')
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

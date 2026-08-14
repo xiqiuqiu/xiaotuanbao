@@ -165,6 +165,10 @@ describe('getTaskContext contract v1', () => {
         {
           materialId: 'mat-1',
           parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '九月川西线',
+          truncated: false,
           originalFilename: '团期.png',
           bytes: 'must-not-pass',
         },
@@ -175,6 +179,10 @@ describe('getTaskContext contract v1', () => {
       {
         materialId: 'mat-1',
         parseResultVersion: 1,
+        status: 'ready',
+        pageCount: 1,
+        excerpt: '九月川西线',
+        truncated: false,
       },
     ])
   })

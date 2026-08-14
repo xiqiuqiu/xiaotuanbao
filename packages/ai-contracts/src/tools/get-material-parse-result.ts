@@ -11,6 +11,7 @@ export const getMaterialParseResultInputSchema = z
     runId: z.string().min(1),
     materialId: z.string().min(1),
     parseResultVersion: z.number().int().positive(),
+    pageNumber: z.number().int().positive().optional(),
   })
   .strip()
 
@@ -18,6 +19,8 @@ export const getMaterialParseResultOutputSchema = z
   .object({
     materialId: z.string().min(1),
     parseResultVersion: z.number().int().positive(),
+    pageCount: z.number().int().nonnegative(),
+    truncated: z.boolean(),
     pages: z.array(
       z
         .object({

@@ -80,6 +80,72 @@ export async function sendAiConversationMessage(
   )
 }
 
+export async function retryFailedConversationMaterials(
+  taskId: string,
+  conversationId: string,
+  batchId: string,
+  materialIds: string[] | undefined,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry-failed-materials`,
+    materialIds ? { materialIds } : {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function removeConversationMaterials(
+  taskId: string,
+  conversationId: string,
+  batchId: string,
+  materialIds: string[],
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/remove-materials`,
+    { materialIds },
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function abandonConversationBatch(
+  taskId: string,
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/abandon`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function stopConversationBatch(
+  taskId: string,
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/stop`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
 export async function listAiConversationEvents(
   taskId: string,
   conversationId: string,

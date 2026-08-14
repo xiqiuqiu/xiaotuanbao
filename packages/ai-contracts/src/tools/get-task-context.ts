@@ -84,6 +84,10 @@ export const getTaskContextOutputSchema = z
           .object({
             materialId: z.string().min(1),
             parseResultVersion: z.number().int().positive(),
+            status: z.literal('ready'),
+            pageCount: z.number().int().nonnegative(),
+            excerpt: z.string(),
+            truncated: z.boolean(),
           })
           .strip(),
       )

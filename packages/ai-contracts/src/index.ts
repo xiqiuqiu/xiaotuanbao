@@ -24,6 +24,17 @@ export {
   type GetMaterialParseResultOutput,
 } from './tools/get-material-parse-result'
 export {
+  MATERIAL_PARSE_INDEX_EXCERPT_CHARS,
+  MATERIAL_PARSE_INDEX_TOTAL_CHARS,
+  MATERIAL_PARSE_TOOL_INLINE_CHARS,
+  MATERIAL_PARSE_EXCERPT_TRUNCATION,
+  buildMaterialParseIndex,
+  clipExcerpt,
+  projectParseResultPages,
+  type MaterialParsePage,
+  type MaterialParseIndexItem,
+} from './context/material-parse-index'
+export {
   SEARCH_ROUTE_TEMPLATES_TOOL,
   SEARCH_ROUTE_TEMPLATES_LIMIT,
   ROUTE_TEMPLATE_MATCH_REASON_CODES,

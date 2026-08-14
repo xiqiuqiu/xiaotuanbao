@@ -31,8 +31,14 @@ import { AiConversationService } from './ai-conversation.service'
 import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateTask } from './ai-create-task.lock'
+import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { AiHeadlessClient } from './ai-headless.client'
 import { DepartureMaterialService } from './departure-material.service'
+import {
+  PARSE_FAILED_ERROR_CODE,
+  materialProgressFromDeps,
+  parseErrorMessage,
+} from './departure-material.constants'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -260,13 +266,13 @@ export class AiWorkflowProcessor {
       if (job.materialId) {
         await this.materialService.markParseTerminalFailure(job.materialId)
       }
-      await this.persistFailure(job, 'PARSE_FAILED')
+      await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
       return
     }
     try {
       const parsed = await this.materialService.executeParseJob(job)
       if (!parsed) {
-        await this.persistFailure(job, 'PARSE_FAILED')
+        await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
         return
       }
       const batchIds = await this.materialService.pinMaterialVersion(
@@ -297,7 +303,7 @@ export class AiWorkflowProcessor {
         where: { id: job.id },
         data: {
           status: AiWorkflowJobStatus.pending,
-          lastErrorCode: 'PARSE_FAILED',
+          lastErrorCode: PARSE_FAILED_ERROR_CODE,
           leaseExpiresAt: null,
           nextAttemptAt: new Date(Date.now() + 5_000),
         },
@@ -375,6 +381,10 @@ export class AiWorkflowProcessor {
       materialId: item.materialId,
       parseResultVersion: item.parseResultVersion as number,
     }))
+    const parseIndex = await this.materialService.loadPinnedParseIndex(
+      job.organizationId,
+      job.inputBatchId,
+    )
     const manifestRecord = buildPlaintextContextManifest({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
@@ -384,6 +394,7 @@ export class AiWorkflowProcessor {
       businessSnapshotVersion: task.draft.version,
       modelId,
       materialVersions,
+      truncationReasons: parseIndex.truncationReasons,
     })
 
     const prepared = await this.prisma.$transaction(async (tx) => {
@@ -548,6 +559,85 @@ export class AiWorkflowProcessor {
           },
         })
       }
+    })
+
+    for (const eventId of published) {
+      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
+      if (event) {
+        this.conversationService.publish(job.conversationId, event)
+      }
+    }
+  }
+
+  private async persistParseBarrierFailure(job: ClaimedJob, errorCode: string): Promise<void> {
+    const published: string[] = []
+    await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
+      await tx.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          status: AiWorkflowJobStatus.failed,
+          lastErrorCode: errorCode,
+          leaseExpiresAt: null,
+        },
+      })
+      const batch = await tx.aiInputBatch.findUnique({
+        where: { id: job.inputBatchId },
+        include: {
+          materials: {
+            include: {
+              material: {
+                include: {
+                  parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      })
+      if (!batch || batch.status !== AiInputBatchStatus.waiting_for_materials) {
+        return
+      }
+      const failedMaterial = job.materialId
+        ? await tx.departureMaterial.findUnique({ where: { id: job.materialId } })
+        : null
+      const errorEvent = await this.conversationService.appendEvent(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        kind: AiConversationEventKind.error,
+        payload: {
+          batchId: job.inputBatchId,
+          materialId: job.materialId,
+          originalFilename: failedMaterial?.originalFilename ?? null,
+          errorCode,
+          errorMessage: parseErrorMessage(errorCode),
+        },
+      })
+      published.push(errorEvent.id)
+      const progress = materialProgressFromDeps(
+        batch.materials.map((item) => ({
+          required: item.required,
+          parseResultVersion: item.parseResultVersion,
+          failed: item.parseResultVersion == null && (item.materialId === job.materialId || isFailedDependency(item)),
+        })),
+      )
+      const statusEvent = await this.conversationService.appendEvent(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        kind: AiConversationEventKind.batch_status,
+        payload: {
+          batchId: job.inputBatchId,
+          status: AiInputBatchStatus.waiting_for_materials,
+          readyCount: progress.ready,
+          totalCount: progress.total,
+          failedCount: progress.failed,
+          failedMaterials: toFailedMaterialPayload(batch.materials),
+        },
+      })
+      published.push(statusEvent.id)
     })
 
     for (const eventId of published) {

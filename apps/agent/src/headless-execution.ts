@@ -13,6 +13,7 @@ import { runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
 import { json, readBearer, readHeader, statusForCollaborationError } from './http'
 import { mapAgentFetchError, mapModelError } from './map-agent-error'
+import { composeSyncedHeadlessUserText } from './sync-pinned-parse-context'
 
 const AGENT_SERVICE_KEY_HEADER = 'x-agent-service-key'
 const AI_OP_DELEGATION_TYP = 'ai-op-delegation'
@@ -100,8 +101,9 @@ export async function handleHeadlessRun(
     return
   }
 
+  let context
   try {
-    await fetchTaskContext(
+    context = await fetchTaskContext(
       {
         apiBaseUrl: config.apiBaseUrl,
         serviceSecret: config.serviceSecret,
@@ -126,6 +128,11 @@ export async function handleHeadlessRun(
     return
   }
 
+  const userText = composeSyncedHeadlessUserText(
+    parsedRequest.data.userText,
+    context.materials ?? [],
+  )
+
   try {
     const result = await runWithAssistRequestContext(
       {
@@ -137,7 +144,7 @@ export async function handleHeadlessRun(
         attemptId: parsedRequest.data.attemptId,
         contextManifestId: parsedRequest.data.contextManifestId,
       },
-      () => executor(parsedRequest.data),
+      () => executor({ ...parsedRequest.data, userText }),
     )
     const parsedResult = headlessExecutionResultSchema.safeParse(result)
     if (!parsedResult.success) {

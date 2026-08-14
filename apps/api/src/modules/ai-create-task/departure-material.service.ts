@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   DepartureMaterialParseRunStatus,
@@ -15,12 +16,14 @@ import {
   type Prisma,
 } from '@prisma/client'
 import type { DepartureMaterialView, StoredObjectSummary } from '@xiaotuanbao/shared'
+import { buildMaterialParseIndex, projectParseResultPages } from '@xiaotuanbao/ai-contracts'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { StoredObjectService } from '../stored-object/stored-object.service'
 import {
   MATERIAL_ALLOWED_CONTENT_TYPES,
   MATERIAL_MAX_BYTES,
   MATERIAL_MAX_FILES_PER_SEND,
+  PARSE_FAILED_ERROR_CODE,
   materialParseJobKey,
 } from './departure-material.constants'
 import { ParseWorkerClient } from './parse-worker.client'
@@ -314,6 +317,7 @@ export class DepartureMaterialService {
     inputBatchId: string
     materialId: string
     parseResultVersion: number
+    pageNumber?: number
   }) {
     const dependency = await this.prisma.aiInputBatchMaterial.findFirst({
       where: {
@@ -336,19 +340,56 @@ export class DepartureMaterialService {
     if (!run) {
       throw new NotFoundException('发团资料解析结果不存在')
     }
-    const pages = Array.isArray(run.pages) ? run.pages : []
+    const projected = projectParseResultPages(mapParsePages(run.pages), params.pageNumber)
+    if (params.pageNumber != null && projected.pages.length === 0) {
+      throw new NotFoundException('发团资料解析页不存在')
+    }
     return {
       materialId: params.materialId,
       parseResultVersion: run.resultVersion,
-      pages: pages.map((page) => {
-        const record = page as Record<string, unknown>
+      pageCount: projected.pageCount,
+      truncated: projected.truncated,
+      pages: projected.pages,
+    }
+  }
+
+  async loadPinnedParseIndex(organizationId: string, inputBatchId: string) {
+    const deps = await this.prisma.aiInputBatchMaterial.findMany({
+      where: {
+        organizationId,
+        inputBatchId,
+        required: true,
+        parseResultVersion: { not: null },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (deps.length === 0) {
+      return { materials: [], truncationReasons: [] as string[] }
+    }
+    const runs = await this.prisma.departureMaterialParseRun.findMany({
+      where: {
+        status: DepartureMaterialParseRunStatus.succeeded,
+        OR: deps.map((item) => ({
+          materialId: item.materialId,
+          resultVersion: item.parseResultVersion as number,
+        })),
+      },
+      select: { materialId: true, resultVersion: true, pages: true },
+    })
+    const runByKey = new Map(
+      runs.map((run) => [`${run.materialId}:${run.resultVersion}`, run] as const),
+    )
+    return buildMaterialParseIndex(
+      deps.map((item) => {
+        const parseResultVersion = item.parseResultVersion as number
+        const run = runByKey.get(`${item.materialId}:${parseResultVersion}`)
         return {
-          pageNumber: Number(record.pageNumber),
-          source: record.source === 'native_pdf' ? ('native_pdf' as const) : ('ocr' as const),
-          text: String(record.text ?? ''),
+          materialId: item.materialId,
+          parseResultVersion,
+          pages: mapParsePages(run?.pages),
         }
       }),
-    }
+    )
   }
 
   async executeParseJob(job: {
@@ -369,7 +410,7 @@ export class DepartureMaterialService {
       return null
     }
     const run = material.parseRuns[0]
-    if (!run) {
+    if (!run || run.status === DepartureMaterialParseRunStatus.failed) {
       return null
     }
     if (
@@ -413,7 +454,7 @@ export class DepartureMaterialService {
               : DepartureMaterialParseRunStatus.succeeded,
           pages: parsed.pages as unknown as Prisma.InputJsonValue,
           parserVersions: parsed.parserVersions as Prisma.InputJsonValue,
-          errorCode: status === DepartureMaterialStatus.failed ? 'PARSE_FAILED' : null,
+          errorCode: status === DepartureMaterialStatus.failed ? PARSE_FAILED_ERROR_CODE : null,
           endedAt: new Date(),
         },
       })
@@ -461,7 +502,7 @@ export class DepartureMaterialService {
         },
         data: {
           status: DepartureMaterialParseRunStatus.failed,
-          errorCode: 'PARSE_FAILED',
+          errorCode: PARSE_FAILED_ERROR_CODE,
           endedAt: new Date(),
         },
       })
@@ -469,15 +510,48 @@ export class DepartureMaterialService {
   }
 
   async pinMaterialVersion(materialId: string, parseResultVersion: number): Promise<string[]> {
+    const waiting = await this.prisma.aiInputBatchMaterial.findMany({
+      where: {
+        materialId,
+        required: true,
+        parseResultVersion: null,
+        inputBatch: { status: AiInputBatchStatus.waiting_for_materials },
+      },
+      select: { id: true, inputBatchId: true },
+    })
+    if (waiting.length === 0) {
+      return []
+    }
     await this.prisma.aiInputBatchMaterial.updateMany({
-      where: { materialId, parseResultVersion: null },
+      where: { id: { in: waiting.map((item) => item.id) } },
       data: { parseResultVersion },
     })
-    const dependencies = await this.prisma.aiInputBatchMaterial.findMany({
-      where: { materialId, required: true },
-      select: { inputBatchId: true },
+    return [...new Set(waiting.map((item) => item.inputBatchId))]
+  }
+
+  async startNewParseRun(
+    tx: Prisma.TransactionClient,
+    params: { organizationId: string; materialId: string },
+  ): Promise<number> {
+    const latest = await tx.departureMaterialParseRun.findFirst({
+      where: { materialId: params.materialId },
+      orderBy: { resultVersion: 'desc' },
     })
-    return [...new Set(dependencies.map((item) => item.inputBatchId))]
+    const resultVersion = (latest?.resultVersion ?? 0) + 1
+    await tx.departureMaterialParseRun.create({
+      data: {
+        organizationId: params.organizationId,
+        materialId: params.materialId,
+        status: DepartureMaterialParseRunStatus.queued,
+        resultVersion,
+        parserVersions: {},
+      },
+    })
+    await tx.departureMaterial.update({
+      where: { id: params.materialId },
+      data: { status: DepartureMaterialStatus.queued, statusVersion: { increment: 1 } },
+    })
+    return resultVersion
   }
 
   private async finishParseJob(jobId: string): Promise<void> {
@@ -522,6 +596,33 @@ export function toMaterialView(
     createdAt: material.createdAt.toISOString(),
     latestResultVersion,
   }
+}
+
+function mapParsePages(pages: unknown): Array<{
+  pageNumber: number
+  source: 'native_pdf' | 'ocr'
+  text: string
+}> {
+  if (!Array.isArray(pages)) {
+    return []
+  }
+  return pages.flatMap((page) => {
+    if (!page || typeof page !== 'object') {
+      return []
+    }
+    const record = page as Record<string, unknown>
+    const pageNumber = Number(record.pageNumber)
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+      return []
+    }
+    return [
+      {
+        pageNumber,
+        source: record.source === 'native_pdf' ? ('native_pdf' as const) : ('ocr' as const),
+        text: String(record.text ?? ''),
+      },
+    ]
+  })
 }
 
 function reusedMaterial(material: DepartureMaterial & {

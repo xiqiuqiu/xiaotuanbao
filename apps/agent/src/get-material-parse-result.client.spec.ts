@@ -12,6 +12,8 @@ describe('fetchMaterialParseResult', () => {
     const result: GetMaterialParseResultOutput = {
       materialId: 'mat-1',
       parseResultVersion: 1,
+      pageCount: 1,
+      truncated: false,
       pages: [{ pageNumber: 1, source: 'ocr', text: '九月川西线' }],
     }
 

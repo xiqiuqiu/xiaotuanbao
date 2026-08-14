@@ -18,12 +18,15 @@ import {
   AiConversationEventKind,
   AiConversationStatus,
   AiCreateTaskStatus,
+  AiAgentAttemptStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
+  DepartureMaterialStatus,
   type AiConversation,
   type AiConversationEvent,
   type AiCreateTask,
+  type AiInputBatch,
   type DepartureCreationDraft,
   type Prisma,
 } from '@prisma/client'
@@ -33,12 +36,23 @@ import { AuthService } from '../auth/auth.service'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
 import {
+  ABANDON_BATCH_OPERATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
+  REMOVE_BATCH_MATERIALS_OPERATION,
+  RETRY_FAILED_MATERIALS_OPERATION,
   SEND_TEXT_OPERATION,
   SSE_CATCH_UP_POLL_MS,
+  STOP_BATCH_OPERATION,
 } from './ai-conversation.constants'
-import { toBatchView, toConversationView, toEventView } from './ai-conversation.mapper'
+import {
+  isFailedDependency,
+  toBatchView,
+  toConversationView,
+  toEventView,
+  toFailedMaterialPayload,
+  type BatchMaterialSource,
+} from './ai-conversation.mapper'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateSender, lockAiCreateTask } from './ai-create-task.lock'
 import {
@@ -55,7 +69,20 @@ const TASK_INCLUDE = {
   draft: true,
 } satisfies Prisma.AiCreateTaskInclude
 
+const BATCH_MATERIAL_INCLUDE = {
+  materials: {
+    include: {
+      material: {
+        include: {
+          parseRuns: { orderBy: { resultVersion: 'desc' as const }, take: 1 },
+        },
+      },
+    },
+  },
+} satisfies Prisma.AiInputBatchInclude
+
 type TaskWithDraft = AiCreateTask & { draft: DepartureCreationDraft | null }
+type BatchWithMaterials = AiInputBatch & { materials: BatchMaterialSource[] }
 
 @Injectable()
 export class AiConversationService {
@@ -273,11 +300,17 @@ export class AiConversationService {
               })),
             },
           },
-          include: { materials: true },
+          include: BATCH_MATERIAL_INCLUDE,
         })
 
         for (const item of archived) {
           if (item.needsParseJob) {
+            if (item.material.status === DepartureMaterialStatus.failed) {
+              await this.materialService.startNewParseRun(tx, {
+                organizationId,
+                materialId: item.material.id,
+              })
+            }
             await this.materialService.enqueueParseJob(tx, {
               organizationId,
               taskId: task.id,
@@ -288,7 +321,8 @@ export class AiConversationService {
           }
         }
 
-        const progress = materialProgressFromDeps(batch.materials)
+        const snapshot = await this.loadBatch(tx, batch.id)
+        const progress = progressOf(snapshot)
         const statusEvent = await tx.aiConversationEvent.create({
           data: {
             organizationId,
@@ -300,6 +334,7 @@ export class AiConversationService {
               status: batchStatus,
               readyCount: progress.ready,
               totalCount: progress.total,
+              failedCount: progress.failed,
             },
           },
         })
@@ -326,7 +361,7 @@ export class AiConversationService {
         const events = [toEventView(userEvent), toEventView(statusEvent)]
         const payload: SendAiConversationMessageResult = {
           conversationId: conversation.id,
-          batch: toBatchView(batch),
+          batch: toBatchView(snapshot),
           events,
           lastSequence: statusSequence,
         }
@@ -358,6 +393,244 @@ export class AiConversationService {
       }
       throw error
     }
+  }
+
+  async retryFailedMaterials(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    batchId: string,
+    materialIds: string[] | undefined,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: RETRY_FAILED_MATERIALS_OPERATION,
+      idempotencyKey,
+      request: { materialIds: materialIds?.slice().sort() ?? null },
+      mutate: async (tx, batch) => {
+        this.assertWaitingBatch(batch)
+        const requested = new Set(materialIds ?? [])
+        const failed = batch.materials.filter((item) => {
+          if (!isFailedDependency(item)) {
+            return false
+          }
+          return requested.size === 0 || requested.has(item.materialId)
+        })
+        if (materialIds && materialIds.length > 0 && failed.length === 0) {
+          const known = new Set(batch.materials.map((item) => item.materialId))
+          if (materialIds.some((id) => !known.has(id))) {
+            throw new NotFoundException('批次中不存在指定资料依赖')
+          }
+        }
+        for (const item of failed) {
+          await this.materialService.startNewParseRun(tx, {
+            organizationId,
+            materialId: item.materialId,
+          })
+          await this.materialService.enqueueParseJob(tx, {
+            organizationId,
+            taskId: batch.taskId,
+            conversationId: batch.conversationId,
+            inputBatchId: batch.id,
+            materialId: item.materialId,
+          })
+        }
+        const reloaded = await this.loadBatch(tx, batch.id)
+        const progress = progressOf(reloaded)
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId: batch.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: {
+            batchId: batch.id,
+            status: AiInputBatchStatus.waiting_for_materials,
+            readyCount: progress.ready,
+            totalCount: progress.total,
+            failedCount: progress.failed,
+            failedMaterials: toFailedMaterialPayload(reloaded.materials),
+          },
+        })
+        return { batch: reloaded, events: [statusEvent] }
+      },
+    })
+  }
+
+  async removeMaterials(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    batchId: string,
+    materialIds: string[],
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: REMOVE_BATCH_MATERIALS_OPERATION,
+      idempotencyKey,
+      request: { materialIds: materialIds.slice().sort() },
+      mutate: async (tx, batch) => {
+        this.assertWaitingBatch(batch)
+        const toRemove: string[] = []
+        for (const id of materialIds) {
+          const dep = batch.materials.find((item) => item.materialId === id)
+          if (dep) {
+            if (!isFailedDependency(dep)) {
+              throw new ConflictException('只能移除解析失败的资料依赖')
+            }
+            toRemove.push(id)
+            continue
+          }
+          const archived = await tx.departureMaterial.findFirst({
+            where: { id, taskId: batch.taskId, organizationId: batch.organizationId },
+            select: { id: true },
+          })
+          if (!archived) {
+            throw new NotFoundException('发团资料档案不存在')
+          }
+        }
+        if (toRemove.length > 0) {
+          await tx.aiInputBatchMaterial.deleteMany({
+            where: { inputBatchId: batch.id, materialId: { in: toRemove } },
+          })
+        }
+        const published = await this.tryPromoteBatch(tx, batch.id)
+        const reloaded = await this.loadBatch(tx, batch.id)
+        const events = []
+        for (const item of published) {
+          events.push(await tx.aiConversationEvent.findUniqueOrThrow({ where: { id: item.eventId } }))
+        }
+        if (events.length === 0) {
+          const progress = progressOf(reloaded)
+          events.push(
+            await this.appendEvent(tx, {
+              organizationId,
+              conversationId: batch.conversationId,
+              kind: AiConversationEventKind.batch_status,
+              payload: {
+                batchId: batch.id,
+                status: reloaded.status,
+                readyCount: progress.ready,
+                totalCount: progress.total,
+                failedCount: progress.failed,
+              },
+            }),
+          )
+        }
+        return { batch: reloaded, events }
+      },
+    })
+  }
+
+  async abandonBatch(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    batchId: string,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: ABANDON_BATCH_OPERATION,
+      idempotencyKey,
+      request: { batchId },
+      mutate: async (tx, batch) => {
+        if (batch.status === AiInputBatchStatus.cancelled) {
+          return { batch, events: [] }
+        }
+        this.assertWaitingBatch(batch)
+        const updated = await tx.aiInputBatch.update({
+          where: { id: batch.id },
+          data: { status: AiInputBatchStatus.cancelled },
+          include: BATCH_MATERIAL_INCLUDE,
+        })
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId: batch.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: { batchId: batch.id, status: AiInputBatchStatus.cancelled },
+        })
+        return { batch: updated, events: [statusEvent] }
+      },
+    })
+  }
+
+  async stopBatch(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    batchId: string,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: STOP_BATCH_OPERATION,
+      idempotencyKey,
+      request: { batchId },
+      mutate: async (tx, batch) => {
+        if (batch.status === AiInputBatchStatus.cancelled) {
+          return { batch, events: [] }
+        }
+        if (
+          batch.status !== AiInputBatchStatus.ready_for_agent &&
+          batch.status !== AiInputBatchStatus.agent_running
+        ) {
+          throw new ConflictException('仅可停止尚未结束的 Agent 处理；等待资料时请放弃本批')
+        }
+        await tx.aiWorkflowJob.updateMany({
+          where: {
+            inputBatchId: batch.id,
+            type: AiWorkflowJobType.agent_batch,
+            status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
+          },
+          data: {
+            status: AiWorkflowJobStatus.failed,
+            lastErrorCode: 'BATCH_CANCELLED',
+            leaseExpiresAt: null,
+          },
+        })
+        await tx.aiAgentAttempt.updateMany({
+          where: { inputBatchId: batch.id, status: AiAgentAttemptStatus.running },
+          data: {
+            status: AiAgentAttemptStatus.failed,
+            errorCode: 'BATCH_CANCELLED',
+            endedAt: new Date(),
+          },
+        })
+        const updated = await tx.aiInputBatch.update({
+          where: { id: batch.id },
+          data: { status: AiInputBatchStatus.cancelled },
+          include: BATCH_MATERIAL_INCLUDE,
+        })
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId: batch.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: { batchId: batch.id, status: AiInputBatchStatus.cancelled },
+        })
+        return { batch: updated, events: [statusEvent] }
+      },
+    })
   }
 
   async listEvents(
@@ -496,23 +769,31 @@ export class AiConversationService {
   ): Promise<{ conversationId: string; eventId: string }[]> {
     const batch = await tx.aiInputBatch.findUnique({
       where: { id: inputBatchId },
-      include: { materials: true },
+      include: BATCH_MATERIAL_INCLUDE,
     })
     if (!batch || batch.status !== AiInputBatchStatus.waiting_for_materials) {
       return []
     }
-    const progress = materialProgressFromDeps(batch.materials)
+    const progress = materialProgressFromDeps(
+      batch.materials.map((item) => ({
+        required: item.required,
+        parseResultVersion: item.parseResultVersion,
+        failed: isFailedDependency(item),
+      })),
+    )
     if (progress.ready < progress.total) {
       const statusEvent = await this.appendEvent(tx, {
         organizationId: batch.organizationId,
         conversationId: batch.conversationId,
         kind: AiConversationEventKind.batch_status,
-        payload: {
-          batchId: batch.id,
-          status: AiInputBatchStatus.waiting_for_materials,
-          readyCount: progress.ready,
-          totalCount: progress.total,
-        },
+            payload: {
+              batchId: batch.id,
+              status: AiInputBatchStatus.waiting_for_materials,
+              readyCount: progress.ready,
+              totalCount: progress.total,
+              failedCount: progress.failed,
+              failedMaterials: toFailedMaterialPayload(batch.materials),
+            },
       })
       return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
     }
@@ -536,12 +817,13 @@ export class AiConversationService {
       organizationId: batch.organizationId,
       conversationId: batch.conversationId,
       kind: AiConversationEventKind.batch_status,
-      payload: {
-        batchId: batch.id,
-        status: AiInputBatchStatus.ready_for_agent,
-        readyCount: progress.ready,
-        totalCount: progress.total,
-      },
+        payload: {
+          batchId: batch.id,
+          status: AiInputBatchStatus.ready_for_agent,
+          readyCount: progress.ready,
+          totalCount: progress.total,
+          failedCount: progress.failed,
+        },
     })
     return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
   }
@@ -604,7 +886,7 @@ export class AiConversationService {
           ],
         },
       },
-      include: { materials: true },
+      include: BATCH_MATERIAL_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })
   }
@@ -625,6 +907,153 @@ export class AiConversationService {
       throw new ForbiddenException('仅任务创建者可访问该 AI 建团会话')
     }
     return conversation
+  }
+
+  private assertWaitingBatch(batch: BatchWithMaterials): void {
+    if (batch.status === AiInputBatchStatus.waiting_for_materials) {
+      return
+    }
+    if (
+      batch.status === AiInputBatchStatus.ready_for_agent ||
+      batch.status === AiInputBatchStatus.agent_running
+    ) {
+      throw new ConflictException('Agent 认领后不可修改本批资料，请先停止当前处理并重新整理')
+    }
+    throw new ConflictException('当前批次不可再修改资料依赖')
+  }
+
+  private async loadBatch(
+    tx: Prisma.TransactionClient,
+    batchId: string,
+  ): Promise<BatchWithMaterials> {
+    return tx.aiInputBatch.findUniqueOrThrow({
+      where: { id: batchId },
+      include: BATCH_MATERIAL_INCLUDE,
+    })
+  }
+
+  private async runBatchCommand(params: {
+    organizationId: string
+    userId: string
+    taskId: string
+    conversationId: string
+    batchId: string
+    operation: string
+    idempotencyKey: string | undefined
+    request: unknown
+    mutate: (
+      tx: Prisma.TransactionClient,
+      batch: BatchWithMaterials,
+    ) => Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }>
+  }): Promise<SendAiConversationMessageResult> {
+    await this.assertAssistAccess(params.userId)
+    const key = requireIdempotencyKey(params.idempotencyKey)
+    const hash = requestHash({
+      taskId: params.taskId,
+      conversationId: params.conversationId,
+      batchId: params.batchId,
+      request: params.request,
+    })
+    const existingRecord = await this.prisma.aiCreateIdempotencyRecord.findUnique({
+      where: {
+        organizationId_operation_idempotencyKey: {
+          organizationId: params.organizationId,
+          operation: params.operation,
+          idempotencyKey: key,
+        },
+      },
+    })
+    if (
+      existingRecord?.completedAt &&
+      existingRecord.resultJson &&
+      existingRecord.requestHash === hash &&
+      existingRecord.taskId === params.taskId
+    ) {
+      return existingRecord.resultJson as unknown as SendAiConversationMessageResult
+    }
+
+    const published: AiConversationEventView[] = []
+    const result = await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, params.organizationId, params.taskId)
+      await this.findOwnedInProgressTask(params.organizationId, params.userId, params.taskId, tx)
+      const conversation = await this.requireOwnedConversation(
+        params.organizationId,
+        params.userId,
+        params.taskId,
+        params.conversationId,
+      )
+      if (conversation.status !== AiConversationStatus.open) {
+        throw new BadRequestException('仅未完成的 AI 建团会话可处理资料批次')
+      }
+      const record = await tx.aiCreateIdempotencyRecord.upsert({
+        where: {
+          organizationId_operation_idempotencyKey: {
+            organizationId: params.organizationId,
+            operation: params.operation,
+            idempotencyKey: key,
+          },
+        },
+        create: {
+          organizationId: params.organizationId,
+          taskId: params.taskId,
+          operation: params.operation,
+          idempotencyKey: key,
+          requestHash: hash,
+        },
+        update: {},
+      })
+      if (record.taskId !== params.taskId) {
+        throw new ConflictException('幂等键已被其他任务使用')
+      }
+      if (record.requestHash !== hash) {
+        throw new ConflictException('幂等键已用于不同的请求内容')
+      }
+      if (record.completedAt && record.resultJson) {
+        return record.resultJson as unknown as SendAiConversationMessageResult
+      }
+
+      const batch = await tx.aiInputBatch.findFirst({
+        where: {
+          id: params.batchId,
+          conversationId: conversation.id,
+          taskId: params.taskId,
+          organizationId: params.organizationId,
+        },
+        include: BATCH_MATERIAL_INCLUDE,
+      })
+      if (!batch) {
+        throw new NotFoundException('AI 输入批次不存在')
+      }
+      const mutated = await params.mutate(tx, batch)
+      await tx.aiConversation.update({
+        where: { id: conversation.id },
+        data: { updatedAt: new Date() },
+      })
+      const events = mutated.events.map(toEventView)
+      const last = await tx.aiConversationEvent.findFirst({
+        where: { conversationId: conversation.id },
+        orderBy: { sequence: 'desc' },
+      })
+      const payload: SendAiConversationMessageResult = {
+        conversationId: conversation.id,
+        batch: toBatchView(mutated.batch),
+        events,
+        lastSequence: last?.sequence ?? 0,
+      }
+      await tx.aiCreateIdempotencyRecord.update({
+        where: { id: record.id },
+        data: {
+          resultJson: payload as unknown as Prisma.InputJsonValue,
+          completedAt: new Date(),
+        },
+      })
+      published.push(...events)
+      return payload
+    })
+    for (const event of published) {
+      this.eventHub.publish(params.conversationId, event)
+    }
+    return result
   }
 
   private async findOwnedInProgressTask(
@@ -662,6 +1091,27 @@ export class AiConversationService {
 
 function requestHash(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(canonicalize(payload))).digest('hex')
+}
+
+function requireIdempotencyKey(idempotencyKey: string | undefined): string {
+  const key = idempotencyKey?.trim()
+  if (!key) {
+    throw new BadRequestException('必须提供 Idempotency-Key 幂等键')
+  }
+  if (key.length > 200) {
+    throw new BadRequestException('幂等键长度不能超过 200 个字符')
+  }
+  return key
+}
+
+function progressOf(batch: BatchWithMaterials) {
+  return materialProgressFromDeps(
+    batch.materials.map((item) => ({
+      required: item.required,
+      parseResultVersion: item.parseResultVersion,
+      failed: isFailedDependency(item),
+    })),
+  )
 }
 
 function dedupeFiles(files: IncomingMaterialFile[]): IncomingMaterialFile[] {

@@ -1,4 +1,7 @@
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
@@ -143,6 +146,22 @@ export class SendAiConversationMessageDto {
   @IsString()
   @MaxLength(8000)
   text?: string
+}
+
+export class RetryFailedMaterialsDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  materialIds?: string[]
+}
+
+export class RemoveBatchMaterialsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  materialIds!: string[]
 }
 
 export class ListAiConversationEventsQueryDto {

@@ -16,6 +16,7 @@ export interface PlaintextContextInput {
   businessSnapshotVersion: number
   modelId: string
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
+  truncationReasons?: string[]
 }
 
 export interface PlaintextContextManifestRecord {
@@ -39,7 +40,7 @@ export interface ConversationEventRecord {
 export function buildPlaintextContextManifest(
   input: PlaintextContextInput,
 ): PlaintextContextManifestRecord {
-  const truncationReasons: string[] = []
+  const truncationReasons = input.truncationReasons ?? []
   const canonical = {
     conversationId: input.conversationId,
     inputBatchId: input.inputBatchId,
@@ -48,6 +49,7 @@ export function buildPlaintextContextManifest(
     userText: input.userText,
     businessSnapshotVersion: input.businessSnapshotVersion,
     materialVersions: input.materialVersions,
+    truncationReasons,
     builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
     systemPromptVersion: PLAINTEXT_SYSTEM_PROMPT_VERSION,
     toolSchemaVersion: PLAINTEXT_TOOL_SCHEMA_VERSION,
