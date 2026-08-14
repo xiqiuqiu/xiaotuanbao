@@ -63,6 +63,49 @@ describe('getTaskContext contract v1', () => {
     expect(parsed).not.toHaveProperty('prismaModel')
     expect(parsed.availableCapabilities).toEqual(['getTaskContext'])
     expect(parsed.objectVersion).toBe(3)
+    expect(parsed).not.toHaveProperty('currentUserMessage')
+  })
+
+  it('carries pinned conversation events so the Agent can read User plaintext', () => {
+    const parsed = getTaskContextOutputSchema.parse({
+      task: {
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        creatorUserId: 'user-1',
+      },
+      snapshot: { mode: 'manual', routeName: '川西线' },
+      objectVersion: 1,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext'],
+      fieldCoverage: { filled: ['routeName'], missing: [], optionalPresent: [] },
+      conversationEvents: [
+        { sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' },
+        { sequence: 2, kind: 'batch_status' },
+      ],
+    })
+    expect(parsed.conversationEvents).toEqual([
+      { sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' },
+      { sequence: 2, kind: 'batch_status' },
+    ])
+  })
+
+  it('carries the current input-batch User text when the Agent is running a headless batch', () => {
+    const parsed = getTaskContextOutputSchema.parse({
+      task: {
+        id: 'task-1',
+        status: 'in_progress',
+        currentPhase: 'basic_info',
+        creatorUserId: 'user-1',
+      },
+      snapshot: { mode: 'manual', routeName: '川西线' },
+      objectVersion: 1,
+      pending: { hasPendingReview: false, reviewPackageId: null },
+      availableCapabilities: ['getTaskContext'],
+      fieldCoverage: { filled: ['routeName'], missing: [], optionalPresent: [] },
+      currentUserMessage: '帮我建一个喀纳斯3日团',
+    })
+    expect(parsed.currentUserMessage).toBe('帮我建一个喀纳斯3日团')
   })
 
   it('allows submitReviewPackage and rejects confirm or other write tools', () => {

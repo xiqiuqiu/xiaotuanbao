@@ -53,6 +53,8 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 
 - ADR-0043 的表单审核边界继续有效：Agent 只能提交持久化审核包，不能把候选直接写入发团创建草稿；查看、修正、确认与拒绝只在中间表单完成。聊天中的审核卡是 `awaiting_review` 状态展示，不是无效按钮，也不提供第二套确认入口。
 - CopilotKit `useHumanInTheLoop` / `respond()` 不再承担业务暂停或可靠续跑。Agent 在持久化审核包、完成消息与批次 `awaiting_review` 状态原子提交后结束 attempt。确认或拒绝由 User HTTP 命令写入持久化事件，并以审核包版本/CAS 保证首个处置生效；另一设备同步“已处理”，不能产生第二次续跑。
+- CopilotKit 继续拥有 AI 会话的交互壳层。浏览器直接管理 Agent 时可使用 `CopilotChat`；本 ADR 的服务端持久化模式使用受控 `CopilotChatView` 及其默认 message/input/attachment Slots，将持久化事件、批次状态、文本草稿和发送命令适配为 `messages`、`isRunning`、`inputValue` 与 `onSubmitMessage`。浏览器不调用 `runAgent()` 只改变执行所有权，不构成用普通 DOM 或 Ant Design 输入控件重做聊天界面的理由。
+- 消息、附件、建议项、流式状态及工具调用展示应先使用 CopilotKit v2 组件、Slots、`useAttachments` 和 activity/message/tool renderer。只有框架扩展点无法满足已确认需求时才允许自定义，并须在 PR 中记录缺口与不可复用证据；Ant Design 继续负责表单、审核、业务状态和通用反馈。
 - 确认后后台工作流可创建后续批次，重新读取最新任务事实并继续协作。拒绝表示本次候选作废且草稿未修改；系统等待 User 下一条明确指令，不追问、不自动重新生成。
 - 发送后立即显示 User 消息及持续更新的业务状态，例如“发送中、解析 1/2、正在整理、等待回答、等待表单审核”。解析期间不先生成没有实际内容的“已收到，稍后处理”。后台失败应在原位置提供重试失败文件、移除后继续或放弃本批等明确操作。
 

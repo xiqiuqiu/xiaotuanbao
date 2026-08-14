@@ -25,9 +25,11 @@ export function useAiCreateAssistBootstrap({
   reset: () => void
   session: AiCreateAssistSession | null
   error: Error | null
+  loading: boolean
 } {
   const [session, setSession] = useState<AiCreateAssistSession | null>(null)
   const [error, setError] = useState<Error | null>(null)
+  const [loading, setLoading] = useState(false)
   const inFlightRef = useRef(false)
   const generationRef = useRef(0)
 
@@ -36,6 +38,7 @@ export function useAiCreateAssistBootstrap({
     inFlightRef.current = false
     setSession(null)
     setError(null)
+    setLoading(false)
   }, [])
 
   const bootstrap = useCallback(async () => {
@@ -44,6 +47,7 @@ export function useAiCreateAssistBootstrap({
     }
 
     inFlightRef.current = true
+    setLoading(true)
     const generation = generationRef.current
     try {
       try {
@@ -75,9 +79,10 @@ export function useAiCreateAssistBootstrap({
     } finally {
       if (generation === generationRef.current) {
         inFlightRef.current = false
+        setLoading(false)
       }
     }
   }, [applySavedDraft, buildDraft, enabled, flushDraft, getTaskId, syncTaskSearch])
 
-  return { bootstrap, reset, session, error }
+  return { bootstrap, reset, session, error, loading }
 }

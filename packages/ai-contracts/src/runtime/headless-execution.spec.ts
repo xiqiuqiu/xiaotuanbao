@@ -30,10 +30,14 @@ describe('headless Agent execution contract', () => {
     expect(
       headlessExecutionRequestSchema.parse({
         ...identity,
+        userText: '帮我建一个喀纳斯3日团',
         runId: 'legacy-run',
         messages: ['must not become execution identity'],
       }),
-    ).toEqual(identity)
+    ).toEqual({
+      ...identity,
+      userText: '帮我建一个喀纳斯3日团',
+    })
 
     expect(() =>
       headlessExecutionRequestSchema.parse({
@@ -41,6 +45,19 @@ describe('headless Agent execution contract', () => {
         attemptId: 'attempt-1',
       }),
     ).toThrow()
+  })
+
+  it('requires the assembled User plaintext in addition to execution identity', () => {
+    expect(() => headlessExecutionRequestSchema.parse(identity)).toThrow()
+    expect(
+      headlessExecutionRequestSchema.parse({
+        ...identity,
+        userText: '  帮我建一个喀纳斯3日团  ',
+      }),
+    ).toEqual({
+      ...identity,
+      userText: '帮我建一个喀纳斯3日团',
+    })
   })
 
   it('accepts only structured terminal outcomes and rejects model prose as a status', () => {

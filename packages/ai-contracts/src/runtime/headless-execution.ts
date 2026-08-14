@@ -22,6 +22,10 @@ export const headlessExecutionIdentitySchema = z
   .strip()
 
 export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
+  .extend({
+    userText: z.string().trim().min(1),
+  })
+  .strip()
 
 export const headlessCompletedResultSchema = z
   .object({

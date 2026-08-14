@@ -33,7 +33,7 @@ describe('sanitizeAgentExecutionOptions', () => {
 })
 
 describe('wrapAgentExecutionWithoutInboundAuth', () => {
-  it('strips inbound Authorization before stream and resumeStream', async () => {
+  it('strips inbound Authorization before stream, resumeStream and generate', async () => {
     const received: unknown[] = []
     const fake = {
       stream: async (_input: unknown, options?: unknown) => {
@@ -44,6 +44,10 @@ describe('wrapAgentExecutionWithoutInboundAuth', () => {
         received.push(['resume', options])
         return 'resumed'
       },
+      generate: async (_input: unknown, options?: unknown) => {
+        received.push(['generate', options])
+        return 'generated'
+      },
     }
 
     const wrapped = wrapAgentExecutionWithoutInboundAuth(fake)
@@ -53,9 +57,11 @@ describe('wrapAgentExecutionWithoutInboundAuth', () => {
 
     await expect(wrapped.stream('hello', inbound)).resolves.toBe('streamed')
     await expect(wrapped.resumeStream?.('hello', inbound)).resolves.toBe('resumed')
+    await expect(wrapped.generate?.('hello', inbound)).resolves.toBe('generated')
     expect(received).toEqual([
       ['stream', { modelSettings: { headers: {} } }],
       ['resume', { modelSettings: { headers: {} } }],
+      ['generate', { modelSettings: { headers: {} } }],
     ])
   })
 })

@@ -99,6 +99,8 @@ export default registerAs('app', () => {
         .filter((value) => value.length > 0),
       agentServiceSecret: process.env.AGENT_SERVICE_SECRET?.trim() ?? '',
       agentRuntimeUrl: (process.env.AGENT_RUNTIME_URL ?? '/copilotkit').trim(),
+      agentInternalUrl: (process.env.AGENT_INTERNAL_URL ?? '').trim(),
+      modelId: (process.env.AI_MODEL ?? 'deterministic').trim(),
       delegationTtlSec: Number(process.env.AI_CREATE_ASSIST_DELEGATION_TTL_SEC ?? 600),
       runTimeoutMs: Number(process.env.AI_CREATE_ASSIST_RUN_TIMEOUT_MS ?? 120_000),
     },

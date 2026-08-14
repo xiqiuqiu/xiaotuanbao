@@ -878,10 +878,56 @@ export interface StartAiCreateAssistSessionDto {
 
 export interface AiCreateAssistSession {
   task: AiCreateTaskSummary
+  conversation: AiConversationView
   runId: string
   delegationToken: string
   agentRuntimeUrl: string
   expiresAt: string
+}
+
+export type AiConversationStatus = 'open' | 'abandoned' | 'completed'
+
+export type AiConversationEventKind = 'user_message' | 'agent_message' | 'batch_status' | 'error'
+
+export type AiInputBatchStatus =
+  | 'waiting_for_materials'
+  | 'ready_for_agent'
+  | 'agent_running'
+  | 'awaiting_user_input'
+  | 'awaiting_review'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface AiConversationEventView {
+  sequence: number
+  kind: AiConversationEventKind
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export interface AiInputBatchView {
+  id: string
+  status: AiInputBatchStatus
+  conversationVersion: number
+}
+
+export interface AiConversationView {
+  id: string
+  status: AiConversationStatus
+  events: AiConversationEventView[]
+  activeBatch: AiInputBatchView | null
+}
+
+export interface SendAiConversationMessageDto {
+  text: string
+}
+
+export interface SendAiConversationMessageResult {
+  conversationId: string
+  batch: AiInputBatchView
+  events: AiConversationEventView[]
+  lastSequence: number
 }
 
 export type AiReviewableBasicInfoField =

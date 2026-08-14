@@ -49,13 +49,18 @@ export function sanitizeAgentExecutionOptions<T>(options: T): T {
 }
 
 export function wrapAgentExecutionWithoutInboundAuth<T extends object>(agent: T): T {
-  const target = agent as T & { stream: AgentMethod; resumeStream?: AgentMethod }
+  const target = agent as T & { stream: AgentMethod; resumeStream?: AgentMethod; generate?: AgentMethod }
   const originalStream = target.stream.bind(target)
   target.stream = (input, options) => originalStream(input, sanitizeAgentExecutionOptions(options))
 
   if (typeof target.resumeStream === 'function') {
     const originalResume = target.resumeStream.bind(target)
     target.resumeStream = (input, options) => originalResume(input, sanitizeAgentExecutionOptions(options))
+  }
+
+  if (typeof target.generate === 'function') {
+    const originalGenerate = target.generate.bind(target)
+    target.generate = (input, options) => originalGenerate(input, sanitizeAgentExecutionOptions(options))
   }
 
   return agent

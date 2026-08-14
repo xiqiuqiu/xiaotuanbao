@@ -7,7 +7,7 @@ import { READONLY_ASSIST_INSTRUCTIONS } from './readonly-turn'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
 import { wrapAgentExecutionWithoutInboundAuth } from './sanitize-model-headers'
 
-const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
+export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 
 export interface AiCreateMastraConfig extends GetTaskContextToolConfig {
   model?: string

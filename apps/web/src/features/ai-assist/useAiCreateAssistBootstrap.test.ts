@@ -23,6 +23,12 @@ const mockSession: AiCreateAssistSession = {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
   },
+  conversation: {
+    id: 'conv-1',
+    status: 'open',
+    events: [],
+    activeBatch: null,
+  },
   runId: 'run-1',
   delegationToken: 'deleg-1',
   agentRuntimeUrl: '/copilotkit',
@@ -178,11 +184,13 @@ describe('useAiCreateAssistBootstrap', () => {
         expect(startAiCreateAssistSession).toHaveBeenCalled()
       })
       expect(startAiCreateAssistSession).toHaveBeenCalledTimes(1)
+      expect(result.current.loading).toBe(true)
       await act(async () => {
         resolveSession(mockSession)
         await first
         await second
       })
+      expect(result.current.loading).toBe(false)
       expect(startAiCreateAssistSession).toHaveBeenCalledTimes(1)
     } finally {
       resolveSession?.(mockSession)

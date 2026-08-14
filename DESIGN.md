@@ -97,6 +97,9 @@ components:
 
 - 主题唯一入口：`apps/web/src/app/providers/AppProviders.tsx`。
 - 页面消费 `theme.useToken()` 或 antd 语义属性；不新增平行 CSS Token 系统。
+- AI 会话、消息列表、输入区、附件、建议项、流式状态及工具调用展示，优先使用 `@copilotkit/react-core/v2` 提供的组件、受控 View、Slots 与 Hooks；Ant Design 用于表单、审核、业务状态和通用反馈，不替代聊天壳层。
+- 浏览器退出 Agent 执行生命周期不等于退出 CopilotKit UI。浏览器直接管理 Agent 时使用 `CopilotChat`；服务端持久化会话、批次与执行状态时使用受控 `CopilotChatView`，将服务端事件适配为 `messages`、`isRunning`、`inputValue` 与 `onSubmitMessage`，不得因此改用普通 DOM 或 `Input.TextArea + Button` 重做聊天界面。
+- CopilotKit 现有组件确实不能满足已确认需求时，先从其 Slots、`useAttachments`、activity/message/tool renderer 等扩展点实现；仍需自定义时，PR 必须记录框架缺口与复用不可行证据，并保持既有视觉、键盘、附件和无障碍行为。
 - 主壳保持现有结构：浅色 `Sider` 220px + `Header` 64px + `Content` 16px 外边距。
 - 响应式是结构变化：侧栏折叠、筛选换行、表格横向滚动、详情列数收缩；不使用流式大标题。
 - 默认桌面优先；小于 768px 时，页头操作允许换行，抽屉优先占满可用宽度，关键触控目标至少 44px。
@@ -237,6 +240,7 @@ components:
 ### Do:
 
 - **Do** 优先复用 antd 组件和现有“页头 → 筛选 → 主工作区 → Drawer/Modal”骨架。
+- **Do** 在 AI 交互面优先复用 CopilotKit v2 聊天组件与扩展点；持久化执行链使用受控 `CopilotChatView` 保持同一套聊天体验。
 - **Do** 只在 `AppProviders.tsx` 调整 seed 或 `theme.components`，业务页通过 token 消费视觉值。
 - **Do** 使用 4px 网格，常用 8/16/24px；相邻区块留白必须体现层级。
 - **Do** 保留参考图的中性克制、细边框、稀疏强调和高扫描效率。
@@ -246,6 +250,7 @@ components:
 ### Don't:
 
 - **Don't** 直接复制参考图的黑色主按钮、英文超大标题、彩色装饰图标或固定超宽布局。
+- **Don't** 因 Agent 改由服务端 Worker 执行，就用普通 DOM 或 Ant Design 输入控件重新制作 CopilotKit 已提供的消息、输入、附件和流式交互。
 - **Don't** 新增第二套组件库、CSS Token 文件或页面级主题。
 - **Don't** 在业务组件新增裸 hex、任意灰阶、渐变文字、玻璃拟态、紫色炫光或重阴影。
 - **Don't** 使用大于 12px 的业务 Card 圆角、默认胶囊按钮、带粗彩色侧边条的卡片。

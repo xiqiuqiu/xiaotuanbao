@@ -3,7 +3,7 @@ import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { CopilotRuntime, createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { MastraAgent } from '@ag-ui/mastra'
-import { runWithAssistRequestContext } from './assist-request-context'
+import { getAssistRequestContext, runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
 import {
   handleHeadlessRun,
@@ -11,7 +11,8 @@ import {
   type HeadlessExecutor,
 } from './headless-execution'
 import { json, readBearer, readHeader, statusForCollaborationError } from './http'
-import { createAiCreateMastra } from './mastra-agent'
+import { createAiCreateMastra, AI_CREATE_AGENT_ID } from './mastra-agent'
+import { createMastraHeadlessExecutor } from './mastra-headless.executor'
 import { mapAgentFetchError, mapModelError } from './map-agent-error'
 
 export {
@@ -47,7 +48,27 @@ export function createAgentServer(config: AgentServerConfig) {
     basePath: '/copilotkit',
   })
   const copilotNode = createCopilotNodeHandler(copilotFetch)
-  const headlessExecutor = config.headlessExecutor ?? loadDeterministicAgentAdapterFromEnv()
+  const headlessExecutor =
+    config.headlessExecutor ??
+    loadDeterministicAgentAdapterFromEnv() ??
+    createMastraHeadlessExecutor({
+      async readUserText(request) {
+        if (request.userText.trim()) {
+          return request.userText.trim()
+        }
+        const context = getAssistRequestContext()
+        const output = await fetchTaskContext(
+          {
+            apiBaseUrl: config.apiBaseUrl,
+            serviceSecret: config.serviceSecret,
+            delegationToken: context.delegationToken,
+          },
+          { taskId: context.taskId, runId: context.runId },
+        )
+        return output.currentUserMessage?.trim() ?? ''
+      },
+      generate: (userText) => mastra.getAgent(AI_CREATE_AGENT_ID).generate(userText),
+    })
 
   return createServer((request, response) => {
     void handleRequest({ ...config, headlessExecutor }, copilotNode, request, response)
@@ -178,6 +199,5 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
     model: process.env.AI_MODEL ?? 'deepseek/deepseek-chat',
     modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
     modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
-    headlessExecutor: loadDeterministicAgentAdapterFromEnv(),
   }
 }

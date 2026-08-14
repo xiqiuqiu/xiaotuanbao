@@ -58,6 +58,9 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import { parseEventSequences, projectConversationEventsForAgent } from './ai-context-manifest'
+import { AiConversationService } from './ai-conversation.service'
+import { lockAiCreateTask } from './ai-create-task.lock'
 import {
   parseStoredCandidates,
   reviewConfirmValues,
@@ -67,7 +70,6 @@ import {
 } from './review-package.mapper'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
-const TASK_LOCK_OPERATION = 'ai-create-task'
 
 type TaskWithDraft = AiCreateTask & {
   draft: DepartureCreationDraft | null
@@ -113,24 +115,6 @@ function emptyToNull(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-async function lockAiCreateTask(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  taskId: string,
-): Promise<void> {
-  const lockScope = `${organizationId}|${TASK_LOCK_OPERATION}|${taskId}`
-  await tx.$queryRaw`
-    SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
-  `
-  await tx.$queryRaw`
-    SELECT id
-    FROM ai_create_tasks
-    WHERE id = ${taskId}
-      AND organization_id = ${organizationId}
-    FOR UPDATE
-  `
-}
-
 @Injectable()
 export class AiCreateTaskService {
   constructor(
@@ -140,6 +124,7 @@ export class AiCreateTaskService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    private readonly conversationService: AiConversationService,
   ) {}
 
   async saveDraft(
@@ -201,31 +186,21 @@ export class AiCreateTaskService {
           this.normalizeSnapshot(dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' }),
         ).then((summary) => this.findOwnedTaskOrThrow(organizationId, userId, summary.id))
 
-    const runTimeoutMs = this.configService.get<number>('app.aiCreateAssist.runTimeoutMs') ?? 120_000
-    const staleBefore = new Date(Date.now() - runTimeoutMs)
+    const conversation = await this.conversationService.openOrResume(
+      organizationId,
+      userId,
+      task.id,
+    )
 
     const run = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, task.id)
-      await tx.aiCreateActivityRun.updateMany({
-        where: {
-          taskId: task.id,
-          status: AiCreateActivityRunStatus.running,
-          startedAt: { lt: staleBefore },
-        },
-        data: {
-          status: AiCreateActivityRunStatus.failed,
-          endedAt: new Date(),
-          errorCode: 'MODEL_TIMEOUT',
-        },
-      })
-      await tx.aiCreateActivityRun.updateMany({
+      const existing = await tx.aiCreateActivityRun.findFirst({
         where: { taskId: task.id, status: AiCreateActivityRunStatus.running },
-        data: {
-          status: AiCreateActivityRunStatus.failed,
-          endedAt: new Date(),
-          errorCode: 'AGENT_UNAVAILABLE',
-        },
+        orderBy: { startedAt: 'desc' },
       })
+      if (existing) {
+        return existing
+      }
       return tx.aiCreateActivityRun.create({
         data: {
           organizationId,
@@ -251,6 +226,7 @@ export class AiCreateTaskService {
 
     return {
       task: this.toSummary(task),
+      conversation,
       runId: run.id,
       delegationToken,
       agentRuntimeUrl: this.agentRuntimeUrl(),
@@ -259,7 +235,15 @@ export class AiCreateTaskService {
   }
 
   async getTaskContextForAgent(
-    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      conversationId?: string
+      inputBatchId?: string
+      contextManifestId?: string
+    },
     rawInput: unknown,
   ): Promise<GetTaskContextOutput> {
     let input: { taskId: string; runId: string }
@@ -287,6 +271,11 @@ export class AiCreateTaskService {
 
     const summary = this.toSummary(task)
     const pending = summary.pendingReview
+    const currentUserMessage = await this.currentUserMessageForBatch(
+      caller.organizationId,
+      caller.inputBatchId,
+    )
+    const conversationEvents = await this.conversationEventsForAttempt(caller)
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -302,7 +291,80 @@ export class AiCreateTaskService {
       },
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+      ...(currentUserMessage ? { currentUserMessage } : {}),
+      ...(conversationEvents.length ? { conversationEvents } : {}),
     })
+  }
+
+  private async conversationEventsForAttempt(caller: {
+    organizationId: string
+    taskId: string
+    conversationId?: string
+    inputBatchId?: string
+    contextManifestId?: string
+  }) {
+    const sequences = await this.pinnedEventSequences(caller)
+    if (sequences.length === 0 || !caller.conversationId) {
+      return []
+    }
+    const events = await this.prisma.aiConversationEvent.findMany({
+      where: {
+        conversationId: caller.conversationId,
+        organizationId: caller.organizationId,
+        sequence: { in: sequences },
+      },
+      orderBy: { sequence: 'asc' },
+      select: { sequence: true, kind: true, payload: true },
+    })
+    return projectConversationEventsForAgent(events)
+  }
+
+  private async pinnedEventSequences(caller: {
+    organizationId: string
+    taskId: string
+    conversationId?: string
+    inputBatchId?: string
+    contextManifestId?: string
+  }): Promise<number[]> {
+    if (caller.contextManifestId) {
+      const manifest = await this.prisma.aiContextManifest.findFirst({
+        where: {
+          id: caller.contextManifestId,
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
+        },
+        select: { eventSequences: true },
+      })
+      return parseEventSequences(manifest?.eventSequences)
+    }
+    if (!caller.inputBatchId) {
+      return []
+    }
+    const batch = await this.prisma.aiInputBatch.findFirst({
+      where: { id: caller.inputBatchId, organizationId: caller.organizationId },
+      select: { userMessageEvent: { select: { sequence: true } } },
+    })
+    return batch?.userMessageEvent.sequence ? [batch.userMessageEvent.sequence] : []
+  }
+
+  private async currentUserMessageForBatch(
+    organizationId: string,
+    inputBatchId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!inputBatchId) {
+      return undefined
+    }
+    const batch = await this.prisma.aiInputBatch.findFirst({
+      where: { id: inputBatchId, organizationId },
+      select: { userMessageEvent: { select: { payload: true } } },
+    })
+    const payload = batch?.userMessageEvent.payload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
+      return undefined
+    }
+    const text = payload.text
+    return typeof text === 'string' && text.trim() ? text.trim() : undefined
   }
 
   async searchRouteTemplatesForAgent(

@@ -1,6 +1,21 @@
 import { z } from 'zod'
 import { aiCreateToolNameSchema } from './review-package'
 
+export const AI_CONVERSATION_EVENT_KINDS = [
+  'user_message',
+  'agent_message',
+  'batch_status',
+  'error',
+] as const
+
+export const conversationEventForAgentSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    kind: z.enum(AI_CONVERSATION_EVENT_KINDS),
+    text: z.string().trim().min(1).optional(),
+  })
+  .strip()
+
 export const GET_TASK_CONTEXT_TOOL = {
   name: 'getTaskContext',
   version: 1,
@@ -61,8 +76,11 @@ export const getTaskContextOutputSchema = z
         optionalPresent: z.array(z.string()),
       })
       .strip(),
+    currentUserMessage: z.string().trim().min(1).optional(),
+    conversationEvents: z.array(conversationEventForAgentSchema).max(50).optional(),
   })
   .strip()
 
 export type GetTaskContextInput = z.infer<typeof getTaskContextInputSchema>
 export type GetTaskContextOutput = z.infer<typeof getTaskContextOutputSchema>
+export type ConversationEventForAgent = z.infer<typeof conversationEventForAgentSchema>

@@ -5,11 +5,6 @@
   min-height: 0;
 }
 
-.error {
-  margin: 0 0 8px;
-  flex-shrink: 0;
-}
-
 .chat {
   flex: 1;
   min-height: 0;
@@ -31,4 +26,145 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+.loading,
+.welcome {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.loading {
+  animation: assist-fade 200ms ease-out both;
+}
+
+.welcomeMain {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 16px 8px;
+}
+
+.welcomeIntro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.welcomeGreeting {
+  margin: 0 !important;
+}
+
+.welcomeCards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welcomeMain > * {
+  animation: welcome-enter 240ms ease-out both;
+}
+
+.welcomeMain > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.welcomeMain > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.promptCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  color: inherit;
+  background: var(--welcome-card-bg);
+  border: 1px solid var(--welcome-card-border);
+  border-radius: 8px;
+  transition:
+    border-color 100ms ease,
+    background-color 100ms ease;
+}
+
+.promptCard:hover,
+.promptCard:focus-visible {
+  border-color: var(--welcome-card-hover-border);
+}
+
+.promptIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--welcome-icon);
+  font-size: 16px;
+}
+
+.promptCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.promptTitle {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.promptDescription {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--welcome-icon);
+}
+
+.welcomeInput {
+  flex-shrink: 0;
+  padding: 8px 16px 16px;
+}
+
+@keyframes assist-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes welcome-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading,
+  .welcomeMain > * {
+    animation: none;
+  }
 }

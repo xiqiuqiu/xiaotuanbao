@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  CopilotChat,
+  CopilotChatConfigurationProvider,
+  CopilotChatView,
   CopilotKit,
-  useAgent,
   useAgentContext,
-  useCopilotKit,
   useHumanInTheLoop,
   useRenderTool,
+  type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
-import { Badge, Card, Typography } from 'antd'
+import { Alert, Badge, Card, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -21,20 +21,33 @@ import {
   type SearchRouteTemplatesOutput,
   type RouteTemplateMatchReason,
 } from '@xiaotuanbao/ai-contracts'
-import type { AiReviewPackageView } from '@xiaotuanbao/shared'
-import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
+import type {
+  AiConversationEventView,
+  AiInputBatchView,
+  AiReviewPackageView,
+} from '@xiaotuanbao/shared'
+import { env } from '@/config/env'
+import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
+import {
+  BATCH_STATUS_ACTIVITY_TYPE,
+  isCopilotChatRunning,
+  toCopilotChatMessages,
+} from './ai-create-copilot-messages'
+import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
-const sentFirstTurns = new Set<string>()
 
 export interface AiCreateAssistChatProps {
   agentRuntimeUrl: string
   delegationToken: string
   taskId: string
   runId: string
+  conversationId: string
+  initialEvents?: AiConversationEventView[]
+  initialActiveBatch?: AiInputBatchView | null
   snapshotVersion: number
   stageKey: AiCreateSharedLightState['stageKey']
   runStatus: AiCreateSharedLightState['runStatus']
@@ -273,46 +286,53 @@ function ReviewPackageNotice({
   return null
 }
 
-function FirstTurnSender({ agentId, runId }: { agentId: string; runId: string }) {
-  const sentRef = useRef(false)
-  const { agent, isReady } = useAgent({ agentId })
-  const { copilotkit } = useCopilotKit()
-
-  useEffect(() => {
-    if (isReady === false) {
-      return
-    }
-    if (sentRef.current) {
-      return
-    }
-    if (sentFirstTurns.has(runId)) {
-      sentRef.current = true
-      return
-    }
-    sentRef.current = true
-    sentFirstTurns.add(runId)
-    agent.addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: AI_CREATE_FIRST_TURN,
-    })
-    void copilotkit.runAgent({ agent })
-
-    return () => {
-      window.setTimeout(() => {
-        sentFirstTurns.delete(runId)
-      }, 0)
-    }
-  }, [agent, copilotkit, isReady, runId])
-
-  return null
+function mergeEvents(
+  current: AiConversationEventView[],
+  incoming: AiConversationEventView[],
+): AiConversationEventView[] {
+  const bySequence = new Map(current.map((event) => [event.sequence, event]))
+  for (const event of incoming) {
+    bySequence.set(event.sequence, event)
+  }
+  return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
 }
+
+const batchStatusActivityRenderer: ReactActivityMessageRenderer<{ label: string }> = {
+  activityType: BATCH_STATUS_ACTIVITY_TYPE,
+  content: {
+    '~standard': {
+      version: 1,
+      vendor: 'xiaotuanbao',
+      validate(value) {
+        if (
+          value &&
+          typeof value === 'object' &&
+          typeof (value as { label?: unknown }).label === 'string'
+        ) {
+          return { value: value as { label: string } }
+        }
+        return { issues: [{ message: 'invalid batch status activity' }] }
+      },
+    },
+  },
+  render: ({ content }) => (
+    <p className={styles.notice} role="status">
+      {content.label}
+    </p>
+  ),
+}
+
+const activityRenderers = [batchStatusActivityRenderer]
+const EVENT_CATCH_UP_POLL_MS = 1_000
 
 export function AiCreateAssistChat({
   agentRuntimeUrl,
   delegationToken,
   taskId,
   runId,
+  conversationId,
+  initialEvents = [],
+  initialActiveBatch = null,
   snapshotVersion,
   stageKey,
   runStatus,
@@ -337,23 +357,133 @@ export function AiCreateAssistChat({
     }),
     [runId, taskId],
   )
+  const [events, setEvents] = useState<AiConversationEventView[]>(initialEvents)
+  const [draft, setDraft] = useState('')
+  const [pendingText, setPendingText] = useState<string | null>(null)
   const [errorText, setErrorText] = useState<string | null>(null)
-  const handleError = useCallback(() => {
-    setErrorText(ASSIST_ERROR_TEXT)
-  }, [])
+  const idempotencyKeyRef = useRef<string | null>(null)
+  const sendingRef = useRef(false)
+  const lastSequenceRef = useRef(0)
+
+  useEffect(() => {
+    lastSequenceRef.current = events.reduce((max, event) => Math.max(max, event.sequence), 0)
+  }, [events])
+
+  useEffect(() => {
+    const abort = new AbortController()
+    const catchUp = () =>
+      Promise.resolve(
+        listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
+          signal: abort.signal,
+          silentError: true,
+        }),
+      )
+        .then((page) => {
+          if (!abort.signal.aborted && page.events.length > 0) {
+            setEvents((current) => mergeEvents(current, page.events))
+          }
+        })
+        .catch(() => undefined)
+
+    const source = new EventSource(
+      `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
+      { withCredentials: true },
+    )
+    source.onmessage = (message) => {
+      try {
+        const parsed = JSON.parse(message.data) as AiConversationEventView
+        if (typeof parsed.sequence === 'number' && typeof parsed.kind === 'string') {
+          setEvents((current) => mergeEvents(current, [parsed]))
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    }
+    source.onerror = () => {
+      void catchUp()
+    }
+    void catchUp()
+    const timer = window.setInterval(() => {
+      void catchUp()
+    }, EVENT_CATCH_UP_POLL_MS)
+    return () => {
+      abort.abort()
+      source.close()
+      window.clearInterval(timer)
+    }
+  }, [conversationId, taskId])
+
+  const send = useCallback(
+    async (text: string) => {
+      const nextText = (text || pendingText || draft).trim()
+      if (!nextText || sendingRef.current) {
+        return
+      }
+      sendingRef.current = true
+      setErrorText(null)
+      setPendingText(nextText)
+      setDraft('')
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID()
+      }
+      try {
+        const result = await sendAiConversationMessage(
+          taskId,
+          conversationId,
+          { text: nextText },
+          idempotencyKeyRef.current,
+        )
+        setEvents((current) => mergeEvents(current, result.events))
+        setPendingText(null)
+        idempotencyKeyRef.current = null
+      } catch {
+        setErrorText(ASSIST_ERROR_TEXT)
+        setDraft(nextText)
+        setPendingText(null)
+      } finally {
+        sendingRef.current = false
+      }
+    },
+    [conversationId, draft, pendingText, taskId],
+  )
+
+  const sendRef = useRef(send)
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
+  const WelcomeScreen = useMemo(
+    () =>
+      function WelcomeScreenSlot({ input }: { input?: ReactNode }) {
+        return (
+          <AiCreateAssistWelcome
+            input={input}
+            onSelectSuggestion={(suggestion) => {
+              void sendRef.current(suggestion.message)
+            }}
+          />
+        )
+      },
+    [],
+  )
+
+  const messages = useMemo(
+    () => toCopilotChatMessages(events, pendingText, initialActiveBatch),
+    [events, initialActiveBatch, pendingText],
+  )
+  const isRunning = isCopilotChatRunning(events, initialActiveBatch, pendingText)
 
   return (
     <div className={styles.root}>
       {errorText ? (
-        <p className={styles.error} role="alert">
-          {errorText}
-        </p>
+        <Alert type="error" showIcon message={errorText} />
       ) : null}
       <CopilotKit
         runtimeUrl={agentRuntimeUrl}
         headers={headers}
         properties={properties}
         useSingleEndpoint={false}
+        enableInspector={false}
+        renderActivityMessages={activityRenderers}
       >
         <AssistLightState
           taskId={taskId}
@@ -370,13 +500,26 @@ export function AiCreateAssistChat({
           pendingReview={pendingReview}
           reviewDecision={reviewDecision}
         />
-        <FirstTurnSender agentId={AGENT_ID} runId={runId} />
-        <CopilotChat
+        <CopilotChatConfigurationProvider
           agentId={AGENT_ID}
-          className={styles.chat}
+          threadId={conversationId}
           labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
-          onError={handleError}
-        />
+        >
+          <CopilotChatView
+            className={styles.chat}
+            messages={messages}
+            isRunning={isRunning}
+            inputValue={pendingText ? '' : draft}
+            onInputChange={setDraft}
+            onSubmitMessage={(value) => {
+              void send(value)
+            }}
+            welcomeScreen={WelcomeScreen}
+            input={{
+              textArea: { 'aria-label': '询问当前发团草稿' },
+            }}
+          />
+        </CopilotChatConfigurationProvider>
       </CopilotKit>
     </div>
   )
