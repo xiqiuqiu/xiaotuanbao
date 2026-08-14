@@ -2,6 +2,7 @@ import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { AddressInfo } from 'node:net'
 import { getAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
+import * as mastraAgent from './mastra-agent'
 import {
   createAgentServer,
   createDeterministicAgentAdapter,
@@ -25,15 +26,26 @@ jest.mock('@ag-ui/mastra', () => ({
   },
 }))
 
-jest.mock('./mastra-agent', () => ({
-  createAiCreateMastra: () => ({}),
-}))
+jest.mock('./mastra-agent', () => {
+  const generate = jest.fn().mockResolvedValue({
+    text: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+    toolCalls: [],
+  })
+  return {
+    AI_CREATE_AGENT_ID: 'ai-create-readonly-assist',
+    createAiCreateMastra: () => ({
+      getAgent: () => ({ generate }),
+    }),
+    mastraGenerateMock: generate,
+  }
+})
 
 jest.mock('./get-task-context.client', () => ({
   fetchTaskContext: jest.fn(),
 }))
 
 const mockFetchTaskContext = fetchTaskContext as jest.MockedFunction<typeof fetchTaskContext>
+const mockMastraGenerate = (mastraAgent as unknown as { mastraGenerateMock: jest.Mock }).mastraGenerateMock
 
 const IDENTITY = {
   taskId: 'task-1',
@@ -42,6 +54,9 @@ const IDENTITY = {
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
 }
+
+const USER_TEXT = '帮我建一个喀纳斯3日团'
+const REQUEST = { ...IDENTITY, userText: USER_TEXT }
 
 const REVIEW_PACKAGE = {
   objectVersion: 2,
@@ -132,7 +147,7 @@ async function postHeadless(
   return fetch(`http://127.0.0.1:${port}/v1/headless-runs`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(options.body ?? IDENTITY),
+    body: JSON.stringify(options.body ?? REQUEST),
   })
 }
 
@@ -259,7 +274,7 @@ describe('headless Agent runtime contract', () => {
     const runtime = await listen()
     try {
       const response = await postHeadless(runtime.port, {
-        body: { ...IDENTITY, conversationId: 'conversation-other' },
+        body: { ...REQUEST, conversationId: 'conversation-other' },
       })
       expect(response.status).toBe(401)
       expect(await response.json()).toMatchObject({
@@ -433,6 +448,33 @@ describe('headless Agent runtime contract', () => {
         },
       })
       expect(mockFetchTaskContext).toHaveBeenCalled()
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
+  })
+
+  it('uses the production Mastra executor and Worker User plaintext when no deterministic adapter is configured', async () => {
+    mockMastraGenerate.mockClear()
+    const server = createAgentServer({
+      port: 0,
+      apiBaseUrl: 'http://api.local',
+      serviceSecret: 'secret',
+      allowedOrigins: ['http://localhost:5173'],
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await postHeadless(port)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({
+        data: {
+          kind: 'completed',
+          message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+        },
+      })
+      expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

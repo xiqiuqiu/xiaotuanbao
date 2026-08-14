@@ -20,6 +20,7 @@ export type AiToolRequestUser = {
   runId: string
   conversationId?: string
   inputBatchId?: string
+  contextManifestId?: string
 }
 
 @Injectable()
@@ -89,6 +90,7 @@ export class AiOperationDelegationGuard implements CanActivate {
       runId: payload.runId,
       conversationId: payload.conversationId,
       inputBatchId: payload.inputBatchId,
+      contextManifestId: payload.contextManifestId,
     }
     return true
   }

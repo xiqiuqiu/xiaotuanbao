@@ -7,6 +7,7 @@ const IDENTITY = {
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  userText: '帮我建一个喀纳斯3日团',
 }
 
 const REVIEW_ARGS = {
@@ -23,9 +24,9 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
-  it('returns a completed Agent message from generate text', async () => {
+  it('passes the Worker User plaintext from the headless request into generate', async () => {
     const executor = createMastraHeadlessExecutor({
-      readUserText: async () => '帮我建一个喀纳斯3日团',
+      readUserText: async (request) => request.userText,
       generate: async (userText) => {
         expect(userText).toBe('帮我建一个喀纳斯3日团')
         return { text: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。', toolCalls: [] }

@@ -10,8 +10,11 @@ export {
   aiCreateDraftSnapshotSchema,
   getTaskContextInputSchema,
   getTaskContextOutputSchema,
+  conversationEventForAgentSchema,
+  AI_CONVERSATION_EVENT_KINDS,
   type GetTaskContextInput,
   type GetTaskContextOutput,
+  type ConversationEventForAgent,
 } from './tools/get-task-context'
 export {
   SEARCH_ROUTE_TEMPLATES_TOOL,

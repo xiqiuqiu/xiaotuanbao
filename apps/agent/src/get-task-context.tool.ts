@@ -13,7 +13,7 @@ export interface GetTaskContextToolConfig {
 export function createGetTaskContextTool(config: GetTaskContextToolConfig) {
   return createTool({
     id: 'getTaskContext',
-    description: '读取当前 AI 建团任务的业务快照与字段覆盖，不改写发团创建草稿。',
+    description: '读取当前 AI 建团任务的业务快照、字段覆盖，以及 ContextManifest 钉定的会话事件。不改写发团创建草稿。',
     inputSchema: z.object({}),
     execute: async () => {
       if (!config.modelApiKey?.trim()) {

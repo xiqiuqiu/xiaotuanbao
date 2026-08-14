@@ -58,6 +58,7 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import { parseEventSequences, projectConversationEventsForAgent } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import {
@@ -239,7 +240,9 @@ export class AiCreateTaskService {
       organizationId: string
       taskId: string
       runId: string
+      conversationId?: string
       inputBatchId?: string
+      contextManifestId?: string
     },
     rawInput: unknown,
   ): Promise<GetTaskContextOutput> {
@@ -272,6 +275,7 @@ export class AiCreateTaskService {
       caller.organizationId,
       caller.inputBatchId,
     )
+    const conversationEvents = await this.conversationEventsForAttempt(caller)
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -288,7 +292,60 @@ export class AiCreateTaskService {
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
       ...(currentUserMessage ? { currentUserMessage } : {}),
+      ...(conversationEvents.length ? { conversationEvents } : {}),
     })
+  }
+
+  private async conversationEventsForAttempt(caller: {
+    organizationId: string
+    taskId: string
+    conversationId?: string
+    inputBatchId?: string
+    contextManifestId?: string
+  }) {
+    const sequences = await this.pinnedEventSequences(caller)
+    if (sequences.length === 0 || !caller.conversationId) {
+      return []
+    }
+    const events = await this.prisma.aiConversationEvent.findMany({
+      where: {
+        conversationId: caller.conversationId,
+        organizationId: caller.organizationId,
+        sequence: { in: sequences },
+      },
+      orderBy: { sequence: 'asc' },
+      select: { sequence: true, kind: true, payload: true },
+    })
+    return projectConversationEventsForAgent(events)
+  }
+
+  private async pinnedEventSequences(caller: {
+    organizationId: string
+    taskId: string
+    conversationId?: string
+    inputBatchId?: string
+    contextManifestId?: string
+  }): Promise<number[]> {
+    if (caller.contextManifestId) {
+      const manifest = await this.prisma.aiContextManifest.findFirst({
+        where: {
+          id: caller.contextManifestId,
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
+        },
+        select: { eventSequences: true },
+      })
+      return parseEventSequences(manifest?.eventSequences)
+    }
+    if (!caller.inputBatchId) {
+      return []
+    }
+    const batch = await this.prisma.aiInputBatch.findFirst({
+      where: { id: caller.inputBatchId, organizationId: caller.organizationId },
+      select: { userMessageEvent: { select: { sequence: true } } },
+    })
+    return batch?.userMessageEvent.sequence ? [batch.userMessageEvent.sequence] : []
   }
 
   private async currentUserMessageForBatch(

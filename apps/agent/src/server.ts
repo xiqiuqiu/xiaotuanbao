@@ -52,7 +52,10 @@ export function createAgentServer(config: AgentServerConfig) {
     config.headlessExecutor ??
     loadDeterministicAgentAdapterFromEnv() ??
     createMastraHeadlessExecutor({
-      async readUserText() {
+      async readUserText(request) {
+        if (request.userText.trim()) {
+          return request.userText.trim()
+        }
         const context = getAssistRequestContext()
         const output = await fetchTaskContext(
           {

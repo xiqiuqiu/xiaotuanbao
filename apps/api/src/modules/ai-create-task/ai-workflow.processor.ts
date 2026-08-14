@@ -190,7 +190,7 @@ export class AiWorkflowProcessor {
       if (!renewed) {
         return
       }
-      const result = await this.headlessClient.run(prepared.identity, prepared.delegationToken)
+      const result = await this.headlessClient.run(prepared.request, prepared.delegationToken)
       await this.persistOutcome(job, prepared.attemptId, result)
     } catch (error) {
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)
@@ -225,12 +225,13 @@ export class AiWorkflowProcessor {
   }
 
   private async prepareAttempt(job: ClaimedJob): Promise<{
-    identity: {
+    request: {
       taskId: string
       conversationId: string
       inputBatchId: string
       attemptId: string
       contextManifestId: string
+      userText: string
     }
     attemptId: string
     delegationToken: string
@@ -245,10 +246,14 @@ export class AiWorkflowProcessor {
     if (!task.draft) {
       throw new Error('发团创建草稿不存在')
     }
-    const userText =
+    const userText = (
       userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
         ? String((userEvent.payload as { text: unknown }).text ?? '')
         : ''
+    ).trim()
+    if (!userText) {
+      throw new Error('输入批次缺少 User 原文')
+    }
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
     const manifestRecord = buildPlaintextContextManifest({
@@ -320,12 +325,13 @@ export class AiWorkflowProcessor {
     })
 
     return {
-      identity: {
+      request: {
         taskId: job.taskId,
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
         attemptId: prepared.attemptId,
         contextManifestId: prepared.contextManifestId,
+        userText,
       },
       attemptId: prepared.attemptId,
       delegationToken,

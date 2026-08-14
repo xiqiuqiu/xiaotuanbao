@@ -92,7 +92,10 @@ export async function handleHeadlessRun(
   }
 
   const bound = boundIdentitiesFromDelegation(payload)
-  if (!bound || !identitiesMatch(parsedRequest.data, bound.identity)) {
+  if (
+    !bound ||
+    !identitiesMatch(headlessExecutionIdentitySchema.parse(parsedRequest.data), bound.identity)
+  ) {
     json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
     return
   }

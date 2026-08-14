@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
   AiCollaborationError,
-  headlessExecutionIdentitySchema,
+  headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
-  type HeadlessExecutionIdentity,
+  type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
 } from '@xiaotuanbao/ai-contracts'
 
@@ -15,10 +15,10 @@ export class AiHeadlessClient {
   constructor(private readonly configService: ConfigService) {}
 
   async run(
-    identity: HeadlessExecutionIdentity,
+    request: HeadlessExecutionRequest,
     delegationToken: string,
   ): Promise<HeadlessExecutionResult> {
-    const parsedIdentity = headlessExecutionIdentitySchema.parse(identity)
+    const parsedRequest = headlessExecutionRequestSchema.parse(request)
     const url = this.headlessRunUrl()
     const secret = this.configService.get<string>('app.aiCreateAssist.agentServiceSecret') ?? ''
     const controller = new AbortController()
@@ -33,7 +33,7 @@ export class AiHeadlessClient {
             'Content-Type': 'application/json',
             'X-Agent-Service-Key': secret,
           },
-          body: JSON.stringify(parsedIdentity),
+          body: JSON.stringify(parsedRequest),
           signal: controller.signal,
         })
       } catch {
