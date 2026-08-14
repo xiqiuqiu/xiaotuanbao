@@ -3,6 +3,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
@@ -31,10 +33,15 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
-import { SEND_TEXT_OPERATION, SSE_CATCH_UP_POLL_MS } from './ai-conversation.constants'
+import {
+  MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
+  MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
+  SEND_TEXT_OPERATION,
+  SSE_CATCH_UP_POLL_MS,
+} from './ai-conversation.constants'
 import { toBatchView, toConversationView, toEventView } from './ai-conversation.mapper'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import { lockAiCreateTask } from './ai-create-task.lock'
+import { lockAiCreateSender, lockAiCreateTask } from './ai-create-task.lock'
 
 const TASK_INCLUDE = {
   draft: true,
@@ -108,6 +115,7 @@ export class AiConversationService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, taskId)
+      await lockAiCreateSender(tx, organizationId, userId)
       const task = await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
       const conversation = await tx.aiConversation.findFirst({
         where: { id: conversationId, taskId: task.id, organizationId },
@@ -149,6 +157,12 @@ export class AiConversationService {
       if (record.completedAt && record.resultJson) {
         return record.resultJson as unknown as SendAiConversationMessageResult
       }
+
+      await this.assertProcessingBatchCapacity(tx, {
+        organizationId,
+        userId,
+        conversationId: conversation.id,
+      })
 
       const lastEvent = await tx.aiConversationEvent.findFirst({
         where: { conversationId: conversation.id },
@@ -368,6 +382,41 @@ export class AiConversationService {
     })
     const activeBatch = await this.findActiveBatch(conversation.id)
     return toConversationView(conversation, events, activeBatch)
+  }
+
+  private async assertProcessingBatchCapacity(
+    tx: Prisma.TransactionClient,
+    params: { organizationId: string; userId: string; conversationId: string },
+  ): Promise<void> {
+    const processingStatus = {
+      in: [
+        AiInputBatchStatus.waiting_for_materials,
+        AiInputBatchStatus.ready_for_agent,
+        AiInputBatchStatus.agent_running,
+      ],
+    }
+    const conversationCount = await tx.aiInputBatch.count({
+      where: { conversationId: params.conversationId, status: processingStatus },
+    })
+    if (conversationCount >= MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION) {
+      throw new HttpException(
+        '当前会话待处理的 AI 批次已达上限，请等待处理完成后再发送',
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
+    const userCount = await tx.aiInputBatch.count({
+      where: {
+        organizationId: params.organizationId,
+        creatorUserId: params.userId,
+        status: processingStatus,
+      },
+    })
+    if (userCount >= MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER) {
+      throw new HttpException(
+        '待处理的 AI 批次已达上限，请等待处理完成后再发送',
+        HttpStatus.TOO_MANY_REQUESTS,
+      )
+    }
   }
 
   private async findActiveBatch(conversationId: string): Promise<AiInputBatch | null> {

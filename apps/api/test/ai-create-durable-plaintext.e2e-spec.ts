@@ -2,6 +2,10 @@ import http from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
+import {
+  MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
+  MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
+} from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
@@ -129,6 +133,25 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       lastSequence: number
       activeBatch: { id: string; status: string } | null
     }
+  }
+
+  async function cancelOwnerInFlightProcessing() {
+    await prisma.aiWorkflowJob.updateMany({
+      where: {
+        organizationId,
+        task: { creatorUserId: ownerUserId },
+        status: { in: ['pending', 'claimed'] },
+      },
+      data: { status: 'failed', lastErrorCode: 'e2e-cancelled-for-cap-test' },
+    })
+    await prisma.aiInputBatch.updateMany({
+      where: {
+        organizationId,
+        creatorUserId: ownerUserId,
+        status: { in: ['waiting_for_materials', 'ready_for_agent', 'agent_running'] },
+      },
+      data: { status: 'cancelled' },
+    })
   }
 
   it('reuses the same unfinished conversation after close and re-entry', async () => {
@@ -336,6 +359,92 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       async () => undefined,
     )
     expect(agent.callCount()).toBe(callsBefore + 1)
+  })
+
+  it('rejects further sends when the conversation already has the max in-flight processing batches', async () => {
+    await cancelOwnerInFlightProcessing()
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    try {
+      let firstBatchId: string | undefined
+      for (let index = 0; index < MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION; index += 1) {
+        const sent = await sendText(
+          taskId,
+          conversationId,
+          `会话在途批次 ${index + 1}`,
+          `e2e-conv-cap-${taskId}-${index}`,
+        ).expect(201)
+        if (index === 0) {
+          firstBatchId = sent.body.data.batch.id as string
+        }
+      }
+
+      const rejected = await sendText(
+        taskId,
+        conversationId,
+        '超出会话在途上限',
+        `e2e-conv-cap-${taskId}-overflow`,
+      ).expect(429)
+      expect(rejected.body.message).toContain('当前会话待处理的 AI 批次已达上限')
+
+      const replay = await sendText(
+        taskId,
+        conversationId,
+        '会话在途批次 1',
+        `e2e-conv-cap-${taskId}-0`,
+      ).expect(201)
+      expect(replay.body.data.batch.id).toBe(firstBatchId)
+
+      const listed = await listEvents(taskId, conversationId)
+      expect(listed.events.filter((event) => event.kind === 'user_message')).toHaveLength(
+        MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
+      )
+    } finally {
+      await prisma.aiCreateTask.deleteMany({ where: { id: taskId } })
+    }
+  })
+
+  it('rejects further sends when the user already has the max in-flight processing batches', async () => {
+    await cancelOwnerInFlightProcessing()
+    const opened: Array<{ taskId: string }> = []
+    try {
+      let remaining = MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER
+      while (remaining > 0) {
+        const session = await openSession()
+        const taskId = session.task.id
+        const conversationId = session.conversation.id
+        opened.push({ taskId })
+        const take = Math.min(remaining, MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION)
+        for (let index = 0; index < take; index += 1) {
+          await sendText(
+            taskId,
+            conversationId,
+            `用户在途批次 ${opened.length}-${index + 1}`,
+            `e2e-user-cap-${taskId}-${index}`,
+          ).expect(201)
+        }
+        remaining -= take
+      }
+
+      const overflowSession = await openSession()
+      opened.push({ taskId: overflowSession.task.id })
+      const rejected = await sendText(
+        overflowSession.task.id,
+        overflowSession.conversation.id,
+        '超出用户在途上限',
+        `e2e-user-cap-${overflowSession.task.id}-overflow`,
+      ).expect(429)
+      expect(rejected.body.message).toContain('待处理的 AI 批次已达上限')
+
+      const listed = await listEvents(overflowSession.task.id, overflowSession.conversation.id)
+      expect(listed.events.filter((event) => event.kind === 'user_message')).toHaveLength(0)
+    } finally {
+      await prisma.aiCreateTask.deleteMany({
+        where: { id: { in: opened.map((item) => item.taskId) } },
+      })
+    }
   })
 })
 
