@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import {
@@ -12,7 +14,7 @@ import {
   type DepartureMaterial,
   type Prisma,
 } from '@prisma/client'
-import type { DepartureMaterialView } from '@xiaotuanbao/shared'
+import type { DepartureMaterialView, StoredObjectSummary } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { StoredObjectService } from '../stored-object/stored-object.service'
 import {
@@ -39,10 +41,23 @@ export type ArchivedMaterial = {
   material: DepartureMaterial
   parseResultVersion: number | null
   needsParseJob: boolean
+  consumedStoredObjectId: string | null
+}
+
+export type PreparedMaterialUploads = {
+  storedByFileKey: Map<string, StoredObjectSummary>
+  uploadedIds: string[]
+}
+
+export function materialFileKey(file: IncomingMaterialFile): string {
+  const contentType = (file.mimetype ?? '').toLowerCase()
+  return `${createHash('sha256').update(file.buffer).digest('hex')}:${file.buffer.byteLength}:${contentType}`
 }
 
 @Injectable()
 export class DepartureMaterialService {
+  private readonly logger = new Logger(DepartureMaterialService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storedObjectService: StoredObjectService,
@@ -72,6 +87,59 @@ export class DepartureMaterialService {
     return createHash('sha256').update(buffer).digest('hex')
   }
 
+  async prepareUploads(params: {
+    organizationId: string
+    userId: string
+    taskId: string
+    files: IncomingMaterialFile[]
+  }): Promise<PreparedMaterialUploads> {
+    const storedByFileKey = new Map<string, StoredObjectSummary>()
+    const uploadedIds: string[] = []
+    try {
+      for (const file of params.files) {
+        const contentType = (file.mimetype ?? '').toLowerCase()
+        const existing = await this.prisma.departureMaterial.findUnique({
+          where: {
+            taskId_sha256_sizeBytes_contentType: {
+              taskId: params.taskId,
+              sha256: this.sha256(file.buffer),
+              sizeBytes: file.buffer.byteLength,
+              contentType,
+            },
+          },
+          select: { id: true },
+        })
+        if (existing) {
+          continue
+        }
+        const stored = await this.storedObjectService.upload(
+          params.organizationId,
+          params.userId,
+          file,
+        )
+        storedByFileKey.set(materialFileKey(file), stored)
+        uploadedIds.push(stored.id)
+      }
+      return { storedByFileKey, uploadedIds }
+    } catch (error) {
+      await this.discardStoredObjects(params.organizationId, uploadedIds)
+      throw error
+    }
+  }
+
+  async discardStoredObjects(organizationId: string, ids: string[]): Promise<void> {
+    for (const id of ids) {
+      try {
+        await this.storedObjectService.delete(organizationId, id)
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cleanup stored object after conversation archive id=${id}`,
+          error instanceof Error ? error.message : undefined,
+        )
+      }
+    }
+  }
+
   async archiveForTask(
     tx: Prisma.TransactionClient,
     params: {
@@ -79,6 +147,7 @@ export class DepartureMaterialService {
       userId: string
       taskId: string
       file: IncomingMaterialFile
+      stored?: StoredObjectSummary
     },
   ): Promise<ArchivedMaterial> {
     const contentType = (params.file.mimetype ?? '').toLowerCase()
@@ -101,20 +170,14 @@ export class DepartureMaterialService {
       },
     })
     if (existing) {
-      const version = existing.parseRuns[0]?.resultVersion ?? null
-      const ready = CONSUMABLE.includes(existing.status) && version != null
-      return {
-        material: existing,
-        parseResultVersion: ready ? version : null,
-        needsParseJob: !ready,
-      }
+      return reusedMaterial(existing)
     }
 
-    const stored = await this.storedObjectService.upload(
-      params.organizationId,
-      params.userId,
-      params.file,
-    )
+    const stored = params.stored
+    if (!stored) {
+      throw new ConflictException('资料归档冲突，请重试')
+    }
+
     try {
       const material = await tx.departureMaterial.create({
         data: {
@@ -138,7 +201,12 @@ export class DepartureMaterialService {
           parserVersions: {},
         },
       })
-      return { material, parseResultVersion: null, needsParseJob: true }
+      return {
+        material,
+        parseResultVersion: null,
+        needsParseJob: true,
+        consumedStoredObjectId: stored.id,
+      }
     } catch (error) {
       if (isUniqueViolation(error)) {
         const raced = await tx.departureMaterial.findUniqueOrThrow({
@@ -158,13 +226,7 @@ export class DepartureMaterialService {
             },
           },
         })
-        const version = raced.parseRuns[0]?.resultVersion ?? null
-        const ready = CONSUMABLE.includes(raced.status) && version != null
-        return {
-          material: raced,
-          parseResultVersion: ready ? version : null,
-          needsParseJob: !ready,
-        }
+        return reusedMaterial(raced)
       }
       throw error
     }
@@ -459,6 +521,19 @@ export function toMaterialView(
     sizeBytes: material.sizeBytes,
     createdAt: material.createdAt.toISOString(),
     latestResultVersion,
+  }
+}
+
+function reusedMaterial(material: DepartureMaterial & {
+  parseRuns: Array<{ resultVersion: number }>
+}): ArchivedMaterial {
+  const version = material.parseRuns[0]?.resultVersion ?? null
+  const ready = CONSUMABLE.includes(material.status) && version != null
+  return {
+    material,
+    parseResultVersion: ready ? version : null,
+    needsParseJob: !ready,
+    consumedStoredObjectId: null,
   }
 }
 
