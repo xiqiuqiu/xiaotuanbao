@@ -92,7 +92,7 @@ export async function handleHeadlessRun(
   }
 
   const bound = boundIdentitiesFromDelegation(payload)
-  if (!bound || !identitiesMatch(parsedRequest.data, bound)) {
+  if (!bound || !identitiesMatch(parsedRequest.data, bound.identity)) {
     json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
     return
   }
@@ -104,7 +104,7 @@ export async function handleHeadlessRun(
         serviceSecret: config.serviceSecret,
         delegationToken,
       },
-      { taskId: parsedRequest.data.taskId, runId: parsedRequest.data.attemptId },
+      { taskId: parsedRequest.data.taskId, runId: bound.runId },
     )
   } catch (error) {
     const mapped = error instanceof AiCollaborationError ? error : mapAgentFetchError(error)
@@ -128,7 +128,7 @@ export async function handleHeadlessRun(
       {
         delegationToken,
         taskId: parsedRequest.data.taskId,
-        runId: parsedRequest.data.attemptId,
+        runId: bound.runId,
         conversationId: parsedRequest.data.conversationId,
         inputBatchId: parsedRequest.data.inputBatchId,
         attemptId: parsedRequest.data.attemptId,
@@ -155,7 +155,8 @@ export async function handleHeadlessRun(
 
 function boundIdentitiesFromDelegation(
   payload: Record<string, unknown>,
-): HeadlessExecutionIdentity | null {
+): { identity: HeadlessExecutionIdentity; runId: string } | null {
+  const runId = stringClaim(payload.runId)
   const parsed = headlessExecutionIdentitySchema.safeParse({
     taskId: stringClaim(payload.taskId),
     conversationId: stringClaim(payload.conversationId),
@@ -163,7 +164,10 @@ function boundIdentitiesFromDelegation(
     attemptId: stringClaim(payload.attemptId),
     contextManifestId: stringClaim(payload.contextManifestId),
   })
-  return parsed.success ? parsed.data : null
+  if (!parsed.success || !runId) {
+    return null
+  }
+  return { identity: parsed.data, runId }
 }
 
 function identitiesMatch(

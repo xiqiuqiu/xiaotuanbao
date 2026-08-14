@@ -1,5 +1,6 @@
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { AddressInfo } from 'node:net'
+import { getAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
 import {
   createAgentServer,
@@ -64,7 +65,7 @@ function delegationToken(claims: Record<string, unknown> = {}): string {
       sub: 'user-1',
       organizationId: 'org-1',
       taskId: IDENTITY.taskId,
-      runId: IDENTITY.attemptId,
+      runId: 'run-1',
       conversationId: IDENTITY.conversationId,
       inputBatchId: IDENTITY.inputBatchId,
       attemptId: IDENTITY.attemptId,
@@ -176,7 +177,7 @@ describe('headless Agent runtime contract', () => {
           serviceSecret: 'secret',
           delegationToken: delegationToken(),
         },
-        { taskId: 'task-1', runId: 'attempt-1' },
+        { taskId: 'task-1', runId: 'run-1' },
       )
       expect(listAgentTools()).toEqual([
         'getTaskContext',
@@ -259,6 +260,62 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(runtime.port, {
         body: { ...IDENTITY, conversationId: 'conversation-other' },
+      })
+      expect(response.status).toBe(401)
+      expect(await response.json()).toMatchObject({
+        data: { code: 'DELEGATION_INVALID' },
+      })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
+  })
+
+  it('binds API and tool runId from the delegation claim, not the request attemptId', async () => {
+    let seen: ReturnType<typeof getAssistRequestContext> | undefined
+    const server = createAgentServer({
+      port: 0,
+      apiBaseUrl: 'http://api.local',
+      serviceSecret: 'secret',
+      allowedOrigins: ['http://localhost:5173'],
+      headlessExecutor: async () => {
+        seen = getAssistRequestContext()
+        return { kind: 'completed', message: '已根据当前资料整理出团基础信息。' }
+      },
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await postHeadless(port)
+      expect(response.status).toBe(200)
+      expect(mockFetchTaskContext).toHaveBeenCalledWith(
+        {
+          apiBaseUrl: 'http://api.local',
+          serviceSecret: 'secret',
+          delegationToken: delegationToken(),
+        },
+        { taskId: 'task-1', runId: 'run-1' },
+      )
+      expect(seen).toMatchObject({
+        taskId: 'task-1',
+        runId: 'run-1',
+        attemptId: 'attempt-1',
+        conversationId: 'conversation-1',
+        inputBatchId: 'batch-1',
+        contextManifestId: 'manifest-1',
+      })
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
+  })
+
+  it('rejects a matching headless identity when the delegation omits runId', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        authorization: `Bearer ${delegationToken({ runId: undefined })}`,
       })
       expect(response.status).toBe(401)
       expect(await response.json()).toMatchObject({
