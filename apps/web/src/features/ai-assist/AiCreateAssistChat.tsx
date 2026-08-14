@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  CopilotChatConfigurationProvider,
+  CopilotChatView,
   CopilotKit,
   useAgentContext,
   useHumanInTheLoop,
   useRenderTool,
+  type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
-import { Badge, Button, Card, Input, Typography } from 'antd'
+import { Alert, Badge, Card, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -27,6 +30,11 @@ import { env } from '@/config/env'
 import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
+import {
+  BATCH_STATUS_ACTIVITY_TYPE,
+  isCopilotChatRunning,
+  toCopilotChatMessages,
+} from './ai-create-copilot-messages'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
@@ -288,76 +296,32 @@ function mergeEvents(
   return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
 }
 
-function eventStatusText(event: AiConversationEventView): string | null {
-  if (event.kind === 'batch_status') {
-    return batchStatusLabel(String(event.payload.status ?? ''))
-  }
-  if (event.kind === 'error') {
-    return '本批处理失败，可修改后重试'
-  }
-  return null
+const batchStatusActivityRenderer: ReactActivityMessageRenderer<{ label: string }> = {
+  activityType: BATCH_STATUS_ACTIVITY_TYPE,
+  content: {
+    '~standard': {
+      version: 1,
+      vendor: 'xiaotuanbao',
+      validate(value) {
+        if (
+          value &&
+          typeof value === 'object' &&
+          typeof (value as { label?: unknown }).label === 'string'
+        ) {
+          return { value: value as { label: string } }
+        }
+        return { issues: [{ message: 'invalid batch status activity' }] }
+      },
+    },
+  },
+  render: ({ content }) => (
+    <p className={styles.notice} role="status">
+      {content.label}
+    </p>
+  ),
 }
 
-function batchStatusLabel(status: string): string | null {
-  if (status === 'ready_for_agent') return '已发送'
-  if (status === 'agent_running') return 'AI 处理中'
-  if (status === 'completed') return '已完成'
-  if (status === 'failed') return '处理失败'
-  return null
-}
-
-function DurableTranscript({
-  events,
-  pendingText,
-  activeBatch,
-}: {
-  events: AiConversationEventView[]
-  pendingText: string | null
-  activeBatch?: AiInputBatchView | null
-}) {
-  const hasBatchStatusEvent = events.some((event) => event.kind === 'batch_status')
-  const fallbackStatus =
-    !hasBatchStatusEvent && activeBatch ? batchStatusLabel(activeBatch.status) : null
-  return (
-    <div className={styles.transcript} role="log" aria-live="polite">
-      {events.map((event) => {
-        if (event.kind === 'user_message') {
-          return (
-            <p key={event.sequence} className={styles.userMessage}>
-              {String(event.payload.text ?? '')}
-            </p>
-          )
-        }
-        if (event.kind === 'agent_message') {
-          return (
-            <p key={event.sequence} className={styles.agentMessage}>
-              {String(event.payload.text ?? '')}
-            </p>
-          )
-        }
-        const status = eventStatusText(event)
-        if (!status) {
-          return null
-        }
-        return (
-          <p key={event.sequence} className={styles.notice} role="status">
-            {status}
-          </p>
-        )
-      })}
-      {fallbackStatus ? (
-        <p className={styles.notice} role="status">
-          {fallbackStatus}
-        </p>
-      ) : null}
-      {pendingText ? (
-        <p className={styles.pending} role="status">
-          发送中
-        </p>
-      ) : null}
-    </div>
-  )
-}
+const activityRenderers = [batchStatusActivityRenderer]
 
 export function AiCreateAssistChat({
   agentRuntimeUrl,
@@ -436,49 +400,57 @@ export function AiCreateAssistChat({
     }
   }, [conversationId, taskId])
 
-  const send = useCallback(async () => {
-    const text = (pendingText ?? draft).trim()
-    if (!text || sendingRef.current) {
-      return
-    }
-    sendingRef.current = true
-    setErrorText(null)
-    setPendingText(text)
-    setDraft('')
-    if (!idempotencyKeyRef.current) {
-      idempotencyKeyRef.current = crypto.randomUUID()
-    }
-    try {
-      const result = await sendAiConversationMessage(
-        taskId,
-        conversationId,
-        { text },
-        idempotencyKeyRef.current,
-      )
-      setEvents((current) => mergeEvents(current, result.events))
-      setPendingText(null)
-      idempotencyKeyRef.current = null
-    } catch {
-      setErrorText(ASSIST_ERROR_TEXT)
-      setDraft(text)
-      setPendingText(null)
-    } finally {
-      sendingRef.current = false
-    }
-  }, [conversationId, draft, pendingText, taskId])
+  const send = useCallback(
+    async (text: string) => {
+      const nextText = (text || pendingText || draft).trim()
+      if (!nextText || sendingRef.current) {
+        return
+      }
+      sendingRef.current = true
+      setErrorText(null)
+      setPendingText(nextText)
+      setDraft('')
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID()
+      }
+      try {
+        const result = await sendAiConversationMessage(
+          taskId,
+          conversationId,
+          { text: nextText },
+          idempotencyKeyRef.current,
+        )
+        setEvents((current) => mergeEvents(current, result.events))
+        setPendingText(null)
+        idempotencyKeyRef.current = null
+      } catch {
+        setErrorText(ASSIST_ERROR_TEXT)
+        setDraft(nextText)
+        setPendingText(null)
+      } finally {
+        sendingRef.current = false
+      }
+    },
+    [conversationId, draft, pendingText, taskId],
+  )
+
+  const messages = useMemo(
+    () => toCopilotChatMessages(events, pendingText, initialActiveBatch),
+    [events, initialActiveBatch, pendingText],
+  )
+  const isRunning = isCopilotChatRunning(events, initialActiveBatch, pendingText)
 
   return (
     <div className={styles.root}>
       {errorText ? (
-        <p className={styles.error} role="alert">
-          {errorText}
-        </p>
+        <Alert type="error" showIcon message={errorText} />
       ) : null}
       <CopilotKit
         runtimeUrl={agentRuntimeUrl}
         headers={headers}
         properties={properties}
         useSingleEndpoint={false}
+        renderActivityMessages={activityRenderers}
       >
         <AssistLightState
           taskId={taskId}
@@ -495,39 +467,26 @@ export function AiCreateAssistChat({
           pendingReview={pendingReview}
           reviewDecision={reviewDecision}
         />
-        <div className={styles.pane}>
-          <DurableTranscript
-            events={events}
-            pendingText={pendingText}
-            activeBatch={initialActiveBatch}
-          />
-          <form
-          className={styles.composer}
-          onSubmit={(event) => {
-            event.preventDefault()
-            void send()
-          }}
+        <CopilotChatConfigurationProvider
+          agentId={AGENT_ID}
+          threadId={conversationId}
+          labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
         >
-          <Input.TextArea
-            aria-label="询问当前发团草稿"
-            placeholder="询问当前发团草稿…"
-            value={pendingText ? '' : draft}
-            disabled={pendingText !== null}
-            autoSize={{ minRows: 2, maxRows: 6 }}
-            onChange={(event) => setDraft(event.target.value)}
-            onPressEnter={(event) => {
-              if (event.shiftKey) {
-                return
-              }
-              event.preventDefault()
-              void send()
+          <CopilotChatView
+            className={styles.chat}
+            messages={messages}
+            isRunning={isRunning}
+            inputValue={pendingText ? '' : draft}
+            onInputChange={setDraft}
+            onSubmitMessage={(value) => {
+              void send(value)
+            }}
+            welcomeScreen={false}
+            input={{
+              textArea: { 'aria-label': '询问当前发团草稿' },
             }}
           />
-          <Button htmlType="submit" type="primary" aria-label="发送" loading={pendingText !== null} disabled={!draft.trim() && !pendingText}>
-            发送
-          </Button>
-        </form>
-        </div>
+        </CopilotChatConfigurationProvider>
       </CopilotKit>
     </div>
   )

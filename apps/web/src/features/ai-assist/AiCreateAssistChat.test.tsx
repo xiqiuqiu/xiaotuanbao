@@ -19,7 +19,18 @@ let capturedKit: {
   useSingleEndpoint?: boolean
   onError?: (event: { error: Error }) => void
 } = {}
-let capturedChat: { agentId?: string; onError?: (event: { error: Error }) => void } = {}
+let capturedView: {
+  messages?: Array<{
+    id: string
+    role: string
+    content?: unknown
+    activityType?: string
+  }>
+  isRunning?: boolean
+  inputValue?: string
+  onSubmitMessage?: (value: string) => void
+  onInputChange?: (value: string) => void
+} = {}
 let capturedRenderTool: {
   name?: string
   render?: (props: {
@@ -67,18 +78,51 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     capturedKit = { runtimeUrl, headers, properties, useSingleEndpoint, onError }
     return <div data-testid="copilot-kit">{children}</div>
   },
-  CopilotChat: ({
-    agentId,
-    onError,
+  CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
+  CopilotChatView: ({
+    messages = [],
+    isRunning,
+    inputValue,
+    onInputChange,
+    onSubmitMessage,
   }: {
-    agentId?: string
-    onError?: (event: { error: Error }) => void
+    messages?: Array<{
+      id: string
+      role: string
+      content?: unknown
+      activityType?: string
+    }>
+    isRunning?: boolean
+    inputValue?: string
+    onInputChange?: (value: string) => void
+    onSubmitMessage?: (value: string) => void
   }) => {
-    capturedChat = { agentId, onError }
+    capturedView = { messages, isRunning, inputValue, onInputChange, onSubmitMessage }
     return (
-      <div data-testid="copilot-chat" data-agent-id={agentId}>
-        <button type="button" onClick={() => onError?.({ error: new Error('runtime down') })}>
-          触发协助错误
+      <div data-testid="copilot-chat-view" data-running={isRunning ? 'true' : 'false'}>
+        <div role="log">
+          {messages.map((message) => {
+            if (message.role === 'activity' && message.content && typeof message.content === 'object') {
+              const label = (message.content as { label?: unknown }).label
+              return (
+                <p key={message.id} role="status">
+                  {typeof label === 'string' ? label : ''}
+                </p>
+              )
+            }
+            return (
+              <p key={message.id}>{typeof message.content === 'string' ? message.content : ''}</p>
+            )
+          })}
+        </div>
+        <textarea
+          aria-label="询问当前发团草稿"
+          placeholder="询问当前发团草稿…"
+          value={inputValue ?? ''}
+          onChange={(event) => onInputChange?.(event.target.value)}
+        />
+        <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
+          发送
         </button>
       </div>
     )
@@ -153,13 +197,13 @@ describe('AiCreateAssistChat', () => {
     vi.clearAllMocks()
     lastEventSource = null
     capturedKit = {}
-    capturedChat = {}
+    capturedView = {}
     capturedRenderTool = {}
     capturedSearchRenderTool = {}
     capturedHumanInTheLoop = {}
   })
 
-  it('passes runtimeUrl and identity headers without mounting CopilotChat send', () => {
+  it('passes runtimeUrl and identity headers to a controlled CopilotChatView', () => {
     render(<AiCreateAssistChat {...chatProps} runId="run-headers" />)
 
     expect(capturedKit.headers).toMatchObject({
@@ -169,7 +213,9 @@ describe('AiCreateAssistChat', () => {
     })
     expect(capturedKit.runtimeUrl).toBe('/copilotkit')
     expect(capturedKit.useSingleEndpoint).toBe(false)
+    expect(screen.getByTestId('copilot-chat-view')).toBeInTheDocument()
     expect(screen.getByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(capturedView.onSubmitMessage).toEqual(expect.any(Function))
     expect(runAgent).not.toHaveBeenCalled()
   })
 
@@ -411,6 +457,8 @@ describe('AiCreateAssistChat', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
 
     expect(await screen.findByText('发送中')).toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(true)
+    expect(runAgent).not.toHaveBeenCalled()
     expect(sendAiConversationMessage).toHaveBeenCalledWith(
       'task-assist',
       'conv-1',
@@ -443,6 +491,7 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByText('团名用九月川西')).toBeInTheDocument()
     expect(screen.getByText('已发送')).toBeInTheDocument()
     expect(screen.queryByText('发送中')).not.toBeInTheDocument()
+    expect(runAgent).not.toHaveBeenCalled()
   })
 
   it('keeps the unsent text after a failed send so it can be retried', async () => {

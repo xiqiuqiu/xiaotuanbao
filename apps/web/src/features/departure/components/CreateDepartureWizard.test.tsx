@@ -105,8 +105,27 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       {children}
     </div>
   ),
-  CopilotChat: ({ agentId }: { agentId?: string }) => (
-    <div data-testid="copilot-chat" data-agent-id={agentId} />
+  CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
+  CopilotChatView: ({
+    inputValue,
+    onInputChange,
+    onSubmitMessage,
+  }: {
+    inputValue?: string
+    onInputChange?: (value: string) => void
+    onSubmitMessage?: (value: string) => void
+  }) => (
+    <div data-testid="copilot-chat-view">
+      <textarea
+        aria-label="询问当前发团草稿"
+        placeholder="询问当前发团草稿…"
+        value={inputValue ?? ''}
+        onChange={(event) => onInputChange?.(event.target.value)}
+      />
+      <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
+        发送
+      </button>
+    </div>
   ),
   useAgentContext: vi.fn(),
   useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
