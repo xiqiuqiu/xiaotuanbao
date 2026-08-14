@@ -4,6 +4,10 @@ export interface AssistRequestContext {
   delegationToken: string
   taskId: string
   runId: string
+  conversationId?: string
+  inputBatchId?: string
+  attemptId?: string
+  contextManifestId?: string
 }
 
 const storage = new AsyncLocalStorage<AssistRequestContext>()

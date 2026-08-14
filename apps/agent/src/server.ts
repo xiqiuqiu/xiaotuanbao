@@ -5,8 +5,20 @@ import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { MastraAgent } from '@ag-ui/mastra'
 import { runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
+import {
+  handleHeadlessRun,
+  loadDeterministicAgentAdapterFromEnv,
+  type HeadlessExecutor,
+} from './headless-execution'
+import { json, readBearer, readHeader, statusForCollaborationError } from './http'
 import { createAiCreateMastra } from './mastra-agent'
 import { mapAgentFetchError, mapModelError } from './map-agent-error'
+
+export {
+  createDeterministicAgentAdapter,
+  loadDeterministicAgentAdapterFromEnv,
+  type HeadlessExecutor,
+} from './headless-execution'
 
 export interface AgentServerConfig {
   port: number
@@ -16,6 +28,7 @@ export interface AgentServerConfig {
   model?: string
   modelApiKey?: string
   modelBaseUrl?: string
+  headlessExecutor?: HeadlessExecutor
 }
 
 const AI_CREATE_TOOLS = ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'] as const
@@ -34,9 +47,10 @@ export function createAgentServer(config: AgentServerConfig) {
     basePath: '/copilotkit',
   })
   const copilotNode = createCopilotNodeHandler(copilotFetch)
+  const headlessExecutor = config.headlessExecutor ?? loadDeterministicAgentAdapterFromEnv()
 
   return createServer((request, response) => {
-    void handleRequest(config, copilotNode, request, response)
+    void handleRequest({ ...config, headlessExecutor }, copilotNode, request, response)
   })
 }
 
@@ -72,6 +86,11 @@ async function handleRequest(
 
   if (url.pathname === '/copilotkit' || url.pathname.startsWith('/copilotkit/')) {
     await handleCopilotkit(config, copilotNode, request, response, url)
+    return
+  }
+
+  if (url.pathname === '/v1/headless-runs') {
+    await handleHeadlessRun(config, request, response)
     return
   }
 
@@ -132,19 +151,6 @@ async function handleCopilotkit(
   )
 }
 
-function statusForCollaborationError(error: AiCollaborationError): number {
-  if (error.code === 'DELEGATION_INVALID') {
-    return 401
-  }
-  if (error.code === 'VERSION_CONFLICT' || error.code === 'REVIEW_PENDING') {
-    return 409
-  }
-  if (error.code === 'PERMISSION_DENIED' || error.code === 'SERVICE_IDENTITY_INVALID') {
-    return 403
-  }
-  return error.retryable ? 503 : 400
-}
-
 async function invokeCopilotNode(response: ServerResponse, run: () => Promise<void>) {
   try {
     await run()
@@ -160,24 +166,6 @@ async function invokeCopilotNode(response: ServerResponse, run: () => Promise<vo
   }
 }
 
-function json(response: ServerResponse, status: number, payload: unknown) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
-  response.end(JSON.stringify(payload))
-}
-
-function readBearer(request: IncomingMessage): string {
-  const header = request.headers.authorization ?? ''
-  return header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-}
-
-function readHeader(request: IncomingMessage, name: string): string {
-  const value = request.headers[name]
-  if (Array.isArray(value)) {
-    return value[0]?.trim() ?? ''
-  }
-  return value?.trim() ?? ''
-}
-
 export function loadAgentConfigFromEnv(): AgentServerConfig {
   return {
     port: Number(process.env.AGENT_PORT ?? 4111),
@@ -190,5 +178,6 @@ export function loadAgentConfigFromEnv(): AgentServerConfig {
     model: process.env.AI_MODEL ?? 'deepseek/deepseek-chat',
     modelApiKey: process.env.DEEPSEEK_API_KEY ?? '',
     modelBaseUrl: process.env.AI_MODEL_BASE_URL ?? 'https://api.deepseek.com',
+    headlessExecutor: loadDeterministicAgentAdapterFromEnv(),
   }
 }

@@ -81,3 +81,17 @@ export {
   assistStreamEventSchema,
   type AssistStreamEvent,
 } from './events/assist-stream-event'
+export {
+  HEADLESS_EXECUTION_OUTCOME_KINDS,
+  headlessExecutionIdentitySchema,
+  headlessExecutionRequestSchema,
+  headlessExecutionResultSchema,
+  type HeadlessExecutionOutcomeKind,
+  type HeadlessExecutionIdentity,
+  type HeadlessExecutionRequest,
+  type HeadlessExecutionResult,
+  type HeadlessCompletedResult,
+  type HeadlessAwaitingUserInputResult,
+  type HeadlessAwaitingReviewResult,
+  type HeadlessFailedResult,
+} from './runtime/headless-execution'
