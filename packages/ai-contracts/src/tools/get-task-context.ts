@@ -61,6 +61,7 @@ export const getTaskContextOutputSchema = z
         optionalPresent: z.array(z.string()),
       })
       .strip(),
+    currentUserMessage: z.string().trim().min(1).optional(),
   })
   .strip()
 

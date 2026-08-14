@@ -322,6 +322,7 @@ const batchStatusActivityRenderer: ReactActivityMessageRenderer<{ label: string 
 }
 
 const activityRenderers = [batchStatusActivityRenderer]
+const EVENT_CATCH_UP_POLL_MS = 1_000
 
 export function AiCreateAssistChat({
   agentRuntimeUrl,
@@ -369,6 +370,18 @@ export function AiCreateAssistChat({
 
   useEffect(() => {
     const abort = new AbortController()
+    const catchUp = () =>
+      listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
+        signal: abort.signal,
+        silentError: true,
+      })
+        .then((page) => {
+          if (!abort.signal.aborted && page.events.length > 0) {
+            setEvents((current) => mergeEvents(current, page.events))
+          }
+        })
+        .catch(() => undefined)
+
     const source = new EventSource(
       `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
       { withCredentials: true },
@@ -384,19 +397,16 @@ export function AiCreateAssistChat({
       }
     }
     source.onerror = () => {
-      void listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
-        signal: abort.signal,
-      })
-        .then((page) => {
-          if (!abort.signal.aborted) {
-            setEvents((current) => mergeEvents(current, page.events))
-          }
-        })
-        .catch(() => undefined)
+      void catchUp()
     }
+    void catchUp()
+    const timer = window.setInterval(() => {
+      void catchUp()
+    }, EVENT_CATCH_UP_POLL_MS)
     return () => {
       abort.abort()
       source.close()
+      window.clearInterval(timer)
     }
   }, [conversationId, taskId])
 

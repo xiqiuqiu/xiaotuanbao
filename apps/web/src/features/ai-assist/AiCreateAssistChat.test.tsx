@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
@@ -192,6 +192,15 @@ const pendingReview: AiReviewPackageView = {
 }
 
 describe('AiCreateAssistChat', () => {
+  beforeEach(() => {
+    vi.mocked(listAiConversationEvents).mockResolvedValue({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+    })
+  })
+
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
@@ -506,7 +515,56 @@ describe('AiCreateAssistChat', () => {
     expect(textarea.value).toBe('保留这句')
   })
 
+  it('catches up agent replies on mount without waiting for the event stream to error', async () => {
+    vi.mocked(listAiConversationEvents).mockResolvedValue({
+      conversationId: 'conv-1',
+      events: [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我建一个喀纳斯3日团' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'agent_message',
+          payload: { text: '已提交待审核建议，请在中间表单确认。' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+        {
+          sequence: 5,
+          kind: 'batch_status',
+          payload: { status: 'awaiting_review' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 5,
+      activeBatch: { id: 'batch-1', status: 'awaiting_review', conversationVersion: 1 },
+    })
+
+    render(<AiCreateAssistChat {...chatProps} />)
+
+    expect(
+      await screen.findByText('已提交待审核建议，请在中间表单确认。'),
+    ).toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(false)
+    expect(listAiConversationEvents).toHaveBeenCalledWith(
+      'task-assist',
+      'conv-1',
+      0,
+      expect.objectContaining({ signal: expect.any(AbortSignal), silentError: true }),
+    )
+  })
+
   it('catches up from the last sequence when the event stream errors', async () => {
+    render(<AiCreateAssistChat {...chatProps} />)
+    expect(lastEventSource).not.toBeNull()
     vi.mocked(listAiConversationEvents).mockResolvedValue({
       conversationId: 'conv-1',
       events: [
@@ -521,9 +579,6 @@ describe('AiCreateAssistChat', () => {
       activeBatch: { id: 'batch-1', status: 'completed', conversationVersion: 1 },
     })
 
-    render(<AiCreateAssistChat {...chatProps} />)
-    expect(lastEventSource).not.toBeNull()
-
     await act(async () => {
       lastEventSource?.onerror?.(new Event('error'))
     })
@@ -532,7 +587,7 @@ describe('AiCreateAssistChat', () => {
       'task-assist',
       'conv-1',
       0,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      expect.objectContaining({ signal: expect.any(AbortSignal), silentError: true }),
     )
     expect(
       await screen.findByText('已记下你的出团说明，可以继续在表单完善。'),

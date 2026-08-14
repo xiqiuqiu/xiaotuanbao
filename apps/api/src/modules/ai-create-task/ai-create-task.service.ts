@@ -234,7 +234,13 @@ export class AiCreateTaskService {
   }
 
   async getTaskContextForAgent(
-    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      inputBatchId?: string
+    },
     rawInput: unknown,
   ): Promise<GetTaskContextOutput> {
     let input: { taskId: string; runId: string }
@@ -262,6 +268,10 @@ export class AiCreateTaskService {
 
     const summary = this.toSummary(task)
     const pending = summary.pendingReview
+    const currentUserMessage = await this.currentUserMessageForBatch(
+      caller.organizationId,
+      caller.inputBatchId,
+    )
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -277,7 +287,27 @@ export class AiCreateTaskService {
       },
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+      ...(currentUserMessage ? { currentUserMessage } : {}),
     })
+  }
+
+  private async currentUserMessageForBatch(
+    organizationId: string,
+    inputBatchId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!inputBatchId) {
+      return undefined
+    }
+    const batch = await this.prisma.aiInputBatch.findFirst({
+      where: { id: inputBatchId, organizationId },
+      select: { userMessageEvent: { select: { payload: true } } },
+    })
+    const payload = batch?.userMessageEvent.payload
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
+      return undefined
+    }
+    const text = payload.text
+    return typeof text === 'string' && text.trim() ? text.trim() : undefined
   }
 
   async searchRouteTemplatesForAgent(
