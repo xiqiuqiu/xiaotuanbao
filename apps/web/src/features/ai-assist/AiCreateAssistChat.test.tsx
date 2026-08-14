@@ -1,10 +1,10 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
 import type { AiReviewPackageView } from '@xiaotuanbao/shared'
-import { AI_CREATE_FIRST_TURN } from './ai-create-first-turn'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
+import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
 
 const { addMessage, runAgent, useAgentContext } = vi.hoisted(() => ({
   addMessage: vi.fn(),
@@ -98,6 +98,24 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   },
 }))
 
+vi.mock('@/services/ai-create-task.service', () => ({
+  sendAiConversationMessage: vi.fn(),
+  listAiConversationEvents: vi.fn(),
+}))
+
+class MockEventSource {
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onerror: ((event: Event) => void) | null = null
+  url: string
+  close() {}
+  constructor(url: string, _init?: EventSourceInit) {
+    this.url = url
+    lastEventSource = this
+  }
+}
+let lastEventSource: MockEventSource | null = null
+vi.stubGlobal('EventSource', MockEventSource)
+
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
 
 const chatProps = {
@@ -105,6 +123,7 @@ const chatProps = {
   delegationToken: 'deleg-1',
   taskId: 'task-assist',
   runId: 'run-1',
+  conversationId: 'conv-1',
   snapshotVersion: 1,
   stageKey: 'basic_info' as const,
   runStatus: 'idle' as const,
@@ -132,6 +151,7 @@ describe('AiCreateAssistChat', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    lastEventSource = null
     capturedKit = {}
     capturedChat = {}
     capturedRenderTool = {}
@@ -139,9 +159,8 @@ describe('AiCreateAssistChat', () => {
     capturedHumanInTheLoop = {}
   })
 
-  it('passes runtimeUrl, identity headers and the readonly agent id', () => {
+  it('passes runtimeUrl and identity headers without mounting CopilotChat send', () => {
     render(<AiCreateAssistChat {...chatProps} runId="run-headers" />)
-
 
     expect(capturedKit.headers).toMatchObject({
       Authorization: 'Bearer deleg-1',
@@ -150,8 +169,8 @@ describe('AiCreateAssistChat', () => {
     })
     expect(capturedKit.runtimeUrl).toBe('/copilotkit')
     expect(capturedKit.useSingleEndpoint).toBe(false)
-    expect(capturedChat.agentId).toBe('ai-create-readonly-assist')
-    expect(screen.getByTestId('copilot-chat')).toBeInTheDocument()
+    expect(screen.getByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(runAgent).not.toHaveBeenCalled()
   })
 
   it('exposes only shared light state to CopilotKit, never the draft snapshot', () => {
@@ -355,45 +374,120 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByText('本次建议已放弃，草稿未修改。')).toBeInTheDocument()
   })
 
-  it('sends the first-turn prompt once even under StrictMode', () => {
+  it('does not call runAgent when the durable chat mounts', () => {
     render(
       <StrictMode>
         <AiCreateAssistChat {...chatProps} runId="run-first" />
       </StrictMode>,
     )
 
-    const contents = addMessage.mock.calls.map((call) => {
-      const message = call[0] as { content?: string } | string
-      return typeof message === 'string' ? message : message.content
-    })
-    expect(contents).toEqual([AI_CREATE_FIRST_TURN])
-    expect(AI_CREATE_FIRST_TURN).toBe(
-      '请根据当前草稿说明已填写和仍缺少的信息，并只问一个下一步问题。',
-    )
+    expect(runAgent).not.toHaveBeenCalled()
+    expect(addMessage).not.toHaveBeenCalled()
   })
 
-  it('sends the first-turn prompt again after a real remount of the same runId', async () => {
-    const { unmount } = render(<AiCreateAssistChat {...chatProps} runId="run-remount" />)
-    expect(addMessage).toHaveBeenCalledTimes(1)
+  it('shows 发送中 until the server confirms, then restores the input on failure', async () => {
+    let resolveSend!: (value: {
+      conversationId: string
+      batch: { id: string; status: 'ready_for_agent'; conversationVersion: number }
+      events: Array<{
+        sequence: number
+        kind: 'user_message' | 'batch_status'
+        payload: Record<string, unknown>
+        createdAt: string
+      }>
+      lastSequence: number
+    }) => void
+    vi.mocked(sendAiConversationMessage).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve
+        }),
+    )
 
-    unmount()
+    render(<AiCreateAssistChat {...chatProps} />)
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '团名用九月川西' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(await screen.findByText('发送中')).toBeInTheDocument()
+    expect(sendAiConversationMessage).toHaveBeenCalledWith(
+      'task-assist',
+      'conv-1',
+      { text: '团名用九月川西' },
+      expect.any(String),
+    )
+
     await act(async () => {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0)
+      resolveSend({
+        conversationId: 'conv-1',
+        batch: { id: 'batch-1', status: 'ready_for_agent', conversationVersion: 1 },
+        events: [
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '团名用九月川西' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'ready_for_agent' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ],
+        lastSequence: 2,
       })
     })
 
-    render(<AiCreateAssistChat {...chatProps} runId="run-remount" />)
-    expect(addMessage).toHaveBeenCalledTimes(2)
-    expect(addMessage.mock.calls[1]?.[0]).toMatchObject({ content: AI_CREATE_FIRST_TURN })
+    expect(screen.getByText('团名用九月川西')).toBeInTheDocument()
+    expect(screen.getByText('已发送')).toBeInTheDocument()
+    expect(screen.queryByText('发送中')).not.toBeInTheDocument()
   })
 
-  it('shows a visible assist failure without throwing', async () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-error" />)
-    await act(async () => {
-      screen.getByRole('button', { name: '触发协助错误' }).click()
+  it('keeps the unsent text after a failed send so it can be retried', async () => {
+    vi.mocked(sendAiConversationMessage).mockRejectedValue(new Error('network'))
+    render(<AiCreateAssistChat {...chatProps} />)
+    const textarea = screen.getByLabelText('询问当前发团草稿')
+    fireEvent.change(textarea, { target: { value: '保留这句' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+    )
+    expect(textarea.value).toBe('保留这句')
+  })
+
+  it('catches up from the last sequence when the event stream errors', async () => {
+    vi.mocked(listAiConversationEvents).mockResolvedValue({
+      conversationId: 'conv-1',
+      events: [
+        {
+          sequence: 3,
+          kind: 'agent_message',
+          payload: { text: '已记下你的出团说明，可以继续在表单完善。' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 3,
+      activeBatch: { id: 'batch-1', status: 'completed', conversationVersion: 1 },
     })
-    expect(screen.getByText('AI 辅助暂时不可用，请稍后重试或继续使用表单')).toBeInTheDocument()
+
+    render(<AiCreateAssistChat {...chatProps} />)
+    expect(lastEventSource).not.toBeNull()
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+
+    expect(listAiConversationEvents).toHaveBeenCalledWith(
+      'task-assist',
+      'conv-1',
+      0,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(
+      await screen.findByText('已记下你的出团说明，可以继续在表单完善。'),
+    ).toBeInTheDocument()
   })
 
   it('renders searchRouteTemplates results as read-only chat copy without adopt buttons', () => {

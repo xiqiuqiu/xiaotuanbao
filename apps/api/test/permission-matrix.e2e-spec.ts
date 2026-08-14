@@ -49,6 +49,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
   departureWrite: [
     { method: 'POST', path: '/api/departures' },
     { method: 'POST', path: '/api/ai-create-tasks/assist-session' },
+    { method: 'POST', path: '/api/ai-create-tasks/:taskId/conversations/:conversationId/messages' },
     { method: 'PATCH', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/confirm' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/reject' },

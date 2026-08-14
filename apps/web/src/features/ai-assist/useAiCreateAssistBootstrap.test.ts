@@ -23,6 +23,12 @@ const mockSession: AiCreateAssistSession = {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
   },
+  conversation: {
+    id: 'conv-1',
+    status: 'open',
+    events: [],
+    activeBatch: null,
+  },
   runId: 'run-1',
   delegationToken: 'deleg-1',
   agentRuntimeUrl: '/copilotkit',

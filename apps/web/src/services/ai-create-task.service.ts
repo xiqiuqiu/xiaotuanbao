@@ -9,6 +9,9 @@ import type {
   AiCreateAssistAvailability,
   StartAiCreateAssistSessionDto,
   AiCreateAssistSession,
+  AiConversationEventView,
+  AiInputBatchView,
+  SendAiConversationMessageResult,
 } from '@/types/api'
 
 export async function saveDepartureCreationDraft(
@@ -42,6 +45,39 @@ export async function startAiCreateAssistSession(
   payload: StartAiCreateAssistSessionDto = {},
 ): Promise<AiCreateAssistSession> {
   return request.post<AiCreateAssistSession>('/ai-create-tasks/assist-session', payload)
+}
+
+export async function sendAiConversationMessage(
+  taskId: string,
+  conversationId: string,
+  payload: { text: string },
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
+    payload,
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function listAiConversationEvents(
+  taskId: string,
+  conversationId: string,
+  afterSequence = 0,
+  config?: RequestConfig,
+): Promise<{
+  conversationId: string
+  events: AiConversationEventView[]
+  lastSequence: number
+  activeBatch: AiInputBatchView | null
+}> {
+  return request.get(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/events`,
+    { ...config, params: { afterSequence, ...config?.params } },
+  )
 }
 
 export async function patchAiReviewPackage(

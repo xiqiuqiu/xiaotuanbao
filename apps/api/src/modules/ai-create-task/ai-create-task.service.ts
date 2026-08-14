@@ -58,6 +58,8 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import { AiConversationService } from './ai-conversation.service'
+import { lockAiCreateTask } from './ai-create-task.lock'
 import {
   parseStoredCandidates,
   reviewConfirmValues,
@@ -67,7 +69,6 @@ import {
 } from './review-package.mapper'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
-const TASK_LOCK_OPERATION = 'ai-create-task'
 
 type TaskWithDraft = AiCreateTask & {
   draft: DepartureCreationDraft | null
@@ -113,24 +114,6 @@ function emptyToNull(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-async function lockAiCreateTask(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-  taskId: string,
-): Promise<void> {
-  const lockScope = `${organizationId}|${TASK_LOCK_OPERATION}|${taskId}`
-  await tx.$queryRaw`
-    SELECT pg_advisory_xact_lock(hashtextextended(${lockScope}, 0))::text AS lock
-  `
-  await tx.$queryRaw`
-    SELECT id
-    FROM ai_create_tasks
-    WHERE id = ${taskId}
-      AND organization_id = ${organizationId}
-    FOR UPDATE
-  `
-}
-
 @Injectable()
 export class AiCreateTaskService {
   constructor(
@@ -140,6 +123,7 @@ export class AiCreateTaskService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    private readonly conversationService: AiConversationService,
   ) {}
 
   async saveDraft(
@@ -201,31 +185,21 @@ export class AiCreateTaskService {
           this.normalizeSnapshot(dto.draft ?? { mode: DepartureCreationDraftMode.MANUAL, routeName: '' }),
         ).then((summary) => this.findOwnedTaskOrThrow(organizationId, userId, summary.id))
 
-    const runTimeoutMs = this.configService.get<number>('app.aiCreateAssist.runTimeoutMs') ?? 120_000
-    const staleBefore = new Date(Date.now() - runTimeoutMs)
+    const conversation = await this.conversationService.openOrResume(
+      organizationId,
+      userId,
+      task.id,
+    )
 
     const run = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, task.id)
-      await tx.aiCreateActivityRun.updateMany({
-        where: {
-          taskId: task.id,
-          status: AiCreateActivityRunStatus.running,
-          startedAt: { lt: staleBefore },
-        },
-        data: {
-          status: AiCreateActivityRunStatus.failed,
-          endedAt: new Date(),
-          errorCode: 'MODEL_TIMEOUT',
-        },
-      })
-      await tx.aiCreateActivityRun.updateMany({
+      const existing = await tx.aiCreateActivityRun.findFirst({
         where: { taskId: task.id, status: AiCreateActivityRunStatus.running },
-        data: {
-          status: AiCreateActivityRunStatus.failed,
-          endedAt: new Date(),
-          errorCode: 'AGENT_UNAVAILABLE',
-        },
+        orderBy: { startedAt: 'desc' },
       })
+      if (existing) {
+        return existing
+      }
       return tx.aiCreateActivityRun.create({
         data: {
           organizationId,
@@ -251,6 +225,7 @@ export class AiCreateTaskService {
 
     return {
       task: this.toSummary(task),
+      conversation,
       runId: run.id,
       delegationToken,
       agentRuntimeUrl: this.agentRuntimeUrl(),

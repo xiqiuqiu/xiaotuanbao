@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator'
@@ -135,4 +136,19 @@ export class ConfirmAiReviewPackageDto {
 export class PatchAiReviewPackageDto {
   @IsObject()
   corrections!: Record<string, string | number | null>
+}
+
+export class SendAiConversationMessageDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(8000)
+  text!: string
+}
+
+export class ListAiConversationEventsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  afterSequence?: number
 }

@@ -741,6 +741,9 @@ export function CreateDepartureWizard() {
           delegationToken={session.delegationToken}
           taskId={session.task.id}
           runId={session.runId}
+          conversationId={session.conversation.id}
+          initialEvents={session.conversation.events}
+          initialActiveBatch={session.conversation.activeBatch}
           snapshotVersion={currentTask.draft.version}
           stageKey="basic_info"
           runStatus="idle"

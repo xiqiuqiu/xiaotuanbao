@@ -72,6 +72,8 @@ vi.mock('@/services/ai-create-task.service', () => ({
   confirmAiCreateTask: vi.fn(),
   getAiCreateAssistAvailability: vi.fn(),
   startAiCreateAssistSession: vi.fn(),
+  sendAiConversationMessage: vi.fn(),
+  listAiConversationEvents: vi.fn(),
   patchAiReviewPackage: vi.fn(),
   confirmAiReviewPackage: vi.fn(),
   rejectAiReviewPackage: vi.fn(),
@@ -116,6 +118,15 @@ vi.mock('@copilotkit/react-core/v2', () => ({
 }))
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
+
+vi.stubGlobal(
+  'EventSource',
+  class MockEventSource {
+    onmessage: ((event: MessageEvent) => void) | null = null
+    close() {}
+    constructor(_url: string, _init?: EventSourceInit) {}
+  },
+)
 
 vi.mock('@/services/employee.service', () => ({
   listEmployeeOptions: vi.fn(),
@@ -222,6 +233,12 @@ function mockAssistSession(
       pendingReview: null,
     },
     runId: 'run-1',
+    conversation: {
+      id: 'conv-1',
+      status: 'open',
+      events: [],
+      activeBatch: null,
+    },
     delegationToken: 'deleg-1',
     agentRuntimeUrl: '/copilotkit',
     expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1012,6 +1029,12 @@ describe('CreateDepartureWizard', () => {
         pendingReview: null,
       },
       runId: 'run-1',
+      conversation: {
+        id: 'conv-1',
+        status: 'open' as const,
+        events: [],
+        activeBatch: null,
+      },
       delegationToken: 'deleg-1',
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1021,7 +1044,7 @@ describe('CreateDepartureWizard', () => {
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
 
     expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
@@ -1054,6 +1077,12 @@ describe('CreateDepartureWizard', () => {
         pendingReview: null,
       },
       runId: 'run-1',
+      conversation: {
+        id: 'conv-1',
+        status: 'open' as const,
+        events: [],
+        activeBatch: null,
+      },
       delegationToken: 'deleg-1',
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1067,7 +1096,7 @@ describe('CreateDepartureWizard', () => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
 
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(startAiCreateAssistSession).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
     expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
@@ -1091,7 +1120,7 @@ describe('CreateDepartureWizard', () => {
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
       'data-authorization',
       'Bearer deleg-1',
@@ -1100,14 +1129,14 @@ describe('CreateDepartureWizard', () => {
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
     await waitFor(() => {
-      expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
     }, { timeout: 700 })
 
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
 
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
     expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
       'data-authorization',
@@ -1143,6 +1172,12 @@ describe('CreateDepartureWizard', () => {
         pendingReview: null,
       },
       runId: 'run-1',
+      conversation: {
+        id: 'conv-1',
+        status: 'open' as const,
+        events: [],
+        activeBatch: null,
+      },
       delegationToken: 'deleg-1',
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1155,7 +1190,7 @@ describe('CreateDepartureWizard', () => {
     await user.type(nameInput, '侧栏打开后仍在')
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
@@ -1225,6 +1260,12 @@ describe('CreateDepartureWizard', () => {
           },
         },
         runId: 'run-1',
+        conversation: {
+          id: 'conv-1',
+          status: 'open' as const,
+          events: [],
+          activeBatch: null,
+        },
         delegationToken: 'deleg-1',
         agentRuntimeUrl: '/copilotkit',
         expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1233,11 +1274,11 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /AI 辅助/ }))
     expect(await screen.findByText('委托已过期')).toBeInTheDocument()
-    expect(screen.queryByTestId('copilot-chat')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
   })
 
@@ -1268,6 +1309,12 @@ describe('CreateDepartureWizard', () => {
         pendingReview: null,
       },
       runId: 'run-1',
+      conversation: {
+        id: 'conv-1',
+        status: 'open' as const,
+        events: [],
+        activeBatch: null,
+      },
       delegationToken: 'deleg-1',
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1282,7 +1329,7 @@ describe('CreateDepartureWizard', () => {
     await user.type(nameInput, '未落盘的团名')
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByTestId('copilot-chat')).toBeInTheDocument()
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(screen.queryByText('发团创建草稿已保存')).not.toBeInTheDocument()
     expect(screen.getByText('发团创建草稿保存失败')).toBeInTheDocument()
 
@@ -1419,6 +1466,12 @@ describe('CreateDepartureWizard', () => {
     vi.mocked(startAiCreateAssistSession).mockResolvedValue({
       task: restored,
       runId: 'run-1',
+      conversation: {
+        id: 'conv-1',
+        status: 'open' as const,
+        events: [],
+        activeBatch: null,
+      },
       delegationToken: 'deleg-1',
       agentRuntimeUrl: '/copilotkit',
       expiresAt: '2026-01-01T00:10:00.000Z',
@@ -1439,7 +1492,7 @@ describe('CreateDepartureWizard', () => {
     renderWizard()
     await screen.findByRole('button', { name: '确认写入草稿' })
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    await screen.findByTestId('copilot-chat')
+    await screen.findByLabelText('询问当前发团草稿')
     const respond = vi.fn().mockResolvedValue(undefined)
     const hitlProps = {
       name: 'awaitReviewPackageDecision',

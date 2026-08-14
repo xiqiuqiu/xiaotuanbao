@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @xiaotuanbao/shared build && pnpm --filter @xiaotuanbao/ai-contracts build && concurrently -k -n shared,contracts,api,reload -c blue,cyan,green,magenta \"pnpm --filter @xiaotuanbao/shared build:watch\" \"pnpm --filter @xiaotuanbao/ai-contracts build:watch\" \"nest start --watch\" \"node scripts/watch-shared-reload.js\"",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
+    "start:workflow-worker": "node dist/workflow-worker.main.js",
+    "dev:workflow-worker": "dotenv -e ../../.env -- tsx watch src/workflow-worker.main.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.seed.json --noEmit",
     "lint": "pnpm typecheck",
     "test": "jest --config jest.config.js",

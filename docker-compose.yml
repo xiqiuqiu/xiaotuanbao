@@ -49,6 +49,7 @@ services:
       # Compose network: talk to Garage by service name (host .env may use 127.0.0.1:3900).
       S3_ENDPOINT: http://garage:3900
       AGENT_RUNTIME_URL: /copilotkit
+      AGENT_INTERNAL_URL: http://agent:4111
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +92,28 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+  workflow-worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: xiaotuanbao-workflow-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-xiaotuanbao}:${POSTGRES_PASSWORD:-please-change-this-password}@postgres:5432/${POSTGRES_DB:-xiaotuanbao}?schema=public
+      S3_ENDPOINT: http://garage:3900
+      AGENT_INTERNAL_URL: http://agent:4111
+    entrypoint: ["node", "dist/workflow-worker.main.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      agent:
+        condition: service_started
 
   garage:
     image: dxflrs/garage:v2.3.0

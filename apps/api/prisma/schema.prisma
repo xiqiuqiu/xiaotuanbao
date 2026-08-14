@@ -333,6 +333,12 @@ model Organization {
   aiCreateActivityRuns AiCreateActivityRun[]
   aiReviewPackages AiReviewPackage[]
   aiReviewRecords AiReviewRecord[]
+  aiConversations AiConversation[]
+  aiConversationEvents AiConversationEvent[]
+  aiInputBatches AiInputBatch[]
+  aiWorkflowJobs AiWorkflowJob[]
+  aiAgentAttempts AiAgentAttempt[]
+  aiContextManifests AiContextManifest[]
 
   @@map("organizations")
 }
@@ -409,6 +415,8 @@ model User {
   createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
   aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
+  createdAiConversations AiConversation[] @relation("AiConversationCreator")
+  createdAiInputBatches AiInputBatch[] @relation("AiInputBatchCreator")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -1094,6 +1102,11 @@ model AiCreateTask {
   idempotencyRecords AiCreateIdempotencyRecord[]
   activityRuns   AiCreateActivityRun[]
   reviewPackages AiReviewPackage[]
+  conversations  AiConversation[]
+  inputBatches   AiInputBatch[]
+  workflowJobs   AiWorkflowJob[]
+  agentAttempts  AiAgentAttempt[]
+  contextManifests AiContextManifest[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1145,6 +1158,7 @@ model AiCreateActivityRun {
   endedAt        DateTime?                  @map("ended_at")
   errorCode      String?                    @map("error_code")
   reviewPackages AiReviewPackage[]
+  agentAttempts  AiAgentAttempt[]
 
   @@index([taskId, status])
   @@index([organizationId, startedAt])
@@ -1222,5 +1236,213 @@ model AiReviewRecord {
   @@index([packageId, createdAt])
   @@index([organizationId, createdAt])
   @@map("ai_review_records")
+}
+
+enum AiConversationStatus {
+  open
+  abandoned
+  completed
+
+  @@map("ai_conversation_status")
+}
+
+enum AiConversationEventKind {
+  user_message
+  agent_message
+  batch_status
+  error
+
+  @@map("ai_conversation_event_kind")
+}
+
+enum AiInputBatchStatus {
+  waiting_for_materials
+  ready_for_agent
+  agent_running
+  awaiting_user_input
+  awaiting_review
+  completed
+  failed
+  cancelled
+
+  @@map("ai_input_batch_status")
+}
+
+enum AiWorkflowJobType {
+  agent_batch
+
+  @@map("ai_workflow_job_type")
+}
+
+enum AiWorkflowJobStatus {
+  pending
+  claimed
+  succeeded
+  failed
+
+  @@map("ai_workflow_job_status")
+}
+
+enum AiAgentAttemptStatus {
+  running
+  completed
+  failed
+
+  @@map("ai_agent_attempt_status")
+}
+
+/// AI 建团会话：跨刷新与跨设备稳定的交流容器，归属任务创建者。
+model AiConversation {
+  id             String               @id @default(cuid())
+  organizationId String               @map("organization_id")
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  taskId         String               @map("task_id")
+  task           AiCreateTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creatorUserId  String               @map("creator_user_id")
+  creator        User                 @relation("AiConversationCreator", fields: [creatorUserId], references: [id])
+  status         AiConversationStatus @default(open)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  events         AiConversationEvent[]
+  inputBatches   AiInputBatch[]
+  workflowJobs   AiWorkflowJob[]
+  agentAttempts  AiAgentAttempt[]
+  contextManifests AiContextManifest[]
+
+  @@index([taskId, status, updatedAt])
+  @@index([organizationId, creatorUserId, status])
+  @@map("ai_conversations")
+}
+
+/// AI 会话事件：按服务端 sequence 追加且不可修改。
+model AiConversationEvent {
+  id             String                  @id @default(cuid())
+  organizationId String                  @map("organization_id")
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String                  @map("conversation_id")
+  conversation   AiConversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sequence       Int
+  kind           AiConversationEventKind
+  payload        Json
+  createdAt      DateTime                @default(now()) @map("created_at")
+  inputBatches   AiInputBatch[]
+
+  @@unique([conversationId, sequence])
+  @@index([organizationId, createdAt])
+  @@map("ai_conversation_events")
+}
+
+/// AI 输入批次：一次成功发送形成的不可变 Agent 输入单元。
+model AiInputBatch {
+  id                   String              @id @default(cuid())
+  organizationId       String              @map("organization_id")
+  organization         Organization        @relation(fields: [organizationId], references: [id])
+  taskId               String              @map("task_id")
+  task                 AiCreateTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  conversationId       String              @map("conversation_id")
+  conversation         AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  creatorUserId        String              @map("creator_user_id")
+  creator              User                @relation("AiInputBatchCreator", fields: [creatorUserId], references: [id])
+  userMessageEventId   String              @map("user_message_event_id")
+  userMessageEvent     AiConversationEvent @relation(fields: [userMessageEventId], references: [id])
+  conversationVersion  Int                 @map("conversation_version")
+  status               AiInputBatchStatus  @default(ready_for_agent)
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  workflowJobs         AiWorkflowJob[]
+  agentAttempts        AiAgentAttempt[]
+  contextManifests     AiContextManifest[]
+
+  @@index([taskId, status])
+  @@index([conversationId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("ai_input_batches")
+}
+
+/// AI 工作流作业：供独立 Worker 原子认领的长耗时工作单元。
+model AiWorkflowJob {
+  id             String              @id @default(cuid())
+  organizationId String              @map("organization_id")
+  organization   Organization        @relation(fields: [organizationId], references: [id])
+  taskId         String              @map("task_id")
+  task           AiCreateTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  conversationId String              @map("conversation_id")
+  conversation   AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId   String              @map("input_batch_id")
+  inputBatch     AiInputBatch        @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  type           AiWorkflowJobType   @default(agent_batch)
+  status         AiWorkflowJobStatus @default(pending)
+  attemptCount   Int                 @default(0) @map("attempt_count")
+  claimedAt      DateTime?           @map("claimed_at")
+  claimedBy      String?             @map("claimed_by")
+  leaseExpiresAt DateTime?           @map("lease_expires_at")
+  nextAttemptAt  DateTime            @default(now()) @map("next_attempt_at")
+  lastErrorCode  String?             @map("last_error_code")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  attempts       AiAgentAttempt[]
+
+  @@unique([inputBatchId, type])
+  @@index([status, nextAttemptAt, type])
+  @@index([taskId, status])
+  @@index([organizationId, createdAt])
+  @@map("ai_workflow_jobs")
+}
+
+/// AI 上下文清单：一次 Agent attempt 实际模型输入的可审计装配记录。
+model AiContextManifest {
+  id                       String         @id @default(cuid())
+  organizationId           String         @map("organization_id")
+  organization             Organization   @relation(fields: [organizationId], references: [id])
+  taskId                   String         @map("task_id")
+  task                     AiCreateTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  conversationId           String         @map("conversation_id")
+  conversation             AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId             String         @map("input_batch_id")
+  inputBatch               AiInputBatch   @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  conversationVersion      Int            @map("conversation_version")
+  eventSequences           Json           @map("event_sequences")
+  businessSnapshotVersion  Int            @map("business_snapshot_version")
+  builderVersion           String         @map("builder_version")
+  systemPromptVersion      String         @map("system_prompt_version")
+  toolSchemaVersion        String         @map("tool_schema_version")
+  modelId                  String         @map("model_id")
+  inputHash                String         @map("input_hash")
+  truncationReasons        Json           @map("truncation_reasons")
+  createdAt                DateTime       @default(now()) @map("created_at")
+  attempt                  AiAgentAttempt?
+
+  @@index([conversationId, inputBatchId])
+  @@index([organizationId, createdAt])
+  @@map("ai_context_manifests")
+}
+
+/// Agent attempt：Worker 对已齐套输入批次的一次执行。
+model AiAgentAttempt {
+  id                String               @id @default(cuid())
+  organizationId    String               @map("organization_id")
+  organization      Organization         @relation(fields: [organizationId], references: [id])
+  taskId            String               @map("task_id")
+  task              AiCreateTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  conversationId    String               @map("conversation_id")
+  conversation      AiConversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId      String               @map("input_batch_id")
+  inputBatch        AiInputBatch         @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  jobId             String               @map("job_id")
+  job               AiWorkflowJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  activityRunId     String               @map("activity_run_id")
+  activityRun       AiCreateActivityRun  @relation(fields: [activityRunId], references: [id])
+  contextManifestId String               @unique @map("context_manifest_id")
+  contextManifest   AiContextManifest    @relation(fields: [contextManifestId], references: [id])
+  status            AiAgentAttemptStatus @default(running)
+  resultJson        Json?                @map("result_json")
+  errorCode         String?              @map("error_code")
+  startedAt         DateTime             @default(now()) @map("started_at")
+  endedAt           DateTime?            @map("ended_at")
+
+  @@index([taskId, status])
+  @@index([jobId, startedAt])
+  @@index([organizationId, startedAt])
+  @@map("ai_agent_attempts")
 }
 
