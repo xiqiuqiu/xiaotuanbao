@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   CopilotChatConfigurationProvider,
   CopilotChatView,
@@ -35,6 +35,7 @@ import {
   isCopilotChatRunning,
   toCopilotChatMessages,
 } from './ai-create-copilot-messages'
+import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
@@ -371,10 +372,12 @@ export function AiCreateAssistChat({
   useEffect(() => {
     const abort = new AbortController()
     const catchUp = () =>
-      listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
-        signal: abort.signal,
-        silentError: true,
-      })
+      Promise.resolve(
+        listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
+          signal: abort.signal,
+          silentError: true,
+        }),
+      )
         .then((page) => {
           if (!abort.signal.aborted && page.events.length > 0) {
             setEvents((current) => mergeEvents(current, page.events))
@@ -444,6 +447,25 @@ export function AiCreateAssistChat({
     [conversationId, draft, pendingText, taskId],
   )
 
+  const sendRef = useRef(send)
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
+  const WelcomeScreen = useMemo(
+    () =>
+      function WelcomeScreenSlot({ input }: { input?: ReactNode }) {
+        return (
+          <AiCreateAssistWelcome
+            input={input}
+            onSelectSuggestion={(suggestion) => {
+              void sendRef.current(suggestion.message)
+            }}
+          />
+        )
+      },
+    [],
+  )
+
   const messages = useMemo(
     () => toCopilotChatMessages(events, pendingText, initialActiveBatch),
     [events, initialActiveBatch, pendingText],
@@ -460,6 +482,7 @@ export function AiCreateAssistChat({
         headers={headers}
         properties={properties}
         useSingleEndpoint={false}
+        enableInspector={false}
         renderActivityMessages={activityRenderers}
       >
         <AssistLightState
@@ -491,7 +514,7 @@ export function AiCreateAssistChat({
             onSubmitMessage={(value) => {
               void send(value)
             }}
-            welcomeScreen={false}
+            welcomeScreen={WelcomeScreen}
             input={{
               textArea: { 'aria-label': '询问当前发团草稿' },
             }}

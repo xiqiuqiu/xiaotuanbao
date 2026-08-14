@@ -56,11 +56,12 @@
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 16px;
+  padding: 0;
 }
 
 .placeholder {
   margin: 0;
+  padding: 16px;
   color: var(--assist-text);
 }
 

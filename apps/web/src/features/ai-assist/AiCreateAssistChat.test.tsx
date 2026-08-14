@@ -17,6 +17,7 @@ let capturedKit: {
   headers?: Record<string, string>
   properties?: Record<string, unknown>
   useSingleEndpoint?: boolean
+  enableInspector?: boolean
   onError?: (event: { error: Error }) => void
 } = {}
 let capturedView: {
@@ -66,6 +67,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     headers,
     properties,
     useSingleEndpoint,
+    enableInspector,
     onError,
   }: {
     children: ReactNode
@@ -73,9 +75,17 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     headers?: Record<string, string>
     properties?: Record<string, unknown>
     useSingleEndpoint?: boolean
+    enableInspector?: boolean
     onError?: (event: { error: Error }) => void
   }) => {
-    capturedKit = { runtimeUrl, headers, properties, useSingleEndpoint, onError }
+    capturedKit = {
+      runtimeUrl,
+      headers,
+      properties,
+      useSingleEndpoint,
+      enableInspector,
+      onError,
+    }
     return <div data-testid="copilot-kit">{children}</div>
   },
   CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
@@ -85,6 +95,9 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue,
     onInputChange,
     onSubmitMessage,
+    welcomeScreen,
+    suggestions,
+    onSelectSuggestion,
   }: {
     messages?: Array<{
       id: string
@@ -96,10 +109,42 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue?: string
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
+    welcomeScreen?:
+      | false
+      | ((props: { input?: ReactNode; suggestionView?: ReactNode }) => ReactNode)
+    suggestions?: Array<{ title: string; message: string }>
+    onSelectSuggestion?: (suggestion: { title: string; message: string }, index: number) => void
   }) => {
     capturedView = { messages, isRunning, inputValue, onInputChange, onSubmitMessage }
+    const input = (
+      <textarea
+        aria-label="询问当前发团草稿"
+        placeholder="询问当前发团草稿…"
+        value={inputValue ?? ''}
+        onChange={(event) => onInputChange?.(event.target.value)}
+      />
+    )
+    const suggestionView =
+      suggestions && suggestions.length > 0 ? (
+        <div>
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={suggestion.title}
+              type="button"
+              onClick={() => onSelectSuggestion?.(suggestion, index)}
+            >
+              {suggestion.title}
+            </button>
+          ))}
+        </div>
+      ) : null
+    const welcome =
+      messages.length === 0 && typeof welcomeScreen === 'function'
+        ? welcomeScreen({ input, suggestionView })
+        : null
     return (
       <div data-testid="copilot-chat-view" data-running={isRunning ? 'true' : 'false'}>
+        {welcome}
         <div role="log">
           {messages.map((message) => {
             if (message.role === 'activity' && message.content && typeof message.content === 'object') {
@@ -115,12 +160,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
             )
           })}
         </div>
-        <textarea
-          aria-label="询问当前发团草稿"
-          placeholder="询问当前发团草稿…"
-          value={inputValue ?? ''}
-          onChange={(event) => onInputChange?.(event.target.value)}
-        />
+        {welcome ? null : input}
         <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
           发送
         </button>
@@ -212,6 +252,73 @@ describe('AiCreateAssistChat', () => {
     capturedHumanInTheLoop = {}
   })
 
+  it('shows a compact welcome with greeting and prompt cards', () => {
+    render(<AiCreateAssistChat {...chatProps} runId="run-welcome" />)
+
+    expect(screen.getByRole('region', { name: '电子化助理说明' })).toBeInTheDocument()
+    expect(screen.getByText(/上午好|下午好|晚上好/)).toBeInTheDocument()
+    expect(screen.getByText('今天要做什么？')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /补全团名和路线/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /查找常用路线/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /说明团期和人数/ })).toBeInTheDocument()
+    expect(screen.queryByText(/建议会出现在中间表单/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('询问当前发团草稿')).toBeInTheDocument()
+  })
+
+  it('hides the welcome screen after the first user message', () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-welcome-hidden"
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '帮我建一个喀纳斯3日团' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.queryByRole('region', { name: '电子化助理说明' })).not.toBeInTheDocument()
+    expect(screen.getByText('帮我建一个喀纳斯3日团')).toBeInTheDocument()
+  })
+
+  it('sends a suggestion as a conversation message', async () => {
+    vi.mocked(sendAiConversationMessage).mockResolvedValue({
+      conversationId: 'conv-1',
+      batch: { id: 'batch-1', status: 'ready_for_agent', conversationVersion: 1 },
+      events: [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我查一下组织里的常用路线' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 2,
+    })
+
+    render(<AiCreateAssistChat {...chatProps} runId="run-welcome-suggest" />)
+    fireEvent.click(screen.getByRole('button', { name: /查找常用路线/ }))
+
+    expect(sendAiConversationMessage).toHaveBeenCalledWith(
+      'task-assist',
+      'conv-1',
+      { text: '帮我查一下组织里的常用路线' },
+      expect.any(String),
+    )
+    expect(await screen.findByText('帮我查一下组织里的常用路线')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '电子化助理说明' })).not.toBeInTheDocument()
+  })
+
   it('passes runtimeUrl and identity headers to a controlled CopilotChatView', () => {
     render(<AiCreateAssistChat {...chatProps} runId="run-headers" />)
 
@@ -222,6 +329,7 @@ describe('AiCreateAssistChat', () => {
     })
     expect(capturedKit.runtimeUrl).toBe('/copilotkit')
     expect(capturedKit.useSingleEndpoint).toBe(false)
+    expect(capturedKit.enableInspector).toBe(false)
     expect(screen.getByTestId('copilot-chat-view')).toBeInTheDocument()
     expect(screen.getByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(capturedView.onSubmitMessage).toEqual(expect.any(Function))

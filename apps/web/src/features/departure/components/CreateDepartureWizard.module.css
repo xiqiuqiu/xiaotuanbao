@@ -102,6 +102,10 @@
   animation: wizard-step-fade 120ms ease both;
 }
 
+.assistMessage {
+  padding: 16px;
+}
+
 @keyframes wizard-step-fade {
   from {
     opacity: 0;

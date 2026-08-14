@@ -9,6 +9,7 @@ import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
 import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
+import { AiCreateAssistLoading } from '@/features/ai-assist/AiCreateAssistLoading'
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
@@ -553,7 +554,7 @@ export function CreateDepartureWizard() {
 
   const getAssistTaskId = useCallback(() => taskIdRef.current, [])
 
-  const { bootstrap, reset, session, error } = useAiCreateAssistBootstrap({
+  const { bootstrap, reset, session, error, loading } = useAiCreateAssistBootstrap({
     enabled: Boolean(assistAvailability?.enabled),
     flushDraft,
     buildDraft: buildAssistDraft,
@@ -765,13 +766,21 @@ export function CreateDepartureWizard() {
 
     if (error) {
       setContent(
-        <>
+        <div className={styles.assistMessage}>
           <p role="alert">{error.message.trim() || ASSIST_ERROR_TEXT}</p>
           <Button aria-label="重试" onClick={() => void bootstrapRef.current()}>
             重试
           </Button>
-        </>,
+        </div>,
       )
+
+      return () => {
+        setContent(null)
+      }
+    }
+
+    if (loading) {
+      setContent(<AiCreateAssistLoading />)
 
       return () => {
         setContent(null)
@@ -780,6 +789,7 @@ export function CreateDepartureWizard() {
   }, [
     assistAvailability?.enabled,
     error,
+    loading,
     reviewDecision,
     session,
     setContent,

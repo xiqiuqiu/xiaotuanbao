@@ -184,11 +184,13 @@ describe('useAiCreateAssistBootstrap', () => {
         expect(startAiCreateAssistSession).toHaveBeenCalled()
       })
       expect(startAiCreateAssistSession).toHaveBeenCalledTimes(1)
+      expect(result.current.loading).toBe(true)
       await act(async () => {
         resolveSession(mockSession)
         await first
         await second
       })
+      expect(result.current.loading).toBe(false)
       expect(startAiCreateAssistSession).toHaveBeenCalledTimes(1)
     } finally {
       resolveSession?.(mockSession)
