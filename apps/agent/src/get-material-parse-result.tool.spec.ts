@@ -1,8 +1,8 @@
 import { standardSchemaToJSONSchema } from '@mastra/core/schema'
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
-import { searchRouteTemplates } from './search-route-templates.client'
+import { fetchMaterialParseResult } from './get-material-parse-result.client'
 import { runWithAssistRequestContext } from './assist-request-context'
-import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
+import { createGetMaterialParseResultTool } from './get-material-parse-result.tool'
 import { listAgentTools } from './server'
 
 jest.mock('@copilotkit/runtime/v2', () => ({
@@ -26,11 +26,11 @@ jest.mock('./mastra-agent', () => ({
   createAiCreateMastra: () => ({}),
 }))
 
-jest.mock('./search-route-templates.client', () => ({
-  searchRouteTemplates: jest.fn(),
+jest.mock('./get-material-parse-result.client', () => ({
+  fetchMaterialParseResult: jest.fn(),
 }))
 
-const mockSearch = searchRouteTemplates as jest.MockedFunction<typeof searchRouteTemplates>
+const mockFetch = fetchMaterialParseResult as jest.MockedFunction<typeof fetchMaterialParseResult>
 
 const toolConfig = {
   apiBaseUrl: 'http://api.local',
@@ -38,36 +38,34 @@ const toolConfig = {
   modelApiKey: 'sk-test',
 }
 
-describe('createSearchRouteTemplatesTool', () => {
+describe('createGetMaterialParseResultTool', () => {
   beforeEach(() => {
-    mockSearch.mockReset()
-    mockSearch.mockResolvedValue({
-      items: [
-        {
-          id: 'tpl-1',
-          name: '川西稻城线',
-          defaultDayCount: 8,
-          usageCount: 4,
-          updatedAt: '2026-08-01T00:00:00.000Z',
-          matchReasons: [{ code: 'name_contains_token', token: '川西' }],
-        },
-      ],
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValue({
+      materialId: 'mat-1',
+      parseResultVersion: 1,
+      pages: [{ pageNumber: 1, source: 'ocr', text: '九月川西线' }],
     })
   })
 
-  it('sends dual identity plus model query, not model-supplied task ids', async () => {
-    const tool = createSearchRouteTemplatesTool(toolConfig)
+  it('sends dual identity plus the pinned parse version, not model-supplied task ids', async () => {
+    const tool = createGetMaterialParseResultTool(toolConfig)
 
     await runWithAssistRequestContext(
       { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
       () =>
         tool.execute?.(
-          { keyword: '川西', dayCount: 8, taskId: 'model-supplied', runId: 'model-supplied' } as never,
+          {
+            materialId: 'mat-1',
+            parseResultVersion: 1,
+            taskId: 'model-supplied',
+            runId: 'model-supplied',
+          } as never,
           {} as never,
         ),
     )
 
-    expect(mockSearch).toHaveBeenCalledWith(
+    expect(mockFetch).toHaveBeenCalledWith(
       {
         apiBaseUrl: 'http://api.local',
         serviceSecret: 'secret',
@@ -76,14 +74,14 @@ describe('createSearchRouteTemplatesTool', () => {
       {
         taskId: 'task-1',
         runId: 'run-1',
-        keyword: '川西',
-        dayCount: 8,
+        materialId: 'mat-1',
+        parseResultVersion: 1,
       },
     )
   })
 
   it('uses a Zod v4 inputSchema so Mastra skips the broken zod-to-json-schema.default path', () => {
-    const tool = createSearchRouteTemplatesTool(toolConfig)
+    const tool = createGetMaterialParseResultTool(toolConfig)
     expect(tool.inputSchema).toBeDefined()
     expect('_zod' in tool.inputSchema!).toBe(true)
     expect(() =>
@@ -91,7 +89,7 @@ describe('createSearchRouteTemplatesTool', () => {
     ).not.toThrow()
   })
 
-  it('exposes searchRouteTemplates among agent tools', () => {
+  it('exposes getMaterialParseResult among agent tools', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
@@ -101,7 +99,7 @@ describe('createSearchRouteTemplatesTool', () => {
   })
 
   it('fails closed when the model key is missing', async () => {
-    const tool = createSearchRouteTemplatesTool({
+    const tool = createGetMaterialParseResultTool({
       ...toolConfig,
       modelApiKey: '',
     })
@@ -109,10 +107,10 @@ describe('createSearchRouteTemplatesTool', () => {
     await expect(
       runWithAssistRequestContext(
         { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
-        () => tool.execute?.({ keyword: '川西' }, {} as never),
+        () => tool.execute?.({ materialId: 'mat-1', parseResultVersion: 1 }, {} as never),
       ),
     ).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
     expect(AiCollaborationError.fromCode('AGENT_UNAVAILABLE').retryable).toBe(true)
-    expect(mockSearch).not.toHaveBeenCalled()
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })

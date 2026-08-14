@@ -74,6 +74,8 @@ vi.mock('@/services/ai-create-task.service', () => ({
   startAiCreateAssistSession: vi.fn(),
   sendAiConversationMessage: vi.fn(),
   listAiConversationEvents: vi.fn(),
+  listDepartureMaterials: vi.fn().mockResolvedValue([]),
+  previewDepartureMaterial: vi.fn(),
   patchAiReviewPackage: vi.fn(),
   confirmAiReviewPackage: vi.fn(),
   rejectAiReviewPackage: vi.fn(),
@@ -137,6 +139,20 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     )
   },
   useAgentContext: vi.fn(),
+  useAttachments: () => ({
+    attachments: [],
+    enabled: true,
+    dragOver: false,
+    fileInputRef: { current: null },
+    containerRef: { current: null },
+    processFiles: async () => {},
+    handleFileUpload: async () => {},
+    handleDragOver: () => {},
+    handleDragLeave: () => {},
+    handleDrop: async () => {},
+    removeAttachment: () => {},
+    consumeAttachments: () => [],
+  }),
   useAgent: () => ({ agent: { addMessage: vi.fn() }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent: vi.fn() } }),
   useRenderTool: vi.fn(),
@@ -1081,6 +1097,7 @@ describe('CreateDepartureWizard', () => {
 
     expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
     expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '发团资料' })).toBeInTheDocument()
     expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()

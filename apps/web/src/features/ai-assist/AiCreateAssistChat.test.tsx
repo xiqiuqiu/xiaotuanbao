@@ -12,6 +12,7 @@ const { addMessage, runAgent, useAgentContext } = vi.hoisted(() => ({
   useAgentContext: vi.fn(),
 }))
 
+let queuedFiles: File[] = []
 let capturedKit: {
   runtimeUrl?: string
   headers?: Record<string, string>
@@ -170,6 +171,37 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   useAgentContext: (...args: unknown[]) => useAgentContext(...args),
   useAgent: () => ({ agent: { addMessage }, isReady: true }),
   useCopilotKit: () => ({ copilotkit: { runAgent } }),
+  useAttachments: () => ({
+    attachments: queuedFiles.map((file) => ({
+      id: file.name,
+      filename: file.name,
+      status: 'ready',
+      source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+    })),
+    enabled: true,
+    dragOver: false,
+    fileInputRef: { current: null },
+    containerRef: { current: null },
+    processFiles: async (files: File[]) => {
+      queuedFiles = [...queuedFiles, ...files]
+    },
+    handleFileUpload: async () => {},
+    handleDragOver: () => {},
+    handleDragLeave: () => {},
+    handleDrop: async () => {},
+    removeAttachment: () => {},
+    consumeAttachments: () => {
+      const files = queuedFiles
+      queuedFiles = []
+      return files.map((file) => ({
+        id: file.name,
+        filename: file.name,
+        status: 'ready',
+        source: { type: 'url', value: `blob:${file.name}`, mimeType: file.type },
+        metadata: { file },
+      }))
+    },
+  }),
   useRenderTool: (config: { name?: string; render?: (props: never) => ReactNode }) => {
     if (config.name === 'searchRouteTemplates') {
       capturedSearchRenderTool = config
@@ -245,6 +277,7 @@ describe('AiCreateAssistChat', () => {
     cleanup()
     vi.clearAllMocks()
     lastEventSource = null
+    queuedFiles = []
     capturedKit = {}
     capturedView = {}
     capturedRenderTool = {}
@@ -736,5 +769,202 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByText(/川西稻城线 · 8 天 · 用过 4 次/)).toBeInTheDocument()
     expect(screen.getByText(/名称包含「川西」/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /采用|确认|选择/ })).not.toBeInTheDocument()
+  })
+
+  it('shows parse progress while waiting for materials and keeps the chat running', () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
+    expect(screen.queryByText('已收到')).not.toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(true)
+  })
+
+  it('stops treating the chat as running when material parse fails', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(capturedView.isRunning).toBe(true)
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 3,
+          kind: 'error',
+          payload: { errorCode: 'PARSE_FAILED' },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'failed', errorCode: 'PARSE_FAILED' },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('本批处理失败，可修改后重试')).toBeInTheDocument()
+    expect(screen.getByText('处理失败')).toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(false)
+  })
+
+  it('updates parse progress in place when a later batch_status event arrives', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'waiting_for_materials', readyCount: 1, totalCount: 1 },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('已上传 1 个，解析 1/1')).toBeInTheDocument()
+    expect(screen.queryByText('已上传 1 个，解析 0/1')).not.toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'agent_running' },
+          createdAt: '2026-08-14T00:00:02.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('AI 处理中')).toBeInTheDocument()
+    expect(screen.queryByText('已上传 1 个，解析 1/1')).not.toBeInTheDocument()
+  })
+
+  it('sends local files with the message and does not call runAgent', async () => {
+    const file = new File([new Uint8Array([1, 2, 3])], '团期.png', { type: 'image/png' })
+    queuedFiles = [file]
+    let resolveSend!: (value: {
+      conversationId: string
+      batch: {
+        id: string
+        status: 'waiting_for_materials'
+        conversationVersion: number
+        materialProgress: { ready: number; total: number }
+      }
+      events: Array<{
+        sequence: number
+        kind: 'user_message' | 'batch_status'
+        payload: Record<string, unknown>
+        createdAt: string
+      }>
+      lastSequence: number
+    }) => void
+    vi.mocked(sendAiConversationMessage).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSend = resolve
+        }),
+    )
+
+    render(<AiCreateAssistChat {...chatProps} />)
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '这是团期资料，请按附件填写。' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(await screen.findByText('上传 1 个附件')).toBeInTheDocument()
+    expect(runAgent).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveSend({
+        conversationId: 'conv-1',
+        batch: {
+          id: 'batch-1',
+          status: 'waiting_for_materials',
+          conversationVersion: 1,
+          materialProgress: { ready: 0, total: 1 },
+        },
+        events: [
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ],
+        lastSequence: 2,
+      })
+    })
+
+    expect(sendAiConversationMessage).toHaveBeenCalledWith(
+      'task-assist',
+      'conv-1',
+      { text: '这是团期资料，请按附件填写。', files: [file] },
+      expect.any(String),
+    )
+    expect(runAgent).not.toHaveBeenCalled()
+    expect(await screen.findByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
   })
 })

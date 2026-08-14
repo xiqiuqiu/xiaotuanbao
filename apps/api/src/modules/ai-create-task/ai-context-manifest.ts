@@ -15,6 +15,7 @@ export interface PlaintextContextInput {
   userText: string
   businessSnapshotVersion: number
   modelId: string
+  materialVersions: Array<{ materialId: string; parseResultVersion: number }>
 }
 
 export interface PlaintextContextManifestRecord {
@@ -46,6 +47,7 @@ export function buildPlaintextContextManifest(
     eventSequences: input.eventSequences,
     userText: input.userText,
     businessSnapshotVersion: input.businessSnapshotVersion,
+    materialVersions: input.materialVersions,
     builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
     systemPromptVersion: PLAINTEXT_SYSTEM_PROMPT_VERSION,
     toolSchemaVersion: PLAINTEXT_TOOL_SCHEMA_VERSION,

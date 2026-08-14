@@ -154,6 +154,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     expect(context.body.data.availableCapabilities).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
+      'getMaterialParseResult',
     ])
   })
 

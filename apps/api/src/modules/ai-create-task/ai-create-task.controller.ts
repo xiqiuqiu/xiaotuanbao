@@ -12,23 +12,31 @@ import {
   Req,
   Res,
   Sse,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common'
 import type {
   AiCreateAssistAvailability,
   AiCreateAssistSession,
   AiCreateTaskSummary,
+  DepartureMaterialView,
   DepartureSummary,
   SendAiConversationMessageResult,
 } from '@xiaotuanbao/shared'
 import type { Response } from 'express'
+import { FilesInterceptor } from '@nestjs/platform-express'
+import { memoryStorage } from 'multer'
 import { Observable } from 'rxjs'
 import { RequireMenu } from '../../common/decorators/require-menu.decorator'
 import { SkipResponseWrap } from '../../common/decorators/skip-response-wrap.decorator'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { buildStoredObjectContentDisposition } from '../stored-object/stored-object.helpers'
 import { AiConversationService } from './ai-conversation.service'
 import { AiCreateTaskService } from './ai-create-task.service'
+import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-material.constants'
+import { DepartureMaterialService } from './departure-material.service'
 import {
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
@@ -45,6 +53,7 @@ export class AiCreateTaskController {
   constructor(
     private readonly aiCreateTaskService: AiCreateTaskService,
     private readonly conversationService: AiConversationService,
+    private readonly materialService: DepartureMaterialService,
   ) {}
 
   @Get('assist-availability')
@@ -71,11 +80,21 @@ export class AiCreateTaskController {
   @Post(':taskId/conversations/:conversationId/messages')
   @HttpCode(201)
   @RequireMenu('departure:write')
+  @UseInterceptors(
+    FilesInterceptor('files', MATERIAL_MAX_FILES_PER_SEND, {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: MATERIAL_MAX_BYTES,
+        files: MATERIAL_MAX_FILES_PER_SEND,
+      },
+    }),
+  )
   sendConversationMessage(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('taskId') taskId: string,
     @Param('conversationId') conversationId: string,
     @Body() dto: SendAiConversationMessageDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<SendAiConversationMessageResult> {
     return this.conversationService.sendText(
@@ -83,9 +102,48 @@ export class AiCreateTaskController {
       request.user.userId,
       taskId,
       conversationId,
-      dto.text,
+      dto.text ?? '',
       idempotencyKey,
+      (files ?? []).map((file) => ({
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        buffer: file.buffer,
+        size: file.size,
+      })),
     )
+  }
+
+  @Get(':taskId/materials')
+  @RequireMenu('departure:write')
+  listMaterials(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+  ): Promise<DepartureMaterialView[]> {
+    return this.materialService.list(request.user.organizationId, request.user.userId, taskId)
+  }
+
+  @Get(':taskId/materials/:materialId/preview')
+  @SkipResponseWrap()
+  @RequireMenu('departure:write')
+  async previewMaterial(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('materialId') materialId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.materialService.preview(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      materialId,
+    )
+    res.setHeader('Content-Type', file.contentType)
+    res.setHeader(
+      'Content-Disposition',
+      buildStoredObjectContentDisposition(file.filename).replace(/^attachment/, 'inline'),
+    )
+    res.setHeader('Content-Length', String(file.buffer.byteLength))
+    res.send(file.buffer)
   }
 
   @Get(':taskId/conversations/:conversationId/events')

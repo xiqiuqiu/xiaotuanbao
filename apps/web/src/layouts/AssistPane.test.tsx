@@ -6,12 +6,18 @@ import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from './AssistPane'
 import { AssistPaneSlotProvider, useAssistPaneSlot } from './assist-pane-slot'
 
-function SlotSetter({ text }: { text: string }) {
-  const { setContent } = useAssistPaneSlot()
+function SlotSetter({ text, extra }: { text: string; extra?: string }) {
+  const { setContent, setHeaderExtra } = useAssistPaneSlot()
   useEffect(() => {
     setContent(<p>{text}</p>)
-    return () => setContent(null)
-  }, [setContent, text])
+    if (extra) {
+      setHeaderExtra(<button type="button">{extra}</button>)
+    }
+    return () => {
+      setContent(null)
+      setHeaderExtra(null)
+    }
+  }, [extra, setContent, setHeaderExtra, text])
   return null
 }
 
@@ -62,6 +68,18 @@ describe('AssistPane', () => {
     )
     expect(screen.getByText('建团协助')).toBeInTheDocument()
     expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
+  })
+
+  it('renders page header actions next to the close control', () => {
+    useUiStore.setState({ assistPaneCollapsed: false })
+    render(
+      <AssistPaneSlotProvider>
+        <SlotSetter text="建团协助" extra="发团资料" />
+        <AssistPane />
+      </AssistPaneSlotProvider>,
+    )
+    expect(screen.getByRole('button', { name: '发团资料' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '收起电子化助理' })).toBeInTheDocument()
   })
 
   it('throws when useAssistPaneSlot is used outside AssistPaneSlotProvider', () => {

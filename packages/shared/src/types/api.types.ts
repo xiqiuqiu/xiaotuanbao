@@ -910,6 +910,10 @@ export interface AiInputBatchView {
   id: string
   status: AiInputBatchStatus
   conversationVersion: number
+  materialProgress?: {
+    ready: number
+    total: number
+  }
 }
 
 export interface AiConversationView {
@@ -930,6 +934,27 @@ export interface SendAiConversationMessageResult {
   lastSequence: number
 }
 
+export type DepartureMaterialStatus =
+  | 'uploaded'
+  | 'queued'
+  | 'parsing'
+  | 'available'
+  | 'partially_available'
+  | 'failed'
+  | 'isolated'
+
+export interface DepartureMaterialView {
+  id: string
+  originalFilename: string
+  contentType: string
+  status: DepartureMaterialStatus
+  statusVersion: number
+  sha256: string
+  sizeBytes: number
+  createdAt: string
+  latestResultVersion: number | null
+}
+
 export type AiReviewableBasicInfoField =
   | 'name'
   | 'routeName'
@@ -945,6 +970,12 @@ export type AiReviewPackageStatus = 'pending' | 'confirmed' | 'rejected' | 'supe
 export type AiCandidateEvidence =
   | { kind: 'user_message'; excerpt: string; messageId?: string }
   | { kind: 'system_derivation'; rule: string }
+  | {
+      kind: 'material_region'
+      materialId: string
+      pageNumber: number
+      excerpt: string
+    }
 
 export interface AiReviewCandidateView {
   fieldKey: AiReviewableBasicInfoField

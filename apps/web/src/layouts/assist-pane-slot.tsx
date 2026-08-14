@@ -10,13 +10,19 @@ import {
 interface AssistPaneSlotValue {
   content: ReactNode | null
   setContent: (content: ReactNode | null) => void
+  headerExtra: ReactNode | null
+  setHeaderExtra: (content: ReactNode | null) => void
 }
 
 const AssistPaneSlotContext = createContext<AssistPaneSlotValue | null>(null)
 
 export function AssistPaneSlotProvider({ children }: PropsWithChildren) {
   const [content, setContent] = useState<ReactNode | null>(null)
-  const value = useMemo(() => ({ content, setContent }), [content])
+  const [headerExtra, setHeaderExtra] = useState<ReactNode | null>(null)
+  const value = useMemo(
+    () => ({ content, setContent, headerExtra, setHeaderExtra }),
+    [content, headerExtra],
+  )
 
   return (
     <AssistPaneSlotContext.Provider value={value}>
@@ -31,4 +37,8 @@ export function useAssistPaneSlot() {
     throw new Error('useAssistPaneSlot must be used within AssistPaneSlotProvider')
   }
   return slot
+}
+
+export function useOptionalAssistPaneSlot() {
+  return useContext(AssistPaneSlotContext)
 }

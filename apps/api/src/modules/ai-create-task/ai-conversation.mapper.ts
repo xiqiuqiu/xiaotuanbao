@@ -8,6 +8,7 @@ import type {
   AiConversationEvent,
   AiInputBatch,
 } from '@prisma/client'
+import { materialProgressFromDeps } from './departure-material.constants'
 
 export function toEventView(event: AiConversationEvent): AiConversationEventView {
   return {
@@ -18,11 +19,19 @@ export function toEventView(event: AiConversationEvent): AiConversationEventView
   }
 }
 
-export function toBatchView(batch: AiInputBatch): AiInputBatchView {
+export function toBatchView(
+  batch: AiInputBatch & {
+    materials?: Array<{ required: boolean; parseResultVersion: number | null }>
+  },
+): AiInputBatchView {
+  const materialProgress = batch.materials
+    ? materialProgressFromDeps(batch.materials)
+    : undefined
   return {
     id: batch.id,
     status: batch.status,
     conversationVersion: batch.conversationVersion,
+    ...(materialProgress && materialProgress.total > 0 ? { materialProgress } : {}),
   }
 }
 

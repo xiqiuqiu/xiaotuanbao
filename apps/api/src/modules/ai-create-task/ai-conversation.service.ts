@@ -24,7 +24,6 @@ import {
   type AiConversation,
   type AiConversationEvent,
   type AiCreateTask,
-  type AiInputBatch,
   type DepartureCreationDraft,
   type Prisma,
 } from '@prisma/client'
@@ -42,6 +41,15 @@ import {
 import { toBatchView, toConversationView, toEventView } from './ai-conversation.mapper'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateSender, lockAiCreateTask } from './ai-create-task.lock'
+import {
+  agentBatchJobKey,
+  materialProgressFromDeps,
+} from './departure-material.constants'
+import {
+  DepartureMaterialService,
+  materialFileKey,
+  type IncomingMaterialFile,
+} from './departure-material.service'
 
 const TASK_INCLUDE = {
   draft: true,
@@ -56,6 +64,7 @@ export class AiConversationService {
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
     private readonly eventHub: AiConversationEventHub,
+    private readonly materialService: DepartureMaterialService,
   ) {}
 
   async openOrResume(
@@ -96,6 +105,7 @@ export class AiConversationService {
     conversationId: string,
     text: string,
     idempotencyKey: string | undefined,
+    files: IncomingMaterialFile[] = [],
   ): Promise<SendAiConversationMessageResult> {
     await this.assertAssistAccess(userId)
     const key = idempotencyKey?.trim()
@@ -105,144 +115,249 @@ export class AiConversationService {
     if (key.length > 200) {
       throw new BadRequestException('幂等键长度不能超过 200 个字符')
     }
-    const trimmed = text.trim()
-    if (!trimmed) {
+    const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
+    const trimmed = text.trim() || (attachments.length > 0 ? '请根据附件整理发团资料。' : '')
+    if (!trimmed && attachments.length === 0) {
       throw new BadRequestException('消息不能为空')
     }
 
-    const hash = requestHash({ taskId, conversationId, text: trimmed })
+    const hash = requestHash({
+      taskId,
+      conversationId,
+      text: trimmed,
+      attachments: attachments.map((file) => ({
+        filename: file.originalname,
+        contentType: (file.mimetype ?? '').toLowerCase(),
+        sizeBytes: file.buffer.byteLength,
+        sha256: this.materialService.sha256(file.buffer),
+      })),
+    })
     const published: AiConversationEventView[] = []
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      await lockAiCreateTask(tx, organizationId, taskId)
-      await lockAiCreateSender(tx, organizationId, userId)
-      const task = await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
-      const conversation = await tx.aiConversation.findFirst({
-        where: { id: conversationId, taskId: task.id, organizationId },
-      })
-      if (!conversation) {
-        throw new NotFoundException('AI 建团会话不存在')
-      }
-      if (conversation.creatorUserId !== userId) {
-        throw new ForbiddenException('仅任务创建者可访问该 AI 建团会话')
-      }
-      if (conversation.status !== AiConversationStatus.open) {
-        throw new BadRequestException('仅未完成的 AI 建团会话可发送消息')
-      }
-
-      const record = await tx.aiCreateIdempotencyRecord.upsert({
-        where: {
-          organizationId_operation_idempotencyKey: {
-            organizationId,
-            operation: SEND_TEXT_OPERATION,
-            idempotencyKey: key,
-          },
-        },
-        create: {
+    const consumedStoredObjectIds = new Set<string>()
+    const existingRecord = await this.prisma.aiCreateIdempotencyRecord.findUnique({
+      where: {
+        organizationId_operation_idempotencyKey: {
           organizationId,
-          taskId: task.id,
           operation: SEND_TEXT_OPERATION,
           idempotencyKey: key,
-          requestHash: hash,
         },
-        update: {},
-      })
+      },
+    })
+    if (
+      existingRecord?.completedAt &&
+      existingRecord.resultJson &&
+      existingRecord.requestHash === hash &&
+      existingRecord.taskId === taskId
+    ) {
+      return existingRecord.resultJson as unknown as SendAiConversationMessageResult
+    }
 
-      if (record.taskId !== task.id) {
-        throw new ConflictException('幂等键已被其他任务使用')
-      }
-      if (record.requestHash !== hash) {
-        throw new ConflictException('幂等键已用于不同的发送内容')
-      }
-      if (record.completedAt && record.resultJson) {
-        return record.resultJson as unknown as SendAiConversationMessageResult
-      }
-
-      await this.assertProcessingBatchCapacity(tx, {
-        organizationId,
-        userId,
-        conversationId: conversation.id,
-      })
-
-      const lastEvent = await tx.aiConversationEvent.findFirst({
-        where: { conversationId: conversation.id },
-        orderBy: { sequence: 'desc' },
-      })
-      const userSequence = (lastEvent?.sequence ?? 0) + 1
-      const statusSequence = userSequence + 1
-
-      const userEvent = await tx.aiConversationEvent.create({
-        data: {
-          organizationId,
-          conversationId: conversation.id,
-          sequence: userSequence,
-          kind: AiConversationEventKind.user_message,
-          payload: { text: trimmed },
-        },
-      })
-
-      const batch = await tx.aiInputBatch.create({
-        data: {
-          organizationId,
-          taskId: task.id,
-          conversationId: conversation.id,
-          creatorUserId: userId,
-          userMessageEventId: userEvent.id,
-          conversationVersion: userSequence,
-          status: AiInputBatchStatus.ready_for_agent,
-        },
-      })
-
-      const statusEvent = await tx.aiConversationEvent.create({
-        data: {
-          organizationId,
-          conversationId: conversation.id,
-          sequence: statusSequence,
-          kind: AiConversationEventKind.batch_status,
-          payload: { batchId: batch.id, status: AiInputBatchStatus.ready_for_agent },
-        },
-      })
-
-      await tx.aiWorkflowJob.create({
-        data: {
-          organizationId,
-          taskId: task.id,
-          conversationId: conversation.id,
-          inputBatchId: batch.id,
-          type: AiWorkflowJobType.agent_batch,
-          status: AiWorkflowJobStatus.pending,
-        },
-      })
-
-      await tx.aiConversation.update({
-        where: { id: conversation.id },
-        data: { updatedAt: new Date() },
-      })
-
-      const events = [toEventView(userEvent), toEventView(statusEvent)]
-      const payload: SendAiConversationMessageResult = {
-        conversationId: conversation.id,
-        batch: toBatchView(batch),
-        events,
-        lastSequence: statusSequence,
-      }
-
-      await tx.aiCreateIdempotencyRecord.update({
-        where: { id: record.id },
-        data: {
-          resultJson: payload as unknown as Prisma.InputJsonValue,
-          completedAt: new Date(),
-        },
-      })
-
-      published.push(...events)
-      return payload
+    const prepared = await this.materialService.prepareUploads({
+      organizationId,
+      userId,
+      taskId,
+      files: attachments,
     })
 
-    for (const event of published) {
-      this.eventHub.publish(conversationId, event)
+    let committed = false
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        await lockAiCreateTask(tx, organizationId, taskId)
+        await lockAiCreateSender(tx, organizationId, userId)
+        const task = await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
+        const conversation = await tx.aiConversation.findFirst({
+          where: { id: conversationId, taskId: task.id, organizationId },
+        })
+        if (!conversation) {
+          throw new NotFoundException('AI 建团会话不存在')
+        }
+        if (conversation.creatorUserId !== userId) {
+          throw new ForbiddenException('仅任务创建者可访问该 AI 建团会话')
+        }
+        if (conversation.status !== AiConversationStatus.open) {
+          throw new BadRequestException('仅未完成的 AI 建团会话可发送消息')
+        }
+
+        const record = await tx.aiCreateIdempotencyRecord.upsert({
+          where: {
+            organizationId_operation_idempotencyKey: {
+              organizationId,
+              operation: SEND_TEXT_OPERATION,
+              idempotencyKey: key,
+            },
+          },
+          create: {
+            organizationId,
+            taskId: task.id,
+            operation: SEND_TEXT_OPERATION,
+            idempotencyKey: key,
+            requestHash: hash,
+          },
+          update: {},
+        })
+
+        if (record.taskId !== task.id) {
+          throw new ConflictException('幂等键已被其他任务使用')
+        }
+        if (record.requestHash !== hash) {
+          throw new ConflictException('幂等键已用于不同的发送内容')
+        }
+        if (record.completedAt && record.resultJson) {
+          return record.resultJson as unknown as SendAiConversationMessageResult
+        }
+
+        await this.assertProcessingBatchCapacity(tx, {
+          organizationId,
+          userId,
+          conversationId: conversation.id,
+        })
+
+        const lastEvent = await tx.aiConversationEvent.findFirst({
+          where: { conversationId: conversation.id },
+          orderBy: { sequence: 'desc' },
+        })
+        const userSequence = (lastEvent?.sequence ?? 0) + 1
+        const statusSequence = userSequence + 1
+
+        const userEvent = await tx.aiConversationEvent.create({
+          data: {
+            organizationId,
+            conversationId: conversation.id,
+            sequence: userSequence,
+            kind: AiConversationEventKind.user_message,
+            payload: {
+              text: trimmed,
+              attachments: attachments.map((file) => ({
+                filename: file.originalname,
+                contentType: (file.mimetype ?? '').toLowerCase(),
+                sizeBytes: file.buffer.byteLength,
+              })),
+            },
+          },
+        })
+
+        const archived = []
+        for (const file of attachments) {
+          const item = await this.materialService.archiveForTask(tx, {
+            organizationId,
+            userId,
+            taskId: task.id,
+            file,
+            stored: prepared.storedByFileKey.get(materialFileKey(file)),
+          })
+          if (item.consumedStoredObjectId) {
+            consumedStoredObjectIds.add(item.consumedStoredObjectId)
+          }
+          archived.push(item)
+        }
+        const waitingForMaterials = archived.some((item) => item.parseResultVersion == null)
+        const batchStatus = waitingForMaterials
+          ? AiInputBatchStatus.waiting_for_materials
+          : AiInputBatchStatus.ready_for_agent
+
+        const batch = await tx.aiInputBatch.create({
+          data: {
+            organizationId,
+            taskId: task.id,
+            conversationId: conversation.id,
+            creatorUserId: userId,
+            userMessageEventId: userEvent.id,
+            conversationVersion: userSequence,
+            status: batchStatus,
+            materials: {
+              create: archived.map((item) => ({
+                organizationId,
+                materialId: item.material.id,
+                required: true,
+                parseResultVersion: item.parseResultVersion,
+              })),
+            },
+          },
+          include: { materials: true },
+        })
+
+        for (const item of archived) {
+          if (item.needsParseJob) {
+            await this.materialService.enqueueParseJob(tx, {
+              organizationId,
+              taskId: task.id,
+              conversationId: conversation.id,
+              inputBatchId: batch.id,
+              materialId: item.material.id,
+            })
+          }
+        }
+
+        const progress = materialProgressFromDeps(batch.materials)
+        const statusEvent = await tx.aiConversationEvent.create({
+          data: {
+            organizationId,
+            conversationId: conversation.id,
+            sequence: statusSequence,
+            kind: AiConversationEventKind.batch_status,
+            payload: {
+              batchId: batch.id,
+              status: batchStatus,
+              readyCount: progress.ready,
+              totalCount: progress.total,
+            },
+          },
+        })
+
+        if (batchStatus === AiInputBatchStatus.ready_for_agent) {
+          await tx.aiWorkflowJob.create({
+            data: {
+              organizationId,
+              taskId: task.id,
+              conversationId: conversation.id,
+              inputBatchId: batch.id,
+              type: AiWorkflowJobType.agent_batch,
+              jobKey: agentBatchJobKey(batch.id),
+              status: AiWorkflowJobStatus.pending,
+            },
+          })
+        }
+
+        await tx.aiConversation.update({
+          where: { id: conversation.id },
+          data: { updatedAt: new Date() },
+        })
+
+        const events = [toEventView(userEvent), toEventView(statusEvent)]
+        const payload: SendAiConversationMessageResult = {
+          conversationId: conversation.id,
+          batch: toBatchView(batch),
+          events,
+          lastSequence: statusSequence,
+        }
+
+        await tx.aiCreateIdempotencyRecord.update({
+          where: { id: record.id },
+          data: {
+            resultJson: payload as unknown as Prisma.InputJsonValue,
+            completedAt: new Date(),
+          },
+        })
+
+        published.push(...events)
+        return payload
+      })
+      committed = true
+      await this.materialService.discardStoredObjects(
+        organizationId,
+        prepared.uploadedIds.filter((id) => !consumedStoredObjectIds.has(id)),
+      )
+
+      for (const event of published) {
+        this.eventHub.publish(conversationId, event)
+      }
+      return result
+    } catch (error) {
+      if (!committed) {
+        await this.materialService.discardStoredObjects(organizationId, prepared.uploadedIds)
+      }
+      throw error
     }
-    return result
   }
 
   async listEvents(
@@ -375,6 +490,62 @@ export class AiConversationService {
     this.eventHub.publish(conversationId, toEventView(event))
   }
 
+  async tryPromoteBatch(
+    tx: Prisma.TransactionClient,
+    inputBatchId: string,
+  ): Promise<{ conversationId: string; eventId: string }[]> {
+    const batch = await tx.aiInputBatch.findUnique({
+      where: { id: inputBatchId },
+      include: { materials: true },
+    })
+    if (!batch || batch.status !== AiInputBatchStatus.waiting_for_materials) {
+      return []
+    }
+    const progress = materialProgressFromDeps(batch.materials)
+    if (progress.ready < progress.total) {
+      const statusEvent = await this.appendEvent(tx, {
+        organizationId: batch.organizationId,
+        conversationId: batch.conversationId,
+        kind: AiConversationEventKind.batch_status,
+        payload: {
+          batchId: batch.id,
+          status: AiInputBatchStatus.waiting_for_materials,
+          readyCount: progress.ready,
+          totalCount: progress.total,
+        },
+      })
+      return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
+    }
+
+    await tx.aiInputBatch.update({
+      where: { id: batch.id },
+      data: { status: AiInputBatchStatus.ready_for_agent },
+    })
+    await tx.aiWorkflowJob.create({
+      data: {
+        organizationId: batch.organizationId,
+        taskId: batch.taskId,
+        conversationId: batch.conversationId,
+        inputBatchId: batch.id,
+        type: AiWorkflowJobType.agent_batch,
+        jobKey: agentBatchJobKey(batch.id),
+        status: AiWorkflowJobStatus.pending,
+      },
+    })
+    const statusEvent = await this.appendEvent(tx, {
+      organizationId: batch.organizationId,
+      conversationId: batch.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: batch.id,
+        status: AiInputBatchStatus.ready_for_agent,
+        readyCount: progress.ready,
+        totalCount: progress.total,
+      },
+    })
+    return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
+  }
+
   private async loadConversationView(conversation: AiConversation): Promise<AiConversationView> {
     const events = await this.prisma.aiConversationEvent.findMany({
       where: { conversationId: conversation.id },
@@ -419,7 +590,7 @@ export class AiConversationService {
     }
   }
 
-  private async findActiveBatch(conversationId: string): Promise<AiInputBatch | null> {
+  private async findActiveBatch(conversationId: string) {
     return this.prisma.aiInputBatch.findFirst({
       where: {
         conversationId,
@@ -433,6 +604,7 @@ export class AiConversationService {
           ],
         },
       },
+      include: { materials: true },
       orderBy: { createdAt: 'desc' },
     })
   }
@@ -490,6 +662,20 @@ export class AiConversationService {
 
 function requestHash(payload: unknown): string {
   return createHash('sha256').update(JSON.stringify(canonicalize(payload))).digest('hex')
+}
+
+function dedupeFiles(files: IncomingMaterialFile[]): IncomingMaterialFile[] {
+  const seen = new Set<string>()
+  const unique: IncomingMaterialFile[] = []
+  for (const file of files) {
+    const key = `${createHash('sha256').update(file.buffer).digest('hex')}:${file.buffer.byteLength}:${(file.mimetype ?? '').toLowerCase()}`
+    if (seen.has(key)) {
+      continue
+    }
+    seen.add(key)
+    unique.push(file)
+  }
+  return unique
 }
 
 function canonicalize(value: unknown): unknown {

@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { Mastra } from '@mastra/core'
+import { createGetMaterialParseResultTool } from './get-material-parse-result.tool'
 import { createGetTaskContextTool, type GetTaskContextToolConfig } from './get-task-context.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
@@ -18,6 +19,7 @@ export function createAiCreateMastra(config: AiCreateMastraConfig) {
   const getTaskContext = createGetTaskContextTool(config)
   const searchRouteTemplates = createSearchRouteTemplatesTool(config)
   const submitReviewPackage = createSubmitReviewPackageTool(config)
+  const getMaterialParseResult = createGetMaterialParseResultTool(config)
   const agent = new Agent({
     id: AI_CREATE_AGENT_ID,
     name: 'AI 建团助手',
@@ -27,7 +29,7 @@ export function createAiCreateMastra(config: AiCreateMastraConfig) {
       url: config.modelBaseUrl ?? 'https://api.deepseek.com',
       apiKey: config.modelApiKey || 'missing',
     },
-    tools: { getTaskContext, searchRouteTemplates, submitReviewPackage },
+    tools: { getTaskContext, searchRouteTemplates, submitReviewPackage, getMaterialParseResult },
   })
 
   wrapAgentExecutionWithoutInboundAuth(agent)

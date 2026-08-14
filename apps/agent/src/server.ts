@@ -32,7 +32,12 @@ export interface AgentServerConfig {
   headlessExecutor?: HeadlessExecutor
 }
 
-const AI_CREATE_TOOLS = ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'] as const
+const AI_CREATE_TOOLS = [
+  'getTaskContext',
+  'searchRouteTemplates',
+  'submitReviewPackage',
+  'getMaterialParseResult',
+] as const
 const ALLOWED_HEADERS = 'Authorization, Content-Type, X-Ai-Task-Id, X-Ai-Run-Id'
 
 export function createAgentServer(config: AgentServerConfig) {

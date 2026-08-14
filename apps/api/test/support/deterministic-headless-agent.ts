@@ -18,9 +18,11 @@ export async function startDeterministicHeadlessAgent(options: {
   release: () => void
   close: () => Promise<void>
   callCount: () => number
+  lastTaskContext: () => unknown
 }> {
   let outcome = options.outcome
   let callCount = 0
+  let lastContext: unknown = null
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
 
@@ -68,6 +70,8 @@ export async function startDeterministicHeadlessAgent(options: {
           runId: typeof claims.runId === 'string' ? claims.runId : '',
         }),
       })
+      const contextBody = await context.json().catch(() => null)
+      lastContext = contextBody
       if (!context.ok) {
         json(response, 200, {
           data: headlessExecutionResultSchema.parse({
@@ -120,6 +124,7 @@ export async function startDeterministicHeadlessAgent(options: {
         server.close((error) => (error ? reject(error) : resolve()))
       }),
     callCount: () => callCount,
+    lastTaskContext: () => lastContext,
   }
 }
 

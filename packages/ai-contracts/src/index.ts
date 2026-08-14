@@ -17,6 +17,13 @@ export {
   type ConversationEventForAgent,
 } from './tools/get-task-context'
 export {
+  GET_MATERIAL_PARSE_RESULT_TOOL,
+  getMaterialParseResultInputSchema,
+  getMaterialParseResultOutputSchema,
+  type GetMaterialParseResultInput,
+  type GetMaterialParseResultOutput,
+} from './tools/get-material-parse-result'
+export {
   SEARCH_ROUTE_TEMPLATES_TOOL,
   SEARCH_ROUTE_TEMPLATES_LIMIT,
   ROUTE_TEMPLATE_MATCH_REASON_CODES,

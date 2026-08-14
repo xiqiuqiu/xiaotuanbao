@@ -24,6 +24,14 @@ const evidenceInputSchema = z.discriminatedUnion('kind', [
       rule: z.string().trim().min(1).max(200),
     })
     .strip(),
+  z
+    .object({
+      kind: z.literal('material_region'),
+      materialId: z.string().min(1),
+      pageNumber: z.number().int().positive(),
+      excerpt: z.string().trim().min(1).max(2000),
+    })
+    .strip(),
 ])
 
 const candidateBase = {

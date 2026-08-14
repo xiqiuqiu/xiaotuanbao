@@ -62,11 +62,12 @@ describe('agent server', () => {
     mockFetchTaskContext.mockReset()
   })
 
-  it('exposes getTaskContext, searchRouteTemplates and submitReviewPackage', () => {
+  it('exposes getTaskContext, searchRouteTemplates, submitReviewPackage and getMaterialParseResult', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
       'submitReviewPackage',
+      'getMaterialParseResult',
     ])
   })
 
@@ -84,7 +85,12 @@ describe('agent server', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({
         status: 'ok',
-        tools: ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage'],
+        tools: [
+          'getTaskContext',
+          'searchRouteTemplates',
+          'submitReviewPackage',
+          'getMaterialParseResult',
+        ],
       })
     } finally {
       await new Promise<void>((resolve, reject) =>

@@ -78,6 +78,17 @@ export const getTaskContextOutputSchema = z
       .strip(),
     currentUserMessage: z.string().trim().min(1).optional(),
     conversationEvents: z.array(conversationEventForAgentSchema).max(50).optional(),
+    materials: z
+      .array(
+        z
+          .object({
+            materialId: z.string().min(1),
+            parseResultVersion: z.number().int().positive(),
+          })
+          .strip(),
+      )
+      .max(20)
+      .optional(),
   })
   .strip()
 

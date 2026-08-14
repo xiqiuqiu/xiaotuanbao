@@ -16,7 +16,11 @@ export interface PendingCandidateOverlayProps {
 
 function evidenceText(candidate: AiReviewCandidateView): string {
   return candidate.evidence
-    .map((item) => (item.kind === 'user_message' ? item.excerpt : item.rule))
+    .map((item) => {
+      if (item.kind === 'user_message') return item.excerpt
+      if (item.kind === 'material_region') return `资料第 ${item.pageNumber} 页：${item.excerpt}`
+      return item.rule
+    })
     .join('；')
 }
 
