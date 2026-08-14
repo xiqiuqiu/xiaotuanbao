@@ -87,8 +87,23 @@ describe('AI create material failure control (e2e) #317', () => {
     await app.close()
   })
 
+  beforeEach(async () => {
+    await prisma.aiWorkflowJob.updateMany({
+      where: {
+        organizationId,
+        status: { in: ['pending', 'claimed'] },
+      },
+      data: {
+        status: 'failed',
+        lastErrorCode: 'E2E_ISOLATION',
+        leaseExpiresAt: null,
+      },
+    })
+  })
+
   afterEach(() => {
     ocr.setPageText('九月川西线 预计 12 人')
+    agent.release()
   })
 
   async function openSession() {
@@ -333,11 +348,14 @@ describe('AI create material failure control (e2e) #317', () => {
       .field('text', '这是团期资料，请按附件填写。')
       .attach('files', PNG_OK, { filename: '固定.png', contentType: 'image/png' })
       .expect(201)
+    const batchId = sent.body.data.batch.id as string
     await processor.processDueJobs(1)
     const running = processor.processDueJobs(1)
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await waitFor(async () => {
+      const batch = await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: batchId } })
+      expect(batch.status).toBe('agent_running')
+    })
 
-    const batchId = sent.body.data.batch.id as string
     const dependency = await prisma.aiInputBatchMaterial.findFirstOrThrow({
       where: { inputBatchId: batchId },
     })
@@ -391,10 +409,15 @@ describe('AI create material failure control (e2e) #317', () => {
       .field('text', '这是团期资料，请按附件填写。')
       .attach('files', PNG_OK, { filename: '停止.png', contentType: 'image/png' })
       .expect(201)
+    const batchId = sent.body.data.batch.id as string
     await processor.processDueJobs(1)
     const running = processor.processDueJobs(1)
-    await new Promise((resolve) => setTimeout(resolve, 50))
-    const batchId = sent.body.data.batch.id as string
+    await waitFor(async () => {
+      const attempt = await prisma.aiAgentAttempt.findFirst({
+        where: { inputBatchId: batchId },
+      })
+      expect(attempt).toBeTruthy()
+    })
 
     const stopped = await authRequest(app, coordinatorToken)
       .post(batchPath(opened.task.id, opened.conversation.id, batchId, 'stop'))
@@ -469,3 +492,20 @@ describe('AI create material failure control (e2e) #317', () => {
     expect(otherMaterial.sha256).toBe(firstMaterial.sha256)
   })
 })
+
+async function waitFor(assert: () => Promise<void>, timeoutMs = 5_000): Promise<void> {
+  const started = Date.now()
+  let lastError: unknown
+  while (Date.now() - started < timeoutMs) {
+    try {
+      await assert()
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    }
+  }
+  throw lastError
+}
