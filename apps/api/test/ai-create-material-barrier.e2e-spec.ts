@@ -317,6 +317,23 @@ describe('AI create material readiness barrier (e2e) #316', () => {
         .expect(201)
       expect(retry.body.data.batch.status).toBe('waiting_for_materials')
       expect(retry.body.data.batch.id).not.toBe(sent.body.data.batch.id)
+      expect(retry.body.data.batch.materialProgress).toEqual(
+        expect.objectContaining({ failed: 0, ready: 0, total: 1 }),
+      )
+      expect(retry.body.data.batch.materials).toEqual([
+        expect.objectContaining({ status: 'pending' }),
+      ])
+      expect(retry.body.data.events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'batch_status',
+            payload: expect.objectContaining({
+              status: 'waiting_for_materials',
+              failedCount: 0,
+            }),
+          }),
+        ]),
+      )
 
       const parseJobs = await prisma.aiWorkflowJob.findMany({
         where: { taskId, type: 'material_parse' },

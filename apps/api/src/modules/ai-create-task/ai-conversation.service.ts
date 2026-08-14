@@ -321,13 +321,8 @@ export class AiConversationService {
           }
         }
 
-        const progress = materialProgressFromDeps(
-          batch.materials.map((item) => ({
-            required: item.required,
-            parseResultVersion: item.parseResultVersion,
-            failed: isFailedDependency(item),
-          })),
-        )
+        const snapshot = await this.loadBatch(tx, batch.id)
+        const progress = progressOf(snapshot)
         const statusEvent = await tx.aiConversationEvent.create({
           data: {
             organizationId,
@@ -366,7 +361,7 @@ export class AiConversationService {
         const events = [toEventView(userEvent), toEventView(statusEvent)]
         const payload: SendAiConversationMessageResult = {
           conversationId: conversation.id,
-          batch: toBatchView(batch),
+          batch: toBatchView(snapshot),
           events,
           lastSequence: statusSequence,
         }

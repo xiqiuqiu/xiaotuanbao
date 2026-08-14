@@ -69,8 +69,14 @@ function createHarness(options?: {
       updatedAt: now,
       ...data,
     })),
+    update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'mat-1',
+      status: DepartureMaterialStatus.queued,
+      ...data,
+    })),
   }
   const departureMaterialParseRun = {
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 'run-1',
       ...data,
@@ -94,6 +100,7 @@ function createHarness(options?: {
     }),
     update: jest.fn().mockResolvedValue({}),
   }
+  let createdBatch: Record<string, unknown> | null = null
   const aiInputBatch = {
     count: jest.fn().mockResolvedValue(0),
     create: jest.fn(
@@ -110,22 +117,31 @@ function createHarness(options?: {
             }>
           }
         } & Record<string, unknown>
-      }) => ({
-        id: 'batch-1',
-        status: AiInputBatchStatus.waiting_for_materials,
-        conversationVersion: 1,
-        createdAt: now,
-        updatedAt: now,
-        ...data,
-        materials: (data.materials?.create ?? []).map((row, index) => ({
-          id: `dep-${index}`,
-          required: row.required,
-          parseResultVersion: row.parseResultVersion,
-          materialId: row.materialId,
-          organizationId: row.organizationId,
-        })),
-      }),
+      }) => {
+        createdBatch = {
+          id: 'batch-1',
+          status: AiInputBatchStatus.waiting_for_materials,
+          conversationVersion: 1,
+          createdAt: now,
+          updatedAt: now,
+          ...data,
+          materials: (data.materials?.create ?? []).map((row, index) => ({
+            id: `dep-${index}`,
+            required: row.required,
+            parseResultVersion: row.parseResultVersion,
+            materialId: row.materialId,
+            organizationId: row.organizationId,
+          })),
+        }
+        return createdBatch
+      },
     ),
+    findUniqueOrThrow: jest.fn(async () => {
+      if (!createdBatch) {
+        throw new Error('aiInputBatch not created')
+      }
+      return createdBatch
+    }),
   }
   const aiConversationEvent = {
     findFirst: jest.fn().mockResolvedValue(null),
@@ -306,5 +322,99 @@ describe('AiConversationService.sendText attachment upload', () => {
     ).rejects.toThrow(uploadError)
 
     expect(storedObjectService.delete).toHaveBeenCalledWith(organizationId, stored.id)
+  })
+
+  it('does not report a false failure when resending a previously failed attachment', async () => {
+    const failedMaterial = {
+      id: 'mat-failed',
+      originalFilename: file.originalname,
+      status: DepartureMaterialStatus.failed,
+      parseRuns: [{ errorCode: 'PARSE_FAILED', status: 'failed', resultVersion: 1 }],
+    }
+    const queuedMaterial = {
+      ...failedMaterial,
+      status: DepartureMaterialStatus.queued,
+      parseRuns: [{ errorCode: null, status: 'queued', resultVersion: 2 }],
+    }
+    const { service, tx } = createHarness()
+    tx.departureMaterial.findUnique.mockResolvedValue(failedMaterial)
+    tx.departureMaterialParseRun.findFirst.mockResolvedValue({ resultVersion: 1 })
+    tx.aiInputBatch.create.mockImplementation(
+      async ({
+        data,
+      }: {
+        data: {
+          materials?: {
+            create: Array<{
+              required: boolean
+              parseResultVersion: number | null
+              materialId: string
+              organizationId: string
+            }>
+          }
+        } & Record<string, unknown>
+      }) => ({
+        id: 'batch-1',
+        status: AiInputBatchStatus.waiting_for_materials,
+        conversationVersion: 1,
+        createdAt: now,
+        updatedAt: now,
+        ...data,
+        materials: (data.materials?.create ?? []).map((row, index) => ({
+          id: `dep-${index}`,
+          required: row.required,
+          parseResultVersion: row.parseResultVersion,
+          materialId: row.materialId,
+          organizationId: row.organizationId,
+          material: failedMaterial,
+        })),
+      }),
+    )
+    tx.aiInputBatch.findUniqueOrThrow.mockResolvedValue({
+      id: 'batch-1',
+      status: AiInputBatchStatus.waiting_for_materials,
+      conversationVersion: 1,
+      materials: [
+        {
+          id: 'dep-0',
+          required: true,
+          parseResultVersion: null,
+          materialId: failedMaterial.id,
+          organizationId,
+          material: queuedMaterial,
+        },
+      ],
+    })
+
+    const result = await service.sendText(
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      '同一份资料再发一次',
+      'idem-retry',
+      [file],
+    )
+
+    expect(result.batch.materialProgress).toEqual({ ready: 0, total: 1, failed: 0 })
+    expect(result.batch.materials).toEqual([
+      expect.objectContaining({
+        materialId: failedMaterial.id,
+        status: 'pending',
+      }),
+    ])
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'batch_status',
+          payload: expect.objectContaining({
+            status: 'waiting_for_materials',
+            readyCount: 0,
+            totalCount: 1,
+            failedCount: 0,
+          }),
+        }),
+      ]),
+    )
   })
 })
