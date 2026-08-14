@@ -317,6 +317,7 @@ export class AiCreateTaskService {
       runId: string
       materialId: string
       parseResultVersion: number
+      pageNumber?: number
     }
     try {
       input = getMaterialParseResultInputSchema.parse(rawInput)
@@ -335,6 +336,7 @@ export class AiCreateTaskService {
       inputBatchId: caller.inputBatchId,
       materialId: input.materialId,
       parseResultVersion: input.parseResultVersion,
+      pageNumber: input.pageNumber,
     })
     return getMaterialParseResultOutputSchema.parse(result)
   }
@@ -369,19 +371,11 @@ export class AiCreateTaskService {
     if (!caller.inputBatchId) {
       return []
     }
-    const deps = await this.prisma.aiInputBatchMaterial.findMany({
-      where: {
-        organizationId: caller.organizationId,
-        inputBatchId: caller.inputBatchId,
-        required: true,
-        parseResultVersion: { not: null },
-      },
-      orderBy: { createdAt: 'asc' },
-    })
-    return deps.map((item) => ({
-      materialId: item.materialId,
-      parseResultVersion: item.parseResultVersion as number,
-    }))
+    const indexed = await this.materialService.loadPinnedParseIndex(
+      caller.organizationId,
+      caller.inputBatchId,
+    )
+    return indexed.materials
   }
 
   private async pinnedEventSequences(caller: {

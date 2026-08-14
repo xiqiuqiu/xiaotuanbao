@@ -44,6 +44,8 @@ describe('createGetMaterialParseResultTool', () => {
     mockFetch.mockResolvedValue({
       materialId: 'mat-1',
       parseResultVersion: 1,
+      pageCount: 1,
+      truncated: false,
       pages: [{ pageNumber: 1, source: 'ocr', text: '九月川西线' }],
     })
   })
@@ -76,6 +78,38 @@ describe('createGetMaterialParseResultTool', () => {
         runId: 'run-1',
         materialId: 'mat-1',
         parseResultVersion: 1,
+      },
+    )
+  })
+
+  it('forwards pageNumber for a directed page read', async () => {
+    const tool = createGetMaterialParseResultTool(toolConfig)
+
+    await runWithAssistRequestContext(
+      { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
+      () =>
+        tool.execute?.(
+          {
+            materialId: 'mat-1',
+            parseResultVersion: 1,
+            pageNumber: 2,
+          } as never,
+          {} as never,
+        ),
+    )
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      {
+        apiBaseUrl: 'http://api.local',
+        serviceSecret: 'secret',
+        delegationToken: 'deleg-1',
+      },
+      {
+        taskId: 'task-1',
+        runId: 'run-1',
+        materialId: 'mat-1',
+        parseResultVersion: 1,
+        pageNumber: 2,
       },
     )
   })

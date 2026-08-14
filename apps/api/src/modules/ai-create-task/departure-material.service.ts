@@ -16,6 +16,7 @@ import {
   type Prisma,
 } from '@prisma/client'
 import type { DepartureMaterialView, StoredObjectSummary } from '@xiaotuanbao/shared'
+import { buildMaterialParseIndex, projectParseResultPages } from '@xiaotuanbao/ai-contracts'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { StoredObjectService } from '../stored-object/stored-object.service'
 import {
@@ -316,6 +317,7 @@ export class DepartureMaterialService {
     inputBatchId: string
     materialId: string
     parseResultVersion: number
+    pageNumber?: number
   }) {
     const dependency = await this.prisma.aiInputBatchMaterial.findFirst({
       where: {
@@ -338,19 +340,56 @@ export class DepartureMaterialService {
     if (!run) {
       throw new NotFoundException('发团资料解析结果不存在')
     }
-    const pages = Array.isArray(run.pages) ? run.pages : []
+    const projected = projectParseResultPages(mapParsePages(run.pages), params.pageNumber)
+    if (params.pageNumber != null && projected.pages.length === 0) {
+      throw new NotFoundException('发团资料解析页不存在')
+    }
     return {
       materialId: params.materialId,
       parseResultVersion: run.resultVersion,
-      pages: pages.map((page) => {
-        const record = page as Record<string, unknown>
+      pageCount: projected.pageCount,
+      truncated: projected.truncated,
+      pages: projected.pages,
+    }
+  }
+
+  async loadPinnedParseIndex(organizationId: string, inputBatchId: string) {
+    const deps = await this.prisma.aiInputBatchMaterial.findMany({
+      where: {
+        organizationId,
+        inputBatchId,
+        required: true,
+        parseResultVersion: { not: null },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (deps.length === 0) {
+      return { materials: [], truncationReasons: [] as string[] }
+    }
+    const runs = await this.prisma.departureMaterialParseRun.findMany({
+      where: {
+        status: DepartureMaterialParseRunStatus.succeeded,
+        OR: deps.map((item) => ({
+          materialId: item.materialId,
+          resultVersion: item.parseResultVersion as number,
+        })),
+      },
+      select: { materialId: true, resultVersion: true, pages: true },
+    })
+    const runByKey = new Map(
+      runs.map((run) => [`${run.materialId}:${run.resultVersion}`, run] as const),
+    )
+    return buildMaterialParseIndex(
+      deps.map((item) => {
+        const parseResultVersion = item.parseResultVersion as number
+        const run = runByKey.get(`${item.materialId}:${parseResultVersion}`)
         return {
-          pageNumber: Number(record.pageNumber),
-          source: record.source === 'native_pdf' ? ('native_pdf' as const) : ('ocr' as const),
-          text: String(record.text ?? ''),
+          materialId: item.materialId,
+          parseResultVersion,
+          pages: mapParsePages(run?.pages),
         }
       }),
-    }
+    )
   }
 
   async executeParseJob(job: {
@@ -557,6 +596,33 @@ export function toMaterialView(
     createdAt: material.createdAt.toISOString(),
     latestResultVersion,
   }
+}
+
+function mapParsePages(pages: unknown): Array<{
+  pageNumber: number
+  source: 'native_pdf' | 'ocr'
+  text: string
+}> {
+  if (!Array.isArray(pages)) {
+    return []
+  }
+  return pages.flatMap((page) => {
+    if (!page || typeof page !== 'object') {
+      return []
+    }
+    const record = page as Record<string, unknown>
+    const pageNumber = Number(record.pageNumber)
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+      return []
+    }
+    return [
+      {
+        pageNumber,
+        source: record.source === 'native_pdf' ? ('native_pdf' as const) : ('ocr' as const),
+        text: String(record.text ?? ''),
+      },
+    ]
+  })
 }
 
 function reusedMaterial(material: DepartureMaterial & {

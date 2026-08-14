@@ -165,14 +165,26 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(agent.callCount()).toBe(beforeParse + 1)
 
     const context = agent.lastTaskContext() as {
-      data?: { materials?: Array<{ materialId: string; parseResultVersion: number }>; pages?: unknown }
+      data?: {
+        materials?: Array<{
+          materialId: string
+          parseResultVersion: number
+          excerpt?: string
+        }>
+        pages?: unknown
+      }
     }
     expect(context.data?.materials).toEqual([
       {
         materialId: materials[0]?.id,
         parseResultVersion: 1,
+        status: 'ready',
+        pageCount: 1,
+        excerpt: expect.any(String),
+        truncated: false,
       },
     ])
+    expect(String(context.data?.materials?.[0]?.excerpt ?? '').length).toBeGreaterThan(0)
     expect(context.data).not.toHaveProperty('pages')
     expect(JSON.stringify(context)).not.toContain(PNG_1X1.toString('base64'))
 

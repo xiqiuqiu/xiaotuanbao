@@ -381,6 +381,10 @@ export class AiWorkflowProcessor {
       materialId: item.materialId,
       parseResultVersion: item.parseResultVersion as number,
     }))
+    const parseIndex = await this.materialService.loadPinnedParseIndex(
+      job.organizationId,
+      job.inputBatchId,
+    )
     const manifestRecord = buildPlaintextContextManifest({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
@@ -390,6 +394,7 @@ export class AiWorkflowProcessor {
       businessSnapshotVersion: task.draft.version,
       modelId,
       materialVersions,
+      truncationReasons: parseIndex.truncationReasons,
     })
 
     const prepared = await this.prisma.$transaction(async (tx) => {

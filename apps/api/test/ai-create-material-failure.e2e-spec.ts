@@ -371,7 +371,14 @@ describe('AI create material failure control (e2e) #317', () => {
       data?: { materials?: Array<{ materialId: string; parseResultVersion: number }> }
     }
     expect(context.data?.materials).toEqual([
-      { materialId: dependency.materialId, parseResultVersion: 1 },
+      {
+        materialId: dependency.materialId,
+        parseResultVersion: 1,
+        status: 'ready',
+        pageCount: 1,
+        excerpt: expect.any(String),
+        truncated: false,
+      },
     ])
   })
 
