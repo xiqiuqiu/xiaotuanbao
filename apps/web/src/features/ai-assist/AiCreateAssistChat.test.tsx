@@ -797,6 +797,53 @@ describe('AiCreateAssistChat', () => {
     expect(capturedView.isRunning).toBe(true)
   })
 
+  it('stops treating the chat as running when material parse fails', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这是团期资料，请按附件填写。' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'waiting_for_materials', readyCount: 0, totalCount: 1 },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(capturedView.isRunning).toBe(true)
+
+    await act(async () => {
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 3,
+          kind: 'error',
+          payload: { errorCode: 'PARSE_FAILED' },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'failed', errorCode: 'PARSE_FAILED' },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
+    })
+
+    expect(screen.getByText('本批处理失败，可修改后重试')).toBeInTheDocument()
+    expect(screen.getByText('处理失败')).toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(false)
+  })
+
   it('updates parse progress in place when a later batch_status event arrives', async () => {
     render(
       <AiCreateAssistChat

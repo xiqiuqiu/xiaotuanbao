@@ -7,6 +7,7 @@ export async function startDeterministicParseWorker(options?: {
   origin: string
   holdNextCall: () => void
   release: () => void
+  setPageText: (text: string) => void
   callCount: () => number
   receivedFilenames: () => string[]
   close: () => Promise<void>
@@ -15,7 +16,7 @@ export async function startDeterministicParseWorker(options?: {
   const receivedFilenames: string[] = []
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
-  const pageText = options?.text ?? '九月川西线 预计 12 人'
+  let pageText = options?.text ?? '九月川西线 预计 12 人'
 
   const server = createServer((request, response) => {
     void handle(request, response)
@@ -62,6 +63,9 @@ export async function startDeterministicParseWorker(options?: {
       releaseHold?.()
       hold = null
       releaseHold = null
+    },
+    setPageText: (text: string) => {
+      pageText = text
     },
     callCount: () => callCount,
     receivedFilenames: () => [...receivedFilenames],

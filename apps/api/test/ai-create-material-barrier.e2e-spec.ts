@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net'
 import { createHash } from 'node:crypto'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
+import { WORKFLOW_MAX_ATTEMPTS } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
@@ -225,5 +226,157 @@ describe('AI create material readiness barrier (e2e) #316', () => {
       })
       .expect(200)
     expect(draft.body.data.draft.snapshot.routeName).toBe(`${testPrefix}-手填路线`)
+  })
+
+  it('fails the input batch when OCR yields no usable text', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    ocr.setPageText('   ')
+    try {
+      const sent = await authRequest(app, coordinatorToken)
+        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `e2e-material-empty-${taskId}`)
+        .field('text', '这是团期资料，请按附件填写。')
+        .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
+        .expect(201)
+      expect(sent.body.data.batch.status).toBe('waiting_for_materials')
+
+      const beforeAgent = agent.callCount()
+      await processor.processDueJobs(1)
+      expect(agent.callCount()).toBe(beforeAgent)
+
+      const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { taskId } })
+      const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
+      const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
+        where: { taskId, type: 'material_parse' },
+      })
+      const events = await prisma.aiConversationEvent.findMany({
+        where: { conversationId },
+        orderBy: { sequence: 'asc' },
+      })
+      expect(material.status).toBe('failed')
+      expect(parseJob.status).toBe('failed')
+      expect(parseJob.lastErrorCode).toBe('PARSE_FAILED')
+      expect(batch.status).toBe('failed')
+      expect(events.map((event) => event.kind)).toEqual(
+        expect.arrayContaining(['user_message', 'batch_status', 'error']),
+      )
+      expect(events.map((event) => event.payload)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ errorCode: 'PARSE_FAILED' }),
+          expect.objectContaining({ status: 'failed', errorCode: 'PARSE_FAILED' }),
+        ]),
+      )
+
+      const retry = await authRequest(app, coordinatorToken)
+        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `e2e-material-empty-retry-${taskId}`)
+        .send({ text: '改用文字说明：九月川西线 12 人。' })
+        .expect(201)
+      expect(retry.body.data.batch.status).toBe('ready_for_agent')
+    } finally {
+      ocr.setPageText('九月川西线 预计 12 人')
+    }
+  })
+
+  it('requeues parse when the same failed attachment is sent again', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    ocr.setPageText('   ')
+    try {
+      const sent = await authRequest(app, coordinatorToken)
+        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `e2e-material-resend-${taskId}`)
+        .field('text', '这是团期资料，请按附件填写。')
+        .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
+        .expect(201)
+      expect(sent.body.data.batch.status).toBe('waiting_for_materials')
+
+      await processor.processDueJobs(1)
+      const failedJob = await prisma.aiWorkflowJob.findFirstOrThrow({
+        where: { taskId, type: 'material_parse' },
+      })
+      expect(failedJob.status).toBe('failed')
+
+      ocr.setPageText('九月川西线 预计 12 人')
+      const retry = await authRequest(app, coordinatorToken)
+        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .set('Idempotency-Key', `e2e-material-resend-retry-${taskId}`)
+        .field('text', '同一份资料再发一次。')
+        .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
+        .expect(201)
+      expect(retry.body.data.batch.status).toBe('waiting_for_materials')
+      expect(retry.body.data.batch.id).not.toBe(sent.body.data.batch.id)
+
+      const parseJobs = await prisma.aiWorkflowJob.findMany({
+        where: { taskId, type: 'material_parse' },
+      })
+      expect(parseJobs).toHaveLength(1)
+      expect(parseJobs[0]).toMatchObject({
+        status: 'pending',
+        attemptCount: 0,
+        inputBatchId: retry.body.data.batch.id,
+        lastErrorCode: null,
+      })
+
+      const beforeAgent = agent.callCount()
+      await processor.processDueJobs(1)
+      expect(agent.callCount()).toBe(beforeAgent)
+
+      const retryBatch = await prisma.aiInputBatch.findUniqueOrThrow({
+        where: { id: retry.body.data.batch.id as string },
+      })
+      expect(retryBatch.status).toBe('ready_for_agent')
+      const agentJobs = await prisma.aiWorkflowJob.findMany({
+        where: { taskId, type: 'agent_batch' },
+      })
+      expect(agentJobs).toHaveLength(1)
+    } finally {
+      ocr.setPageText('九月川西线 预计 12 人')
+    }
+  })
+
+  it('fails the input batch when parse retries are exhausted', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    const sent = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .set('Idempotency-Key', `e2e-material-exhausted-${taskId}`)
+      .field('text', '这是团期资料，请按附件填写。')
+      .attach('files', PNG_1X1, { filename: '超时.png', contentType: 'image/png' })
+      .expect(201)
+    expect(sent.body.data.batch.status).toBe('waiting_for_materials')
+
+    await prisma.aiWorkflowJob.updateMany({
+      where: { taskId, type: 'material_parse' },
+      data: { attemptCount: WORKFLOW_MAX_ATTEMPTS },
+    })
+
+    const beforeOcr = ocr.callCount()
+    const beforeAgent = agent.callCount()
+    await processor.processDueJobs(1)
+    expect(ocr.callCount()).toBe(beforeOcr)
+    expect(agent.callCount()).toBe(beforeAgent)
+
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { taskId } })
+    const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
+    const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { taskId, type: 'material_parse' },
+    })
+    expect(material.status).toBe('failed')
+    expect(parseJob.status).toBe('failed')
+    expect(parseJob.lastErrorCode).toBe('PARSE_FAILED')
+    expect(batch.status).toBe('failed')
+
+    const retry = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .set('Idempotency-Key', `e2e-material-exhausted-retry-${taskId}`)
+      .send({ text: '改用文字说明：九月川西线 12 人。' })
+      .expect(201)
+    expect(retry.body.data.batch.status).toBe('ready_for_agent')
   })
 })

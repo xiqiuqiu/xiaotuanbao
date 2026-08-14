@@ -180,8 +180,9 @@ export class DepartureMaterialService {
       materialId: string
     },
   ): Promise<void> {
+    const jobKey = materialParseJobKey(params.materialId)
     await tx.aiWorkflowJob.upsert({
-      where: { jobKey: materialParseJobKey(params.materialId) },
+      where: { jobKey },
       create: {
         organizationId: params.organizationId,
         taskId: params.taskId,
@@ -189,10 +190,29 @@ export class DepartureMaterialService {
         inputBatchId: params.inputBatchId,
         materialId: params.materialId,
         type: AiWorkflowJobType.material_parse,
-        jobKey: materialParseJobKey(params.materialId),
+        jobKey,
         status: AiWorkflowJobStatus.pending,
       },
       update: {},
+    })
+    await tx.aiWorkflowJob.updateMany({
+      where: {
+        jobKey,
+        status: {
+          in: [AiWorkflowJobStatus.failed, AiWorkflowJobStatus.succeeded],
+        },
+      },
+      data: {
+        conversationId: params.conversationId,
+        inputBatchId: params.inputBatchId,
+        status: AiWorkflowJobStatus.pending,
+        attemptCount: 0,
+        claimedAt: null,
+        claimedBy: null,
+        leaseExpiresAt: null,
+        nextAttemptAt: new Date(),
+        lastErrorCode: null,
+      },
     })
   }
 
@@ -339,22 +359,51 @@ export class DepartureMaterialService {
         where: { id: material.id },
         data: { status, statusVersion: { increment: 1 } },
       })
-      await tx.aiWorkflowJob.update({
-        where: { id: job.id },
-        data: {
-          status:
-            status === DepartureMaterialStatus.failed
-              ? AiWorkflowJobStatus.failed
-              : AiWorkflowJobStatus.succeeded,
-          lastErrorCode: status === DepartureMaterialStatus.failed ? 'PARSE_FAILED' : null,
-          leaseExpiresAt: null,
-        },
-      })
+      if (CONSUMABLE.includes(status)) {
+        await tx.aiWorkflowJob.update({
+          where: { id: job.id },
+          data: {
+            status: AiWorkflowJobStatus.succeeded,
+            lastErrorCode: null,
+            leaseExpiresAt: null,
+          },
+        })
+      }
     })
     if (CONSUMABLE.includes(status)) {
       return { materialId: material.id, parseResultVersion: resultVersion }
     }
     return null
+  }
+
+  async markParseTerminalFailure(materialId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.departureMaterial.updateMany({
+        where: {
+          id: materialId,
+          status: {
+            in: [DepartureMaterialStatus.queued, DepartureMaterialStatus.parsing],
+          },
+        },
+        data: { status: DepartureMaterialStatus.failed, statusVersion: { increment: 1 } },
+      })
+      await tx.departureMaterialParseRun.updateMany({
+        where: {
+          materialId,
+          status: {
+            in: [
+              DepartureMaterialParseRunStatus.queued,
+              DepartureMaterialParseRunStatus.running,
+            ],
+          },
+        },
+        data: {
+          status: DepartureMaterialParseRunStatus.failed,
+          errorCode: 'PARSE_FAILED',
+          endedAt: new Date(),
+        },
+      })
+    })
   }
 
   async pinMaterialVersion(materialId: string, parseResultVersion: number): Promise<string[]> {

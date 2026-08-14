@@ -257,19 +257,16 @@ export class AiWorkflowProcessor {
 
   private async executeParse(job: ClaimedJob): Promise<void> {
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
-      await this.prisma.aiWorkflowJob.update({
-        where: { id: job.id },
-        data: {
-          status: AiWorkflowJobStatus.failed,
-          lastErrorCode: 'PARSE_FAILED',
-          leaseExpiresAt: null,
-        },
-      })
+      if (job.materialId) {
+        await this.materialService.markParseTerminalFailure(job.materialId)
+      }
+      await this.persistFailure(job, 'PARSE_FAILED')
       return
     }
     try {
       const parsed = await this.materialService.executeParseJob(job)
       if (!parsed) {
+        await this.persistFailure(job, 'PARSE_FAILED')
         return
       }
       const batchIds = await this.materialService.pinMaterialVersion(
