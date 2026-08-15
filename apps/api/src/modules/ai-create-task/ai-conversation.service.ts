@@ -46,6 +46,7 @@ import {
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
   RETRY_FAILED_MATERIALS_OPERATION,
+  REVIEW_CONFIRM_CONTINUATION_TEXT,
   SEND_TEXT_OPERATION,
   SSE_CATCH_UP_POLL_MS,
   STOP_BATCH_OPERATION,
@@ -870,6 +871,113 @@ export class AiConversationService {
         live.unsubscribe()
       }
     })
+  }
+
+  async finalizeReviewDisposition(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      taskId: string
+      userId: string
+      reviewPackageId: string
+      inputBatchId: string | null
+      disposition: 'confirmed' | 'rejected'
+    },
+  ): Promise<AiConversationEvent[]> {
+    const batch = params.inputBatchId
+      ? await tx.aiInputBatch.findFirst({
+          where: {
+            id: params.inputBatchId,
+            taskId: params.taskId,
+            organizationId: params.organizationId,
+            status: AiInputBatchStatus.awaiting_review,
+          },
+        })
+      : await tx.aiInputBatch.findFirst({
+          where: {
+            taskId: params.taskId,
+            organizationId: params.organizationId,
+            status: AiInputBatchStatus.awaiting_review,
+          },
+          orderBy: { conversationVersion: 'desc' },
+        })
+    if (!batch) {
+      return []
+    }
+
+    await tx.aiInputBatch.update({
+      where: { id: batch.id },
+      data: { status: AiInputBatchStatus.completed },
+    })
+    const statusEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: batch.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: batch.id,
+        status: AiInputBatchStatus.completed,
+        reviewPackageId: params.reviewPackageId,
+        disposition: params.disposition,
+      },
+    })
+    const events = [statusEvent]
+    if (params.disposition !== 'confirmed') {
+      await tx.aiConversation.update({
+        where: { id: batch.conversationId },
+        data: { updatedAt: new Date() },
+      })
+      return events
+    }
+
+    const userEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: batch.conversationId,
+      kind: AiConversationEventKind.user_message,
+      payload: {
+        text: REVIEW_CONFIRM_CONTINUATION_TEXT,
+        reviewPackageId: params.reviewPackageId,
+        disposition: 'confirmed',
+      },
+    })
+    events.push(userEvent)
+
+    const continuation = await tx.aiInputBatch.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        conversationId: batch.conversationId,
+        creatorUserId: params.userId,
+        userMessageEventId: userEvent.id,
+        conversationVersion: userEvent.sequence,
+        status: AiInputBatchStatus.ready_for_agent,
+      },
+    })
+    await tx.aiWorkflowJob.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        conversationId: batch.conversationId,
+        inputBatchId: continuation.id,
+        type: AiWorkflowJobType.agent_batch,
+        jobKey: agentBatchJobKey(continuation.id),
+        status: AiWorkflowJobStatus.pending,
+      },
+    })
+    const readyEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: batch.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: continuation.id,
+        status: AiInputBatchStatus.ready_for_agent,
+      },
+    })
+    events.push(readyEvent)
+    await tx.aiConversation.update({
+      where: { id: batch.conversationId },
+      data: { updatedAt: new Date() },
+    })
+    return events
   }
 
   async appendEvent(

@@ -131,9 +131,21 @@ export class ConfirmAiReviewPackageDto {
   @Min(1)
   expectedVersion!: number
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedPackageVersion!: number
+
   @IsOptional()
   @IsObject()
   corrections?: Record<string, string | number | null>
+}
+
+export class RejectAiReviewPackageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedPackageVersion!: number
 }
 
 export class PatchAiReviewPackageDto {

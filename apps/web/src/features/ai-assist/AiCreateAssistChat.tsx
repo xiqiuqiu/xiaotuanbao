@@ -5,27 +5,22 @@ import {
   CopilotKit,
   useAgentContext,
   useAttachments,
-  useHumanInTheLoop,
   useRenderTool,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
-import { Alert, Badge, Button, Card, Input, Radio, Space, Typography } from 'antd'
+import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
-  AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
-  awaitReviewPackageDecisionInputSchema,
   aiCreateSharedLightStateSchema,
   searchRouteTemplatesModelInputSchema,
   submitReviewPackageModelInputSchema,
   type AiCreateSharedLightState,
-  type ReviewPackageDecision,
   type SearchRouteTemplatesOutput,
   type RouteTemplateMatchReason,
 } from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
   AiInputBatchView,
-  AiReviewPackageView,
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
@@ -67,102 +62,7 @@ export interface AiCreateAssistChatProps {
   runStatus: AiCreateSharedLightState['runStatus']
   reviewPackageId?: string | null
   progress?: AiCreateSharedLightState['progress']
-  pendingReview?: AiReviewPackageView | null
-  reviewDecision?: ReviewPackageDecision | null
   onReviewPackageSubmitted?: () => void
-}
-
-function ReviewDecisionCard({
-  reviewPackageId,
-  pendingReview,
-  reviewDecision,
-  respond,
-}: {
-  reviewPackageId: string
-  pendingReview?: AiReviewPackageView | null
-  reviewDecision?: ReviewPackageDecision | null
-  respond?: (result: unknown) => Promise<void>
-}) {
-  const respondedRef = useRef(false)
-  const matchingReview = pendingReview?.id === reviewPackageId ? pendingReview : null
-  const matchingDecision =
-    reviewDecision?.reviewPackageId === reviewPackageId ? reviewDecision : null
-
-  useEffect(() => {
-    if (!respond || !matchingDecision || respondedRef.current) {
-      return
-    }
-    respondedRef.current = true
-    void respond(matchingDecision)
-  }, [matchingDecision, respond])
-
-  const labels = formatReviewFieldList(
-    matchingReview?.candidates.map((candidate) => candidate.fieldKey) ?? [],
-  )
-  const needsReviewCount =
-    matchingReview?.candidates.filter((candidate) => candidate.clarity !== 'clear').length ?? 0
-  const cardTitle = matchingDecision
-    ? matchingDecision.status === 'confirmed'
-      ? 'AI 建议已确认'
-      : 'AI 建议已放弃'
-    : 'AI 建议待审核'
-
-  return (
-    <Card
-      className={styles.reviewCard}
-      classNames={{ body: styles.reviewCardBody }}
-      size="small"
-      title={cardTitle}
-      role="status"
-    >
-      {matchingDecision ? (
-        <Typography.Text type="secondary">
-          {matchingDecision.status === 'confirmed'
-            ? '已确认写入，正在继续协作…'
-            : '本次建议已放弃，草稿未修改。'}
-        </Typography.Text>
-      ) : (
-        <>
-          <Typography.Text type="secondary">
-            {labels ? `已建议修改${labels}` : '请在中间表单审核本次建议'}
-          </Typography.Text>
-          {needsReviewCount > 0 ? (
-            <Typography.Text type="warning">其中 {needsReviewCount} 项需要重点核对</Typography.Text>
-          ) : null}
-          <Badge status="processing" text="等待你在发团表单中完成审核" />
-        </>
-      )}
-    </Card>
-  )
-}
-
-function ReviewDecisionGate({
-  agentId,
-  pendingReview,
-  reviewDecision,
-}: {
-  agentId: string
-  pendingReview?: AiReviewPackageView | null
-  reviewDecision?: ReviewPackageDecision | null
-}) {
-  useHumanInTheLoop(
-    {
-      name: AWAIT_REVIEW_PACKAGE_DECISION_TOOL.name,
-      description: '等待 User 在中间表单审核 AI 候选；此工具不写入业务数据',
-      parameters: awaitReviewPackageDecisionInputSchema,
-      agentId,
-      render: ({ args, status, respond }) => (
-        <ReviewDecisionCard
-          reviewPackageId={args.reviewPackageId ?? ''}
-          pendingReview={pendingReview}
-          reviewDecision={reviewDecision}
-          respond={status === 'executing' ? respond : undefined}
-        />
-      ),
-    },
-    [agentId, pendingReview, reviewDecision],
-  )
-  return null
 }
 
 function AssistLightState({
@@ -668,8 +568,6 @@ export function AiCreateAssistChat({
   runStatus,
   reviewPackageId,
   progress,
-  pendingReview,
-  reviewDecision,
   onReviewPackageSubmitted,
 }: AiCreateAssistChatProps) {
   const headers = useMemo(
@@ -968,11 +866,6 @@ export function AiCreateAssistChat({
         />
         <SearchRouteTemplatesNotice agentId={AGENT_ID} />
         <ReviewPackageNotice agentId={AGENT_ID} onSubmitted={onReviewPackageSubmitted} />
-        <ReviewDecisionGate
-          agentId={AGENT_ID}
-          pendingReview={pendingReview}
-          reviewDecision={reviewDecision}
-        />
         <CopilotChatConfigurationProvider
           agentId={AGENT_ID}
           threadId={conversationId}

@@ -78,17 +78,6 @@
   margin-top: 4px;
 }
 
-.reviewCard {
-  width: 100%;
-}
-
-.reviewCardBody {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
 .loading,
 .welcome {
   display: flex;

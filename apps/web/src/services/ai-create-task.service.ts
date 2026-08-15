@@ -3,6 +3,7 @@ import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
+  RejectAiReviewPackageDto,
   DepartureMaterialView,
   DepartureSummary,
   PatchAiReviewPackageDto,
@@ -238,8 +239,10 @@ export async function confirmAiReviewPackage(
 export async function rejectAiReviewPackage(
   taskId: string,
   packageId: string,
+  payload: RejectAiReviewPackageDto,
 ): Promise<AiCreateTaskSummary> {
   return request.post<AiCreateTaskSummary>(
     `/ai-create-tasks/${taskId}/review-packages/${packageId}/reject`,
+    payload,
   )
 }

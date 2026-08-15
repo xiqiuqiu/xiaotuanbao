@@ -62,6 +62,7 @@ export function toReviewPackageView(pkg: {
   status: string
   confirmationUnit: string
   baseObjectVersion: number
+  version: number
   runId: string
   candidates: unknown
 }): AiReviewPackageView {
@@ -70,6 +71,7 @@ export function toReviewPackageView(pkg: {
     status: pkg.status as AiReviewPackageView['status'],
     confirmationUnit: 'basic_info_draft',
     baseObjectVersion: pkg.baseObjectVersion,
+    version: pkg.version,
     runId: pkg.runId,
     candidates: parseStoredCandidates(pkg.candidates).map((candidate) => ({
       fieldKey: candidate.fieldKey,

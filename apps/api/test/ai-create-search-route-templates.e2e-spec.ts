@@ -269,7 +269,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       .post(
         `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
-      .send({ expectedVersion: opened.version })
+      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(200)
 
     expect(confirmed.body.data.draft.snapshot).toMatchObject({
@@ -332,7 +332,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       .post(
         `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
-      .send({ expectedVersion: opened.version })
+      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(400)
     expect(failed.body.message).toContain('常用路线已不可用')
 

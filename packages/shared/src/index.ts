@@ -119,6 +119,7 @@ export type {
   AiReviewCandidateView,
   AiReviewPackageView,
   ConfirmAiReviewPackageDto,
+  RejectAiReviewPackageDto,
   PatchAiReviewPackageDto,
   UpdateDepartureDto,
   TransitionDepartureDto,

@@ -1,8 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
+import { StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
-import type { AiReviewPackageView } from '@xiaotuanbao/shared'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
 import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
 
@@ -283,24 +282,6 @@ const chatProps = {
   runStatus: 'idle' as const,
 }
 
-const pendingReview: AiReviewPackageView = {
-  id: 'pkg-1',
-  status: 'pending',
-  confirmationUnit: 'basic_info_draft',
-  baseObjectVersion: 1,
-  runId: 'run-1',
-  candidates: [
-    {
-      fieldKey: 'name',
-      proposedValue: '八月川西团',
-      userCorrectedValue: null,
-      clarity: 'clear',
-      status: 'pending',
-      evidence: [{ kind: 'user_message', excerpt: '八月川西团' }],
-    },
-  ],
-}
-
 describe('AiCreateAssistChat', () => {
   beforeEach(() => {
     vi.mocked(listAiConversationEvents).mockResolvedValue({
@@ -506,106 +487,35 @@ describe('AiCreateAssistChat', () => {
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
   })
 
-  it('shows a waiting state and responds after the form confirms', async () => {
-    const respond = vi.fn().mockResolvedValue(undefined)
-    const { rerender } = render(
-      <AiCreateAssistChat
-        {...chatProps}
-        runId="run-hitl"
-        pendingReview={{
-          ...pendingReview,
-          candidates: pendingReview.candidates.map((candidate) => ({
-            ...candidate,
-            clarity: 'needs_confirmation' as const,
-          })),
-        }}
-      />,
-    )
+  it('does not register awaitReviewPackageDecision and only shows a form-review status card', async () => {
+    vi.mocked(listAiConversationEvents).mockResolvedValue({
+      conversationId: 'conv-1',
+      events: [
+        {
+          sequence: 1,
+          kind: 'agent_message',
+          payload: { text: '已提交待审核建议，请在中间表单确认。' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'awaiting_review' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 2,
+      activeBatch: { id: 'batch-1', status: 'awaiting_review', conversationVersion: 1 },
+    })
 
-    expect(capturedHumanInTheLoop.name).toBe('awaitReviewPackageDecision')
-    const RenderHitl = capturedHumanInTheLoop.render!
-    const hitlProps = {
-      name: 'awaitReviewPackageDecision',
-      description: '等待 User 审核 AI 候选',
-      toolCallId: 'call-1',
-      args: { reviewPackageId: 'pkg-1' },
-      status: 'executing' as const,
-      result: undefined,
-      respond,
-    }
-    const card = render(createElement(RenderHitl, hitlProps))
+    render(<AiCreateAssistChat {...chatProps} />)
 
-    expect(screen.getByText('AI 建议待审核')).toBeInTheDocument()
-    expect(screen.getByText('已建议修改团名')).toBeInTheDocument()
-    expect(screen.getByText('其中 1 项需要重点核对')).toBeInTheDocument()
-    expect(screen.getByText('等待你在发团表单中完成审核')).toBeInTheDocument()
+    expect(capturedHumanInTheLoop.name).toBeUndefined()
+    expect(await screen.findByText('等待表单审核')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '确认写入草稿' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '拒绝建议' })).not.toBeInTheDocument()
-    expect(card.container.querySelector('button')).toBeNull()
-    expect(respond).not.toHaveBeenCalled()
-
-    rerender(
-      <AiCreateAssistChat
-        {...chatProps}
-        runId="run-hitl"
-        pendingReview={null}
-        reviewDecision={{
-          reviewPackageId: 'pkg-1',
-          status: 'confirmed',
-          snapshotVersion: 2,
-        }}
-      />,
-    )
-    const UpdatedRenderHitl = capturedHumanInTheLoop.render!
-    card.rerender(createElement(UpdatedRenderHitl, hitlProps))
-
-    await waitFor(() => {
-      expect(respond).toHaveBeenCalledWith({
-        reviewPackageId: 'pkg-1',
-        status: 'confirmed',
-        snapshotVersion: 2,
-      })
-    })
-    expect(respond).toHaveBeenCalledTimes(1)
-  })
-
-  it('keeps waiting without a decision and returns a rejection only after the user API succeeds', async () => {
-    const respond = vi.fn().mockResolvedValue(undefined)
-    const { rerender } = render(
-      <AiCreateAssistChat
-        {...chatProps}
-        runId="run-reject"
-        pendingReview={pendingReview}
-        reviewDecision={null}
-      />,
-    )
-    const RenderHitl = capturedHumanInTheLoop.render!
-    const hitlProps = {
-      name: 'awaitReviewPackageDecision',
-      description: '等待 User 审核 AI 候选',
-      toolCallId: 'call-reject',
-      args: { reviewPackageId: 'pkg-1' },
-      status: 'executing' as const,
-      result: undefined,
-      respond,
-    }
-    const card = render(createElement(RenderHitl, hitlProps))
-
-    expect(respond).not.toHaveBeenCalled()
-    rerender(
-      <AiCreateAssistChat
-        {...chatProps}
-        runId="run-reject"
-        pendingReview={null}
-        reviewDecision={{ reviewPackageId: 'pkg-1', status: 'rejected' }}
-      />,
-    )
-    card.rerender(createElement(capturedHumanInTheLoop.render!, hitlProps))
-
-    await waitFor(() => {
-      expect(respond).toHaveBeenCalledWith({ reviewPackageId: 'pkg-1', status: 'rejected' })
-    })
-    expect(screen.getByText('本次建议已放弃，草稿未修改。')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '确认' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
   })
 
   it('does not call runAgent when the durable chat mounts', () => {

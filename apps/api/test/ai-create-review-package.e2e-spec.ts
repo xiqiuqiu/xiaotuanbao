@@ -182,7 +182,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .post(
         `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/reject`,
       )
-      .send({})
+      .send({ expectedPackageVersion: 1 })
       .expect(200)
 
     const resubmitted = await agentSubmit(opened.delegationToken, {
@@ -230,7 +230,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .post(
         `/api/ai-create-tasks/${rejectedOpened.taskId}/review-packages/${rejectedSubmit.body.data.reviewPackageId}/reject`,
       )
-      .send({})
+      .send({ expectedPackageVersion: 1 })
       .expect(200)
     expect(rejected.body.data.pendingReview).toBeNull()
     expect(rejected.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
@@ -238,7 +238,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const confirmed = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
-      .send({ expectedVersion: opened.version })
+      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(200)
 
     expect(confirmed.body.data.pendingReview).toBeNull()
@@ -298,6 +298,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
       .send({
         expectedVersion: opened.version,
+        expectedPackageVersion: 1,
         corrections: { startDate: null, expectedGuestCountHint: null },
       })
       .expect(200)
@@ -338,7 +339,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     const conflict = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
-      .send({ expectedVersion: opened.version + 1 })
+      .send({ expectedVersion: opened.version + 1, expectedPackageVersion: 1 })
       .expect(409)
 
     expect(conflict.body.message).toContain('旧候选不能覆盖新值')
@@ -367,14 +368,14 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
 
     await authRequest(app, financeToken)
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
-      .send({ expectedVersion: opened.version })
+      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(403)
 
     await request(app.getHttpServer())
       .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
       .set('Authorization', `Bearer ${opened.delegationToken}`)
       .set('Origin', 'http://localhost:5173')
-      .send({ expectedVersion: opened.version })
+      .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(401)
 
     const invalid = await agentSubmit(opened.delegationToken, {

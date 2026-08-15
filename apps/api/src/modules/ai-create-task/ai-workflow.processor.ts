@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt'
 import {
   AiCollaborationError,
   type HeadlessExecutionResult,
+  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AiAgentAttemptStatus,
@@ -12,6 +13,7 @@ import {
   AiConversationInteractionStatus,
   AiCreateActivityRunStatus,
   AiInputBatchStatus,
+  AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   OrganizationStatus,
@@ -46,6 +48,7 @@ import {
   materialProgressFromDeps,
   parseErrorMessage,
 } from './departure-material.constants'
+import { toStoredCandidates } from './review-package.mapper'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -602,6 +605,11 @@ export class AiWorkflowProcessor {
             }
           : null
 
+      const reviewPackageId =
+        result.kind === 'awaiting_review'
+          ? await this.persistReviewPackage(tx, job, result.reviewPackage)
+          : null
+
       const agentEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -611,6 +619,7 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           attemptId,
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
+          ...(reviewPackageId ? { reviewPackageId } : {}),
         } as Prisma.InputJsonValue,
       })
       published.push(agentEvent.id)
@@ -636,7 +645,12 @@ export class AiWorkflowProcessor {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
         kind: AiConversationEventKind.batch_status,
-        payload: { batchId: job.inputBatchId, status: batchStatus, attemptId },
+        payload: {
+          batchId: job.inputBatchId,
+          status: batchStatus,
+          attemptId,
+          ...(reviewPackageId ? { reviewPackageId } : {}),
+        },
       })
       published.push(statusEvent.id)
 
@@ -880,6 +894,61 @@ export class AiWorkflowProcessor {
       select: { id: true },
     })
     return owned !== null
+  }
+
+  private async persistReviewPackage(
+    tx: Prisma.TransactionClient,
+    job: ClaimedJob,
+    reviewPackage: SubmitReviewPackageModelInput,
+  ): Promise<string> {
+    const task = await tx.aiCreateTask.findFirst({
+      where: { id: job.taskId, organizationId: job.organizationId },
+      include: {
+        draft: true,
+        reviewPackages: {
+          where: { status: AiReviewPackageStatus.pending },
+          take: 1,
+        },
+      },
+    })
+    if (!task?.draft) {
+      throw new Error('REVIEW_PACKAGE_TASK_MISSING')
+    }
+    const existing = task.reviewPackages[0]
+    if (existing) {
+      if (!existing.inputBatchId) {
+        await tx.aiReviewPackage.update({
+          where: { id: existing.id },
+          data: { inputBatchId: job.inputBatchId },
+        })
+      }
+      return existing.id
+    }
+    if (task.draft.version !== reviewPackage.objectVersion) {
+      throw new Error('VERSION_CONFLICT')
+    }
+    const run = await this.getOrCreateRunningActivityRun(
+      tx,
+      job.organizationId,
+      job.taskId,
+      job.inputBatch.creatorUserId,
+    )
+    const stored = toStoredCandidates(reviewPackage.candidates)
+    const created = await tx.aiReviewPackage.create({
+      data: {
+        organizationId: job.organizationId,
+        taskId: job.taskId,
+        runId: run.id,
+        inputBatchId: job.inputBatchId,
+        status: AiReviewPackageStatus.pending,
+        confirmationUnit: reviewPackage.confirmationUnit,
+        baseObjectVersion: task.draft.version,
+        baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
+        candidates: stored as unknown as Prisma.InputJsonValue,
+        version: 1,
+      },
+    })
+    return created.id
   }
 }
 

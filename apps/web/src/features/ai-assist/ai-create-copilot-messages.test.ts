@@ -9,7 +9,7 @@ describe('AI create chat status projection', () => {
     expect(batchStatusLabel('agent_running')).toBe('AI 处理中')
     expect(batchStatusLabel('ready_for_agent', null, { queued: true })).toBe('已排队')
     expect(batchStatusLabel('awaiting_user_input')).toBe('等待回答')
-    expect(batchStatusLabel('awaiting_review')).toBe('AI 建议待审核')
+    expect(batchStatusLabel('awaiting_review')).toBe('等待表单审核')
     expect(batchStatusLabel('cancelled', null, { reason: 'user_stop' })).toBe('已停止当前处理')
     expect(batchStatusLabel('cancelled', null, { reason: 'interaction_cancelled' })).toBe(
       '已取消等待',
@@ -101,7 +101,7 @@ describe('AI create chat status projection', () => {
     const statuses = messages
       .filter((message) => message.activityType === 'ai-create-batch-status')
       .map((message) => message.content as { label?: string; showStopAction?: boolean })
-    expect(statuses.map((item) => item.label)).toEqual(['AI 建议待审核'])
+    expect(statuses.map((item) => item.label)).toEqual(['等待表单审核'])
     expect(statuses.some((item) => item.showStopAction)).toBe(false)
   })
 

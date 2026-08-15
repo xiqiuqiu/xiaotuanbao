@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { Button, Card, Drawer, Form, Spin, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
 import type { AiCreateTaskSummary, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
-import type { ReviewPackageDecision } from '@xiaotuanbao/ai-contracts'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -80,7 +79,6 @@ export function CreateDepartureWizard() {
   const [taskId, setTaskId] = useState<string | null>(searchTaskId ?? null)
   const [draftVersion, setDraftVersion] = useState<number | null>(null)
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>('idle')
-  const [reviewDecision, setReviewDecision] = useState<ReviewPackageDecision | null>(null)
   const [infoForm] = Form.useForm<InfoFormValues>()
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -639,17 +637,11 @@ export function CreateDepartureWizard() {
       pendingCorrectionsRef.current = {}
       return confirmAiReviewPackage(taskId, pendingReview.id, {
         expectedVersion: draftVersion,
+        expectedPackageVersion: pendingReview.version,
         ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
       })
     },
     onSuccess: (summary) => {
-      if (pendingReview) {
-        setReviewDecision({
-          reviewPackageId: pendingReview.id,
-          status: 'confirmed',
-          snapshotVersion: summary.draft.version,
-        })
-      }
       applyConfirmedTask(summary)
       message.success('已将确认值写入发团创建草稿')
     },
@@ -684,12 +676,11 @@ export function CreateDepartureWizard() {
       if (!taskId || !pendingReview) {
         throw new Error('没有待确认的审核包')
       }
-      return rejectAiReviewPackage(taskId, pendingReview.id)
+      return rejectAiReviewPackage(taskId, pendingReview.id, {
+        expectedPackageVersion: pendingReview.version,
+      })
     },
     onSuccess: (summary) => {
-      if (pendingReview) {
-        setReviewDecision({ reviewPackageId: pendingReview.id, status: 'rejected' })
-      }
       applySavedDraft(summary)
       queryClient.setQueryData(['ai-create-task', summary.id], summary)
       message.success('已拒绝 AI 建议，发团创建草稿未改动')
@@ -750,10 +741,7 @@ export function CreateDepartureWizard() {
           runStatus="idle"
           reviewPackageId={currentTask.pendingReview?.id ?? null}
           progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
-          pendingReview={currentTask.pendingReview}
-          reviewDecision={reviewDecision}
           onReviewPackageSubmitted={() => {
-            setReviewDecision(null)
             void refetchTaskReviewRef.current()
           }}
         />,
@@ -790,7 +778,6 @@ export function CreateDepartureWizard() {
     assistAvailability?.enabled,
     error,
     loading,
-    reviewDecision,
     session,
     setContent,
     taskReview,

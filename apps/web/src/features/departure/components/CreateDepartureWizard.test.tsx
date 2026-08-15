@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { ConfigProvider, Modal, message } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
-import { createElement, StrictMode, type ComponentType, type ReactNode } from 'react'
+import { StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type {
@@ -300,6 +300,7 @@ function mockPendingReview(
     status: 'pending',
     confirmationUnit: 'basic_info_draft',
     baseObjectVersion: 1,
+    version: 1,
     runId: 'run-1',
     candidates: [
       {
@@ -1577,36 +1578,18 @@ describe('CreateDepartureWizard', () => {
     await screen.findByRole('button', { name: '确认写入草稿' })
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
     await screen.findByLabelText('询问当前发团草稿')
-    const respond = vi.fn().mockResolvedValue(undefined)
-    const hitlProps = {
-      name: 'awaitReviewPackageDecision',
-      description: '等待 User 审核 AI 候选',
-      toolCallId: 'call-1',
-      args: { reviewPackageId: 'pkg-1' },
-      status: 'executing' as const,
-      result: undefined,
-      respond,
-    }
-    const hitl = render(createElement(hitlRegistration.current!.render, hitlProps))
     fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
 
     await waitFor(() => {
       expect(confirmAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
         expectedVersion: 2,
+        expectedPackageVersion: 1,
         corrections: { name: '修正团名' },
       })
     })
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
-    })
-    hitl.rerender(createElement(hitlRegistration.current!.render, hitlProps))
-    await waitFor(() => {
-      expect(respond).toHaveBeenCalledWith({
-        reviewPackageId: 'pkg-1',
-        status: 'confirmed',
-        snapshotVersion: 3,
-      })
     })
     expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
   })
@@ -1647,7 +1630,9 @@ describe('CreateDepartureWizard', () => {
     await user.click(await screen.findByRole('button', { name: '拒绝建议' }))
 
     await waitFor(() => {
-      expect(rejectAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1')
+      expect(rejectAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedPackageVersion: 1,
+      })
     })
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
