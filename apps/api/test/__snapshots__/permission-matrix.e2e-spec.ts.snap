@@ -45,6 +45,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "departure:write",
+    "route": "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/interactions/:interactionId/cancel",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
     "route": "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/messages",
   },
   {
@@ -901,6 +906,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/stop [departure:write]",
     "GET /api/ai-create-tasks/:taskId/conversations/:conversationId/events [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/interactions/:interactionId/cancel [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/messages [departure:write]",
     "GET /api/ai-create-tasks/:taskId/conversations/:conversationId/stream [departure:write]",
     "GET /api/ai-create-tasks/:taskId/materials [departure:write]",
@@ -1072,6 +1078,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/stop [departure:write]",
     "GET /api/ai-create-tasks/:taskId/conversations/:conversationId/events [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/interactions/:interactionId/cancel [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/messages [departure:write]",
     "GET /api/ai-create-tasks/:taskId/conversations/:conversationId/stream [departure:write]",
     "GET /api/ai-create-tasks/:taskId/materials [departure:write]",

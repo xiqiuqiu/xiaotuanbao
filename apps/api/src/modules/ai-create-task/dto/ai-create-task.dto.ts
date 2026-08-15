@@ -146,6 +146,34 @@ export class SendAiConversationMessageDto {
   @IsString()
   @MaxLength(8000)
   text?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  replyToEventId?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  interactionId?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  interactionVersion?: number
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  selectedOptionId?: string
+}
+
+export class CancelAiConversationInteractionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  version!: number
 }
 
 export class RetryFailedMaterialsDto {

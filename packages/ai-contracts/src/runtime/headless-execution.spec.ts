@@ -75,12 +75,43 @@ describe('headless Agent execution contract', () => {
     expect(
       headlessExecutionResultSchema.parse({
         kind: 'awaiting_user_input',
-        question: '出团日期是哪一天？',
+        interaction: { type: 'free_text', prompt: '出团日期是哪一天？' },
       }),
     ).toEqual({
       kind: 'awaiting_user_input',
-      question: '出团日期是哪一天？',
+      interaction: { type: 'free_text', prompt: '出团日期是哪一天？' },
     })
+
+    expect(
+      headlessExecutionResultSchema.parse({
+        kind: 'awaiting_user_input',
+        interaction: {
+          type: 'single_choice',
+          prompt: '出团几天？',
+          options: [
+            { id: '3d', label: '3天' },
+            { id: '5d', label: '5天' },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'single_choice', prompt: '出团几天？' },
+    })
+
+    expect(() =>
+      headlessExecutionResultSchema.parse({
+        kind: 'awaiting_user_input',
+        question: '出团日期是哪一天？',
+      }),
+    ).toThrow()
+
+    expect(() =>
+      headlessExecutionResultSchema.parse({
+        kind: 'awaiting_user_input',
+        interaction: { type: 'single_choice', prompt: '出团几天？' },
+      }),
+    ).toThrow()
 
     expect(
       headlessExecutionResultSchema.parse({

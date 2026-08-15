@@ -335,6 +335,7 @@ model Organization {
   aiReviewRecords AiReviewRecord[]
   aiConversations AiConversation[]
   aiConversationEvents AiConversationEvent[]
+  aiConversationInteractions AiConversationInteraction[]
   aiInputBatches AiInputBatch[]
   aiInputBatchMaterials AiInputBatchMaterial[]
   aiWorkflowJobs AiWorkflowJob[]
@@ -1311,6 +1312,7 @@ model AiConversation {
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
   events         AiConversationEvent[]
+  interactions   AiConversationInteraction[]
   inputBatches   AiInputBatch[]
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
@@ -1332,7 +1334,9 @@ model AiConversationEvent {
   kind           AiConversationEventKind
   payload        Json
   createdAt      DateTime                @default(now()) @map("created_at")
-  inputBatches   AiInputBatch[]
+  inputBatches   AiInputBatch[]          @relation("AiInputBatchUserMessage")
+  replyBatches   AiInputBatch[]          @relation("AiInputBatchReplyTo")
+  askedInteraction AiConversationInteraction?
 
   @@unique([conversationId, sequence])
   @@index([organizationId, createdAt])
@@ -1351,7 +1355,9 @@ model AiInputBatch {
   creatorUserId        String              @map("creator_user_id")
   creator              User                @relation("AiInputBatchCreator", fields: [creatorUserId], references: [id])
   userMessageEventId   String              @map("user_message_event_id")
-  userMessageEvent     AiConversationEvent @relation(fields: [userMessageEventId], references: [id])
+  userMessageEvent     AiConversationEvent @relation("AiInputBatchUserMessage", fields: [userMessageEventId], references: [id])
+  replyToEventId       String?             @map("reply_to_event_id")
+  replyToEvent         AiConversationEvent? @relation("AiInputBatchReplyTo", fields: [replyToEventId], references: [id])
   conversationVersion  Int                 @map("conversation_version")
   status               AiInputBatchStatus  @default(ready_for_agent)
   createdAt            DateTime            @default(now()) @map("created_at")
@@ -1360,11 +1366,54 @@ model AiInputBatch {
   workflowJobs         AiWorkflowJob[]
   agentAttempts        AiAgentAttempt[]
   contextManifests     AiContextManifest[]
+  askedInteractions    AiConversationInteraction[]
 
   @@index([taskId, status])
   @@index([conversationId, createdAt])
   @@index([organizationId, createdAt])
+  @@index([replyToEventId])
   @@map("ai_input_batches")
+}
+
+enum AiConversationInteractionType {
+  free_text
+  single_choice
+
+  @@map("ai_conversation_interaction_type")
+}
+
+enum AiConversationInteractionStatus {
+  pending
+  answered
+  cancelled
+
+  @@map("ai_conversation_interaction_status")
+}
+
+/// AI 追问交互：Agent 向 User 提出的持久化结构化问题，以版本 CAS 接受首个有效响应。
+model AiConversationInteraction {
+  id              String                           @id @default(cuid())
+  organizationId  String                           @map("organization_id")
+  organization    Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId  String                           @map("conversation_id")
+  conversation    AiConversation                   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId    String                           @map("input_batch_id")
+  inputBatch      AiInputBatch                     @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  eventId         String                           @unique @map("event_id")
+  event           AiConversationEvent              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  type            AiConversationInteractionType
+  prompt          String
+  options         Json                             @default("[]")
+  responseSchema  Json                             @map("response_schema")
+  status          AiConversationInteractionStatus  @default(pending)
+  version         Int                              @default(1)
+  responseJson    Json?                            @map("response_json")
+  createdAt       DateTime                         @default(now()) @map("created_at")
+  updatedAt       DateTime                         @updatedAt @map("updated_at")
+
+  @@index([conversationId, status])
+  @@index([organizationId, createdAt])
+  @@map("ai_conversation_interactions")
 }
 
 /// AI 工作流作业：供独立 Worker 原子认领的长耗时工作单元。

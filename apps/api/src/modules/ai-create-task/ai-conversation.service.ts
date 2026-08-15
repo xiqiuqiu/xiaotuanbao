@@ -11,11 +11,14 @@ import {
 import { ConfigService } from '@nestjs/config'
 import type {
   AiConversationEventView,
+  AiConversationInteractionView,
   AiConversationView,
+  AiInputBatchView,
   SendAiConversationMessageResult,
 } from '@xiaotuanbao/shared'
 import {
   AiConversationEventKind,
+  AiConversationInteractionStatus,
   AiConversationStatus,
   AiCreateTaskStatus,
   AiAgentAttemptStatus,
@@ -25,6 +28,7 @@ import {
   DepartureMaterialStatus,
   type AiConversation,
   type AiConversationEvent,
+  type AiConversationInteraction,
   type AiCreateTask,
   type AiInputBatch,
   type DepartureCreationDraft,
@@ -37,6 +41,7 @@ import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
 import {
   ABANDON_BATCH_OPERATION,
+  CANCEL_INTERACTION_OPERATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
@@ -51,8 +56,16 @@ import {
   toConversationView,
   toEventView,
   toFailedMaterialPayload,
+  toInteractionView,
   type BatchMaterialSource,
 } from './ai-conversation.mapper'
+import {
+  isReplyAttempt,
+  requireCompleteReply,
+  resolveReplyText,
+  staleInteractionMessage,
+  type ConversationReplyInput,
+} from './ai-conversation.interaction'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateSender, lockAiCreateTask } from './ai-create-task.lock'
 import {
@@ -133,6 +146,7 @@ export class AiConversationService {
     text: string,
     idempotencyKey: string | undefined,
     files: IncomingMaterialFile[] = [],
+    reply: ConversationReplyInput = {},
   ): Promise<SendAiConversationMessageResult> {
     await this.assertAssistAccess(userId)
     const key = idempotencyKey?.trim()
@@ -144,14 +158,21 @@ export class AiConversationService {
     }
     const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
     const trimmed = text.trim() || (attachments.length > 0 ? '请根据附件整理发团资料。' : '')
-    if (!trimmed && attachments.length === 0) {
+    if (!trimmed && attachments.length === 0 && !reply.selectedOptionId) {
       throw new BadRequestException('消息不能为空')
+    }
+    if (isReplyAttempt(reply)) {
+      requireCompleteReply(reply)
     }
 
     const hash = requestHash({
       taskId,
       conversationId,
       text: trimmed,
+      replyToEventId: reply.replyToEventId ?? null,
+      interactionId: reply.interactionId ?? null,
+      interactionVersion: reply.interactionVersion ?? null,
+      selectedOptionId: reply.selectedOptionId ?? null,
       attachments: attachments.map((file) => ({
         filename: file.originalname,
         contentType: (file.mimetype ?? '').toLowerCase(),
@@ -233,11 +254,24 @@ export class AiConversationService {
           return record.resultJson as unknown as SendAiConversationMessageResult
         }
 
-        await this.assertProcessingBatchCapacity(tx, {
-          organizationId,
-          userId,
-          conversationId: conversation.id,
-        })
+        const answering = isReplyAttempt(reply)
+        if (!answering) {
+          await this.assertProcessingBatchCapacity(tx, {
+            organizationId,
+            userId,
+            conversationId: conversation.id,
+          })
+        }
+
+        const replyResult = answering
+          ? await this.consumeInteractionReply(tx, {
+              organizationId,
+              conversationId: conversation.id,
+              text: trimmed,
+              reply,
+            })
+          : null
+        const messageText = replyResult?.text ?? trimmed
 
         const lastEvent = await tx.aiConversationEvent.findFirst({
           where: { conversationId: conversation.id },
@@ -253,12 +287,19 @@ export class AiConversationService {
             sequence: userSequence,
             kind: AiConversationEventKind.user_message,
             payload: {
-              text: trimmed,
+              text: messageText,
               attachments: attachments.map((file) => ({
                 filename: file.originalname,
                 contentType: (file.mimetype ?? '').toLowerCase(),
                 sizeBytes: file.buffer.byteLength,
               })),
+              ...(replyResult
+                ? {
+                    replyToEventId: replyResult.replyToEventId,
+                    interactionId: replyResult.interactionId,
+                    selectedOptionId: replyResult.selectedOptionId ?? null,
+                  }
+                : {}),
             },
           },
         })
@@ -282,6 +323,7 @@ export class AiConversationService {
           ? AiInputBatchStatus.waiting_for_materials
           : AiInputBatchStatus.ready_for_agent
 
+        const queued = !replyResult && (await this.hasBlockingBatch(tx, conversation.id))
         const batch = await tx.aiInputBatch.create({
           data: {
             organizationId,
@@ -289,6 +331,7 @@ export class AiConversationService {
             conversationId: conversation.id,
             creatorUserId: userId,
             userMessageEventId: userEvent.id,
+            replyToEventId: replyResult?.replyToEventId,
             conversationVersion: userSequence,
             status: batchStatus,
             materials: {
@@ -332,6 +375,7 @@ export class AiConversationService {
             payload: {
               batchId: batch.id,
               status: batchStatus,
+              queued,
               readyCount: progress.ready,
               totalCount: progress.total,
               failedCount: progress.failed,
@@ -358,10 +402,14 @@ export class AiConversationService {
           data: { updatedAt: new Date() },
         })
 
-        const events = [toEventView(userEvent), toEventView(statusEvent)]
+        const events = [
+          ...(replyResult?.events ?? []).map(toEventView),
+          toEventView(userEvent),
+          toEventView(statusEvent),
+        ]
         const payload: SendAiConversationMessageResult = {
           conversationId: conversation.id,
-          batch: toBatchView(snapshot),
+          batch: toBatchView(snapshot, { queued }),
           events,
           lastSequence: statusSequence,
         }
@@ -593,7 +641,8 @@ export class AiConversationService {
         }
         if (
           batch.status !== AiInputBatchStatus.ready_for_agent &&
-          batch.status !== AiInputBatchStatus.agent_running
+          batch.status !== AiInputBatchStatus.agent_running &&
+          batch.status !== AiInputBatchStatus.awaiting_user_input
         ) {
           throw new ConflictException('仅可停止尚未结束的 Agent 处理；等待资料时请放弃本批')
         }
@@ -609,12 +658,26 @@ export class AiConversationService {
             leaseExpiresAt: null,
           },
         })
+        const runningAttempt = await tx.aiAgentAttempt.findFirst({
+          where: { inputBatchId: batch.id, status: AiAgentAttemptStatus.running },
+          orderBy: { startedAt: 'desc' },
+        })
         await tx.aiAgentAttempt.updateMany({
           where: { inputBatchId: batch.id, status: AiAgentAttemptStatus.running },
           data: {
             status: AiAgentAttemptStatus.failed,
             errorCode: 'BATCH_CANCELLED',
             endedAt: new Date(),
+          },
+        })
+        await tx.aiConversationInteraction.updateMany({
+          where: {
+            inputBatchId: batch.id,
+            status: AiConversationInteractionStatus.pending,
+          },
+          data: {
+            status: AiConversationInteractionStatus.cancelled,
+            version: { increment: 1 },
           },
         })
         const updated = await tx.aiInputBatch.update({
@@ -626,7 +689,79 @@ export class AiConversationService {
           organizationId,
           conversationId: batch.conversationId,
           kind: AiConversationEventKind.batch_status,
-          payload: { batchId: batch.id, status: AiInputBatchStatus.cancelled },
+          payload: {
+            batchId: batch.id,
+            status: AiInputBatchStatus.cancelled,
+            reason: 'user_stop',
+            attemptId: runningAttempt?.id ?? null,
+          },
+        })
+        return { batch: updated, events: [statusEvent] }
+      },
+    })
+  }
+
+  async cancelInteraction(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    interactionId: string,
+    version: number,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    await this.assertAssistAccess(userId)
+    const existing = await this.prisma.aiConversationInteraction.findFirst({
+      where: { id: interactionId, conversationId, organizationId },
+    })
+    if (!existing) {
+      throw new NotFoundException('追问不存在')
+    }
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId: existing.inputBatchId,
+      operation: CANCEL_INTERACTION_OPERATION,
+      idempotencyKey,
+      request: { interactionId, version },
+      mutate: async (tx) => {
+        const interaction = await tx.aiConversationInteraction.findFirst({
+          where: { id: interactionId, conversationId, organizationId },
+        })
+        if (!interaction) {
+          throw new NotFoundException('追问不存在')
+        }
+        const updatedCount = await tx.aiConversationInteraction.updateMany({
+          where: {
+            id: interaction.id,
+            version,
+            status: AiConversationInteractionStatus.pending,
+          },
+          data: {
+            status: AiConversationInteractionStatus.cancelled,
+            version: { increment: 1 },
+          },
+        })
+        if (updatedCount.count !== 1) {
+          throw new ConflictException(staleInteractionMessage(interaction))
+        }
+        const updated = await tx.aiInputBatch.update({
+          where: { id: interaction.inputBatchId },
+          data: { status: AiInputBatchStatus.cancelled },
+          include: BATCH_MATERIAL_INCLUDE,
+        })
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: {
+            batchId: updated.id,
+            status: AiInputBatchStatus.cancelled,
+            reason: 'interaction_cancelled',
+            interactionId: interaction.id,
+          },
         })
         return { batch: updated, events: [statusEvent] }
       },
@@ -643,7 +778,9 @@ export class AiConversationService {
     conversationId: string
     events: AiConversationEventView[]
     lastSequence: number
-    activeBatch: ReturnType<typeof toBatchView> | null
+    activeBatch: AiInputBatchView | null
+    pendingInteraction: AiConversationInteractionView | null
+    queuedBatches: AiInputBatchView[]
   }> {
     await this.assertAssistAccess(userId)
     await this.findOwnedInProgressTask(organizationId, userId, taskId)
@@ -664,12 +801,12 @@ export class AiConversationService {
       where: { conversationId: conversation.id },
       orderBy: { sequence: 'desc' },
     })
-    const activeBatch = await this.findActiveBatch(conversation.id)
+    const projection = await this.loadBatchProjection(conversation.id)
     return {
       conversationId: conversation.id,
       events: events.map(toEventView),
       lastSequence: last?.sequence ?? 0,
-      activeBatch: activeBatch ? toBatchView(activeBatch) : null,
+      ...projection,
     }
   }
 
@@ -833,8 +970,153 @@ export class AiConversationService {
       where: { conversationId: conversation.id },
       orderBy: { sequence: 'asc' },
     })
-    const activeBatch = await this.findActiveBatch(conversation.id)
-    return toConversationView(conversation, events, activeBatch)
+    const projection = await this.loadBatchProjection(conversation.id)
+    return toConversationView(
+      conversation,
+      events,
+      projection.activeBatchSource,
+      projection.pendingInteractionSource,
+      projection.queuedBatchSources,
+    )
+  }
+
+  private async loadBatchProjection(conversationId: string): Promise<{
+    activeBatch: AiInputBatchView | null
+    pendingInteraction: AiConversationInteractionView | null
+    queuedBatches: AiInputBatchView[]
+    activeBatchSource: BatchWithMaterials | null
+    pendingInteractionSource: AiConversationInteraction | null
+    queuedBatchSources: BatchWithMaterials[]
+  }> {
+    const [openBatches, pendingInteraction] = await Promise.all([
+      this.prisma.aiInputBatch.findMany({
+        where: {
+          conversationId,
+          status: {
+            in: [
+              AiInputBatchStatus.ready_for_agent,
+              AiInputBatchStatus.agent_running,
+              AiInputBatchStatus.waiting_for_materials,
+              AiInputBatchStatus.awaiting_user_input,
+              AiInputBatchStatus.awaiting_review,
+            ],
+          },
+        },
+        include: BATCH_MATERIAL_INCLUDE,
+        orderBy: { conversationVersion: 'asc' },
+      }),
+      this.prisma.aiConversationInteraction.findFirst({
+        where: { conversationId, status: AiConversationInteractionStatus.pending },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+    const activeBatch = pickActiveBatch(openBatches)
+    const queuedBatchSources = openBatches.filter(
+      (batch) =>
+        batch.status === AiInputBatchStatus.ready_for_agent && batch.id !== activeBatch?.id,
+    )
+    return {
+      activeBatch: activeBatch ? toBatchView(activeBatch) : null,
+      pendingInteraction: pendingInteraction ? toInteractionView(pendingInteraction) : null,
+      queuedBatches: queuedBatchSources.map((batch) => toBatchView(batch, { queued: true })),
+      activeBatchSource: activeBatch,
+      pendingInteractionSource: pendingInteraction,
+      queuedBatchSources,
+    }
+  }
+
+  private async consumeInteractionReply(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      conversationId: string
+      text: string
+      reply: ConversationReplyInput
+    },
+  ): Promise<{
+    replyToEventId: string
+    interactionId: string
+    text: string
+    selectedOptionId?: string
+    events: AiConversationEvent[]
+  }> {
+    const reply = requireCompleteReply(params.reply)
+    const interaction = await tx.aiConversationInteraction.findFirst({
+      where: {
+        id: reply.interactionId,
+        conversationId: params.conversationId,
+        organizationId: params.organizationId,
+      },
+    })
+    if (!interaction) {
+      throw new NotFoundException('追问不存在')
+    }
+    if (interaction.eventId !== reply.replyToEventId) {
+      throw new BadRequestException('replyToEventId 与当前追问不匹配')
+    }
+    const resolved = resolveReplyText(interaction, params.text, reply.selectedOptionId)
+    const updated = await tx.aiConversationInteraction.updateMany({
+      where: {
+        id: interaction.id,
+        version: reply.interactionVersion,
+        status: AiConversationInteractionStatus.pending,
+      },
+      data: {
+        status: AiConversationInteractionStatus.answered,
+        version: { increment: 1 },
+        responseJson: {
+          text: resolved.text,
+          selectedOptionId: resolved.selectedOptionId ?? null,
+        },
+      },
+    })
+    if (updated.count !== 1) {
+      throw new ConflictException(staleInteractionMessage(interaction))
+    }
+    await tx.aiInputBatch.update({
+      where: { id: interaction.inputBatchId },
+      data: { status: AiInputBatchStatus.completed },
+    })
+    const statusEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: params.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: interaction.inputBatchId,
+        status: AiInputBatchStatus.completed,
+        interactionId: interaction.id,
+        interactionStatus: AiConversationInteractionStatus.answered,
+      },
+    })
+    return {
+      replyToEventId: interaction.eventId,
+      interactionId: interaction.id,
+      text: resolved.text,
+      selectedOptionId: resolved.selectedOptionId,
+      events: [statusEvent],
+    }
+  }
+
+  private async hasBlockingBatch(
+    tx: Prisma.TransactionClient,
+    conversationId: string,
+  ): Promise<boolean> {
+    const blocking = await tx.aiInputBatch.findFirst({
+      where: {
+        conversationId,
+        status: {
+          in: [
+            AiInputBatchStatus.waiting_for_materials,
+            AiInputBatchStatus.ready_for_agent,
+            AiInputBatchStatus.agent_running,
+            AiInputBatchStatus.awaiting_user_input,
+            AiInputBatchStatus.awaiting_review,
+          ],
+        },
+      },
+      select: { id: true },
+    })
+    return blocking != null
   }
 
   private async assertProcessingBatchCapacity(
@@ -870,25 +1152,6 @@ export class AiConversationService {
         HttpStatus.TOO_MANY_REQUESTS,
       )
     }
-  }
-
-  private async findActiveBatch(conversationId: string) {
-    return this.prisma.aiInputBatch.findFirst({
-      where: {
-        conversationId,
-        status: {
-          in: [
-            AiInputBatchStatus.ready_for_agent,
-            AiInputBatchStatus.agent_running,
-            AiInputBatchStatus.waiting_for_materials,
-            AiInputBatchStatus.awaiting_user_input,
-            AiInputBatchStatus.awaiting_review,
-          ],
-        },
-      },
-      include: BATCH_MATERIAL_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-    })
   }
 
   private async requireOwnedConversation(
@@ -1087,6 +1350,26 @@ export class AiConversationService {
       throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
     }
   }
+}
+
+function pickActiveBatch(batches: BatchWithMaterials[]): BatchWithMaterials | null {
+  const rank: Partial<Record<AiInputBatchStatus, number>> = {
+    [AiInputBatchStatus.agent_running]: 0,
+    [AiInputBatchStatus.waiting_for_materials]: 1,
+    [AiInputBatchStatus.awaiting_user_input]: 2,
+    [AiInputBatchStatus.awaiting_review]: 3,
+    [AiInputBatchStatus.ready_for_agent]: 4,
+  }
+  return (
+    [...batches].sort((left, right) => {
+      const leftRank = rank[left.status] ?? 99
+      const rightRank = rank[right.status] ?? 99
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank
+      }
+      return left.conversationVersion - right.conversationVersion
+    })[0] ?? null
+  )
 }
 
 function requestHash(payload: unknown): string {

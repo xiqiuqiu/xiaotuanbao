@@ -103,6 +103,7 @@ function createHarness(options?: {
   let createdBatch: Record<string, unknown> | null = null
   const aiInputBatch = {
     count: jest.fn().mockResolvedValue(0),
+    findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(
       async ({
         data,

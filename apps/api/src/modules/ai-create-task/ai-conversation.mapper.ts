@@ -1,5 +1,6 @@
 import type {
   AiConversationEventView,
+  AiConversationInteractionView,
   AiConversationView,
   AiInputBatchMaterialView,
   AiInputBatchView,
@@ -8,6 +9,7 @@ import {
   DepartureMaterialStatus,
   type AiConversation,
   type AiConversationEvent,
+  type AiConversationInteraction,
   type AiInputBatch,
 } from '@prisma/client'
 import { materialProgressFromDeps, parseErrorMessage } from './departure-material.constants'
@@ -28,11 +30,43 @@ export type BatchMaterialSource = {
 
 export function toEventView(event: AiConversationEvent): AiConversationEventView {
   return {
+    id: event.id,
     sequence: event.sequence,
     kind: event.kind,
     payload: asRecord(event.payload),
     createdAt: event.createdAt.toISOString(),
   }
+}
+
+export function toInteractionView(
+  interaction: AiConversationInteraction,
+): AiConversationInteractionView {
+  return {
+    id: interaction.id,
+    eventId: interaction.eventId,
+    type: interaction.type,
+    prompt: interaction.prompt,
+    options: parseInteractionOptions(interaction.options),
+    responseSchema: asRecord(interaction.responseSchema),
+    status: interaction.status,
+    version: interaction.version,
+  }
+}
+
+export function parseInteractionOptions(value: unknown): Array<{ id: string; label: string }> {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+    const record = item as Record<string, unknown>
+    if (typeof record.id !== 'string' || typeof record.label !== 'string') {
+      return []
+    }
+    return [{ id: record.id, label: record.label }]
+  })
 }
 
 export function toBatchMaterialView(dep: BatchMaterialSource): AiInputBatchMaterialView {
@@ -53,6 +87,7 @@ export function toBatchView(
   batch: AiInputBatch & {
     materials?: BatchMaterialSource[]
   },
+  options?: { queued?: boolean },
 ): AiInputBatchView {
   const materials = batch.materials?.map(toBatchMaterialView)
   const materialProgress = batch.materials
@@ -68,6 +103,8 @@ export function toBatchView(
     id: batch.id,
     status: batch.status,
     conversationVersion: batch.conversationVersion,
+    replyToEventId: batch.replyToEventId,
+    ...(options?.queued ? { queued: true } : {}),
     ...(materialProgress && materialProgress.total > 0 ? { materialProgress } : {}),
     ...(materials && materials.length > 0 ? { materials } : {}),
   }
@@ -77,12 +114,16 @@ export function toConversationView(
   conversation: AiConversation,
   events: AiConversationEvent[],
   activeBatch: (AiInputBatch & { materials?: BatchMaterialSource[] }) | null,
+  pendingInteraction: AiConversationInteraction | null = null,
+  queuedBatches: Array<AiInputBatch & { materials?: BatchMaterialSource[] }> = [],
 ): AiConversationView {
   return {
     id: conversation.id,
     status: conversation.status,
     events: events.map(toEventView),
     activeBatch: activeBatch ? toBatchView(activeBatch) : null,
+    pendingInteraction: pendingInteraction ? toInteractionView(pendingInteraction) : null,
+    queuedBatches: queuedBatches.map((batch) => toBatchView(batch, { queued: true })),
   }
 }
 

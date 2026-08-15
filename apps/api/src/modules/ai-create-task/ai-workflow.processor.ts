@@ -9,6 +9,7 @@ import {
 import {
   AiAgentAttemptStatus,
   AiConversationEventKind,
+  AiConversationInteractionStatus,
   AiCreateActivityRunStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
@@ -32,6 +33,7 @@ import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.cons
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
+import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
 import { DepartureMaterialService } from './departure-material.service'
 import {
@@ -127,6 +129,7 @@ export class AiWorkflowProcessor {
         const rows = await tx.$queryRaw<{ id: string }[]>`
           SELECT j.id
           FROM ai_workflow_jobs j
+          JOIN ai_input_batches b ON b.id = j.input_batch_id
           WHERE j.type = 'agent_batch'::ai_workflow_job_type
             AND (
               (
@@ -141,13 +144,38 @@ export class AiWorkflowProcessor {
             )
             AND NOT EXISTS (
               SELECT 1
-              FROM ai_input_batches b
-              WHERE b.task_id = j.task_id
-                AND b.status = 'agent_running'::ai_input_batch_status
-                AND b.id <> j.input_batch_id
+              FROM ai_input_batches running
+              WHERE running.task_id = j.task_id
+                AND running.status = 'agent_running'::ai_input_batch_status
+                AND running.id <> j.input_batch_id
             )
-          ORDER BY j.created_at ASC
-          FOR UPDATE SKIP LOCKED
+            AND (
+              NOT EXISTS (
+                SELECT 1
+                FROM ai_conversation_interactions pending
+                WHERE pending.conversation_id = j.conversation_id
+                  AND pending.status = 'pending'::ai_conversation_interaction_status
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM ai_conversation_interactions pending
+                WHERE pending.conversation_id = j.conversation_id
+                  AND pending.status = 'pending'::ai_conversation_interaction_status
+                  AND b.reply_to_event_id = pending.event_id
+              )
+            )
+            AND (
+              NOT EXISTS (
+                SELECT 1
+                FROM ai_input_batches reply
+                WHERE reply.conversation_id = j.conversation_id
+                  AND reply.status = 'ready_for_agent'::ai_input_batch_status
+                  AND reply.reply_to_event_id IS NOT NULL
+              )
+              OR b.reply_to_event_id IS NOT NULL
+            )
+          ORDER BY b.conversation_version ASC
+          FOR UPDATE OF j SKIP LOCKED
           LIMIT 1
         `
         if (rows.length === 0) {
@@ -509,16 +537,55 @@ export class AiWorkflowProcessor {
         result.kind === 'completed'
           ? result.message
           : result.kind === 'awaiting_user_input'
-            ? result.question
+            ? result.interaction.prompt
             : '已提交待审核建议，请在中间表单确认。'
+      const interactionId =
+        result.kind === 'awaiting_user_input' ? randomUUID() : null
+      const interactionPayload =
+        result.kind === 'awaiting_user_input' && interactionId
+          ? {
+              interactionId,
+              type: result.interaction.type,
+              prompt: result.interaction.prompt,
+              options: result.interaction.options ?? [],
+              responseSchema: responseSchemaFor(
+                result.interaction.type === 'single_choice' ? 'single_choice' : 'free_text',
+                result.interaction.options ?? [],
+              ),
+              status: AiConversationInteractionStatus.pending,
+              version: 1,
+            }
+          : null
 
       const agentEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
         kind: AiConversationEventKind.agent_message,
-        payload: { text: message, batchId: job.inputBatchId, attemptId },
+        payload: {
+          text: message,
+          batchId: job.inputBatchId,
+          attemptId,
+          ...(interactionPayload ? { interaction: interactionPayload } : {}),
+        } as Prisma.InputJsonValue,
       })
       published.push(agentEvent.id)
+      if (result.kind === 'awaiting_user_input' && interactionId && interactionPayload) {
+        await tx.aiConversationInteraction.create({
+          data: {
+            id: interactionId,
+            organizationId: job.organizationId,
+            conversationId: job.conversationId,
+            inputBatchId: job.inputBatchId,
+            eventId: agentEvent.id,
+            type: result.interaction.type,
+            prompt: result.interaction.prompt,
+            options: interactionPayload.options,
+            responseSchema: interactionPayload.responseSchema as Prisma.InputJsonValue,
+            status: AiConversationInteractionStatus.pending,
+            version: 1,
+          },
+        })
+      }
 
       const statusEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,

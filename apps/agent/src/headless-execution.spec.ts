@@ -391,7 +391,7 @@ describe('headless Agent runtime contract', () => {
       {
         outcome: {
           kind: 'awaiting_user_input' as const,
-          question: '出团日期是哪一天？',
+          interaction: { type: 'free_text' as const, prompt: '出团日期是哪一天？' },
         },
       },
       {

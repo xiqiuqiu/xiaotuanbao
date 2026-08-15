@@ -151,12 +151,28 @@ vi.mock('@copilotkit/react-core/v2', () => ({
             if (message.role === 'activity' && message.content && typeof message.content === 'object') {
               const content = message.content as {
                 label?: unknown
+                prompt?: unknown
+                status?: unknown
+                type?: unknown
                 failedMaterials?: Array<{ originalFilename: string; errorMessage: string | null }>
                 showMaterialActions?: boolean
               }
               return (
                 <div key={message.id}>
-                  <p role="status">{typeof content.label === 'string' ? content.label : ''}</p>
+                  <p role="status">
+                    {typeof content.label === 'string'
+                      ? content.label
+                      : content.status === 'answered'
+                        ? '追问已回答'
+                        : content.status === 'cancelled'
+                          ? '已取消本次等待'
+                          : content.type === 'single_choice'
+                            ? '请选择一项'
+                            : typeof content.prompt === 'string'
+                              ? '请补充说明'
+                              : ''}
+                  </p>
+                  {typeof content.prompt === 'string' ? <p>{content.prompt}</p> : null}
                   {content.failedMaterials?.map((item) => (
                     <p key={item.originalFilename}>
                       {item.originalFilename}
@@ -167,6 +183,12 @@ vi.mock('@copilotkit/react-core/v2', () => ({
                     <>
                       <button type="button">重试失败资料</button>
                       <button type="button">放弃本批</button>
+                    </>
+                  ) : null}
+                  {content.status === 'pending' ? (
+                    <>
+                      <button type="button">发送回答</button>
+                      <button type="button">取消本次等待</button>
                     </>
                   ) : null}
                 </div>
@@ -1003,5 +1025,117 @@ describe('AiCreateAssistChat', () => {
     )
     expect(runAgent).not.toHaveBeenCalled()
     expect(await screen.findByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
+  })
+
+  it('shows queued and waiting-for-answer states without locking the composer', () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '第一批' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'agent_running', batchId: 'batch-1' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+          {
+            sequence: 3,
+            kind: 'user_message',
+            payload: { text: '第二批排队' },
+            createdAt: '2026-08-15T00:00:01.000Z',
+          },
+          {
+            sequence: 4,
+            kind: 'batch_status',
+            payload: { status: 'ready_for_agent', batchId: 'batch-2', queued: true },
+            createdAt: '2026-08-15T00:00:01.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('AI 处理中')).toBeInTheDocument()
+    expect(screen.getByText('已排队')).toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(false)
+  })
+
+  it('restores a free-text question card from persisted interaction events', () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            id: 'event-q',
+            sequence: 3,
+            kind: 'agent_message',
+            payload: {
+              text: '出团日期是哪一天？',
+              interaction: {
+                interactionId: 'int-1',
+                type: 'free_text',
+                prompt: '出团日期是哪一天？',
+                status: 'pending',
+                version: 1,
+              },
+            },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+          {
+            sequence: 4,
+            kind: 'batch_status',
+            payload: { status: 'awaiting_user_input', batchId: 'batch-1' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getAllByText('出团日期是哪一天？').length).toBeGreaterThan(0)
+    expect(screen.getByText('等待回答')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '发送回答' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '取消本次等待' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /确认|拒绝/ })).not.toBeInTheDocument()
+    expect(capturedView.isRunning).toBe(false)
+  })
+
+  it('restores a single-choice question card from persisted interaction events', () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            id: 'event-choice',
+            sequence: 3,
+            kind: 'agent_message',
+            payload: {
+              text: '这次按几天出团？',
+              interaction: {
+                interactionId: 'int-2',
+                type: 'single_choice',
+                prompt: '这次按几天出团？',
+                options: [
+                  { id: '3d', label: '3天' },
+                  { id: '5d', label: '5天' },
+                ],
+                status: 'pending',
+                version: 1,
+              },
+            },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('请选择一项')).toBeInTheDocument()
+    expect(screen.getAllByText('这次按几天出团？').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '发送回答' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /确认|拒绝/ })).not.toBeInTheDocument()
   })
 })

@@ -9,7 +9,7 @@ import {
   useRenderTool,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
-import { Alert, Badge, Button, Card, Space, Typography } from 'antd'
+import { Alert, Badge, Button, Card, Input, Radio, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
@@ -31,6 +31,7 @@ import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
 import {
   abandonConversationBatch,
+  cancelAiConversationInteraction,
   listAiConversationEvents,
   removeConversationMaterials,
   retryFailedConversationMaterials,
@@ -41,9 +42,11 @@ import { ASSIST_ERROR_TEXT } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
 import {
   BATCH_STATUS_ACTIVITY_TYPE,
+  INTERACTION_ACTIVITY_TYPE,
   isCopilotChatRunning,
   toCopilotChatMessages,
   type BatchStatusActivityContent,
+  type InteractionActivityContent,
 } from './ai-create-copilot-messages'
 import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import { AssistMaterialsTrigger } from './AssistMaterialsTrigger'
@@ -395,6 +398,126 @@ function createBatchStatusActivityRenderer(handlers: {
     ),
   }
 }
+
+// CopilotKit v2 没有可恢复的持久化追问 Slot；用 activity renderer 把服务端交互事件投影为追问卡。
+function InteractionCard({
+  content,
+  pending,
+  onReply,
+  onCancel,
+}: {
+  content: InteractionActivityContent
+  pending: boolean
+  onReply: (content: InteractionActivityContent, text: string, selectedOptionId?: string) => void
+  onCancel: (content: InteractionActivityContent) => void
+}) {
+  const [text, setText] = useState('')
+  const [selectedOptionId, setSelectedOptionId] = useState<string>()
+  const resolved = content.status !== 'pending'
+  const title =
+    content.status === 'answered'
+      ? '追问已回答'
+      : content.status === 'cancelled'
+        ? '已取消本次等待'
+        : content.type === 'single_choice'
+          ? '请选择一项'
+          : '请补充说明'
+
+  return (
+    <Card
+      className={styles.reviewCard}
+      classNames={{ body: styles.reviewCardBody }}
+      size="small"
+      title={title}
+      role="status"
+    >
+      <Typography.Text>{content.prompt}</Typography.Text>
+      {resolved ? (
+        <Typography.Text type="secondary">
+          {content.status === 'answered' ? '已根据你的回答继续处理。' : '已取消等待，可继续发送新的说明。'}
+        </Typography.Text>
+      ) : content.type === 'single_choice' ? (
+        <Radio.Group
+          value={selectedOptionId}
+          onChange={(event) => setSelectedOptionId(event.target.value)}
+          options={content.options.map((option) => ({
+            value: option.id,
+            label: option.label,
+          }))}
+        />
+      ) : (
+        <Input.TextArea
+          aria-label="回答当前追问"
+          value={text}
+          autoSize={{ minRows: 2, maxRows: 4 }}
+          onChange={(event) => setText(event.target.value)}
+        />
+      )}
+      {resolved ? null : (
+        <Space size={8}>
+          <Button
+            type="primary"
+            size="small"
+            loading={pending}
+            disabled={
+              pending ||
+              (content.type === 'single_choice' ? !selectedOptionId : text.trim().length === 0)
+            }
+            onClick={() =>
+              onReply(
+                content,
+                content.type === 'single_choice'
+                  ? (content.options.find((option) => option.id === selectedOptionId)?.label ?? '')
+                  : text,
+                selectedOptionId,
+              )
+            }
+          >
+            发送回答
+          </Button>
+          <Button size="small" loading={pending} disabled={pending} onClick={() => onCancel(content)}>
+            取消本次等待
+          </Button>
+        </Space>
+      )}
+    </Card>
+  )
+}
+
+function createInteractionActivityRenderer(handlers: {
+  pending: boolean
+  onReply: (content: InteractionActivityContent, text: string, selectedOptionId?: string) => void
+  onCancel: (content: InteractionActivityContent) => void
+}): ReactActivityMessageRenderer<InteractionActivityContent> {
+  return {
+    activityType: INTERACTION_ACTIVITY_TYPE,
+    content: {
+      '~standard': {
+        version: 1,
+        vendor: 'xiaotuanbao',
+        validate(value) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as { interactionId?: unknown }).interactionId === 'string' &&
+            typeof (value as { prompt?: unknown }).prompt === 'string'
+          ) {
+            return { value: value as InteractionActivityContent }
+          }
+          return { issues: [{ message: 'invalid interaction activity' }] }
+        },
+      },
+    },
+    render: ({ content }) => (
+      <InteractionCard
+        content={content}
+        pending={handlers.pending}
+        onReply={handlers.onReply}
+        onCancel={handlers.onCancel}
+      />
+    ),
+  }
+}
 const EVENT_CATCH_UP_POLL_MS = 1_000
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
@@ -565,6 +688,9 @@ export function AiCreateAssistChat({
     [runId, taskId],
   )
   const [events, setEvents] = useState<AiConversationEventView[]>(initialEvents)
+  const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
+    initialActiveBatch ?? null,
+  )
   const [draft, setDraft] = useState('')
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
@@ -599,7 +725,13 @@ export function AiCreateAssistChat({
         }),
       )
         .then((page) => {
-          if (!abort.signal.aborted && page.events.length > 0) {
+          if (abort.signal.aborted) {
+            return
+          }
+          if (page.activeBatch !== undefined) {
+            setActiveBatch(page.activeBatch)
+          }
+          if (page.events.length > 0) {
             setEvents((current) => mergeEvents(current, page.events))
             if (page.events.some((event) => event.kind === 'batch_status')) {
               setMaterialsRefreshKey((key) => key + 1)
@@ -665,6 +797,7 @@ export function AiCreateAssistChat({
           idempotencyKeyRef.current,
         )
         setEvents((current) => mergeEvents(current, result.events))
+        setActiveBatch(result.batch)
         setPendingText(null)
         setPendingUploadCount(0)
         idempotencyKeyRef.current = null
@@ -689,10 +822,16 @@ export function AiCreateAssistChat({
     sendRef.current = send
   }, [send])
 
-  const applyCommandResult = useCallback((result: { events: AiConversationEventView[] }) => {
-    setEvents((current) => mergeEvents(current, result.events))
-    setMaterialsRefreshKey((key) => key + 1)
-  }, [])
+  const applyCommandResult = useCallback(
+    (result: { events: AiConversationEventView[]; batch?: AiInputBatchView }) => {
+      setEvents((current) => mergeEvents(current, result.events))
+      if (result.batch) {
+        setActiveBatch(result.batch)
+      }
+      setMaterialsRefreshKey((key) => key + 1)
+    },
+    [],
+  )
 
   const runBatchCommand = useCallback(
     async (execute: () => Promise<{ events: AiConversationEventView[] }>) => {
@@ -751,6 +890,36 @@ export function AiCreateAssistChat({
           )
         },
       }),
+      createInteractionActivityRenderer({
+        pending: commandPending,
+        onReply: (content, text, selectedOptionId) => {
+          void runBatchCommand(() =>
+            sendAiConversationMessage(
+              taskId,
+              conversationId,
+              {
+                text,
+                replyToEventId: content.eventId,
+                interactionId: content.interactionId,
+                interactionVersion: content.version,
+                selectedOptionId,
+              },
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onCancel: (content) => {
+          void runBatchCommand(() =>
+            cancelAiConversationInteraction(
+              taskId,
+              conversationId,
+              content.interactionId,
+              content.version,
+              crypto.randomUUID(),
+            ),
+          )
+        },
+      }),
     ],
     [commandPending, conversationId, runBatchCommand, taskId],
   )
@@ -771,10 +940,10 @@ export function AiCreateAssistChat({
   )
 
   const messages = useMemo(
-    () => toCopilotChatMessages(events, pendingText, initialActiveBatch, pendingUploadCount),
-    [events, initialActiveBatch, pendingText, pendingUploadCount],
+    () => toCopilotChatMessages(events, pendingText, activeBatch, pendingUploadCount),
+    [activeBatch, events, pendingText, pendingUploadCount],
   )
-  const isRunning = isCopilotChatRunning(events, initialActiveBatch, pendingText)
+  const isRunning = isCopilotChatRunning(events, activeBatch, pendingText)
 
   return (
     <div className={styles.root}>

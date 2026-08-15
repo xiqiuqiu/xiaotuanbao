@@ -92,6 +92,7 @@ export type {
   AiConversationEventKind,
   AiInputBatchStatus,
   AiConversationEventView,
+  AiConversationInteractionView,
   AiInputBatchView,
   AiConversationView,
   SendAiConversationMessageDto,
