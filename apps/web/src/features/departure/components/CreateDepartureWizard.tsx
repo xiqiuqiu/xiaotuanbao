@@ -647,6 +647,10 @@ export function CreateDepartureWizard() {
     },
     onError: (caught) => {
       const conflict = readAiCreateTaskConflict(caught)
+      if (conflict && caught instanceof Error && caught.message.includes('已处理')) {
+        applyConfirmedTask(conflict)
+        return
+      }
       if (conflict) {
         queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
         const fields =
@@ -686,6 +690,11 @@ export function CreateDepartureWizard() {
       message.success('已拒绝 AI 建议，发团创建草稿未改动')
     },
     onError: (caught) => {
+      const conflict = readAiCreateTaskConflict(caught)
+      if (conflict && caught instanceof Error && caught.message.includes('已处理')) {
+        applyConfirmedTask(conflict)
+        return
+      }
       message.error(caught instanceof Error ? caught.message : '拒绝审核包失败')
     },
   })

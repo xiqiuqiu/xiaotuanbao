@@ -596,7 +596,7 @@ export class AiCreateTaskService {
         },
       })
       if (claimed.count !== 1) {
-        throw new ConflictException(REVIEW_ALREADY_HANDLED_MESSAGE)
+        await this.throwAlreadyHandled(tx, organizationId, taskId)
       }
       await this.writeReviewRecord(tx, {
         organizationId,
@@ -774,7 +774,7 @@ export class AiCreateTaskService {
         },
       })
       if (claimed.count !== 1) {
-        throw new ConflictException(REVIEW_ALREADY_HANDLED_MESSAGE)
+        await this.throwAlreadyHandled(tx, organizationId, taskId)
       }
 
       const nextVersion = task.draft.version + 1
@@ -1224,12 +1224,27 @@ export class AiCreateTaskService {
       throw new NotFoundException('审核包不存在')
     }
     if (pkg.status !== AiReviewPackageStatus.pending) {
-      throw new ConflictException(REVIEW_ALREADY_HANDLED_MESSAGE)
+      await this.throwAlreadyHandled(tx, organizationId, taskId)
     }
     if (expectedPackageVersion != null && pkg.version !== expectedPackageVersion) {
       throw new ConflictException('审核包版本已变化，请刷新后重试')
     }
     return pkg
+  }
+
+  private async throwAlreadyHandled(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    taskId: string,
+  ): Promise<never> {
+    const task = await tx.aiCreateTask.findFirstOrThrow({
+      where: { id: taskId, organizationId },
+      include: TASK_WITH_PENDING_INCLUDE,
+    })
+    throw new ConflictException({
+      message: REVIEW_ALREADY_HANDLED_MESSAGE,
+      data: this.toSummary(task),
+    })
   }
 
   private parseCorrections(

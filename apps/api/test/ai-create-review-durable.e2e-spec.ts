@@ -361,12 +361,16 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(statuses).toEqual([200, 409])
     const conflict = first.status === 409 ? first : second
     expect(conflict.body.message).toContain('已处理')
+    expect(conflict.body.data.pendingReview).toBeNull()
+    expect(conflict.body.data.draft.snapshot.name).toBe(`${testPrefix}-候选团名`)
 
     const late = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/reject`)
       .send({ expectedPackageVersion: pending.version })
       .expect(409)
     expect(late.body.message).toContain('已处理')
+    expect(late.body.data.pendingReview).toBeNull()
+    expect(late.body.data.draft.snapshot.name).toBe(`${testPrefix}-候选团名`)
 
     await processor.processDueJobs(5)
     const listed = await listEvents(taskId, conversationId)
