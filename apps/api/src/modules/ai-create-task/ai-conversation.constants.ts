@@ -3,6 +3,7 @@ export const RETRY_FAILED_MATERIALS_OPERATION = 'ai-conversation.retry-failed-ma
 export const REMOVE_BATCH_MATERIALS_OPERATION = 'ai-conversation.remove-materials'
 export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
 export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
+export const CANCEL_INTERACTION_OPERATION = 'ai-conversation.cancel-interaction'
 
 /** 同一会话中仍会占用 Worker 的在途批次上限（排队 + 执行中，不含等待用户的暂停态）。 */
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
@@ -10,7 +11,7 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 /** 同一 User 在组织内仍会占用 Worker 的在途批次上限。 */
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
-export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-plaintext/v2'
+export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-plaintext/v3'
 export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v3'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v3'
 export const WORKFLOW_LEASE_MS = 120_000

@@ -45,6 +45,7 @@ import {
   RemoveBatchMaterialsDto,
   SaveDepartureCreationDraftDto,
   SendAiConversationMessageDto,
+  CancelAiConversationInteractionDto,
   ListAiConversationEventsQueryDto,
   StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
@@ -112,6 +113,34 @@ export class AiCreateTaskController {
         buffer: file.buffer,
         size: file.size,
       })),
+      {
+        replyToEventId: dto.replyToEventId,
+        interactionId: dto.interactionId,
+        interactionVersion: dto.interactionVersion,
+        selectedOptionId: dto.selectedOptionId,
+      },
+    )
+  }
+
+  @Post(':taskId/conversations/:conversationId/interactions/:interactionId/cancel')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  cancelInteraction(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('interactionId') interactionId: string,
+    @Body() dto: CancelAiConversationInteractionDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.cancelInteraction(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      interactionId,
+      dto.version,
+      idempotencyKey,
     )
   }
 

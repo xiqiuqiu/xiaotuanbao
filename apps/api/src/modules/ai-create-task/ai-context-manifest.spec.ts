@@ -1,6 +1,8 @@
 import {
+  composePlaintextUserText,
   parseEventSequences,
   projectConversationEventsForAgent,
+  selectPlaintextContextEvents,
 } from './ai-context-manifest'
 
 describe('projectConversationEventsForAgent', () => {
@@ -15,6 +17,42 @@ describe('projectConversationEventsForAgent', () => {
       { sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' },
       { sequence: 2, kind: 'batch_status' },
     ])
+  })
+
+  it('keeps prior user and agent turns in the next attempt context', () => {
+    const selected = selectPlaintextContextEvents(
+      [
+        { sequence: 1, kind: 'user_message', payload: { text: '路线按川西环线，日期还没定' } },
+        { sequence: 2, kind: 'batch_status', payload: { status: 'completed' } },
+        { sequence: 3, kind: 'agent_message', payload: { text: '出团日期是哪一天？' } },
+        { sequence: 4, kind: 'user_message', payload: { text: '另外预计人数大概20人' } },
+      ],
+      4,
+    )
+    const projected = projectConversationEventsForAgent(selected)
+
+    expect(projected.map((event) => event.text)).toEqual([
+      '路线按川西环线，日期还没定',
+      '出团日期是哪一天？',
+      '另外预计人数大概20人',
+    ])
+    expect(
+      composePlaintextUserText(
+        '另外预计人数大概20人',
+        projected,
+      ),
+    ).toContain('出团日期是哪一天？')
+    expect(
+      selectPlaintextContextEvents(
+        [
+          { sequence: 1, kind: 'user_message', payload: { text: '路线按川西环线，日期还没定' } },
+          { sequence: 3, kind: 'agent_message', payload: { text: '出团日期是哪一天？' } },
+          { sequence: 4, kind: 'user_message', payload: { text: '另外预计人数大概20人' } },
+          { sequence: 6, kind: 'user_message', payload: { text: '认领后才出现的消息' } },
+        ],
+        4,
+      ).map((event) => event.sequence),
+    ).toEqual([1, 3, 4])
   })
 
   it('reads integer event sequences from the ContextManifest JSON', () => {

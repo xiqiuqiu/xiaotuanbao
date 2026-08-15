@@ -213,7 +213,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       status: 'completed',
       contextManifest: {
         conversationVersion: expect.any(Number),
-        builderVersion: 'ai-create-plaintext/v2',
+        builderVersion: 'ai-create-plaintext/v3',
         inputHash: expect.any(String),
       },
     })
@@ -247,10 +247,12 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     agent.release()
     await first
     await processor.processDueJobs(5)
-    const done = await prisma.aiInputBatch.count({
-      where: { taskId, status: 'agent_running' },
+    await waitFor(async () => {
+      const done = await prisma.aiInputBatch.count({
+        where: { taskId, status: 'agent_running' },
+      })
+      expect(done).toBe(0)
     })
-    expect(done).toBe(0)
   })
 
   it('reclaims an expired worker lease so a later batch on the same task can run', async () => {

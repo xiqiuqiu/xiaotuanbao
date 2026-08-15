@@ -2,13 +2,12 @@ import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
 import type { AiConversationEventView, AiInputBatchStatus, AiInputBatchView } from '@xiaotuanbao/shared'
 
 export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
+export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
 const RUNNING_BATCH_STATUSES: ReadonlySet<AiInputBatchStatus> = new Set([
   'waiting_for_materials',
-  'ready_for_agent',
-  'agent_running',
 ])
 
 export type FailedMaterialNotice = {
@@ -25,6 +24,16 @@ export type BatchStatusActivityContent = {
   showStopAction?: boolean
 }
 
+export type InteractionActivityContent = {
+  interactionId: string
+  eventId: string
+  type: 'free_text' | 'single_choice'
+  prompt: string
+  options: Array<{ id: string; label: string }>
+  version: number
+  status: 'pending' | 'answered' | 'cancelled'
+}
+
 type MaterialProgress = {
   ready?: number
   total?: number
@@ -34,6 +43,7 @@ type MaterialProgress = {
 export function batchStatusLabel(
   status: string,
   progress?: MaterialProgress | null,
+  extra?: { queued?: boolean; reason?: string },
 ): string | null {
   if (status === 'waiting_for_materials') {
     const ready = progress?.ready
@@ -47,12 +57,84 @@ export function batchStatusLabel(
     }
     return '资料处理中'
   }
-  if (status === 'ready_for_agent') return '已发送'
+  if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
   if (status === 'agent_running') return 'AI 处理中'
+  if (status === 'awaiting_user_input') return '等待回答'
+  if (status === 'awaiting_review') return 'AI 建议待审核'
   if (status === 'completed') return '已完成'
   if (status === 'failed') return '处理失败'
-  if (status === 'cancelled') return '已放弃本批'
+  if (status === 'cancelled') {
+    if (extra?.reason === 'interaction_cancelled') return '已取消等待'
+    if (extra?.reason === 'user_stop') return '已停止当前处理'
+    return '已放弃本批'
+  }
   return null
+}
+
+export function interactionFromPayload(
+  payload: Record<string, unknown>,
+  eventId?: string,
+): InteractionActivityContent | null {
+  const raw = payload.interaction
+  if (!raw || typeof raw !== 'object') {
+    return null
+  }
+  const record = raw as Record<string, unknown>
+  if (
+    typeof record.interactionId !== 'string' ||
+    (record.type !== 'free_text' && record.type !== 'single_choice') ||
+    typeof record.prompt !== 'string'
+  ) {
+    return null
+  }
+  const options = Array.isArray(record.options)
+    ? record.options.flatMap((item) => {
+        if (!item || typeof item !== 'object') {
+          return []
+        }
+        const option = item as Record<string, unknown>
+        if (typeof option.id !== 'string' || typeof option.label !== 'string') {
+          return []
+        }
+        return [{ id: option.id, label: option.label }]
+      })
+    : []
+  return {
+    interactionId: record.interactionId,
+    eventId: typeof record.eventId === 'string' ? record.eventId : eventId ?? '',
+    type: record.type,
+    prompt: record.prompt,
+    options,
+    version: typeof record.version === 'number' ? record.version : 1,
+    status:
+      record.status === 'answered' || record.status === 'cancelled' ? record.status : 'pending',
+  }
+}
+
+export function resolveInteractionStatus(
+  events: AiConversationEventView[],
+  interaction: InteractionActivityContent,
+): InteractionActivityContent['status'] {
+  for (const event of events) {
+    if (event.kind === 'user_message' && event.payload.interactionId === interaction.interactionId) {
+      return 'answered'
+    }
+    if (
+      event.kind === 'batch_status' &&
+      event.payload.interactionId === interaction.interactionId
+    ) {
+      if (
+        event.payload.interactionStatus === 'cancelled' ||
+        event.payload.reason === 'interaction_cancelled'
+      ) {
+        return 'cancelled'
+      }
+      if (event.payload.interactionStatus === 'answered') {
+        return 'answered'
+      }
+    }
+  }
+  return interaction.status
 }
 
 export function latestBatchStatus(
@@ -144,19 +226,21 @@ export function toCopilotChatMessages(
   pendingUploadCount = 0,
 ): ChatMessage[] {
   const messages: ChatMessage[] = []
-  let statusSlot = -1
+  const statusSlots = new Map<string, number>()
   const upsertStatus = (content: BatchStatusActivityContent) => {
+    const key = content.batchId ?? 'current'
     const item: ChatMessage = {
-      id: 'batch-status-current',
+      id: `batch-status-${key}`,
       role: 'activity',
       activityType: BATCH_STATUS_ACTIVITY_TYPE,
       content,
     }
-    if (statusSlot >= 0) {
-      messages[statusSlot] = item
+    const existing = statusSlots.get(key)
+    if (existing != null) {
+      messages[existing] = item
       return
     }
-    statusSlot = messages.length
+    statusSlots.set(key, messages.length)
     messages.push(item)
   }
 
@@ -167,7 +251,6 @@ export function toCopilotChatMessages(
         role: 'user',
         content: String(event.payload.text ?? ''),
       })
-      statusSlot = -1
       continue
     }
     if (event.kind === 'agent_message') {
@@ -176,7 +259,19 @@ export function toCopilotChatMessages(
         role: 'assistant',
         content: String(event.payload.text ?? ''),
       })
-      statusSlot = -1
+      const interaction = interactionFromPayload(event.payload, event.id)
+      if (interaction) {
+        messages.push({
+          id: `interaction-${interaction.interactionId}`,
+          role: 'activity',
+          activityType: INTERACTION_ACTIVITY_TYPE,
+          content: {
+            ...interaction,
+            eventId: interaction.eventId || event.id || `event-${event.sequence}`,
+            status: resolveInteractionStatus(events, interaction),
+          } satisfies InteractionActivityContent,
+        })
+      }
       continue
     }
     if (event.kind === 'error') {
@@ -189,13 +284,15 @@ export function toCopilotChatMessages(
         activityType: BATCH_STATUS_ACTIVITY_TYPE,
         content: { label: '本批处理失败，可修改后重试' } satisfies BatchStatusActivityContent,
       })
-      statusSlot = -1
       continue
     }
     if (event.kind === 'batch_status') {
       const status = String(event.payload.status ?? '')
       const progress = progressFromPayload(event.payload)
-      const label = batchStatusLabel(status, progress)
+      const label = batchStatusLabel(status, progress, {
+        queued: event.payload.queued === true,
+        reason: typeof event.payload.reason === 'string' ? event.payload.reason : undefined,
+      })
       if (label) {
         const failedMaterials = failedMaterialsFromPayload(event.payload)
         upsertStatus({
@@ -203,7 +300,10 @@ export function toCopilotChatMessages(
           batchId: typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined,
           failedMaterials,
           showMaterialActions: status === 'waiting_for_materials' && failedMaterials.length > 0,
-          showStopAction: status === 'ready_for_agent' || status === 'agent_running',
+          showStopAction:
+            status === 'ready_for_agent' ||
+            status === 'agent_running' ||
+            status === 'awaiting_user_input',
         })
       }
     }
@@ -215,8 +315,10 @@ export function toCopilotChatMessages(
       activityType: BATCH_STATUS_ACTIVITY_TYPE,
       content: { label: pendingSendLabel(pendingUploadCount) } satisfies BatchStatusActivityContent,
     })
-  } else if (statusSlot < 0 && activeBatch) {
-    const label = batchStatusLabel(activeBatch.status, activeBatch.materialProgress)
+  } else if (activeBatch && statusSlots.size === 0) {
+    const label = batchStatusLabel(activeBatch.status, activeBatch.materialProgress, {
+      queued: activeBatch.queued === true,
+    })
     if (label) {
       const failedMaterials = (activeBatch.materials ?? []).flatMap((item) =>
         item.status === 'failed'
@@ -234,7 +336,10 @@ export function toCopilotChatMessages(
         batchId: activeBatch.id,
         failedMaterials,
         showMaterialActions: activeBatch.status === 'waiting_for_materials' && failedMaterials.length > 0,
-        showStopAction: activeBatch.status === 'ready_for_agent' || activeBatch.status === 'agent_running',
+        showStopAction:
+          activeBatch.status === 'ready_for_agent' ||
+          activeBatch.status === 'agent_running' ||
+          activeBatch.status === 'awaiting_user_input',
       })
     }
   }

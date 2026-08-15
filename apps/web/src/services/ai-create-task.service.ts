@@ -11,6 +11,7 @@ import type {
   StartAiCreateAssistSessionDto,
   AiCreateAssistSession,
   AiConversationEventView,
+  AiConversationInteractionView,
   AiInputBatchView,
   SendAiConversationMessageResult,
 } from '@/types/api'
@@ -51,13 +52,32 @@ export async function startAiCreateAssistSession(
 export async function sendAiConversationMessage(
   taskId: string,
   conversationId: string,
-  payload: { text: string; files?: File[] },
+  payload: {
+    text: string
+    files?: File[]
+    replyToEventId?: string
+    interactionId?: string
+    interactionVersion?: number
+    selectedOptionId?: string
+  },
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   const files = payload.files ?? []
+  const reply = {
+    replyToEventId: payload.replyToEventId,
+    interactionId: payload.interactionId,
+    interactionVersion: payload.interactionVersion,
+    selectedOptionId: payload.selectedOptionId,
+  }
   if (files.length > 0) {
     const form = new FormData()
     form.append('text', payload.text)
+    if (reply.replyToEventId) form.append('replyToEventId', reply.replyToEventId)
+    if (reply.interactionId) form.append('interactionId', reply.interactionId)
+    if (reply.interactionVersion != null) {
+      form.append('interactionVersion', String(reply.interactionVersion))
+    }
+    if (reply.selectedOptionId) form.append('selectedOptionId', reply.selectedOptionId)
     for (const file of files) {
       form.append('files', file)
     }
@@ -72,7 +92,24 @@ export async function sendAiConversationMessage(
   }
   return request.post<SendAiConversationMessageResult>(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
-    { text: payload.text },
+    { text: payload.text, ...reply },
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
+export async function cancelAiConversationInteraction(
+  taskId: string,
+  conversationId: string,
+  interactionId: string,
+  version: number,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/interactions/${interactionId}/cancel`,
+    { version },
     {
       silentError: true,
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -156,6 +193,8 @@ export async function listAiConversationEvents(
   events: AiConversationEventView[]
   lastSequence: number
   activeBatch: AiInputBatchView | null
+  pendingInteraction?: AiConversationInteractionView | null
+  queuedBatches?: AiInputBatchView[]
 }> {
   return request.get(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/events`,

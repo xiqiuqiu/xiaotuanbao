@@ -899,7 +899,28 @@ export type AiInputBatchStatus =
   | 'failed'
   | 'cancelled'
 
+export type AiConversationInteractionType = 'free_text' | 'single_choice'
+
+export type AiConversationInteractionStatus = 'pending' | 'answered' | 'cancelled'
+
+export interface AiConversationInteractionOption {
+  id: string
+  label: string
+}
+
+export interface AiConversationInteractionView {
+  id: string
+  eventId: string
+  type: AiConversationInteractionType
+  prompt: string
+  options: AiConversationInteractionOption[]
+  responseSchema: Record<string, unknown>
+  status: AiConversationInteractionStatus
+  version: number
+}
+
 export interface AiConversationEventView {
+  id?: string
   sequence: number
   kind: AiConversationEventKind
   payload: Record<string, unknown>
@@ -922,6 +943,8 @@ export interface AiInputBatchView {
   id: string
   status: AiInputBatchStatus
   conversationVersion: number
+  replyToEventId?: string | null
+  queued?: boolean
   materialProgress?: {
     ready: number
     total: number
@@ -935,10 +958,20 @@ export interface AiConversationView {
   status: AiConversationStatus
   events: AiConversationEventView[]
   activeBatch: AiInputBatchView | null
+  pendingInteraction?: AiConversationInteractionView | null
+  queuedBatches?: AiInputBatchView[]
 }
 
 export interface SendAiConversationMessageDto {
-  text: string
+  text?: string
+  replyToEventId?: string
+  interactionId?: string
+  interactionVersion?: number
+  selectedOptionId?: string
+}
+
+export interface CancelAiConversationInteractionDto {
+  version: number
 }
 
 export interface SendAiConversationMessageResult {

@@ -112,6 +112,7 @@ export {
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessCompletedResult,
+  type HeadlessInteraction,
   type HeadlessAwaitingUserInputResult,
   type HeadlessAwaitingReviewResult,
   type HeadlessFailedResult,
