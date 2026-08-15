@@ -75,6 +75,46 @@ export function parseEventSequences(value: unknown): number[] {
   return value.filter((item): item is number => Number.isInteger(item) && item > 0)
 }
 
+const PLAINTEXT_CONTEXT_TAIL_KINDS = new Set(['user_message', 'agent_message'])
+const PLAINTEXT_CONTEXT_TAIL_LIMIT = 40
+
+export function selectPlaintextContextEvents(
+  events: ConversationEventRecord[],
+  conversationVersion: number,
+): ConversationEventRecord[] {
+  return events
+    .filter(
+      (event) =>
+        event.sequence <= conversationVersion && PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind),
+    )
+    .slice(-PLAINTEXT_CONTEXT_TAIL_LIMIT)
+}
+
+export function composePlaintextUserText(
+  currentUserText: string,
+  events: ConversationEventForAgent[],
+): string {
+  const lines = events.flatMap((event) => {
+    if (!event.text) {
+      return []
+    }
+    if (event.kind === 'user_message') {
+      return [`User: ${event.text}`]
+    }
+    if (event.kind === 'agent_message') {
+      return [`Assistant: ${event.text}`]
+    }
+    return []
+  })
+  const currentLine = `User: ${currentUserText}`
+  const lastLine = lines.at(-1)
+  const prior = lastLine === currentLine ? lines.slice(0, -1) : lines
+  if (prior.length === 0) {
+    return currentUserText
+  }
+  return `以下是本会话近期对话，请在此基础上继续，不要忽略已经说过的内容。\n\n${prior.join('\n')}\n\n${currentLine}`
+}
+
 export function projectConversationEventsForAgent(
   events: ConversationEventRecord[],
 ): ConversationEventForAgent[] {

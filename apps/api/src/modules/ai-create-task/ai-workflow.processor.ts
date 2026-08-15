@@ -27,7 +27,12 @@ import {
 import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
-import { buildPlaintextContextManifest } from './ai-context-manifest'
+import {
+  buildPlaintextContextManifest,
+  composePlaintextUserText,
+  projectConversationEventsForAgent,
+  selectPlaintextContextEvents,
+} from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
@@ -413,12 +418,29 @@ export class AiWorkflowProcessor {
       job.organizationId,
       job.inputBatchId,
     )
+    const historyEvents = await this.prisma.aiConversationEvent.findMany({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        sequence: { lte: job.inputBatch.conversationVersion },
+      },
+      orderBy: { sequence: 'asc' },
+      select: { sequence: true, kind: true, payload: true },
+    })
+    const selectedEvents = selectPlaintextContextEvents(
+      historyEvents,
+      job.inputBatch.conversationVersion,
+    )
+    const composedUserText = composePlaintextUserText(
+      userText,
+      projectConversationEventsForAgent(selectedEvents),
+    )
     const manifestRecord = buildPlaintextContextManifest({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
       conversationVersion: job.inputBatch.conversationVersion,
-      eventSequences: [userEvent.sequence],
-      userText,
+      eventSequences: selectedEvents.map((event) => event.sequence),
+      userText: composedUserText,
       businessSnapshotVersion: task.draft.version,
       modelId,
       materialVersions,
@@ -491,7 +513,7 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: prepared.attemptId,
         contextManifestId: prepared.contextManifestId,
-        userText,
+        userText: composedUserText,
       },
       attemptId: prepared.attemptId,
       delegationToken,

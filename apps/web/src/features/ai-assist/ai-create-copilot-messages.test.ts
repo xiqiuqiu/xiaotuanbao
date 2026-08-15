@@ -9,6 +9,7 @@ describe('AI create chat status projection', () => {
     expect(batchStatusLabel('agent_running')).toBe('AI 处理中')
     expect(batchStatusLabel('ready_for_agent', null, { queued: true })).toBe('已排队')
     expect(batchStatusLabel('awaiting_user_input')).toBe('等待回答')
+    expect(batchStatusLabel('awaiting_review')).toBe('AI 建议待审核')
     expect(batchStatusLabel('cancelled', null, { reason: 'user_stop' })).toBe('已停止当前处理')
     expect(batchStatusLabel('cancelled', null, { reason: 'interaction_cancelled' })).toBe(
       '已取消等待',
@@ -75,6 +76,33 @@ describe('AI create chat status projection', () => {
     expect(labels).toContain('已排队')
     expect(labels).toContain('等待回答')
     expect(labels).not.toContain('AI 处理中')
+  })
+
+  it('does not keep 处理中 or 停止 after the same batch enters awaiting_review', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'agent_running', batchId: 'batch-review' },
+          createdAt: '2026-08-15T14:36:11.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'batch_status',
+          payload: { status: 'awaiting_review', batchId: 'batch-review' },
+          createdAt: '2026-08-15T14:36:29.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    const statuses = messages
+      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .map((message) => message.content as { label?: string; showStopAction?: boolean })
+    expect(statuses.map((item) => item.label)).toEqual(['AI 建议待审核'])
+    expect(statuses.some((item) => item.showStopAction)).toBe(false)
   })
 
   it('projects a persisted question as an interaction card, not only assistant text', () => {

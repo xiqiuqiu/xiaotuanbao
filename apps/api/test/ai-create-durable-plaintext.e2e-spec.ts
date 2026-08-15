@@ -213,7 +213,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       status: 'completed',
       contextManifest: {
         conversationVersion: expect.any(Number),
-        builderVersion: 'ai-create-plaintext/v2',
+        builderVersion: 'ai-create-plaintext/v3',
         inputHash: expect.any(String),
       },
     })

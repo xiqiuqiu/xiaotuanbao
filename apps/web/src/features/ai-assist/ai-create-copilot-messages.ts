@@ -60,6 +60,7 @@ export function batchStatusLabel(
   if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
   if (status === 'agent_running') return 'AI 处理中'
   if (status === 'awaiting_user_input') return '等待回答'
+  if (status === 'awaiting_review') return 'AI 建议待审核'
   if (status === 'completed') return '已完成'
   if (status === 'failed') return '处理失败'
   if (status === 'cancelled') {
