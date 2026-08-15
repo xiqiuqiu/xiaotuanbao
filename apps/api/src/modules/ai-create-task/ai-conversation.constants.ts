@@ -4,7 +4,6 @@ export const REMOVE_BATCH_MATERIALS_OPERATION = 'ai-conversation.remove-material
 export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
 export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
 export const CANCEL_INTERACTION_OPERATION = 'ai-conversation.cancel-interaction'
-export const REVIEW_CONFIRM_CONTINUATION_TEXT = '已确认本次审核建议'
 export const REVIEW_ALREADY_HANDLED_MESSAGE = '审核包已处理'
 
 /** 同一会话中仍会占用 Worker 的在途批次上限（排队 + 执行中，不含等待用户的暂停态）。 */

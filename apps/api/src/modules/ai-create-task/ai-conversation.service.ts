@@ -46,7 +46,6 @@ import {
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
   RETRY_FAILED_MATERIALS_OPERATION,
-  REVIEW_CONFIRM_CONTINUATION_TEXT,
   SEND_TEXT_OPERATION,
   SSE_CATCH_UP_POLL_MS,
   STOP_BATCH_OPERATION,
@@ -929,26 +928,14 @@ export class AiConversationService {
       return events
     }
 
-    const userEvent = await this.appendEvent(tx, {
-      organizationId: params.organizationId,
-      conversationId: batch.conversationId,
-      kind: AiConversationEventKind.user_message,
-      payload: {
-        text: REVIEW_CONFIRM_CONTINUATION_TEXT,
-        reviewPackageId: params.reviewPackageId,
-        disposition: 'confirmed',
-      },
-    })
-    events.push(userEvent)
-
     const continuation = await tx.aiInputBatch.create({
       data: {
         organizationId: params.organizationId,
         taskId: params.taskId,
         conversationId: batch.conversationId,
         creatorUserId: params.userId,
-        userMessageEventId: userEvent.id,
-        conversationVersion: userEvent.sequence,
+        userMessageEventId: batch.userMessageEventId,
+        conversationVersion: statusEvent.sequence,
         status: AiInputBatchStatus.ready_for_agent,
       },
     })
@@ -970,6 +957,8 @@ export class AiConversationService {
       payload: {
         batchId: continuation.id,
         status: AiInputBatchStatus.ready_for_agent,
+        reviewPackageId: params.reviewPackageId,
+        disposition: 'confirmed',
       },
     })
     events.push(readyEvent)

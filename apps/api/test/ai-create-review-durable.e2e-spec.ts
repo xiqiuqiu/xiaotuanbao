@@ -2,7 +2,6 @@ import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
-import { REVIEW_CONFIRM_CONTINUATION_TEXT } from '../src/modules/ai-create-task/ai-conversation.constants'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
 import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
@@ -267,7 +266,15 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(
       afterConfirm.events.some(
         (event) =>
-          event.kind === 'user_message' && event.payload.text === REVIEW_CONFIRM_CONTINUATION_TEXT,
+          event.kind === 'user_message' && event.payload.text === '已确认本次审核建议',
+      ),
+    ).toBe(false)
+    expect(
+      afterConfirm.events.some(
+        (event) =>
+          event.kind === 'batch_status' &&
+          event.payload.status === 'ready_for_agent' &&
+          event.payload.disposition === 'confirmed',
       ),
     ).toBe(true)
 
@@ -317,7 +324,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       ),
     ).toBe(true)
     expect(
-      listed.events.some((event) => event.payload.text === REVIEW_CONFIRM_CONTINUATION_TEXT),
+      listed.events.some(
+        (event) =>
+          event.kind === 'batch_status' &&
+          event.payload.status === 'ready_for_agent' &&
+          event.payload.disposition === 'confirmed',
+      ),
     ).toBe(false)
     expect(listed.events.some((event) => event.payload.text === CONTINUATION_MESSAGE)).toBe(false)
   })
@@ -361,9 +373,17 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(
       listed.events.filter(
         (event) =>
-          event.kind === 'user_message' && event.payload.text === REVIEW_CONFIRM_CONTINUATION_TEXT,
+          event.kind === 'batch_status' &&
+          event.payload.status === 'ready_for_agent' &&
+          event.payload.disposition === 'confirmed',
       ),
     ).toHaveLength(1)
+    expect(
+      listed.events.filter(
+        (event) =>
+          event.kind === 'user_message' && event.payload.text === '已确认本次审核建议',
+      ),
+    ).toHaveLength(0)
   })
 
   it('keeps the package pending on package-version conflict, permission denial and draft conflict', async () => {
