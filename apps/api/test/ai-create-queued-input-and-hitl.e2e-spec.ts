@@ -4,11 +4,16 @@ import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
+import { startDeterministicParseWorker } from './support/deterministic-parse-worker'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
 const FREE_TEXT_PROMPT = '出团日期是哪一天？'
 const SINGLE_CHOICE_PROMPT = '这次按几天出团？'
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 describe('Queued input and Agent HITL replies (e2e) #318', () => {
   let app: INestApplication
@@ -18,12 +23,16 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   let organizationId: string
   let ownerUserId: string
   let agent: Awaited<ReturnType<typeof startDeterministicHeadlessAgent>>
+  let ocr: Awaited<ReturnType<typeof startDeterministicParseWorker>>
   const testPrefix = `e2e-ai-hitl-${Date.now()}`
 
   beforeAll(async () => {
     let apiBaseUrl = ''
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
+
+    ocr = await startDeterministicParseWorker({ text: '出团日期 2026-10-01' })
+    process.env.OCR_BASE_URL = ocr.origin
 
     agent = await startDeterministicHeadlessAgent({
       getApiBaseUrl: () => apiBaseUrl,
@@ -68,12 +77,14 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
     await prisma.$disconnect()
     await agent.close()
+    await ocr.close()
     await app.close()
   })
 
   afterEach(() => {
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     agent.release()
+    ocr.release()
   })
 
   async function openSession(taskId?: string) {
@@ -396,6 +407,92 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processor.processDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: { taskId, status: { in: ['ready_for_agent', 'agent_running'] } },
+    })
+    expect(remaining).toBe(0)
+  })
+
+  it('does not claim pre-question queued batches while a HITL reply is still waiting for materials', async () => {
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
+    })
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendMessage(taskId, conversationId, { text: '先问日期' }, `e2e-mat-iso-a-${taskId}`).expect(
+      201,
+    )
+    await sendMessage(
+      taskId,
+      conversationId,
+      { text: '提问前就排队的消息，不能抢在带附件的答案前面' },
+      `e2e-mat-iso-b-${taskId}`,
+    ).expect(201)
+    await processor.processDueJobs(5)
+
+    const asked = await listEvents(taskId, conversationId)
+    expect(asked.pendingInteraction?.status).toBe('pending')
+    expect(asked.queuedBatches).toHaveLength(1)
+    const queuedBatchId = asked.queuedBatches[0]?.id
+
+    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    ocr.holdNextCall()
+    const replied = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .set('Idempotency-Key', `e2e-mat-iso-ok-${taskId}`)
+      .field('text', '2026-10-01')
+      .field('replyToEventId', asked.pendingInteraction?.eventId ?? '')
+      .field('interactionId', asked.pendingInteraction?.id ?? '')
+      .field('interactionVersion', '1')
+      .attach('files', PNG_1X1, { filename: '日期.png', contentType: 'image/png' })
+      .expect(201)
+    expect(replied.body.data.batch).toMatchObject({
+      status: 'waiting_for_materials',
+      replyToEventId: asked.pendingInteraction?.eventId,
+    })
+
+    const parseRun = processor.processDueJobs(1)
+    await waitFor(async () => {
+      expect(ocr.callCount()).toBeGreaterThan(0)
+    })
+
+    await processor.processDueJobs(5)
+    const queuedDuringParse = await prisma.aiInputBatch.findUnique({
+      where: { id: queuedBatchId as string },
+    })
+    expect(queuedDuringParse?.status).toBe('ready_for_agent')
+    expect(
+      await prisma.aiInputBatch.count({
+        where: { id: replied.body.data.batch.id as string, status: 'waiting_for_materials' },
+      }),
+    ).toBe(1)
+
+    ocr.release()
+    await parseRun
+
+    agent.holdNextCall()
+    const replyRun = processor.processDueJobs(1)
+    await waitFor(async () => {
+      const replyBatch = await prisma.aiInputBatch.findUnique({
+        where: { id: replied.body.data.batch.id as string },
+      })
+      expect(replyBatch?.status).toBe('agent_running')
+    })
+    expect(
+      await prisma.aiInputBatch.count({
+        where: { taskId, replyToEventId: null, status: 'ready_for_agent' },
+      }),
+    ).toBeGreaterThan(0)
+
+    agent.release()
+    await replyRun
+    await processor.processDueJobs(5)
+    const remaining = await prisma.aiInputBatch.count({
+      where: {
+        taskId,
+        status: { in: ['waiting_for_materials', 'ready_for_agent', 'agent_running'] },
+      },
     })
     expect(remaining).toBe(0)
   })

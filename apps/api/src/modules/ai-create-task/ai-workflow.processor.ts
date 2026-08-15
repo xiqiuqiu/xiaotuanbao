@@ -174,7 +174,10 @@ export class AiWorkflowProcessor {
                 SELECT 1
                 FROM ai_input_batches reply
                 WHERE reply.conversation_id = j.conversation_id
-                  AND reply.status = 'ready_for_agent'::ai_input_batch_status
+                  AND reply.status IN (
+                    'waiting_for_materials'::ai_input_batch_status,
+                    'ready_for_agent'::ai_input_batch_status
+                  )
                   AND reply.reply_to_event_id IS NOT NULL
               )
               OR b.reply_to_event_id IS NOT NULL
