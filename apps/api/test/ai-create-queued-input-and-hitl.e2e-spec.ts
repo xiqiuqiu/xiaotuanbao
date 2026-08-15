@@ -570,6 +570,120 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     ).toBe(true)
   })
 
+  it('does not claim a later ready batch while an earlier batch is awaiting review', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    const first = await sendMessage(
+      taskId,
+      conversationId,
+      { text: '先提交待审核建议' },
+      `e2e-review-queue-a-${taskId}`,
+    ).expect(201)
+    await prisma.$transaction([
+      prisma.aiInputBatch.update({
+        where: { id: first.body.data.batch.id as string },
+        data: { status: 'awaiting_review' },
+      }),
+      prisma.aiWorkflowJob.updateMany({
+        where: { inputBatchId: first.body.data.batch.id as string },
+        data: { status: 'succeeded', leaseExpiresAt: null },
+      }),
+    ])
+
+    const second = await sendMessage(
+      taskId,
+      conversationId,
+      { text: '审核未结束前这条应继续排队' },
+      `e2e-review-queue-b-${taskId}`,
+    ).expect(201)
+    expect(second.body.data.batch).toMatchObject({
+      status: 'ready_for_agent',
+      queued: true,
+    })
+
+    await processor.processDueJobs(5)
+    const queuedDuringReview = await prisma.aiInputBatch.findUnique({
+      where: { id: second.body.data.batch.id as string },
+    })
+    expect(queuedDuringReview?.status).toBe('ready_for_agent')
+    expect(
+      await prisma.aiWorkflowJob.count({
+        where: {
+          inputBatchId: second.body.data.batch.id as string,
+          status: { in: ['claimed', 'succeeded'] },
+        },
+      }),
+    ).toBe(0)
+
+    await prisma.aiInputBatch.update({
+      where: { id: first.body.data.batch.id as string },
+      data: { status: 'completed' },
+    })
+    await processor.processDueJobs(5)
+    const afterReview = await prisma.aiInputBatch.findUnique({
+      where: { id: second.body.data.batch.id as string },
+    })
+    expect(afterReview?.status).toBe('completed')
+  })
+
+  it('does not claim a later ready batch while an earlier non-reply batch is waiting for materials', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    ocr.holdNextCall()
+    const first = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .set('Idempotency-Key', `e2e-wait-mat-a-${taskId}`)
+      .field('text', '先解析这张图')
+      .attach('files', PNG_1X1, { filename: '行程.png', contentType: 'image/png' })
+      .expect(201)
+    expect(first.body.data.batch.status).toBe('waiting_for_materials')
+
+    const parseRun = processor.processDueJobs(1)
+    try {
+      await waitFor(async () => {
+        expect(ocr.callCount()).toBeGreaterThan(0)
+      })
+
+      const second = await sendMessage(
+        taskId,
+        conversationId,
+        { text: '资料未齐套前这条应继续排队' },
+        `e2e-wait-mat-b-${taskId}`,
+      ).expect(201)
+      expect(second.body.data.batch).toMatchObject({
+        status: 'ready_for_agent',
+        queued: true,
+      })
+
+      await processor.processDueJobs(5)
+      const queuedDuringParse = await prisma.aiInputBatch.findUnique({
+        where: { id: second.body.data.batch.id as string },
+      })
+      expect(queuedDuringParse?.status).toBe('ready_for_agent')
+      expect(
+        await prisma.aiWorkflowJob.count({
+          where: {
+            inputBatchId: second.body.data.batch.id as string,
+            status: { in: ['claimed', 'succeeded'] },
+          },
+        }),
+      ).toBe(0)
+    } finally {
+      ocr.release()
+      await parseRun
+    }
+    await processor.processDueJobs(5)
+    const batches = await prisma.aiInputBatch.findMany({
+      where: { taskId },
+      orderBy: { conversationVersion: 'asc' },
+    })
+    expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
+  })
+
   it('cancels the current wait so previously queued batches can run in sequence', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',

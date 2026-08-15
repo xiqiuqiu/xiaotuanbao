@@ -182,6 +182,20 @@ export class AiWorkflowProcessor {
               )
               OR b.reply_to_event_id IS NOT NULL
             )
+            AND (
+              b.reply_to_event_id IS NOT NULL
+              OR NOT EXISTS (
+                SELECT 1
+                FROM ai_input_batches blocking
+                WHERE blocking.conversation_id = j.conversation_id
+                  AND blocking.id <> j.input_batch_id
+                  AND blocking.conversation_version < b.conversation_version
+                  AND blocking.status IN (
+                    'waiting_for_materials'::ai_input_batch_status,
+                    'awaiting_review'::ai_input_batch_status
+                  )
+              )
+            )
           ORDER BY b.conversation_version ASC
           FOR UPDATE OF j SKIP LOCKED
           LIMIT 1
@@ -204,6 +218,12 @@ export class AiWorkflowProcessor {
           select: { id: true },
         })
         if (running) {
+          return null
+        }
+        if (
+          !job.inputBatch.replyToEventId &&
+          (await this.hasEarlierNonReplyClaimBlocker(tx, job.inputBatch))
+        ) {
           return null
         }
 
@@ -830,6 +850,24 @@ export class AiWorkflowProcessor {
       data: { leaseExpiresAt: this.leaseUntil() },
     })
     return result.count === 1
+  }
+
+  private async hasEarlierNonReplyClaimBlocker(
+    tx: Prisma.TransactionClient,
+    batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'conversationVersion'>,
+  ): Promise<boolean> {
+    const blocking = await tx.aiInputBatch.findFirst({
+      where: {
+        conversationId: batch.conversationId,
+        id: { not: batch.id },
+        conversationVersion: { lt: batch.conversationVersion },
+        status: {
+          in: [AiInputBatchStatus.waiting_for_materials, AiInputBatchStatus.awaiting_review],
+        },
+      },
+      select: { id: true },
+    })
+    return blocking != null
   }
 
   private async ownsClaimedJob(tx: Prisma.TransactionClient, jobId: string): Promise<boolean> {
