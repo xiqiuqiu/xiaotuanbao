@@ -216,6 +216,14 @@ export async function listAiConversationEvents(
   conversationId: string
   events: AiConversationEventView[]
   lastSequence: number
+  nextAfterSequence?: number | null
+  hasMore?: boolean
+  materialReferences?: Array<{
+    messageEventSequence: number
+    inputBatchId: string
+    materialId: string
+    parseResultVersion: number | null
+  }>
   activeBatch: AiInputBatchView | null
   pendingInteraction?: AiConversationInteractionView | null
   queuedBatches?: AiInputBatchView[]

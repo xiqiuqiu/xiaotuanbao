@@ -342,6 +342,8 @@ model Organization {
   aiWorkflowJobs AiWorkflowJob[]
   aiAgentAttempts AiAgentAttempt[]
   aiContextManifests AiContextManifest[]
+  aiContextMaterialReads AiContextMaterialRead[]
+  aiConversationSummaries AiConversationSummary[]
   departureMaterials DepartureMaterial[]
   departureMaterialParseRuns DepartureMaterialParseRun[]
 
@@ -1115,6 +1117,7 @@ model AiCreateTask {
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
+  conversationSummaries AiConversationSummary[]
   departureMaterials DepartureMaterial[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
@@ -1324,6 +1327,7 @@ model AiConversation {
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
+  summaries       AiConversationSummary[]
 
   @@index([taskId, status, updatedAt])
   @@index([organizationId, creatorUserId, status])
@@ -1466,6 +1470,7 @@ model AiWorkflowJob {
   leaseExpiresAt DateTime?           @map("lease_expires_at")
   nextAttemptAt  DateTime            @default(now()) @map("next_attempt_at")
   lastErrorCode  String?             @map("last_error_code")
+  claimedConversationVersion Int?    @map("claimed_conversation_version")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
   attempts       AiAgentAttempt[]
@@ -1489,8 +1494,20 @@ model AiContextManifest {
   inputBatchId             String         @map("input_batch_id")
   inputBatch               AiInputBatch   @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
   conversationVersion      Int            @map("conversation_version")
+  manifestVersion          Int            @default(1) @map("manifest_version")
   eventSequences           Json           @map("event_sequences")
   businessSnapshotVersion  Int            @map("business_snapshot_version")
+  taskStatus               AiCreateTaskStatus @default(in_progress) @map("task_status")
+  taskPhase                AiCreatePhase @default(basic_info) @map("task_phase")
+  businessSnapshot         Json           @default("{}") @map("business_snapshot")
+  reviewSnapshot           Json?          @map("review_snapshot")
+  availableCapabilities    Json           @default("[]") @map("available_capabilities")
+  summaryId                String?         @map("summary_id")
+  summary                  AiConversationSummary? @relation(fields: [summaryId], references: [id], onDelete: SetNull)
+  summaryVersion           Int?            @map("summary_version")
+  materialFragmentRefs     Json            @default("[]") @map("material_fragment_refs")
+  budgetPolicy             Json            @default("{}") @map("budget_policy")
+  budgetUsage              Json            @default("{}") @map("budget_usage")
   builderVersion           String         @map("builder_version")
   systemPromptVersion      String         @map("system_prompt_version")
   toolSchemaVersion        String         @map("tool_schema_version")
@@ -1500,10 +1517,55 @@ model AiContextManifest {
   materialVersions         Json           @default("[]") @map("material_versions")
   createdAt                DateTime       @default(now()) @map("created_at")
   attempt                  AiAgentAttempt?
+  materialReads            AiContextMaterialRead[]
 
   @@index([conversationId, inputBatchId])
+  @@unique([inputBatchId, manifestVersion])
+  @@index([summaryId])
   @@index([organizationId, createdAt])
   @@map("ai_context_manifests")
+}
+
+/// AI 上下文资料读取留痕：记录某清单对应 attempt 实际读取的固定解析页。
+model AiContextMaterialRead {
+  id                 String            @id @default(cuid())
+  organizationId     String            @map("organization_id")
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contextManifestId  String            @map("context_manifest_id")
+  contextManifest    AiContextManifest @relation(fields: [contextManifestId], references: [id], onDelete: Cascade)
+  materialId         String            @map("material_id")
+  parseResultVersion Int               @map("parse_result_version")
+  pageNumber         Int               @map("page_number")
+  readSequence       Int               @map("read_sequence")
+  textHash           String            @map("text_hash")
+  createdAt          DateTime          @default(now()) @map("created_at")
+
+  @@unique([contextManifestId, readSequence])
+  @@index([contextManifestId, materialId, parseResultVersion, pageNumber])
+  @@index([organizationId, createdAt])
+  @@map("ai_context_material_reads")
+}
+
+/// AI 会话滚动摘要：仅承接交流背景，不是候选或业务写入证据。
+model AiConversationSummary {
+  id                   String         @id @default(cuid())
+  organizationId       String         @map("organization_id")
+  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskId               String         @map("task_id")
+  task                 AiCreateTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  conversationId       String         @map("conversation_id")
+  conversation         AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  version              Int
+  throughSequence      Int            @map("through_sequence")
+  text                 String
+  sourceEventSequences Json           @map("source_event_sequences")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  contextManifests     AiContextManifest[]
+
+  @@unique([conversationId, version])
+  @@index([conversationId, throughSequence])
+  @@index([organizationId, createdAt])
+  @@map("ai_conversation_summaries")
 }
 
 /// Agent attempt：Worker 对已齐套输入批次的一次执行。
@@ -1526,6 +1588,7 @@ model AiAgentAttempt {
   status            AiAgentAttemptStatus @default(running)
   resultJson        Json?                @map("result_json")
   errorCode         String?              @map("error_code")
+  finalInputHash    String?              @map("final_input_hash")
   startedAt         DateTime             @default(now()) @map("started_at")
   endedAt           DateTime?            @map("ended_at")
 

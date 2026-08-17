@@ -188,6 +188,20 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(context.data).not.toHaveProperty('pages')
     expect(JSON.stringify(context)).not.toContain(PNG_1X1.toString('base64'))
 
+    const historyPage = await authRequest(app, coordinatorToken)
+      .get(
+        `/api/ai-create-tasks/${taskId}/conversations/${opened.conversation.id}/events?afterSequence=0&limit=1`,
+      )
+      .expect(200)
+    expect(historyPage.body.data.materialReferences).toEqual([
+      {
+        messageEventSequence: 1,
+        inputBatchId: batch.id,
+        materialId: materials[0]?.id,
+        parseResultVersion: 1,
+      },
+    ])
+
     const restored = await authRequest(app, coordinatorToken)
       .post('/api/ai-create-tasks/assist-session')
       .send({ taskId })

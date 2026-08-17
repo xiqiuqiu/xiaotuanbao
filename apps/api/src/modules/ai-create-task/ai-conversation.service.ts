@@ -141,6 +141,23 @@ export class AiConversationService {
     return this.loadConversationView(conversation, userId)
   }
 
+  async createNew(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<AiConversationView> {
+    await this.assertAssistAccess(userId)
+    const task = await this.findOwnedInProgressTask(organizationId, userId, taskId)
+    const conversation = await this.prisma.aiConversation.create({
+      data: {
+        organizationId,
+        taskId: task.id,
+        creatorUserId: userId,
+      },
+    })
+    return this.loadConversationView(conversation, userId)
+  }
+
   async saveDraft(
     organizationId: string,
     userId: string,
@@ -881,10 +898,19 @@ export class AiConversationService {
     taskId: string,
     conversationId: string,
     afterSequence = 0,
+    limit = 100,
   ): Promise<{
     conversationId: string
     events: AiConversationEventView[]
     lastSequence: number
+    nextAfterSequence: number | null
+    hasMore: boolean
+    materialReferences: Array<{
+      messageEventSequence: number
+      inputBatchId: string
+      materialId: string
+      parseResultVersion: number | null
+    }>
     activeBatch: AiInputBatchView | null
     pendingInteraction: AiConversationInteractionView | null
     queuedBatches: AiInputBatchView[]
@@ -898,13 +924,33 @@ export class AiConversationService {
       taskId,
       conversationId,
     )
-    const events = await this.prisma.aiConversationEvent.findMany({
+    const fetchedEvents = await this.prisma.aiConversationEvent.findMany({
       where: {
         conversationId: conversation.id,
         sequence: { gt: afterSequence },
       },
       orderBy: { sequence: 'asc' },
+      take: limit + 1,
     })
+    const hasMore = fetchedEvents.length > limit
+    const events = fetchedEvents.slice(0, limit)
+    const eventSequences = events.map((event) => event.sequence)
+    const referencedBatches = eventSequences.length
+      ? await this.prisma.aiInputBatch.findMany({
+          where: {
+            conversationId: conversation.id,
+            userMessageEvent: { sequence: { in: eventSequences } },
+          },
+          select: {
+            id: true,
+            userMessageEvent: { select: { sequence: true } },
+            materials: {
+              select: { materialId: true, parseResultVersion: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        })
+      : []
     const last = await this.prisma.aiConversationEvent.findFirst({
       where: { conversationId: conversation.id },
       orderBy: { sequence: 'desc' },
@@ -917,6 +963,16 @@ export class AiConversationService {
       conversationId: conversation.id,
       events: events.map(toEventView),
       lastSequence: last?.sequence ?? 0,
+      nextAfterSequence: hasMore ? events.at(-1)?.sequence ?? null : null,
+      hasMore,
+      materialReferences: referencedBatches.flatMap((batch) =>
+        batch.materials.map((material) => ({
+          messageEventSequence: batch.userMessageEvent.sequence,
+          inputBatchId: batch.id,
+          materialId: material.materialId,
+          parseResultVersion: material.parseResultVersion,
+        })),
+      ),
       ...projection,
       draft: toConversationDraftView(conversation.id, draft),
     }
@@ -1188,7 +1244,8 @@ export class AiConversationService {
     const [events, projection, draft] = await Promise.all([
       this.prisma.aiConversationEvent.findMany({
         where: { conversationId: conversation.id },
-        orderBy: { sequence: 'asc' },
+        orderBy: { sequence: 'desc' },
+        take: 100,
       }),
       this.loadBatchProjection(conversation.id),
       this.prisma.aiConversationDraft.findUnique({
@@ -1197,7 +1254,7 @@ export class AiConversationService {
     ])
     return toConversationView(
       conversation,
-      events,
+      events.reverse(),
       projection.activeBatchSource,
       projection.pendingInteractionSource,
       projection.queuedBatchSources,

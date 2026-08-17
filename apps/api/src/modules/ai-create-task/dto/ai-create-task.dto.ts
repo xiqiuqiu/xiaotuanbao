@@ -221,4 +221,11 @@ export class ListAiConversationEventsQueryDto {
   @IsInt()
   @Min(0)
   afterSequence?: number
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number
 }

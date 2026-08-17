@@ -103,6 +103,9 @@ export default registerAs('app', () => {
       modelId: (process.env.AI_MODEL ?? 'deterministic').trim(),
       delegationTtlSec: Number(process.env.AI_CREATE_ASSIST_DELEGATION_TTL_SEC ?? 600),
       runTimeoutMs: Number(process.env.AI_CREATE_ASSIST_RUN_TIMEOUT_MS ?? 120_000),
+      allowLegacyUnmanifestedSubmitForTests:
+        nodeEnv !== 'production' &&
+        process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT === 'true',
     },
     materialParse: {
       baseUrl: (process.env.OCR_BASE_URL ?? 'http://127.0.0.1:8089').trim(),

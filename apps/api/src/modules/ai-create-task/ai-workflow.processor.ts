@@ -1,9 +1,12 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
   AiCollaborationError,
+  aiCreateDraftSnapshotSchema,
+  capabilitiesForPendingReview,
+  classifyDraftFields,
   type HeadlessExecutionResult,
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
@@ -30,12 +33,14 @@ import type { AiOperationDelegationPayload } from '../../common/types/api-respon
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import {
-  buildPlaintextContextManifest,
-  composePlaintextUserText,
-  projectConversationEventsForAgent,
+  buildAuditablePlaintextContext,
+  buildRollingConversationSummary,
+  estimatePlaintextTokens,
+  parseEventSequences,
+  RequiredContextBudgetExceededError,
   resolveAttemptUserText,
-  selectPlaintextContextEvents,
 } from './ai-context-manifest'
+import { hasGroundedManifestCandidateEvidence } from './ai-candidate-evidence'
 import { AiConversationService } from './ai-conversation.service'
 import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
@@ -255,6 +260,8 @@ export class AiWorkflowProcessor {
             claimedBy: this.workerId,
             leaseExpiresAt: this.leaseUntil(),
             attemptCount: { increment: 1 },
+            claimedConversationVersion:
+              job.claimedConversationVersion ?? job.inputBatch.conversationVersion,
           },
         })
         if (job.inputBatch.status !== AiInputBatchStatus.agent_running) {
@@ -312,17 +319,30 @@ export class AiWorkflowProcessor {
       return
     }
 
+    let attemptId: string | undefined
     try {
       const prepared = await this.prepareAttempt(job)
+      attemptId = prepared.attemptId
       const renewed = await this.renewLease(job.id)
       if (!renewed) {
+        await this.finalizeLostAttempt(job, prepared.attemptId)
         return
       }
       const result = await this.headlessClient.run(prepared.request, prepared.delegationToken)
       await this.persistOutcome(job, prepared.attemptId, result)
     } catch (error) {
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)
-      await this.persistFailure(job, 'AGENT_UNAVAILABLE')
+      await this.persistFailure(
+        job,
+        error instanceof RequiredContextBudgetExceededError
+          ? 'CONTEXT_BUDGET_EXCEEDED'
+          : 'AGENT_UNAVAILABLE',
+        undefined,
+        attemptId,
+        error instanceof RequiredContextBudgetExceededError
+          ? { requiredTokens: error.requiredTokens, totalTokens: error.totalTokens }
+          : undefined,
+      )
     }
   }
 
@@ -414,6 +434,8 @@ export class AiWorkflowProcessor {
     attemptId: string
     delegationToken: string
   }> {
+    const conversationVersion =
+      job.claimedConversationVersion ?? job.inputBatch.conversationVersion
     const userEvent = await this.prisma.aiConversationEvent.findUniqueOrThrow({
       where: { id: job.inputBatch.userMessageEventId },
     })
@@ -421,17 +443,28 @@ export class AiWorkflowProcessor {
       where: {
         conversationId: job.conversationId,
         organizationId: job.organizationId,
-        sequence: job.inputBatch.conversationVersion,
+        sequence: conversationVersion,
       },
       select: { kind: true, payload: true },
     })
-    const task = await this.prisma.aiCreateTask.findUniqueOrThrow({
-      where: { id: job.taskId },
-      include: { draft: true },
+    const task = await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      return tx.aiCreateTask.findUniqueOrThrow({
+        where: { id: job.taskId },
+        include: {
+          draft: true,
+          reviewPackages: {
+            where: { status: AiReviewPackageStatus.pending },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+      })
     })
     if (!task.draft) {
       throw new Error('发团创建草稿不存在')
     }
+    const businessSnapshot = aiCreateDraftSnapshotSchema.parse(task.draft.snapshot)
     const originalUserText = (
       userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
         ? String((userEvent.payload as { text: unknown }).text ?? '')
@@ -463,31 +496,114 @@ export class AiWorkflowProcessor {
       where: {
         conversationId: job.conversationId,
         organizationId: job.organizationId,
-        sequence: { lte: job.inputBatch.conversationVersion },
+        sequence: { lte: conversationVersion },
       },
       orderBy: { sequence: 'asc' },
       select: { sequence: true, kind: true, payload: true },
     })
-    const selectedEvents = selectPlaintextContextEvents(
+    const existingSummary = await this.prisma.aiConversationSummary.findFirst({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        throughSequence: { lte: conversationVersion },
+      },
+      orderBy: { version: 'desc' },
+    })
+    const summaryProjection = buildRollingConversationSummary(
+      existingSummary
+        ? {
+            version: existingSummary.version,
+            throughSequence: existingSummary.throughSequence,
+            text: existingSummary.text,
+            sourceEventSequences: parseEventSequences(existingSummary.sourceEventSequences),
+          }
+        : null,
       historyEvents,
-      job.inputBatch.conversationVersion,
-      userEvent.sequence,
+      conversationVersion,
+      { originUserMessageSequence: userEvent.sequence },
     )
-    const composedUserText = composePlaintextUserText(
-      userText,
-      projectConversationEventsForAgent(selectedEvents),
+    const summary =
+      summaryProjection && summaryProjection.version !== existingSummary?.version
+        ? await this.prisma.aiConversationSummary.create({
+            data: {
+              organizationId: job.organizationId,
+              taskId: job.taskId,
+              conversationId: job.conversationId,
+              version: summaryProjection.version,
+              throughSequence: summaryProjection.throughSequence,
+              text: summaryProjection.text,
+              sourceEventSequences: summaryProjection.sourceEventSequences,
+            },
+          })
+        : existingSummary
+    const pendingReview = task.reviewPackages[0] ?? null
+    const availableCapabilities = capabilitiesForPendingReview(Boolean(pendingReview))
+    const materialFragmentRefs = parseIndex.materials.map(
+      (material) =>
+        `material:${material.materialId}:parse:${material.parseResultVersion}:index`,
     )
-    const manifestRecord = buildPlaintextContextManifest({
+    const reviewSnapshot = pendingReview
+      ? {
+          packageId: pendingReview.id,
+          version: pendingReview.version,
+          objectVersion: pendingReview.baseObjectVersion,
+          status: pendingReview.status,
+        }
+      : null
+    const authoritativeContext = {
+      task: {
+        id: task.id,
+        status: task.status,
+        currentPhase: task.currentPhase,
+        creatorUserId: task.creatorUserId,
+      },
+      snapshot: businessSnapshot,
+      objectVersion: task.draft.version,
+      pending: {
+        hasPendingReview: Boolean(pendingReview),
+        reviewPackageId: pendingReview?.id ?? null,
+      },
+      availableCapabilities,
+      fieldCoverage: classifyDraftFields(businessSnapshot),
+      currentUserMessage: userText,
+    }
+    const context = buildAuditablePlaintextContext({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
-      conversationVersion: job.inputBatch.conversationVersion,
-      eventSequences: selectedEvents.map((event) => event.sequence),
-      userText: composedUserText,
+      conversationVersion,
+      originUserMessageSequence: userEvent.sequence,
+      currentUserText: userText,
+      events: historyEvents,
       businessSnapshotVersion: task.draft.version,
+      taskStatus: task.status,
+      taskPhase: task.currentPhase,
+      businessSnapshot,
+      authoritativeContext,
+      materialContext: parseIndex.materials,
+      reviewSnapshot,
+      availableCapabilities,
       modelId,
       materialVersions,
-      truncationReasons: parseIndex.truncationReasons,
+      materialFragmentRefs,
+      materialContentTokens: parseIndex.materials.reduce(
+        (total, material) => total + estimatePlaintextTokens(material.excerpt),
+        0,
+      ),
+      summary: summary
+        ? {
+            id: summary.id,
+            version: summary.version,
+            throughSequence: summary.throughSequence,
+            text: summary.text,
+          }
+        : null,
+      truncationReasons: [
+        ...parseIndex.truncationReasons,
+        ...(summaryProjection?.truncated ? ['summary_token_budget'] : []),
+      ],
     })
+    const manifestRecord = context.manifest
+    const composedUserText = context.userText
 
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
@@ -497,6 +613,10 @@ export class AiWorkflowProcessor {
         job.taskId,
         job.inputBatch.creatorUserId,
       )
+      const latestManifest = await tx.aiContextManifest.aggregate({
+        where: { inputBatchId: job.inputBatchId },
+        _max: { manifestVersion: true },
+      })
       const manifest = await tx.aiContextManifest.create({
         data: {
           organizationId: job.organizationId,
@@ -504,8 +624,19 @@ export class AiWorkflowProcessor {
           conversationId: job.conversationId,
           inputBatchId: job.inputBatchId,
           conversationVersion: manifestRecord.conversationVersion,
+          manifestVersion: (latestManifest._max.manifestVersion ?? 0) + 1,
           eventSequences: manifestRecord.eventSequences,
           businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+          taskStatus: task.status,
+          taskPhase: task.currentPhase,
+          businessSnapshot: manifestRecord.businessSnapshot as Prisma.InputJsonValue,
+          reviewSnapshot: manifestRecord.reviewSnapshot as Prisma.InputJsonValue,
+          availableCapabilities: manifestRecord.availableCapabilities,
+          summaryId: manifestRecord.summaryId,
+          summaryVersion: manifestRecord.summaryVersion,
+          materialFragmentRefs: manifestRecord.materialFragmentRefs,
+          budgetPolicy: manifestRecord.budgets as unknown as Prisma.InputJsonValue,
+          budgetUsage: manifestRecord.budgetUsage as unknown as Prisma.InputJsonValue,
           builderVersion: manifestRecord.builderVersion,
           systemPromptVersion: manifestRecord.systemPromptVersion,
           toolSchemaVersion: manifestRecord.toolSchemaVersion,
@@ -623,7 +754,7 @@ export class AiWorkflowProcessor {
 
       const reviewPackageId =
         result.kind === 'awaiting_review'
-          ? await this.persistReviewPackage(tx, job, result.reviewPackage)
+          ? await this.persistReviewPackage(tx, job, attemptId, result.reviewPackage)
           : null
 
       const agentEvent = await this.conversationService.appendEvent(tx, {
@@ -674,11 +805,13 @@ export class AiWorkflowProcessor {
         where: { id: job.inputBatchId },
         data: { status: batchStatus },
       })
+      const finalInputHash = await this.finalInputHashForAttempt(tx, attemptId)
       await tx.aiAgentAttempt.update({
         where: { id: attemptId },
         data: {
           status: AiAgentAttemptStatus.completed,
           resultJson: result as unknown as Prisma.InputJsonValue,
+          finalInputHash,
           endedAt: new Date(),
         },
       })
@@ -795,6 +928,7 @@ export class AiWorkflowProcessor {
     errorCode: string,
     result?: HeadlessExecutionResult,
     attemptId?: string,
+    details?: Record<string, number>,
   ): Promise<void> {
     const published: string[] = []
     await this.prisma.$transaction(async (tx) => {
@@ -806,7 +940,12 @@ export class AiWorkflowProcessor {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
         kind: AiConversationEventKind.error,
-        payload: { batchId: job.inputBatchId, errorCode, attemptId: attemptId ?? null },
+        payload: {
+          batchId: job.inputBatchId,
+          errorCode,
+          attemptId: attemptId ?? null,
+          ...(details ? { details } : {}),
+        },
       })
       published.push(errorEvent.id)
       const statusEvent = await this.conversationService.appendEvent(tx, {
@@ -817,6 +956,7 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           status: AiInputBatchStatus.failed,
           errorCode,
+          ...(details ? { details } : {}),
         },
       })
       published.push(statusEvent.id)
@@ -825,11 +965,13 @@ export class AiWorkflowProcessor {
         data: { status: AiInputBatchStatus.failed },
       })
       if (attemptId) {
+        const finalInputHash = await this.finalInputHashForAttempt(tx, attemptId)
         await tx.aiAgentAttempt.update({
           where: { id: attemptId },
           data: {
             status: AiAgentAttemptStatus.failed,
             errorCode,
+            finalInputHash,
             resultJson: (result ?? {
               kind: 'failed',
               error: AiCollaborationError.fromCode(
@@ -864,6 +1006,55 @@ export class AiWorkflowProcessor {
         this.conversationService.publish(job.conversationId, event)
       }
     }
+  }
+
+  private async finalInputHashForAttempt(
+    tx: Prisma.TransactionClient,
+    attemptId: string,
+  ): Promise<string> {
+    const audit = await tx.aiAgentAttempt.findUniqueOrThrow({
+      where: { id: attemptId },
+      include: {
+        contextManifest: {
+          include: { materialReads: { orderBy: { readSequence: 'asc' } } },
+        },
+      },
+    })
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          initialInputHash: audit.contextManifest.inputHash,
+          materialReads: audit.contextManifest.materialReads.map((read) => ({
+            sequence: read.readSequence,
+            materialId: read.materialId,
+            parseResultVersion: read.parseResultVersion,
+            pageNumber: read.pageNumber,
+            textHash: read.textHash,
+          })),
+        }),
+      )
+      .digest('hex')
+  }
+
+  private async finalizeLostAttempt(job: ClaimedJob, attemptId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      const attempt = await tx.aiAgentAttempt.findUnique({
+        where: { id: attemptId },
+        select: { status: true },
+      })
+      if (attempt?.status !== AiAgentAttemptStatus.running) return
+      const finalInputHash = await this.finalInputHashForAttempt(tx, attemptId)
+      await tx.aiAgentAttempt.updateMany({
+        where: { id: attemptId, status: AiAgentAttemptStatus.running },
+        data: {
+          status: AiAgentAttemptStatus.failed,
+          errorCode: 'LEASE_LOST',
+          finalInputHash,
+          endedAt: new Date(),
+        },
+      })
+    })
   }
 
   private leaseUntil(): Date {
@@ -922,6 +1113,7 @@ export class AiWorkflowProcessor {
   private async persistReviewPackage(
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
+    attemptId: string,
     reviewPackage: SubmitReviewPackageModelInput,
   ): Promise<string> {
     const task = await tx.aiCreateTask.findFirst({
@@ -949,6 +1141,42 @@ export class AiWorkflowProcessor {
     }
     if (task.draft.version !== reviewPackage.objectVersion) {
       throw new Error('VERSION_CONFLICT')
+    }
+    const attempt = await tx.aiAgentAttempt.findFirst({
+      where: { id: attemptId, jobId: job.id, inputBatchId: job.inputBatchId },
+      include: { contextManifest: true },
+    })
+    if (!attempt) {
+      throw new Error('CONTEXT_MANIFEST_MISSING')
+    }
+    const eventSequences = parseEventSequences(attempt.contextManifest.eventSequences)
+    const sourceEvents = await tx.aiConversationEvent.findMany({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        sequence: { in: eventSequences },
+        kind: AiConversationEventKind.user_message,
+      },
+      select: { id: true, payload: true },
+    })
+    if (
+      !(await hasGroundedManifestCandidateEvidence(tx, {
+        organizationId: job.organizationId,
+        candidates: reviewPackage.candidates,
+        contextManifestId: attempt.contextManifest.id,
+        businessSnapshot: attempt.contextManifest.businessSnapshot,
+        materialVersions: attempt.contextManifest.materialVersions,
+        userMessages: sourceEvents.flatMap((event) => {
+          const payload = event.payload
+          if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
+            return []
+          }
+          const text = String((payload as { text: unknown }).text ?? '').trim()
+          return text ? [{ id: event.id, text }] : []
+        }),
+      }))
+    ) {
+      throw new Error('UNGROUNDED_CANDIDATE_EVIDENCE')
     }
     const run = await this.getOrCreateRunningActivityRun(
       tx,

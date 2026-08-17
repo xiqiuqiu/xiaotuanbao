@@ -163,6 +163,30 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     expect(second.conversation.status).toBe('open')
   })
 
+  it('starts a new empty conversation without inheriting archived messages or starting Agent work', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const oldConversationId = opened.conversation.id
+    await sendText(
+      taskId,
+      oldConversationId,
+      '只属于旧会话的消息',
+      `e2e-new-conversation-${taskId}`,
+    ).expect(201)
+    const callsBefore = agent.callCount()
+    const jobsBefore = await prisma.aiWorkflowJob.count({ where: { taskId } })
+
+    const created = await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${taskId}/conversations`)
+      .expect(201)
+    expect(created.body.data).toMatchObject({ status: 'open', events: [], activeBatch: null })
+    expect(created.body.data.id).not.toBe(oldConversationId)
+    expect((await listEvents(taskId, oldConversationId)).events).toHaveLength(2)
+    expect(agent.callCount()).toBe(callsBefore)
+    expect(await prisma.aiWorkflowJob.count({ where: { taskId } })).toBe(jobsBefore)
+    await prisma.aiCreateTask.delete({ where: { id: taskId } })
+  })
+
   it('sends plaintext idempotently and completes via worker after the client disconnects', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
@@ -211,14 +235,98 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     })
     expect(attempt).toMatchObject({
       status: 'completed',
+      finalInputHash: expect.any(String),
       contextManifest: {
         conversationVersion: expect.any(Number),
+        manifestVersion: 1,
+        taskStatus: 'in_progress',
+        taskPhase: 'basic_info',
         builderVersion: 'ai-create-plaintext/v3',
         inputHash: expect.any(String),
+        businessSnapshot: expect.objectContaining({ name: `${testPrefix}-团` }),
+        budgetPolicy: expect.objectContaining({ totalTokens: expect.any(Number) }),
+        budgetUsage: expect.objectContaining({ totalTokens: expect.any(Number) }),
       },
     })
     const sequences = attempt?.contextManifest.eventSequences
     expect(Array.isArray(sequences)).toBe(true)
+    const claimedJob = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { taskId, inputBatchId: attempt?.inputBatchId },
+    })
+    expect(claimedJob.claimedConversationVersion).toBe(
+      attempt?.contextManifest.conversationVersion,
+    )
+  })
+
+  it('pins the latest business snapshot before execution and returns it through the manifest', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendText(taskId, conversationId, '请基于最新表单继续', `e2e-current-facts-${taskId}`).expect(201)
+    const saved = await authRequest(app, coordinatorToken)
+      .post('/api/ai-create-tasks/draft')
+      .send({
+        taskId,
+        expectedVersion: opened.task.draft.version,
+        draft: {
+          mode: 'manual',
+          routeName: `${testPrefix}-最新路线`,
+          name: `${testPrefix}-最新团名`,
+        },
+      })
+      .expect(200)
+
+    await processor.processDueJobs(5)
+
+    expect(agent.lastTaskContext()).toMatchObject({
+      data: {
+        snapshot: { name: `${testPrefix}-最新团名`, routeName: `${testPrefix}-最新路线` },
+        objectVersion: saved.body.data.draft.version,
+      },
+    })
+    const manifest = await prisma.aiContextManifest.findFirstOrThrow({ where: { taskId } })
+    expect(manifest.businessSnapshotVersion).toBe(saved.body.data.draft.version)
+    expect(manifest.businessSnapshot).toMatchObject({ name: `${testPrefix}-最新团名` })
+  })
+
+  it('paginates archived events and material references without starting Agent work', async () => {
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+    for (let index = 0; index < 3; index += 1) {
+      await sendText(
+        taskId,
+        conversationId,
+        `历史消息 ${index + 1}`,
+        `e2e-history-${taskId}-${index}`,
+      ).expect(201)
+    }
+    const callsBefore = agent.callCount()
+    const jobsBefore = await prisma.aiWorkflowJob.count({ where: { taskId } })
+
+    const first = await authRequest(app, coordinatorToken)
+      .get(
+        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events?afterSequence=0&limit=2`,
+      )
+      .expect(200)
+    expect(first.body.data).toMatchObject({
+      hasMore: true,
+      nextAfterSequence: 2,
+      materialReferences: [],
+    })
+    expect(first.body.data.events).toHaveLength(2)
+
+    const second = await authRequest(app, coordinatorToken)
+      .get(
+        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events?afterSequence=${first.body.data.nextAfterSequence}&limit=2`,
+      )
+      .expect(200)
+    expect(second.body.data.events[0].sequence).toBe(3)
+    expect(agent.callCount()).toBe(callsBefore)
+    expect(await prisma.aiWorkflowJob.count({ where: { taskId } })).toBe(jobsBefore)
+    expect(await prisma.aiAgentAttempt.count({ where: { taskId } })).toBe(0)
+    await prisma.aiCreateTask.delete({ where: { id: taskId } })
   })
 
   it('keeps only one Agent batch running for the same task', async () => {
@@ -321,6 +429,12 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
         (event) => event.kind === 'batch_status' && event.payload.status === 'failed',
       ),
     ).toBe(true)
+    expect(
+      await prisma.aiAgentAttempt.findFirst({
+        where: { taskId, status: 'failed' },
+        select: { finalInputHash: true },
+      }),
+    ).toEqual({ finalInputHash: expect.any(String) })
 
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     await sendText(taskId, conversationId, '重试后的说明', `e2e-fail-retry-${taskId}`).expect(201)

@@ -155,7 +155,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
   async function submitAwaitingReview(taskId: string, conversationId: string, objectVersion: number) {
     agent.setOutcome(reviewOutcome(objectVersion))
-    await sendMessage(taskId, conversationId, '请按这个团名建团', `e2e-review-${taskId}`).expect(201)
+    await sendMessage(
+      taskId,
+      conversationId,
+      `团名叫${testPrefix}-候选团名`,
+      `e2e-review-${taskId}`,
+    ).expect(201)
     await processor.processDueJobs(5)
     await waitFor(async () => {
       const batch = await prisma.aiInputBatch.findFirst({

@@ -20,6 +20,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:4111/copilotkit'
+    process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT = 'true'
 
     app = await createTestApp()
     prisma = new PrismaClient()
@@ -81,6 +82,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     }
     await prisma.$disconnect()
     await app.close()
+    delete process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT
   })
 
   function agentSearch(delegationToken: string, body: Record<string, unknown>) {

@@ -23,6 +23,8 @@ import {
 } from '@xiaotuanbao/shared'
 import {
   classifyDraftFields,
+  aiCreateDraftSnapshotSchema,
+  AI_CREATE_TOOL_NAMES,
   capabilitiesForPendingReview,
   evaluateReviewConfirmMerge,
   getTaskContextInputSchema,
@@ -38,6 +40,7 @@ import {
   type SearchRouteTemplatesOutput,
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
+  type AiCreateToolName,
 } from '@xiaotuanbao/ai-contracts'
 import type { AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
 import { AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType } from '@prisma/client'
@@ -61,7 +64,13 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import { parseEventSequences, projectConversationEventsForAgent, resolveAttemptUserText } from './ai-context-manifest'
+import {
+  estimatePlaintextTokens,
+  parseEventSequences,
+  projectConversationEventsForAgent,
+  resolveAttemptUserText,
+} from './ai-context-manifest'
+import { hasGroundedManifestCandidateEvidence } from './ai-candidate-evidence'
 import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { lockAiCreateTask } from './ai-create-task.lock'
@@ -118,6 +127,65 @@ function emptyToNull(value: string | null | undefined): string | null {
   if (value == null) return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+function parseManifestReviewSnapshot(value: unknown): {
+  packageId: string
+  version: number
+  objectVersion: number
+  status: 'pending'
+} | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const snapshot = value as Record<string, unknown>
+  if (
+    typeof snapshot.packageId !== 'string' ||
+    !Number.isInteger(snapshot.version) ||
+    !Number.isInteger(snapshot.objectVersion) ||
+    snapshot.status !== 'pending'
+  ) {
+    return null
+  }
+  return {
+    packageId: snapshot.packageId,
+    version: snapshot.version as number,
+    objectVersion: snapshot.objectVersion as number,
+    status: 'pending',
+  }
+}
+
+function parseManifestCapabilities(value: unknown): AiCreateToolName[] {
+  const allowed = new Set<string>(AI_CREATE_TOOL_NAMES)
+  if (!Array.isArray(value)) return ['getTaskContext']
+  const capabilities = value.filter(
+    (item): item is AiCreateToolName => typeof item === 'string' && allowed.has(item),
+  )
+  return capabilities.length > 0 ? capabilities : ['getTaskContext']
+}
+
+function parseManifestMaterialTokenBudget(value: unknown): number {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 0
+  const materialTokens = (value as Record<string, unknown>).materialTokens
+  return typeof materialTokens === 'number' && Number.isFinite(materialTokens)
+    ? Math.max(0, Math.floor(materialTokens))
+    : 0
+}
+
+function clipMaterialIndexToTokenBudget<T extends { excerpt: string; truncated: boolean }>(
+  items: T[],
+  maxTokens: number | null,
+): T[] {
+  if (maxTokens == null) return items
+  let remaining = maxTokens
+  return items.map((item) => {
+    const characters = [...item.excerpt]
+    const take = Math.min(characters.length, remaining)
+    remaining -= take
+    return {
+      ...item,
+      excerpt: characters.slice(0, take).join(''),
+      truncated: item.truncated || take < estimatePlaintextTokens(item.excerpt),
+    }
+  })
 }
 
 @Injectable()
@@ -276,28 +344,53 @@ export class AiCreateTaskService {
     }
 
     const summary = this.toSummary(task)
-    const pending = summary.pendingReview
+    const manifest = caller.contextManifestId
+      ? await this.prisma.aiContextManifest.findFirst({
+          where: {
+            id: caller.contextManifestId,
+            organizationId: caller.organizationId,
+            taskId: caller.taskId,
+            ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
+            ...(caller.inputBatchId ? { inputBatchId: caller.inputBatchId } : {}),
+          },
+        })
+      : null
+    if (caller.contextManifestId && !manifest) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const manifestReview = parseManifestReviewSnapshot(manifest?.reviewSnapshot)
+    const pending = manifest ? manifestReview : summary.pendingReview
+    const snapshot = manifest
+      ? aiCreateDraftSnapshotSchema.parse(manifest.businessSnapshot)
+      : summary.draft.snapshot
+    const objectVersion = manifest?.businessSnapshotVersion ?? summary.draft.version
+    const availableCapabilities = manifest
+      ? parseManifestCapabilities(manifest.availableCapabilities)
+      : capabilitiesForPendingReview(Boolean(pending))
     const currentUserMessage = await this.currentUserMessageForBatch(
       caller.organizationId,
       caller.inputBatchId,
     )
     const conversationEvents = await this.conversationEventsForAttempt(caller)
-    const materials = await this.pinnedMaterialsForBatch(caller)
+    const materials = clipMaterialIndexToTokenBudget(
+      await this.pinnedMaterialsForBatch(caller),
+      manifest ? parseManifestMaterialTokenBudget(manifest.budgetUsage) : null,
+    )
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
-        status: summary.status,
-        currentPhase: summary.currentPhase,
+        status: manifest?.taskStatus ?? summary.status,
+        currentPhase: manifest?.taskPhase ?? summary.currentPhase,
         creatorUserId: summary.creatorUserId,
       },
-      snapshot: summary.draft.snapshot,
-      objectVersion: summary.draft.version,
+      snapshot,
+      objectVersion,
       pending: {
         hasPendingReview: Boolean(pending),
-        reviewPackageId: pending?.id ?? null,
+        reviewPackageId: manifest ? manifestReview?.packageId ?? null : summary.pendingReview?.id ?? null,
       },
-      availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
-      fieldCoverage: classifyDraftFields(summary.draft.snapshot),
+      availableCapabilities,
+      fieldCoverage: classifyDraftFields(snapshot),
       ...(currentUserMessage ? { currentUserMessage } : {}),
       ...(conversationEvents.length ? { conversationEvents } : {}),
       ...(materials.length ? { materials } : {}),
@@ -311,6 +404,7 @@ export class AiCreateTaskService {
       taskId: string
       runId: string
       inputBatchId?: string
+      contextManifestId?: string
     },
     rawInput: unknown,
   ) {
@@ -329,7 +423,7 @@ export class AiCreateTaskService {
     if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
-    if (!caller.inputBatchId) {
+    if (!caller.inputBatchId || !caller.contextManifestId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
     const result = await this.materialService.getPinnedParseResult({
@@ -340,7 +434,38 @@ export class AiCreateTaskService {
       parseResultVersion: input.parseResultVersion,
       pageNumber: input.pageNumber,
     })
-    return getMaterialParseResultOutputSchema.parse(result)
+    const parsed = getMaterialParseResultOutputSchema.parse(result)
+    await this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, caller.organizationId, caller.taskId)
+      const runningAttempt = await tx.aiAgentAttempt.findFirst({
+        where: {
+          contextManifestId: caller.contextManifestId,
+          status: 'running',
+        },
+        select: { id: true },
+      })
+      if (!runningAttempt) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      await tx.$queryRaw`SELECT id FROM ai_context_manifests WHERE id = ${caller.contextManifestId} FOR UPDATE`
+      const latest = await tx.aiContextMaterialRead.aggregate({
+        where: { contextManifestId: caller.contextManifestId },
+        _max: { readSequence: true },
+      })
+      const firstSequence = (latest._max.readSequence ?? 0) + 1
+      await tx.aiContextMaterialRead.createMany({
+        data: parsed.pages.map((page, index) => ({
+            organizationId: caller.organizationId,
+            contextManifestId: caller.contextManifestId as string,
+            materialId: parsed.materialId,
+            parseResultVersion: parsed.parseResultVersion,
+            pageNumber: page.pageNumber,
+            readSequence: firstSequence + index,
+            textHash: createHash('sha256').update(page.text).digest('hex'),
+        })),
+      })
+    })
+    return parsed
   }
 
   private async conversationEventsForAttempt(caller: {
@@ -482,7 +607,15 @@ export class AiCreateTaskService {
   }
 
   async submitReviewPackageForAgent(
-    caller: { userId: string; organizationId: string; taskId: string; runId: string },
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      conversationId?: string
+      inputBatchId?: string
+      contextManifestId?: string
+    },
     rawInput: unknown,
   ): Promise<SubmitReviewPackageOutput> {
     let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
@@ -492,6 +625,14 @@ export class AiCreateTaskService {
       throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
     }
     if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (
+      !caller.contextManifestId &&
+      !this.configService.get<boolean>(
+        'app.aiCreateAssist.allowLegacyUnmanifestedSubmitForTests',
+      )
+    ) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
@@ -531,6 +672,54 @@ export class AiCreateTaskService {
       const pending = task.reviewPackages?.[0]
       if (pending) {
         throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
+      }
+
+      if (caller.contextManifestId) {
+        const manifest = await tx.aiContextManifest.findFirst({
+          where: {
+            id: caller.contextManifestId,
+            organizationId: caller.organizationId,
+            taskId: caller.taskId,
+            ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
+            ...(caller.inputBatchId ? { inputBatchId: caller.inputBatchId } : {}),
+          },
+        })
+        if (!manifest) {
+          throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+        }
+        const sourceEvents = await tx.aiConversationEvent.findMany({
+          where: {
+            conversationId: manifest.conversationId,
+            organizationId: caller.organizationId,
+            sequence: { in: parseEventSequences(manifest.eventSequences) },
+            kind: 'user_message',
+          },
+          select: { id: true, payload: true },
+        })
+        if (
+          !(await hasGroundedManifestCandidateEvidence(tx, {
+            organizationId: caller.organizationId,
+            candidates: input.candidates,
+            contextManifestId: manifest.id,
+            businessSnapshot: manifest.businessSnapshot,
+            materialVersions: manifest.materialVersions,
+            userMessages: sourceEvents.flatMap((event) => {
+              const payload = event.payload
+              if (
+                !payload ||
+                typeof payload !== 'object' ||
+                Array.isArray(payload) ||
+                !('text' in payload)
+              ) {
+                return []
+              }
+              const text = String((payload as { text: unknown }).text ?? '').trim()
+              return text ? [{ id: event.id, text }] : []
+            }),
+          }))
+        ) {
+          throw new BadRequestException('候选证据不属于当前上下文清单')
+        }
       }
 
       const stored = toStoredCandidates(input.candidates)

@@ -62,6 +62,19 @@ export class AiCreateTaskController {
     private readonly materialService: DepartureMaterialService,
   ) {}
 
+  @Post(':taskId/conversations')
+  @RequireMenu('departure:write')
+  createConversation(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+  ) {
+    return this.conversationService.createNew(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+    )
+  }
+
   @Get('assist-availability')
   getAssistAvailability(
     @Req() request: { user: { userId: string } },
@@ -309,6 +322,7 @@ export class AiCreateTaskController {
       taskId,
       conversationId,
       query.afterSequence ?? 0,
+      query.limit ?? 100,
     )
   }
 

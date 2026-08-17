@@ -18,6 +18,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:4111/copilotkit'
+    process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT = 'true'
 
     app = await createTestApp()
     prisma = new PrismaClient()
@@ -52,6 +53,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     })
     await prisma.$disconnect()
     await app.close()
+    delete process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT
   })
 
   function agentSubmit(delegationToken: string, body: Record<string, unknown>, serviceKey = AGENT_SECRET) {
