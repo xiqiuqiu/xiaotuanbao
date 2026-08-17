@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Button, Card, Drawer, Form, Spin, Typography, message, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
-import type { AiCreateTaskSummary, AiReviewableBasicInfoField } from '@xiaotuanbao/shared'
+import type {
+  AiCreateAssistTaskStatus,
+  AiCreateTaskSummary,
+  AiReviewableBasicInfoField,
+} from '@xiaotuanbao/shared'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
@@ -17,6 +21,7 @@ import {
   confirmAiCreateTask,
   confirmAiReviewPackage,
   getAiCreateAssistAvailability,
+  getAiCreateAssistTaskState,
   getAiCreateTask,
   patchAiReviewPackage,
   rejectAiReviewPackage,
@@ -49,6 +54,14 @@ import {
 import { readAiCreateTaskConflict } from '../utils/ai-create-task-conflict'
 
 const AUTOSAVE_DEBOUNCE_MS = 800
+
+const ASSIST_TASK_STATUS_LABELS: Partial<Record<AiCreateAssistTaskStatus, string>> = {
+  parsing: '解析中',
+  ai_processing: 'AI 处理中',
+  awaiting_user_input: '待回答',
+  awaiting_review: '待审核',
+  failed: '处理失败',
+}
 
 type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -545,6 +558,16 @@ export function CreateDepartureWizard() {
     queryFn: getAiCreateAssistAvailability,
   })
 
+  const { data: assistTaskState } = useQuery({
+    queryKey: ['ai-create-assist-state', taskId],
+    queryFn: () => getAiCreateAssistTaskState(taskId!),
+    enabled: Boolean(assistAvailability?.enabled && taskId),
+    refetchInterval: 2500,
+  })
+  const assistTaskStatusLabel = assistTaskState
+    ? ASSIST_TASK_STATUS_LABELS[assistTaskState.status]
+    : undefined
+
   const buildAssistDraft = useCallback(
     () => buildDepartureCreationDraftSnapshot(routeValuesRef.current, infoForm.getFieldsValue(true)),
     [infoForm],
@@ -759,6 +782,7 @@ export function CreateDepartureWizard() {
           conversationId={session.conversation.id}
           initialEvents={session.conversation.events}
           initialActiveBatch={session.conversation.activeBatch}
+          initialDraft={session.conversation.draft}
           snapshotVersion={currentTask.draft.version}
           stageKey="basic_info"
           runStatus="idle"
@@ -838,7 +862,7 @@ export function CreateDepartureWizard() {
         </div>
         {assistAvailability?.enabled ? (
           <Button aria-label="AI 辅助" icon={<CommentOutlined />} onClick={openAssist}>
-            AI 辅助
+            {assistTaskStatusLabel ? `AI 辅助 · ${assistTaskStatusLabel}` : 'AI 辅助'}
           </Button>
         ) : null}
       </div>

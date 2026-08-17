@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -46,6 +47,7 @@ import {
   RemoveBatchMaterialsDto,
   SaveDepartureCreationDraftDto,
   SendAiConversationMessageDto,
+  SaveAiConversationTextDraftDto,
   CancelAiConversationInteractionDto,
   ListAiConversationEventsQueryDto,
   StartAiCreateAssistSessionDto,
@@ -120,6 +122,24 @@ export class AiCreateTaskController {
         interactionVersion: dto.interactionVersion,
         selectedOptionId: dto.selectedOptionId,
       },
+    )
+  }
+
+  @Put(':taskId/conversations/:conversationId/draft')
+  @RequireMenu('departure:write')
+  saveConversationDraft(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Body() dto: SaveAiConversationTextDraftDto,
+  ) {
+    return this.conversationService.saveDraft(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      dto.text,
+      dto.draftEpoch,
     )
   }
 
@@ -236,6 +256,19 @@ export class AiCreateTaskController {
     @Param('taskId') taskId: string,
   ): Promise<DepartureMaterialView[]> {
     return this.materialService.list(request.user.organizationId, request.user.userId, taskId)
+  }
+
+  @Get(':taskId/assist-state')
+  @RequireMenu('departure:write')
+  getAssistTaskState(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+  ) {
+    return this.conversationService.getTaskEntryState(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+    )
   }
 
   @Get(':taskId/materials/:materialId/preview')

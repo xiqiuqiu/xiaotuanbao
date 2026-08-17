@@ -170,6 +170,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
         version: number
       } | null
       queuedBatches: Array<{ id: string; status: string; queued?: boolean }>
+      draft: { text: string; draftEpoch: number; revision: number }
     }
   }
 
@@ -303,6 +304,59 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
         where: { taskId, conversationId, status: 'completed' },
       }),
     ).toBe(1)
+  })
+
+  it('keeps the composer draft when answering an interaction card', async () => {
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: FREE_TEXT_PROMPT },
+    })
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendMessage(
+      taskId,
+      conversationId,
+      { text: '先记下路线，日期还没定' },
+      `e2e-draft-ask-${taskId}`,
+    ).expect(201)
+    await processor.processDueJobs(5)
+
+    const asked = await listEvents(taskId, conversationId)
+    const saved = await authRequest(app, coordinatorToken)
+      .put(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`)
+      .send({ text: '还没发出去的备注', draftEpoch: 1 })
+      .expect(200)
+    expect(saved.body.data).toMatchObject({
+      text: '还没发出去的备注',
+      draftEpoch: 1,
+    })
+
+    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    const replied = await sendMessage(
+      taskId,
+      conversationId,
+      {
+        text: '2026-10-01',
+        replyToEventId: asked.pendingInteraction?.eventId,
+        interactionId: asked.pendingInteraction?.id,
+        interactionVersion: 1,
+      },
+      `e2e-draft-reply-${taskId}`,
+    ).expect(201)
+
+    expect(replied.body.data.draft).toMatchObject({
+      text: '还没发出去的备注',
+      draftEpoch: 1,
+      revision: saved.body.data.revision,
+    })
+    const listed = await listEvents(taskId, conversationId)
+    expect(listed.draft).toMatchObject({
+      text: '还没发出去的备注',
+      draftEpoch: 1,
+      revision: saved.body.data.revision,
+    })
   })
 
   it('requires a valid replyToEventId and does not treat earlier queued text as the answer', async () => {

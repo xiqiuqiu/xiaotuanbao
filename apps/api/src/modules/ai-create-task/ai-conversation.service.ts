@@ -11,8 +11,10 @@ import {
 import { ConfigService } from '@nestjs/config'
 import type {
   AiConversationEventView,
+  AiConversationDraftView,
   AiConversationInteractionView,
   AiConversationView,
+  AiCreateAssistTaskState,
   AiInputBatchView,
   SendAiConversationMessageResult,
 } from '@xiaotuanbao/shared'
@@ -54,6 +56,7 @@ import {
   isFailedDependency,
   toBatchView,
   toConversationView,
+  toConversationDraftView,
   toEventView,
   toFailedMaterialPayload,
   toInteractionView,
@@ -135,7 +138,89 @@ export class AiConversationService {
         },
       })
     })
-    return this.loadConversationView(conversation)
+    return this.loadConversationView(conversation, userId)
+  }
+
+  async saveDraft(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    text: string,
+    draftEpoch: number,
+  ): Promise<AiConversationDraftView> {
+    await this.assertAssistAccess(userId)
+    return this.prisma.$transaction(async (tx) => {
+      await lockAiCreateTask(tx, organizationId, taskId)
+      await lockAiCreateSender(tx, organizationId, userId)
+      await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
+      const conversation = await tx.aiConversation.findFirst({
+        where: { id: conversationId, taskId, organizationId },
+      })
+      if (!conversation) {
+        throw new NotFoundException('AI 建团会话不存在')
+      }
+      if (conversation.creatorUserId !== userId) {
+        throw new ForbiddenException('仅任务创建者可访问该 AI 建团会话')
+      }
+      const current = await tx.aiConversationDraft.findUnique({
+        where: { conversationId_userId: { conversationId, userId } },
+      })
+      if ((current?.draftEpoch ?? 0) !== draftEpoch) {
+        throw new ConflictException({
+          code: 'AI_DRAFT_EPOCH_STALE',
+          message: '草稿已随发送推进，请同步最新草稿后重试',
+        })
+      }
+      const saved = current
+        ? await tx.aiConversationDraft.update({
+            where: { id: current.id },
+            data: { text, revision: { increment: 1 } },
+          })
+        : await tx.aiConversationDraft.create({
+            data: {
+              organizationId,
+              conversationId,
+              userId,
+              text,
+              draftEpoch,
+              revision: 1,
+            },
+          })
+      return toConversationDraftView(conversationId, saved)
+    })
+  }
+
+  async getTaskEntryState(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<AiCreateAssistTaskState> {
+    await this.assertAssistAccess(userId)
+    await this.findOwnedInProgressTask(organizationId, userId, taskId)
+    const conversation = await this.prisma.aiConversation.findFirst({
+      where: { organizationId, taskId, creatorUserId: userId, status: AiConversationStatus.open },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    })
+    if (!conversation) return { status: 'idle' }
+    const projection = await this.loadBatchProjection(conversation.id)
+    const latestTerminal = projection.activeBatch
+      ? null
+      : await this.prisma.aiInputBatch.findFirst({
+          where: { conversationId: conversation.id },
+          orderBy: { createdAt: 'desc' },
+          select: { status: true },
+        })
+    const status = projection.activeBatch?.status ?? latestTerminal?.status
+    if (status === AiInputBatchStatus.waiting_for_materials) return { status: 'parsing' }
+    if (status === AiInputBatchStatus.ready_for_agent || status === AiInputBatchStatus.agent_running) {
+      return { status: 'ai_processing' }
+    }
+    if (status === AiInputBatchStatus.awaiting_user_input) return { status: 'awaiting_user_input' }
+    if (status === AiInputBatchStatus.awaiting_review) return { status: 'awaiting_review' }
+    if (status === AiInputBatchStatus.failed) return { status: 'failed' }
+    return { status: 'idle' }
   }
 
   async sendText(
@@ -402,6 +487,27 @@ export class AiConversationService {
           data: { updatedAt: new Date() },
         })
 
+        const conversationDraft = answering
+          ? await tx.aiConversationDraft.findUnique({
+              where: { conversationId_userId: { conversationId: conversation.id, userId } },
+            })
+          : await tx.aiConversationDraft.upsert({
+              where: { conversationId_userId: { conversationId: conversation.id, userId } },
+              create: {
+                organizationId,
+                conversationId: conversation.id,
+                userId,
+                text: '',
+                draftEpoch: 1,
+                revision: 1,
+              },
+              update: {
+                text: '',
+                draftEpoch: { increment: 1 },
+                revision: { increment: 1 },
+              },
+            })
+
         const events = [
           ...(replyResult?.events ?? []).map(toEventView),
           toEventView(userEvent),
@@ -412,6 +518,7 @@ export class AiConversationService {
           batch: toBatchView(snapshot, { queued }),
           events,
           lastSequence: statusSequence,
+          draft: toConversationDraftView(conversation.id, conversationDraft),
         }
 
         await tx.aiCreateIdempotencyRecord.update({
@@ -781,6 +888,7 @@ export class AiConversationService {
     activeBatch: AiInputBatchView | null
     pendingInteraction: AiConversationInteractionView | null
     queuedBatches: AiInputBatchView[]
+    draft: AiConversationDraftView
   }> {
     await this.assertAssistAccess(userId)
     await this.findOwnedInProgressTask(organizationId, userId, taskId)
@@ -802,11 +910,15 @@ export class AiConversationService {
       orderBy: { sequence: 'desc' },
     })
     const projection = await this.loadBatchProjection(conversation.id)
+    const draft = await this.prisma.aiConversationDraft.findUnique({
+      where: { conversationId_userId: { conversationId: conversation.id, userId } },
+    })
     return {
       conversationId: conversation.id,
       events: events.map(toEventView),
       lastSequence: last?.sequence ?? 0,
       ...projection,
+      draft: toConversationDraftView(conversation.id, draft),
     }
   }
 
@@ -825,12 +937,19 @@ export class AiConversationService {
       let cancelled = false
       let lastSeq = afterSequence
       let timer: ReturnType<typeof setTimeout> | undefined
+      const pending = new Map<number, AiConversationEventView>()
       const emit = (event: AiConversationEventView) => {
         if (event.sequence <= lastSeq) {
           return
         }
-        lastSeq = event.sequence
-        subscriber.next({ id: String(event.sequence), data: event })
+        pending.set(event.sequence, event)
+        let next = pending.get(lastSeq + 1)
+        while (next) {
+          pending.delete(next.sequence)
+          lastSeq = next.sequence
+          subscriber.next({ id: String(next.sequence), data: next })
+          next = pending.get(lastSeq + 1)
+        }
       }
       const live = this.eventHub.observe(conversationId).subscribe(emit)
 
@@ -1062,18 +1181,27 @@ export class AiConversationService {
     return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
   }
 
-  private async loadConversationView(conversation: AiConversation): Promise<AiConversationView> {
-    const events = await this.prisma.aiConversationEvent.findMany({
-      where: { conversationId: conversation.id },
-      orderBy: { sequence: 'asc' },
-    })
-    const projection = await this.loadBatchProjection(conversation.id)
+  private async loadConversationView(
+    conversation: AiConversation,
+    userId: string,
+  ): Promise<AiConversationView> {
+    const [events, projection, draft] = await Promise.all([
+      this.prisma.aiConversationEvent.findMany({
+        where: { conversationId: conversation.id },
+        orderBy: { sequence: 'asc' },
+      }),
+      this.loadBatchProjection(conversation.id),
+      this.prisma.aiConversationDraft.findUnique({
+        where: { conversationId_userId: { conversationId: conversation.id, userId } },
+      }),
+    ])
     return toConversationView(
       conversation,
       events,
       projection.activeBatchSource,
       projection.pendingInteractionSource,
       projection.queuedBatchSources,
+      draft,
     )
   }
 

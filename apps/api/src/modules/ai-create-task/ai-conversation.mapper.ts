@@ -1,5 +1,6 @@
 import type {
   AiConversationEventView,
+  AiConversationDraftView,
   AiConversationInteractionView,
   AiConversationView,
   AiInputBatchMaterialView,
@@ -9,6 +10,7 @@ import {
   DepartureMaterialStatus,
   type AiConversation,
   type AiConversationEvent,
+  type AiConversationDraft,
   type AiConversationInteraction,
   type AiInputBatch,
 } from '@prisma/client'
@@ -116,6 +118,7 @@ export function toConversationView(
   activeBatch: (AiInputBatch & { materials?: BatchMaterialSource[] }) | null,
   pendingInteraction: AiConversationInteraction | null = null,
   queuedBatches: Array<AiInputBatch & { materials?: BatchMaterialSource[] }> = [],
+  draft: AiConversationDraft | null = null,
 ): AiConversationView {
   return {
     id: conversation.id,
@@ -124,6 +127,20 @@ export function toConversationView(
     activeBatch: activeBatch ? toBatchView(activeBatch) : null,
     pendingInteraction: pendingInteraction ? toInteractionView(pendingInteraction) : null,
     queuedBatches: queuedBatches.map((batch) => toBatchView(batch, { queued: true })),
+    draft: toConversationDraftView(conversation.id, draft),
+  }
+}
+
+export function toConversationDraftView(
+  conversationId: string,
+  draft: AiConversationDraft | null,
+): AiConversationDraftView {
+  return {
+    conversationId,
+    text: draft?.text ?? '',
+    draftEpoch: draft?.draftEpoch ?? 0,
+    revision: draft?.revision ?? 0,
+    updatedAt: (draft?.updatedAt ?? new Date(0)).toISOString(),
   }
 }
 
