@@ -627,6 +627,7 @@ export function AiCreateAssistChat({
   const draftRevisionRef = useRef(initialDraft?.revision ?? 0)
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const draftSaveGenerationRef = useRef(0)
+  const pendingDraftTextRef = useRef<string | null>(null)
   const editingDraftRef = useRef(false)
   const deferredDraftRef = useRef<AiConversationDraftView | null>(null)
 
@@ -657,10 +658,12 @@ export function AiCreateAssistChat({
       editingDraftRef.current = true
       draftSaveGenerationRef.current += 1
       const generation = draftSaveGenerationRef.current
+      pendingDraftTextRef.current = value
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current)
       }
       draftSaveTimerRef.current = setTimeout(() => {
+        pendingDraftTextRef.current = null
         const epoch = draftEpochRef.current
         void saveAiConversationDraft(taskId, conversationId, { text: value, draftEpoch: epoch })
           .then((saved) => {
@@ -687,9 +690,19 @@ export function AiCreateAssistChat({
     () => () => {
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current)
+        draftSaveTimerRef.current = undefined
       }
+      const text = pendingDraftTextRef.current
+      if (text === null) {
+        return
+      }
+      pendingDraftTextRef.current = null
+      void saveAiConversationDraft(taskId, conversationId, {
+        text,
+        draftEpoch: draftEpochRef.current,
+      }).catch(() => undefined)
     },
-    [],
+    [conversationId, taskId],
   )
 
   useEffect(() => {
@@ -774,6 +787,7 @@ export function AiCreateAssistChat({
       }
       sendingRef.current = true
       draftSaveGenerationRef.current += 1
+      pendingDraftTextRef.current = null
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current)
       }

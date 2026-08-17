@@ -556,6 +556,61 @@ describe('AiCreateAssistChat', () => {
     )
   })
 
+  it('flushes the latest composer text when the assist chat unmounts before debounce', () => {
+    const { unmount } = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '初始草稿',
+          draftEpoch: 0,
+          revision: 1,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '关闭前刚改的完整文本' },
+    })
+    expect(saveAiConversationDraft).not.toHaveBeenCalled()
+
+    unmount()
+
+    expect(saveAiConversationDraft).toHaveBeenCalledTimes(1)
+    expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+      text: '关闭前刚改的完整文本',
+      draftEpoch: 0,
+    })
+  })
+
+  it('does not flush composer text cancelled by send when the assist chat unmounts', async () => {
+    vi.mocked(sendAiConversationMessage).mockResolvedValue({
+      conversationId: 'conv-1',
+      batch: { id: 'batch-1', status: 'ready_for_agent', conversationVersion: 1 },
+      events: [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '团名用九月川西' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 1,
+    })
+    const { unmount } = render(<AiCreateAssistChat {...chatProps} />)
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '团名用九月川西' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    await waitFor(() => {
+      expect(sendAiConversationMessage).toHaveBeenCalled()
+    })
+    vi.mocked(saveAiConversationDraft).mockClear()
+
+    unmount()
+
+    expect(saveAiConversationDraft).not.toHaveBeenCalled()
+  })
+
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
