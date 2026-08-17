@@ -46,6 +46,7 @@ cp .env.example .env
 - `JWT_SECRET`、`POSTGRES_PASSWORD`：强随机值
 - `CADDY_DOMAIN=:80`（TLS 由 Cloudflare 终止）
 - `VITE_APP_ENV=production`（仅作记录；前端构建参数在 Actions 里已写死为 production）
+- 开启 AI 建团辅助时：设置 `AI_CREATE_ASSIST_ENABLED=true`、强随机 `AGENT_SERVICE_SECRET`、`DEEPSEEK_API_KEY`，并将 `WEB_ORIGINS` 设为实际预览域名；可用 `AI_CREATE_ASSIST_USER_IDS` 限定试用 User
 - 按需改 `SEED_*`（空库首次起来后：`docker compose ... exec api ./node_modules/.bin/prisma db seed`）
 
 不要把 `.env` 提交进 Git。
@@ -59,7 +60,7 @@ cp .env.example .env
 echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 ```
 
-若将 `xiaotuanbao-api` / `xiaotuanbao-web` 设为 public，可跳过。
+若将 `xiaotuanbao-api` / `xiaotuanbao-agent` / `xiaotuanbao-web` 设为 public，可跳过。
 
 ### 4. Cloudflare Tunnel
 
@@ -87,8 +88,11 @@ compose 需要精确标签 **`postgres:16`**、**`caddy:2`**（`postgres:16-alpi
 成功后镜像在 GHCR：
 
 - `ghcr.io/xiqiuqiu/xiaotuanbao-api:<tag>`
+- `ghcr.io/xiqiuqiu/xiaotuanbao-agent:<tag>`
 - `ghcr.io/xiqiuqiu/xiaotuanbao-web:<tag>`
 - `v*` 还会打 `latest`
+
+`workflow-worker` 直接复用同标签的 API 镜像，通过 Compose 覆盖入口启动，不单独发布镜像。
 
 推送 GHCR 使用 workflow 内置 `GITHUB_TOKEN`（已声明 `packages: write`）。无需配置 Tailscale OAuth / `DEPLOY_HOST`。
 
@@ -108,9 +112,11 @@ IMAGE_TAG=main ./scripts/remote-deploy-home.sh
 # Mac
 TAG=main
 docker pull --platform linux/arm64 ghcr.io/xiqiuqiu/xiaotuanbao-api:$TAG
+docker pull --platform linux/arm64 ghcr.io/xiqiuqiu/xiaotuanbao-agent:$TAG
 docker pull --platform linux/arm64 ghcr.io/xiqiuqiu/xiaotuanbao-web:$TAG
 docker save \
   ghcr.io/xiqiuqiu/xiaotuanbao-api:$TAG \
+  ghcr.io/xiqiuqiu/xiaotuanbao-agent:$TAG \
   ghcr.io/xiqiuqiu/xiaotuanbao-web:$TAG | gzip > /tmp/xiaotuanbao-images.tar.gz
 scp /tmp/xiaotuanbao-images.tar.gz root@armbian:/mnt/mydata/
 
@@ -130,7 +136,7 @@ curl -fsS http://127.0.0.1:8088/api/health
 docker compose -f docker-compose.yml -f docker-compose.home.yml config
 ```
 
-应看到 `api`/`web` 为 `ghcr.io/...` 镜像、无 `build`，且 Caddy 端口为 `127.0.0.1:8088:80`。
+应看到 `api`/`agent`/`web` 为 `ghcr.io/...` 镜像、`workflow-worker` 复用 API 镜像、四者均无 `build`，且 Caddy 端口为 `127.0.0.1:8088:80`。
 
 本地日常开发仍用原来的 `pnpm docker:up`（不要加 `docker-compose.home.yml`）。
 
@@ -140,7 +146,7 @@ docker compose -f docker-compose.yml -f docker-compose.home.yml config
 | ---- | ---- |
 | `docker pull` 401 | Mac/服务器 `docker login ghcr.io`；或把 Package 设为 public |
 | `No such image: postgres:16` | 缺精确标签；不要用 `16-alpine` 冒充；可 Mac 传包 load |
-| health 失败 | `docker compose -f docker-compose.yml -f docker-compose.home.yml logs api caddy` |
+| health 失败 | `docker compose -f docker-compose.yml -f docker-compose.home.yml logs api agent workflow-worker caddy` |
 | 页面通但登录 401 | 空库未 seed；`exec api ./node_modules/.bin/prisma db seed` |
 | 本机域名 NXDOMAIN、服务器 health 正常 | Tailscale DNS 负缓存；与部署无关 |
 | 端口冲突 | 确认只有 home overlay 映射 8088 |

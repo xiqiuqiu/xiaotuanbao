@@ -1,6 +1,6 @@
 # Docker 部署指南
 
-通过 Docker Compose 统一部署 **Caddy + API + PostgreSQL + Garage + 前端静态资源**。
+通过 Docker Compose 统一部署 **Caddy + API + Agent + Workflow Worker + PostgreSQL + Garage + 前端静态资源**。
 
 ## 架构
 
@@ -9,9 +9,10 @@
   ↓
 Caddy (:80 / :443)
   ├─ /api/*  → api:3000
+  ├─ /copilotkit* → agent:4111
   └─ /*      → web_dist（前端 dist）
        ↓
-    postgres（内网） + garage:3900（S3 API，内网；本地可映射 3900）
+    workflow-worker + postgres（内网） + garage:3900（S3 API，内网；本地可映射 3900）
 ```
 
 ## 首次部署
@@ -41,6 +42,8 @@ pnpm docker:seed
 | ---- | --------- | ---- | ---- |
 | `xiaotuanbao-caddy` | caddy:2 | 80, 443 | 唯一公网入口 |
 | `xiaotuanbao-api` | apps/api/Dockerfile | 内网 3000 | NestJS（prod 依赖），启动时自动 migrate |
+| `xiaotuanbao-agent` | apps/agent/Dockerfile | 内网 4111 | CopilotKit / Mastra Agent Runtime |
+| `xiaotuanbao-workflow-worker` | apps/api/Dockerfile | — | 复用 API 构建产物，执行持久化 Agent 与资料解析作业 |
 | `xiaotuanbao-postgres` | postgres:16 | 内网 5432 | 数据持久化 |
 | `xiaotuanbao-garage` | dxflrs/garage:v2.3.0 | 3900（S3） | 对象存储（FileStore / ADR-0027） |
 | `xiaotuanbao-web` | apps/web/Dockerfile | — | 一次性构建，复制 dist 到 volume |

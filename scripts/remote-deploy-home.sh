@@ -57,7 +57,7 @@ fi
 export IMAGE_TAG
 
 echo "==> pulling app images"
-timeout "$PULL_TIMEOUT" "${COMPOSE[@]}" pull api web
+timeout "$PULL_TIMEOUT" "${COMPOSE[@]}" pull api agent web
 
 echo "==> ensuring base images"
 docker image inspect caddy:2 >/dev/null 2>&1 || timeout "$PUBLIC_PULL_TIMEOUT" docker pull caddy:2
@@ -81,7 +81,7 @@ echo "==> containers"
 
 if [[ "$ok" -ne 1 ]]; then
   echo "error: health check failed after $HEALTH_RETRIES attempts" >&2
-  "${COMPOSE[@]}" logs --tail=80 api caddy || true
+  "${COMPOSE[@]}" logs --tail=80 api agent workflow-worker caddy || true
   exit 1
 fi
 

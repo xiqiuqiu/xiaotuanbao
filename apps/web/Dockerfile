@@ -25,7 +25,8 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_APP_ENV=$VITE_APP_ENV
 
 WORKDIR /app/apps/web
-RUN pnpm build
+# The production bundle exceeds Node's ~2 GiB default heap on the arm64 CI runner.
+RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm build
 
 FROM alpine:3.20 AS export
 COPY --from=build /app/apps/web/dist /dist

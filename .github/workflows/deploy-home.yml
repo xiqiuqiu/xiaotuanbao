@@ -18,6 +18,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_API: ghcr.io/xiqiuqiu/xiaotuanbao-api
+  IMAGE_AGENT: ghcr.io/xiqiuqiu/xiaotuanbao-agent
   IMAGE_WEB: ghcr.io/xiqiuqiu/xiaotuanbao-web
 
 jobs:
@@ -58,6 +59,9 @@ jobs:
           - name: api
             image: ghcr.io/xiqiuqiu/xiaotuanbao-api
             file: apps/api/Dockerfile
+          - name: agent
+            image: ghcr.io/xiqiuqiu/xiaotuanbao-agent
+            file: apps/agent/Dockerfile
           - name: web
             image: ghcr.io/xiqiuqiu/xiaotuanbao-web
             file: apps/web/Dockerfile
@@ -90,6 +94,19 @@ jobs:
 
       - name: Build and push API
         if: matrix.name == 'api'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Build and push Agent
+        if: matrix.name == 'agent'
         uses: docker/build-push-action@v6
         with:
           context: .
