@@ -135,10 +135,13 @@ export class AiWorkflowProcessor {
     try {
       const published: { conversationId: string; eventId: string }[] = []
       const claimed = await this.prisma.$transaction(async (tx) => {
+        // Continuations reuse the review-turn user_message but snapshot a later
+        // confirm event. Claim by originating turn so they run before later queues.
         const rows = await tx.$queryRaw<{ id: string }[]>`
           SELECT j.id
           FROM ai_workflow_jobs j
           JOIN ai_input_batches b ON b.id = j.input_batch_id
+          JOIN ai_conversation_events origin ON origin.id = b.user_message_event_id
           WHERE j.type = 'agent_batch'::ai_workflow_job_type
             AND (
               (
@@ -191,16 +194,18 @@ export class AiWorkflowProcessor {
               OR NOT EXISTS (
                 SELECT 1
                 FROM ai_input_batches blocking
+                JOIN ai_conversation_events blocking_origin
+                  ON blocking_origin.id = blocking.user_message_event_id
                 WHERE blocking.conversation_id = j.conversation_id
                   AND blocking.id <> j.input_batch_id
-                  AND blocking.conversation_version < b.conversation_version
+                  AND blocking_origin.sequence < origin.sequence
                   AND blocking.status IN (
                     'waiting_for_materials'::ai_input_batch_status,
                     'awaiting_review'::ai_input_batch_status
                   )
               )
             )
-          ORDER BY b.conversation_version ASC
+          ORDER BY origin.sequence ASC, b.conversation_version ASC
           FOR UPDATE OF j SKIP LOCKED
           LIMIT 1
         `
@@ -466,6 +471,7 @@ export class AiWorkflowProcessor {
     const selectedEvents = selectPlaintextContextEvents(
       historyEvents,
       job.inputBatch.conversationVersion,
+      userEvent.sequence,
     )
     const composedUserText = composePlaintextUserText(
       userText,
@@ -878,13 +884,20 @@ export class AiWorkflowProcessor {
 
   private async hasEarlierNonReplyClaimBlocker(
     tx: Prisma.TransactionClient,
-    batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'conversationVersion'>,
+    batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'userMessageEventId'>,
   ): Promise<boolean> {
+    const origin = await tx.aiConversationEvent.findUnique({
+      where: { id: batch.userMessageEventId },
+      select: { sequence: true },
+    })
+    if (!origin) {
+      return false
+    }
     const blocking = await tx.aiInputBatch.findFirst({
       where: {
         conversationId: batch.conversationId,
         id: { not: batch.id },
-        conversationVersion: { lt: batch.conversationVersion },
+        userMessageEvent: { sequence: { lt: origin.sequence } },
         status: {
           in: [AiInputBatchStatus.waiting_for_materials, AiInputBatchStatus.awaiting_review],
         },

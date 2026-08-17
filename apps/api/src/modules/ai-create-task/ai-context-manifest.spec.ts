@@ -57,6 +57,21 @@ describe('projectConversationEventsForAgent', () => {
     ).toEqual([1, 3, 4])
   })
 
+  it('omits later queued user turns from a confirmed review continuation snapshot', () => {
+    expect(
+      selectPlaintextContextEvents(
+        [
+          { sequence: 1, kind: 'user_message', payload: { text: '请按这个团名建团' } },
+          { sequence: 3, kind: 'agent_message', payload: { text: '已提交待审核建议，请在中间表单确认。' } },
+          { sequence: 5, kind: 'user_message', payload: { text: '审核期间补一句' } },
+          { sequence: 7, kind: 'batch_status', payload: { status: 'completed', disposition: 'confirmed' } },
+        ],
+        7,
+        1,
+      ).map((event) => event.sequence),
+    ).toEqual([1, 3])
+  })
+
   it('reads integer event sequences from the ContextManifest JSON', () => {
     expect(parseEventSequences([1, 2, '3', 0, -1, 4.5, 3])).toEqual([1, 2, 3])
     expect(parseEventSequences({ sequences: [1] })).toEqual([])

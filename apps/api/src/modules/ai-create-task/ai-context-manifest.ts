@@ -82,12 +82,22 @@ const PLAINTEXT_CONTEXT_TAIL_LIMIT = 40
 export function selectPlaintextContextEvents(
   events: ConversationEventRecord[],
   conversationVersion: number,
+  originUserMessageSequence?: number,
 ): ConversationEventRecord[] {
   return events
-    .filter(
-      (event) =>
-        event.sequence <= conversationVersion && PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind),
-    )
+    .filter((event) => {
+      if (event.sequence > conversationVersion || !PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind)) {
+        return false
+      }
+      if (
+        originUserMessageSequence != null &&
+        event.kind === 'user_message' &&
+        event.sequence > originUserMessageSequence
+      ) {
+        return false
+      }
+      return true
+    })
     .slice(-PLAINTEXT_CONTEXT_TAIL_LIMIT)
 }
 
