@@ -70,6 +70,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   confirmAiCreateTask: { gating: 'departureWrite', endpointKey: 'departure:write' },
   startAiCreateAssistSession: { gating: 'departureWrite', endpointKey: 'departure:write' },
   sendAiConversationMessage: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  saveAiConversationDraft: { gating: 'departureWrite', endpointKey: 'departure:write' },
   cancelAiConversationInteraction: { gating: 'departureWrite', endpointKey: 'departure:write' },
   retryFailedConversationMaterials: { gating: 'departureWrite', endpointKey: 'departure:write' },
   removeConversationMaterials: { gating: 'departureWrite', endpointKey: 'departure:write' },

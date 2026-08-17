@@ -20,6 +20,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import type {
   AiConversationEventView,
+  AiConversationDraftView,
   AiInputBatchView,
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
@@ -31,6 +32,7 @@ import {
   removeConversationMaterials,
   retryFailedConversationMaterials,
   sendAiConversationMessage,
+  saveAiConversationDraft,
   stopConversationBatch,
 } from '@/services/ai-create-task.service'
 import { ASSIST_ERROR_TEXT } from './assist-error-text'
@@ -49,6 +51,15 @@ import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
 
+type DraftVersion = Pick<AiConversationDraftView, 'draftEpoch' | 'revision'>
+
+function isNewerDraftVersion(next: DraftVersion, current: DraftVersion): boolean {
+  return (
+    next.draftEpoch > current.draftEpoch ||
+    (next.draftEpoch === current.draftEpoch && next.revision > current.revision)
+  )
+}
+
 export interface AiCreateAssistChatProps {
   agentRuntimeUrl: string
   delegationToken: string
@@ -57,6 +68,7 @@ export interface AiCreateAssistChatProps {
   conversationId: string
   initialEvents?: AiConversationEventView[]
   initialActiveBatch?: AiInputBatchView | null
+  initialDraft?: AiConversationDraftView
   snapshotVersion: number
   stageKey: AiCreateSharedLightState['stageKey']
   runStatus: AiCreateSharedLightState['runStatus']
@@ -209,6 +221,15 @@ function mergeEvents(
     bySequence.set(event.sequence, event)
   }
   return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
+}
+
+function getContiguousSequence(events: AiConversationEventView[]): number {
+  const sequences = new Set(events.map((event) => event.sequence))
+  let sequence = 0
+  while (sequences.has(sequence + 1)) {
+    sequence += 1
+  }
+  return sequence
 }
 
 function createBatchStatusActivityRenderer(handlers: {
@@ -419,6 +440,7 @@ function createInteractionActivityRenderer(handlers: {
   }
 }
 const EVENT_CATCH_UP_POLL_MS = 1_000
+const DRAFT_SAVE_DEBOUNCE_MS = 600
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
 const DEFAULT_ATTACHMENT_TEXT = '请根据附件整理发团资料。'
@@ -563,6 +585,7 @@ export function AiCreateAssistChat({
   conversationId,
   initialEvents = [],
   initialActiveBatch = null,
+  initialDraft,
   snapshotVersion,
   stageKey,
   runStatus,
@@ -589,7 +612,7 @@ export function AiCreateAssistChat({
   const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
     initialActiveBatch ?? null,
   )
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(initialDraft?.text ?? '')
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
   const [commandPending, setCommandPending] = useState(false)
@@ -600,9 +623,85 @@ export function AiCreateAssistChat({
   const idempotencyKeyRef = useRef<string | null>(null)
   const sendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
+  const draftEpochRef = useRef(initialDraft?.draftEpoch ?? 0)
+  const draftRevisionRef = useRef(initialDraft?.revision ?? 0)
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const draftSaveGenerationRef = useRef(0)
+  const editingDraftRef = useRef(false)
+  const deferredDraftRef = useRef<AiConversationDraftView | null>(null)
+
+  const applyServerDraft = useCallback((next: AiConversationDraftView) => {
+    if (
+      !isNewerDraftVersion(next, {
+        draftEpoch: draftEpochRef.current,
+        revision: draftRevisionRef.current,
+      })
+    ) {
+      return
+    }
+    if (editingDraftRef.current) {
+      const deferred = deferredDraftRef.current
+      if (!deferred || isNewerDraftVersion(next, deferred)) {
+        deferredDraftRef.current = next
+      }
+      return
+    }
+    draftEpochRef.current = next.draftEpoch
+    draftRevisionRef.current = next.revision
+    setDraft(next.text)
+  }, [])
+
+  const updateDraft = useCallback(
+    (value: string) => {
+      setDraft(value)
+      editingDraftRef.current = true
+      draftSaveGenerationRef.current += 1
+      const generation = draftSaveGenerationRef.current
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current)
+      }
+      draftSaveTimerRef.current = setTimeout(() => {
+        const epoch = draftEpochRef.current
+        void saveAiConversationDraft(taskId, conversationId, { text: value, draftEpoch: epoch })
+          .then((saved) => {
+            if (generation !== draftSaveGenerationRef.current) {
+              return
+            }
+            editingDraftRef.current = false
+            applyServerDraft(saved)
+            const deferred = deferredDraftRef.current
+            deferredDraftRef.current = null
+            if (deferred) {
+              applyServerDraft(deferred)
+            }
+          })
+          .catch(() => {
+            if (generation !== draftSaveGenerationRef.current) {
+              return
+            }
+            editingDraftRef.current = false
+            const deferred = deferredDraftRef.current
+            deferredDraftRef.current = null
+            if (deferred) {
+              applyServerDraft(deferred)
+            }
+          })
+      }, DRAFT_SAVE_DEBOUNCE_MS)
+    },
+    [applyServerDraft, conversationId, taskId],
+  )
+
+  useEffect(
+    () => () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
-    lastSequenceRef.current = events.reduce((max, event) => Math.max(max, event.sequence), 0)
+    lastSequenceRef.current = getContiguousSequence(events)
   }, [events])
 
   useEffect(() => {
@@ -628,6 +727,9 @@ export function AiCreateAssistChat({
           }
           if (page.activeBatch !== undefined) {
             setActiveBatch(page.activeBatch)
+          }
+          if (page.draft) {
+            applyServerDraft(page.draft)
           }
           if (page.events.length > 0) {
             setEvents((current) => mergeEvents(current, page.events))
@@ -667,7 +769,7 @@ export function AiCreateAssistChat({
       source.close()
       window.clearInterval(timer)
     }
-  }, [conversationId, taskId])
+  }, [applyServerDraft, conversationId, taskId])
 
   const send = useCallback(
     async (text: string, files: File[] = [], restoreFiles?: () => Promise<void>) => {
@@ -679,6 +781,11 @@ export function AiCreateAssistChat({
         return
       }
       sendingRef.current = true
+      draftSaveGenerationRef.current += 1
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current)
+      }
+      editingDraftRef.current = false
       setErrorText(null)
       const outboundText = nextText || DEFAULT_ATTACHMENT_TEXT
       setPendingText(outboundText)
@@ -698,13 +805,16 @@ export function AiCreateAssistChat({
         setActiveBatch(result.batch)
         setPendingText(null)
         setPendingUploadCount(0)
+        if (result.draft) {
+          applyServerDraft(result.draft)
+        }
         idempotencyKeyRef.current = null
         if (files.length > 0 || result.events.some((event) => event.kind === 'batch_status')) {
           setMaterialsRefreshKey((key) => key + 1)
         }
       } catch {
         setErrorText(ASSIST_ERROR_TEXT)
-        setDraft(nextText)
+        updateDraft(nextText)
         setPendingText(null)
         setPendingUploadCount(0)
         await restoreFiles?.()
@@ -712,7 +822,7 @@ export function AiCreateAssistChat({
         sendingRef.current = false
       }
     },
-    [conversationId, draft, pendingText, taskId],
+    [applyServerDraft, conversationId, draft, pendingText, taskId, updateDraft],
   )
 
   const sendRef = useRef(send)
@@ -876,7 +986,7 @@ export function AiCreateAssistChat({
             isRunning={isRunning}
             draft={draft}
             pendingText={pendingText}
-            setDraft={setDraft}
+            setDraft={updateDraft}
             onSend={send}
             WelcomeScreen={WelcomeScreen}
           />

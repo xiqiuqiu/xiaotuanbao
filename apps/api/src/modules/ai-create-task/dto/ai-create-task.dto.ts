@@ -181,6 +181,17 @@ export class SendAiConversationMessageDto {
   selectedOptionId?: string
 }
 
+export class SaveAiConversationTextDraftDto {
+  @IsString()
+  @MaxLength(8000)
+  text!: string
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  draftEpoch!: number
+}
+
 export class CancelAiConversationInteractionDto {
   @Type(() => Number)
   @IsInt()

@@ -1,9 +1,13 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode, type ComponentType, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { aiCreateSharedLightStateSchema } from '@xiaotuanbao/ai-contracts'
 import { AiCreateAssistChat } from './AiCreateAssistChat'
-import { sendAiConversationMessage, listAiConversationEvents } from '@/services/ai-create-task.service'
+import {
+  sendAiConversationMessage,
+  listAiConversationEvents,
+  saveAiConversationDraft,
+} from '@/services/ai-create-task.service'
 
 const { addMessage, runAgent, useAgentContext } = vi.hoisted(() => ({
   addMessage: vi.fn(),
@@ -254,6 +258,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
 vi.mock('@/services/ai-create-task.service', () => ({
   sendAiConversationMessage: vi.fn(),
   listAiConversationEvents: vi.fn(),
+  saveAiConversationDraft: vi.fn(),
 }))
 
 class MockEventSource {
@@ -264,9 +269,11 @@ class MockEventSource {
   constructor(url: string, _init?: EventSourceInit) {
     this.url = url
     lastEventSource = this
+    eventSources.push(this)
   }
 }
 let lastEventSource: MockEventSource | null = null
+let eventSources: MockEventSource[] = []
 vi.stubGlobal('EventSource', MockEventSource)
 
 vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
@@ -284,6 +291,15 @@ const chatProps = {
 
 describe('AiCreateAssistChat', () => {
   beforeEach(() => {
+    vi.mocked(saveAiConversationDraft).mockImplementation(
+      async (_taskId, conversationId, payload) => ({
+        conversationId,
+        text: payload.text,
+        draftEpoch: payload.draftEpoch,
+        revision: 1,
+        updatedAt: '2026-08-17T00:00:00.000Z',
+      }),
+    )
     vi.mocked(listAiConversationEvents).mockResolvedValue({
       conversationId: 'conv-1',
       events: [],
@@ -292,10 +308,197 @@ describe('AiCreateAssistChat', () => {
     })
   })
 
+  it('restores a server text draft without syncing local attachments', () => {
+    queuedFiles = [new File(['pdf'], 'local-only.pdf', { type: 'application/pdf' })]
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '电脑上未发送的说明',
+          draftEpoch: 3,
+          revision: 7,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+      />,
+    )
+
+    expect(screen.getByLabelText('询问当前发团草稿')).toHaveValue('电脑上未发送的说明')
+    expect(capturedView.inputValue).toBe('电脑上未发送的说明')
+  })
+
+  it('saves complete text after input becomes idle and suppresses remote draft while editing', async () => {
+    vi.mocked(saveAiConversationDraft).mockResolvedValue({
+      conversationId: 'conv-1',
+      text: '手机正在输入的完整文本',
+      draftEpoch: 0,
+      revision: 3,
+      updatedAt: '2026-08-17T00:00:02.000Z',
+    })
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '初始草稿',
+          draftEpoch: 0,
+          revision: 1,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+      />,
+    )
+    const textarea = screen.getByLabelText('询问当前发团草稿')
+    fireEvent.change(textarea, { target: { value: '手机正在输入的完整文本' } })
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+      draft: {
+        text: '电脑端稍早保存的文本',
+        draftEpoch: 0,
+        revision: 2,
+        updatedAt: '2026-08-17T00:00:01.000Z',
+      },
+    })
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+    expect(textarea).toHaveValue('手机正在输入的完整文本')
+
+    await waitFor(() => {
+      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+        text: '手机正在输入的完整文本',
+        draftEpoch: 0,
+      })
+    })
+    expect(textarea).toHaveValue('手机正在输入的完整文本')
+  })
+
+  it('applies the newest remote draft when this device is idle', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '较早的草稿',
+          draftEpoch: 0,
+          revision: 1,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+      />,
+    )
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+      draft: {
+        text: '另一台设备最后保存的草稿',
+        draftEpoch: 0,
+        revision: 2,
+        updatedAt: '2026-08-17T00:00:01.000Z',
+      },
+    })
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+
+    expect(await screen.findByLabelText('询问当前发团草稿')).toHaveValue(
+      '另一台设备最后保存的草稿',
+    )
+  })
+
+  it('keeps local text while two clients edit, then converges after both become idle', async () => {
+    let serverDraft = {
+      conversationId: 'conv-1',
+      text: '初始草稿',
+      draftEpoch: 0,
+      revision: 1,
+      updatedAt: '2026-08-17T00:00:00.000Z',
+    }
+    vi.mocked(saveAiConversationDraft).mockImplementation(async (_taskId, _conversationId, payload) => {
+      serverDraft = {
+        ...serverDraft,
+        text: payload.text,
+        revision: serverDraft.revision + 1,
+        updatedAt: `2026-08-17T00:00:0${serverDraft.revision}.000Z`,
+      }
+      return serverDraft
+    })
+    const initialDraft = { ...serverDraft }
+    const computer = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        delegationToken="computer-token"
+        initialDraft={initialDraft}
+      />,
+    )
+    const phone = render(
+      <AiCreateAssistChat
+        {...chatProps}
+        runId="run-phone"
+        delegationToken="phone-token"
+        initialDraft={initialDraft}
+      />,
+    )
+    const computerChat = within(computer.container)
+    const phoneChat = within(phone.container)
+    await waitFor(() => expect(listAiConversationEvents).toHaveBeenCalledTimes(2))
+
+    fireEvent.change(phoneChat.getByLabelText('询问当前发团草稿'), {
+      target: { value: '手机先保存的完整草稿' },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    fireEvent.change(computerChat.getByLabelText('询问当前发团草稿'), {
+      target: { value: '电脑仍在编辑的完整草稿' },
+    })
+    await waitFor(() =>
+      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+        text: '手机先保存的完整草稿',
+        draftEpoch: 0,
+      }),
+    )
+
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+      draft: { ...serverDraft },
+    })
+    await act(async () => {
+      eventSources[0]?.onerror?.(new Event('error'))
+    })
+    expect(computerChat.getByLabelText('询问当前发团草稿')).toHaveValue(
+      '电脑仍在编辑的完整草稿',
+    )
+
+    await waitFor(() =>
+      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+        text: '电脑仍在编辑的完整草稿',
+        draftEpoch: 0,
+      }),
+    )
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+      draft: { ...serverDraft },
+    })
+    await act(async () => {
+      eventSources[1]?.onerror?.(new Event('error'))
+    })
+    expect(phoneChat.getByLabelText('询问当前发团草稿')).toHaveValue(
+      '电脑仍在编辑的完整草稿',
+    )
+  })
+
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
     lastEventSource = null
+    eventSources = []
     queuedFiles = []
     capturedKit = {}
     capturedView = {}
@@ -681,6 +884,61 @@ describe('AiCreateAssistChat', () => {
     expect(
       await screen.findByText('已记下你的出团说明，可以继续在表单完善。'),
     ).toBeInTheDocument()
+  })
+
+  it('keeps the contiguous sequence watermark and fills an SSE gap without duplicates', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '请整理这个团' },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+    const agentEvent = {
+      sequence: 3,
+      kind: 'agent_message',
+      payload: { text: '整理完成' },
+      createdAt: '2026-08-14T00:00:02.000Z',
+    }
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(agentEvent) }))
+      lastEventSource?.onmessage?.(new MessageEvent('message', { data: JSON.stringify(agentEvent) }))
+    })
+
+    expect(screen.getAllByText('整理完成')).toHaveLength(1)
+
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: { status: 'agent_running' },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        },
+        agentEvent,
+      ],
+      lastSequence: 3,
+      activeBatch: null,
+    })
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+
+    expect(listAiConversationEvents).toHaveBeenLastCalledWith(
+      'task-assist',
+      'conv-1',
+      1,
+      expect.objectContaining({ signal: expect.any(AbortSignal), silentError: true }),
+    )
+    expect(screen.getAllByText('整理完成')).toHaveLength(1)
   })
 
   it('renders searchRouteTemplates results as read-only chat copy without adopt buttons', () => {

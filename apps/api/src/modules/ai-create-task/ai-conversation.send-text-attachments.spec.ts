@@ -162,6 +162,19 @@ function createHarness(options?: {
     updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     create: jest.fn(),
   }
+  const aiConversationDraft = {
+    upsert: jest.fn().mockResolvedValue({
+      id: 'conversation-draft-1',
+      organizationId,
+      conversationId,
+      userId,
+      text: '',
+      draftEpoch: 1,
+      revision: 1,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  }
 
   const tx = {
     $queryRaw: jest.fn().mockResolvedValue([]),
@@ -173,6 +186,7 @@ function createHarness(options?: {
     departureMaterial,
     departureMaterialParseRun,
     aiWorkflowJob,
+    aiConversationDraft,
   }
 
   const prisma = {

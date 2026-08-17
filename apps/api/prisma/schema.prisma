@@ -336,6 +336,7 @@ model Organization {
   aiConversations AiConversation[]
   aiConversationEvents AiConversationEvent[]
   aiConversationInteractions AiConversationInteraction[]
+  aiConversationDrafts AiConversationDraft[]
   aiInputBatches AiInputBatch[]
   aiInputBatchMaterials AiInputBatchMaterial[]
   aiWorkflowJobs AiWorkflowJob[]
@@ -420,6 +421,7 @@ model User {
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
   aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
   createdAiConversations AiConversation[] @relation("AiConversationCreator")
+  aiConversationDrafts AiConversationDraft[]
   createdAiInputBatches AiInputBatch[] @relation("AiInputBatchCreator")
   createdDepartureMaterials DepartureMaterial[] @relation("DepartureMaterialCreator")
 
@@ -1317,6 +1319,7 @@ model AiConversation {
   updatedAt      DateTime             @updatedAt @map("updated_at")
   events         AiConversationEvent[]
   interactions   AiConversationInteraction[]
+  drafts          AiConversationDraft[]
   inputBatches   AiInputBatch[]
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
@@ -1325,6 +1328,26 @@ model AiConversation {
   @@index([taskId, status, updatedAt])
   @@index([organizationId, creatorUserId, status])
   @@map("ai_conversations")
+}
+
+/// AI 会话未发送纯文本草稿：独立于事件与模型上下文，按 User 保存完整文本。
+model AiConversationDraft {
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String         @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String         @map("user_id")
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text           String         @default("")
+  draftEpoch     Int            @default(0) @map("draft_epoch")
+  revision       Int            @default(0)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@unique([conversationId, userId])
+  @@index([organizationId, userId, updatedAt])
+  @@map("ai_conversation_drafts")
 }
 
 /// AI 会话事件：按服务端 sequence 追加且不可修改。

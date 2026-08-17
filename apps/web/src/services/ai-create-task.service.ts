@@ -9,12 +9,15 @@ import type {
   PatchAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
   AiCreateAssistAvailability,
+  AiCreateAssistTaskState,
   StartAiCreateAssistSessionDto,
   AiCreateAssistSession,
   AiConversationEventView,
+  AiConversationDraftView,
   AiConversationInteractionView,
   AiInputBatchView,
   SendAiConversationMessageResult,
+  SaveAiConversationDraftDto,
 } from '@/types/api'
 
 export async function saveDepartureCreationDraft(
@@ -42,6 +45,14 @@ export async function confirmAiCreateTask(
 
 export async function getAiCreateAssistAvailability(): Promise<AiCreateAssistAvailability> {
   return request.get<AiCreateAssistAvailability>('/ai-create-tasks/assist-availability')
+}
+
+export async function getAiCreateAssistTaskState(
+  taskId: string,
+): Promise<AiCreateAssistTaskState> {
+  return request.get<AiCreateAssistTaskState>(`/ai-create-tasks/${taskId}/assist-state`, {
+    silentError: true,
+  })
 }
 
 export async function startAiCreateAssistSession(
@@ -98,6 +109,18 @@ export async function sendAiConversationMessage(
       silentError: true,
       headers: { 'Idempotency-Key': idempotencyKey },
     },
+  )
+}
+
+export async function saveAiConversationDraft(
+  taskId: string,
+  conversationId: string,
+  payload: SaveAiConversationDraftDto,
+): Promise<AiConversationDraftView> {
+  return request.put<AiConversationDraftView>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`,
+    payload,
+    { silentError: true },
   )
 }
 
@@ -196,6 +219,7 @@ export async function listAiConversationEvents(
   activeBatch: AiInputBatchView | null
   pendingInteraction?: AiConversationInteractionView | null
   queuedBatches?: AiInputBatchView[]
+  draft?: AiConversationDraftView
 }> {
   return request.get(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/events`,

@@ -71,6 +71,7 @@ vi.mock('@/services/ai-create-task.service', () => ({
   getAiCreateTask: vi.fn(),
   confirmAiCreateTask: vi.fn(),
   getAiCreateAssistAvailability: vi.fn(),
+  getAiCreateAssistTaskState: vi.fn(),
   startAiCreateAssistSession: vi.fn(),
   sendAiConversationMessage: vi.fn(),
   listAiConversationEvents: vi.fn(),
@@ -190,6 +191,7 @@ import {
   confirmAiCreateTask,
   confirmAiReviewPackage,
   getAiCreateAssistAvailability,
+  getAiCreateAssistTaskState,
   getAiCreateTask,
   patchAiReviewPackage,
   rejectAiReviewPackage,
@@ -445,6 +447,7 @@ describe('CreateDepartureWizard', () => {
       enabled: false,
       agentRuntimeUrl: null,
     })
+    vi.mocked(getAiCreateAssistTaskState).mockResolvedValue({ status: 'idle' })
     vi.mocked(listRouteTemplates).mockResolvedValue([])
     vi.mocked(deleteRouteTemplate).mockResolvedValue({ success: true })
     vi.mocked(listEmployeeOptions).mockResolvedValue([{ id: 'user-1', name: '王杰' }])
@@ -1107,6 +1110,21 @@ describe('CreateDepartureWizard', () => {
       taskId: undefined,
       draft: expect.objectContaining({ mode: 'manual', routeName: '' }),
     })
+  })
+
+  it('shows persisted background work at the task entry without opening the assist pane', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(getAiCreateAssistTaskState).mockResolvedValue({ status: 'ai_processing' })
+
+    renderWizard()
+
+    expect(await screen.findByText('AI 辅助 · AI 处理中')).toBeInTheDocument()
+    expect(useUiStore.getState().assistPaneCollapsed).toBe(true)
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
   it('starts assist when the pane expands without clicking AI 辅助', async () => {

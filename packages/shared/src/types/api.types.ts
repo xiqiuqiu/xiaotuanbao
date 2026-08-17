@@ -871,6 +871,18 @@ export interface AiCreateAssistAvailability {
   agentRuntimeUrl: string | null
 }
 
+export type AiCreateAssistTaskStatus =
+  | 'idle'
+  | 'parsing'
+  | 'ai_processing'
+  | 'awaiting_user_input'
+  | 'awaiting_review'
+  | 'failed'
+
+export interface AiCreateAssistTaskState {
+  status: AiCreateAssistTaskStatus
+}
+
 export interface StartAiCreateAssistSessionDto {
   taskId?: string
   draft?: DepartureCreationDraftSnapshot
@@ -927,6 +939,19 @@ export interface AiConversationEventView {
   createdAt: string
 }
 
+export interface AiConversationDraftView {
+  conversationId: string
+  text: string
+  draftEpoch: number
+  revision: number
+  updatedAt: string
+}
+
+export interface SaveAiConversationDraftDto {
+  text: string
+  draftEpoch: number
+}
+
 export type AiInputBatchMaterialReadyStatus = 'pending' | 'ready' | 'failed'
 
 export interface AiInputBatchMaterialView {
@@ -960,6 +985,7 @@ export interface AiConversationView {
   activeBatch: AiInputBatchView | null
   pendingInteraction?: AiConversationInteractionView | null
   queuedBatches?: AiInputBatchView[]
+  draft?: AiConversationDraftView
 }
 
 export interface SendAiConversationMessageDto {
@@ -979,6 +1005,7 @@ export interface SendAiConversationMessageResult {
   batch: AiInputBatchView
   events: AiConversationEventView[]
   lastSequence: number
+  draft?: AiConversationDraftView
 }
 
 export type DepartureMaterialStatus =
