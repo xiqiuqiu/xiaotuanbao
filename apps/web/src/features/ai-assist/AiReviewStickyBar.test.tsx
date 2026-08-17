@@ -11,6 +11,7 @@ const pendingReview: AiReviewPackageView = {
   status: 'pending',
   confirmationUnit: 'basic_info_draft',
   baseObjectVersion: 1,
+  version: 1,
   runId: 'run-1',
   candidates: [
     {

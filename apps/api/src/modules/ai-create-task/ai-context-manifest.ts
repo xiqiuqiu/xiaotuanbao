@@ -5,6 +5,7 @@ import {
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
   PLAINTEXT_SYSTEM_PROMPT_VERSION,
   PLAINTEXT_TOOL_SCHEMA_VERSION,
+  REVIEW_CONFIRM_CONTINUATION_TEXT,
 } from './ai-conversation.constants'
 
 export interface PlaintextContextInput {
@@ -81,13 +82,42 @@ const PLAINTEXT_CONTEXT_TAIL_LIMIT = 40
 export function selectPlaintextContextEvents(
   events: ConversationEventRecord[],
   conversationVersion: number,
+  originUserMessageSequence?: number,
 ): ConversationEventRecord[] {
   return events
-    .filter(
-      (event) =>
-        event.sequence <= conversationVersion && PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind),
-    )
+    .filter((event) => {
+      if (event.sequence > conversationVersion || !PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind)) {
+        return false
+      }
+      if (
+        originUserMessageSequence != null &&
+        event.kind === 'user_message' &&
+        event.sequence > originUserMessageSequence
+      ) {
+        return false
+      }
+      return true
+    })
     .slice(-PLAINTEXT_CONTEXT_TAIL_LIMIT)
+}
+
+export function resolveAttemptUserText(
+  originalUserText: string,
+  versionEvent: { kind: string; payload: unknown } | null | undefined,
+): string {
+  if (versionEvent?.kind !== 'batch_status' || !versionEvent.payload) {
+    return originalUserText
+  }
+  const payload = versionEvent.payload
+  if (
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    'disposition' in payload &&
+    payload.disposition === 'confirmed'
+  ) {
+    return REVIEW_CONFIRM_CONTINUATION_TEXT
+  }
+  return originalUserText
 }
 
 export function composePlaintextUserText(

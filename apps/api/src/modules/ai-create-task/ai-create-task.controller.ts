@@ -41,6 +41,7 @@ import {
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
   PatchAiReviewPackageDto,
+  RejectAiReviewPackageDto,
   RetryFailedMaterialsDto,
   RemoveBatchMaterialsDto,
   SaveDepartureCreationDraftDto,
@@ -386,12 +387,14 @@ export class AiCreateTaskController {
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('taskId') taskId: string,
     @Param('packageId') packageId: string,
+    @Body() dto: RejectAiReviewPackageDto,
   ): Promise<AiCreateTaskSummary> {
     return this.aiCreateTaskService.rejectReviewPackage(
       request.user.organizationId,
       request.user.userId,
       taskId,
       packageId,
+      dto,
     )
   }
 }

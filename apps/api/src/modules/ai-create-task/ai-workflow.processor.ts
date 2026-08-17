@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt'
 import {
   AiCollaborationError,
   type HeadlessExecutionResult,
+  type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
   AiAgentAttemptStatus,
@@ -12,6 +13,7 @@ import {
   AiConversationInteractionStatus,
   AiCreateActivityRunStatus,
   AiInputBatchStatus,
+  AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   OrganizationStatus,
@@ -31,6 +33,7 @@ import {
   buildPlaintextContextManifest,
   composePlaintextUserText,
   projectConversationEventsForAgent,
+  resolveAttemptUserText,
   selectPlaintextContextEvents,
 } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
@@ -46,6 +49,7 @@ import {
   materialProgressFromDeps,
   parseErrorMessage,
 } from './departure-material.constants'
+import { toStoredCandidates } from './review-package.mapper'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -131,10 +135,13 @@ export class AiWorkflowProcessor {
     try {
       const published: { conversationId: string; eventId: string }[] = []
       const claimed = await this.prisma.$transaction(async (tx) => {
+        // Continuations reuse the review-turn user_message but snapshot a later
+        // confirm event. Claim by originating turn so they run before later queues.
         const rows = await tx.$queryRaw<{ id: string }[]>`
           SELECT j.id
           FROM ai_workflow_jobs j
           JOIN ai_input_batches b ON b.id = j.input_batch_id
+          JOIN ai_conversation_events origin ON origin.id = b.user_message_event_id
           WHERE j.type = 'agent_batch'::ai_workflow_job_type
             AND (
               (
@@ -187,16 +194,18 @@ export class AiWorkflowProcessor {
               OR NOT EXISTS (
                 SELECT 1
                 FROM ai_input_batches blocking
+                JOIN ai_conversation_events blocking_origin
+                  ON blocking_origin.id = blocking.user_message_event_id
                 WHERE blocking.conversation_id = j.conversation_id
                   AND blocking.id <> j.input_batch_id
-                  AND blocking.conversation_version < b.conversation_version
+                  AND blocking_origin.sequence < origin.sequence
                   AND blocking.status IN (
                     'waiting_for_materials'::ai_input_batch_status,
                     'awaiting_review'::ai_input_batch_status
                   )
               )
             )
-          ORDER BY b.conversation_version ASC
+          ORDER BY origin.sequence ASC, b.conversation_version ASC
           FOR UPDATE OF j SKIP LOCKED
           LIMIT 1
         `
@@ -408,6 +417,14 @@ export class AiWorkflowProcessor {
     const userEvent = await this.prisma.aiConversationEvent.findUniqueOrThrow({
       where: { id: job.inputBatch.userMessageEventId },
     })
+    const versionEvent = await this.prisma.aiConversationEvent.findFirst({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        sequence: job.inputBatch.conversationVersion,
+      },
+      select: { kind: true, payload: true },
+    })
     const task = await this.prisma.aiCreateTask.findUniqueOrThrow({
       where: { id: job.taskId },
       include: { draft: true },
@@ -415,11 +432,12 @@ export class AiWorkflowProcessor {
     if (!task.draft) {
       throw new Error('发团创建草稿不存在')
     }
-    const userText = (
+    const originalUserText = (
       userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
         ? String((userEvent.payload as { text: unknown }).text ?? '')
         : ''
     ).trim()
+    const userText = resolveAttemptUserText(originalUserText, versionEvent).trim()
     if (!userText) {
       throw new Error('输入批次缺少 User 原文')
     }
@@ -453,6 +471,7 @@ export class AiWorkflowProcessor {
     const selectedEvents = selectPlaintextContextEvents(
       historyEvents,
       job.inputBatch.conversationVersion,
+      userEvent.sequence,
     )
     const composedUserText = composePlaintextUserText(
       userText,
@@ -602,6 +621,11 @@ export class AiWorkflowProcessor {
             }
           : null
 
+      const reviewPackageId =
+        result.kind === 'awaiting_review'
+          ? await this.persistReviewPackage(tx, job, result.reviewPackage)
+          : null
+
       const agentEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
@@ -611,6 +635,7 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           attemptId,
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
+          ...(reviewPackageId ? { reviewPackageId } : {}),
         } as Prisma.InputJsonValue,
       })
       published.push(agentEvent.id)
@@ -636,7 +661,12 @@ export class AiWorkflowProcessor {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
         kind: AiConversationEventKind.batch_status,
-        payload: { batchId: job.inputBatchId, status: batchStatus, attemptId },
+        payload: {
+          batchId: job.inputBatchId,
+          status: batchStatus,
+          attemptId,
+          ...(reviewPackageId ? { reviewPackageId } : {}),
+        },
       })
       published.push(statusEvent.id)
 
@@ -854,13 +884,20 @@ export class AiWorkflowProcessor {
 
   private async hasEarlierNonReplyClaimBlocker(
     tx: Prisma.TransactionClient,
-    batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'conversationVersion'>,
+    batch: Pick<AiInputBatch, 'id' | 'conversationId' | 'userMessageEventId'>,
   ): Promise<boolean> {
+    const origin = await tx.aiConversationEvent.findUnique({
+      where: { id: batch.userMessageEventId },
+      select: { sequence: true },
+    })
+    if (!origin) {
+      return false
+    }
     const blocking = await tx.aiInputBatch.findFirst({
       where: {
         conversationId: batch.conversationId,
         id: { not: batch.id },
-        conversationVersion: { lt: batch.conversationVersion },
+        userMessageEvent: { sequence: { lt: origin.sequence } },
         status: {
           in: [AiInputBatchStatus.waiting_for_materials, AiInputBatchStatus.awaiting_review],
         },
@@ -880,6 +917,61 @@ export class AiWorkflowProcessor {
       select: { id: true },
     })
     return owned !== null
+  }
+
+  private async persistReviewPackage(
+    tx: Prisma.TransactionClient,
+    job: ClaimedJob,
+    reviewPackage: SubmitReviewPackageModelInput,
+  ): Promise<string> {
+    const task = await tx.aiCreateTask.findFirst({
+      where: { id: job.taskId, organizationId: job.organizationId },
+      include: {
+        draft: true,
+        reviewPackages: {
+          where: { status: AiReviewPackageStatus.pending },
+          take: 1,
+        },
+      },
+    })
+    if (!task?.draft) {
+      throw new Error('REVIEW_PACKAGE_TASK_MISSING')
+    }
+    const existing = task.reviewPackages[0]
+    if (existing) {
+      if (!existing.inputBatchId) {
+        await tx.aiReviewPackage.update({
+          where: { id: existing.id },
+          data: { inputBatchId: job.inputBatchId },
+        })
+      }
+      return existing.id
+    }
+    if (task.draft.version !== reviewPackage.objectVersion) {
+      throw new Error('VERSION_CONFLICT')
+    }
+    const run = await this.getOrCreateRunningActivityRun(
+      tx,
+      job.organizationId,
+      job.taskId,
+      job.inputBatch.creatorUserId,
+    )
+    const stored = toStoredCandidates(reviewPackage.candidates)
+    const created = await tx.aiReviewPackage.create({
+      data: {
+        organizationId: job.organizationId,
+        taskId: job.taskId,
+        runId: run.id,
+        inputBatchId: job.inputBatchId,
+        status: AiReviewPackageStatus.pending,
+        confirmationUnit: reviewPackage.confirmationUnit,
+        baseObjectVersion: task.draft.version,
+        baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
+        candidates: stored as unknown as Prisma.InputJsonValue,
+        version: 1,
+      },
+    })
+    return created.id
   }
 }
 

@@ -1038,13 +1038,19 @@ export interface AiReviewPackageView {
   status: AiReviewPackageStatus
   confirmationUnit: 'basic_info_draft'
   baseObjectVersion: number
+  version: number
   runId: string
   candidates: AiReviewCandidateView[]
 }
 
 export interface ConfirmAiReviewPackageDto {
   expectedVersion: number
+  expectedPackageVersion: number
   corrections?: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
+}
+
+export interface RejectAiReviewPackageDto {
+  expectedPackageVersion: number
 }
 
 export interface PatchAiReviewPackageDto {

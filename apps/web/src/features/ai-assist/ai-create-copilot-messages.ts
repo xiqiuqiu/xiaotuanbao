@@ -43,7 +43,7 @@ type MaterialProgress = {
 export function batchStatusLabel(
   status: string,
   progress?: MaterialProgress | null,
-  extra?: { queued?: boolean; reason?: string },
+  extra?: { queued?: boolean; reason?: string; disposition?: string },
 ): string | null {
   if (status === 'waiting_for_materials') {
     const ready = progress?.ready
@@ -60,8 +60,11 @@ export function batchStatusLabel(
   if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
   if (status === 'agent_running') return 'AI 处理中'
   if (status === 'awaiting_user_input') return '等待回答'
-  if (status === 'awaiting_review') return 'AI 建议待审核'
-  if (status === 'completed') return '已完成'
+  if (status === 'awaiting_review') return '等待表单审核'
+  if (status === 'completed') {
+    if (extra?.disposition === 'rejected') return '已拒绝本次建议'
+    return '已完成'
+  }
   if (status === 'failed') return '处理失败'
   if (status === 'cancelled') {
     if (extra?.reason === 'interaction_cancelled') return '已取消等待'
@@ -292,6 +295,8 @@ export function toCopilotChatMessages(
       const label = batchStatusLabel(status, progress, {
         queued: event.payload.queued === true,
         reason: typeof event.payload.reason === 'string' ? event.payload.reason : undefined,
+        disposition:
+          typeof event.payload.disposition === 'string' ? event.payload.disposition : undefined,
       })
       if (label) {
         const failedMaterials = failedMaterialsFromPayload(event.payload)

@@ -1207,7 +1207,10 @@ model AiReviewPackage {
   task               AiCreateTask          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   runId              String                @map("run_id")
   run                AiCreateActivityRun   @relation(fields: [runId], references: [id])
+  inputBatchId       String?               @map("input_batch_id")
+  inputBatch         AiInputBatch?         @relation(fields: [inputBatchId], references: [id], onDelete: SetNull)
   status             AiReviewPackageStatus @default(pending)
+  version            Int                   @default(1)
   confirmationUnit   String                @default("basic_info_draft") @map("confirmation_unit")
   baseObjectVersion  Int                   @map("base_object_version")
   baselineSnapshot   Json                  @map("baseline_snapshot")
@@ -1218,6 +1221,7 @@ model AiReviewPackage {
 
   @@index([taskId, status])
   @@index([organizationId, createdAt])
+  @@index([inputBatchId])
   @@map("ai_review_packages")
 }
 
@@ -1367,6 +1371,7 @@ model AiInputBatch {
   agentAttempts        AiAgentAttempt[]
   contextManifests     AiContextManifest[]
   askedInteractions    AiConversationInteraction[]
+  reviewPackages       AiReviewPackage[]
 
   @@index([taskId, status])
   @@index([conversationId, createdAt])

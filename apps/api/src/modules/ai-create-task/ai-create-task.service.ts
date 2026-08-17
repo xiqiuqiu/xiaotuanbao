@@ -55,13 +55,15 @@ import type {
   ConfirmAiReviewPackageDto,
   DepartureCreationDraftSnapshotDto,
   PatchAiReviewPackageDto,
+  RejectAiReviewPackageDto,
   SaveDepartureCreationDraftDto,
   StartAiCreateAssistSessionDto,
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import { parseEventSequences, projectConversationEventsForAgent } from './ai-context-manifest'
+import { parseEventSequences, projectConversationEventsForAgent, resolveAttemptUserText } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
+import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { DepartureMaterialService } from './departure-material.service'
 import {
@@ -416,14 +418,30 @@ export class AiCreateTaskService {
     }
     const batch = await this.prisma.aiInputBatch.findFirst({
       where: { id: inputBatchId, organizationId },
-      select: { userMessageEvent: { select: { payload: true } } },
+      select: {
+        conversationId: true,
+        conversationVersion: true,
+        userMessageEvent: { select: { payload: true } },
+      },
     })
     const payload = batch?.userMessageEvent.payload
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
       return undefined
     }
     const text = payload.text
-    return typeof text === 'string' && text.trim() ? text.trim() : undefined
+    const originalText = typeof text === 'string' && text.trim() ? text.trim() : undefined
+    if (!originalText || !batch) {
+      return undefined
+    }
+    const versionEvent = await this.prisma.aiConversationEvent.findFirst({
+      where: {
+        conversationId: batch.conversationId,
+        organizationId,
+        sequence: batch.conversationVersion,
+      },
+      select: { kind: true, payload: true },
+    })
+    return resolveAttemptUserText(originalText, versionEvent)
   }
 
   async searchRouteTemplatesForAgent(
@@ -566,20 +584,36 @@ export class AiCreateTaskService {
     userId: string,
     taskId: string,
     packageId: string,
+    dto: RejectAiReviewPackageDto,
   ): Promise<AiCreateTaskSummary> {
-    return this.prisma.$transaction(async (tx) => {
-      const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+    const { summary, events } = await this.prisma.$transaction(async (tx) => {
+      const pkg = await this.lockPendingPackage(
+        tx,
+        organizationId,
+        userId,
+        taskId,
+        packageId,
+        dto.expectedPackageVersion,
+      )
       const candidates = parseStoredCandidates(pkg.candidates).map((candidate) => ({
         ...candidate,
         status: 'rejected' as const,
       }))
-      await tx.aiReviewPackage.update({
-        where: { id: pkg.id },
+      const claimed = await tx.aiReviewPackage.updateMany({
+        where: {
+          id: pkg.id,
+          status: AiReviewPackageStatus.pending,
+          version: dto.expectedPackageVersion,
+        },
         data: {
           status: AiReviewPackageStatus.rejected,
+          version: { increment: 1 },
           candidates: candidates as unknown as Prisma.InputJsonValue,
         },
       })
+      if (claimed.count !== 1) {
+        await this.throwAlreadyHandled(tx, organizationId, taskId)
+      }
       await this.writeReviewRecord(tx, {
         organizationId,
         packageId: pkg.id,
@@ -591,12 +625,24 @@ export class AiCreateTaskService {
         objectVersion: pkg.baseObjectVersion,
         writeResult: AiReviewWriteResult.rejected,
       })
+      const events = await this.conversationService.finalizeReviewDisposition(tx, {
+        organizationId,
+        taskId,
+        userId,
+        reviewPackageId: pkg.id,
+        inputBatchId: pkg.inputBatchId,
+        disposition: 'rejected',
+      })
       const task = await tx.aiCreateTask.findFirstOrThrow({
         where: { id: taskId, organizationId },
         include: TASK_WITH_PENDING_INCLUDE,
       })
-      return this.toSummary(task)
+      return { summary: this.toSummary(task), events }
     })
+    for (const event of events) {
+      this.conversationService.publish(event.conversationId, event)
+    }
+    return summary
   }
 
   async confirmReviewPackage(
@@ -607,8 +653,15 @@ export class AiCreateTaskService {
     dto: ConfirmAiReviewPackageDto,
   ): Promise<AiCreateTaskSummary> {
     const requestCorrections = this.parseCorrections(dto.corrections)
-    return this.prisma.$transaction(async (tx) => {
-      const pkg = await this.lockPendingPackage(tx, organizationId, userId, taskId, packageId)
+    const { summary, events } = await this.prisma.$transaction(async (tx) => {
+      const pkg = await this.lockPendingPackage(
+        tx,
+        organizationId,
+        userId,
+        taskId,
+        packageId,
+        dto.expectedPackageVersion,
+      )
       const task = await tx.aiCreateTask.findFirstOrThrow({
         where: { id: taskId, organizationId },
         include: TASK_WITH_PENDING_INCLUDE,
@@ -721,22 +774,31 @@ export class AiCreateTaskService {
         throw error
       }
 
+      const claimed = await tx.aiReviewPackage.updateMany({
+        where: {
+          id: pkg.id,
+          status: AiReviewPackageStatus.pending,
+          version: dto.expectedPackageVersion,
+        },
+        data: {
+          status: AiReviewPackageStatus.confirmed,
+          version: { increment: 1 },
+          candidates: candidates.map((candidate) => ({
+            ...candidate,
+            status: 'confirmed',
+          })) as unknown as Prisma.InputJsonValue,
+        },
+      })
+      if (claimed.count !== 1) {
+        await this.throwAlreadyHandled(tx, organizationId, taskId)
+      }
+
       const nextVersion = task.draft.version + 1
       await tx.departureCreationDraft.update({
         where: { id: task.draft.id },
         data: {
           version: nextVersion,
           snapshot: merge.nextSnapshot as unknown as Prisma.InputJsonValue,
-        },
-      })
-      await tx.aiReviewPackage.update({
-        where: { id: pkg.id },
-        data: {
-          status: AiReviewPackageStatus.confirmed,
-          candidates: candidates.map((candidate) => ({
-            ...candidate,
-            status: 'confirmed',
-          })) as unknown as Prisma.InputJsonValue,
         },
       })
       await this.writeReviewRecord(tx, {
@@ -750,13 +812,25 @@ export class AiCreateTaskService {
         objectVersion: nextVersion,
         writeResult: AiReviewWriteResult.success,
       })
+      const events = await this.conversationService.finalizeReviewDisposition(tx, {
+        organizationId,
+        taskId,
+        userId,
+        reviewPackageId: pkg.id,
+        inputBatchId: pkg.inputBatchId,
+        disposition: 'confirmed',
+      })
 
       const updated = await tx.aiCreateTask.findFirstOrThrow({
         where: { id: taskId, organizationId },
         include: TASK_WITH_PENDING_INCLUDE,
       })
-      return this.toSummary(updated)
+      return { summary: this.toSummary(updated), events }
     })
+    for (const event of events) {
+      this.conversationService.publish(event.conversationId, event)
+    }
+    return summary
   }
 
   async confirm(
@@ -1144,6 +1218,7 @@ export class AiCreateTaskService {
     userId: string,
     taskId: string,
     packageId: string,
+    expectedPackageVersion?: number,
   ): Promise<AiReviewPackage> {
     await lockAiCreateTask(tx, organizationId, taskId)
     const task = await tx.aiCreateTask.findFirst({
@@ -1165,9 +1240,27 @@ export class AiCreateTaskService {
       throw new NotFoundException('审核包不存在')
     }
     if (pkg.status !== AiReviewPackageStatus.pending) {
-      throw new BadRequestException('仅待确认审核包可处理')
+      await this.throwAlreadyHandled(tx, organizationId, taskId)
+    }
+    if (expectedPackageVersion != null && pkg.version !== expectedPackageVersion) {
+      throw new ConflictException('审核包版本已变化，请刷新后重试')
     }
     return pkg
+  }
+
+  private async throwAlreadyHandled(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    taskId: string,
+  ): Promise<never> {
+    const task = await tx.aiCreateTask.findFirstOrThrow({
+      where: { id: taskId, organizationId },
+      include: TASK_WITH_PENDING_INCLUDE,
+    })
+    throw new ConflictException({
+      message: REVIEW_ALREADY_HANDLED_MESSAGE,
+      data: this.toSummary(task),
+    })
   }
 
   private parseCorrections(
