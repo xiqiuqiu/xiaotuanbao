@@ -14,6 +14,16 @@ services:
     build: !reset null
     pull_policy: always
 
+  agent:
+    image: ghcr.io/xiqiuqiu/xiaotuanbao-agent:${IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
+  workflow-worker:
+    image: ghcr.io/xiqiuqiu/xiaotuanbao-api:${IMAGE_TAG:-latest}
+    build: !reset null
+    pull_policy: always
+
   caddy:
     ports: !override
       - "127.0.0.1:8088:80"
