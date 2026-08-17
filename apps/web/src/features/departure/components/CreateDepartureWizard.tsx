@@ -636,17 +636,22 @@ export function CreateDepartureWizard() {
 
   const confirmReviewMutation = useMutation({
     mutationFn: async () => {
-      if (!taskId || !pendingReview || draftVersion == null) {
+      if (!taskId || !pendingReview) {
         throw new Error('没有待确认的审核包')
       }
       if (correctTimerRef.current) {
         clearTimeout(correctTimerRef.current)
         correctTimerRef.current = null
       }
+      await flushDraft()
+      const currentVersion = draftVersionRef.current
+      if (currentVersion == null) {
+        throw new Error('没有待确认的审核包')
+      }
       const corrections = pendingCorrectionsRef.current
       pendingCorrectionsRef.current = {}
       return confirmAiReviewPackage(taskId, pendingReview.id, {
-        expectedVersion: taskReview?.draft.version ?? draftVersion,
+        expectedVersion: currentVersion,
         expectedPackageVersion: pendingReview.version,
         ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
       })

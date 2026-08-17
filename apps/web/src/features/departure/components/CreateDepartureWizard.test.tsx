@@ -1761,6 +1761,65 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
+  it('confirms with the local autosaved draft version instead of the stale task query cache', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const pending = mockPendingReview({ baseObjectVersion: 2 })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: pending,
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(confirmAiReviewPackage).mockResolvedValue({
+      ...restored,
+      draft: {
+        version: 4,
+        snapshot: restored.draft.snapshot,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+
+    renderWizard()
+    await screen.findByRole('button', { name: '确认写入草稿' })
+    const savesBeforeEdit = vi.mocked(saveDepartureCreationDraft).mock.calls.length
+
+    await user.type(screen.getByLabelText('备注'), '集合时间提前')
+    await waitFor(() => {
+      expect(vi.mocked(saveDepartureCreationDraft).mock.calls.length).toBeGreaterThan(savesBeforeEdit)
+    })
+
+    const lastSave = vi.mocked(saveDepartureCreationDraft).mock.calls.at(-1)?.[0]
+    const localVersion = (lastSave?.expectedVersion ?? 0) + 1
+    expect(localVersion).toBeGreaterThan(restored.draft.version)
+
+    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
+    await waitFor(() => {
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
+        expectedVersion: localVersion,
+        expectedPackageVersion: 1,
+      })
+    })
+  })
+
   it('patches candidate corrections without autosaving them into the draft snapshot', async () => {
     mockSearch = { taskId: 'task-1' }
     const pending = mockPendingReview()
