@@ -9,7 +9,7 @@ describe('READONLY_ASSIST_INSTRUCTIONS', () => {
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('pending.hasPendingReview')
     expect(READONLY_ASSIST_INSTRUCTIONS).not.toContain('必须调用前端 awaitReviewPackageDecision')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('不要调用 awaitReviewPackageDecision')
-    expect(READONLY_ASSIST_INSTRUCTIONS).toContain('重新调用 getTaskContext')
+    expect(READONLY_ASSIST_INSTRUCTIONS).toContain('不要再次提交 snapshot')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('随后结束本轮')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('不得追问、引导或自动重新提交')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('不要声称已经改写草稿')

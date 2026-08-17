@@ -19,7 +19,7 @@ export const READONLY_ASSIST_INSTRUCTIONS = [
   '无法指出来源的内容不能形成候选。',
   '若 pending.hasPendingReview 为 true，不要再提交新的审核包，除非用户明确拒绝后要求重新整理。',
   'submitReviewPackage 成功后结束本轮，等待 User 在中间表单审核；不要调用 awaitReviewPackageDecision，也不在聊天里提供确认或拒绝。',
-  '若本轮是确认后续批次，重新调用 getTaskContext，简短说明已写入字段，并只问一个当前阶段仍缺少的问题。',
+  '若本轮是确认后续批次，重新调用 getTaskContext，简短说明已写入字段，并只问一个当前阶段仍缺少的问题；不要再次提交 snapshot 或 fieldCoverage.filled 中已有的字段。',
   '拒绝后不会自动续跑；只说明“本次建议已放弃，草稿未修改”，随后结束本轮；不得追问、引导或自动重新提交。',
   '不要声称已经改写草稿或创建发团；候选只出现在中间表单，由 User 确认后才写入。',
   '使用中文，字段名用：团名、路线、常用路线、出团日期、结束日期、负责人、发团类型、预计人数提示、备注。',

@@ -5,6 +5,7 @@ import {
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
   PLAINTEXT_SYSTEM_PROMPT_VERSION,
   PLAINTEXT_TOOL_SCHEMA_VERSION,
+  REVIEW_CONFIRM_CONTINUATION_TEXT,
 } from './ai-conversation.constants'
 
 export interface PlaintextContextInput {
@@ -88,6 +89,25 @@ export function selectPlaintextContextEvents(
         event.sequence <= conversationVersion && PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind),
     )
     .slice(-PLAINTEXT_CONTEXT_TAIL_LIMIT)
+}
+
+export function resolveAttemptUserText(
+  originalUserText: string,
+  versionEvent: { kind: string; payload: unknown } | null | undefined,
+): string {
+  if (versionEvent?.kind !== 'batch_status' || !versionEvent.payload) {
+    return originalUserText
+  }
+  const payload = versionEvent.payload
+  if (
+    typeof payload === 'object' &&
+    !Array.isArray(payload) &&
+    'disposition' in payload &&
+    payload.disposition === 'confirmed'
+  ) {
+    return REVIEW_CONFIRM_CONTINUATION_TEXT
+  }
+  return originalUserText
 }
 
 export function composePlaintextUserText(

@@ -61,7 +61,7 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import { parseEventSequences, projectConversationEventsForAgent } from './ai-context-manifest'
+import { parseEventSequences, projectConversationEventsForAgent, resolveAttemptUserText } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { lockAiCreateTask } from './ai-create-task.lock'
@@ -418,14 +418,30 @@ export class AiCreateTaskService {
     }
     const batch = await this.prisma.aiInputBatch.findFirst({
       where: { id: inputBatchId, organizationId },
-      select: { userMessageEvent: { select: { payload: true } } },
+      select: {
+        conversationId: true,
+        conversationVersion: true,
+        userMessageEvent: { select: { payload: true } },
+      },
     })
     const payload = batch?.userMessageEvent.payload
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
       return undefined
     }
     const text = payload.text
-    return typeof text === 'string' && text.trim() ? text.trim() : undefined
+    const originalText = typeof text === 'string' && text.trim() ? text.trim() : undefined
+    if (!originalText || !batch) {
+      return undefined
+    }
+    const versionEvent = await this.prisma.aiConversationEvent.findFirst({
+      where: {
+        conversationId: batch.conversationId,
+        organizationId,
+        sequence: batch.conversationVersion,
+      },
+      select: { kind: true, payload: true },
+    })
+    return resolveAttemptUserText(originalText, versionEvent)
   }
 
   async searchRouteTemplatesForAgent(

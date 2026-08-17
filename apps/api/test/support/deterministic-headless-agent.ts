@@ -19,10 +19,12 @@ export async function startDeterministicHeadlessAgent(options: {
   close: () => Promise<void>
   callCount: () => number
   lastTaskContext: () => unknown
+  lastUserText: () => string | null
 }> {
   let outcome = options.outcome
   let callCount = 0
   let lastContext: unknown = null
+  let lastUserText: string | null = null
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
 
@@ -72,6 +74,7 @@ export async function startDeterministicHeadlessAgent(options: {
       })
       const contextBody = await context.json().catch(() => null)
       lastContext = contextBody
+      lastUserText = parsed.data.userText
       if (!context.ok) {
         json(response, 200, {
           data: headlessExecutionResultSchema.parse({
@@ -125,6 +128,7 @@ export async function startDeterministicHeadlessAgent(options: {
       }),
     callCount: () => callCount,
     lastTaskContext: () => lastContext,
+    lastUserText: () => lastUserText,
   }
 }
 

@@ -33,6 +33,7 @@ import {
   buildPlaintextContextManifest,
   composePlaintextUserText,
   projectConversationEventsForAgent,
+  resolveAttemptUserText,
   selectPlaintextContextEvents,
 } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
@@ -411,6 +412,14 @@ export class AiWorkflowProcessor {
     const userEvent = await this.prisma.aiConversationEvent.findUniqueOrThrow({
       where: { id: job.inputBatch.userMessageEventId },
     })
+    const versionEvent = await this.prisma.aiConversationEvent.findFirst({
+      where: {
+        conversationId: job.conversationId,
+        organizationId: job.organizationId,
+        sequence: job.inputBatch.conversationVersion,
+      },
+      select: { kind: true, payload: true },
+    })
     const task = await this.prisma.aiCreateTask.findUniqueOrThrow({
       where: { id: job.taskId },
       include: { draft: true },
@@ -418,11 +427,12 @@ export class AiWorkflowProcessor {
     if (!task.draft) {
       throw new Error('发团创建草稿不存在')
     }
-    const userText = (
+    const originalUserText = (
       userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
         ? String((userEvent.payload as { text: unknown }).text ?? '')
         : ''
     ).trim()
+    const userText = resolveAttemptUserText(originalUserText, versionEvent).trim()
     if (!userText) {
       throw new Error('输入批次缺少 User 原文')
     }

@@ -285,9 +285,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     })
 
     const context = agent.lastTaskContext() as {
-      data?: { snapshot?: { name?: string } }
+      data?: { snapshot?: { name?: string }; currentUserMessage?: string }
     }
     expect(context.data?.snapshot?.name).toBe(`${testPrefix}-修正团名`)
+    expect(context.data?.currentUserMessage).toContain('已在中间表单确认')
+    expect(agent.lastUserText()).toContain('已在中间表单确认')
+    expect(agent.lastUserText()).not.toBe('请按这个团名建团')
   })
 
   it('rejects without mutating the draft or enqueueing a continuation', async () => {

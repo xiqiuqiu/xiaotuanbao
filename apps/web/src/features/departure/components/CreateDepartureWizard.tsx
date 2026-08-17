@@ -589,6 +589,16 @@ export function CreateDepartureWizard() {
     [applySavedDraft, infoForm, queryClient, user],
   )
 
+  useEffect(() => {
+    if (!taskReview || draftVersion == null || initializingForm || restoringTask) {
+      return
+    }
+    if (taskReview.draft.version <= draftVersion) {
+      return
+    }
+    applyConfirmedTask(taskReview)
+  }, [applyConfirmedTask, draftVersion, initializingForm, restoringTask, taskReview])
+
   const correctTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleCorrectCandidate = useCallback(
     (fieldKey: AiReviewableBasicInfoField, value: string | number | null) => {
@@ -636,7 +646,7 @@ export function CreateDepartureWizard() {
       const corrections = pendingCorrectionsRef.current
       pendingCorrectionsRef.current = {}
       return confirmAiReviewPackage(taskId, pendingReview.id, {
-        expectedVersion: draftVersion,
+        expectedVersion: taskReview?.draft.version ?? draftVersion,
         expectedPackageVersion: pendingReview.version,
         ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
       })
@@ -647,12 +657,11 @@ export function CreateDepartureWizard() {
     },
     onError: (caught) => {
       const conflict = readAiCreateTaskConflict(caught)
-      if (conflict && caught instanceof Error && caught.message.includes('已处理')) {
-        applyConfirmedTask(conflict)
-        return
-      }
       if (conflict) {
-        queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
+        applyConfirmedTask(conflict)
+        if (caught instanceof Error && caught.message.includes('已处理')) {
+          return
+        }
         const fields =
           caught instanceof ApiError &&
           caught.data &&

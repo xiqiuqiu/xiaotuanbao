@@ -2,8 +2,10 @@ import {
   composePlaintextUserText,
   parseEventSequences,
   projectConversationEventsForAgent,
+  resolveAttemptUserText,
   selectPlaintextContextEvents,
 } from './ai-context-manifest'
+import { REVIEW_CONFIRM_CONTINUATION_TEXT } from './ai-conversation.constants'
 
 describe('projectConversationEventsForAgent', () => {
   it('projects pinned User plaintext and drops unknown event kinds', () => {
@@ -58,5 +60,26 @@ describe('projectConversationEventsForAgent', () => {
   it('reads integer event sequences from the ContextManifest JSON', () => {
     expect(parseEventSequences([1, 2, '3', 0, -1, 4.5, 3])).toEqual([1, 2, 3])
     expect(parseEventSequences({ sequences: [1] })).toEqual([])
+  })
+})
+
+describe('resolveAttemptUserText', () => {
+  it('replaces the original request after a confirmed review continuation', () => {
+    expect(
+      resolveAttemptUserText('请按这个团名建团', {
+        kind: 'batch_status',
+        payload: { status: 'completed', disposition: 'confirmed' },
+      }),
+    ).toBe(REVIEW_CONFIRM_CONTINUATION_TEXT)
+  })
+
+  it('keeps the original request for a normal user turn', () => {
+    expect(resolveAttemptUserText('请按这个团名建团', null)).toBe('请按这个团名建团')
+    expect(
+      resolveAttemptUserText('请按这个团名建团', {
+        kind: 'user_message',
+        payload: { text: '请按这个团名建团' },
+      }),
+    ).toBe('请按这个团名建团')
   })
 })
