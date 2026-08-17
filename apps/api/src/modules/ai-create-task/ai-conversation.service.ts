@@ -487,22 +487,26 @@ export class AiConversationService {
           data: { updatedAt: new Date() },
         })
 
-        const conversationDraft = await tx.aiConversationDraft.upsert({
-          where: { conversationId_userId: { conversationId: conversation.id, userId } },
-          create: {
-            organizationId,
-            conversationId: conversation.id,
-            userId,
-            text: '',
-            draftEpoch: 1,
-            revision: 1,
-          },
-          update: {
-            text: '',
-            draftEpoch: { increment: 1 },
-            revision: { increment: 1 },
-          },
-        })
+        const conversationDraft = answering
+          ? await tx.aiConversationDraft.findUnique({
+              where: { conversationId_userId: { conversationId: conversation.id, userId } },
+            })
+          : await tx.aiConversationDraft.upsert({
+              where: { conversationId_userId: { conversationId: conversation.id, userId } },
+              create: {
+                organizationId,
+                conversationId: conversation.id,
+                userId,
+                text: '',
+                draftEpoch: 1,
+                revision: 1,
+              },
+              update: {
+                text: '',
+                draftEpoch: { increment: 1 },
+                revision: { increment: 1 },
+              },
+            })
 
         const events = [
           ...(replyResult?.events ?? []).map(toEventView),

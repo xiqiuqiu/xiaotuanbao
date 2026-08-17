@@ -1,4 +1,6 @@
 import {
+  AiConversationInteractionStatus,
+  AiConversationInteractionType,
   AiConversationStatus,
   AiCreateTaskStatus,
   AiInputBatchStatus,
@@ -104,6 +106,7 @@ function createHarness(options?: {
   const aiInputBatch = {
     count: jest.fn().mockResolvedValue(0),
     findFirst: jest.fn().mockResolvedValue(null),
+    update: jest.fn().mockResolvedValue({}),
     create: jest.fn(
       async ({
         data,
@@ -144,13 +147,22 @@ function createHarness(options?: {
       return createdBatch
     }),
   }
+  const createdEvents: Array<Record<string, unknown>> = []
   const aiConversationEvent = {
+    findFirst: jest.fn(async () => createdEvents.at(-1) ?? null),
+    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      const event = {
+        id: `event-${String(data.sequence)}`,
+        createdAt: now,
+        ...data,
+      }
+      createdEvents.push(event)
+      return event
+    }),
+  }
+  const aiConversationInteraction = {
     findFirst: jest.fn().mockResolvedValue(null),
-    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-      id: `event-${String(data.sequence)}`,
-      createdAt: now,
-      ...data,
-    })),
+    updateMany: jest.fn().mockResolvedValue({ count: 0 }),
   }
   const aiWorkflowJob = {
     upsert: jest.fn(async ({ create }: { create: Record<string, unknown> }) => ({
@@ -163,6 +175,7 @@ function createHarness(options?: {
     create: jest.fn(),
   }
   const aiConversationDraft = {
+    findUnique: jest.fn().mockResolvedValue(null),
     upsert: jest.fn().mockResolvedValue({
       id: 'conversation-draft-1',
       organizationId,
@@ -183,6 +196,7 @@ function createHarness(options?: {
     aiCreateIdempotencyRecord,
     aiInputBatch,
     aiConversationEvent,
+    aiConversationInteraction,
     departureMaterial,
     departureMaterialParseRun,
     aiWorkflowJob,
@@ -431,5 +445,62 @@ describe('AiConversationService.sendText attachment upload', () => {
         }),
       ]),
     )
+  })
+})
+
+describe('AiConversationService.sendText composer draft', () => {
+  it('does not clear the composer draft or bump draftEpoch when answering an interaction card', async () => {
+    const existingDraft = {
+      id: 'conversation-draft-1',
+      organizationId,
+      conversationId,
+      userId,
+      text: '还没发出去的备注',
+      draftEpoch: 2,
+      revision: 5,
+      createdAt: now,
+      updatedAt: now,
+    }
+    const { service, tx } = createHarness()
+    tx.aiConversationDraft.findUnique.mockResolvedValue(existingDraft)
+    tx.aiConversationInteraction.findFirst.mockResolvedValue({
+      id: 'int-1',
+      organizationId,
+      conversationId,
+      inputBatchId: 'batch-ask',
+      eventId: 'event-q',
+      type: AiConversationInteractionType.free_text,
+      prompt: '出团日期是哪一天？',
+      options: null,
+      responseSchema: { type: 'string', minLength: 1, maxLength: 8000 },
+      status: AiConversationInteractionStatus.pending,
+      version: 1,
+    })
+    tx.aiConversationInteraction.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.sendText(
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      '2026-10-01',
+      'idem-reply',
+      [],
+      {
+        replyToEventId: 'event-q',
+        interactionId: 'int-1',
+        interactionVersion: 1,
+      },
+    )
+
+    expect(tx.aiConversationDraft.upsert).not.toHaveBeenCalled()
+    expect(tx.aiConversationDraft.findUnique).toHaveBeenCalledWith({
+      where: { conversationId_userId: { conversationId, userId } },
+    })
+    expect(result.draft).toMatchObject({
+      text: '还没发出去的备注',
+      draftEpoch: 2,
+      revision: 5,
+    })
   })
 })

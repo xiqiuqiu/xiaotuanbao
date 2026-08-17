@@ -64,6 +64,11 @@ let capturedHumanInTheLoop: {
   }>
 } = {}
 
+let capturedActivityRenderers: Array<{
+  activityType?: string
+  render?: (props: { content: unknown }) => ReactNode
+}> = []
+
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotKit: ({
     children,
@@ -73,6 +78,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     useSingleEndpoint,
     enableInspector,
     onError,
+    renderActivityMessages,
   }: {
     children: ReactNode
     runtimeUrl?: string
@@ -81,6 +87,10 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     useSingleEndpoint?: boolean
     enableInspector?: boolean
     onError?: (event: { error: Error }) => void
+    renderActivityMessages?: Array<{
+      activityType?: string
+      render?: (props: { content: unknown }) => ReactNode
+    }>
   }) => {
     capturedKit = {
       runtimeUrl,
@@ -90,6 +100,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       enableInspector,
       onError,
     }
+    capturedActivityRenderers = renderActivityMessages ?? []
     return <div data-testid="copilot-kit">{children}</div>
   },
   CopilotChatConfigurationProvider: ({ children }: { children: ReactNode }) => children,
@@ -152,6 +163,12 @@ vi.mock('@copilotkit/react-core/v2', () => ({
         <div role="log">
           {messages.map((message) => {
             if (message.role === 'activity' && message.content && typeof message.content === 'object') {
+              const renderer = capturedActivityRenderers.find(
+                (item) => item.activityType === message.activityType,
+              )
+              if (renderer?.render) {
+                return <div key={message.id}>{renderer.render({ content: message.content })}</div>
+              }
               const content = message.content as {
                 label?: unknown
                 prompt?: unknown
@@ -505,6 +522,7 @@ describe('AiCreateAssistChat', () => {
     capturedRenderTool = {}
     capturedSearchRenderTool = {}
     capturedHumanInTheLoop = {}
+    capturedActivityRenderers = []
   })
 
   it('shows a compact welcome with greeting and prompt cards', () => {
@@ -1305,5 +1323,111 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getAllByText('这次按几天出团？').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '发送回答' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /确认|拒绝/ })).not.toBeInTheDocument()
+  })
+
+  it('applies the returned draft after an interaction-card reply without wiping composer notes', async () => {
+    vi.mocked(sendAiConversationMessage).mockResolvedValue({
+      conversationId: 'conv-1',
+      batch: {
+        id: 'batch-reply',
+        status: 'ready_for_agent',
+        conversationVersion: 6,
+        replyToEventId: 'event-q',
+      },
+      events: [
+        {
+          sequence: 5,
+          kind: 'user_message',
+          payload: {
+            text: '2026-10-01',
+            replyToEventId: 'event-q',
+            interactionId: 'int-1',
+          },
+          createdAt: '2026-08-15T00:00:01.000Z',
+        },
+        {
+          sequence: 6,
+          kind: 'batch_status',
+          payload: { status: 'ready_for_agent', batchId: 'batch-reply' },
+          createdAt: '2026-08-15T00:00:01.000Z',
+        },
+      ],
+      lastSequence: 6,
+      draft: {
+        conversationId: 'conv-1',
+        text: '还没发出去的备注',
+        draftEpoch: 3,
+        revision: 6,
+        updatedAt: '2026-08-17T00:00:01.000Z',
+      },
+    })
+
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '还没发出去的备注',
+          draftEpoch: 2,
+          revision: 5,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+        initialEvents={[
+          {
+            id: 'event-q',
+            sequence: 3,
+            kind: 'agent_message',
+            payload: {
+              text: '出团日期是哪一天？',
+              interaction: {
+                interactionId: 'int-1',
+                type: 'free_text',
+                prompt: '出团日期是哪一天？',
+                status: 'pending',
+                version: 1,
+              },
+            },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+          {
+            sequence: 4,
+            kind: 'batch_status',
+            payload: { status: 'awaiting_user_input', batchId: 'batch-1' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByLabelText('询问当前发团草稿')).toHaveValue('还没发出去的备注')
+    fireEvent.change(screen.getByLabelText('回答当前追问'), {
+      target: { value: '2026-10-01' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送回答' }))
+
+    await waitFor(() => {
+      expect(sendAiConversationMessage).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '2026-10-01',
+          replyToEventId: 'event-q',
+          interactionId: 'int-1',
+          interactionVersion: 1,
+          selectedOptionId: undefined,
+        },
+        expect.any(String),
+      )
+    })
+    expect(screen.getByLabelText('询问当前发团草稿')).toHaveValue('还没发出去的备注')
+
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '还没发出去的备注，又改了一点' },
+    })
+    await waitFor(() => {
+      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+        text: '还没发出去的备注，又改了一点',
+        draftEpoch: 3,
+      })
+    })
   })
 })

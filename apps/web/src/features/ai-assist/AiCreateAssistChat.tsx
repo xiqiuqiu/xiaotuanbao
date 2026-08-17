@@ -831,18 +831,31 @@ export function AiCreateAssistChat({
   }, [send])
 
   const applyCommandResult = useCallback(
-    (result: { events: AiConversationEventView[]; batch?: AiInputBatchView }) => {
+    (result: {
+      events: AiConversationEventView[]
+      batch?: AiInputBatchView
+      draft?: AiConversationDraftView
+    }) => {
       setEvents((current) => mergeEvents(current, result.events))
       if (result.batch) {
         setActiveBatch(result.batch)
       }
+      if (result.draft) {
+        applyServerDraft(result.draft)
+      }
       setMaterialsRefreshKey((key) => key + 1)
     },
-    [],
+    [applyServerDraft],
   )
 
   const runBatchCommand = useCallback(
-    async (execute: () => Promise<{ events: AiConversationEventView[] }>) => {
+    async (
+      execute: () => Promise<{
+        events: AiConversationEventView[]
+        batch?: AiInputBatchView
+        draft?: AiConversationDraftView
+      }>,
+    ) => {
       if (sendingRef.current) {
         return
       }
