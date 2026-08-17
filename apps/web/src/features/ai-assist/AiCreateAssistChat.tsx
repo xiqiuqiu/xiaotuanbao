@@ -675,17 +675,9 @@ export function AiCreateAssistChat({
               applyServerDraft(deferred)
             }
           })
-          .catch(() => {
-            if (generation !== draftSaveGenerationRef.current) {
-              return
-            }
-            editingDraftRef.current = false
-            const deferred = deferredDraftRef.current
-            deferredDraftRef.current = null
-            if (deferred) {
-              applyServerDraft(deferred)
-            }
-          })
+          // Failed idle saves must keep editingDraftRef so a deferred remote
+          // snapshot cannot replace still-local unsaved composer text.
+          .catch(() => undefined)
       }, DRAFT_SAVE_DEBOUNCE_MS)
     },
     [applyServerDraft, conversationId, taskId],

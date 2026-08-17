@@ -391,6 +391,51 @@ describe('AiCreateAssistChat', () => {
     expect(textarea).toHaveValue('手机正在输入的完整文本')
   })
 
+  it('keeps local composer text when an idle draft save fails after a remote snapshot was deferred', async () => {
+    vi.mocked(saveAiConversationDraft).mockRejectedValue(new Error('draft save failed'))
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialDraft={{
+          text: '初始草稿',
+          draftEpoch: 0,
+          revision: 1,
+          updatedAt: '2026-08-17T00:00:00.000Z',
+        }}
+      />,
+    )
+    const textarea = screen.getByLabelText('询问当前发团草稿')
+    fireEvent.change(textarea, { target: { value: '手机正在输入的完整文本' } })
+    vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
+      conversationId: 'conv-1',
+      events: [],
+      lastSequence: 0,
+      activeBatch: null,
+      draft: {
+        text: '电脑端稍早保存的文本',
+        draftEpoch: 0,
+        revision: 2,
+        updatedAt: '2026-08-17T00:00:01.000Z',
+      },
+    })
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+    expect(textarea).toHaveValue('手机正在输入的完整文本')
+
+    await waitFor(() => {
+      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
+        text: '手机正在输入的完整文本',
+        draftEpoch: 0,
+      })
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(textarea).toHaveValue('手机正在输入的完整文本')
+  })
+
   it('applies the newest remote draft when this device is idle', async () => {
     render(
       <AiCreateAssistChat
