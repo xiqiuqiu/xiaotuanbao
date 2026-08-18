@@ -89,6 +89,7 @@ export {
 } from './review/merge-review-confirm'
 export {
   AI_COLLABORATION_ERROR_CODES,
+  isAiCollaborationErrorCode,
   AiCollaborationError,
   aiCollaborationErrorSchema,
   type AiCollaborationErrorCode,

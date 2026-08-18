@@ -33,7 +33,7 @@ export interface InfoStepValues {
 }
 
 export type InfoFormValues = InfoStepValues & {
-  dayCount: number
+  dayCount?: number
 }
 
 export function createInitialRouteStepValues(): RouteStepValues {
@@ -149,27 +149,22 @@ export function isEndDateBeforeStartDate(startDate: string, endDate: string): bo
   return endDate < startDate
 }
 
-const shanghaiDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' })
-
-export function getShanghaiTodayString(): string {
-  return shanghaiDateFormatter.format(new Date())
-}
-
 export function buildInitialInfoValues(
   route: RouteStepValues,
   ownerUserId: string,
-  startDate = getShanghaiTodayString(),
+  startDate?: string,
 ): InfoStepValues {
+  const resolvedStart = startDate?.trim() ?? ''
   const endDate =
-    route.defaultDayCount && route.defaultDayCount > 0
-      ? computeEndDateFromDefaultDays(startDate, route.defaultDayCount)
-      : startDate
+    resolvedStart && route.defaultDayCount && route.defaultDayCount > 0
+      ? computeEndDateFromDefaultDays(resolvedStart, route.defaultDayCount)
+      : resolvedStart
 
   return {
-    name: buildDefaultDepartureName(route.routeName, startDate),
+    name: buildDefaultDepartureName(route.routeName, resolvedStart || undefined),
     departureNo: '',
     departureType: DepartureType.COMBINED,
-    startDate,
+    startDate: resolvedStart,
     endDate,
     ownerUserId,
     notes: undefined,
@@ -291,15 +286,15 @@ export function applyDraftSnapshotToInfoForm(
   snapshot: import('@xiaotuanbao/shared').DepartureCreationDraftSnapshot,
   ownerUserIdFallback: string,
 ): InfoFormValues {
-  const startDate = snapshot.startDate || getShanghaiTodayString()
-  const endDate = snapshot.endDate || startDate
+  const startDate = snapshot.startDate?.trim() || ''
+  const endDate = snapshot.endDate?.trim() || ''
   return {
-    name: snapshot.name?.trim() || buildDefaultDepartureName(snapshot.routeName, startDate),
+    name: snapshot.name?.trim() || buildDefaultDepartureName(snapshot.routeName, startDate || undefined),
     departureNo: '',
     departureType: (snapshot.departureType as DepartureType | null) ?? DepartureType.COMBINED,
     startDate,
     endDate,
-    dayCount: computeDayCount(startDate, endDate),
+    dayCount: startDate && endDate ? computeDayCount(startDate, endDate) : undefined,
     ownerUserId: snapshot.ownerUserId || ownerUserIdFallback,
     notes: snapshot.notes ?? undefined,
     driverSupplierId: snapshot.driverSupplierId ?? undefined,
@@ -313,21 +308,24 @@ export function applyDraftSnapshotToInfoForm(
 export function createInfoFormValues(
   route: RouteStepValues,
   ownerUserId: string,
-  startDate: string,
+  startDate: string | undefined,
   departureNo: string,
 ): InfoFormValues {
+  const resolvedStart = startDate?.trim() || ''
   const endDate =
-    route.defaultDayCount && route.defaultDayCount > 0
-      ? computeEndDateFromDefaultDays(startDate, route.defaultDayCount)
-      : startDate
+    resolvedStart && route.defaultDayCount && route.defaultDayCount > 0
+      ? computeEndDateFromDefaultDays(resolvedStart, route.defaultDayCount)
+      : resolvedStart
 
   return {
-    name: route.routeName.trim() ? buildDefaultDepartureName(route.routeName, startDate) : '',
+    name: route.routeName.trim()
+      ? buildDefaultDepartureName(route.routeName, resolvedStart || undefined)
+      : '',
     departureNo,
     departureType: DepartureType.COMBINED,
-    startDate,
+    startDate: resolvedStart,
     endDate,
-    dayCount: computeDayCount(startDate, endDate),
+    dayCount: resolvedStart && endDate ? computeDayCount(resolvedStart, endDate) : undefined,
     ownerUserId,
     notes: undefined,
   }

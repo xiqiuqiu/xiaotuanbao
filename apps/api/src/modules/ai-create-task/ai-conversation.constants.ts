@@ -17,7 +17,7 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-plaintext/v3'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v3'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v4'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v3'
 export const WORKFLOW_LEASE_MS = 120_000
 /** 租约过期后最多再执行的次数；超出则失败并释放 `agent_running`，避免毒任务永久占锁。 */

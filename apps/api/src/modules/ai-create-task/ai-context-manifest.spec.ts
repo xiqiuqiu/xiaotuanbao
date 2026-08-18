@@ -411,6 +411,193 @@ describe('hasGroundedCandidateEvidence #321', () => {
     ).toBe(true)
   })
 
+  it('accepts same-fact dates, inclusive day count from this package, and ignores invented message ids', () => {
+    const capturedUserText =
+      '帮我创建一个团名是2026年8月13号西北大环线10日游的发团，然后开始时间是2026年的8月13号，行程总共10天，负责人是王姐，预计人数大概12个人。'
+    const captured = {
+      userMessages: [
+        { id: 'cmsxyzldb0005wdg43jg2k3gm', text: capturedUserText },
+        { id: 'cmsxzranz0005wdgsvkxzxx9q', text: capturedUserText },
+      ],
+      materials: [] as Array<{
+        materialId: string
+        parseResultVersion: number
+        pages: Array<{ pageNumber: number; text: string }>
+      }>,
+      routeTemplates: [] as Array<{ id: string; name: string }>,
+      businessSnapshot: {
+        mode: 'manual',
+        name: null,
+        endDate: null,
+        routeName: '',
+        startDate: null,
+        templateId: null,
+        expectedGuestCountHint: null,
+      },
+      materialReads: new Set<string>(),
+    }
+    const spokenPackage = [
+      {
+        fieldKey: 'name',
+        proposedValue: '2026年8月13号西北大环线10日游',
+        evidence: [{ kind: 'user_message' as const, excerpt: '2026年8月13号西北大环线10日游' }],
+      },
+      {
+        fieldKey: 'routeName',
+        proposedValue: '西北大环线',
+        evidence: [{ kind: 'user_message' as const, excerpt: '西北大环线' }],
+      },
+      {
+        fieldKey: 'startDate',
+        proposedValue: '2026-08-13',
+        evidence: [{ kind: 'user_message' as const, excerpt: '2026年的8月13号' }],
+      },
+      {
+        fieldKey: 'endDate',
+        proposedValue: '2026-08-22',
+        evidence: [{ kind: 'system_derivation' as const, rule: 'startDate plus 9 days' }],
+      },
+      {
+        fieldKey: 'expectedGuestCountHint',
+        proposedValue: 12,
+        evidence: [{ kind: 'user_message' as const, excerpt: '12个人' }],
+      },
+    ]
+
+    expect(hasGroundedCandidateEvidence(spokenPackage, captured)).toBe(true)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'startDate',
+            proposedValue: '2026-08-13',
+            evidence: [{ kind: 'user_message', excerpt: '2026-08-13' }],
+          },
+        ],
+        captured,
+      ),
+    ).toBe(true)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'startDate',
+            proposedValue: '2026-08-13',
+            evidence: [{ kind: 'user_message', excerpt: '2026年8月13日' }],
+          },
+        ],
+        captured,
+      ),
+    ).toBe(true)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'name',
+            proposedValue: '2026年8月13号西北大环线10日游',
+            evidence: [
+              { kind: 'user_message', excerpt: '2026年8月13号西北大环线10日游', messageId: '1' },
+            ],
+          },
+        ],
+        captured,
+      ),
+    ).toBe(true)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'startDate',
+            proposedValue: '2026-08-13',
+            evidence: [{ kind: 'user_message', excerpt: '2026年9月1号' }],
+          },
+        ],
+        {
+          ...captured,
+          userMessages: [
+            {
+              id: 'event-1',
+              text: '开始时间是2026年的8月13号，备选2026年9月1号',
+            },
+          ],
+        },
+      ),
+    ).toBe(false)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'expectedGuestCountHint',
+            proposedValue: 99,
+            evidence: [{ kind: 'user_message', excerpt: '12个人' }],
+          },
+        ],
+        captured,
+      ),
+    ).toBe(false)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'endDate',
+            proposedValue: '2026-08-18',
+            evidence: [{ kind: 'system_derivation', rule: 'startDate plus 5 days' }],
+          },
+        ],
+        {
+          ...captured,
+          businessSnapshot: { startDate: '2026-08-13' },
+        },
+      ),
+    ).toBe(false)
+  })
+
+  it('rejects a yearless spoken date as a startDate and does not treat duration text as the end date', () => {
+    const yearless = {
+      userMessages: [{ id: 'event-1', text: '8月13号出发，行程总共10天' }],
+      materials: [] as Array<{
+        materialId: string
+        parseResultVersion: number
+        pages: Array<{ pageNumber: number; text: string }>
+      }>,
+      routeTemplates: [] as Array<{ id: string; name: string }>,
+      businessSnapshot: { startDate: null },
+      materialReads: new Set<string>(),
+    }
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'startDate',
+            proposedValue: '2026-08-13',
+            evidence: [{ kind: 'user_message', excerpt: '8月13号' }],
+          },
+        ],
+        yearless,
+      ),
+    ).toBe(false)
+    expect(
+      hasGroundedCandidateEvidence(
+        [
+          {
+            fieldKey: 'endDate',
+            proposedValue: '2026-08-22',
+            evidence: [{ kind: 'user_message', excerpt: '行程总共10天' }],
+          },
+        ],
+        {
+          ...yearless,
+          userMessages: [
+            {
+              id: 'event-1',
+              text: '帮我创建一个团名是2026年8月13号西北大环线10日游的发团，行程总共10天',
+            },
+          ],
+        },
+      ),
+    ).toBe(false)
+  })
+
   it('rejects a summary-only excerpt and an archived material outside this batch', () => {
     expect(
       hasGroundedCandidateEvidence(

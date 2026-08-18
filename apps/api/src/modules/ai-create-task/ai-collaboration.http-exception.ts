@@ -14,6 +14,7 @@ const STATUS_BY_CODE: Record<AiCollaborationErrorCode, HttpStatus> = {
   SERVICE_IDENTITY_INVALID: HttpStatus.UNAUTHORIZED,
   VERSION_CONFLICT: HttpStatus.CONFLICT,
   REVIEW_PENDING: HttpStatus.CONFLICT,
+  UNGROUNDED_CANDIDATE_EVIDENCE: HttpStatus.UNPROCESSABLE_ENTITY,
 }
 
 export class AiCollaborationHttpException extends HttpException {

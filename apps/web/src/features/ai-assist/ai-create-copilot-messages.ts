@@ -1,4 +1,5 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
+import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import type { AiConversationEventView, AiInputBatchStatus, AiInputBatchView } from '@xiaotuanbao/shared'
 
 export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
@@ -34,6 +35,11 @@ export type InteractionActivityContent = {
   status: 'pending' | 'answered' | 'cancelled'
 }
 
+function ungroundedEvidenceLabel(errorCode?: string): string | null {
+  if (errorCode !== 'UNGROUNDED_CANDIDATE_EVIDENCE') return null
+  return AiCollaborationError.fromCode('UNGROUNDED_CANDIDATE_EVIDENCE').message
+}
+
 type MaterialProgress = {
   ready?: number
   total?: number
@@ -43,7 +49,7 @@ type MaterialProgress = {
 export function batchStatusLabel(
   status: string,
   progress?: MaterialProgress | null,
-  extra?: { queued?: boolean; reason?: string; disposition?: string },
+  extra?: { queued?: boolean; reason?: string; disposition?: string; errorCode?: string },
 ): string | null {
   if (status === 'waiting_for_materials') {
     const ready = progress?.ready
@@ -65,7 +71,9 @@ export function batchStatusLabel(
     if (extra?.disposition === 'rejected') return '已拒绝本次建议'
     return '已完成'
   }
-  if (status === 'failed') return '处理失败'
+  if (status === 'failed') {
+    return ungroundedEvidenceLabel(extra?.errorCode) ?? '处理失败'
+  }
   if (status === 'cancelled') {
     if (extra?.reason === 'interaction_cancelled') return '已取消等待'
     if (extra?.reason === 'user_stop') return '已停止当前处理'
@@ -278,14 +286,18 @@ export function toCopilotChatMessages(
       continue
     }
     if (event.kind === 'error') {
-      if (typeof event.payload.materialId === 'string') {
+      const payload = event.payload
+      if (typeof payload.materialId === 'string') {
         continue
       }
+      const errorCode = typeof payload.errorCode === 'string' ? payload.errorCode : undefined
       messages.push({
         id: `event-${event.sequence}`,
         role: 'activity',
         activityType: BATCH_STATUS_ACTIVITY_TYPE,
-        content: { label: '本批处理失败，可修改后重试' } satisfies BatchStatusActivityContent,
+        content: {
+          label: ungroundedEvidenceLabel(errorCode) ?? '本批处理失败，可修改后重试',
+        } satisfies BatchStatusActivityContent,
       })
       continue
     }
@@ -297,6 +309,7 @@ export function toCopilotChatMessages(
         reason: typeof event.payload.reason === 'string' ? event.payload.reason : undefined,
         disposition:
           typeof event.payload.disposition === 'string' ? event.payload.disposition : undefined,
+        errorCode: typeof event.payload.errorCode === 'string' ? event.payload.errorCode : undefined,
       })
       if (label) {
         const failedMaterials = failedMaterialsFromPayload(event.payload)

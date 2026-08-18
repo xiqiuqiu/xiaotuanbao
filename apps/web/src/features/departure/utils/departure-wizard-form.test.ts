@@ -2,6 +2,7 @@ import { DepartureType } from '@xiaotuanbao/shared'
 import { describe, expect, it } from 'vitest'
 import {
   addDays,
+  applyDraftSnapshotToInfoForm,
   applyDraftSnapshotToRoute,
   applySelectedRouteTemplate,
   buildCreateDeparturePayload,
@@ -69,6 +70,37 @@ describe('departure-wizard-form', () => {
       endDate: '2026-08-10',
       ownerUserId: 'user-1',
     })
+  })
+
+  it('leaves start and end dates empty until the user or a candidate provides them', () => {
+    const values = buildInitialInfoValues(
+      { mode: 'manual', routeName: '喀纳斯阿勒泰10日线', defaultDayCount: 10 },
+      'user-1',
+    )
+
+    expect(values.startDate).toBe('')
+    expect(values.endDate).toBe('')
+    expect(values.name).toBe('喀纳斯阿勒泰10日线')
+  })
+
+  it('restores a draft without inventing today as the tour dates', () => {
+    const values = applyDraftSnapshotToInfoForm(
+      {
+        mode: 'manual',
+        routeName: '西北大环线',
+        name: null,
+        startDate: null,
+        endDate: null,
+        ownerUserId: 'user-1',
+        departureType: DepartureType.COMBINED,
+      },
+      'user-1',
+    )
+
+    expect(values.startDate).toBe('')
+    expect(values.endDate).toBe('')
+    expect(values.dayCount).toBeUndefined()
+    expect(values.name).toBe('西北大环线')
   })
 
   it('defaults a blank form to filling the route name by hand', () => {

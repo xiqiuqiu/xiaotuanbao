@@ -18,6 +18,10 @@ describe('AI create chat status projection', () => {
     expect(batchStatusLabel('cancelled', null, { reason: 'interaction_cancelled' })).toBe(
       '已取消等待',
     )
+    expect(batchStatusLabel('failed')).toBe('处理失败')
+    expect(
+      batchStatusLabel('failed', null, { errorCode: 'UNGROUNDED_CANDIDATE_EVIDENCE' }),
+    ).toBe('本次建议无法追溯到来源，草稿未改。你可以改一句话再发。')
   })
 
   it('keeps queued visible when the running batch starts waiting for an answer', () => {
@@ -132,6 +136,40 @@ describe('AI create chat status projection', () => {
       .filter((message) => message.activityType === 'ai-create-batch-status')
       .map((message) => (message.content as { label?: string }).label)
     expect(labels).toEqual(['已完成', '已拒绝本次建议'])
+  })
+
+  it('labels ungrounded evidence as a source-trace failure, not a generic processing failure', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'error',
+          payload: { errorCode: 'UNGROUNDED_CANDIDATE_EVIDENCE', batchId: 'batch-1' },
+          createdAt: '2026-08-18T02:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'failed',
+            batchId: 'batch-1',
+            errorCode: 'UNGROUNDED_CANDIDATE_EVIDENCE',
+          },
+          createdAt: '2026-08-18T02:00:00.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+    const labels = messages
+      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .map((message) => (message.content as { label?: string }).label)
+    expect(labels).toEqual([
+      '本次建议无法追溯到来源，草稿未改。你可以改一句话再发。',
+      '本次建议无法追溯到来源，草稿未改。你可以改一句话再发。',
+    ])
+    expect(labels).not.toContain('处理失败')
+    expect(labels).not.toContain('本批处理失败，可修改后重试')
   })
 
   it('projects a persisted question as an interaction card, not only assistant text', () => {

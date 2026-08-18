@@ -432,6 +432,13 @@ export function resolveContextManifestIdentity(
   }
 }
 
+export class UngroundedCandidateEvidenceError extends Error {
+  constructor() {
+    super('UNGROUNDED_CANDIDATE_EVIDENCE')
+    this.name = 'UngroundedCandidateEvidenceError'
+  }
+}
+
 export function hasGroundedCandidateEvidence(
   candidates: ReadonlyArray<{
     fieldKey?: string
@@ -454,56 +461,137 @@ export function hasGroundedCandidateEvidence(
     businessSnapshot: unknown
   },
 ): boolean {
-  return candidates.every(
-    (candidate) =>
-      candidate.evidence.length > 0 &&
-      candidate.evidence.every((evidence) => {
-        if (evidence.kind === 'system_derivation') {
-          const match = /^searchRouteTemplates:name_contains_token:(.+)$/.exec(evidence.rule.trim())
-          if (match && typeof candidate.proposedValue === 'string') {
-            const token = match[1].trim()
-            return (
-              token.length > 0 &&
-              sources.routeTemplates.some(
-                (template) => template.id === candidate.proposedValue && template.name.includes(token),
-              )
-            )
-          }
-          return verifiesBusinessSnapshotDerivation(
-            evidence.rule.trim(),
-            candidate.fieldKey,
-            candidate.proposedValue,
-            sources.businessSnapshot,
-          )
-        }
-        if (evidence.kind === 'material_region') {
-          const excerpt = evidence.excerpt.trim()
-          return (
-            excerpt.length > 0 &&
-            sources.materials.some(
-              (material) =>
-                material.materialId === evidence.materialId &&
-                sources.materialReads.has(
-                  `${material.materialId}:${material.parseResultVersion}:${evidence.pageNumber}`,
-                ) &&
-                material.pages.some(
-                  (page) =>
-                    page.pageNumber === evidence.pageNumber && page.text.includes(excerpt),
-                ),
-            )
-          )
-        }
-        const excerpt = evidence.excerpt.trim()
-        return (
-          excerpt.length > 0 &&
-          sources.userMessages.some(
-            (message) =>
-              (!evidence.messageId || message.id === evidence.messageId) &&
-              message.text.includes(excerpt),
-          )
-        )
-      }),
+  const startDates = [...snapshotStartDates(sources.businessSnapshot)]
+  const offsetCandidates: Array<(typeof candidates)[number]> = []
+  for (const candidate of candidates) {
+    if (usesStartDateOffset(candidate)) {
+      offsetCandidates.push(candidate)
+      continue
+    }
+    if (!verifiesCandidateEvidence(candidate, sources, startDates)) return false
+    collectVerifiedStartDate(candidate, startDates)
+  }
+  return offsetCandidates.every((candidate) =>
+    verifiesCandidateEvidence(candidate, sources, startDates),
   )
+}
+
+type GroundingCandidate = Parameters<typeof hasGroundedCandidateEvidence>[0][number]
+type GroundingSources = Parameters<typeof hasGroundedCandidateEvidence>[1]
+
+const START_DATE_OFFSET_RULE = /^startDate plus (\d{1,3}) days$/
+
+function usesStartDateOffset(candidate: GroundingCandidate): boolean {
+  return candidate.evidence.some(
+    (evidence) =>
+      evidence.kind === 'system_derivation' && START_DATE_OFFSET_RULE.test(evidence.rule.trim()),
+  )
+}
+
+function collectVerifiedStartDate(candidate: GroundingCandidate, startDates: string[]) {
+  if (candidate.fieldKey !== 'startDate' || typeof candidate.proposedValue !== 'string') return
+  if (normalizeIsoDate(candidate.proposedValue)) startDates.push(candidate.proposedValue)
+}
+
+function verifiesCandidateEvidence(
+  candidate: GroundingCandidate,
+  sources: GroundingSources,
+  startDates: readonly string[],
+): boolean {
+  return (
+    candidate.evidence.length > 0 &&
+    candidate.evidence.every((evidence) => {
+      if (evidence.kind === 'system_derivation') {
+        const match = /^searchRouteTemplates:name_contains_token:(.+)$/.exec(evidence.rule.trim())
+        if (match && typeof candidate.proposedValue === 'string') {
+          const token = match[1].trim()
+          return (
+            token.length > 0 &&
+            sources.routeTemplates.some(
+              (template) => template.id === candidate.proposedValue && template.name.includes(token),
+            )
+          )
+        }
+        return verifiesBusinessSnapshotDerivation(
+          evidence.rule.trim(),
+          candidate.fieldKey,
+          candidate.proposedValue,
+          sources.businessSnapshot,
+          startDates,
+          sources.userMessages,
+        )
+      }
+      if (evidence.kind === 'material_region') {
+        const excerpt = evidence.excerpt.trim()
+        if (!excerpt) return false
+        return sources.materials.some(
+          (material) =>
+            material.materialId === evidence.materialId &&
+            sources.materialReads.has(
+              `${material.materialId}:${material.parseResultVersion}:${evidence.pageNumber}`,
+            ) &&
+            material.pages.some((page) => {
+              if (page.pageNumber !== evidence.pageNumber || !page.text.includes(excerpt)) {
+                return false
+              }
+              if (isDateField(candidate.fieldKey)) {
+                return verifiesCalendarDateInSource(excerpt, candidate.proposedValue, page.text)
+              }
+              return proposedValueAppearsInSource(candidate.proposedValue, page.text)
+            }),
+        )
+      }
+      return verifiesUserMessageEvidence(
+        evidence,
+        candidate.fieldKey,
+        candidate.proposedValue,
+        sources.userMessages,
+      )
+    })
+  )
+}
+
+function isDateField(fieldKey: string | undefined): boolean {
+  return fieldKey === 'startDate' || fieldKey === 'endDate'
+}
+
+function verifiesUserMessageEvidence(
+  evidence: { excerpt: string },
+  fieldKey: string | undefined,
+  proposedValue: unknown,
+  messages: ReadonlyArray<{ text: string }>,
+): boolean {
+  const excerpt = evidence.excerpt.trim()
+  if (!excerpt) return false
+  return messages.some((message) => {
+    if (isDateField(fieldKey)) {
+      return verifiesCalendarDateInSource(excerpt, proposedValue, message.text)
+    }
+    return (
+      message.text.includes(excerpt) && proposedValueAppearsInSource(proposedValue, message.text)
+    )
+  })
+}
+
+function verifiesCalendarDateInSource(
+  excerpt: string,
+  proposedValue: unknown,
+  sourceText: string,
+): boolean {
+  if (typeof proposedValue !== 'string') return false
+  if (!extractCompleteCalendarDates(sourceText).includes(proposedValue)) return false
+  const excerptDates = extractCompleteCalendarDates(excerpt)
+  if (excerptDates.length > 0) return excerptDates.includes(proposedValue)
+  return sourceText.includes(excerpt)
+}
+
+function proposedValueAppearsInSource(proposedValue: unknown, sourceText: string): boolean {
+  if (proposedValue == null) return true
+  if (typeof proposedValue === 'number') return sourceText.includes(String(proposedValue))
+  if (typeof proposedValue === 'string' && proposedValue.length > 0) {
+    return sourceText.includes(proposedValue)
+  }
+  return true
 }
 
 function verifiesBusinessSnapshotDerivation(
@@ -511,20 +599,95 @@ function verifiesBusinessSnapshotDerivation(
   fieldKey: string | undefined,
   proposedValue: unknown,
   snapshot: unknown,
+  startDates: readonly string[],
+  userMessages: ReadonlyArray<{ text: string }>,
 ): boolean {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    return verifiesDateOffset(rule, fieldKey, proposedValue, startDates, userMessages)
+  }
   const business = snapshot as Record<string, unknown>
   const direct = /^businessSnapshot:([A-Za-z][A-Za-z0-9_]*)$/.exec(rule)
   if (direct) return fieldKey === direct[1] && business[direct[1]] === proposedValue
+  return verifiesDateOffset(rule, fieldKey, proposedValue, startDates, userMessages)
+}
 
-  const dateOffset = /^startDate plus (\d{1,3}) days$/.exec(rule)
+function verifiesDateOffset(
+  rule: string,
+  fieldKey: string | undefined,
+  proposedValue: unknown,
+  startDates: readonly string[],
+  userMessages: ReadonlyArray<{ text: string }>,
+): boolean {
+  const dateOffset = START_DATE_OFFSET_RULE.exec(rule)
   if (!dateOffset || fieldKey !== 'endDate' || typeof proposedValue !== 'string') return false
-  const startDate = business.startDate
-  if (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return false
-  const date = new Date(`${startDate}T00:00:00.000Z`)
-  if (Number.isNaN(date.getTime())) return false
-  date.setUTCDate(date.getUTCDate() + Number(dateOffset[1]))
-  return date.toISOString().slice(0, 10) === proposedValue
+  const days = Number(dateOffset[1])
+  if (!startDates.some((startDate) => addUtcDays(startDate, days) === proposedValue)) return false
+  const durations = extractSpokenDurations(userMessages)
+  if (durations.length === 0) return true
+  return durations.some((daysInclusive) => days === daysInclusive - 1)
+}
+
+function extractSpokenDurations(messages: ReadonlyArray<{ text: string }>): number[] {
+  const found = new Set<number>()
+  const patterns = [/(\d{1,3})\s*天/g, /(\d{1,3})日游/g]
+  for (const message of messages) {
+    for (const pattern of patterns) {
+      for (const match of message.text.matchAll(pattern)) {
+        const daysInclusive = Number(match[1])
+        if (daysInclusive > 0) found.add(daysInclusive)
+      }
+    }
+  }
+  return [...found]
+}
+
+function snapshotStartDates(snapshot: unknown): string[] {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return []
+  const startDate = (snapshot as Record<string, unknown>).startDate
+  return typeof startDate === 'string' && normalizeIsoDate(startDate) ? [startDate] : []
+}
+
+function extractCompleteCalendarDates(text: string): string[] {
+  const dates = new Set<string>()
+  const patterns = [
+    /(\d{4})年的?(\d{1,2})月(\d{1,2})[日号]/g,
+    /(\d{4})-(\d{1,2})-(\d{1,2})/g,
+    /(\d{4})\/(\d{1,2})\/(\d{1,2})/g,
+  ]
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const iso = toIsoDate(Number(match[1]), Number(match[2]), Number(match[3]))
+      if (iso) dates.add(iso)
+    }
+  }
+  return [...dates]
+}
+
+function toIsoDate(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null
+  }
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function normalizeIsoDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  return toIsoDate(Number(value.slice(0, 4)), Number(value.slice(5, 7)), Number(value.slice(8, 10)))
+}
+
+function addUtcDays(startDate: string, days: number): string | null {
+  const iso = normalizeIsoDate(startDate)
+  if (!iso) return null
+  const date = new Date(`${iso}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
 function clipToTokenBudget(text: string, maxTokens: number) {

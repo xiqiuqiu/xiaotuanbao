@@ -10,9 +10,17 @@ export const AI_COLLABORATION_ERROR_CODES = [
   'SERVICE_IDENTITY_INVALID',
   'VERSION_CONFLICT',
   'REVIEW_PENDING',
+  'UNGROUNDED_CANDIDATE_EVIDENCE',
 ] as const
 
 export type AiCollaborationErrorCode = (typeof AI_COLLABORATION_ERROR_CODES)[number]
+
+export function isAiCollaborationErrorCode(code: unknown): code is AiCollaborationErrorCode {
+  return (
+    typeof code === 'string' &&
+    (AI_COLLABORATION_ERROR_CODES as readonly string[]).includes(code)
+  )
+}
 
 const MESSAGES: Record<AiCollaborationErrorCode, string> = {
   AGENT_UNAVAILABLE: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
@@ -24,6 +32,7 @@ const MESSAGES: Record<AiCollaborationErrorCode, string> = {
   SERVICE_IDENTITY_INVALID: '不受信任的 AI 编排服务',
   VERSION_CONFLICT: '草稿版本已变化，请重新读取任务上下文后再提交候选',
   REVIEW_PENDING: '已有待确认审核包，请先在表单拒绝或确认后再提交新候选',
+  UNGROUNDED_CANDIDATE_EVIDENCE: '本次建议无法追溯到来源，草稿未改。你可以改一句话再发。',
 }
 
 const RETRYABLE: ReadonlySet<AiCollaborationErrorCode> = new Set([

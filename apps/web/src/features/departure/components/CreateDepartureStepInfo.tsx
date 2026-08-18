@@ -544,7 +544,11 @@ export function CreateDepartureStepInfo({
 
   const handleStartDateChange = (value: Dayjs | null) => {
     const startDate = value?.format('YYYY-MM-DD')
-    if (!startDate) return
+    if (!startDate) {
+      committedStartDateRef.current = undefined
+      form.setFieldsValue({ startDate: undefined, dayCount: undefined })
+      return
+    }
 
     const previousStartDate = committedStartDateRef.current
     const currentEndDate = form.getFieldValue('endDate') as string | undefined
@@ -571,7 +575,10 @@ export function CreateDepartureStepInfo({
 
   const handleEndDateChange = (value: Dayjs | null) => {
     const endDate = value?.format('YYYY-MM-DD')
-    if (!endDate) return
+    if (!endDate) {
+      form.setFieldsValue({ endDate: undefined, dayCount: undefined })
+      return
+    }
 
     const startDate = form.getFieldValue('startDate') as string | undefined
     form.setFieldsValue({

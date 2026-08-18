@@ -326,6 +326,13 @@ async function fillManualRouteAndContinue(
   const routeInput = screen.getByLabelText('路线名称')
   await user.clear(routeInput)
   await user.type(routeInput, routeName)
+  await pickDepartureDates(user, startDate)
+}
+
+async function pickDepartureDates(
+  user: ReturnType<typeof userEvent.setup>,
+  startDate = '2026-08-01',
+) {
   await user.click(screen.getByLabelText('出团日期'))
   await user.click(await screen.findByTitle(startDate))
 }
@@ -469,6 +476,8 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByText('填写路线名称')).toBeInTheDocument()
     expect(screen.getByLabelText('路线名称')).toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
+    expect(screen.getByLabelText('出团日期')).toHaveValue('')
+    expect(screen.getByLabelText('结束日期')).toHaveValue('')
     expect(screen.getByRole('button', { name: /创建发团/ })).toBeEnabled()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('创建进度')).not.toBeInTheDocument()
@@ -546,6 +555,7 @@ describe('CreateDepartureWizard', () => {
 
     await selectCommonRoute(user)
     await screen.findAllByText('将复制 2 段行程、5 项资源草稿')
+    await pickDepartureDates(user)
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
@@ -583,6 +593,7 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByLabelText('路线名称')).toHaveValue('西安-青海湖-茶卡6日游')
     expect(screen.queryByText('将复制 2 段行程、5 项资源草稿')).not.toBeInTheDocument()
 
+    await pickDepartureDates(user)
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
       expect(confirmAiCreateTask).toHaveBeenCalled()
@@ -628,6 +639,7 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getAllByText('将复制 3 段行程、8 项资源草稿').length).toBeGreaterThan(0)
     expect(screen.queryAllByText('将复制 2 段行程、5 项资源草稿')).toHaveLength(0)
 
+    await pickDepartureDates(user)
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
       expect(confirmAiCreateTask).toHaveBeenCalled()
@@ -663,6 +675,7 @@ describe('CreateDepartureWizard', () => {
     expect(screen.getByLabelText('路线名称')).toHaveValue('')
 
     await user.type(screen.getByLabelText('路线名称'), '喀纳斯阿勒泰10日线')
+    await pickDepartureDates(user)
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
       expect(confirmAiCreateTask).toHaveBeenCalled()
@@ -798,6 +811,7 @@ describe('CreateDepartureWizard', () => {
     )
     expect(screen.queryByLabelText('创建进度')).not.toBeInTheDocument()
 
+    await pickDepartureDates(user)
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
 
     await waitFor(() => {
@@ -1108,7 +1122,12 @@ describe('CreateDepartureWizard', () => {
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
     expect(startAiCreateAssistSession).toHaveBeenCalledWith({
       taskId: undefined,
-      draft: expect.objectContaining({ mode: 'manual', routeName: '' }),
+      draft: expect.objectContaining({
+        mode: 'manual',
+        routeName: '',
+        startDate: null,
+        endDate: null,
+      }),
     })
   })
 

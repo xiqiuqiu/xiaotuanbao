@@ -1,9 +1,12 @@
-import { AiCollaborationError, type AiCollaborationErrorCode } from '@xiaotuanbao/ai-contracts'
+import {
+  AiCollaborationError,
+  isAiCollaborationErrorCode,
+} from '@xiaotuanbao/ai-contracts'
 
 export function mapAgentFetchError(payload: unknown): AiCollaborationError {
   if (payload && typeof payload === 'object' && 'code' in payload) {
     const code = (payload as { code?: string }).code
-    if (isCollaborationCode(code)) {
+    if (isAiCollaborationErrorCode(code)) {
       return AiCollaborationError.fromCode(code)
     }
   }
@@ -37,16 +40,3 @@ export function mapModelError(error: unknown): AiCollaborationError {
   return AiCollaborationError.fromCode('AGENT_UNAVAILABLE')
 }
 
-function isCollaborationCode(code: unknown): code is AiCollaborationErrorCode {
-  return (
-    code === 'AGENT_UNAVAILABLE' ||
-    code === 'MODEL_TIMEOUT' ||
-    code === 'MODEL_REFUSED' ||
-    code === 'INVALID_FORMAT' ||
-    code === 'PERMISSION_DENIED' ||
-    code === 'DELEGATION_INVALID' ||
-    code === 'SERVICE_IDENTITY_INVALID' ||
-    code === 'VERSION_CONFLICT' ||
-    code === 'REVIEW_PENDING'
-  )
-}

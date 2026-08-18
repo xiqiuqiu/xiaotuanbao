@@ -45,7 +45,6 @@ import {
   createInfoFormValues,
   type InfoFormValues,
   createInitialRouteStepValues,
-  getShanghaiTodayString,
   hasUsableRouteSource,
   resolveEndDateAfterTemplateSelect,
   type RouteStepValues,
@@ -260,11 +259,10 @@ export function CreateDepartureWizard() {
 
       setInitializingForm(true)
       try {
-        const startDate = nextRouteValues.startDate ?? getShanghaiTodayString()
         const initialValues = createInfoFormValues(
           nextRouteValues,
           user.id,
-          startDate,
+          nextRouteValues.startDate,
           '',
         )
         infoForm.setFieldsValue(initialValues)
@@ -370,8 +368,9 @@ export function CreateDepartureWizard() {
     }
 
     formInitializedRef.current = true
-    const startDate = getShanghaiTodayString()
-    infoForm.setFieldsValue(createInfoFormValues(createInitialRouteStepValues(), user.id, startDate, ''))
+    infoForm.setFieldsValue(
+      createInfoFormValues(createInitialRouteStepValues(), user.id, undefined, ''),
+    )
     void loadDepartureNo().catch(() => {
       // 预览团号失败不阻断空表
     })

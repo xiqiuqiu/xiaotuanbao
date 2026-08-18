@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
   AiCollaborationError,
+  isAiCollaborationErrorCode,
   aiCreateDraftSnapshotSchema,
   capabilitiesForPendingReview,
   classifyDraftFields,
@@ -38,6 +39,7 @@ import {
   estimatePlaintextTokens,
   parseEventSequences,
   RequiredContextBudgetExceededError,
+  UngroundedCandidateEvidenceError,
   resolveAttemptUserText,
   resolveContextManifestIdentity,
 } from './ai-context-manifest'
@@ -337,7 +339,9 @@ export class AiWorkflowProcessor {
         job,
         error instanceof RequiredContextBudgetExceededError
           ? 'CONTEXT_BUDGET_EXCEEDED'
-          : 'AGENT_UNAVAILABLE',
+          : error instanceof UngroundedCandidateEvidenceError
+            ? 'UNGROUNDED_CANDIDATE_EVIDENCE'
+            : 'AGENT_UNAVAILABLE',
         undefined,
         attemptId,
         error instanceof RequiredContextBudgetExceededError
@@ -998,8 +1002,9 @@ export class AiWorkflowProcessor {
             finalInputHash,
             resultJson: (result ?? {
               kind: 'failed',
-              error: AiCollaborationError.fromCode(
-                errorCode === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'AGENT_UNAVAILABLE',
+              error: (isAiCollaborationErrorCode(errorCode)
+                ? AiCollaborationError.fromCode(errorCode)
+                : AiCollaborationError.fromCode('AGENT_UNAVAILABLE')
               ).toJSON(),
             }) as unknown as Prisma.InputJsonValue,
             endedAt: new Date(),
@@ -1200,7 +1205,7 @@ export class AiWorkflowProcessor {
         }),
       }))
     ) {
-      throw new Error('UNGROUNDED_CANDIDATE_EVIDENCE')
+      throw new UngroundedCandidateEvidenceError()
     }
     const run = await this.getOrCreateRunningActivityRun(
       tx,
