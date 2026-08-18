@@ -1516,11 +1516,12 @@ model AiContextManifest {
   truncationReasons        Json           @map("truncation_reasons")
   materialVersions         Json           @default("[]") @map("material_versions")
   createdAt                DateTime       @default(now()) @map("created_at")
-  attempt                  AiAgentAttempt?
+  attempts                 AiAgentAttempt[]
   materialReads            AiContextMaterialRead[]
 
   @@index([conversationId, inputBatchId])
   @@unique([inputBatchId, manifestVersion])
+  @@unique([inputBatchId, inputHash])
   @@index([summaryId])
   @@index([organizationId, createdAt])
   @@map("ai_context_manifests")
@@ -1583,7 +1584,7 @@ model AiAgentAttempt {
   job               AiWorkflowJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   activityRunId     String               @map("activity_run_id")
   activityRun       AiCreateActivityRun  @relation(fields: [activityRunId], references: [id])
-  contextManifestId String               @unique @map("context_manifest_id")
+  contextManifestId String               @map("context_manifest_id")
   contextManifest   AiContextManifest    @relation(fields: [contextManifestId], references: [id])
   status            AiAgentAttemptStatus @default(running)
   resultJson        Json?                @map("result_json")
@@ -1594,6 +1595,7 @@ model AiAgentAttempt {
 
   @@index([taskId, status])
   @@index([jobId, startedAt])
+  @@index([contextManifestId])
   @@index([organizationId, startedAt])
   @@map("ai_agent_attempts")
 }

@@ -330,6 +330,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
   })
 
   it('keeps only one Agent batch running for the same task', async () => {
+    await cancelOwnerInFlightProcessing()
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -338,7 +339,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     await sendText(taskId, conversationId, '第二批说明', `e2e-one-running-b-${taskId}`).expect(201)
 
     agent.holdNextCall()
-    const first = processor.processDueJobs(5)
+    const first = processor.processDueJobs(1)
     await waitFor(async () => {
       const running = await prisma.aiInputBatch.count({
         where: { taskId, status: 'agent_running' },
@@ -404,6 +405,59 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       orderBy: { createdAt: 'asc' },
     })
     expect(jobs.map((job) => job.status)).toEqual(['succeeded', 'succeeded'])
+  })
+
+  it('reuses the frozen context manifest when the same batch is reclaimed', async () => {
+    await cancelOwnerInFlightProcessing()
+    const opened = await openSession()
+    const taskId = opened.task.id
+    const conversationId = opened.conversation.id
+
+    await sendText(taskId, conversationId, '同一批次重试应复用清单', `e2e-reuse-manifest-${taskId}`).expect(
+      201,
+    )
+
+    agent.holdNextCall()
+    const firstRun = processor.processDueJobs(1)
+    await waitFor(async () => {
+      const attempt = await prisma.aiAgentAttempt.findFirst({
+        where: { taskId, status: 'running' },
+      })
+      expect(attempt).not.toBeNull()
+    })
+
+    const firstAttempt = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { taskId },
+      include: { contextManifest: true },
+      orderBy: { startedAt: 'asc' },
+    })
+    await prisma.aiWorkflowJob.update({
+      where: { id: firstAttempt.jobId },
+      data: {
+        claimedAt: new Date(Date.now() - 130_000),
+        claimedBy: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 10_000),
+      },
+    })
+
+    agent.release()
+    await firstRun
+    await processor.processDueJobs(5)
+
+    const attempts = await prisma.aiAgentAttempt.findMany({
+      where: { taskId },
+      include: { contextManifest: true },
+      orderBy: { startedAt: 'asc' },
+    })
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]?.status).toBe('failed')
+    expect(attempts[1]?.status).toBe('completed')
+    expect(attempts[0]?.contextManifestId).toBe(attempts[1]?.contextManifestId)
+    expect(attempts[0]?.contextManifest.manifestVersion).toBe(1)
+    expect(attempts[1]?.contextManifest.manifestVersion).toBe(1)
+    expect(attempts[0]?.contextManifest.inputHash).toBe(attempts[1]?.contextManifest.inputHash)
+    expect(attempts[0]?.id).not.toBe(attempts[1]?.id)
+    expect(await prisma.aiContextManifest.count({ where: { taskId } })).toBe(1)
   })
 
   it('persists Agent failure as a server-side batch fact and allows a new send', async () => {

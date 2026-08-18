@@ -39,6 +39,7 @@ import {
   parseEventSequences,
   RequiredContextBudgetExceededError,
   resolveAttemptUserText,
+  resolveContextManifestIdentity,
 } from './ai-context-manifest'
 import { hasGroundedManifestCandidateEvidence } from './ai-candidate-evidence'
 import { AiConversationService } from './ai-conversation.service'
@@ -607,45 +608,61 @@ export class AiWorkflowProcessor {
 
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      await tx.aiAgentAttempt.updateMany({
+        where: {
+          inputBatchId: job.inputBatchId,
+          status: AiAgentAttemptStatus.running,
+        },
+        data: {
+          status: AiAgentAttemptStatus.failed,
+          errorCode: 'AGENT_UNAVAILABLE',
+          endedAt: new Date(),
+        },
+      })
       const run = await this.getOrCreateRunningActivityRun(
         tx,
         job.organizationId,
         job.taskId,
         job.inputBatch.creatorUserId,
       )
-      const latestManifest = await tx.aiContextManifest.aggregate({
+      const existingManifests = await tx.aiContextManifest.findMany({
         where: { inputBatchId: job.inputBatchId },
-        _max: { manifestVersion: true },
+        select: { id: true, manifestVersion: true, inputHash: true },
+        orderBy: [{ manifestVersion: 'asc' }, { id: 'asc' }],
       })
-      const manifest = await tx.aiContextManifest.create({
-        data: {
-          organizationId: job.organizationId,
-          taskId: job.taskId,
-          conversationId: job.conversationId,
-          inputBatchId: job.inputBatchId,
-          conversationVersion: manifestRecord.conversationVersion,
-          manifestVersion: (latestManifest._max.manifestVersion ?? 0) + 1,
-          eventSequences: manifestRecord.eventSequences,
-          businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
-          taskStatus: task.status,
-          taskPhase: task.currentPhase,
-          businessSnapshot: manifestRecord.businessSnapshot as Prisma.InputJsonValue,
-          reviewSnapshot: manifestRecord.reviewSnapshot as Prisma.InputJsonValue,
-          availableCapabilities: manifestRecord.availableCapabilities,
-          summaryId: manifestRecord.summaryId,
-          summaryVersion: manifestRecord.summaryVersion,
-          materialFragmentRefs: manifestRecord.materialFragmentRefs,
-          budgetPolicy: manifestRecord.budgets as unknown as Prisma.InputJsonValue,
-          budgetUsage: manifestRecord.budgetUsage as unknown as Prisma.InputJsonValue,
-          builderVersion: manifestRecord.builderVersion,
-          systemPromptVersion: manifestRecord.systemPromptVersion,
-          toolSchemaVersion: manifestRecord.toolSchemaVersion,
-          modelId: manifestRecord.modelId,
-          inputHash: manifestRecord.inputHash,
-          truncationReasons: manifestRecord.truncationReasons,
-          materialVersions,
-        },
-      })
+      const resolved = resolveContextManifestIdentity(existingManifests, manifestRecord.inputHash)
+      const manifest =
+        resolved.action === 'reuse'
+          ? { id: resolved.id }
+          : await tx.aiContextManifest.create({
+              data: {
+                organizationId: job.organizationId,
+                taskId: job.taskId,
+                conversationId: job.conversationId,
+                inputBatchId: job.inputBatchId,
+                conversationVersion: manifestRecord.conversationVersion,
+                manifestVersion: resolved.manifestVersion,
+                eventSequences: manifestRecord.eventSequences,
+                businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+                taskStatus: task.status,
+                taskPhase: task.currentPhase,
+                businessSnapshot: manifestRecord.businessSnapshot as Prisma.InputJsonValue,
+                reviewSnapshot: manifestRecord.reviewSnapshot as Prisma.InputJsonValue,
+                availableCapabilities: manifestRecord.availableCapabilities,
+                summaryId: manifestRecord.summaryId,
+                summaryVersion: manifestRecord.summaryVersion,
+                materialFragmentRefs: manifestRecord.materialFragmentRefs,
+                budgetPolicy: manifestRecord.budgets as unknown as Prisma.InputJsonValue,
+                budgetUsage: manifestRecord.budgetUsage as unknown as Prisma.InputJsonValue,
+                builderVersion: manifestRecord.builderVersion,
+                systemPromptVersion: manifestRecord.systemPromptVersion,
+                toolSchemaVersion: manifestRecord.toolSchemaVersion,
+                modelId: manifestRecord.modelId,
+                inputHash: manifestRecord.inputHash,
+                truncationReasons: manifestRecord.truncationReasons,
+                materialVersions,
+              },
+            })
       const attempt = await tx.aiAgentAttempt.create({
         data: {
           organizationId: job.organizationId,
@@ -725,6 +742,13 @@ export class AiWorkflowProcessor {
     await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
       if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
+      const attempt = await tx.aiAgentAttempt.findUnique({
+        where: { id: attemptId },
+        select: { status: true },
+      })
+      if (attempt?.status !== AiAgentAttemptStatus.running) {
         return
       }
       const batchStatus = batchStatusForResult(result)

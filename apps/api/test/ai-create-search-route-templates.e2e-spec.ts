@@ -1,29 +1,52 @@
+import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { JwtService } from '@nestjs/jwt'
 import { CounterpartyType, DepartureType, PrismaClient, ResourceKind } from '@prisma/client'
 import request from 'supertest'
+import {
+  AI_OP_DELEGATION_JWT_AUD,
+  AI_OP_DELEGATION_JWT_TYP,
+} from '../src/common/jwt-claims'
+import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
+import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
+const COMPLETED_MESSAGE = '已记下你的出团说明，可以继续在表单完善。'
 
 describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
   let app: INestApplication
   let prisma: PrismaClient
+  let processor: AiWorkflowProcessor
   let coordinatorToken: string
   let organizationId: string
   let ownerUserId: string
   let supplierId: string
+  let agent: Awaited<ReturnType<typeof startDeterministicHeadlessAgent>>
+  let inFlightJobs: Promise<number> | null = null
   const testPrefix = `e2e-ai-search-tpl-${Date.now()}`
   const createdTemplateIds: string[] = []
   const foreignOrgIds: string[] = []
 
   beforeAll(async () => {
+    let apiBaseUrl = ''
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
-    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:4111/copilotkit'
-    process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT = 'true'
+
+    agent = await startDeterministicHeadlessAgent({
+      getApiBaseUrl: () => apiBaseUrl,
+      serviceSecret: AGENT_SECRET,
+      outcome: { kind: 'completed', message: COMPLETED_MESSAGE },
+    })
+    process.env.AGENT_INTERNAL_URL = agent.origin
 
     app = await createTestApp()
+    const address = app.getHttpServer().address() as AddressInfo
+    apiBaseUrl = `http://127.0.0.1:${address.port}`
+
     prisma = new PrismaClient()
+    processor = app.get(AiWorkflowProcessor)
     coordinatorToken = await loginAs(app, 'wangjie')
 
     const user = await prisma.user.findFirst({
@@ -43,6 +66,9 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
   })
 
   afterAll(async () => {
+    await prisma.aiConversation.deleteMany({
+      where: { organizationId, creatorUserId: ownerUserId },
+    })
     await prisma.aiReviewRecord.deleteMany({
       where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
     })
@@ -81,8 +107,14 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       await prisma.organization.delete({ where: { id: orgId } }).catch(() => undefined)
     }
     await prisma.$disconnect()
+    await finishHeldJobs()
+    await agent.close()
     await app.close()
-    delete process.env.AI_CREATE_ALLOW_LEGACY_UNMANIFESTED_SUBMIT
+  })
+
+  afterEach(async () => {
+    await finishHeldJobs()
+    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
   })
 
   function agentSearch(delegationToken: string, body: Record<string, unknown>) {
@@ -99,6 +131,14 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       .set('X-Agent-Service-Key', AGENT_SECRET)
       .set('Authorization', `Bearer ${delegationToken}`)
       .send(body)
+  }
+
+  async function finishHeldJobs() {
+    agent.release()
+    if (inFlightJobs) {
+      await inFlightJobs.catch(() => undefined)
+      inFlightJobs = null
+    }
   }
 
   async function openTask(draft?: Record<string, unknown>) {
@@ -122,7 +162,58 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       taskId: session.body.data.task.id as string,
       version: session.body.data.task.draft.version as number,
       runId: session.body.data.runId as string,
+      conversationId: session.body.data.conversation.id as string,
       delegationToken: session.body.data.delegationToken as string,
+    }
+  }
+
+  async function openWorkerTask(draft?: Record<string, unknown>, userText = '用那条常用路线') {
+    await finishHeldJobs()
+    const opened = await openTask(draft)
+    await authRequest(app, coordinatorToken)
+      .post(`/api/ai-create-tasks/${opened.taskId}/conversations/${opened.conversationId}/messages`)
+      .set('Idempotency-Key', `e2e-search-open-${opened.taskId}`)
+      .send({ text: userText })
+      .expect(201)
+
+    agent.holdNextCall()
+    inFlightJobs = processor.processDueJobs(5)
+    await waitFor(async () => {
+      const attempt = await prisma.aiAgentAttempt.findFirst({
+        where: { taskId: opened.taskId, status: 'running' },
+      })
+      expect(attempt).not.toBeNull()
+    })
+
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { taskId: opened.taskId, status: 'running' },
+    })
+    const jwt = app.get(JwtService)
+    const config = app.get(ConfigService)
+    const ttlSec = config.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
+
+    return {
+      taskId: opened.taskId,
+      version: opened.version,
+      runId: attempt.activityRunId,
+      delegationToken: await jwt.signAsync(
+        {
+          typ: AI_OP_DELEGATION_JWT_TYP,
+          sub: ownerUserId,
+          organizationId,
+          taskId: opened.taskId,
+          runId: attempt.activityRunId,
+          conversationId: attempt.conversationId,
+          inputBatchId: attempt.inputBatchId,
+          attemptId: attempt.id,
+          contextManifestId: attempt.contextManifestId,
+        },
+        {
+          expiresIn: ttlSec,
+          secret: config.getOrThrow<string>('app.jwtDelegationSecret'),
+          audience: AI_OP_DELEGATION_JWT_AUD,
+        },
+      ),
     }
   }
 
@@ -240,7 +331,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       },
     })
 
-    const opened = await openTask({ endDate: '2026-09-03' })
+    const opened = await openWorkerTask({ endDate: '2026-09-03' })
     const submitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
@@ -313,7 +404,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       name: `${testPrefix}-将删除`,
       defaultDayCount: 4,
     })
-    const opened = await openTask({ routeName: `${testPrefix}-原路线` })
+    const opened = await openWorkerTask({ routeName: `${testPrefix}-原路线` })
     const submitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
@@ -350,3 +441,18 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     expect(after.body.data.pendingReview.id).toBe(submitted.body.data.reviewPackageId)
   })
 })
+
+async function waitFor(assert: () => Promise<void>, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+  while (Date.now() < deadline) {
+    try {
+      await assert()
+      return
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+  throw lastError
+}

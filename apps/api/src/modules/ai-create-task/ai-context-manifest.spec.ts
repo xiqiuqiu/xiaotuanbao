@@ -8,6 +8,7 @@ import {
   parseEventSequences,
   projectConversationEventsForAgent,
   resolveAttemptUserText,
+  resolveContextManifestIdentity,
   selectPlaintextContextEvents,
 } from './ai-context-manifest'
 import { REVIEW_CONFIRM_CONTINUATION_TEXT } from './ai-conversation.constants'
@@ -253,6 +254,44 @@ describe('buildAuditablePlaintextContext #321', () => {
         materialFragmentRefs: [],
       }).inputHash,
     ).not.toBe(first.inputHash)
+  })
+})
+
+describe('resolveContextManifestIdentity #321', () => {
+  it('reuses the lowest version when the input hash already exists', () => {
+    expect(
+      resolveContextManifestIdentity(
+        [
+          { id: 'manifest-later', manifestVersion: 3, inputHash: 'same-hash' },
+          { id: 'manifest-first', manifestVersion: 1, inputHash: 'same-hash' },
+          { id: 'manifest-other', manifestVersion: 2, inputHash: 'other-hash' },
+        ],
+        'same-hash',
+      ),
+    ).toEqual({
+      action: 'reuse',
+      id: 'manifest-first',
+      manifestVersion: 1,
+    })
+  })
+
+  it('creates the next version when the input hash is new', () => {
+    expect(
+      resolveContextManifestIdentity(
+        [
+          { id: 'manifest-1', manifestVersion: 1, inputHash: 'old-hash' },
+          { id: 'manifest-2', manifestVersion: 2, inputHash: 'older-hash' },
+        ],
+        'new-hash',
+      ),
+    ).toEqual({ action: 'create', manifestVersion: 3 })
+  })
+
+  it('creates version 1 when the batch has no manifests yet', () => {
+    expect(resolveContextManifestIdentity([], 'first-hash')).toEqual({
+      action: 'create',
+      manifestVersion: 1,
+    })
   })
 })
 

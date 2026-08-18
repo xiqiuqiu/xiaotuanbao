@@ -627,12 +627,7 @@ export class AiCreateTaskService {
     if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
-    if (
-      !caller.contextManifestId &&
-      !this.configService.get<boolean>(
-        'app.aiCreateAssist.allowLegacyUnmanifestedSubmitForTests',
-      )
-    ) {
+    if (!caller.contextManifestId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
@@ -674,52 +669,50 @@ export class AiCreateTaskService {
         throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
       }
 
-      if (caller.contextManifestId) {
-        const manifest = await tx.aiContextManifest.findFirst({
-          where: {
-            id: caller.contextManifestId,
-            organizationId: caller.organizationId,
-            taskId: caller.taskId,
-            ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
-            ...(caller.inputBatchId ? { inputBatchId: caller.inputBatchId } : {}),
-          },
-        })
-        if (!manifest) {
-          throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
-        }
-        const sourceEvents = await tx.aiConversationEvent.findMany({
-          where: {
-            conversationId: manifest.conversationId,
-            organizationId: caller.organizationId,
-            sequence: { in: parseEventSequences(manifest.eventSequences) },
-            kind: 'user_message',
-          },
-          select: { id: true, payload: true },
-        })
-        if (
-          !(await hasGroundedManifestCandidateEvidence(tx, {
-            organizationId: caller.organizationId,
-            candidates: input.candidates,
-            contextManifestId: manifest.id,
-            businessSnapshot: manifest.businessSnapshot,
-            materialVersions: manifest.materialVersions,
-            userMessages: sourceEvents.flatMap((event) => {
-              const payload = event.payload
-              if (
-                !payload ||
-                typeof payload !== 'object' ||
-                Array.isArray(payload) ||
-                !('text' in payload)
-              ) {
-                return []
-              }
-              const text = String((payload as { text: unknown }).text ?? '').trim()
-              return text ? [{ id: event.id, text }] : []
-            }),
-          }))
-        ) {
-          throw new BadRequestException('候选证据不属于当前上下文清单')
-        }
+      const manifest = await tx.aiContextManifest.findFirst({
+        where: {
+          id: caller.contextManifestId,
+          organizationId: caller.organizationId,
+          taskId: caller.taskId,
+          ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
+          ...(caller.inputBatchId ? { inputBatchId: caller.inputBatchId } : {}),
+        },
+      })
+      if (!manifest) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      const sourceEvents = await tx.aiConversationEvent.findMany({
+        where: {
+          conversationId: manifest.conversationId,
+          organizationId: caller.organizationId,
+          sequence: { in: parseEventSequences(manifest.eventSequences) },
+          kind: 'user_message',
+        },
+        select: { id: true, payload: true },
+      })
+      if (
+        !(await hasGroundedManifestCandidateEvidence(tx, {
+          organizationId: caller.organizationId,
+          candidates: input.candidates,
+          contextManifestId: manifest.id,
+          businessSnapshot: manifest.businessSnapshot,
+          materialVersions: manifest.materialVersions,
+          userMessages: sourceEvents.flatMap((event) => {
+            const payload = event.payload
+            if (
+              !payload ||
+              typeof payload !== 'object' ||
+              Array.isArray(payload) ||
+              !('text' in payload)
+            ) {
+              return []
+            }
+            const text = String((payload as { text: unknown }).text ?? '').trim()
+            return text ? [{ id: event.id, text }] : []
+          }),
+        }))
+      ) {
+        throw new BadRequestException('候选证据不属于当前上下文清单')
       }
 
       const stored = toStoredCandidates(input.candidates)

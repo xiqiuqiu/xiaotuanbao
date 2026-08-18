@@ -397,6 +397,41 @@ export function estimatePlaintextTokens(text: string): number {
   return [...text].length
 }
 
+export type ExistingContextManifestIdentity = {
+  id: string
+  manifestVersion: number
+  inputHash: string
+}
+
+export type ResolvedContextManifestIdentity =
+  | { action: 'reuse'; id: string; manifestVersion: number }
+  | { action: 'create'; manifestVersion: number }
+
+export function resolveContextManifestIdentity(
+  existing: readonly ExistingContextManifestIdentity[],
+  inputHash: string,
+): ResolvedContextManifestIdentity {
+  const reused = existing
+    .filter((item) => item.inputHash === inputHash)
+    .slice()
+    .sort((left, right) =>
+      left.manifestVersion === right.manifestVersion
+        ? left.id.localeCompare(right.id)
+        : left.manifestVersion - right.manifestVersion,
+    )[0]
+  if (reused) {
+    return {
+      action: 'reuse',
+      id: reused.id,
+      manifestVersion: reused.manifestVersion,
+    }
+  }
+  return {
+    action: 'create',
+    manifestVersion: existing.reduce((max, item) => Math.max(max, item.manifestVersion), 0) + 1,
+  }
+}
+
 export function hasGroundedCandidateEvidence(
   candidates: ReadonlyArray<{
     fieldKey?: string
