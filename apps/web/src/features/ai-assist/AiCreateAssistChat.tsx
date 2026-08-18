@@ -439,7 +439,6 @@ function createInteractionActivityRenderer(handlers: {
     ),
   }
 }
-const EVENT_CATCH_UP_POLL_MS = 1_000
 const DRAFT_SAVE_DEBOUNCE_MS = 600
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
@@ -766,13 +765,9 @@ export function AiCreateAssistChat({
       void catchUp()
     }
     void catchUp()
-    const timer = window.setInterval(() => {
-      void catchUp()
-    }, EVENT_CATCH_UP_POLL_MS)
     return () => {
       abort.abort()
       source.close()
-      window.clearInterval(timer)
     }
   }, [applyServerDraft, conversationId, taskId])
 

@@ -562,7 +562,13 @@ export function CreateDepartureWizard() {
     queryKey: ['ai-create-assist-state', taskId],
     queryFn: () => getAiCreateAssistTaskState(taskId!),
     enabled: Boolean(assistAvailability?.enabled && taskId),
-    refetchInterval: 2500,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'parsing' || status === 'ai_processing') {
+        return 2500
+      }
+      return false
+    },
   })
   const assistTaskStatusLabel = assistTaskState
     ? ASSIST_TASK_STATUS_LABELS[assistTaskState.status]

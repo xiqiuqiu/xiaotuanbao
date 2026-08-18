@@ -1127,6 +1127,25 @@ describe('CreateDepartureWizard', () => {
     expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
+  it('does not keep polling assist-state after background work returns to idle', async () => {
+    mockSearch = { taskId: 'task-1' }
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(getAiCreateAssistTaskState).mockResolvedValue({ status: 'idle' })
+
+    renderWizard()
+    await waitFor(() => {
+      expect(getAiCreateAssistTaskState).toHaveBeenCalled()
+    })
+    const callsAfterMount = vi.mocked(getAiCreateAssistTaskState).mock.calls.length
+
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+
+    expect(vi.mocked(getAiCreateAssistTaskState).mock.calls.length).toBe(callsAfterMount)
+  })
+
   it('starts assist when the pane expands without clicking AI 辅助', async () => {
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,

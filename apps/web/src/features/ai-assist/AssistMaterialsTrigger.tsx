@@ -54,7 +54,7 @@ export function AssistMaterialsTrigger({
         (item) =>
           item.status === 'queued' || item.status === 'uploaded' || item.status === 'parsing',
       )
-      if (waiting || items.length === 0) {
+      if (waiting) {
         return 2000
       }
       return false

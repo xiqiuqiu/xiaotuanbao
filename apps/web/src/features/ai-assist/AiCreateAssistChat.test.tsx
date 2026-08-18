@@ -1004,6 +1004,19 @@ describe('AiCreateAssistChat', () => {
     ).toBeInTheDocument()
   })
 
+  it('does not poll conversation events on an interval while the event stream is open', async () => {
+    render(<AiCreateAssistChat {...chatProps} />)
+    await waitFor(() => {
+      expect(listAiConversationEvents).toHaveBeenCalled()
+    })
+    const callsAfterMount = vi.mocked(listAiConversationEvents).mock.calls.length
+
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+
+    expect(vi.mocked(listAiConversationEvents).mock.calls.length).toBe(callsAfterMount)
+    expect(lastEventSource).not.toBeNull()
+  })
+
   it('keeps the contiguous sequence watermark and fills an SSE gap without duplicates', async () => {
     render(
       <AiCreateAssistChat

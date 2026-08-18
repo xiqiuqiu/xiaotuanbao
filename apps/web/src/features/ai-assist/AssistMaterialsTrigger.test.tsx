@@ -118,4 +118,17 @@ describe('AssistMaterialsTrigger', () => {
     })
     expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
   })
+
+  it('does not poll an empty materials list', async () => {
+    vi.mocked(listDepartureMaterials).mockResolvedValue([])
+    renderTrigger()
+    await waitFor(() => {
+      expect(listDepartureMaterials).toHaveBeenCalled()
+    })
+    const callsAfterMount = vi.mocked(listDepartureMaterials).mock.calls.length
+
+    await new Promise((resolve) => setTimeout(resolve, 2500))
+
+    expect(vi.mocked(listDepartureMaterials).mock.calls.length).toBe(callsAfterMount)
+  })
 })
