@@ -49,8 +49,8 @@ import {
   REMOVE_BATCH_MATERIALS_OPERATION,
   RETRY_FAILED_MATERIALS_OPERATION,
   SEND_TEXT_OPERATION,
-  SSE_CATCH_UP_POLL_MS,
   STOP_BATCH_OPERATION,
+  nextSseCatchUpDelay,
 } from './ai-conversation.constants'
 import {
   isFailedDependency,
@@ -958,6 +958,7 @@ export class AiConversationService {
         if (cancelled) {
           return
         }
+        let foundEvents = false
         try {
           const events = await this.prisma.aiConversationEvent.findMany({
             where: { conversationId, sequence: { gt: lastSeq } },
@@ -966,6 +967,7 @@ export class AiConversationService {
           if (cancelled) {
             return
           }
+          foundEvents = events.length > 0
           for (const event of events) {
             emit(toEventView(event))
           }
@@ -977,7 +979,7 @@ export class AiConversationService {
         }
         timer = setTimeout(() => {
           void poll()
-        }, SSE_CATCH_UP_POLL_MS)
+        }, nextSseCatchUpDelay(foundEvents))
       }
       void poll()
 

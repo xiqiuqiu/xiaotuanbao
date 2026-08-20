@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Button, Card, Drawer, Form, Spin, Typography, message, theme } from 'antd'
+import { App, Button, Card, Drawer, Form, Spin, Typography, theme } from 'antd'
 import { ArrowLeftOutlined, CommentOutlined } from '@ant-design/icons'
+import { pendingCandidateSnapshotDrift, preservePendingCandidateBaseline } from '@xiaotuanbao/ai-contracts'
 import type {
   AiCreateAssistTaskStatus,
   AiCreateTaskSummary,
+  AiReviewPackageView,
   AiReviewableBasicInfoField,
 } from '@xiaotuanbao/shared'
 import { useNavigate, useSearch } from '@tanstack/react-router'
@@ -16,6 +18,10 @@ import { AiCreateAssistLoading } from '@/features/ai-assist/AiCreateAssistLoadin
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
 import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
+import {
+  assistStateRefetchInterval,
+  taskReviewRefetchInterval,
+} from '@/features/ai-assist/ai-create-assist-polling'
 import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
 import {
   confirmAiCreateTask,
@@ -73,6 +79,7 @@ function newConfirmIdempotencyKey(taskId: string): string {
 
 export function CreateDepartureWizard() {
   const { token } = theme.useToken()
+  const { message } = App.useApp()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
@@ -100,6 +107,7 @@ export function CreateDepartureWizard() {
   const taskIdRef = useRef(taskId)
   const draftVersionRef = useRef(draftVersion)
   const routeValuesRef = useRef(routeValues)
+  const pendingReviewRef = useRef<AiReviewPackageView | null>(null)
   const templateSelectGenerationRef = useRef(0)
   const templateSelectAbortRef = useRef<AbortController | null>(null)
 
@@ -164,7 +172,14 @@ export function CreateDepartureWizard() {
 
     const run = (async () => {
       const info = infoForm.getFieldsValue(true)
-      const draft = buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
+      const pending = pendingReviewRef.current
+      const draft = pending?.baselineSnapshot
+        ? preservePendingCandidateBaseline({
+            draft: buildDepartureCreationDraftSnapshot(routeValuesRef.current, info),
+            baselineSnapshot: pending.baselineSnapshot,
+            candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
+          })
+        : buildDepartureCreationDraftSnapshot(routeValuesRef.current, info)
       if (!canPersistDepartureCreationDraft(draft)) {
         return
       }
@@ -232,18 +247,36 @@ export function CreateDepartureWizard() {
         message.error(error instanceof Error ? error.message : '发团创建草稿保存失败，请勿离开本页')
       })
     }, AUTOSAVE_DEBOUNCE_MS)
-  }, [persistDraft])
+  }, [message, persistDraft])
 
-  const flushDraft = useCallback(async () => {
+  const flushDraft = useCallback(async (options?: { restorePendingBaseline?: boolean }) => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = null
+    }
+    if (options?.restorePendingBaseline) {
+      const pending = pendingReviewRef.current
+      if (pending?.baselineSnapshot && pending.candidates.length > 0) {
+        const draft = buildDepartureCreationDraftSnapshot(
+          routeValuesRef.current,
+          infoForm.getFieldsValue(true),
+        )
+        if (
+          pendingCandidateSnapshotDrift({
+            draft,
+            baselineSnapshot: pending.baselineSnapshot,
+            candidateFields: pending.candidates.map((candidate) => candidate.fieldKey),
+          })
+        ) {
+          dirtyRef.current = true
+        }
+      }
     }
     if (!dirtyRef.current && taskIdRef.current && draftVersionRef.current != null) {
       return
     }
     await persistDraft()
-  }, [persistDraft])
+  }, [infoForm, persistDraft])
 
   const loadDepartureNo = useCallback(async () => {
     const result = await previewDepartureNo()
@@ -279,7 +312,7 @@ export function CreateDepartureWizard() {
         setInitializingForm(false)
       }
     },
-    [infoForm, loadDepartureNo, persistDraft, user],
+    [infoForm, loadDepartureNo, message, persistDraft, user],
   )
 
   const handleCopyLoadError = useCallback(() => {
@@ -345,7 +378,7 @@ export function CreateDepartureWizard() {
     return () => {
       cancelled = true
     }
-  }, [infoForm, loadDepartureNo, navigate, searchTaskId, user])
+  }, [infoForm, loadDepartureNo, message, navigate, searchTaskId, user])
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -397,7 +430,15 @@ export function CreateDepartureWizard() {
       }
 
       const previousDefaultName = buildDefaultDepartureName(previous.routeName, startDate)
-      if (startDate && next.routeName.trim() && (!name?.trim() || name === previousDefaultName)) {
+      const pendingNameCandidate = pendingReviewRef.current?.candidates.some(
+        (candidate) => candidate.fieldKey === 'name',
+      )
+      if (
+        !pendingNameCandidate &&
+        startDate &&
+        next.routeName.trim() &&
+        (!name?.trim() || name === previousDefaultName)
+      ) {
         updates.name = buildDefaultDepartureName(next.routeName, startDate)
       }
 
@@ -462,7 +503,7 @@ export function CreateDepartureWizard() {
       if (generation !== templateSelectGenerationRef.current) return
       handleRouteChange(next)
     },
-    [handleRouteChange],
+    [handleRouteChange, message],
   )
 
   const handleClearSelectedTemplate = useCallback(() => {
@@ -551,7 +592,7 @@ export function CreateDepartureWizard() {
       .catch((error) => {
         message.error(error instanceof Error ? error.message : '发团创建草稿保存失败，请处理后再离开')
       })
-  }, [flushDraft, navigate])
+  }, [flushDraft, message, navigate])
 
   const { data: assistAvailability } = useQuery({
     queryKey: ['ai-create-assist-availability'],
@@ -562,7 +603,8 @@ export function CreateDepartureWizard() {
     queryKey: ['ai-create-assist-state', taskId],
     queryFn: () => getAiCreateAssistTaskState(taskId!),
     enabled: Boolean(assistAvailability?.enabled && taskId),
-    refetchInterval: 2500,
+    refetchInterval: (current) => assistStateRefetchInterval(current.state.data?.status),
+    refetchIntervalInBackground: false,
   })
   const assistTaskStatusLabel = assistTaskState
     ? ASSIST_TASK_STATUS_LABELS[assistTaskState.status]
@@ -590,9 +632,16 @@ export function CreateDepartureWizard() {
     queryKey: ['ai-create-task', taskId],
     queryFn: () => getAiCreateTask(taskId!),
     enabled: Boolean(taskId),
-    refetchInterval: session && !assistPaneCollapsed ? 2500 : false,
+    refetchInterval: (current) =>
+      taskReviewRefetchInterval({
+        paneOpen: Boolean(session && !assistPaneCollapsed),
+        hasPendingReview: Boolean(current.state.data?.pendingReview),
+        assistStatus: assistTaskState?.status,
+      }),
+    refetchIntervalInBackground: false,
   })
   const pendingReview = taskReview?.pendingReview ?? null
+  pendingReviewRef.current = pendingReview
   const refetchTaskReviewRef = useRef(refetchTaskReview)
   refetchTaskReviewRef.current = refetchTaskReview
   const pendingCorrectionsRef = useRef<
@@ -642,7 +691,7 @@ export function CreateDepartureWizard() {
           })
       }, 300)
     },
-    [pendingReview, queryClient, taskId],
+    [message, pendingReview, queryClient, taskId],
   )
 
   useEffect(() => {
@@ -666,7 +715,7 @@ export function CreateDepartureWizard() {
         clearTimeout(correctTimerRef.current)
         correctTimerRef.current = null
       }
-      await flushDraft()
+      await flushDraft({ restorePendingBaseline: true })
       const currentVersion = draftVersionRef.current
       if (currentVersion == null) {
         throw new Error('没有待确认的审核包')

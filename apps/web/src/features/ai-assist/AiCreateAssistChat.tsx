@@ -47,6 +47,10 @@ import {
 } from './ai-create-copilot-messages'
 import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import { AssistMaterialsTrigger } from './AssistMaterialsTrigger'
+import {
+  CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
+  conversationCatchUpIntervalMs,
+} from './ai-create-assist-polling'
 import styles from './AiCreateAssistChat.module.css'
 
 const AGENT_ID = 'ai-create-readonly-assist'
@@ -439,7 +443,7 @@ function createInteractionActivityRenderer(handlers: {
     ),
   }
 }
-const EVENT_CATCH_UP_POLL_MS = 1_000
+
 const DRAFT_SAVE_DEBOUNCE_MS = 600
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
@@ -612,6 +616,8 @@ export function AiCreateAssistChat({
   const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
     initialActiveBatch ?? null,
   )
+  const activeBatchStatusRef = useRef(activeBatch?.status ?? null)
+  activeBatchStatusRef.current = activeBatch?.status ?? null
   const [draft, setDraft] = useState(initialDraft?.text ?? '')
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
@@ -623,13 +629,21 @@ export function AiCreateAssistChat({
   const idempotencyKeyRef = useRef<string | null>(null)
   const sendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
+  const onReviewPackageSubmittedRef = useRef(onReviewPackageSubmitted)
+  onReviewPackageSubmittedRef.current = onReviewPackageSubmitted
   const draftEpochRef = useRef(initialDraft?.draftEpoch ?? 0)
   const draftRevisionRef = useRef(initialDraft?.revision ?? 0)
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const draftSaveAbortRef = useRef<AbortController | null>(null)
   const draftSaveGenerationRef = useRef(0)
   const pendingDraftTextRef = useRef<string | null>(null)
   const editingDraftRef = useRef(false)
   const deferredDraftRef = useRef<AiConversationDraftView | null>(null)
+
+  const abortDraftSave = useCallback(() => {
+    draftSaveAbortRef.current?.abort()
+    draftSaveAbortRef.current = null
+  }, [])
 
   const applyServerDraft = useCallback((next: AiConversationDraftView) => {
     if (
@@ -665,7 +679,15 @@ export function AiCreateAssistChat({
       draftSaveTimerRef.current = setTimeout(() => {
         pendingDraftTextRef.current = null
         const epoch = draftEpochRef.current
-        void saveAiConversationDraft(taskId, conversationId, { text: value, draftEpoch: epoch })
+        abortDraftSave()
+        const abort = new AbortController()
+        draftSaveAbortRef.current = abort
+        void saveAiConversationDraft(
+          taskId,
+          conversationId,
+          { text: value, draftEpoch: epoch },
+          { signal: abort.signal },
+        )
           .then((saved) => {
             if (generation !== draftSaveGenerationRef.current) {
               return
@@ -683,7 +705,7 @@ export function AiCreateAssistChat({
           .catch(() => undefined)
       }, DRAFT_SAVE_DEBOUNCE_MS)
     },
-    [applyServerDraft, conversationId, taskId],
+    [abortDraftSave, applyServerDraft, conversationId, taskId],
   )
 
   useEffect(
@@ -719,6 +741,9 @@ export function AiCreateAssistChat({
 
   useEffect(() => {
     const abort = new AbortController()
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let errorDebounce: ReturnType<typeof setTimeout> | undefined
     const catchUp = () =>
       Promise.resolve(
         listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
@@ -727,7 +752,7 @@ export function AiCreateAssistChat({
         }),
       )
         .then((page) => {
-          if (abort.signal.aborted) {
+          if (abort.signal.aborted || cancelled) {
             return
           }
           if (page.activeBatch !== undefined) {
@@ -740,10 +765,28 @@ export function AiCreateAssistChat({
             setEvents((current) => mergeEvents(current, page.events))
             if (page.events.some((event) => event.kind === 'batch_status')) {
               setMaterialsRefreshKey((key) => key + 1)
+              onReviewPackageSubmittedRef.current?.()
             }
           }
         })
         .catch(() => undefined)
+
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (cancelled) {
+          return
+        }
+        if (document.visibilityState === 'hidden') {
+          schedule()
+          return
+        }
+        void catchUp().finally(() => {
+          if (!cancelled) {
+            schedule()
+          }
+        })
+      }, conversationCatchUpIntervalMs(activeBatchStatusRef.current))
+    }
 
     const source = new EventSource(
       `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
@@ -756,6 +799,7 @@ export function AiCreateAssistChat({
           setEvents((current) => mergeEvents(current, [parsed]))
           if (parsed.kind === 'batch_status') {
             setMaterialsRefreshKey((key) => key + 1)
+            onReviewPackageSubmittedRef.current?.()
           }
         }
       } catch {
@@ -763,16 +807,33 @@ export function AiCreateAssistChat({
       }
     }
     source.onerror = () => {
+      if (cancelled || errorDebounce) {
+        return
+      }
+      errorDebounce = setTimeout(() => {
+        errorDebounce = undefined
+      }, CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS)
       void catchUp()
     }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void catchUp()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
     void catchUp()
-    const timer = window.setInterval(() => {
-      void catchUp()
-    }, EVENT_CATCH_UP_POLL_MS)
+    schedule()
     return () => {
+      cancelled = true
       abort.abort()
       source.close()
-      window.clearInterval(timer)
+      if (timer) {
+        clearTimeout(timer)
+      }
+      if (errorDebounce) {
+        clearTimeout(errorDebounce)
+      }
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [applyServerDraft, conversationId, taskId])
 
@@ -791,6 +852,7 @@ export function AiCreateAssistChat({
       if (draftSaveTimerRef.current) {
         clearTimeout(draftSaveTimerRef.current)
       }
+      abortDraftSave()
       editingDraftRef.current = false
       setErrorText(null)
       const outboundText = nextText || DEFAULT_ATTACHMENT_TEXT
@@ -828,7 +890,7 @@ export function AiCreateAssistChat({
         sendingRef.current = false
       }
     },
-    [applyServerDraft, conversationId, draft, pendingText, taskId, updateDraft],
+    [abortDraftSave, applyServerDraft, conversationId, draft, pendingText, taskId, updateDraft],
   )
 
   const sendRef = useRef(send)

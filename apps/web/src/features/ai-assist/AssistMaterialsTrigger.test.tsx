@@ -62,6 +62,21 @@ describe('AssistMaterialsTrigger', () => {
     expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
   })
 
+  it('does not poll an empty materials list', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      vi.mocked(listDepartureMaterials).mockResolvedValue([])
+      renderTrigger()
+      await waitFor(() => expect(listDepartureMaterials).toHaveBeenCalledTimes(1))
+      await act(async () => {
+        vi.advanceTimersByTime(8_000)
+      })
+      expect(listDepartureMaterials).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('shows empty guidance, loading, and retryable errors in the panel', async () => {
     let resolveList!: (value: Awaited<ReturnType<typeof listDepartureMaterials>>) => void
     vi.mocked(listDepartureMaterials).mockImplementation(

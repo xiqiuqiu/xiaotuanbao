@@ -13,6 +13,7 @@ const pendingReview: AiReviewPackageView = {
   baseObjectVersion: 1,
   version: 1,
   runId: 'run-1',
+  baselineSnapshot: { mode: 'manual', routeName: '' },
   candidates: [
     {
       fieldKey: 'name',

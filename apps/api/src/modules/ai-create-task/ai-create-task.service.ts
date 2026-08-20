@@ -1345,7 +1345,12 @@ export class AiCreateTaskService {
         snapshot,
         updatedAt: task.draft.updatedAt.toISOString(),
       },
-      pendingReview: pending ? toReviewPackageView(pending) : null,
+      pendingReview: pending
+        ? toReviewPackageView({
+            ...pending,
+            baselineSnapshot: this.parseSnapshot(pending.baselineSnapshot),
+          })
+        : null,
     }
   }
 }

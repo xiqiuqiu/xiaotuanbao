@@ -116,11 +116,12 @@ export async function saveAiConversationDraft(
   taskId: string,
   conversationId: string,
   payload: SaveAiConversationDraftDto,
+  config?: RequestConfig,
 ): Promise<AiConversationDraftView> {
   return request.put<AiConversationDraftView>(
     `/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`,
     payload,
-    { silentError: true },
+    { silentError: true, ...config },
   )
 }
 

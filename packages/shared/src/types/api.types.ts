@@ -1068,6 +1068,8 @@ export interface AiReviewPackageView {
   version: number
   runId: string
   candidates: AiReviewCandidateView[]
+  /** 候选提交时的发团创建草稿快照；确认前自动保存不得覆盖这些候选字段。 */
+  baselineSnapshot: DepartureCreationDraftSnapshot
 }
 
 export interface ConfirmAiReviewPackageDto {

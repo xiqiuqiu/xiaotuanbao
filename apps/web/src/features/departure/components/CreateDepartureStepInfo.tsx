@@ -550,7 +550,9 @@ export function CreateDepartureStepInfo({
     const currentEndDate = form.getFieldValue('endDate') as string | undefined
     const updates: Partial<InfoFormValues> = { startDate }
     const routeName = route.routeName.trim()
-    if (routeName) updates.name = buildDefaultDepartureName(routeName, startDate)
+    if (routeName && !findReviewCandidate(pendingReview, 'name')) {
+      updates.name = buildDefaultDepartureName(routeName, startDate)
+    }
 
     const nextEndDate = resolveEndDateAfterStartChange(
       previousStartDate,

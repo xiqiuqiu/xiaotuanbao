@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Empty, Modal, Popover, Space, Spin, Tag, Typograp
 import { useQuery } from '@tanstack/react-query'
 import type { DepartureMaterialView } from '@xiaotuanbao/shared'
 import { listDepartureMaterials, previewDepartureMaterial } from '@/services/ai-create-task.service'
+import { materialsRefetchInterval } from './ai-create-assist-polling'
 import styles from './AssistMaterialsTrigger.module.css'
 
 function materialStatusLabel(status: DepartureMaterialView['status']): string {
@@ -48,17 +49,8 @@ export function AssistMaterialsTrigger({
     queryKey: ['ai-create-materials', taskId, refreshKey],
     queryFn: () => listDepartureMaterials(taskId),
     enabled: Boolean(taskId),
-    refetchInterval: (current) => {
-      const items = current.state.data ?? []
-      const waiting = items.some(
-        (item) =>
-          item.status === 'queued' || item.status === 'uploaded' || item.status === 'parsing',
-      )
-      if (waiting || items.length === 0) {
-        return 2000
-      }
-      return false
-    },
+    refetchInterval: (current) => materialsRefetchInterval(current.state.data),
+    refetchIntervalInBackground: false,
   })
   const materials = query.data ?? []
 

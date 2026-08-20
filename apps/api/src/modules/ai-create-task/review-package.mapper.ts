@@ -65,6 +65,7 @@ export function toReviewPackageView(pkg: {
   version: number
   runId: string
   candidates: unknown
+  baselineSnapshot: unknown
 }): AiReviewPackageView {
   return {
     id: pkg.id,
@@ -81,5 +82,6 @@ export function toReviewPackageView(pkg: {
       status: candidate.status,
       evidence: candidate.evidence,
     })),
+    baselineSnapshot: pkg.baselineSnapshot as AiReviewPackageView['baselineSnapshot'],
   }
 }
