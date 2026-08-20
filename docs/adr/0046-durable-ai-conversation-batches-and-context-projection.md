@@ -54,7 +54,7 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 
 - ADR-0043 的表单审核边界继续有效：Agent 只能提交持久化审核包，不能把候选直接写入发团创建草稿；查看、修正、确认与拒绝只在中间表单完成。聊天中的审核卡是 `awaiting_review` 状态展示，不是无效按钮，也不提供第二套确认入口。
 - CopilotKit `useHumanInTheLoop` / `respond()` 不再承担业务暂停或可靠续跑。Agent 在持久化审核包、完成消息与批次 `awaiting_review` 状态原子提交后结束 attempt。确认或拒绝由 User HTTP 命令写入持久化事件，并以审核包版本/CAS 保证首个处置生效；另一设备同步“已处理”，不能产生第二次续跑。
-- CopilotKit 继续拥有 AI 会话的交互壳层。浏览器直接管理 Agent 时可使用 `CopilotChat`；本 ADR 的服务端持久化模式使用受控 `CopilotChatView` 及其默认 message/input/attachment Slots，将持久化事件、批次状态、文本草稿和发送命令适配为 `messages`、`isRunning`、`inputValue` 与 `onSubmitMessage`。浏览器不调用 `runAgent()` 只改变执行所有权，不构成用普通 DOM 或 Ant Design 输入控件重做聊天界面的理由。
+- CopilotKit 继续拥有 AI 会话的交互壳层。浏览器直接管理 Agent 时可使用 `CopilotChat`；本 ADR 的服务端持久化模式使用受控 `CopilotChatView` 及其默认 message/input/attachment Slots，将持久化事件、批次状态、文本草稿和发送命令适配为 `messages`、`isRunning`、`inputValue` 与 `onSubmitMessage`。浏览器不调用 `runAgent()`、也不经 `POST /copilotkit` 触发执行，这只改变执行所有权，不构成用普通 DOM 或 Ant Design 输入控件重做聊天界面的理由。
 - 消息、附件、建议项、流式状态及工具调用展示应先使用 CopilotKit v2 组件、Slots、`useAttachments` 和 activity/message/tool renderer。只有框架扩展点无法满足已确认需求时才允许自定义，并须在 PR 中记录缺口与不可复用证据；Ant Design 继续负责表单、审核、业务状态和通用反馈。
 - 确认后后台工作流可创建后续批次，重新读取最新任务事实并继续协作。拒绝表示本次候选作废且草稿未修改；系统等待 User 下一条明确指令，不追问、不自动重新生成。
 - 发送后立即显示 User 消息及持续更新的业务状态，例如“发送中、解析 1/2、正在整理、等待回答、等待表单审核”。解析期间不先生成没有实际内容的“已收到，稍后处理”。后台失败应在原位置提供重试失败文件、移除后继续或放弃本批等明确操作。
@@ -66,10 +66,20 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 - 附件、录音及其他本地对象不跨设备保存。只有发送成功后，服务端档案引用才成为跨设备事实。
 - 发送消息与清空草稿在同一事务中推进 `draftEpoch`；发送前产生但延迟到达的旧 epoch 请求不得复活已发送文本。发送失败则保留当前文字和本地附件供重试，也不得启动 Agent。
 
+## Contract 收口（#323）
+
+expand 阶段已把会话、批次、Worker、SSE 与 Context Manifest 落地。contract 阶段删除仍让浏览器拥有执行身份的旧缝，不新开 ADR，也不把 ADR-0047 动作网关并进本票。
+
+- 打开协助窗只创建或恢复任务与 `AiConversation`；`assist-session` 只返回这两者。不创建 `AiCreateActivityRun`，不签发 AI 操作委托，不返回 `runId` / `delegationToken` / `expiresAt`。
+- `AiCreateActivityRun` 仅在 Worker 认领已齐套批次时创建，是一次 Agent attempt 的外壳。attempt 到达已完成、等待 User 回答、等待表单审核或失败时结束该运行（实体仍为 `completed` / `failed`，暂停原因在批次）；等待审核期间不得保持 `running`。下一批次认领新建；租约回收未结束的 attempt 时复用原运行。审核包归属产生它的那次运行。不在本票删除或与 `AiAgentAttempt` 合并该实体。
+- HTTP `*ForAgent()` 仍供无头 Agent 使用，但委托必须绑定 `running` 的 attempt，且与会话、批次、运行一致。缺 attempt 的开窗形态直接拒绝。浏览器不持有委托。
+- Agent 进程唯一执行入口是 Worker 调用 `/v1/headless-runs`。`POST /copilotkit` 拒绝交互式执行；`GET /copilotkit/info` 可留作壳层发现。CopilotKit 继续作为受控 `CopilotChatView` 与附件 Slot，审核/工具提示投影自持久化会话事件，不依赖直播 toolCalls，也不把可执行 runtime 当第二执行者。
+- CI 用确定性 OCR/Agent 的 API e2e 覆盖关页、刷新、第二设备、Worker 重启、解析失败、重试、拒绝与确认。一条 Playwright 冒烟走纯文字 → 待审核包 → 表单确认写入发团创建草稿 → 刷新后仍在，放在现有 `web-e2e`、本票不进 CI 门禁；真实 OCR/模型冒烟不进默认 CI，只写开发与运维边界。
+
 ## 第一阶段交付边界
 
 - 当前仍处开发阶段，直接切换新数据模型；允许清理开发环境旧 AI 任务数据，不实现旧活动运行/聊天记录兼容读取、转换、灰度或浏览器/Worker 双执行模式。
-- 以 `basic_info` 做纵向切片，一次打通“持久化输入批次 → 文件解析 Worker → 齐套唤醒 Agent → 持久化问题或审核包 → 刷新/跨设备恢复”。现有前端每 2.5 秒轮询并调用 `runAgent()` 的机制退出执行职责，不作为长期兜底。
+- 以 `basic_info` 做纵向切片，一次打通“持久化输入批次 → 文件解析 Worker → 齐套唤醒 Agent → 持久化问题或审核包 → 刷新/跨设备恢复”。浏览器不拥有执行生命周期；`runAgent()` 与 CopilotKit 交互式执行均退出，不作为长期兜底。
 - 完整历史会话入口、Word/多模态解析与事实索引、复杂队列管理后台、组织级配额及数据保留期限后续单独交付，但必须遵守本 ADR 的会话、批次、版本与上下文边界。
 
 ## Consequences
@@ -86,3 +96,7 @@ AI 建团允许 User 在一轮消息中附加需要较长时间解析的图片�
 - **立即引入 Redis/BullMQ 或完整工作流平台：** 能提供成熟队列能力，但当前只有少数 AI 长任务，增加新的基础设施与运维面不成比例；PostgreSQL 持久化执行器足以建立可靠边界。
 - **把所有操作都队列化：** 会扩大最终一致性范围；普通表单和审核命令继续使用同步事务，只有长耗时、可恢复的解析与 Agent 执行进入后台工作流。
 - **多设备草稿做 CRDT 或弹出冲突选择：** 对同一账号的短文本草稿过度设计；LWW 配合发送 epoch 即可避免静默复活旧文本。
+- **等待审核期间复用任务级 running `AiCreateActivityRun`：** 实现少，但「running」在无人执行时撒谎，开窗不创建运行也无法自洽。
+- **#323 顺手落地 ADR-0047 或删掉 HTTP `*ForAgent()`：** 把执行所有权与动作治理绑成一张票；无头仍需要工具缝，网关观察期应另票包这条缝。
+- **`POST /copilotkit` 继续作为第二执行口（即便要求 attempt 委托）：** 同一任务仍存在浏览器与 Worker 两个执行者。
+- **把 Playwright `basic_info` 冒烟直接做成 `main` required：** 正确性已由确定性 API e2e 守；本票再给 CI 接 Web+Worker+确定性 Agent 矩阵会变成基础设施票。

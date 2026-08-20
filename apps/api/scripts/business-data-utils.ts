@@ -11,6 +11,7 @@ export const FINANCE_SEQUENCE_TYPES: DocumentSequenceType[] = [
 export async function clearBusinessData(prisma: PrismaClient) {
   return prisma.$transaction(async (tx) => {
     const verifications = await tx.financeVerification.deleteMany()
+    const settlementHistories = await tx.departureSettlementHistory.deleteMany()
     const schedules = await tx.paymentSchedule.deleteMany()
     const transactions = await tx.financeTransaction.deleteMany()
     const departures = await tx.departure.deleteMany()
@@ -21,6 +22,7 @@ export async function clearBusinessData(prisma: PrismaClient) {
 
     return {
       financeVerifications: verifications.count,
+      departureSettlementHistories: settlementHistories.count,
       paymentSchedules: schedules.count,
       financeTransactions: transactions.count,
       departures: departures.count,
