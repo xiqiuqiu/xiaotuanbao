@@ -1,19 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { CopilotRuntime, createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { MastraAgent } from '@ag-ui/mastra'
-import { runWithAssistRequestContext } from './assist-request-context'
-import { fetchTaskContext } from './get-task-context.client'
 import {
   handleHeadlessRun,
   loadDeterministicAgentAdapterFromEnv,
   type HeadlessExecutor,
 } from './headless-execution'
-import { json, readBearer, readHeader, statusForCollaborationError } from './http'
+import { json } from './http'
 import { createAiCreateMastra, AI_CREATE_AGENT_ID } from './mastra-agent'
 import { createMastraHeadlessExecutor } from './mastra-headless.executor'
-import { mapAgentFetchError, mapModelError } from './map-agent-error'
+import { mapModelError } from './map-agent-error'
 
 export {
   createDeterministicAgentAdapter,
@@ -99,7 +96,7 @@ async function handleRequest(
   }
 
   if (url.pathname === '/copilotkit' || url.pathname.startsWith('/copilotkit/')) {
-    await handleCopilotkit(config, copilotNode, request, response, url)
+    await handleCopilotkit(copilotNode, request, response, url)
     return
   }
 
@@ -119,7 +116,6 @@ function isCopilotkitInfoDiscovery(method: string | undefined, pathname: string)
 }
 
 async function handleCopilotkit(
-  config: AgentServerConfig,
   copilotNode: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
   request: IncomingMessage,
   response: ServerResponse,
@@ -130,39 +126,7 @@ async function handleCopilotkit(
     return
   }
 
-  const delegationToken = readBearer(request)
-  if (!delegationToken) {
-    json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
-    return
-  }
-
-  const taskId = readHeader(request, 'x-ai-task-id')
-  const runId = readHeader(request, 'x-ai-run-id')
-  if (!taskId || !runId) {
-    json(response, 400, { data: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON() })
-    return
-  }
-
-  try {
-    await fetchTaskContext(
-      {
-        apiBaseUrl: config.apiBaseUrl,
-        serviceSecret: config.serviceSecret,
-        delegationToken,
-      },
-      { taskId, runId },
-    )
-  } catch (error) {
-    const mapped = error instanceof AiCollaborationError ? error : mapAgentFetchError(error)
-    json(response, statusForCollaborationError(mapped), { data: mapped.toJSON() })
-    return
-  }
-
-  await invokeCopilotNode(response, () =>
-    runWithAssistRequestContext({ delegationToken, taskId, runId }, async () => {
-      await copilotNode(request, response)
-    }),
-  )
+  json(response, 404, { message: 'not found' })
 }
 
 async function invokeCopilotNode(response: ServerResponse, run: () => Promise<void>) {
@@ -175,7 +139,7 @@ async function invokeCopilotNode(response: ServerResponse, run: () => Promise<vo
       }
       return
     }
-    const mapped = error instanceof AiCollaborationError ? error : mapModelError(error)
+    const mapped = mapModelError(error)
     json(response, mapped.retryable ? 503 : 400, { data: mapped.toJSON() })
   }
 }

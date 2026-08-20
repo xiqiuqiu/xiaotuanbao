@@ -29,10 +29,6 @@ const mockSession: AiCreateAssistSession = {
     events: [],
     activeBatch: null,
   },
-  runId: 'run-1',
-  delegationToken: 'deleg-1',
-  agentRuntimeUrl: '/copilotkit',
-  expiresAt: '2026-01-01T00:10:00.000Z',
 }
 
 describe('useAiCreateAssistBootstrap', () => {
@@ -98,11 +94,11 @@ describe('useAiCreateAssistBootstrap', () => {
 
     expect(startAiCreateAssistSession).toHaveBeenCalled()
     expect(applySavedDraft).toHaveBeenCalledWith(mockSession.task, { keepDirty: true })
-    expect(result.current.session?.delegationToken).toBe('deleg-1')
+    expect(result.current.session?.conversation.id).toBe('conv-1')
     expect(result.current.error).toBeNull()
   })
 
-  it('starts the session with the current draft and returns the token', async () => {
+  it('starts the session with the current draft and returns the conversation', async () => {
     let currentDraft = { mode: 'template' as const, routeName: '' }
     const { result } = renderHook(() =>
       useAiCreateAssistBootstrap({
@@ -125,7 +121,7 @@ describe('useAiCreateAssistBootstrap', () => {
       taskId: undefined,
       draft: { mode: 'manual', routeName: '喀纳斯阿勒泰10日线' },
     })
-    expect(result.current.session?.delegationToken).toBe('deleg-1')
+    expect(result.current.session?.conversation.id).toBe('conv-1')
   })
 
   it('uses the task id assigned during flushDraft, not the id from render', async () => {
@@ -216,7 +212,7 @@ describe('useAiCreateAssistBootstrap', () => {
     await act(async () => {
       await result.current.bootstrap()
     })
-    expect(result.current.session?.delegationToken).toBe('deleg-1')
+    expect(result.current.session?.conversation.id).toBe('conv-1')
     expect(result.current.error).toBeNull()
 
     await act(async () => {
@@ -229,8 +225,10 @@ describe('useAiCreateAssistBootstrap', () => {
   it('clears the session so a later bootstrap can start a new one', async () => {
     const secondSession: AiCreateAssistSession = {
       ...mockSession,
-      runId: 'run-2',
-      delegationToken: 'deleg-2',
+      conversation: {
+        ...mockSession.conversation,
+        id: 'conv-2',
+      },
     }
     vi.mocked(startAiCreateAssistSession)
       .mockResolvedValueOnce(mockSession)
@@ -249,7 +247,7 @@ describe('useAiCreateAssistBootstrap', () => {
     await act(async () => {
       await result.current.bootstrap()
     })
-    expect(result.current.session?.runId).toBe('run-1')
+    expect(result.current.session?.conversation.id).toBe('conv-1')
 
     act(() => {
       result.current.reset()
@@ -259,8 +257,7 @@ describe('useAiCreateAssistBootstrap', () => {
     await act(async () => {
       await result.current.bootstrap()
     })
-    expect(result.current.session?.runId).toBe('run-2')
-    expect(result.current.session?.delegationToken).toBe('deleg-2')
+    expect(result.current.session?.conversation.id).toBe('conv-2')
     expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
   })
 
@@ -304,13 +301,15 @@ describe('useAiCreateAssistBootstrap', () => {
 
     vi.mocked(startAiCreateAssistSession).mockResolvedValue({
       ...mockSession,
-      runId: 'run-2',
-      delegationToken: 'deleg-2',
+      conversation: {
+        ...mockSession.conversation,
+        id: 'conv-2',
+      },
     })
     await act(async () => {
       await result.current.bootstrap()
     })
-    expect(result.current.session?.runId).toBe('run-2')
+    expect(result.current.session?.conversation.id).toBe('conv-2')
     expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
   })
 })

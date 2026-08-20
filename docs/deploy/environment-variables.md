@@ -82,7 +82,10 @@ cp .env.example .env
 | `AI_CREATE_ASSIST_ENABLED` | 否 | `false` | 为 `true` 时，具备 `departure:write` 的 User 可看到新建发团「AI 辅助」入口 |
 | `AI_CREATE_ASSIST_USER_IDS` | 否 | 空 | 逗号分隔 User id 白名单；空表示开关打开后对所有具备写权限的 User 生效 |
 | `AGENT_SERVICE_SECRET` | 开辅助时必填 | — | Agent 调 NestJS 工具的服务密钥，API 与 Agent 必须相同 |
-| `AGENT_RUNTIME_URL` | 否 | `/copilotkit` | 浏览器访问 Agent 的同域路径；本地 Vite / Caddy 再转到 4111 |
+| `AGENT_RUNTIME_URL` | 否 | `/copilotkit` | CopilotKit 壳层发现（`GET /copilotkit/info`）；浏览器不再持有执行委托，`POST /copilotkit` 已关闭交互式执行 |
+| `AGENT_INTERNAL_URL` | 否 | `http://127.0.0.1:4111` | Worker 调用无头 Agent 的内部地址（`/v1/headless-runs`） |
+| `AGENT_HEADLESS_ADAPTER` | 否 | 空 | 设为 `deterministic` 时 Agent 不调模型，按 `AGENT_HEADLESS_OUTCOME` 返回固定结果；本地 Playwright 冒烟用 |
+| `AGENT_HEADLESS_OUTCOME` | 否 | 空 | 确定性无头 JSON。空且 adapter=deterministic 时返回失败。真实 OCR/模型冒烟不进默认 CI |
 | `AI_MODEL` | 否 | `deepseek/deepseek-chat` | 预览环境单一模型，Mastra Model Router id |
 | `AI_MODEL_BASE_URL` | 否 | `https://api.deepseek.com` | OpenAI 兼容网关根地址 |
 | `DEEPSEEK_API_KEY` | 开辅助对话时必填 | — | DeepSeek 密钥，只放 `.env`，不要提交 |

@@ -272,6 +272,9 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     const listed = await listEvents(taskId, conversationId)
     expect(listed.activeBatch?.status).toBe('awaiting_user_input')
+    const run = await prisma.aiCreateActivityRun.findFirstOrThrow({ where: { taskId } })
+    expect(run.status).toBe('completed')
+    expect(run.endedAt).not.toBeNull()
     expect(listed.pendingInteraction).toMatchObject({
       type: 'free_text',
       prompt: FREE_TEXT_PROMPT,

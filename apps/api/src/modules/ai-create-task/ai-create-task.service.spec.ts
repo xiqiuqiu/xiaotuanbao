@@ -105,7 +105,6 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
     )
     return { service, findFirst, tx }
   }

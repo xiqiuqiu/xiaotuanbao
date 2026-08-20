@@ -200,6 +200,9 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       where: { inputBatchId: batch.id },
     })
     expect(attempt.status).toBe('completed')
+    const run = await prisma.aiCreateActivityRun.findFirstOrThrow({ where: { taskId } })
+    expect(run.status).toBe('completed')
+    expect(run.endedAt).not.toBeNull()
 
     const listed = await listEvents(taskId, conversationId)
     expect(listed.activeBatch).toMatchObject({ id: batch.id, status: 'awaiting_review' })

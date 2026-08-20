@@ -42,7 +42,7 @@ pnpm docker:seed
 | ---- | --------- | ---- | ---- |
 | `xiaotuanbao-caddy` | caddy:2 | 80, 443 | 唯一公网入口 |
 | `xiaotuanbao-api` | apps/api/Dockerfile | 内网 3000 | NestJS（prod 依赖），启动时自动 migrate |
-| `xiaotuanbao-agent` | apps/agent/Dockerfile | 内网 4111 | CopilotKit / Mastra Agent Runtime |
+| `xiaotuanbao-agent` | apps/agent/Dockerfile | 内网 4111 | 无头 Agent Runtime（`/v1/headless-runs`）；`GET /copilotkit/info` 可供壳层发现，`POST /copilotkit` 不执行 |
 | `xiaotuanbao-workflow-worker` | apps/api/Dockerfile | — | 复用 API 构建产物，执行持久化 Agent 与资料解析作业 |
 | `xiaotuanbao-postgres` | postgres:16 | 内网 5432 | 数据持久化 |
 | `xiaotuanbao-garage` | dxflrs/garage:v2.3.0 | 3900（S3） | 对象存储（FileStore / ADR-0027） |
@@ -104,6 +104,8 @@ curl -X POST http://localhost/api/auth/login \
 
 登录响应通过 `HttpOnly` Cookie 建立会话。生产环境必须使用 HTTPS；上面的 HTTP curl
 只适用于 `NODE_ENV=development` 且 `AUTH_COOKIE_SECURE=false` 的本地开发，不适用于生产容器。
+
+AI 建团协助：Agent 只通过 Worker 调 `/v1/headless-runs` 执行；`POST /copilotkit` 不执行。生产不要设 `AGENT_HEADLESS_ADAPTER=deterministic`。真实 OCR / 真实模型冒烟不进默认 CI；本地纯文字冒烟见 `apps/web-e2e/README.md`。
 
 ## 相关文档
 

@@ -3,6 +3,8 @@ import type { AiConversationEventView, AiInputBatchStatus, AiInputBatchView } fr
 
 export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
 export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
+export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'ai-create-review-package'
+export const SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE = 'ai-create-search-route-templates'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
@@ -33,6 +35,21 @@ export type InteractionActivityContent = {
   options: Array<{ id: string; label: string }>
   version: number
   status: 'pending' | 'answered' | 'cancelled'
+}
+
+export type ReviewPackageActivityContent = {
+  reviewPackageId: string
+  fieldKeys: string[]
+}
+
+export type SearchRouteTemplatesActivityContent = {
+  items: Array<{
+    id: string
+    name: string
+    defaultDayCount: number
+    usageCount: number
+    matchReasons: Array<Record<string, unknown>>
+  }>
 }
 
 type MaterialProgress = {
@@ -152,6 +169,55 @@ export function latestBatchStatus(
     }
   }
   return activeBatch?.status ?? null
+}
+
+function reviewPackageFromPayload(payload: Record<string, unknown>): ReviewPackageActivityContent | null {
+  const reviewPackageId = payload.reviewPackageId
+  if (typeof reviewPackageId !== 'string' || reviewPackageId.length === 0) {
+    return null
+  }
+  const fieldKeys = Array.isArray(payload.fieldKeys)
+    ? payload.fieldKeys.filter((key): key is string => typeof key === 'string')
+    : []
+  return { reviewPackageId, fieldKeys }
+}
+
+function searchRouteTemplatesFromPayload(
+  payload: Record<string, unknown>,
+): SearchRouteTemplatesActivityContent | null {
+  const raw = payload.searchRouteTemplates
+  if (!raw || typeof raw !== 'object' || !('items' in raw) || !Array.isArray(raw.items)) {
+    return null
+  }
+  const items = raw.items.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return []
+    }
+    const record = item as Record<string, unknown>
+    if (
+      typeof record.id !== 'string' ||
+      typeof record.name !== 'string' ||
+      typeof record.defaultDayCount !== 'number' ||
+      typeof record.usageCount !== 'number'
+    ) {
+      return []
+    }
+    return [
+      {
+        id: record.id,
+        name: record.name,
+        defaultDayCount: record.defaultDayCount,
+        usageCount: record.usageCount,
+        matchReasons: Array.isArray(record.matchReasons)
+          ? record.matchReasons.filter(
+              (reason): reason is Record<string, unknown> =>
+                Boolean(reason) && typeof reason === 'object',
+            )
+          : [],
+      },
+    ]
+  })
+  return { items }
 }
 
 function progressFromPayload(payload: Record<string, unknown>): MaterialProgress | null {
@@ -274,6 +340,24 @@ export function toCopilotChatMessages(
             eventId: interaction.eventId || event.id || `event-${event.sequence}`,
             status: resolveInteractionStatus(events, interaction),
           } satisfies InteractionActivityContent,
+        })
+      }
+      const reviewNotice = reviewPackageFromPayload(event.payload)
+      if (reviewNotice) {
+        messages.push({
+          id: `review-${reviewNotice.reviewPackageId}`,
+          role: 'activity',
+          activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
+          content: reviewNotice,
+        })
+      }
+      const searchNotice = searchRouteTemplatesFromPayload(event.payload)
+      if (searchNotice) {
+        messages.push({
+          id: `search-${event.sequence}`,
+          role: 'activity',
+          activityType: SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE,
+          content: searchNotice,
         })
       }
       continue

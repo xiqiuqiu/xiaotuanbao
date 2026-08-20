@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { CounterpartyType, DepartureType, PrismaClient, ResourceKind } from '@prisma/client'
 import request from 'supertest'
 import { authRequest, createTestApp, loginAs, uniqueBusinessPrefix } from './helpers'
+import { mintRunningAttemptDelegation } from './support/worker-delegation'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 
@@ -42,6 +43,9 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
   })
 
   afterAll(async () => {
+    await prisma.aiConversation.deleteMany({
+      where: { organizationId, creatorUserId: ownerUserId },
+    })
     await prisma.aiReviewRecord.deleteMany({
       where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
     })
@@ -116,11 +120,20 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       })
       .expect(201)
 
+    const minted = await mintRunningAttemptDelegation({
+      app,
+      prisma,
+      organizationId,
+      userId: ownerUserId,
+      taskId: session.body.data.task.id as string,
+      conversationId: session.body.data.conversation.id as string,
+    })
+
     return {
       taskId: session.body.data.task.id as string,
       version: session.body.data.task.draft.version as number,
-      runId: session.body.data.runId as string,
-      delegationToken: session.body.data.delegationToken as string,
+      runId: minted.runId,
+      delegationToken: minted.delegationToken,
     }
   }
 

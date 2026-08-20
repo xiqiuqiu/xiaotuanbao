@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import request from 'supertest'
 import { authRequest, createTestApp, loginAs } from './helpers'
+import { mintRunningAttemptDelegation } from './support/worker-delegation'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 
@@ -35,6 +36,9 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
   })
 
   afterAll(async () => {
+    await prisma.aiConversation.deleteMany({
+      where: { organizationId, creatorUserId: ownerUserId },
+    })
     await prisma.aiReviewRecord.deleteMany({
       where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
     })
@@ -94,11 +98,20 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .send({ taskId })
       .expect(201)
 
+    const minted = await mintRunningAttemptDelegation({
+      app,
+      prisma,
+      organizationId,
+      userId: ownerUserId,
+      taskId,
+      conversationId: session.body.data.conversation.id as string,
+    })
+
     return {
       taskId,
       version,
-      runId: session.body.data.runId as string,
-      delegationToken: session.body.data.delegationToken as string,
+      runId: minted.runId,
+      delegationToken: minted.delegationToken,
     }
   }
 

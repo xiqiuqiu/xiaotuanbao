@@ -302,9 +302,7 @@ vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
 
 const chatProps = {
   agentRuntimeUrl: '/copilotkit',
-  delegationToken: 'deleg-1',
   taskId: 'task-assist',
-  runId: 'run-1',
   conversationId: 'conv-1',
   snapshotVersion: 1,
   stageKey: 'basic_info' as const,
@@ -506,15 +504,12 @@ describe('AiCreateAssistChat', () => {
     const computer = render(
       <AiCreateAssistChat
         {...chatProps}
-        delegationToken="computer-token"
         initialDraft={initialDraft}
       />,
     )
     const phone = render(
       <AiCreateAssistChat
         {...chatProps}
-        runId="run-phone"
-        delegationToken="phone-token"
         initialDraft={initialDraft}
       />,
     )
@@ -694,7 +689,7 @@ describe('AiCreateAssistChat', () => {
   })
 
   it('shows a compact welcome with greeting and prompt cards', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-welcome" />)
+    render(<AiCreateAssistChat {...chatProps} />)
 
     expect(screen.getByRole('region', { name: '电子化助理说明' })).toBeInTheDocument()
     expect(screen.getByText(/上午好|下午好|晚上好/)).toBeInTheDocument()
@@ -710,7 +705,6 @@ describe('AiCreateAssistChat', () => {
     render(
       <AiCreateAssistChat
         {...chatProps}
-        runId="run-welcome-hidden"
         initialEvents={[
           {
             sequence: 1,
@@ -747,7 +741,7 @@ describe('AiCreateAssistChat', () => {
       lastSequence: 2,
     })
 
-    render(<AiCreateAssistChat {...chatProps} runId="run-welcome-suggest" />)
+    render(<AiCreateAssistChat {...chatProps} />)
     fireEvent.click(screen.getByRole('button', { name: /查找常用路线/ }))
 
     expect(sendAiConversationMessage).toHaveBeenCalledWith(
@@ -760,14 +754,11 @@ describe('AiCreateAssistChat', () => {
     expect(screen.queryByRole('region', { name: '电子化助理说明' })).not.toBeInTheDocument()
   })
 
-  it('passes runtimeUrl and identity headers to a controlled CopilotChatView', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-headers" />)
+  it('passes runtimeUrl without a delegation token to a controlled CopilotChatView', () => {
+    render(<AiCreateAssistChat {...chatProps} />)
 
-    expect(capturedKit.headers).toMatchObject({
-      Authorization: 'Bearer deleg-1',
-      'X-Ai-Task-Id': 'task-assist',
-      'X-Ai-Run-Id': 'run-headers',
-    })
+    expect(capturedKit.headers).toBeUndefined()
+    expect(capturedKit.properties).toBeUndefined()
     expect(capturedKit.runtimeUrl).toBe('/copilotkit')
     expect(capturedKit.useSingleEndpoint).toBe(false)
     expect(capturedKit.enableInspector).toBe(false)
@@ -778,7 +769,7 @@ describe('AiCreateAssistChat', () => {
   })
 
   it('exposes only shared light state to CopilotKit, never the draft snapshot', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-light" reviewPackageId="pkg-1" />)
+    render(<AiCreateAssistChat {...chatProps} reviewPackageId="pkg-1" />)
 
     expect(useAgentContext).toHaveBeenCalled()
     const readable = useAgentContext.mock.calls[0]?.[0] as { value?: unknown }
@@ -800,78 +791,81 @@ describe('AiCreateAssistChat', () => {
     render(
       <AiCreateAssistChat
         {...chatProps}
-        runId="run-notice"
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'agent_message',
+            payload: {
+              text: '已提交待审核建议，请在中间表单确认。',
+              reviewPackageId: 'pkg-1',
+              fieldKeys: ['name', 'routeName'],
+            },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
         onReviewPackageSubmitted={onReviewPackageSubmitted}
       />,
     )
 
-    expect(capturedRenderTool.name).toBe('submitReviewPackage')
-    const inProgress = capturedRenderTool.render?.({
-      status: 'inProgress',
-      parameters: { candidates: [{ fieldKey: 'name' }] },
-    })
-    const complete = capturedRenderTool.render?.({
-      status: 'complete',
-      parameters: { candidates: [{ fieldKey: 'name' }, { fieldKey: 'routeName' }] },
-      result: { reviewPackageId: 'pkg-1' },
-    })
-
-    render(
-      <>
-        {inProgress}
-        {complete}
-      </>,
-    )
-    expect(screen.getByText('正在整理审核建议…')).toBeInTheDocument()
     expect(
       screen.getByText(
         '已建议修改团名、路线。请到中间表单确认，不会自动写入发团创建草稿。',
       ),
     ).toBeInTheDocument()
-
-    await act(async () => {
-      await Promise.resolve()
-    })
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
   })
 
-  it('notifies again when a later submitReviewPackage completes with a different package', async () => {
+  it('notifies again when a later persisted review package arrives', async () => {
     const onReviewPackageSubmitted = vi.fn()
     render(
       <AiCreateAssistChat
         {...chatProps}
-        runId="run-notice-second"
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'agent_message',
+            payload: {
+              text: '已提交待审核建议，请在中间表单确认。',
+              reviewPackageId: 'pkg-1',
+              fieldKeys: ['name'],
+            },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+        ]}
         onReviewPackageSubmitted={onReviewPackageSubmitted}
       />,
     )
-
-    capturedRenderTool.render?.({
-      status: 'complete',
-      parameters: { candidates: [{ fieldKey: 'name' }] },
-      result: { reviewPackageId: 'pkg-1', status: 'pending' },
-    })
-    await act(async () => {
-      await Promise.resolve()
-    })
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(1)
 
-    capturedRenderTool.render?.({
-      status: 'complete',
-      parameters: { candidates: [{ fieldKey: 'routeName' }] },
-      result: { reviewPackageId: 'pkg-2', status: 'pending' },
-    })
     await act(async () => {
-      await Promise.resolve()
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 2,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在中间表单确认。',
+            reviewPackageId: 'pkg-2',
+            fieldKeys: ['routeName'],
+          },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
     })
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
 
-    capturedRenderTool.render?.({
-      status: 'complete',
-      parameters: { candidates: [{ fieldKey: 'routeName' }] },
-      result: { reviewPackageId: 'pkg-2', status: 'pending' },
-    })
     await act(async () => {
-      await Promise.resolve()
+      lastEventSource?.onmessage?.({
+        data: JSON.stringify({
+          sequence: 2,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在中间表单确认。',
+            reviewPackageId: 'pkg-2',
+            fieldKeys: ['routeName'],
+          },
+          createdAt: '2026-08-14T00:00:01.000Z',
+        }),
+      } as MessageEvent)
     })
     expect(onReviewPackageSubmitted).toHaveBeenCalledTimes(2)
   })
@@ -910,7 +904,7 @@ describe('AiCreateAssistChat', () => {
   it('does not call runAgent when the durable chat mounts', () => {
     render(
       <StrictMode>
-        <AiCreateAssistChat {...chatProps} runId="run-first" />
+        <AiCreateAssistChat {...chatProps} />
       </StrictMode>,
     )
 
@@ -1142,36 +1136,46 @@ describe('AiCreateAssistChat', () => {
   })
 
   it('renders searchRouteTemplates results as read-only chat copy without adopt buttons', () => {
-    render(<AiCreateAssistChat {...chatProps} runId="run-search" />)
-
-    expect(capturedSearchRenderTool.name).toBe('searchRouteTemplates')
-    const empty = capturedSearchRenderTool.render?.({
-      status: 'complete',
-      result: { items: [] },
-    })
-    const results = capturedSearchRenderTool.render?.({
-      status: 'complete',
-      result: {
-        items: [
-          {
-            id: 'tpl-1',
-            name: '川西稻城线',
-            defaultDayCount: 8,
-            usageCount: 4,
-            updatedAt: '2026-08-01T00:00:00.000Z',
-            matchReasons: [{ code: 'name_contains_token', token: '川西' }],
-          },
-        ],
-      },
-    })
-
     render(
-      <>
-        {empty}
-        {results}
-      </>,
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'agent_message',
+            payload: {
+              text: '没有匹配的常用路线。',
+              searchRouteTemplates: { items: [] },
+            },
+            createdAt: '2026-08-14T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'agent_message',
+            payload: {
+              text: '组织内有这些常用路线。',
+              searchRouteTemplates: {
+                items: [
+                  {
+                    id: 'tpl-1',
+                    name: '川西稻城线',
+                    defaultDayCount: 8,
+                    usageCount: 4,
+                    matchReasons: [{ code: 'name_contains_token', token: '川西' }],
+                  },
+                ],
+              },
+            },
+            createdAt: '2026-08-14T00:00:01.000Z',
+          },
+        ]}
+      />,
     )
-    expect(screen.getByText(/没有匹配的常用路线/)).toBeInTheDocument()
+
+    expect(screen.getByText('没有匹配的常用路线。')).toBeInTheDocument()
+    expect(
+      screen.getByText('没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。'),
+    ).toBeInTheDocument()
     expect(screen.getByText(/川西稻城线 · 8 天 · 用过 4 次/)).toBeInTheDocument()
     expect(screen.getByText(/名称包含「川西」/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /采用|确认|选择/ })).not.toBeInTheDocument()
