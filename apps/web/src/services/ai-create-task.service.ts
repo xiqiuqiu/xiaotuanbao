@@ -208,6 +208,22 @@ export async function stopConversationBatch(
   )
 }
 
+export async function retryFailedConversationBatch(
+  taskId: string,
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}
+
 export async function listAiConversationEvents(
   taskId: string,
   conversationId: string,

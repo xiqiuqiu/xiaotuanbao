@@ -311,9 +311,9 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     agent.setOutcome({
       kind: 'failed',
       error: {
-        code: 'AGENT_UNAVAILABLE',
-        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
-        retryable: true,
+        code: 'MODEL_REFUSED',
+        message: '模型拒绝回答，请换一种说法或继续使用表单',
+        retryable: false,
       },
     })
     const opened = await openSession()

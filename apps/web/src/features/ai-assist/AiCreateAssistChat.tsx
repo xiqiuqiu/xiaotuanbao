@@ -31,6 +31,7 @@ import {
   listAiConversationEvents,
   removeConversationMaterials,
   retryFailedConversationMaterials,
+  retryFailedConversationBatch,
   sendAiConversationMessage,
   saveAiConversationDraft,
   stopConversationBatch,
@@ -239,6 +240,7 @@ function getContiguousSequence(events: AiConversationEventView[]): number {
 function createBatchStatusActivityRenderer(handlers: {
   pending: boolean
   onRetry: (batchId: string) => void
+  onRetryBatch: (batchId: string) => void
   onRemove: (batchId: string, materialId: string) => void
   onAbandon: (batchId: string) => void
   onStop: (batchId: string) => void
@@ -316,6 +318,19 @@ function createBatchStatusActivityRenderer(handlers: {
               onClick={() => handlers.onStop(content.batchId!)}
             >
               停止当前处理
+            </Button>
+          </Space>
+        ) : null}
+        {content.showBatchRetryAction && content.batchId ? (
+          <Space size={8} className={styles.failedActions}>
+            <Button
+              type="primary"
+              size="small"
+              autoInsertSpace={false}
+              loading={handlers.pending}
+              onClick={() => handlers.onRetryBatch(content.batchId!)}
+            >
+              重试
             </Button>
           </Space>
         ) : null}
@@ -955,6 +970,11 @@ export function AiCreateAssistChat({
               undefined,
               crypto.randomUUID(),
             ),
+          )
+        },
+        onRetryBatch: (batchId) => {
+          void runBatchCommand(() =>
+            retryFailedConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
           )
         },
         onRemove: (batchId, materialId) => {

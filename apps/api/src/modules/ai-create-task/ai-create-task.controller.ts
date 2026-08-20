@@ -249,6 +249,26 @@ export class AiCreateTaskController {
     )
   }
 
+  @Post(':taskId/conversations/:conversationId/batches/:batchId/retry')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  retryFailedBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.retryFailedBatch(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+
   @Get(':taskId/materials')
   @RequireMenu('departure:write')
   listMaterials(

@@ -58,7 +58,10 @@ export class ParseWorkerClient {
         this.logger.warn(
           `parse worker rejected status=${response.status} code=${payload?.detail?.code ?? ''}`,
         )
-        throw new ServiceUnavailableException(payload?.detail?.message ?? '资料解析服务不可用')
+        if (response.status >= 500) {
+          throw new ServiceUnavailableException(payload?.detail?.message ?? '资料解析服务不可用')
+        }
+        throw new Error(payload?.detail?.message ?? '资料解析服务拒绝请求')
       }
       return {
         parserVersions: payload?.parserVersions ?? {},

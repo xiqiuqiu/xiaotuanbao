@@ -41,8 +41,8 @@ _Avoid_: 最近活跃作在线状态, 实时在线
 _Avoid_: 把 Platform Admin 挂在客户 Organization 下, organizationId 为空的平台账号, 平台组织当客户开户
 
 **Platform Admin**:
-平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）及 **Organization Module Entitlement** 配置。创建客户组织时须同事务建立 Initial Organization Admin（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization；客户组织档案可只读展示 Initial Organization Admin 的登录用户名与显示名称，不因此开放平台侧员工管理。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。
-_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码, 平台档案展示等同员工管理, 权限管理（作平台开通能力的产品文案）
+平台运营方的超级管理员，可跨客户 Organization 做名录维护（创建、查看档案、改名称、启用/停用）及 **Organization Module Entitlement** 配置。创建客户组织时须同事务建立 Initial Organization Admin（见 Organization Onboarding）。与客户 Organization 内的 User 是不同身份，通过 User 表的 isPlatformAdmin 标志位识别，账号挂在 Platform Organization 下，共用同一套登录体系。工作台为同一 Web 应用内的独立平台区，与 Organization 后台路由及 Menu Permission 分离；不可进入租户业务页，也不可代入企业管理员操作。名录维护不提供删除 Organization；客户组织档案可只读展示 Initial Organization Admin 的登录用户名与显示名称，不因此开放平台侧员工管理。Platform Admin 账号本身由 seed/运维预置，不在平台区做账号管理 UI。不承担租户 AI 工作流作业的查看、重试或会话介入。
+_Avoid_: 超管, 系统管理员, super admin, 企业管理员（作平台身份）, 代入租户后台, 平台区删除客户组织, 平台区管理 Platform Admin 账号, 平台区事后重置租户管理员密码, 平台档案展示等同员工管理, 权限管理（作平台开通能力的产品文案）, 平台区查看或重试租户工作流作业, 平台区打开租户 AI 建团会话
 
 **Organization Module Entitlement UI（模块开通）**:
 平台区客户 Organization 名录操作列中的入口，产品文案为 **模块开通**（不用「权限管理」）。打开抽屉勾选该组织已开通的业务模块 Entitlement Key 并保存。不提供名录列上直接勾选；不代入租户后台。
@@ -335,12 +335,20 @@ _Avoid_: 任意字段集合, 逐字段版本, 联动字段分别覆盖, 由模�
 _Avoid_: AI 专用 CRUD, Prisma 工具, AI 超级权限, 由模型直接确认候选, 把现有全部接口注册为工具, 工具内自行决定能否写入, 读调用不形成动作
 
 **AI 操作委托**:
-AI 编排层在一次限定批次运行中代表发起User调用AI业务工具的短期授权关系；它绑定User、Organization、AI建团任务、输入批次与活动运行标识，但不固化或扩大权限。后台Worker每次认领均重新检查当前User、Organization与业务能力，再生成该attempt的短期委托；不保存浏览器token。
-_Avoid_: AI 服务账号, 长期访问令牌, 浏览器token作后台凭证, 固定权限快照, Agent 自有业务身份, User 权限撤销后仍可继续写入
+AI 编排层在一次限定批次运行中代表发起User调用AI业务工具的短期授权关系；它绑定User、Organization、AI建团任务、输入批次与活动运行标识，但不固化或扩大权限。仅 **Agent 批次执行** 在认领后签发：Worker 重新检查当前User、Organization与`departure:write`，再生成该attempt的短期委托；不保存浏览器token。资料解析作业不签发 AI 操作委托。
+_Avoid_: AI 服务账号, 长期访问令牌, 浏览器token作后台凭证, 固定权限快照, Agent 自有业务身份, User 权限撤销后仍可继续写入, 解析作业冒充业务委托
 
 **AI 工作流作业**:
-由服务端持久化、供独立workflow-worker认领的长耗时工作单元，第一阶段仅用于发团资料解析与Agent批次执行；作业只保存任务、会话、批次、档案及版本指针，通过租约、心跳、过期回收、有限重试和幂等处理获得至少一次执行语义。普通表单保存、审核命令和业务事务不进入工作流队列。
-_Avoid_: API进程内fire-and-forget, 浏览器轮询触发可靠续跑, 把文件字节或完整prompt放入队列表, 所有业务操作异步化, 恰好一次的虚假承诺, Redis/BullMQ（第一阶段）
+由服务端持久化、供独立workflow-worker认领的长耗时工作单元，第一阶段仅用于发团资料解析与Agent批次执行；作业只保存任务、会话、批次、档案及版本指针，通过租约、心跳、过期回收、有限重试和幂等处理获得至少一次执行语义。OCR 与 Agent 使用独立并发上限，互不占用对方槽位。普通表单保存、审核命令和业务事务不进入工作流队列。
+_Avoid_: API进程内fire-and-forget, 浏览器轮询触发可靠续跑, 把文件字节或完整prompt放入队列表, 所有业务操作异步化, 恰好一次的虚假承诺, Redis/BullMQ（第一阶段）, 解析与Agent共用一个并发槽
+
+**失败批次重试**:
+任务创建者在系统将某次 AI 输入批次标为失败后，对同一不可变输入再次投入执行的动作；产品文案为「重试」，不暗示内容写错。资料解析失败仍可只重试失败资料；Agent 执行失败重试同一批次，不新发 User 消息。已取消、已放弃、待审核不可重试。权限类失败仍可点重试，认领时再次校验。命令形态与现有批次操作相同（含幂等键），不是 Platform Admin 改作业。
+_Avoid_: 运维代点重试, 失败后必须新发一条消息才能续跑, 取消或待审核后唤醒, 企业管理员重试他人任务, 修改后重试（作 Agent 失败主文案）
+
+**AI 工作流作业恢复**:
+Worker 在租约有效期内续租；进程退出或租约过期后另一 Worker 可安全回收。瞬时外部故障（网络、超时、无头或解析服务 5xx）由系统有限自动重试；权限失效、用户取消与版本冲突立即进入可理解终态，交由创建者决定失败批次重试或放弃。Organization 停用后资料解析不再执行；发起 User 停用不阻止已排队档案完成解析归档。Agent 认领仍须 User 可用且持有`departure:write`。
+_Avoid_: 恰好一次外部模型调用, 权限失败自动重试到上限, 无续租的长跑作业, User停用即丢弃已上传资料解析, 失败后只能运维改库续跑
 
 **AI 建团活动运行**:
 后台Worker对一个已齐套AI输入批次执行的一次Agent推理与工具协作attempt；同一任务同一时间至多一个活动运行，多个客户端只共同观察服务端状态，后续批次按sequence等待。页面打开、关闭、刷新或第二设备加入均不创建、抢占或结束活动运行；运行结束于已完成、等待User回答、等待表单审核或失败等持久化边界。活动运行读取认领时固定的会话版本和上下文清单，不锁定表单；候选仍通过对象版本和确认时校验处理并发变化。

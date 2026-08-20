@@ -55,6 +55,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/remove-materials' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/abandon' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/stop' },
+    { method: 'POST', path: '/api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry' },
     { method: 'PATCH', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/confirm' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/reject' },

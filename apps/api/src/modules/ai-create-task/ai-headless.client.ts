@@ -64,7 +64,9 @@ export class AiHeadlessClient {
         if (!response.ok) {
           return {
             kind: 'failed',
-            error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
+            error: AiCollaborationError.fromCode(
+              response.status >= 500 ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
+            ).toJSON(),
           }
         }
         return {

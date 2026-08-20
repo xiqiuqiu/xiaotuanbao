@@ -22,6 +22,7 @@ export type BatchStatusActivityContent = {
   failedMaterials?: FailedMaterialNotice[]
   showMaterialActions?: boolean
   showStopAction?: boolean
+  showBatchRetryAction?: boolean
 }
 
 export type InteractionActivityContent = {
@@ -281,11 +282,10 @@ export function toCopilotChatMessages(
       if (typeof event.payload.materialId === 'string') {
         continue
       }
-      messages.push({
-        id: `event-${event.sequence}`,
-        role: 'activity',
-        activityType: BATCH_STATUS_ACTIVITY_TYPE,
-        content: { label: '本批处理失败，可修改后重试' } satisfies BatchStatusActivityContent,
+      upsertStatus({
+        label: '处理失败',
+        batchId: typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined,
+        showBatchRetryAction: true,
       })
       continue
     }
@@ -309,6 +309,7 @@ export function toCopilotChatMessages(
             status === 'ready_for_agent' ||
             status === 'agent_running' ||
             status === 'awaiting_user_input',
+          showBatchRetryAction: status === 'failed',
         })
       }
     }
@@ -345,6 +346,7 @@ export function toCopilotChatMessages(
           activeBatch.status === 'ready_for_agent' ||
           activeBatch.status === 'agent_running' ||
           activeBatch.status === 'awaiting_user_input',
+        showBatchRetryAction: activeBatch.status === 'failed',
       })
     }
   }

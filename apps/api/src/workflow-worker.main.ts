@@ -5,7 +5,6 @@ import { AiWorkflowProcessor } from './modules/ai-create-task/ai-workflow.proces
 
 const POLL_IDLE_MS = 500
 const POLL_BUSY_MS = 50
-const BATCH_LIMIT = 5
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule, {
@@ -33,7 +32,7 @@ async function bootstrap() {
   })
 
   while (!stopping) {
-    const processed = await processor.processDueJobs(BATCH_LIMIT)
+    const processed = await processor.processDueJobs()
     await sleep(processed > 0 ? POLL_BUSY_MS : POLL_IDLE_MS)
   }
 }

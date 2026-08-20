@@ -20,6 +20,40 @@ describe('AI create chat status projection', () => {
     )
   })
 
+  it('offers 重试 on a failed Agent batch without 修改后重试 copy', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '这次会失败' },
+          createdAt: '2026-08-20T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'error',
+          payload: { batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'failed', batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    const statuses = messages
+      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .map((message) => message.content as { label?: string; showBatchRetryAction?: boolean })
+    expect(statuses.map((item) => item.label)).toEqual(['处理失败'])
+    expect(statuses.some((item) => item.showBatchRetryAction)).toBe(true)
+    expect(JSON.stringify(messages)).not.toContain('修改后重试')
+  })
+
   it('keeps queued visible when the running batch starts waiting for an answer', () => {
     const messages = toCopilotChatMessages(
       [

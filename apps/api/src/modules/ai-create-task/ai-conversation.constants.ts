@@ -1,5 +1,6 @@
 export const SEND_TEXT_OPERATION = 'ai-conversation.send-text'
 export const RETRY_FAILED_MATERIALS_OPERATION = 'ai-conversation.retry-failed-materials'
+export const RETRY_FAILED_BATCH_OPERATION = 'ai-conversation.retry-failed-batch'
 export const REMOVE_BATCH_MATERIALS_OPERATION = 'ai-conversation.remove-materials'
 export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
 export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
@@ -21,8 +22,27 @@ export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v4'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v4'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
 export const WORKFLOW_LEASE_MS = 120_000
+export const WORKFLOW_HEARTBEAT_MS = 30_000
+export const WORKFLOW_PARSE_CONCURRENCY = 2
+export const WORKFLOW_AGENT_CONCURRENCY = 2
 /** 租约过期后最多再执行的次数；超出则失败并释放 `agent_running`，避免毒任务永久占锁。 */
 export const WORKFLOW_MAX_ATTEMPTS = 5
+export const WORKFLOW_RETRY_BACKOFF_MS = [5_000, 10_000, 20_000, 40_000, 60_000] as const
+export const WORKFLOW_IMMEDIATE_FAILURE_CODES = new Set([
+  'PERMISSION_DENIED',
+  'VERSION_CONFLICT',
+  'BATCH_CANCELLED',
+])
+
+export function workflowBackoffMs(attemptCount: number): number {
+  const index = Math.min(Math.max(attemptCount, 1), WORKFLOW_RETRY_BACKOFF_MS.length) - 1
+  return WORKFLOW_RETRY_BACKOFF_MS[index] ?? WORKFLOW_RETRY_BACKOFF_MS[WORKFLOW_RETRY_BACKOFF_MS.length - 1]
+}
+
+export function isImmediateWorkflowFailure(errorCode: string): boolean {
+  return WORKFLOW_IMMEDIATE_FAILURE_CODES.has(errorCode)
+}
+
 /** Worker 与 API 分进程时内存 hub 收不到完成事件，按 sequence 轮询补读。 */
 export const SSE_CATCH_UP_POLL_MS = 400
 /** 空闲 SSE 连接拉长补读间隔，避免每个打开的对话框都按 400ms 打库。 */

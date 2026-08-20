@@ -11,6 +11,7 @@ export async function startDeterministicParseWorker(options?: {
   queuePageTexts: (texts: string[]) => void
   callCount: () => number
   receivedFilenames: () => string[]
+  failNext: (status: number) => void
   close: () => Promise<void>
 }> {
   let callCount = 0
@@ -19,6 +20,7 @@ export async function startDeterministicParseWorker(options?: {
   let releaseHold: (() => void) | null = null
   let pageText = options?.text ?? '九月川西线 预计 12 人'
   let queuedTexts: string[] = []
+  let nextErrorStatus: number | null = null
 
   const server = createServer((request, response) => {
     void handle(request, response)
@@ -33,6 +35,12 @@ export async function startDeterministicParseWorker(options?: {
       callCount += 1
       if (hold) {
         await hold
+      }
+      if (nextErrorStatus != null) {
+        const status = nextErrorStatus
+        nextErrorStatus = null
+        json(response, status, { detail: { code: 'UNAVAILABLE', message: 'ocr 5xx' } })
+        return
       }
       const text = queuedTexts.length > 0 ? queuedTexts.shift()! : pageText
       json(response, 200, {
@@ -76,6 +84,9 @@ export async function startDeterministicParseWorker(options?: {
     },
     callCount: () => callCount,
     receivedFilenames: () => [...receivedFilenames],
+    failNext: (status: number) => {
+      nextErrorStatus = status
+    },
     close: () =>
       new Promise((resolve, reject) => {
         releaseHold?.()
