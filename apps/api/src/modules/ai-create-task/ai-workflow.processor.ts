@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
@@ -37,7 +37,15 @@ import {
   resolveAttemptUserText,
 } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
-import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
+import {
+  WORKFLOW_AGENT_CONCURRENCY,
+  WORKFLOW_HEARTBEAT_MS,
+  WORKFLOW_LEASE_MS,
+  WORKFLOW_MAX_ATTEMPTS,
+  WORKFLOW_PARSE_CONCURRENCY,
+  isImmediateWorkflowFailure,
+  workflowBackoffMs,
+} from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
@@ -57,6 +65,8 @@ type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 export class AiWorkflowProcessor {
   private readonly logger = new Logger(AiWorkflowProcessor.name)
   private readonly workerId = process.env.HOSTNAME?.trim() || `worker-${randomUUID()}`
+  private parseInFlight = 0
+  private agentInFlight = 0
 
   constructor(
     private readonly prisma: PrismaService,
@@ -70,13 +80,76 @@ export class AiWorkflowProcessor {
 
   async processDueJobs(limit = 10): Promise<number> {
     let processed = 0
-    for (let index = 0; index < limit; index += 1) {
-      const claimed = (await this.claimNextParse()) ?? (await this.claimNextAgent())
-      if (!claimed) {
-        break
+    const running = new Map<string, Promise<void>>()
+
+    const startJob = (claimed: ClaimedJob) => {
+      const jobId = claimed.id
+      const isParse = claimed.type === AiWorkflowJobType.material_parse
+      if (isParse) {
+        this.parseInFlight += 1
+      } else {
+        this.agentInFlight += 1
       }
-      await this.executeClaimed(claimed)
-      processed += 1
+      this.workflowLog('claimed', {
+        job: jobId,
+        type: claimed.type,
+        attempt: claimed.attemptCount,
+        queuedMs: Math.max(
+          0,
+          Date.now() - (claimed.nextAttemptAt ?? claimed.createdAt).getTime(),
+        ),
+        inFlightParse: this.parseInFlight,
+        inFlightAgent: this.agentInFlight,
+      })
+      const task = this.executeClaimed(claimed)
+        .catch((error: unknown) => {
+          this.logger.error(`workflow execute failed job=${jobId}: ${String(error)}`)
+        })
+        .finally(() => {
+          if (isParse) {
+            this.parseInFlight -= 1
+          } else {
+            this.agentInFlight -= 1
+          }
+          running.delete(jobId)
+          processed += 1
+        })
+      running.set(jobId, task)
+    }
+
+    const fill = async () => {
+      while (processed + running.size < limit) {
+        let started = false
+        if (
+          this.parseInFlight < this.parseConcurrency() &&
+          processed + running.size < limit
+        ) {
+          const parseJob = await this.claimNextParse()
+          if (parseJob) {
+            startJob(parseJob)
+            started = true
+          }
+        }
+        if (
+          this.agentInFlight < this.agentConcurrency() &&
+          processed + running.size < limit
+        ) {
+          const agentJob = await this.claimNextAgent()
+          if (agentJob) {
+            startJob(agentJob)
+            started = true
+          }
+        }
+        if (!started) {
+          break
+        }
+      }
+    }
+
+    await fill()
+    while (running.size > 0) {
+      await Promise.race(running.values())
+      await fill()
     }
     return processed
   }
@@ -110,6 +183,14 @@ export class AiWorkflowProcessor {
           where: { id: rows[0].id },
           include: { inputBatch: true },
         })
+        if (job.status === AiWorkflowJobStatus.claimed) {
+          this.workflowLog('recovered', {
+            job: job.id,
+            type: job.type,
+            previousWorker: job.claimedBy,
+            attempt: job.attemptCount + 1,
+          })
+        }
         const claimedJob = await tx.aiWorkflowJob.update({
           where: { id: job.id },
           data: {
@@ -237,6 +318,12 @@ export class AiWorkflowProcessor {
         }
 
         if (job.status === AiWorkflowJobStatus.claimed) {
+          this.workflowLog('recovered', {
+            job: job.id,
+            type: job.type,
+            previousWorker: job.claimedBy,
+            attempt: job.attemptCount + 1,
+          })
           await tx.aiAgentAttempt.updateMany({
             where: { jobId: job.id, status: AiAgentAttemptStatus.running },
             data: {
@@ -297,18 +384,31 @@ export class AiWorkflowProcessor {
   }
 
   private async executeClaimed(job: ClaimedJob): Promise<void> {
+    const startedAt = Date.now()
     if (job.type === AiWorkflowJobType.material_parse) {
       await this.executeParse(job)
       return
     }
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       await this.persistFailure(job, 'AGENT_UNAVAILABLE')
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: 'AGENT_UNAVAILABLE',
+        attempt: job.attemptCount,
+      })
       return
     }
 
     const authorized = await this.recheckAuthorization(job)
     if (!authorized.ok) {
       await this.persistFailure(job, authorized.errorCode)
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: authorized.errorCode,
+        attempt: job.attemptCount,
+      })
       return
     }
 
@@ -318,61 +418,126 @@ export class AiWorkflowProcessor {
       if (!renewed) {
         return
       }
-      const result = await this.headlessClient.run(prepared.request, prepared.delegationToken)
-      await this.persistOutcome(job, prepared.attemptId, result)
+      const result = await this.withHeartbeat(job.id, async () => {
+        const outcome = await this.headlessClient.run(prepared.request, prepared.delegationToken)
+        await this.persistOutcome(job, prepared.attemptId, outcome)
+        return outcome
+      })
+      if (result.kind === 'failed') {
+        return
+      }
+      this.workflowLog('agent_done', {
+        job: job.id,
+        durationMs: Date.now() - startedAt,
+        attempt: job.attemptCount,
+        result: result.kind,
+      })
     } catch (error) {
+      const errorCode = workflowErrorCode(error)
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)
-      await this.persistFailure(job, 'AGENT_UNAVAILABLE')
+      if (isImmediateWorkflowFailure(errorCode) || !isTransientWorkflowError(error)) {
+        await this.persistFailure(job, errorCode)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: errorCode,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+      await this.scheduleRetry(job, errorCode)
     }
   }
 
   private async executeParse(job: ClaimedJob): Promise<void> {
+    const startedAt = Date.now()
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       if (job.materialId) {
         await this.materialService.markParseTerminalFailure(job.materialId)
       }
       await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: PARSE_FAILED_ERROR_CODE,
+        attempt: job.attemptCount,
+      })
+      return
+    }
+    if (!(await this.organizationUsable(job.organizationId))) {
+      if (job.materialId) {
+        await this.materialService.markParseTerminalFailure(job.materialId)
+      }
+      await this.persistParseBarrierFailure(job, 'PERMISSION_DENIED')
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: 'PERMISSION_DENIED',
+        attempt: job.attemptCount,
+      })
       return
     }
     try {
-      const parsed = await this.materialService.executeParseJob(job)
-      if (!parsed) {
-        await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
-        return
-      }
-      const batchIds = await this.materialService.pinMaterialVersion(
-        parsed.materialId,
-        parsed.parseResultVersion,
-      )
-      for (const batchId of batchIds) {
-        const published = await this.prisma.$transaction(async (tx) => {
-          const batch = await tx.aiInputBatch.findUnique({ where: { id: batchId } })
-          if (!batch) {
-            return []
-          }
-          await lockAiCreateTask(tx, batch.organizationId, batch.taskId)
-          return this.conversationService.tryPromoteBatch(tx, batchId)
-        })
-        for (const item of published) {
-          const event = await this.prisma.aiConversationEvent.findUnique({
-            where: { id: item.eventId },
+      const completed = await this.withHeartbeat(job.id, async () => {
+        const parsed = await this.materialService.executeParseJob(job)
+        if (!parsed) {
+          return false
+        }
+        const batchIds = await this.materialService.pinMaterialVersion(
+          parsed.materialId,
+          parsed.parseResultVersion,
+        )
+        for (const batchId of batchIds) {
+          const published = await this.prisma.$transaction(async (tx) => {
+            const batch = await tx.aiInputBatch.findUnique({ where: { id: batchId } })
+            if (!batch) {
+              return []
+            }
+            await lockAiCreateTask(tx, batch.organizationId, batch.taskId)
+            return this.conversationService.tryPromoteBatch(tx, batchId)
           })
-          if (event) {
-            this.conversationService.publish(item.conversationId, event)
+          for (const item of published) {
+            const event = await this.prisma.aiConversationEvent.findUnique({
+              where: { id: item.eventId },
+            })
+            if (event) {
+              this.conversationService.publish(item.conversationId, event)
+            }
           }
         }
+        return true
+      })
+      if (!completed) {
+        await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: PARSE_FAILED_ERROR_CODE,
+          attempt: job.attemptCount,
+        })
+        return
       }
+      this.workflowLog('parse_done', {
+        job: job.id,
+        durationMs: Date.now() - startedAt,
+        attempt: job.attemptCount,
+      })
     } catch (error) {
       this.logger.warn(`资料解析失败 job=${job.id}: ${String(error)}`)
-      await this.prisma.aiWorkflowJob.update({
-        where: { id: job.id },
-        data: {
-          status: AiWorkflowJobStatus.pending,
-          lastErrorCode: PARSE_FAILED_ERROR_CODE,
-          leaseExpiresAt: null,
-          nextAttemptAt: new Date(Date.now() + 5_000),
-        },
-      })
+      if (!isTransientWorkflowError(error)) {
+        if (job.materialId) {
+          await this.materialService.markParseTerminalFailure(job.materialId)
+        }
+        await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: PARSE_FAILED_ERROR_CODE,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+      await this.scheduleRetry(job, 'PARSE_UNAVAILABLE')
     }
   }
 
@@ -600,7 +765,18 @@ export class AiWorkflowProcessor {
     result: HeadlessExecutionResult,
   ): Promise<void> {
     if (result.kind === 'failed') {
-      await this.persistFailure(job, result.error.code, result, attemptId)
+      const errorCode = result.error.code
+      if (isImmediateWorkflowFailure(errorCode) || result.error.retryable === false) {
+        await this.persistFailure(job, errorCode, result, attemptId)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: errorCode,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+      await this.scheduleRetry(job, errorCode, attemptId)
       return
     }
 
@@ -881,7 +1057,7 @@ export class AiWorkflowProcessor {
   }
 
   private leaseUntil(): Date {
-    return new Date(Date.now() + WORKFLOW_LEASE_MS)
+    return new Date(Date.now() + this.leaseMs())
   }
 
   private async renewLease(jobId: string): Promise<boolean> {
@@ -894,6 +1070,128 @@ export class AiWorkflowProcessor {
       data: { leaseExpiresAt: this.leaseUntil() },
     })
     return result.count === 1
+  }
+
+  private async withHeartbeat<T>(jobId: string, work: () => Promise<T>): Promise<T> {
+    const timer = setInterval(() => {
+      void this.renewLease(jobId)
+    }, this.heartbeatMs())
+    try {
+      return await work()
+    } finally {
+      clearInterval(timer)
+    }
+  }
+
+  private async scheduleRetry(
+    job: ClaimedJob,
+    errorCode: string,
+    attemptId?: string,
+  ): Promise<void> {
+    if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
+      if (job.type === AiWorkflowJobType.material_parse) {
+        if (job.materialId) {
+          await this.materialService.markParseTerminalFailure(job.materialId)
+        }
+        await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: PARSE_FAILED_ERROR_CODE,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+      await this.persistFailure(job, errorCode)
+      this.workflowLog('failed', {
+        job: job.id,
+        type: job.type,
+        reason: errorCode,
+        attempt: job.attemptCount,
+      })
+      return
+    }
+    const delayMs = workflowBackoffMs(job.attemptCount)
+    await this.prisma.$transaction(async (tx) => {
+      if (!(await this.ownsClaimedJob(tx, job.id))) {
+        return
+      }
+      if (attemptId) {
+        await tx.aiAgentAttempt.updateMany({
+          where: { id: attemptId, status: AiAgentAttemptStatus.running },
+          data: {
+            status: AiAgentAttemptStatus.failed,
+            errorCode,
+            endedAt: new Date(),
+          },
+        })
+      }
+      await tx.aiWorkflowJob.update({
+        where: { id: job.id },
+        data: {
+          status: AiWorkflowJobStatus.pending,
+          lastErrorCode: errorCode,
+          leaseExpiresAt: null,
+          claimedAt: null,
+          claimedBy: null,
+          nextAttemptAt: new Date(Date.now() + delayMs),
+        },
+      })
+    })
+    this.workflowLog('retry_scheduled', {
+      job: job.id,
+      type: job.type,
+      reason: errorCode,
+      attempt: job.attemptCount,
+      delayMs,
+    })
+  }
+
+  private async organizationUsable(organizationId: string): Promise<boolean> {
+    const organization = await this.prisma.organization.findFirst({
+      where: {
+        id: organizationId,
+        deletedAt: null,
+        status: OrganizationStatus.enabled,
+      },
+      select: { id: true },
+    })
+    return organization != null
+  }
+
+  private leaseMs(): number {
+    return this.configNumber('app.workflow.leaseMs', WORKFLOW_LEASE_MS)
+  }
+
+  private heartbeatMs(): number {
+    return this.configNumber('app.workflow.heartbeatMs', WORKFLOW_HEARTBEAT_MS)
+  }
+
+  private parseConcurrency(): number {
+    return this.configNumber('app.workflow.parseConcurrency', WORKFLOW_PARSE_CONCURRENCY)
+  }
+
+  private agentConcurrency(): number {
+    return this.configNumber('app.workflow.agentConcurrency', WORKFLOW_AGENT_CONCURRENCY)
+  }
+
+  private configNumber(key: string, fallback: number): number {
+    const configured = this.configService.get<number>(key)
+    if (typeof configured === 'number' && Number.isFinite(configured) && configured > 0) {
+      return Math.floor(configured)
+    }
+    return fallback
+  }
+
+  private workflowLog(
+    event: string,
+    fields: Record<string, string | number | boolean | null | undefined>,
+  ): void {
+    const parts = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(' ')
+    this.logger.log(`workflow ${event} ${parts}`)
   }
 
   private async hasEarlierNonReplyClaimBlocker(
@@ -971,21 +1269,35 @@ export class AiWorkflowProcessor {
       job.inputBatch.creatorUserId,
     )
     const stored = toStoredCandidates(reviewPackage.candidates)
-    const created = await tx.aiReviewPackage.create({
-      data: {
-        organizationId: job.organizationId,
-        taskId: job.taskId,
-        runId: run.id,
-        inputBatchId: job.inputBatchId,
-        status: AiReviewPackageStatus.pending,
-        confirmationUnit: reviewPackage.confirmationUnit,
-        baseObjectVersion: task.draft.version,
-        baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-        candidates: stored as unknown as Prisma.InputJsonValue,
-        version: 1,
-      },
-    })
-    return created.id
+    try {
+      const created = await tx.aiReviewPackage.create({
+        data: {
+          organizationId: job.organizationId,
+          taskId: job.taskId,
+          runId: run.id,
+          inputBatchId: job.inputBatchId,
+          status: AiReviewPackageStatus.pending,
+          confirmationUnit: reviewPackage.confirmationUnit,
+          baseObjectVersion: task.draft.version,
+          baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
+          candidates: stored as unknown as Prisma.InputJsonValue,
+          version: 1,
+        },
+      })
+      return created.id
+    } catch (error) {
+      if (!isUniqueViolation(error)) {
+        throw error
+      }
+      const raced = await tx.aiReviewPackage.findFirst({
+        where: { taskId: job.taskId, status: AiReviewPackageStatus.pending },
+        select: { id: true },
+      })
+      if (!raced) {
+        throw error
+      }
+      return raced.id
+    }
   }
 }
 
@@ -1006,4 +1318,27 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code: string }).code === 'P2002'
   )
+}
+
+function workflowErrorCode(error: unknown): string {
+  if (error instanceof Error && error.message === 'VERSION_CONFLICT') {
+    return 'VERSION_CONFLICT'
+  }
+  if (error instanceof ServiceUnavailableException) {
+    return 'AGENT_UNAVAILABLE'
+  }
+  return 'AGENT_UNAVAILABLE'
+}
+
+function isTransientWorkflowError(error: unknown): boolean {
+  if (error instanceof ServiceUnavailableException) {
+    return true
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true
+  }
+  if (error instanceof TypeError && /fetch|network|ECONN|ETIMEDOUT/i.test(error.message)) {
+    return true
+  }
+  return false
 }

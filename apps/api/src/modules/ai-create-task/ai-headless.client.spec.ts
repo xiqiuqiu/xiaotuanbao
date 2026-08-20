@@ -101,6 +101,48 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
+  it('treats headless 5xx as retryable AGENT_UNAVAILABLE', async () => {
+    server = createServer((_request, response) => {
+      response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ message: 'unavailable' }))
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(client.run(request, 'delegation-token')).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'AGENT_UNAVAILABLE',
+        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        retryable: true,
+      },
+    })
+  })
+
+  it('treats headless 4xx as non-retryable INVALID_FORMAT', async () => {
+    server = createServer((_request, response) => {
+      response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ message: 'bad request' }))
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(client.run(request, 'delegation-token')).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'INVALID_FORMAT',
+        message: '模型输出格式异常，本轮未形成任何候选',
+        retryable: false,
+      },
+    })
+  })
+
   it('posts the assembled User plaintext with the execution identity', async () => {
     let posted: unknown
     server = createServer((incoming, response) => {

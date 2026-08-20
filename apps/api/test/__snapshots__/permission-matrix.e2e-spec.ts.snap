@@ -35,6 +35,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "departure:write",
+    "route": "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
     "route": "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials",
   },
   {
@@ -914,6 +919,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/:taskId/confirm [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/abandon [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/remove-materials [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/stop [departure:write]",
     "PUT /api/ai-create-tasks/:taskId/conversations/:conversationId/draft [departure:write]",
@@ -1088,6 +1094,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "POST /api/ai-create-tasks/:taskId/confirm [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/abandon [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/remove-materials [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/retry-failed-materials [departure:write]",
     "POST /api/ai-create-tasks/:taskId/conversations/:conversationId/batches/:batchId/stop [departure:write]",
     "PUT /api/ai-create-tasks/:taskId/conversations/:conversationId/draft [departure:write]",

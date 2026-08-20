@@ -276,6 +276,11 @@ vi.mock('@/services/ai-create-task.service', () => ({
   sendAiConversationMessage: vi.fn(),
   listAiConversationEvents: vi.fn(),
   saveAiConversationDraft: vi.fn(),
+  retryFailedConversationMaterials: vi.fn(),
+  retryFailedConversationBatch: vi.fn(),
+  removeConversationMaterials: vi.fn(),
+  abandonConversationBatch: vi.fn(),
+  stopConversationBatch: vi.fn(),
 }))
 
 class MockEventSource {
@@ -1264,6 +1269,38 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByRole('button', { name: '重试失败资料' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放弃本批' })).toBeInTheDocument()
     expect(capturedView.isRunning).toBe(false)
+  })
+
+  it('shows a 重试 action for a failed Agent batch', async () => {
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '这次会失败' },
+            createdAt: '2026-08-20T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'error',
+            payload: { batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+            createdAt: '2026-08-20T00:00:01.000Z',
+          },
+          {
+            sequence: 3,
+            kind: 'batch_status',
+            payload: { status: 'failed', batchId: 'batch-fail', errorCode: 'PERMISSION_DENIED' },
+            createdAt: '2026-08-20T00:00:01.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('处理失败')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
+    expect(screen.queryByText('本批处理失败，可修改后重试')).not.toBeInTheDocument()
   })
 
   it('updates parse progress in place when a later batch_status event arrives', async () => {

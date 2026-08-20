@@ -48,6 +48,7 @@ import {
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
+  RETRY_FAILED_BATCH_OPERATION,
   RETRY_FAILED_MATERIALS_OPERATION,
   SEND_TEXT_OPERATION,
   STOP_BATCH_OPERATION,
@@ -802,6 +803,83 @@ export class AiConversationService {
             status: AiInputBatchStatus.cancelled,
             reason: 'user_stop',
             attemptId: runningAttempt?.id ?? null,
+          },
+        })
+        return { batch: updated, events: [statusEvent] }
+      },
+    })
+  }
+
+  async retryFailedBatch(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+    conversationId: string,
+    batchId: string,
+    idempotencyKey: string | undefined,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.runBatchCommand({
+      organizationId,
+      userId,
+      taskId,
+      conversationId,
+      batchId,
+      operation: RETRY_FAILED_BATCH_OPERATION,
+      idempotencyKey,
+      request: { batchId },
+      mutate: async (tx, batch) => {
+        if (batch.status === AiInputBatchStatus.cancelled) {
+          throw new ConflictException('已取消或已放弃的批次不可重试')
+        }
+        if (batch.status === AiInputBatchStatus.awaiting_review) {
+          throw new ConflictException('待审核批次不可重试')
+        }
+        if (batch.status === AiInputBatchStatus.waiting_for_materials) {
+          throw new ConflictException('资料失败请使用重试失败资料')
+        }
+        if (batch.status !== AiInputBatchStatus.failed) {
+          throw new ConflictException('仅失败批次可重试')
+        }
+        const reset = await tx.aiWorkflowJob.updateMany({
+          where: {
+            inputBatchId: batch.id,
+            type: AiWorkflowJobType.agent_batch,
+          },
+          data: {
+            status: AiWorkflowJobStatus.pending,
+            attemptCount: 0,
+            claimedAt: null,
+            claimedBy: null,
+            leaseExpiresAt: null,
+            nextAttemptAt: new Date(),
+            lastErrorCode: null,
+          },
+        })
+        if (reset.count === 0) {
+          await tx.aiWorkflowJob.create({
+            data: {
+              organizationId,
+              taskId,
+              conversationId: batch.conversationId,
+              inputBatchId: batch.id,
+              type: AiWorkflowJobType.agent_batch,
+              jobKey: agentBatchJobKey(batch.id),
+              status: AiWorkflowJobStatus.pending,
+            },
+          })
+        }
+        const updated = await tx.aiInputBatch.update({
+          where: { id: batch.id },
+          data: { status: AiInputBatchStatus.ready_for_agent },
+          include: BATCH_MATERIAL_INCLUDE,
+        })
+        const statusEvent = await this.appendEvent(tx, {
+          organizationId,
+          conversationId: batch.conversationId,
+          kind: AiConversationEventKind.batch_status,
+          payload: {
+            batchId: batch.id,
+            status: AiInputBatchStatus.ready_for_agent,
           },
         })
         return { batch: updated, events: [statusEvent] }

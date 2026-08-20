@@ -20,6 +20,7 @@ export async function startDeterministicHeadlessAgent(options: {
   callCount: () => number
   lastTaskContext: () => unknown
   lastUserText: () => string | null
+  failNextHttp: (status: number) => void
 }> {
   let outcome = options.outcome
   let callCount = 0
@@ -27,6 +28,7 @@ export async function startDeterministicHeadlessAgent(options: {
   let lastUserText: string | null = null
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
+  let nextHttpError: number | null = null
 
   const server = createServer((request, response) => {
     void handle(request, response)
@@ -90,6 +92,12 @@ export async function startDeterministicHeadlessAgent(options: {
       }
 
       callCount += 1
+      if (nextHttpError != null) {
+        const status = nextHttpError
+        nextHttpError = null
+        json(response, status, { message: 'headless 5xx' })
+        return
+      }
       if (hold) {
         await hold
       }
@@ -129,6 +137,9 @@ export async function startDeterministicHeadlessAgent(options: {
     callCount: () => callCount,
     lastTaskContext: () => lastContext,
     lastUserText: () => lastUserText,
+    failNextHttp: (status: number) => {
+      nextHttpError = status
+    },
   }
 }
 

@@ -76,6 +76,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   removeConversationMaterials: { gating: 'departureWrite', endpointKey: 'departure:write' },
   abandonConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
   stopConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  retryFailedConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },

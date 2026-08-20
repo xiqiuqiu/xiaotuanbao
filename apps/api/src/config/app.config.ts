@@ -31,6 +31,14 @@ function parseDurationMs(value: string): number {
   return amount * multiplier
 }
 
+function positiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw ?? fallback)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback
+  }
+  return Math.floor(parsed)
+}
+
 export default registerAs('app', () => {
   const nodeEnv = process.env.NODE_ENV ?? 'development'
   const jwtSecret = process.env.JWT_SECRET ?? DEFAULT_JWT_SECRET
@@ -103,6 +111,12 @@ export default registerAs('app', () => {
       modelId: (process.env.AI_MODEL ?? 'deterministic').trim(),
       delegationTtlSec: Number(process.env.AI_CREATE_ASSIST_DELEGATION_TTL_SEC ?? 600),
       runTimeoutMs: Number(process.env.AI_CREATE_ASSIST_RUN_TIMEOUT_MS ?? 120_000),
+    },
+    workflow: {
+      leaseMs: positiveInt(process.env.WORKFLOW_LEASE_MS, 120_000),
+      heartbeatMs: positiveInt(process.env.WORKFLOW_HEARTBEAT_MS, 30_000),
+      parseConcurrency: positiveInt(process.env.WORKFLOW_PARSE_CONCURRENCY, 2),
+      agentConcurrency: positiveInt(process.env.WORKFLOW_AGENT_CONCURRENCY, 2),
     },
     materialParse: {
       baseUrl: (process.env.OCR_BASE_URL ?? 'http://127.0.0.1:8089').trim(),
