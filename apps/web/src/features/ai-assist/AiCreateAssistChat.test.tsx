@@ -383,10 +383,15 @@ describe('AiCreateAssistChat', () => {
     expect(textarea).toHaveValue('手机正在输入的完整文本')
 
     await waitFor(() => {
-      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
-        text: '手机正在输入的完整文本',
-        draftEpoch: 0,
-      })
+      expect(saveAiConversationDraft).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '手机正在输入的完整文本',
+          draftEpoch: 0,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
     })
     expect(textarea).toHaveValue('手机正在输入的完整文本')
   })
@@ -425,10 +430,15 @@ describe('AiCreateAssistChat', () => {
     expect(textarea).toHaveValue('手机正在输入的完整文本')
 
     await waitFor(() => {
-      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
-        text: '手机正在输入的完整文本',
-        draftEpoch: 0,
-      })
+      expect(saveAiConversationDraft).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '手机正在输入的完整文本',
+          draftEpoch: 0,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
     })
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
@@ -515,10 +525,15 @@ describe('AiCreateAssistChat', () => {
       target: { value: '电脑仍在编辑的完整草稿' },
     })
     await waitFor(() =>
-      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
-        text: '手机先保存的完整草稿',
-        draftEpoch: 0,
-      }),
+      expect(saveAiConversationDraft).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '手机先保存的完整草稿',
+          draftEpoch: 0,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
     )
 
     vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
@@ -536,10 +551,15 @@ describe('AiCreateAssistChat', () => {
     )
 
     await waitFor(() =>
-      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
-        text: '电脑仍在编辑的完整草稿',
-        draftEpoch: 0,
-      }),
+      expect(saveAiConversationDraft).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '电脑仍在编辑的完整草稿',
+          draftEpoch: 0,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
     )
     vi.mocked(listAiConversationEvents).mockResolvedValueOnce({
       conversationId: 'conv-1',
@@ -609,6 +629,49 @@ describe('AiCreateAssistChat', () => {
     unmount()
 
     expect(saveAiConversationDraft).not.toHaveBeenCalled()
+  })
+
+  it('aborts an in-flight composer draft save when sending so a stale draftEpoch cannot 409', async () => {
+    const signals: AbortSignal[] = []
+    vi.mocked(saveAiConversationDraft).mockImplementation(
+      (_taskId, _conversationId, _payload, config) => {
+        if (config?.signal) {
+          signals.push(config.signal)
+        }
+        return new Promise(() => undefined)
+      },
+    )
+    vi.mocked(sendAiConversationMessage).mockResolvedValue({
+      conversationId: 'conv-1',
+      batch: { id: 'batch-1', status: 'ready_for_agent', conversationVersion: 1 },
+      events: [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '准备发送的文本' },
+          createdAt: '2026-08-14T00:00:00.000Z',
+        },
+      ],
+      lastSequence: 1,
+      draft: {
+        conversationId: 'conv-1',
+        text: '',
+        draftEpoch: 1,
+        revision: 2,
+        updatedAt: '2026-08-18T00:00:00.000Z',
+      },
+    })
+    render(<AiCreateAssistChat {...chatProps} />)
+    fireEvent.change(screen.getByLabelText('询问当前发团草稿'), {
+      target: { value: '准备发送的文本' },
+    })
+    await waitFor(() => expect(saveAiConversationDraft).toHaveBeenCalledTimes(1))
+    expect(signals[0]?.aborted).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    await waitFor(() => expect(sendAiConversationMessage).toHaveBeenCalled())
+
+    expect(signals[0]?.aborted).toBe(true)
   })
 
   afterEach(() => {
@@ -970,6 +1033,20 @@ describe('AiCreateAssistChat', () => {
       0,
       expect.objectContaining({ signal: expect.any(AbortSignal), silentError: true }),
     )
+  })
+
+  it('does not poll conversation events every second while the idle chat is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      render(<AiCreateAssistChat {...chatProps} />)
+      await waitFor(() => expect(listAiConversationEvents).toHaveBeenCalledTimes(1))
+      await act(async () => {
+        vi.advanceTimersByTime(3_000)
+      })
+      expect(listAiConversationEvents).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('catches up from the last sequence when the event stream errors', async () => {
@@ -1524,10 +1601,15 @@ describe('AiCreateAssistChat', () => {
       target: { value: '还没发出去的备注，又改了一点' },
     })
     await waitFor(() => {
-      expect(saveAiConversationDraft).toHaveBeenCalledWith('task-assist', 'conv-1', {
-        text: '还没发出去的备注，又改了一点',
-        draftEpoch: 3,
-      })
+      expect(saveAiConversationDraft).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        {
+          text: '还没发出去的备注，又改了一点',
+          draftEpoch: 3,
+        },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      )
     })
   })
 })

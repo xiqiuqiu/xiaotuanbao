@@ -22,4 +22,11 @@ export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v3'
 export const WORKFLOW_LEASE_MS = 120_000
 /** 租约过期后最多再执行的次数；超出则失败并释放 `agent_running`，避免毒任务永久占锁。 */
 export const WORKFLOW_MAX_ATTEMPTS = 5
+/** Worker 与 API 分进程时内存 hub 收不到完成事件，按 sequence 轮询补读。 */
 export const SSE_CATCH_UP_POLL_MS = 400
+/** 空闲 SSE 连接拉长补读间隔，避免每个打开的对话框都按 400ms 打库。 */
+export const SSE_CATCH_UP_IDLE_POLL_MS = 5_000
+
+export function nextSseCatchUpDelay(foundEvents: boolean): number {
+  return foundEvents ? SSE_CATCH_UP_POLL_MS : SSE_CATCH_UP_IDLE_POLL_MS
+}
