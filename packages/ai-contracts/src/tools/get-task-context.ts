@@ -18,7 +18,7 @@ export const conversationEventForAgentSchema = z
 
 export const GET_TASK_CONTEXT_TOOL = {
   name: 'getTaskContext',
-  version: 1,
+  version: 2,
 } as const
 
 export const AI_CREATE_READONLY_CAPABILITIES = ['getTaskContext'] as const
@@ -76,23 +76,6 @@ export const getTaskContextOutputSchema = z
         optionalPresent: z.array(z.string()),
       })
       .strip(),
-    currentUserMessage: z.string().trim().min(1).optional(),
-    conversationEvents: z.array(conversationEventForAgentSchema).max(50).optional(),
-    materials: z
-      .array(
-        z
-          .object({
-            materialId: z.string().min(1),
-            parseResultVersion: z.number().int().positive(),
-            status: z.literal('ready'),
-            pageCount: z.number().int().nonnegative(),
-            excerpt: z.string(),
-            truncated: z.boolean(),
-          })
-          .strip(),
-      )
-      .max(20)
-      .optional(),
   })
   .strip()
 

@@ -2,6 +2,12 @@ export const MATERIAL_PARSE_INDEX_EXCERPT_CHARS = 240
 export const MATERIAL_PARSE_INDEX_TOTAL_CHARS = 2400
 export const MATERIAL_PARSE_TOOL_INLINE_CHARS = 3000
 export const MATERIAL_PARSE_EXCERPT_TRUNCATION = 'material_parse_excerpt'
+export const FROZEN_PROJECTION_TOTAL_CHARS = 12_000
+export const FROZEN_PROJECTION_TAIL_EVENT_LIMIT = 40
+export const AGENT_MESSAGE_DROPPED_TRUNCATION = 'recent_tail_agent_dropped'
+export const PROJECTION_TOTAL_CHARS_TRUNCATION = 'projection_total_chars'
+export const PINNED_PARSE_CONTEXT_PREFACE =
+  '以下发团资料已解析完成，不是待解析、解析中或尚未处理。当前上下文只包含事实索引和摘录，不是全文。原文证据必须用 getMaterialParseResult 按 materialId、parseResultVersion 和可选 pageNumber 读取。禁止把它们说成待解析。'
 
 export type MaterialParsePage = {
   pageNumber: number

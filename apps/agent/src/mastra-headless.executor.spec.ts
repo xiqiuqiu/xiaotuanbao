@@ -18,7 +18,7 @@ const REVIEW_ARGS = {
       fieldKey: 'routeName' as const,
       proposedValue: '喀纳斯3日线',
       clarity: 'clear' as const,
-      evidence: [{ kind: 'user_message' as const, excerpt: '帮我建一个喀纳斯3日团' }],
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '帮我建一个喀纳斯3日团' }],
     },
   ],
 }

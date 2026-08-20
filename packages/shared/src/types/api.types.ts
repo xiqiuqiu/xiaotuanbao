@@ -1042,11 +1042,12 @@ export type AiCandidateClarity = 'clear' | 'needs_confirmation' | 'undetermined'
 export type AiReviewPackageStatus = 'pending' | 'confirmed' | 'rejected' | 'superseded'
 
 export type AiCandidateEvidence =
-  | { kind: 'user_message'; excerpt: string; messageId?: string }
+  | { kind: 'user_message'; excerpt: string; sequence: number; messageId?: string }
   | { kind: 'system_derivation'; rule: string }
   | {
       kind: 'material_region'
       materialId: string
+      parseResultVersion: number
       pageNumber: number
       excerpt: string
     }

@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto'
-import type { ConversationEventForAgent } from '@xiaotuanbao/ai-contracts'
-import { AI_CONVERSATION_EVENT_KINDS } from '@xiaotuanbao/ai-contracts'
+import type { ConversationEventForAgent, MaterialParseIndexItem } from '@xiaotuanbao/ai-contracts'
+import {
+  AGENT_MESSAGE_DROPPED_TRUNCATION,
+  AI_CONVERSATION_EVENT_KINDS,
+  FROZEN_PROJECTION_TAIL_EVENT_LIMIT,
+  FROZEN_PROJECTION_TOTAL_CHARS,
+  PINNED_PARSE_CONTEXT_PREFACE,
+  PROJECTION_TOTAL_CHARS_TRUNCATION,
+  clipExcerpt,
+} from '@xiaotuanbao/ai-contracts'
 import {
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
   PLAINTEXT_SYSTEM_PROMPT_VERSION,
@@ -8,19 +16,32 @@ import {
   REVIEW_CONFIRM_CONTINUATION_TEXT,
 } from './ai-conversation.constants'
 
-export interface PlaintextContextInput {
+export interface ExcerptDigest {
+  materialId: string
+  parseResultVersion: number
+  sha256: string
+}
+
+export interface FrozenContextProjection {
+  conversationBackground: { summary: null; summaryVersion: null }
+  recentTail: ConversationEventForAgent[]
+  pinnedMaterials: MaterialParseIndexItem[]
+  truncationReasons: string[]
+}
+
+export interface ContextManifestInput {
   conversationId: string
   inputBatchId: string
   conversationVersion: number
   eventSequences: number[]
-  userText: string
   businessSnapshotVersion: number
   modelId: string
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
+  excerptDigests: ExcerptDigest[]
   truncationReasons?: string[]
 }
 
-export interface PlaintextContextManifestRecord {
+export interface ContextManifestRecord {
   conversationVersion: number
   eventSequences: number[]
   businessSnapshotVersion: number
@@ -30,6 +51,9 @@ export interface PlaintextContextManifestRecord {
   modelId: string
   inputHash: string
   truncationReasons: string[]
+  summaryVersion: null
+  excerptDigests: ExcerptDigest[]
+  materialVersions: Array<{ materialId: string; parseResultVersion: number }>
 }
 
 export interface ConversationEventRecord {
@@ -38,18 +62,45 @@ export interface ConversationEventRecord {
   payload: unknown
 }
 
-export function buildPlaintextContextManifest(
-  input: PlaintextContextInput,
-): PlaintextContextManifestRecord {
-  const truncationReasons = input.truncationReasons ?? []
+export function digestExcerpt(excerpt: string): string {
+  return createHash('sha256').update(excerpt, 'utf8').digest('hex')
+}
+
+export function excerptDigestsFor(materials: MaterialParseIndexItem[]): ExcerptDigest[] {
+  return materials
+    .map((item) => ({
+      materialId: item.materialId,
+      parseResultVersion: item.parseResultVersion,
+      sha256: digestExcerpt(item.excerpt),
+    }))
+    .sort(
+      (left, right) =>
+        left.materialId.localeCompare(right.materialId) ||
+        left.parseResultVersion - right.parseResultVersion,
+    )
+}
+
+export function buildContextManifest(input: ContextManifestInput): ContextManifestRecord {
+  const truncationReasons = [...(input.truncationReasons ?? [])].sort()
+  const materialVersions = [...input.materialVersions].sort(
+    (left, right) =>
+      left.materialId.localeCompare(right.materialId) ||
+      left.parseResultVersion - right.parseResultVersion,
+  )
+  const excerptDigests = [...input.excerptDigests].sort(
+    (left, right) =>
+      left.materialId.localeCompare(right.materialId) ||
+      left.parseResultVersion - right.parseResultVersion,
+  )
   const canonical = {
     conversationId: input.conversationId,
     inputBatchId: input.inputBatchId,
     conversationVersion: input.conversationVersion,
     eventSequences: input.eventSequences,
-    userText: input.userText,
+    materialVersions,
+    excerptDigests,
     businessSnapshotVersion: input.businessSnapshotVersion,
-    materialVersions: input.materialVersions,
+    summaryVersion: null,
     truncationReasons,
     builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
     systemPromptVersion: PLAINTEXT_SYSTEM_PROMPT_VERSION,
@@ -66,8 +117,14 @@ export function buildPlaintextContextManifest(
     modelId: input.modelId,
     inputHash: createHash('sha256').update(JSON.stringify(canonical)).digest('hex'),
     truncationReasons,
+    summaryVersion: null,
+    excerptDigests,
+    materialVersions,
   }
 }
+
+/** @deprecated Use buildContextManifest */
+export const buildPlaintextContextManifest = buildContextManifest
 
 export function parseEventSequences(value: unknown): number[] {
   if (!Array.isArray(value)) {
@@ -76,17 +133,16 @@ export function parseEventSequences(value: unknown): number[] {
   return value.filter((item): item is number => Number.isInteger(item) && item > 0)
 }
 
-const PLAINTEXT_CONTEXT_TAIL_KINDS = new Set(['user_message', 'agent_message'])
-const PLAINTEXT_CONTEXT_TAIL_LIMIT = 40
+const CONTEXT_TAIL_KINDS = new Set(['user_message', 'agent_message'])
 
-export function selectPlaintextContextEvents(
+export function selectRecentTailEvents(
   events: ConversationEventRecord[],
   conversationVersion: number,
   originUserMessageSequence?: number,
 ): ConversationEventRecord[] {
   return events
     .filter((event) => {
-      if (event.sequence > conversationVersion || !PLAINTEXT_CONTEXT_TAIL_KINDS.has(event.kind)) {
+      if (event.sequence > conversationVersion || !CONTEXT_TAIL_KINDS.has(event.kind)) {
         return false
       }
       if (
@@ -98,8 +154,11 @@ export function selectPlaintextContextEvents(
       }
       return true
     })
-    .slice(-PLAINTEXT_CONTEXT_TAIL_LIMIT)
+    .slice(-FROZEN_PROJECTION_TAIL_EVENT_LIMIT)
 }
+
+/** @deprecated Use selectRecentTailEvents */
+export const selectPlaintextContextEvents = selectRecentTailEvents
 
 export function resolveAttemptUserText(
   originalUserText: string,
@@ -120,10 +179,99 @@ export function resolveAttemptUserText(
   return originalUserText
 }
 
-export function composePlaintextUserText(
-  currentUserText: string,
-  events: ConversationEventForAgent[],
-): string {
+function uniqueReasons(reasons: string[]): string[] {
+  return [...new Set(reasons)].sort()
+}
+
+function projectionCharCount(
+  tail: ConversationEventForAgent[],
+  materials: MaterialParseIndexItem[],
+): number {
+  const tailChars = tail.reduce((sum, event) => sum + (event.text?.length ?? 0), 0)
+  const excerptChars = materials.reduce((sum, item) => sum + item.excerpt.length, 0)
+  return tailChars + excerptChars
+}
+
+export function applyFrozenProjectionBudget(
+  tail: ConversationEventForAgent[],
+  materials: MaterialParseIndexItem[],
+  originUserMessageSequence?: number,
+): { recentTail: ConversationEventForAgent[]; pinnedMaterials: MaterialParseIndexItem[]; truncationReasons: string[] } {
+  const reasons: string[] = []
+  let recentTail = [...tail]
+  let pinnedMaterials = materials.map((item) => ({ ...item }))
+
+  const dropOldestAgent = (): boolean => {
+    const index = recentTail.findIndex(
+      (event) =>
+        event.kind === 'agent_message' &&
+        (originUserMessageSequence == null || event.sequence !== originUserMessageSequence),
+    )
+    if (index < 0) {
+      return false
+    }
+    recentTail = recentTail.filter((_, itemIndex) => itemIndex !== index)
+    return true
+  }
+
+  while (
+    projectionCharCount(recentTail, pinnedMaterials) > FROZEN_PROJECTION_TOTAL_CHARS &&
+    dropOldestAgent()
+  ) {
+    reasons.push(AGENT_MESSAGE_DROPPED_TRUNCATION)
+  }
+
+  if (projectionCharCount(recentTail, pinnedMaterials) > FROZEN_PROJECTION_TOTAL_CHARS) {
+    const tailChars = recentTail.reduce((sum, event) => sum + (event.text?.length ?? 0), 0)
+    let remaining = Math.max(0, FROZEN_PROJECTION_TOTAL_CHARS - tailChars)
+    pinnedMaterials = pinnedMaterials.map((item) => {
+      const clipped = clipExcerpt(item.excerpt, remaining)
+      remaining = Math.max(0, remaining - clipped.excerpt.length)
+      return {
+        ...item,
+        excerpt: clipped.excerpt,
+        truncated: item.truncated || clipped.truncated,
+      }
+    })
+    reasons.push(PROJECTION_TOTAL_CHARS_TRUNCATION)
+  }
+
+  return {
+    recentTail,
+    pinnedMaterials,
+    truncationReasons: uniqueReasons(reasons),
+  }
+}
+
+export function buildFrozenProjection(input: {
+  events: ConversationEventRecord[]
+  conversationVersion: number
+  originUserMessageSequence?: number
+  materials: MaterialParseIndexItem[]
+  materialTruncationReasons?: string[]
+}): FrozenContextProjection {
+  const selected = selectRecentTailEvents(
+    input.events,
+    input.conversationVersion,
+    input.originUserMessageSequence,
+  )
+  const budgeted = applyFrozenProjectionBudget(
+    projectConversationEventsForAgent(selected),
+    input.materials,
+    input.originUserMessageSequence,
+  )
+  return {
+    conversationBackground: { summary: null, summaryVersion: null },
+    recentTail: budgeted.recentTail,
+    pinnedMaterials: budgeted.pinnedMaterials,
+    truncationReasons: uniqueReasons([
+      ...(input.materialTruncationReasons ?? []),
+      ...budgeted.truncationReasons,
+    ]),
+  }
+}
+
+function formatTail(events: ConversationEventForAgent[]): string {
   const lines = events.flatMap((event) => {
     if (!event.text) {
       return []
@@ -136,13 +284,50 @@ export function composePlaintextUserText(
     }
     return []
   })
-  const currentLine = `User: ${currentUserText}`
-  const lastLine = lines.at(-1)
-  const prior = lastLine === currentLine ? lines.slice(0, -1) : lines
-  if (prior.length === 0) {
-    return currentUserText
+  return lines.length > 0 ? lines.join('\n') : '（无）'
+}
+
+function formatMaterials(materials: MaterialParseIndexItem[]): string {
+  if (materials.length === 0) {
+    return '（无）'
   }
-  return `以下是本会话近期对话，请在此基础上继续，不要忽略已经说过的内容。\n\n${prior.join('\n')}\n\n${currentLine}`
+  const blocks = materials.map((item) => {
+    const clip = item.truncated ? '，摘录已裁剪' : ''
+    const excerpt = item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''
+    return `资料 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${clip}）${excerpt}`
+  })
+  return `${PINNED_PARSE_CONTEXT_PREFACE}\n\n${blocks.join('\n\n')}`
+}
+
+export function assembleFrozenUserText(
+  currentUserText: string,
+  projection: FrozenContextProjection,
+): string {
+  return [
+    '【交流背景】',
+    '本阶段无滚动摘要。',
+    '',
+    '【近期对话】',
+    formatTail(projection.recentTail),
+    '',
+    '【本批资料】',
+    formatMaterials(projection.pinnedMaterials),
+    '',
+    '【本轮指令】',
+    currentUserText,
+  ].join('\n')
+}
+
+export function composePlaintextUserText(
+  currentUserText: string,
+  events: ConversationEventForAgent[],
+): string {
+  return assembleFrozenUserText(currentUserText, {
+    conversationBackground: { summary: null, summaryVersion: null },
+    recentTail: events,
+    pinnedMaterials: [],
+    truncationReasons: [],
+  })
 }
 
 export function projectConversationEventsForAgent(

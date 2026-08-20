@@ -4,11 +4,25 @@ import {
   getTaskContextOutputSchema,
 } from './get-task-context'
 
-describe('getTaskContext contract v1', () => {
+const BASE = {
+  task: {
+    id: 'task-1',
+    status: 'in_progress' as const,
+    currentPhase: 'basic_info' as const,
+    creatorUserId: 'user-1',
+  },
+  snapshot: { mode: 'manual' as const, routeName: '川西线' },
+  objectVersion: 1,
+  pending: { hasPendingReview: false, reviewPackageId: null },
+  availableCapabilities: ['getTaskContext'] as const,
+  fieldCoverage: { filled: ['routeName'], missing: [], optionalPresent: [] },
+}
+
+describe('getTaskContext contract v2', () => {
   it('declares the versioned tool name and forbids write capabilities', () => {
     expect(GET_TASK_CONTEXT_TOOL).toEqual({
       name: 'getTaskContext',
-      version: 1,
+      version: 2,
     })
   })
 
@@ -64,48 +78,30 @@ describe('getTaskContext contract v1', () => {
     expect(parsed.availableCapabilities).toEqual(['getTaskContext'])
     expect(parsed.objectVersion).toBe(3)
     expect(parsed).not.toHaveProperty('currentUserMessage')
+    expect(parsed).not.toHaveProperty('conversationEvents')
+    expect(parsed).not.toHaveProperty('materials')
   })
 
-  it('carries pinned conversation events so the Agent can read User plaintext', () => {
+  it('strips conversation history and material excerpts out of the live tool payload', () => {
     const parsed = getTaskContextOutputSchema.parse({
-      task: {
-        id: 'task-1',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        creatorUserId: 'user-1',
-      },
-      snapshot: { mode: 'manual', routeName: '川西线' },
-      objectVersion: 1,
-      pending: { hasPendingReview: false, reviewPackageId: null },
-      availableCapabilities: ['getTaskContext'],
-      fieldCoverage: { filled: ['routeName'], missing: [], optionalPresent: [] },
-      conversationEvents: [
-        { sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' },
-        { sequence: 2, kind: 'batch_status' },
+      ...BASE,
+      currentUserMessage: '帮我建一个喀纳斯3日团',
+      conversationEvents: [{ sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' }],
+      materials: [
+        {
+          materialId: 'mat-1',
+          parseResultVersion: 1,
+          status: 'ready',
+          pageCount: 1,
+          excerpt: '九月川西线',
+          truncated: false,
+          bytes: 'must-not-pass',
+        },
       ],
     })
-    expect(parsed.conversationEvents).toEqual([
-      { sequence: 1, kind: 'user_message', text: '帮我建一个喀纳斯3日团' },
-      { sequence: 2, kind: 'batch_status' },
-    ])
-  })
-
-  it('carries the current input-batch User text when the Agent is running a headless batch', () => {
-    const parsed = getTaskContextOutputSchema.parse({
-      task: {
-        id: 'task-1',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        creatorUserId: 'user-1',
-      },
-      snapshot: { mode: 'manual', routeName: '川西线' },
-      objectVersion: 1,
-      pending: { hasPendingReview: false, reviewPackageId: null },
-      availableCapabilities: ['getTaskContext'],
-      fieldCoverage: { filled: ['routeName'], missing: [], optionalPresent: [] },
-      currentUserMessage: '帮我建一个喀纳斯3日团',
-    })
-    expect(parsed.currentUserMessage).toBe('帮我建一个喀纳斯3日团')
+    expect(parsed).not.toHaveProperty('currentUserMessage')
+    expect(parsed).not.toHaveProperty('conversationEvents')
+    expect(parsed).not.toHaveProperty('materials')
   })
 
   it('allows submitReviewPackage and rejects confirm or other write tools', () => {
@@ -146,44 +142,5 @@ describe('getTaskContext contract v1', () => {
         availableCapabilities: ['getTaskContext', 'confirmReviewPackage'],
       }),
     ).toThrow()
-  })
-
-  it('exposes pinned material pointers without original bytes', () => {
-    const parsed = getTaskContextOutputSchema.parse({
-      task: {
-        id: 'task-1',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        creatorUserId: 'user-1',
-      },
-      snapshot: { mode: 'manual', routeName: '川西线' },
-      objectVersion: 1,
-      pending: { hasPendingReview: false, reviewPackageId: null },
-      availableCapabilities: ['getTaskContext', 'getMaterialParseResult'],
-      fieldCoverage: { filled: ['routeName'], missing: ['name'], optionalPresent: [] },
-      materials: [
-        {
-          materialId: 'mat-1',
-          parseResultVersion: 1,
-          status: 'ready',
-          pageCount: 1,
-          excerpt: '九月川西线',
-          truncated: false,
-          originalFilename: '团期.png',
-          bytes: 'must-not-pass',
-        },
-      ],
-    })
-
-    expect(parsed.materials).toEqual([
-      {
-        materialId: 'mat-1',
-        parseResultVersion: 1,
-        status: 'ready',
-        pageCount: 1,
-        excerpt: '九月川西线',
-        truncated: false,
-      },
-    ])
   })
 })

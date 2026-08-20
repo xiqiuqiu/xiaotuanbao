@@ -30,11 +30,11 @@ import type { AiOperationDelegationPayload } from '../../common/types/api-respon
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import {
-  buildPlaintextContextManifest,
-  composePlaintextUserText,
-  projectConversationEventsForAgent,
+  assembleFrozenUserText,
+  buildContextManifest,
+  buildFrozenProjection,
+  excerptDigestsFor,
   resolveAttemptUserText,
-  selectPlaintextContextEvents,
 } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { WORKFLOW_LEASE_MS, WORKFLOW_MAX_ATTEMPTS } from './ai-conversation.constants'
@@ -468,25 +468,25 @@ export class AiWorkflowProcessor {
       orderBy: { sequence: 'asc' },
       select: { sequence: true, kind: true, payload: true },
     })
-    const selectedEvents = selectPlaintextContextEvents(
-      historyEvents,
-      job.inputBatch.conversationVersion,
-      userEvent.sequence,
-    )
-    const composedUserText = composePlaintextUserText(
-      userText,
-      projectConversationEventsForAgent(selectedEvents),
-    )
-    const manifestRecord = buildPlaintextContextManifest({
+    const projection = buildFrozenProjection({
+      events: historyEvents,
+      conversationVersion: job.inputBatch.conversationVersion,
+      originUserMessageSequence: userEvent.sequence,
+      materials: parseIndex.materials,
+      materialTruncationReasons: parseIndex.truncationReasons,
+    })
+    const composedUserText = assembleFrozenUserText(userText, projection)
+    const excerptDigests = excerptDigestsFor(projection.pinnedMaterials)
+    const manifestRecord = buildContextManifest({
       conversationId: job.conversationId,
       inputBatchId: job.inputBatchId,
       conversationVersion: job.inputBatch.conversationVersion,
-      eventSequences: selectedEvents.map((event) => event.sequence),
-      userText: composedUserText,
+      eventSequences: projection.recentTail.map((event) => event.sequence),
       businessSnapshotVersion: task.draft.version,
       modelId,
       materialVersions,
-      truncationReasons: parseIndex.truncationReasons,
+      excerptDigests,
+      truncationReasons: projection.truncationReasons,
     })
 
     const prepared = await this.prisma.$transaction(async (tx) => {
@@ -497,24 +497,38 @@ export class AiWorkflowProcessor {
         job.taskId,
         job.inputBatch.creatorUserId,
       )
-      const manifest = await tx.aiContextManifest.create({
-        data: {
+      const existingManifest = await tx.aiContextManifest.findFirst({
+        where: {
           organizationId: job.organizationId,
-          taskId: job.taskId,
-          conversationId: job.conversationId,
           inputBatchId: job.inputBatchId,
-          conversationVersion: manifestRecord.conversationVersion,
-          eventSequences: manifestRecord.eventSequences,
-          businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
-          builderVersion: manifestRecord.builderVersion,
-          systemPromptVersion: manifestRecord.systemPromptVersion,
-          toolSchemaVersion: manifestRecord.toolSchemaVersion,
-          modelId: manifestRecord.modelId,
+          conversationId: job.conversationId,
           inputHash: manifestRecord.inputHash,
-          truncationReasons: manifestRecord.truncationReasons,
-          materialVersions,
         },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
       })
+      const manifest = existingManifest
+        ? { id: existingManifest.id }
+        : await tx.aiContextManifest.create({
+            data: {
+              organizationId: job.organizationId,
+              taskId: job.taskId,
+              conversationId: job.conversationId,
+              inputBatchId: job.inputBatchId,
+              conversationVersion: manifestRecord.conversationVersion,
+              eventSequences: manifestRecord.eventSequences,
+              businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+              builderVersion: manifestRecord.builderVersion,
+              systemPromptVersion: manifestRecord.systemPromptVersion,
+              toolSchemaVersion: manifestRecord.toolSchemaVersion,
+              modelId: manifestRecord.modelId,
+              inputHash: manifestRecord.inputHash,
+              truncationReasons: manifestRecord.truncationReasons,
+              materialVersions,
+              summaryVersion: null,
+              excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
+            },
+          })
       const attempt = await tx.aiAgentAttempt.create({
         data: {
           organizationId: job.organizationId,

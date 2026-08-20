@@ -48,7 +48,7 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
         proposedValue: '候选团名',
         clarity: 'clear',
         status: 'pending',
-        evidence: [{ kind: 'user_message', excerpt: '团名叫候选团名' }],
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫候选团名' }],
       },
     ],
     createdAt: now,

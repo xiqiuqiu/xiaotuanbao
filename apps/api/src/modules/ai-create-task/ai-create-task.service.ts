@@ -61,7 +61,6 @@ import type {
 } from './dto/ai-create-task.dto'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
-import { parseEventSequences, projectConversationEventsForAgent, resolveAttemptUserText } from './ai-context-manifest'
 import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
 import { lockAiCreateTask } from './ai-create-task.lock'
@@ -277,12 +276,6 @@ export class AiCreateTaskService {
 
     const summary = this.toSummary(task)
     const pending = summary.pendingReview
-    const currentUserMessage = await this.currentUserMessageForBatch(
-      caller.organizationId,
-      caller.inputBatchId,
-    )
-    const conversationEvents = await this.conversationEventsForAttempt(caller)
-    const materials = await this.pinnedMaterialsForBatch(caller)
     return getTaskContextOutputSchema.parse({
       task: {
         id: summary.id,
@@ -298,9 +291,6 @@ export class AiCreateTaskService {
       },
       availableCapabilities: capabilitiesForPendingReview(Boolean(pending)),
       fieldCoverage: classifyDraftFields(summary.draft.snapshot),
-      ...(currentUserMessage ? { currentUserMessage } : {}),
-      ...(conversationEvents.length ? { conversationEvents } : {}),
-      ...(materials.length ? { materials } : {}),
     })
   }
 
@@ -341,107 +331,6 @@ export class AiCreateTaskService {
       pageNumber: input.pageNumber,
     })
     return getMaterialParseResultOutputSchema.parse(result)
-  }
-
-  private async conversationEventsForAttempt(caller: {
-    organizationId: string
-    taskId: string
-    conversationId?: string
-    inputBatchId?: string
-    contextManifestId?: string
-  }) {
-    const sequences = await this.pinnedEventSequences(caller)
-    if (sequences.length === 0 || !caller.conversationId) {
-      return []
-    }
-    const events = await this.prisma.aiConversationEvent.findMany({
-      where: {
-        conversationId: caller.conversationId,
-        organizationId: caller.organizationId,
-        sequence: { in: sequences },
-      },
-      orderBy: { sequence: 'asc' },
-      select: { sequence: true, kind: true, payload: true },
-    })
-    return projectConversationEventsForAgent(events)
-  }
-
-  private async pinnedMaterialsForBatch(caller: {
-    organizationId: string
-    inputBatchId?: string
-  }) {
-    if (!caller.inputBatchId) {
-      return []
-    }
-    const indexed = await this.materialService.loadPinnedParseIndex(
-      caller.organizationId,
-      caller.inputBatchId,
-    )
-    return indexed.materials
-  }
-
-  private async pinnedEventSequences(caller: {
-    organizationId: string
-    taskId: string
-    conversationId?: string
-    inputBatchId?: string
-    contextManifestId?: string
-  }): Promise<number[]> {
-    if (caller.contextManifestId) {
-      const manifest = await this.prisma.aiContextManifest.findFirst({
-        where: {
-          id: caller.contextManifestId,
-          organizationId: caller.organizationId,
-          taskId: caller.taskId,
-          ...(caller.conversationId ? { conversationId: caller.conversationId } : {}),
-        },
-        select: { eventSequences: true },
-      })
-      return parseEventSequences(manifest?.eventSequences)
-    }
-    if (!caller.inputBatchId) {
-      return []
-    }
-    const batch = await this.prisma.aiInputBatch.findFirst({
-      where: { id: caller.inputBatchId, organizationId: caller.organizationId },
-      select: { userMessageEvent: { select: { sequence: true } } },
-    })
-    return batch?.userMessageEvent.sequence ? [batch.userMessageEvent.sequence] : []
-  }
-
-  private async currentUserMessageForBatch(
-    organizationId: string,
-    inputBatchId: string | undefined,
-  ): Promise<string | undefined> {
-    if (!inputBatchId) {
-      return undefined
-    }
-    const batch = await this.prisma.aiInputBatch.findFirst({
-      where: { id: inputBatchId, organizationId },
-      select: {
-        conversationId: true,
-        conversationVersion: true,
-        userMessageEvent: { select: { payload: true } },
-      },
-    })
-    const payload = batch?.userMessageEvent.payload
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
-      return undefined
-    }
-    const text = payload.text
-    const originalText = typeof text === 'string' && text.trim() ? text.trim() : undefined
-    if (!originalText || !batch) {
-      return undefined
-    }
-    const versionEvent = await this.prisma.aiConversationEvent.findFirst({
-      where: {
-        conversationId: batch.conversationId,
-        organizationId,
-        sequence: batch.conversationVersion,
-      },
-      select: { kind: true, payload: true },
-    })
-    return resolveAttemptUserText(originalText, versionEvent)
   }
 
   async searchRouteTemplatesForAgent(

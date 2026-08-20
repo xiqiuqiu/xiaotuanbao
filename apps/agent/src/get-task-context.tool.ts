@@ -14,7 +14,7 @@ export function createGetTaskContextTool(config: GetTaskContextToolConfig) {
   return createTool({
     id: 'getTaskContext',
     description:
-      '读取当前 AI 建团任务的业务快照、字段覆盖、钉定会话事件，以及已解析完成的资料事实索引（materials[].status 恒为 ready，含 pageCount 与摘录，不是全文）。不改写发团创建草稿。',
+      '读取当前 AI 建团任务的业务快照、字段覆盖和未解决审核状态。对话尾部与资料索引在冻结投影里，不在本工具中。不改写发团创建草稿。',
     inputSchema: z.object({}),
     execute: async () => {
       if (!config.modelApiKey?.trim()) {

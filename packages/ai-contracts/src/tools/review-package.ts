@@ -49,6 +49,7 @@ export const aiCandidateEvidenceSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('user_message'),
       excerpt: z.string().trim().min(1).max(2000),
+      sequence: z.number().int().positive(),
       messageId: z.string().min(1).optional(),
     })
     .strip(),
@@ -62,6 +63,7 @@ export const aiCandidateEvidenceSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('material_region'),
       materialId: z.string().min(1),
+      parseResultVersion: z.number().int().positive(),
       pageNumber: z.number().int().positive(),
       excerpt: z.string().trim().min(1).max(2000),
     })

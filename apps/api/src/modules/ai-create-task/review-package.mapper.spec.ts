@@ -7,7 +7,7 @@ function candidate(
   return {
     clarity: 'clear',
     status: 'pending',
-    evidence: [{ kind: 'user_message', excerpt: '证据' }],
+    evidence: [{ kind: 'user_message', sequence: 1, excerpt: '证据' }],
     ...overrides,
   }
 }

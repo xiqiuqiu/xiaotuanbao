@@ -388,16 +388,9 @@ describe('AI create material failure control (e2e) #317', () => {
     const context = agent.lastTaskContext() as {
       data?: { materials?: Array<{ materialId: string; parseResultVersion: number }> }
     }
-    expect(context.data?.materials).toEqual([
-      {
-        materialId: dependency.materialId,
-        parseResultVersion: 1,
-        status: 'ready',
-        pageCount: 1,
-        excerpt: expect.any(String),
-        truncated: false,
-      },
-    ])
+    expect(context.data).not.toHaveProperty('materials')
+    expect(agent.lastUserText()).toContain(dependency.materialId)
+    expect(agent.lastUserText()).toContain('解析版本 1')
   })
 
   it('cancels the claimed attempt on stop so a new batch can reorganize input', async () => {

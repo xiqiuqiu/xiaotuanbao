@@ -321,7 +321,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
           fieldKey: 'templateId',
           proposedValue: template.id,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', excerpt: '用那条常用路线' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '用那条常用路线' }],
         },
       ],
     }).expect(200)
