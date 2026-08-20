@@ -20,7 +20,7 @@ const reviewPackage = {
       fieldKey: 'name' as const,
       proposedValue: '八月川西团',
       clarity: 'clear' as const,
-      evidence: [{ kind: 'user_message' as const, excerpt: '团名叫八月川西团' }],
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名叫八月川西团' }],
     },
   ],
 }

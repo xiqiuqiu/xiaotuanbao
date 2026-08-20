@@ -72,7 +72,7 @@ const REVIEW_PACKAGE = {
       fieldKey: 'name' as const,
       proposedValue: '八月川西团',
       clarity: 'clear' as const,
-      evidence: [{ kind: 'user_message' as const, excerpt: '团名叫八月川西团' }],
+      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名叫八月川西团' }],
     },
   ],
 }
@@ -490,7 +490,7 @@ describe('headless Agent runtime contract', () => {
     }
   })
 
-  it('injects a ready parse index into the Mastra input without loading full page bodies', async () => {
+  it('does not splice getTaskContext materials into the model userText', async () => {
     mockMastraGenerate.mockClear()
     mockFetchTaskContext.mockResolvedValue({
       task: {
@@ -504,24 +504,6 @@ describe('headless Agent runtime contract', () => {
       pending: { hasPendingReview: false, reviewPackageId: null },
       availableCapabilities: ['getTaskContext', 'getMaterialParseResult'],
       fieldCoverage: { filled: [], missing: [], optionalPresent: [] },
-      materials: [
-        {
-          materialId: 'mat-1',
-          parseResultVersion: 1,
-          status: 'ready',
-          pageCount: 1,
-          excerpt: '喀纳斯10日游6月4日团',
-          truncated: false,
-        },
-        {
-          materialId: 'mat-2',
-          parseResultVersion: 1,
-          status: 'ready',
-          pageCount: 2,
-          excerpt: '喀纳斯10日游7月14日团',
-          truncated: true,
-        },
-      ],
     })
 
     const server = createAgentServer({
@@ -537,14 +519,7 @@ describe('headless Agent runtime contract', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toMatchObject({ data: { kind: 'completed' } })
       expect(mockFetchParseResult).not.toHaveBeenCalled()
-      expect(mockMastraGenerate).toHaveBeenCalledTimes(1)
-      const synced = mockMastraGenerate.mock.calls[0]?.[0] as string
-      expect(synced).toContain(USER_TEXT)
-      expect(synced).toContain('喀纳斯10日游6月4日团')
-      expect(synced).toContain('已解析完成')
-      expect(synced).toContain('getMaterialParseResult')
-      expect(synced).toContain('摘录已裁剪')
-      expect(synced).toContain('禁止把它们说成待解析')
+      expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

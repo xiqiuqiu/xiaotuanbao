@@ -314,7 +314,7 @@ function mockPendingReview(
         userCorrectedValue: undefined,
         clarity: 'clear',
         status: 'pending',
-        evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+        evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫八月川西团' }],
       },
     ],
     baselineSnapshot: {
@@ -1873,7 +1873,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '团名叫2026年8月13号西北大环线10日游' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫2026年8月13号西北大环线10日游' }],
         },
         {
           fieldKey: 'startDate',
@@ -1881,7 +1881,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '开始时间是2026年的8月13号' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '开始时间是2026年的8月13号' }],
         },
         {
           fieldKey: 'endDate',
@@ -1889,7 +1889,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '行程总共10天' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '行程总共10天' }],
         },
         {
           fieldKey: 'expectedGuestCountHint',
@@ -1897,7 +1897,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '大概12个人' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '大概12个人' }],
         },
       ],
     })
@@ -1998,7 +1998,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '团名叫2026年8月13号西北大环线10日游' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫2026年8月13号西北大环线10日游' }],
         },
       ],
     })
@@ -2107,7 +2107,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫八月川西团' }],
         },
         {
           fieldKey: 'expectedGuestCountHint',
@@ -2115,7 +2115,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '大概12人' }],
         },
       ],
     })
@@ -2177,7 +2177,7 @@ describe('CreateDepartureWizard', () => {
           userCorrectedValue: undefined,
           clarity: 'clear',
           status: 'pending',
-          evidence: [{ kind: 'user_message', excerpt: '大概8人' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '大概8人' }],
         },
       ],
     })

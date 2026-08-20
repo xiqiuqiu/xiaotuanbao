@@ -3,7 +3,7 @@ import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { CopilotRuntime, createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { MastraAgent } from '@ag-ui/mastra'
-import { getAssistRequestContext, runWithAssistRequestContext } from './assist-request-context'
+import { runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
 import {
   handleHeadlessRun,
@@ -58,19 +58,7 @@ export function createAgentServer(config: AgentServerConfig) {
     loadDeterministicAgentAdapterFromEnv() ??
     createMastraHeadlessExecutor({
       async readUserText(request) {
-        if (request.userText.trim()) {
-          return request.userText.trim()
-        }
-        const context = getAssistRequestContext()
-        const output = await fetchTaskContext(
-          {
-            apiBaseUrl: config.apiBaseUrl,
-            serviceSecret: config.serviceSecret,
-            delegationToken: context.delegationToken,
-          },
-          { taskId: context.taskId, runId: context.runId },
-        )
-        return output.currentUserMessage?.trim() ?? ''
+        return request.userText.trim()
       },
       generate: (userText) => mastra.getAgent(AI_CREATE_AGENT_ID).generate(userText),
     })

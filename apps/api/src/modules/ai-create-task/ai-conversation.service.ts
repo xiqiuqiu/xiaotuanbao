@@ -44,6 +44,7 @@ import { AiConversationEventHub } from './ai-conversation-event.hub'
 import {
   ABANDON_BATCH_OPERATION,
   CANCEL_INTERACTION_OPERATION,
+  CONVERSATION_EVENTS_PAGE_SIZE,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
@@ -904,6 +905,7 @@ export class AiConversationService {
         sequence: { gt: afterSequence },
       },
       orderBy: { sequence: 'asc' },
+      take: CONVERSATION_EVENTS_PAGE_SIZE,
     })
     const last = await this.prisma.aiConversationEvent.findFirst({
       where: { conversationId: conversation.id },

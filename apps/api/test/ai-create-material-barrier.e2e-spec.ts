@@ -166,27 +166,18 @@ describe('AI create material readiness barrier (e2e) #316', () => {
 
     const context = agent.lastTaskContext() as {
       data?: {
-        materials?: Array<{
-          materialId: string
-          parseResultVersion: number
-          excerpt?: string
-        }>
+        materials?: unknown
+        snapshot?: unknown
         pages?: unknown
       }
     }
-    expect(context.data?.materials).toEqual([
-      {
-        materialId: materials[0]?.id,
-        parseResultVersion: 1,
-        status: 'ready',
-        pageCount: 1,
-        excerpt: expect.any(String),
-        truncated: false,
-      },
-    ])
-    expect(String(context.data?.materials?.[0]?.excerpt ?? '').length).toBeGreaterThan(0)
+    expect(context.data).not.toHaveProperty('materials')
     expect(context.data).not.toHaveProperty('pages')
     expect(JSON.stringify(context)).not.toContain(PNG_1X1.toString('base64'))
+    expect(agent.lastUserText()).toContain('【本批资料】')
+    expect(agent.lastUserText()).toContain(materials[0]?.id ?? '')
+    expect(agent.lastUserText()).toContain('解析版本 1')
+    expect(agent.lastUserText()).not.toContain(PNG_1X1.toString('base64'))
 
     const restored = await authRequest(app, coordinatorToken)
       .post('/api/ai-create-tasks/assist-session')

@@ -21,7 +21,7 @@ const pendingReview: AiReviewPackageView = {
       userCorrectedValue: null,
       clarity: 'clear',
       status: 'pending',
-      evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+      evidence: [{ kind: 'user_message', sequence: 1, excerpt: '团名叫八月川西团' }],
     },
     {
       fieldKey: 'routeName',
@@ -29,7 +29,7 @@ const pendingReview: AiReviewPackageView = {
       userCorrectedValue: null,
       clarity: 'clear',
       status: 'pending',
-      evidence: [{ kind: 'user_message', excerpt: '走川西' }],
+      evidence: [{ kind: 'user_message', sequence: 1, excerpt: '走川西' }],
     },
   ],
 }

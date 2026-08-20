@@ -14,14 +14,14 @@ export function createGetMaterialParseResultTool(config: GetMaterialParseResultT
   return createTool({
     id: 'getMaterialParseResult',
     description:
-      '按 getTaskContext 返回的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。不要用文件名、预览或未钉版本编造候选。',
+      '按冻结投影【本批资料】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。不要用文件名、预览或未钉版本编造候选。',
     inputSchema: z.object({
-      materialId: z.string().min(1).describe('getTaskContext.materials[].materialId'),
+      materialId: z.string().min(1).describe('冻结投影资料索引中的 materialId'),
       parseResultVersion: z
         .number()
         .int()
         .positive()
-        .describe('getTaskContext.materials[].parseResultVersion，必须原样传入'),
+        .describe('冻结投影资料索引中的 parseResultVersion，必须原样传入'),
       pageNumber: z
         .number()
         .int()

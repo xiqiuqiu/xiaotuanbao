@@ -107,7 +107,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       fieldKey: 'name',
       proposedValue: `${testPrefix}-候选团名`,
       clarity: 'clear',
-      evidence: [{ kind: 'user_message', excerpt }],
+      evidence: [{ kind: 'user_message', sequence: 1, excerpt }],
     }
   }
 
@@ -269,13 +269,13 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
           fieldKey: 'startDate',
           proposedValue: '2026-09-08',
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', excerpt: '9月8日出团' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月8日出团' }],
         },
         {
           fieldKey: 'expectedGuestCountHint',
           proposedValue: 12,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', excerpt: '大概12人' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '大概12人' }],
         },
       ],
     }).expect(200)
@@ -387,7 +387,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
           fieldKey: 'ownerUserId',
           proposedValue: ownerUserId,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', excerpt: '负责人我来' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '负责人我来' }],
         },
       ],
     })

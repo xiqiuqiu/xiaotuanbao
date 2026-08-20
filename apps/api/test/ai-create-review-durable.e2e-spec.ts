@@ -146,7 +146,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
             fieldKey: 'name' as const,
             proposedValue: name,
             clarity: 'clear' as const,
-            evidence: [{ kind: 'user_message' as const, excerpt: `团名叫${name}` }],
+            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: `团名叫${name}` }],
           },
         ],
       },
@@ -186,7 +186,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
         {
           fieldKey: 'name',
           proposedValue: `${testPrefix}-候选团名`,
-          evidence: [{ kind: 'user_message', excerpt: `团名叫${testPrefix}-候选团名` }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: `团名叫${testPrefix}-候选团名` }],
         },
       ],
     })
@@ -288,8 +288,9 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       data?: { snapshot?: { name?: string }; currentUserMessage?: string }
     }
     expect(context.data?.snapshot?.name).toBe(`${testPrefix}-修正团名`)
-    expect(context.data?.currentUserMessage).toContain('已在中间表单确认')
+    expect(context.data).not.toHaveProperty('currentUserMessage')
     expect(agent.lastUserText()).toContain('已在中间表单确认')
+    expect(agent.lastUserText()).toContain('【本轮指令】')
     expect(agent.lastUserText()).not.toBe('请按这个团名建团')
   })
 

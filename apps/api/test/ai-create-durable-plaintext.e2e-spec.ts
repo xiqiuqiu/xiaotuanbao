@@ -213,12 +213,21 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       status: 'completed',
       contextManifest: {
         conversationVersion: expect.any(Number),
-        builderVersion: 'ai-create-plaintext/v3',
+        builderVersion: 'ai-create-frozen-projection/v1',
         inputHash: expect.any(String),
+        summaryVersion: null,
+        excerptDigests: [],
       },
     })
     const sequences = attempt?.contextManifest.eventSequences
     expect(Array.isArray(sequences)).toBe(true)
+    expect(agent.lastUserText()).toContain('【交流背景】')
+    expect(agent.lastUserText()).toContain('【本轮指令】')
+    const jobsBeforeList = await prisma.aiWorkflowJob.count({ where: { taskId } })
+    const listedAgain = await listEvents(taskId, conversationId)
+    expect(listedAgain.events.length).toBeGreaterThan(0)
+    expect(listedAgain.events.length).toBeLessThanOrEqual(100)
+    expect(await prisma.aiWorkflowJob.count({ where: { taskId } })).toBe(jobsBeforeList)
   })
 
   it('keeps only one Agent batch running for the same task', async () => {

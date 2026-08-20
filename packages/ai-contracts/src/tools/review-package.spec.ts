@@ -13,7 +13,7 @@ const validCandidate = {
   fieldKey: 'name' as const,
   proposedValue: '八月川西团',
   clarity: 'clear' as const,
-  evidence: [{ kind: 'user_message' as const, excerpt: '团名叫八月川西团' }],
+  evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名叫八月川西团' }],
 }
 
 describe('submitReviewPackage contract v1', () => {
@@ -69,7 +69,7 @@ describe('submitReviewPackage contract v1', () => {
           fieldKey: 'startDate',
           proposedValue: '2026-09-01',
           clarity: 'needs_confirmation',
-          evidence: [{ kind: 'user_message', excerpt: '9 月 1 号出发' }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9 月 1 号出发' }],
         },
         {
           fieldKey: 'endDate',
@@ -100,7 +100,7 @@ describe('submitReviewPackage contract v1', () => {
             fieldKey: 'ownerUserId',
             proposedValue: 'user-1',
             clarity: 'clear',
-            evidence: [{ kind: 'user_message', excerpt: '负责人王杰' }],
+            evidence: [{ kind: 'user_message', sequence: 1, excerpt: '负责人王杰' }],
           },
         ],
       }),
@@ -116,7 +116,7 @@ describe('submitReviewPackage contract v1', () => {
             fieldKey: 'departureType',
             proposedValue: 'combined',
             clarity: 'clear',
-            evidence: [{ kind: 'user_message', excerpt: '散拼' }],
+            evidence: [{ kind: 'user_message', sequence: 1, excerpt: '散拼' }],
           },
         ],
       }),
@@ -150,13 +150,13 @@ describe('submitReviewPackage contract v1', () => {
             fieldKey: 'startDate',
             proposedValue: '2026-09-10',
             clarity: 'clear',
-            evidence: [{ kind: 'user_message', excerpt: '10 号出发' }],
+            evidence: [{ kind: 'user_message', sequence: 1, excerpt: '10 号出发' }],
           },
           {
             fieldKey: 'endDate',
             proposedValue: '2026-09-01',
             clarity: 'clear',
-            evidence: [{ kind: 'user_message', excerpt: '1 号结束' }],
+            evidence: [{ kind: 'user_message', sequence: 1, excerpt: '1 号结束' }],
           },
         ],
       }),
@@ -231,7 +231,7 @@ describe('submitReviewPackage contract v1', () => {
           evidence: [
             {
               kind: 'material_region',
-              materialId: 'mat-1',
+              materialId: 'mat-1', parseResultVersion: 1,
               pageNumber: 1,
               excerpt: '九月川西线',
             },
@@ -243,9 +243,71 @@ describe('submitReviewPackage contract v1', () => {
       {
         kind: 'material_region',
         materialId: 'mat-1',
+        parseResultVersion: 1,
         pageNumber: 1,
         excerpt: '九月川西线',
       },
     ])
+  })
+
+  it('rejects user_message evidence without an event identity', () => {
+    expect(() =>
+      submitReviewPackageInputSchema.parse({
+        taskId: 'task-1',
+        runId: 'run-1',
+        objectVersion: 1,
+        candidates: [
+          {
+            fieldKey: 'name',
+            proposedValue: '八月川西团',
+            clarity: 'clear',
+            evidence: [{ kind: 'user_message', excerpt: '团名叫八月川西团' }],
+          },
+        ],
+      }),
+    ).toThrow()
+  })
+
+  it('rejects material_region evidence without parseResultVersion', () => {
+    expect(() =>
+      submitReviewPackageInputSchema.parse({
+        taskId: 'task-1',
+        runId: 'run-1',
+        objectVersion: 1,
+        candidates: [
+          {
+            fieldKey: 'name',
+            proposedValue: '九月川西团',
+            clarity: 'clear',
+            evidence: [
+              {
+                kind: 'material_region',
+                materialId: 'mat-1',
+                pageNumber: 1,
+                excerpt: '九月川西线',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow()
+  })
+
+  it('rejects unknown evidence kinds including summary', () => {
+    expect(() =>
+      submitReviewPackageInputSchema.parse({
+        taskId: 'task-1',
+        runId: 'run-1',
+        objectVersion: 1,
+        candidates: [
+          {
+            fieldKey: 'name',
+            proposedValue: '八月川西团',
+            clarity: 'clear',
+            evidence: [{ kind: 'summary', excerpt: '摘要里写了团名' }],
+          },
+        ],
+      }),
+    ).toThrow()
   })
 })

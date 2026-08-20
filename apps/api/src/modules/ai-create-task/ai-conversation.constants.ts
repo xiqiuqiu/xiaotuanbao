@@ -16,9 +16,10 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 /** 同一 User 在组织内仍会占用 Worker 的在途批次上限。 */
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
-export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-plaintext/v3'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v3'
-export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v3'
+export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v1'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v4'
+export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v4'
+export const CONVERSATION_EVENTS_PAGE_SIZE = 100
 export const WORKFLOW_LEASE_MS = 120_000
 /** 租约过期后最多再执行的次数；超出则失败并释放 `agent_running`，避免毒任务永久占锁。 */
 export const WORKFLOW_MAX_ATTEMPTS = 5
