@@ -6,7 +6,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import type {
   AiCreateAssistAvailability,
@@ -45,11 +44,6 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
 import { AuthService } from '../auth/auth.service'
-import {
-  AI_OP_DELEGATION_JWT_AUD,
-  AI_OP_DELEGATION_JWT_TYP,
-} from '../../common/jwt-claims'
-import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import type {
   ConfirmAiCreateTaskDto,
   ConfirmAiReviewPackageDto,
@@ -125,7 +119,6 @@ export class AiCreateTaskService {
     private readonly prisma: PrismaService,
     private readonly departureService: DepartureService,
     private readonly routeTemplateService: RouteTemplateService,
-    private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
     private readonly conversationService: AiConversationService,
@@ -197,45 +190,9 @@ export class AiCreateTaskService {
       task.id,
     )
 
-    const run = await this.prisma.$transaction(async (tx) => {
-      await lockAiCreateTask(tx, organizationId, task.id)
-      const existing = await tx.aiCreateActivityRun.findFirst({
-        where: { taskId: task.id, status: AiCreateActivityRunStatus.running },
-        orderBy: { startedAt: 'desc' },
-      })
-      if (existing) {
-        return existing
-      }
-      return tx.aiCreateActivityRun.create({
-        data: {
-          organizationId,
-          taskId: task.id,
-          creatorUserId: userId,
-        },
-      })
-    })
-
-    const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
-    const payload: AiOperationDelegationPayload = {
-      typ: AI_OP_DELEGATION_JWT_TYP,
-      sub: userId,
-      organizationId,
-      taskId: task.id,
-      runId: run.id,
-    }
-    const delegationToken = await this.jwtService.signAsync(payload, {
-      expiresIn: ttlSec,
-      secret: this.configService.getOrThrow<string>('app.jwtDelegationSecret'),
-      audience: AI_OP_DELEGATION_JWT_AUD,
-    })
-
     return {
       task: this.toSummary(task),
       conversation,
-      runId: run.id,
-      delegationToken,
-      agentRuntimeUrl: this.agentRuntimeUrl(),
-      expiresAt: new Date(Date.now() + ttlSec * 1000).toISOString(),
     }
   }
 

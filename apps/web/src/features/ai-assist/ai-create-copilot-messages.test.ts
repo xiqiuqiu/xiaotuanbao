@@ -207,4 +207,57 @@ describe('AI create chat status projection', () => {
       ]),
     )
   })
+
+  it('projects review and search tool notices from persisted agent events', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'agent_message',
+          payload: {
+            text: '组织内有这些常用路线。',
+            searchRouteTemplates: {
+              items: [
+                {
+                  id: 'tpl-1',
+                  name: '川西稻城线',
+                  defaultDayCount: 8,
+                  usageCount: 4,
+                  matchReasons: [{ code: 'name_contains_token', token: '川西' }],
+                },
+              ],
+            },
+          },
+          createdAt: '2026-08-20T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'agent_message',
+          payload: {
+            text: '已提交待审核建议，请在中间表单确认。',
+            reviewPackageId: 'pkg-1',
+            fieldKeys: ['name', 'routeName'],
+          },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          activityType: 'ai-create-search-route-templates',
+          content: expect.objectContaining({
+            items: [expect.objectContaining({ name: '川西稻城线' })],
+          }),
+        }),
+        expect.objectContaining({
+          activityType: 'ai-create-review-package',
+          content: { reviewPackageId: 'pkg-1', fieldKeys: ['name', 'routeName'] },
+        }),
+      ]),
+    )
+  })
 })

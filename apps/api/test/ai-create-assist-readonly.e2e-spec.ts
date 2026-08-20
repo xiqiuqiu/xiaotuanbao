@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import request from 'supertest'
 import { authRequest, createTestApp, loginAs } from './helpers'
+import { mintRunningAttemptDelegation } from './support/worker-delegation'
 
 const AGENT_SECRET = 'e2e-agent-service-secret'
 
@@ -35,6 +36,9 @@ describe('AI create readonly tool chain (e2e) #297', () => {
   })
 
   afterAll(async () => {
+    await prisma.aiConversation.deleteMany({
+      where: { organizationId, creatorUserId: ownerUserId },
+    })
     await prisma.aiReviewPackage.deleteMany({
       where: { task: { organizationId, creatorUserId: ownerUserId } },
     })
@@ -80,9 +84,6 @@ describe('AI create readonly tool chain (e2e) #297', () => {
       .expect(201)
 
     expect(response.body.data).toMatchObject({
-      runId: expect.any(String),
-      delegationToken: expect.any(String),
-      agentRuntimeUrl: 'http://127.0.0.1:4111/copilotkit',
       task: {
         status: 'in_progress',
         currentPhase: 'basic_info',
@@ -94,7 +95,15 @@ describe('AI create readonly tool chain (e2e) #297', () => {
           },
         },
       },
+      conversation: {
+        id: expect.any(String),
+        status: 'open',
+      },
     })
+    expect(response.body.data).not.toHaveProperty('runId')
+    expect(response.body.data).not.toHaveProperty('delegationToken')
+    expect(response.body.data).not.toHaveProperty('agentRuntimeUrl')
+    expect(response.body.data).not.toHaveProperty('expiresAt')
   })
 
   it('returns min task context, does not mutate the draft, and rejects untrusted callers', async () => {
@@ -122,10 +131,16 @@ describe('AI create readonly tool chain (e2e) #297', () => {
       .send({ taskId })
       .expect(201)
 
-    const { runId, delegationToken } = session.body.data as {
-      runId: string
-      delegationToken: string
-    }
+    const conversationId = session.body.data.conversation.id as string
+    const minted = await mintRunningAttemptDelegation({
+      app,
+      prisma,
+      organizationId,
+      userId: ownerUserId,
+      taskId,
+      conversationId,
+    })
+    const { runId, delegationToken } = minted
 
     await agentContextRequest(delegationToken, { taskId, runId, organizationId: 'leak' }).expect(200)
       .then((response) => {
@@ -184,7 +199,15 @@ describe('AI create readonly tool chain (e2e) #297', () => {
       })
       .expect(201)
 
-    const { delegationToken } = session.body.data as { delegationToken: string }
+    const minted = await mintRunningAttemptDelegation({
+      app,
+      prisma,
+      organizationId,
+      userId: ownerUserId,
+      taskId: session.body.data.task.id as string,
+      conversationId: session.body.data.conversation.id as string,
+    })
+    const { delegationToken } = minted
 
     await request(app.getHttpServer())
       .get('/api/auth/me')

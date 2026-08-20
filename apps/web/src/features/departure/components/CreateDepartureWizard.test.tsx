@@ -78,7 +78,21 @@ vi.mock('@/services/ai-create-task.service', () => ({
   listAiConversationEvents: vi.fn(),
   listDepartureMaterials: vi.fn().mockResolvedValue([]),
   previewDepartureMaterial: vi.fn(),
-  patchAiReviewPackage: vi.fn(),
+  patchAiReviewPackage: vi.fn().mockResolvedValue({
+    id: 'task-assist',
+    status: 'in_progress',
+    currentPhase: 'basic_info',
+    departureId: null,
+    creatorUserId: 'user-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    draft: {
+      version: 1,
+      snapshot: { mode: 'manual', routeName: '' },
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    pendingReview: null,
+  }),
   confirmAiReviewPackage: vi.fn(),
   rejectAiReviewPackage: vi.fn(),
 }))
@@ -265,7 +279,7 @@ function renderWizard({ strict = false }: { strict?: boolean } = {}) {
 }
 
 function mockAssistSession(
-  overrides: Partial<Pick<AiCreateAssistSession, 'runId' | 'delegationToken'>> = {},
+  overrides: Partial<AiCreateAssistSession> = {},
 ): AiCreateAssistSession {
   return {
     task: {
@@ -283,16 +297,12 @@ function mockAssistSession(
       },
       pendingReview: null,
     },
-    runId: 'run-1',
     conversation: {
       id: 'conv-1',
       status: 'open',
       events: [],
       activeBatch: null,
     },
-    delegationToken: 'deleg-1',
-    agentRuntimeUrl: '/copilotkit',
-    expiresAt: '2026-01-01T00:10:00.000Z',
     ...overrides,
   }
 }
@@ -1092,16 +1102,12 @@ describe('CreateDepartureWizard', () => {
         },
         pendingReview: null,
       },
-      runId: 'run-1',
       conversation: {
         id: 'conv-1',
         status: 'open' as const,
         events: [],
         activeBatch: null,
       },
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
     })
 
     renderWizard()
@@ -1156,16 +1162,12 @@ describe('CreateDepartureWizard', () => {
         },
         pendingReview: null,
       },
-      runId: 'run-1',
       conversation: {
         id: 'conv-1',
         status: 'open' as const,
         events: [],
         activeBatch: null,
       },
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
     })
 
     renderWizard()
@@ -1222,7 +1224,9 @@ describe('CreateDepartureWizard', () => {
     vi.mocked(startAiCreateAssistSession)
       .mockResolvedValueOnce(mockAssistSession())
       .mockResolvedValueOnce(
-        mockAssistSession({ runId: 'run-2', delegationToken: 'deleg-2' }),
+        mockAssistSession({
+          conversation: { id: 'conv-2', status: 'open', events: [], activeBatch: null },
+        }),
       )
 
     renderWizard()
@@ -1232,11 +1236,8 @@ describe('CreateDepartureWizard', () => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
     expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
-      'data-authorization',
-      'Bearer deleg-1',
-    )
-    expect(screen.getByTestId('copilot-kit')).toHaveAttribute('data-run-id', 'run-1')
+    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-authorization')
+    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-run-id')
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
     await waitFor(() => {
@@ -1249,11 +1250,8 @@ describe('CreateDepartureWizard', () => {
 
     expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
-    expect(screen.getByTestId('copilot-kit')).toHaveAttribute(
-      'data-authorization',
-      'Bearer deleg-2',
-    )
-    expect(screen.getByTestId('copilot-kit')).toHaveAttribute('data-run-id', 'run-2')
+    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-authorization')
+    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-run-id')
   })
 
   it('opens the AI sidebar without losing the form edit buffer', async () => {
@@ -1282,16 +1280,12 @@ describe('CreateDepartureWizard', () => {
         },
         pendingReview: null,
       },
-      runId: 'run-1',
       conversation: {
         id: 'conv-1',
         status: 'open' as const,
         events: [],
         activeBatch: null,
       },
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
     })
 
     renderWizard()
@@ -1370,16 +1364,12 @@ describe('CreateDepartureWizard', () => {
             updatedAt: '2026-01-01T00:00:00.000Z',
           },
         },
-        runId: 'run-1',
         conversation: {
           id: 'conv-1',
           status: 'open' as const,
           events: [],
           activeBatch: null,
         },
-        delegationToken: 'deleg-1',
-        agentRuntimeUrl: '/copilotkit',
-        expiresAt: '2026-01-01T00:10:00.000Z',
       })
       .mockRejectedValueOnce(new Error('委托已过期'))
 
@@ -1419,16 +1409,12 @@ describe('CreateDepartureWizard', () => {
         },
         pendingReview: null,
       },
-      runId: 'run-1',
       conversation: {
         id: 'conv-1',
         status: 'open' as const,
         events: [],
         activeBatch: null,
       },
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
     })
 
     renderWizard()
@@ -1576,17 +1562,14 @@ describe('CreateDepartureWizard', () => {
     })
     vi.mocked(startAiCreateAssistSession).mockResolvedValue({
       task: restored,
-      runId: 'run-1',
       conversation: {
         id: 'conv-1',
         status: 'open' as const,
         events: [],
         activeBatch: null,
       },
-      delegationToken: 'deleg-1',
-      agentRuntimeUrl: '/copilotkit',
-      expiresAt: '2026-01-01T00:10:00.000Z',
     })
+    vi.mocked(patchAiReviewPackage).mockResolvedValue(restored)
     vi.mocked(confirmAiReviewPackage).mockResolvedValue({
       ...restored,
       draft: {

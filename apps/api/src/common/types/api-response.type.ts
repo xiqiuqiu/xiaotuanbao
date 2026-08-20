@@ -17,8 +17,8 @@ export interface AiOperationDelegationPayload {
   organizationId: string
   taskId: string
   runId: string
-  conversationId?: string
-  inputBatchId?: string
-  attemptId?: string
+  conversationId: string
+  inputBatchId: string
+  attemptId: string
   contextManifestId?: string
 }

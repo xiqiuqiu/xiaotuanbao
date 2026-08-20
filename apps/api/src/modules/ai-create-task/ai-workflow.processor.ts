@@ -825,7 +825,15 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           attemptId,
           ...(interactionPayload ? { interaction: interactionPayload } : {}),
-          ...(reviewPackageId ? { reviewPackageId } : {}),
+          ...(reviewPackageId
+            ? {
+                reviewPackageId,
+                fieldKeys:
+                  result.kind === 'awaiting_review'
+                    ? result.reviewPackage.candidates.map((candidate) => candidate.fieldKey)
+                    : undefined,
+              }
+            : {}),
         } as Prisma.InputJsonValue,
       })
       published.push(agentEvent.id)
@@ -879,7 +887,7 @@ export class AiWorkflowProcessor {
           leaseExpiresAt: null,
         },
       })
-      if (batchStatus === AiInputBatchStatus.completed) {
+      if (isActivityRunCompleteBoundary(batchStatus)) {
         await tx.aiCreateActivityRun.updateMany({
           where: {
             taskId: job.taskId,
@@ -1309,6 +1317,14 @@ function batchStatusForResult(result: HeadlessExecutionResult): AiInputBatchStat
     return AiInputBatchStatus.awaiting_review
   }
   return AiInputBatchStatus.completed
+}
+
+function isActivityRunCompleteBoundary(batchStatus: AiInputBatchStatus): boolean {
+  return (
+    batchStatus === AiInputBatchStatus.completed ||
+    batchStatus === AiInputBatchStatus.awaiting_review ||
+    batchStatus === AiInputBatchStatus.awaiting_user_input
+  )
 }
 
 function isUniqueViolation(error: unknown): boolean {

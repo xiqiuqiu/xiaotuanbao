@@ -891,10 +891,6 @@ export interface StartAiCreateAssistSessionDto {
 export interface AiCreateAssistSession {
   task: AiCreateTaskSummary
   conversation: AiConversationView
-  runId: string
-  delegationToken: string
-  agentRuntimeUrl: string
-  expiresAt: string
 }
 
 export type AiConversationStatus = 'open' | 'abandoned' | 'completed'

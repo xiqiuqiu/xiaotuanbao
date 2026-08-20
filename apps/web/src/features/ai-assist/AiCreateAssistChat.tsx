@@ -5,17 +5,13 @@ import {
   CopilotKit,
   useAgentContext,
   useAttachments,
-  useRenderTool,
   type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
 import { Alert, Button, Card, Input, Radio, Space, Typography } from 'antd'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   aiCreateSharedLightStateSchema,
-  searchRouteTemplatesModelInputSchema,
-  submitReviewPackageModelInputSchema,
   type AiCreateSharedLightState,
-  type SearchRouteTemplatesOutput,
   type RouteTemplateMatchReason,
 } from '@xiaotuanbao/ai-contracts'
 import type {
@@ -41,10 +37,14 @@ import { formatReviewFieldList } from './review-field-labels'
 import {
   BATCH_STATUS_ACTIVITY_TYPE,
   INTERACTION_ACTIVITY_TYPE,
+  REVIEW_PACKAGE_ACTIVITY_TYPE,
+  SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE,
   isCopilotChatRunning,
   toCopilotChatMessages,
   type BatchStatusActivityContent,
   type InteractionActivityContent,
+  type ReviewPackageActivityContent,
+  type SearchRouteTemplatesActivityContent,
 } from './ai-create-copilot-messages'
 import { AiCreateAssistWelcome } from './AiCreateAssistWelcome'
 import { AssistMaterialsTrigger } from './AssistMaterialsTrigger'
@@ -67,9 +67,7 @@ function isNewerDraftVersion(next: DraftVersion, current: DraftVersion): boolean
 
 export interface AiCreateAssistChatProps {
   agentRuntimeUrl: string
-  delegationToken: string
   taskId: string
-  runId: string
   conversationId: string
   initialEvents?: AiConversationEventView[]
   initialActiveBatch?: AiInputBatchView | null
@@ -114,107 +112,53 @@ function AssistLightState({
   return null
 }
 
-function formatMatchReason(reason: RouteTemplateMatchReason): string {
+function formatMatchReason(reason: Record<string, unknown> | RouteTemplateMatchReason): string {
   if (reason.code === 'name_contains_token') {
-    return `名称包含「${reason.token}」`
+    return `名称包含「${String(reason.token ?? '')}」`
   }
   if (reason.code === 'segment_name_contains_token') {
-    return `行程段「${reason.segmentName}」包含「${reason.token}」`
+    return `行程段「${String(reason.segmentName ?? '')}」包含「${String(reason.token ?? '')}」`
   }
   if (reason.code === 'destination_contains_token') {
-    return `目的地「${reason.destination}」包含「${reason.token}」`
+    return `目的地「${String(reason.destination ?? '')}」包含「${String(reason.token ?? '')}」`
   }
-  return `默认 ${reason.dayCount} 天`
+  if (reason.code === 'day_count_equals') {
+    const dayCount = 'dayCount' in reason ? reason.dayCount : undefined
+    return typeof dayCount === 'number' ? `默认 ${dayCount} 天` : '默认天数匹配'
+  }
+  return '常用路线'
 }
 
-function SearchRouteTemplatesNotice({ agentId }: { agentId: string }) {
-  useRenderTool(
-    {
-      name: 'searchRouteTemplates',
-      parameters: searchRouteTemplatesModelInputSchema,
-      agentId,
-      render: ({ status, result }) => {
-        if (status === 'inProgress' || status === 'executing') {
-          return <p className={styles.notice}>正在查找常用路线…</p>
-        }
-        const items =
-          result && typeof result === 'object' && 'items' in result
-            ? ((result as SearchRouteTemplatesOutput).items ?? [])
-            : []
-        if (items.length === 0) {
-          return (
-            <p className={styles.notice}>
-              没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。
-            </p>
-          )
-        }
-        return (
-          <div className={styles.reviewCardBody}>
-            <p className={styles.notice}>组织内常用路线候选（回复要用哪一条；确认与拒绝只在中间表单）：</p>
-            {items.map((item) => (
-              <p key={item.id} className={styles.notice}>
-                {item.name} · {item.defaultDayCount} 天 · 用过 {item.usageCount} 次
-                {item.matchReasons.length > 0
-                  ? ` · ${item.matchReasons.map(formatMatchReason).join('；')}`
-                  : ''}
-              </p>
-            ))}
-          </div>
-        )
-      },
-    },
-    [agentId],
+function ReviewPackageNotice({ fieldKeys }: { fieldKeys: string[] }) {
+  const labels = formatReviewFieldList(fieldKeys)
+  return (
+    <p className={styles.notice}>
+      已建议修改{labels || '基础信息'}。请到中间表单确认，不会自动写入发团创建草稿。
+    </p>
   )
-  return null
 }
 
-function submittedReviewNoticeKey(result: unknown): string | null {
-  if (typeof result === 'object' && result !== null && 'reviewPackageId' in result) {
-    const id = result.reviewPackageId
-    if (typeof id === 'string' && id.length > 0) {
-      return id
-    }
+function SearchRouteTemplatesNotice({ items }: { items: SearchRouteTemplatesActivityContent['items'] }) {
+  if (items.length === 0) {
+    return (
+      <p className={styles.notice}>
+        没有匹配的常用路线。可在表单填写路线名称，不阻断手动创建。
+      </p>
+    )
   }
-  if (typeof result === 'string' && result.length > 0 && result !== '[object Object]') {
-    return result
-  }
-  return null
-}
-
-function ReviewPackageNotice({
-  agentId,
-  onSubmitted,
-}: {
-  agentId: string
-  onSubmitted?: () => void
-}) {
-  const notifiedRef = useRef<string | null>(null)
-  useRenderTool(
-    {
-      name: 'submitReviewPackage',
-      parameters: submitReviewPackageModelInputSchema,
-      agentId,
-      render: ({ status, parameters, result }) => {
-        const fieldKeys = parameters?.candidates?.map((candidate) => candidate.fieldKey) ?? []
-        const labels = formatReviewFieldList(fieldKeys)
-        const noticeKey = submittedReviewNoticeKey(result)
-        if (status === 'complete' && noticeKey && notifiedRef.current !== noticeKey) {
-          notifiedRef.current = noticeKey
-          queueMicrotask(() => onSubmitted?.())
-        }
-        if (status === 'inProgress' || status === 'executing') {
-          return <p className={styles.notice}>正在整理审核建议…</p>
-        }
-        return (
-          <p className={styles.notice}>
-            已建议修改{labels || '基础信息'}。请到中间表单确认，不会自动写入发团创建草稿。
-          </p>
-        )
-      },
-    },
-    [agentId, onSubmitted],
+  return (
+    <div className={styles.reviewCardBody}>
+      <p className={styles.notice}>组织内常用路线候选（回复要用哪一条；确认与拒绝只在中间表单）：</p>
+      {items.map((item) => (
+        <p key={item.id} className={styles.notice}>
+          {item.name} · {item.defaultDayCount} 天 · 用过 {item.usageCount} 次
+          {item.matchReasons.length > 0
+            ? ` · ${item.matchReasons.map(formatMatchReason).join('；')}`
+            : ''}
+        </p>
+      ))}
+    </div>
   )
-  return null
 }
 
 function mergeEvents(
@@ -459,6 +403,48 @@ function createInteractionActivityRenderer(handlers: {
   }
 }
 
+function createReviewPackageActivityRenderer(): ReactActivityMessageRenderer<ReviewPackageActivityContent> {
+  return {
+    activityType: REVIEW_PACKAGE_ACTIVITY_TYPE,
+    content: {
+      '~standard': {
+        version: 1,
+        vendor: 'xiaotuanbao',
+        validate(value) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as { reviewPackageId?: unknown }).reviewPackageId === 'string'
+          ) {
+            return { value: value as ReviewPackageActivityContent }
+          }
+          return { issues: [{ message: 'invalid review package activity' }] }
+        },
+      },
+    },
+    render: ({ content }) => <ReviewPackageNotice fieldKeys={content.fieldKeys} />,
+  }
+}
+
+function createSearchRouteTemplatesActivityRenderer(): ReactActivityMessageRenderer<SearchRouteTemplatesActivityContent> {
+  return {
+    activityType: SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE,
+    content: {
+      '~standard': {
+        version: 1,
+        vendor: 'xiaotuanbao',
+        validate(value) {
+          if (value && typeof value === 'object' && Array.isArray((value as { items?: unknown }).items)) {
+            return { value: value as SearchRouteTemplatesActivityContent }
+          }
+          return { issues: [{ message: 'invalid search route templates activity' }] }
+        },
+      },
+    },
+    render: ({ content }) => <SearchRouteTemplatesNotice items={content.items} />,
+  }
+}
+
 const DRAFT_SAVE_DEBOUNCE_MS = 600
 const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/pdf'
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
@@ -598,9 +584,7 @@ function ChatComposer({
 
 export function AiCreateAssistChat({
   agentRuntimeUrl,
-  delegationToken,
   taskId,
-  runId,
   conversationId,
   initialEvents = [],
   initialActiveBatch = null,
@@ -612,21 +596,6 @@ export function AiCreateAssistChat({
   progress,
   onReviewPackageSubmitted,
 }: AiCreateAssistChatProps) {
-  const headers = useMemo(
-    () => ({
-      Authorization: `Bearer ${delegationToken}`,
-      'X-Ai-Task-Id': taskId,
-      'X-Ai-Run-Id': runId,
-    }),
-    [delegationToken, runId, taskId],
-  )
-  const properties = useMemo(
-    () => ({
-      taskId,
-      runId,
-    }),
-    [runId, taskId],
-  )
   const [events, setEvents] = useState<AiConversationEventView[]>(initialEvents)
   const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
     initialActiveBatch ?? null,
@@ -646,6 +615,7 @@ export function AiCreateAssistChat({
   const lastSequenceRef = useRef(0)
   const onReviewPackageSubmittedRef = useRef(onReviewPackageSubmitted)
   onReviewPackageSubmittedRef.current = onReviewPackageSubmitted
+  const notifiedReviewPackageIdRef = useRef<string | null>(null)
   const draftEpochRef = useRef(initialDraft?.draftEpoch ?? 0)
   const draftRevisionRef = useRef(initialDraft?.revision ?? 0)
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -744,6 +714,19 @@ export function AiCreateAssistChat({
 
   useEffect(() => {
     lastSequenceRef.current = getContiguousSequence(events)
+  }, [events])
+
+  useEffect(() => {
+    let latest: string | null = null
+    for (const event of events) {
+      if (event.kind === 'agent_message' && typeof event.payload.reviewPackageId === 'string') {
+        latest = event.payload.reviewPackageId
+      }
+    }
+    if (latest && notifiedReviewPackageIdRef.current !== latest) {
+      notifiedReviewPackageIdRef.current = latest
+      onReviewPackageSubmittedRef.current?.()
+    }
   }, [events])
 
   useEffect(() => {
@@ -1029,6 +1012,8 @@ export function AiCreateAssistChat({
           )
         },
       }),
+      createReviewPackageActivityRenderer(),
+      createSearchRouteTemplatesActivityRenderer(),
     ],
     [commandPending, conversationId, runBatchCommand, taskId],
   )
@@ -1061,8 +1046,6 @@ export function AiCreateAssistChat({
       ) : null}
       <CopilotKit
         runtimeUrl={agentRuntimeUrl}
-        headers={headers}
-        properties={properties}
         useSingleEndpoint={false}
         enableInspector={false}
         renderActivityMessages={activityRenderers}
@@ -1075,8 +1058,6 @@ export function AiCreateAssistChat({
           reviewPackageId={reviewPackageId}
           progress={progress}
         />
-        <SearchRouteTemplatesNotice agentId={AGENT_ID} />
-        <ReviewPackageNotice agentId={AGENT_ID} onSubmitted={onReviewPackageSubmitted} />
         <CopilotChatConfigurationProvider
           agentId={AGENT_ID}
           threadId={conversationId}

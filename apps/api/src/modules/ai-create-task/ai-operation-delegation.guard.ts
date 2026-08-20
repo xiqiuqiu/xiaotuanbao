@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
-import { OrganizationStatus, UserStatus } from '@prisma/client'
+import { OrganizationStatus, UserStatus, AiAgentAttemptStatus, AiCreateActivityRunStatus } from '@prisma/client'
 import {
   AI_OP_DELEGATION_JWT_AUD,
   AI_OP_DELEGATION_JWT_TYP,
@@ -18,8 +18,9 @@ export type AiToolRequestUser = {
   organizationId: string
   taskId: string
   runId: string
-  conversationId?: string
-  inputBatchId?: string
+  conversationId: string
+  inputBatchId: string
+  attemptId: string
   contextManifestId?: string
 }
 
@@ -55,7 +56,10 @@ export class AiOperationDelegationGuard implements CanActivate {
       !payload.sub ||
       !payload.organizationId ||
       !payload.taskId ||
-      !payload.runId
+      !payload.runId ||
+      !payload.conversationId ||
+      !payload.inputBatchId ||
+      !payload.attemptId
     ) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
@@ -83,6 +87,23 @@ export class AiOperationDelegationGuard implements CanActivate {
       throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
     }
 
+    const attempt = await this.prisma.aiAgentAttempt.findFirst({
+      where: {
+        id: payload.attemptId,
+        status: AiAgentAttemptStatus.running,
+        organizationId: payload.organizationId,
+        taskId: payload.taskId,
+        conversationId: payload.conversationId,
+        inputBatchId: payload.inputBatchId,
+        activityRunId: payload.runId,
+        activityRun: { status: AiCreateActivityRunStatus.running },
+      },
+      select: { id: true },
+    })
+    if (!attempt) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
     request.user = {
       userId: user.id,
       organizationId: user.organizationId,
@@ -90,6 +111,7 @@ export class AiOperationDelegationGuard implements CanActivate {
       runId: payload.runId,
       conversationId: payload.conversationId,
       inputBatchId: payload.inputBatchId,
+      attemptId: payload.attemptId,
       contextManifestId: payload.contextManifestId,
     }
     return true

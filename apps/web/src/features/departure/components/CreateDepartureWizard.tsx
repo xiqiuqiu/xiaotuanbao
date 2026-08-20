@@ -824,10 +824,8 @@ export function CreateDepartureWizard() {
       const currentTask = taskReview ?? session.task
       setContent(
         <AiCreateAssistChat
-          agentRuntimeUrl={session.agentRuntimeUrl}
-          delegationToken={session.delegationToken}
+          agentRuntimeUrl={assistAvailability.agentRuntimeUrl ?? '/copilotkit'}
           taskId={session.task.id}
-          runId={session.runId}
           conversationId={session.conversation.id}
           initialEvents={session.conversation.events}
           initialActiveBatch={session.conversation.activeBatch}
@@ -872,6 +870,7 @@ export function CreateDepartureWizard() {
     }
   }, [
     assistAvailability?.enabled,
+    assistAvailability?.agentRuntimeUrl,
     error,
     loading,
     session,
