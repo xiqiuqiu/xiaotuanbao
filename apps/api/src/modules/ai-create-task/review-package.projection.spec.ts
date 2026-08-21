@@ -1,6 +1,6 @@
 import { AiReviewPackageStatus } from '@prisma/client'
 import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
-import { projectPendingReviewPackage } from './review-package.projection'
+import { projectPendingReviewPackage, httpPendingReviewDisposition } from './review-package.projection'
 
 const reviewPackage: SubmitReviewPackageModelInput = {
   objectVersion: 1,
@@ -135,5 +135,27 @@ describe('projectPendingReviewPackage', () => {
     ).rejects.toThrow('REVIEW_PACKAGE_MISSING_ACTION')
 
     expect(reviewCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('httpPendingReviewDisposition', () => {
+  it('creates when there is no pending package', () => {
+    expect(httpPendingReviewDisposition(undefined, 'action-1')).toBe('create')
+  })
+
+  it('replays the same source action onto the existing pending package', () => {
+    expect(
+      httpPendingReviewDisposition({ sourceActionId: 'action-1' }, 'action-1'),
+    ).toBe('replay')
+  })
+
+  it('rejects a later proposal without treating it as a source change', () => {
+    expect(
+      httpPendingReviewDisposition({ sourceActionId: 'action-first' }, 'action-later'),
+    ).toBe('reject')
+  })
+
+  it('rejects when an older pending package has no source action', () => {
+    expect(httpPendingReviewDisposition({ sourceActionId: null }, 'action-1')).toBe('reject')
   })
 })

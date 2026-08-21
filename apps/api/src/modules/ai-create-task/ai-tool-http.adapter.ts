@@ -3,9 +3,10 @@ import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
   SearchRouteTemplatesOutput,
+  SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
-import type { AiActionActor } from '../ai-action/ai-action.types'
+import type { AiActionActor, AiActionForwardContext } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiCreateTaskService } from './ai-create-task.service'
 import type { AiToolRequestUser } from './ai-operation-delegation.guard'
@@ -18,7 +19,7 @@ export class AiToolHttpAdapter {
   ) {}
 
   getTaskContext(user: AiToolRequestUser, body: unknown): Promise<GetTaskContextOutput> {
-    return this.executeRead('getTaskContext', user, body, () =>
+    return this.executeRegistered('getTaskContext', user, body, () =>
       this.tasks.getTaskContextForAgent(user, body),
     )
   }
@@ -27,7 +28,7 @@ export class AiToolHttpAdapter {
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<SearchRouteTemplatesOutput> {
-    return this.executeRead('searchRouteTemplates', user, body, () =>
+    return this.executeRegistered('searchRouteTemplates', user, body, () =>
       this.tasks.searchRouteTemplatesForAgent(user, body),
     )
   }
@@ -36,16 +37,28 @@ export class AiToolHttpAdapter {
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<GetMaterialParseResultOutput> {
-    return this.executeRead('getMaterialParseResult', user, body, () =>
+    return this.executeRegistered('getMaterialParseResult', user, body, () =>
       this.tasks.getMaterialParseResultForAgent(user, body),
     )
   }
 
-  private async executeRead<T>(
-    name: 'getTaskContext' | 'searchRouteTemplates' | 'getMaterialParseResult',
+  submitReviewPackage(
     user: AiToolRequestUser,
     body: unknown,
-    forward: () => Promise<T>,
+  ): Promise<SubmitReviewPackageOutput> {
+    return this.executeRegistered('submitReviewPackage', user, body, async ({ action }) => {
+      if (!action?.id) {
+        throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
+      }
+      return this.tasks.submitReviewPackageForAgent(user, body, { sourceActionId: action.id })
+    })
+  }
+
+  private async executeRegistered<T>(
+    name: 'getTaskContext' | 'searchRouteTemplates' | 'getMaterialParseResult' | 'submitReviewPackage',
+    user: AiToolRequestUser,
+    body: unknown,
+    forward: (context: AiActionForwardContext) => Promise<T>,
   ): Promise<T> {
     const executed = await this.gateway.execute({
       name,

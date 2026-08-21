@@ -20,7 +20,7 @@ export type AiToolRequestUser = {
   runId: string
   conversationId: string
   inputBatchId: string
-  attemptId: string
+  attemptId?: string
   contextManifestId?: string
 }
 

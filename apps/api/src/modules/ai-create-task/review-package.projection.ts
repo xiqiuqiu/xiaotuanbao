@@ -78,6 +78,16 @@ export async function projectPendingReviewPackage(
   }
 }
 
+export function httpPendingReviewDisposition(
+  pending: { sourceActionId: string | null } | undefined,
+  sourceActionId: string,
+): 'create' | 'replay' | 'reject' {
+  if (!pending) {
+    return 'create'
+  }
+  return pending.sourceActionId === sourceActionId ? 'replay' : 'reject'
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     typeof error === 'object' &&
