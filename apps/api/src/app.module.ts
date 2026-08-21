@@ -14,6 +14,7 @@ import { PartnerModule } from './modules/partner/partner.module'
 import { ProductModule } from './modules/product/product.module'
 import { DepartureModule } from './modules/departure/departure.module'
 import { AiCreateTaskModule } from './modules/ai-create-task/ai-create-task.module'
+import { AiActionModule } from './modules/ai-action/ai-action.module'
 import { FinanceModule } from './modules/finance/finance.module'
 import { PlatformModule } from './modules/platform/platform.module'
 import { PrismaModule } from './database/prisma/prisma.module'
@@ -39,6 +40,7 @@ import { WorkbenchModule } from './modules/workbench/workbench.module'
     ProductModule,
     DepartureModule,
     AiCreateTaskModule,
+    AiActionModule,
     FinanceModule,
     PlatformModule,
     WorkbenchModule,
