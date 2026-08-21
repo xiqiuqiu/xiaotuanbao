@@ -344,6 +344,7 @@ model Organization {
   aiContextManifests AiContextManifest[]
   departureMaterials DepartureMaterial[]
   departureMaterialParseRuns DepartureMaterialParseRun[]
+  aiActions AiAction[]
 
   @@map("organizations")
 }
@@ -424,6 +425,7 @@ model User {
   aiConversationDrafts AiConversationDraft[]
   createdAiInputBatches AiInputBatch[] @relation("AiInputBatchCreator")
   createdDepartureMaterials DepartureMaterial[] @relation("DepartureMaterialCreator")
+  proposedAiActions AiAction[] @relation("AiActionProposer")
 
   // Global uniqueness for non-deleted usernames is enforced by partial unique index
   // users_username_active_key (see migration); soft-deleted rows may reuse names.
@@ -1116,6 +1118,7 @@ model AiCreateTask {
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
   departureMaterials DepartureMaterial[]
+  aiActions AiAction[]
 
   @@index([organizationId, creatorUserId, status, updatedAt])
   @@map("ai_create_tasks")
@@ -1168,6 +1171,7 @@ model AiCreateActivityRun {
   errorCode      String?                    @map("error_code")
   reviewPackages AiReviewPackage[]
   agentAttempts  AiAgentAttempt[]
+  aiActions      AiAction[]
 
   @@index([taskId, status])
   @@index([organizationId, startedAt])
@@ -1220,10 +1224,13 @@ model AiReviewPackage {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
   records            AiReviewRecord[]
+  sourceActionId     String?               @map("source_action_id")
+  sourceAction       AiAction?             @relation("ReviewPackageSourceAction", fields: [sourceActionId], references: [id], onDelete: SetNull)
 
   @@index([taskId, status])
   @@index([organizationId, createdAt])
   @@index([inputBatchId])
+  @@index([sourceActionId])
   @@map("ai_review_packages")
 }
 
@@ -1249,6 +1256,67 @@ model AiReviewRecord {
   @@index([packageId, createdAt])
   @@index([organizationId, createdAt])
   @@map("ai_review_records")
+}
+
+enum AiActionDecision {
+  allow
+  review
+  deny
+
+  @@map("ai_action_decision")
+}
+
+enum AiActionKind {
+  read
+  write
+
+  @@map("ai_action_kind")
+}
+
+enum AiActionExecutionStatus {
+  not_started
+  succeeded
+  failed
+  skipped
+
+  @@map("ai_action_execution_status")
+}
+
+/// AI 动作：Agent 一次提出的受治理操作身份，只保留安全摘要。
+model AiAction {
+  id                 String                   @id @default(cuid())
+  organizationId     String                   @map("organization_id")
+  organization       Organization             @relation(fields: [organizationId], references: [id])
+  userId             String?                  @map("user_id")
+  user               User?                    @relation("AiActionProposer", fields: [userId], references: [id], onDelete: SetNull)
+  taskId             String?                  @map("task_id")
+  task               AiCreateTask?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  conversationId     String?                  @map("conversation_id")
+  conversation       AiConversation?          @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  inputBatchId       String?                  @map("input_batch_id")
+  inputBatch         AiInputBatch?            @relation(fields: [inputBatchId], references: [id], onDelete: SetNull)
+  runId              String?                  @map("run_id")
+  run                AiCreateActivityRun?     @relation(fields: [runId], references: [id], onDelete: SetNull)
+  attemptId          String?                  @map("attempt_id")
+  attempt            AiAgentAttempt?          @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  contextManifestId  String?                  @map("context_manifest_id")
+  contextManifest    AiContextManifest?       @relation(fields: [contextManifestId], references: [id], onDelete: SetNull)
+  name               String
+  kind               AiActionKind
+  decision           AiActionDecision
+  reasonCode         String                   @map("reason_code")
+  targetKind         String?                  @map("target_kind")
+  targetId           String?                  @map("target_id")
+  inputHash          String                   @map("input_hash")
+  candidateFieldKeys String[]                 @default([]) @map("candidate_field_keys")
+  executionStatus    AiActionExecutionStatus  @default(not_started) @map("execution_status")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  sourcedPackages    AiReviewPackage[]        @relation("ReviewPackageSourceAction")
+
+  @@index([organizationId, createdAt])
+  @@index([taskId, createdAt])
+  @@map("ai_actions")
 }
 
 enum AiConversationStatus {
@@ -1324,6 +1392,7 @@ model AiConversation {
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
+  aiActions        AiAction[]
 
   @@index([taskId, status, updatedAt])
   @@index([organizationId, creatorUserId, status])
@@ -1395,6 +1464,7 @@ model AiInputBatch {
   contextManifests     AiContextManifest[]
   askedInteractions    AiConversationInteraction[]
   reviewPackages       AiReviewPackage[]
+  aiActions            AiAction[]
 
   @@index([taskId, status])
   @@index([conversationId, createdAt])
@@ -1502,6 +1572,7 @@ model AiContextManifest {
   excerptDigests           Json           @default("[]") @map("excerpt_digests")
   createdAt                DateTime       @default(now()) @map("created_at")
   attempts                 AiAgentAttempt[]
+  aiActions                AiAction[]
 
   @@index([conversationId, inputBatchId])
   @@index([inputBatchId, inputHash])
@@ -1531,6 +1602,7 @@ model AiAgentAttempt {
   errorCode         String?              @map("error_code")
   startedAt         DateTime             @default(now()) @map("started_at")
   endedAt           DateTime?            @map("ended_at")
+  aiActions         AiAction[]
 
   @@index([taskId, status])
   @@index([jobId, startedAt])
