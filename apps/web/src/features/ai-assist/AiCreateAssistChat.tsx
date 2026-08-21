@@ -58,6 +58,14 @@ const AGENT_ID = 'ai-create-readonly-assist'
 
 type DraftVersion = Pick<AiConversationDraftView, 'draftEpoch' | 'revision'>
 
+function useLatestRef<T>(value: T) {
+  const ref = useRef(value)
+  useEffect(() => {
+    ref.current = value
+  }, [value])
+  return ref
+}
+
 function isNewerDraftVersion(next: DraftVersion, current: DraftVersion): boolean {
   return (
     next.draftEpoch > current.draftEpoch ||
@@ -450,26 +458,29 @@ const MATERIAL_ACCEPT = 'image/png,image/jpeg,image/webp,image/tiff,application/
 const MATERIAL_MAX_BYTES = 20 * 1024 * 1024
 const DEFAULT_ATTACHMENT_TEXT = '请根据附件整理发团资料。'
 
-function filesFromAttachmentSources(
-  ready: Array<{ source?: { value?: unknown }; metadata?: Record<string, unknown> }>,
-  filesByKey: Map<string, File>,
-): File[] {
-  return ready.flatMap((item) => {
-    const key = typeof item.source?.value === 'string' ? item.source.value : ''
-    const fromKey = filesByKey.get(key)
-    if (fromKey) {
-      return [fromKey]
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== 'string') {
+        reject(new Error('附件读取失败'))
+        return
+      }
+      resolve(result.slice(result.indexOf(',') + 1))
     }
-    const metaFile = item.metadata?.file
-    return metaFile instanceof File ? [metaFile] : []
+    reader.onerror = () => reject(reader.error ?? new Error('附件读取失败'))
+    reader.readAsDataURL(file)
   })
 }
 
-function dropPreviewKey(filesByKey: Map<string, File>, key: string) {
-  filesByKey.delete(key)
-  if (key.startsWith('blob:')) {
-    URL.revokeObjectURL(key)
-  }
+function filesFromAttachmentSources(
+  ready: Array<{ source?: { value?: unknown }; metadata?: Record<string, unknown> }>,
+): File[] {
+  return ready.flatMap((item) => {
+    const metaFile = item.metadata?.file
+    return metaFile instanceof File ? [metaFile] : []
+  })
 }
 
 function ChatComposer({
@@ -489,7 +500,6 @@ function ChatComposer({
   onSend: (text: string, files: File[], restoreFiles?: () => Promise<void>) => Promise<void>
   WelcomeScreen: (props: { input?: ReactNode }) => ReactNode
 }) {
-  const filesByKeyRef = useRef(new Map<string, File>())
   const {
     attachments,
     consumeAttachments,
@@ -508,21 +518,11 @@ function ChatComposer({
       accept: MATERIAL_ACCEPT,
       maxSize: MATERIAL_MAX_BYTES,
       onUpload: async (file) => {
-        const url = URL.createObjectURL(file)
-        filesByKeyRef.current.set(url, file)
-        return { type: 'url', value: url, mimeType: file.type }
+        const value = await readFileAsBase64(file)
+        return { type: 'data', value, mimeType: file.type, metadata: { file } }
       },
     },
   })
-
-  useEffect(() => {
-    const filesByKey = filesByKeyRef.current
-    return () => {
-      for (const key of [...filesByKey.keys()]) {
-        dropPreviewKey(filesByKey, key)
-      }
-    }
-  }, [])
 
   return (
     <div
@@ -552,19 +552,12 @@ function ChatComposer({
         onInputChange={setDraft}
         onSubmitMessage={(value) => {
           const ready = consumeAttachments()
-          const files = filesFromAttachmentSources(ready, filesByKeyRef.current)
-          for (const item of ready) {
-            const key = typeof item.source?.value === 'string' ? item.source.value : ''
-            dropPreviewKey(filesByKeyRef.current, key)
-          }
+          const files = filesFromAttachmentSources(ready)
           void onSend(value, files, () => processFiles(files))
         }}
         welcomeScreen={WelcomeScreen}
         attachments={attachments}
         onRemoveAttachment={(id) => {
-          const current = attachments.find((item) => item.id === id)
-          const key = typeof current?.source?.value === 'string' ? current.source.value : ''
-          dropPreviewKey(filesByKeyRef.current, key)
           removeAttachment(id)
         }}
         onAddFile={() => fileInputRef.current?.click()}
@@ -578,6 +571,376 @@ function ChatComposer({
           textArea: { 'aria-label': '询问当前发团草稿' },
         }}
       />
+    </div>
+  )
+}
+
+type ValueRef<T> = { current: T }
+
+function startConversationCatchUpPolling(
+  catchUp: () => Promise<void>,
+  activeBatchStatusRef: ValueRef<AiInputBatchView['status'] | null>,
+  isCancelled: () => boolean,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const schedule = () => {
+    timer = setTimeout(() => {
+      if (isCancelled()) {
+        return
+      }
+      if (document.visibilityState === 'hidden') {
+        schedule()
+        return
+      }
+      void catchUp().finally(() => {
+        if (!isCancelled()) {
+          schedule()
+        }
+      })
+    }, conversationCatchUpIntervalMs(activeBatchStatusRef.current))
+  }
+  schedule()
+  return () => {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
+function createCatchUpErrorHandler(catchUp: () => Promise<void>, isCancelled: () => boolean) {
+  let debounce: ReturnType<typeof setTimeout> | undefined
+  return {
+    trigger() {
+      if (isCancelled() || debounce) {
+        return
+      }
+      debounce = setTimeout(() => {
+        debounce = undefined
+      }, CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS)
+      void catchUp()
+    },
+    dispose() {
+      if (debounce) {
+        clearTimeout(debounce)
+      }
+    },
+  }
+}
+
+type ConversationEventSink = {
+  updateActiveBatch: (batch: AiInputBatchView | null) => void
+  applyServerDraft: (draft: AiConversationDraftView) => void
+  mergeEvents: (events: AiConversationEventView[]) => void
+  materialsChanged: () => void
+  notifyReviewPackageSubmitted: () => void
+}
+
+function useConversationEventSync({
+  taskId,
+  conversationId,
+  lastSequenceRef,
+  activeBatchStatusRef,
+  sink,
+}: {
+  taskId: string
+  conversationId: string
+  lastSequenceRef: ValueRef<number>
+  activeBatchStatusRef: ValueRef<AiInputBatchView['status'] | null>
+  sink: ConversationEventSink
+}) {
+  useEffect(() => {
+    const abort = new AbortController()
+    let cancelled = false
+    const isCancelled = () => cancelled
+    const catchUp = () =>
+      Promise.resolve(
+        listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
+          signal: abort.signal,
+          silentError: true,
+        }),
+      )
+        .then((page) => {
+          if (abort.signal.aborted || cancelled) return
+          if (page.activeBatch !== undefined) sink.updateActiveBatch(page.activeBatch)
+          if (page.draft) sink.applyServerDraft(page.draft)
+          if (page.events.length === 0) return
+          sink.mergeEvents(page.events)
+          if (page.events.some((event) => event.kind === 'batch_status')) {
+            sink.materialsChanged()
+            sink.notifyReviewPackageSubmitted()
+          }
+        })
+        .catch(() => undefined)
+
+    const stopPolling = startConversationCatchUpPolling(
+      catchUp,
+      activeBatchStatusRef,
+      isCancelled,
+    )
+    const errorHandler = createCatchUpErrorHandler(catchUp, isCancelled)
+    const source = new EventSource(
+      `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
+      { withCredentials: true },
+    )
+    source.onmessage = (message) => {
+      try {
+        const parsed = JSON.parse(message.data) as AiConversationEventView
+        if (typeof parsed.sequence !== 'number' || typeof parsed.kind !== 'string') return
+        sink.mergeEvents([parsed])
+        if (parsed.kind === 'batch_status') {
+          sink.materialsChanged()
+          sink.notifyReviewPackageSubmitted()
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    }
+    source.onerror = errorHandler.trigger
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void catchUp()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    void catchUp()
+    return () => {
+      cancelled = true
+      abort.abort()
+      source.close()
+      stopPolling()
+      errorHandler.dispose()
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [
+    activeBatchStatusRef,
+    conversationId,
+    lastSequenceRef,
+    sink,
+    taskId,
+  ])
+}
+
+type BatchCommandResult = {
+  events: AiConversationEventView[]
+  batch?: AiInputBatchView
+  draft?: AiConversationDraftView
+}
+
+function useBatchCommands({
+  sendingRef,
+  applyServerDraft,
+  setEvents,
+  setActiveBatch,
+  setMaterialsRefreshKey,
+  setErrorText,
+}: {
+  sendingRef: ValueRef<boolean>
+  applyServerDraft: (next: AiConversationDraftView) => void
+  setEvents: (updater: (current: AiConversationEventView[]) => AiConversationEventView[]) => void
+  setActiveBatch: (batch: AiInputBatchView) => void
+  setMaterialsRefreshKey: (updater: (current: number) => number) => void
+  setErrorText: (error: string | null) => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'pending'>('idle')
+  const generationRef = useRef(0)
+  const finish = useCallback(
+    (generation: number) => {
+      if (generation !== generationRef.current) return
+      sendingRef.current = false
+      setStatus('idle')
+    },
+    [sendingRef],
+  )
+  const applyResult = useCallback(
+    (result: BatchCommandResult) => {
+      setEvents((current) => mergeEvents(current, result.events))
+      if (result.batch) setActiveBatch(result.batch)
+      if (result.draft) applyServerDraft(result.draft)
+      setMaterialsRefreshKey((key) => key + 1)
+    },
+    [applyServerDraft, setActiveBatch, setEvents, setMaterialsRefreshKey],
+  )
+  const run = useCallback(
+    async (execute: () => Promise<BatchCommandResult>) => {
+      if (sendingRef.current) return
+      sendingRef.current = true
+      generationRef.current += 1
+      const generation = generationRef.current
+      setStatus('pending')
+      setErrorText(null)
+      try {
+        applyResult(await execute())
+      } catch {
+        setErrorText(ASSIST_ERROR_TEXT)
+      } finally {
+        finish(generation)
+      }
+    },
+    [applyResult, finish, sendingRef, setErrorText],
+  )
+  return { pending: status === 'pending', run }
+}
+
+function useActivityRenderers({
+  pending,
+  run,
+  taskId,
+  conversationId,
+}: {
+  pending: boolean
+  run: (execute: () => Promise<BatchCommandResult>) => Promise<void>
+  taskId: string
+  conversationId: string
+}) {
+  return useMemo(
+    () => [
+      createBatchStatusActivityRenderer({
+        pending,
+        onRetry: (batchId) => {
+          void run(() =>
+            retryFailedConversationMaterials(
+              taskId,
+              conversationId,
+              batchId,
+              undefined,
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onRetryBatch: (batchId) => {
+          void run(() =>
+            retryFailedConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+          )
+        },
+        onRemove: (batchId, materialId) => {
+          void run(() =>
+            removeConversationMaterials(
+              taskId,
+              conversationId,
+              batchId,
+              [materialId],
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onAbandon: (batchId) => {
+          void run(() =>
+            abandonConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+          )
+        },
+        onStop: (batchId) => {
+          void run(() =>
+            stopConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+          )
+        },
+      }),
+      createInteractionActivityRenderer({
+        pending,
+        onReply: (content, text, selectedOptionId) => {
+          void run(() =>
+            sendAiConversationMessage(
+              taskId,
+              conversationId,
+              {
+                text,
+                replyToEventId: content.eventId,
+                interactionId: content.interactionId,
+                interactionVersion: content.version,
+                selectedOptionId,
+              },
+              crypto.randomUUID(),
+            ),
+          )
+        },
+        onCancel: (content) => {
+          void run(() =>
+            cancelAiConversationInteraction(
+              taskId,
+              conversationId,
+              content.interactionId,
+              content.version,
+              crypto.randomUUID(),
+            ),
+          )
+        },
+      }),
+      createReviewPackageActivityRenderer(),
+      createSearchRouteTemplatesActivityRenderer(),
+    ],
+    [conversationId, pending, run, taskId],
+  )
+}
+
+function AiCreateAssistChatView({
+  errorText,
+  agentRuntimeUrl,
+  activityRenderers,
+  taskId,
+  snapshotVersion,
+  stageKey,
+  runStatus,
+  reviewPackageId,
+  progress,
+  conversationId,
+  messages,
+  isRunning,
+  draft,
+  pendingText,
+  updateDraft,
+  send,
+  WelcomeScreen,
+}: Pick<
+  AiCreateAssistChatProps,
+  | 'agentRuntimeUrl'
+  | 'taskId'
+  | 'snapshotVersion'
+  | 'stageKey'
+  | 'runStatus'
+  | 'reviewPackageId'
+  | 'progress'
+  | 'conversationId'
+> & {
+  errorText: string | null
+  activityRenderers: ReturnType<typeof useActivityRenderers>
+  messages: ReturnType<typeof toCopilotChatMessages>
+  isRunning: boolean
+  draft: string
+  pendingText: string | null
+  updateDraft: (value: string) => void
+  send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  WelcomeScreen: (props: { input?: ReactNode }) => ReactNode
+}) {
+  return (
+    <div className={styles.root}>
+      {errorText ? <Alert type="error" showIcon message={errorText} /> : null}
+      <CopilotKit
+        runtimeUrl={agentRuntimeUrl}
+        useSingleEndpoint={false}
+        enableInspector={false}
+        renderActivityMessages={activityRenderers}
+      >
+        <AssistLightState
+          taskId={taskId}
+          snapshotVersion={snapshotVersion}
+          stageKey={stageKey}
+          runStatus={runStatus}
+          reviewPackageId={reviewPackageId}
+          progress={progress}
+        />
+        <CopilotChatConfigurationProvider
+          agentId={AGENT_ID}
+          threadId={conversationId}
+          labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
+        >
+          <ChatComposer
+            messages={messages}
+            isRunning={isRunning}
+            draft={draft}
+            pendingText={pendingText}
+            setDraft={updateDraft}
+            onSend={send}
+            WelcomeScreen={WelcomeScreen}
+          />
+        </CopilotChatConfigurationProvider>
+      </CopilotKit>
     </div>
   )
 }
@@ -600,12 +963,10 @@ export function AiCreateAssistChat({
   const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
     initialActiveBatch ?? null,
   )
-  const activeBatchStatusRef = useRef(activeBatch?.status ?? null)
-  activeBatchStatusRef.current = activeBatch?.status ?? null
+  const activeBatchStatusRef = useLatestRef(activeBatch?.status ?? null)
   const [draft, setDraft] = useState(initialDraft?.text ?? '')
   const [pendingText, setPendingText] = useState<string | null>(null)
   const [pendingUploadCount, setPendingUploadCount] = useState(0)
-  const [commandPending, setCommandPending] = useState(false)
   const [errorText, setErrorText] = useState<string | null>(null)
   const assistPane = useOptionalAssistPaneSlot()
   const setHeaderExtra = assistPane?.setHeaderExtra
@@ -613,8 +974,7 @@ export function AiCreateAssistChat({
   const idempotencyKeyRef = useRef<string | null>(null)
   const sendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
-  const onReviewPackageSubmittedRef = useRef(onReviewPackageSubmitted)
-  onReviewPackageSubmittedRef.current = onReviewPackageSubmitted
+  const onReviewPackageSubmittedRef = useLatestRef(onReviewPackageSubmitted)
   const notifiedReviewPackageIdRef = useRef<string | null>(null)
   const draftEpochRef = useRef(initialDraft?.draftEpoch ?? 0)
   const draftRevisionRef = useRef(initialDraft?.revision ?? 0)
@@ -650,6 +1010,38 @@ export function AiCreateAssistChat({
     draftRevisionRef.current = next.revision
     setDraft(next.text)
   }, [])
+
+  const conversationEventSink = useMemo<ConversationEventSink>(
+    () => ({
+      updateActiveBatch: setActiveBatch,
+      applyServerDraft,
+      mergeEvents: (incoming) => {
+        setEvents((current) => mergeEvents(current, incoming))
+      },
+      materialsChanged: () => {
+        setMaterialsRefreshKey((key) => key + 1)
+      },
+      notifyReviewPackageSubmitted: () => {
+        onReviewPackageSubmittedRef.current?.()
+      },
+    }),
+    [applyServerDraft, onReviewPackageSubmittedRef],
+  )
+
+  const { pending: commandPending, run: runBatchCommand } = useBatchCommands({
+    sendingRef,
+    applyServerDraft,
+    setEvents,
+    setActiveBatch,
+    setMaterialsRefreshKey,
+    setErrorText,
+  })
+  const activityRenderers = useActivityRenderers({
+    pending: commandPending,
+    run: runBatchCommand,
+    taskId,
+    conversationId,
+  })
 
   const updateDraft = useCallback(
     (value: string) => {
@@ -714,7 +1106,7 @@ export function AiCreateAssistChat({
 
   useEffect(() => {
     lastSequenceRef.current = getContiguousSequence(events)
-  }, [events])
+  }, [events, onReviewPackageSubmittedRef])
 
   useEffect(() => {
     let latest: string | null = null
@@ -727,7 +1119,7 @@ export function AiCreateAssistChat({
       notifiedReviewPackageIdRef.current = latest
       onReviewPackageSubmittedRef.current?.()
     }
-  }, [events])
+  }, [events, onReviewPackageSubmittedRef])
 
   useEffect(() => {
     if (!setHeaderExtra) {
@@ -737,103 +1129,13 @@ export function AiCreateAssistChat({
     return () => setHeaderExtra(null)
   }, [materialsRefreshKey, setHeaderExtra, taskId])
 
-  useEffect(() => {
-    const abort = new AbortController()
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let errorDebounce: ReturnType<typeof setTimeout> | undefined
-    const catchUp = () =>
-      Promise.resolve(
-        listAiConversationEvents(taskId, conversationId, lastSequenceRef.current, {
-          signal: abort.signal,
-          silentError: true,
-        }),
-      )
-        .then((page) => {
-          if (abort.signal.aborted || cancelled) {
-            return
-          }
-          if (page.activeBatch !== undefined) {
-            setActiveBatch(page.activeBatch)
-          }
-          if (page.draft) {
-            applyServerDraft(page.draft)
-          }
-          if (page.events.length > 0) {
-            setEvents((current) => mergeEvents(current, page.events))
-            if (page.events.some((event) => event.kind === 'batch_status')) {
-              setMaterialsRefreshKey((key) => key + 1)
-              onReviewPackageSubmittedRef.current?.()
-            }
-          }
-        })
-        .catch(() => undefined)
-
-    const schedule = () => {
-      timer = setTimeout(() => {
-        if (cancelled) {
-          return
-        }
-        if (document.visibilityState === 'hidden') {
-          schedule()
-          return
-        }
-        void catchUp().finally(() => {
-          if (!cancelled) {
-            schedule()
-          }
-        })
-      }, conversationCatchUpIntervalMs(activeBatchStatusRef.current))
-    }
-
-    const source = new EventSource(
-      `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
-      { withCredentials: true },
-    )
-    source.onmessage = (message) => {
-      try {
-        const parsed = JSON.parse(message.data) as AiConversationEventView
-        if (typeof parsed.sequence === 'number' && typeof parsed.kind === 'string') {
-          setEvents((current) => mergeEvents(current, [parsed]))
-          if (parsed.kind === 'batch_status') {
-            setMaterialsRefreshKey((key) => key + 1)
-            onReviewPackageSubmittedRef.current?.()
-          }
-        }
-      } catch {
-        // ignore malformed frames
-      }
-    }
-    source.onerror = () => {
-      if (cancelled || errorDebounce) {
-        return
-      }
-      errorDebounce = setTimeout(() => {
-        errorDebounce = undefined
-      }, CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS)
-      void catchUp()
-    }
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void catchUp()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    void catchUp()
-    schedule()
-    return () => {
-      cancelled = true
-      abort.abort()
-      source.close()
-      if (timer) {
-        clearTimeout(timer)
-      }
-      if (errorDebounce) {
-        clearTimeout(errorDebounce)
-      }
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [applyServerDraft, conversationId, taskId])
+  useConversationEventSync({
+    taskId,
+    conversationId,
+    lastSequenceRef,
+    activeBatchStatusRef,
+    sink: conversationEventSink,
+  })
 
   const send = useCallback(
     async (text: string, files: File[] = [], restoreFiles?: () => Promise<void>) => {
@@ -896,128 +1198,6 @@ export function AiCreateAssistChat({
     sendRef.current = send
   }, [send])
 
-  const applyCommandResult = useCallback(
-    (result: {
-      events: AiConversationEventView[]
-      batch?: AiInputBatchView
-      draft?: AiConversationDraftView
-    }) => {
-      setEvents((current) => mergeEvents(current, result.events))
-      if (result.batch) {
-        setActiveBatch(result.batch)
-      }
-      if (result.draft) {
-        applyServerDraft(result.draft)
-      }
-      setMaterialsRefreshKey((key) => key + 1)
-    },
-    [applyServerDraft],
-  )
-
-  const runBatchCommand = useCallback(
-    async (
-      execute: () => Promise<{
-        events: AiConversationEventView[]
-        batch?: AiInputBatchView
-        draft?: AiConversationDraftView
-      }>,
-    ) => {
-      if (sendingRef.current) {
-        return
-      }
-      sendingRef.current = true
-      setCommandPending(true)
-      setErrorText(null)
-      try {
-        applyCommandResult(await execute())
-      } catch {
-        setErrorText(ASSIST_ERROR_TEXT)
-      } finally {
-        sendingRef.current = false
-        setCommandPending(false)
-      }
-    },
-    [applyCommandResult],
-  )
-
-  const activityRenderers = useMemo(
-    () => [
-      createBatchStatusActivityRenderer({
-        pending: commandPending,
-        onRetry: (batchId) => {
-          void runBatchCommand(() =>
-            retryFailedConversationMaterials(
-              taskId,
-              conversationId,
-              batchId,
-              undefined,
-              crypto.randomUUID(),
-            ),
-          )
-        },
-        onRetryBatch: (batchId) => {
-          void runBatchCommand(() =>
-            retryFailedConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
-          )
-        },
-        onRemove: (batchId, materialId) => {
-          void runBatchCommand(() =>
-            removeConversationMaterials(
-              taskId,
-              conversationId,
-              batchId,
-              [materialId],
-              crypto.randomUUID(),
-            ),
-          )
-        },
-        onAbandon: (batchId) => {
-          void runBatchCommand(() =>
-            abandonConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
-          )
-        },
-        onStop: (batchId) => {
-          void runBatchCommand(() =>
-            stopConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
-          )
-        },
-      }),
-      createInteractionActivityRenderer({
-        pending: commandPending,
-        onReply: (content, text, selectedOptionId) => {
-          void runBatchCommand(() =>
-            sendAiConversationMessage(
-              taskId,
-              conversationId,
-              {
-                text,
-                replyToEventId: content.eventId,
-                interactionId: content.interactionId,
-                interactionVersion: content.version,
-                selectedOptionId,
-              },
-              crypto.randomUUID(),
-            ),
-          )
-        },
-        onCancel: (content) => {
-          void runBatchCommand(() =>
-            cancelAiConversationInteraction(
-              taskId,
-              conversationId,
-              content.interactionId,
-              content.version,
-              crypto.randomUUID(),
-            ),
-          )
-        },
-      }),
-      createReviewPackageActivityRenderer(),
-      createSearchRouteTemplatesActivityRenderer(),
-    ],
-    [commandPending, conversationId, runBatchCommand, taskId],
-  )
-
   const WelcomeScreen = useMemo(
     () =>
       function WelcomeScreenSlot({ input }: { input?: ReactNode }) {
@@ -1040,40 +1220,24 @@ export function AiCreateAssistChat({
   const isRunning = isCopilotChatRunning(events, activeBatch, pendingText)
 
   return (
-    <div className={styles.root}>
-      {errorText ? (
-        <Alert type="error" showIcon message={errorText} />
-      ) : null}
-      <CopilotKit
-        runtimeUrl={agentRuntimeUrl}
-        useSingleEndpoint={false}
-        enableInspector={false}
-        renderActivityMessages={activityRenderers}
-      >
-        <AssistLightState
-          taskId={taskId}
-          snapshotVersion={snapshotVersion}
-          stageKey={stageKey}
-          runStatus={runStatus}
-          reviewPackageId={reviewPackageId}
-          progress={progress}
-        />
-        <CopilotChatConfigurationProvider
-          agentId={AGENT_ID}
-          threadId={conversationId}
-          labels={{ chatInputPlaceholder: '询问当前发团草稿…' }}
-        >
-          <ChatComposer
-            messages={messages}
-            isRunning={isRunning}
-            draft={draft}
-            pendingText={pendingText}
-            setDraft={updateDraft}
-            onSend={send}
-            WelcomeScreen={WelcomeScreen}
-          />
-        </CopilotChatConfigurationProvider>
-      </CopilotKit>
-    </div>
+    <AiCreateAssistChatView
+      errorText={errorText}
+      agentRuntimeUrl={agentRuntimeUrl}
+      activityRenderers={activityRenderers}
+      taskId={taskId}
+      snapshotVersion={snapshotVersion}
+      stageKey={stageKey}
+      runStatus={runStatus}
+      reviewPackageId={reviewPackageId}
+      progress={progress}
+      conversationId={conversationId}
+      messages={messages}
+      isRunning={isRunning}
+      draft={draft}
+      pendingText={pendingText}
+      updateDraft={updateDraft}
+      send={send}
+      WelcomeScreen={WelcomeScreen}
+    />
   )
 }

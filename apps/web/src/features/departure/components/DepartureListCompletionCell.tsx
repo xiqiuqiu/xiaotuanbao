@@ -7,18 +7,19 @@ export function DepartureListCompletionCell({ tags }: { tags: DepartureCompletio
   const items = listDepartureListCompletionItems(tags)
 
   return (
-    <div className={styles.root} role="list" aria-label="完成情况">
+    <ul className={styles.root} aria-label="完成情况">
       {items.map((item) => (
-        <Typography.Text
-          key={item.category}
-          className={styles.line}
-          type={item.incomplete ? 'warning' : undefined}
-          title={`${item.category}：${item.status}`}
-          ellipsis={{ tooltip: { title: `${item.category}：${item.status}` } }}
-        >
-          {item.status}
-        </Typography.Text>
+        <li key={item.category}>
+          <Typography.Text
+            className={styles.line}
+            type={item.incomplete ? 'warning' : undefined}
+            title={`${item.category}：${item.status}`}
+            ellipsis={{ tooltip: { title: `${item.category}：${item.status}` } }}
+          >
+            {item.status}
+          </Typography.Text>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }

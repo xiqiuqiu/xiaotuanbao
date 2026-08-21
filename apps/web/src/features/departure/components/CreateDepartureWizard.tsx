@@ -77,7 +77,7 @@ function newConfirmIdempotencyKey(taskId: string): string {
     : `confirm-${taskId}-${Date.now()}`
 }
 
-export function CreateDepartureWizard() {
+function useCreateDepartureWizardController() {
   const { token } = theme.useToken()
   const { message } = App.useApp()
   const navigate = useNavigate()
@@ -625,8 +625,6 @@ export function CreateDepartureWizard() {
     applySavedDraft,
     syncTaskSearch,
   })
-  const bootstrapRef = useRef(bootstrap)
-  bootstrapRef.current = bootstrap
 
   const { data: taskReview, refetch: refetchTaskReview } = useQuery({
     queryKey: ['ai-create-task', taskId],
@@ -641,9 +639,9 @@ export function CreateDepartureWizard() {
     refetchIntervalInBackground: false,
   })
   const pendingReview = taskReview?.pendingReview ?? null
-  pendingReviewRef.current = pendingReview
-  const refetchTaskReviewRef = useRef(refetchTaskReview)
-  refetchTaskReviewRef.current = refetchTaskReview
+  useEffect(() => {
+    pendingReviewRef.current = pendingReview
+  }, [pendingReview])
   const pendingCorrectionsRef = useRef<
     Partial<Record<AiReviewableBasicInfoField, string | number | null>>
   >({})
@@ -656,9 +654,8 @@ export function CreateDepartureWizard() {
       if (user) {
         infoForm.setFieldsValue(applyDraftSnapshotToInfoForm(summary.draft.snapshot, user.id))
       }
-      queryClient.setQueryData(['ai-create-task', summary.id], summary)
     },
-    [applySavedDraft, infoForm, queryClient, user],
+    [applySavedDraft, infoForm, user],
   )
 
   useEffect(() => {
@@ -729,12 +726,14 @@ export function CreateDepartureWizard() {
       })
     },
     onSuccess: (summary) => {
+      queryClient.setQueryData(['ai-create-task', summary.id], summary)
       applyConfirmedTask(summary)
       message.success('已将确认值写入发团创建草稿')
     },
     onError: (caught) => {
       const conflict = readAiCreateTaskConflict(caught)
       if (conflict) {
+        queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
         applyConfirmedTask(conflict)
         if (caught instanceof Error && caught.message.includes('已处理')) {
           return
@@ -778,6 +777,7 @@ export function CreateDepartureWizard() {
     onError: (caught) => {
       const conflict = readAiCreateTaskConflict(caught)
       if (conflict && caught instanceof Error && caught.message.includes('已处理')) {
+        queryClient.setQueryData(['ai-create-task', conflict.id], conflict)
         applyConfirmedTask(conflict)
         return
       }
@@ -836,7 +836,7 @@ export function CreateDepartureWizard() {
           reviewPackageId={currentTask.pendingReview?.id ?? null}
           progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
           onReviewPackageSubmitted={() => {
-            void refetchTaskReviewRef.current()
+            void refetchTaskReview()
           }}
         />,
       )
@@ -850,7 +850,7 @@ export function CreateDepartureWizard() {
       setContent(
         <div className={styles.assistMessage}>
           <p role="alert">{error.message.trim() || ASSIST_ERROR_TEXT}</p>
-          <Button aria-label="重试" onClick={() => void bootstrapRef.current()}>
+          <Button aria-label="重试" onClick={() => void bootstrap()}>
             重试
           </Button>
         </div>,
@@ -876,6 +876,8 @@ export function CreateDepartureWizard() {
     session,
     setContent,
     taskReview,
+    bootstrap,
+    refetchTaskReview,
   ])
 
   const stepEnterKey = showCopyBootstrap ? 'bootstrap' : 'form'
@@ -889,6 +891,68 @@ export function CreateDepartureWizard() {
           ? '发团创建草稿保存失败'
           : null
 
+  return {
+    token,
+    goBack,
+    isCopyMode,
+    copyFromId,
+    assistAvailability,
+    openAssist,
+    assistTaskStatusLabel,
+    pendingReview,
+    draftVersion,
+    confirmReviewMutation,
+    rejectReviewMutation,
+    stepEnterKey,
+    showCopyBootstrap,
+    restoringTask,
+    infoForm,
+    routeValues,
+    scheduleAutosave,
+    handleRouteChange,
+    setTemplatePickerOpen,
+    templatePickerOpen,
+    handleCorrectCandidate,
+    saveStatusLabel,
+    saveStatus,
+    createMutation,
+    initializingForm,
+    handleCreate,
+    handleSelectTemplate,
+    handleClearSelectedTemplate,
+  }
+}
+
+function CreateDepartureWizardView({
+  token,
+  goBack,
+  isCopyMode,
+  copyFromId,
+  assistAvailability,
+  openAssist,
+  assistTaskStatusLabel,
+  pendingReview,
+  draftVersion,
+  confirmReviewMutation,
+  rejectReviewMutation,
+  stepEnterKey,
+  showCopyBootstrap,
+  restoringTask,
+  infoForm,
+  routeValues,
+  scheduleAutosave,
+  handleRouteChange,
+  setTemplatePickerOpen,
+  templatePickerOpen,
+  handleCorrectCandidate,
+  saveStatusLabel,
+  saveStatus,
+  createMutation,
+  initializingForm,
+  handleCreate,
+  handleSelectTemplate,
+  handleClearSelectedTemplate,
+}: ReturnType<typeof useCreateDepartureWizardController>) {
   return (
     <div
       className={styles.page}
@@ -993,4 +1057,9 @@ export function CreateDepartureWizard() {
       </Drawer>
     </div>
   )
+}
+
+export function CreateDepartureWizard() {
+  const controller = useCreateDepartureWizardController()
+  return <CreateDepartureWizardView {...controller} />
 }

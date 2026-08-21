@@ -315,6 +315,8 @@ export function toCopilotChatMessages(
   }
 
   for (const event of events) {
+    const batchId =
+      typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined
     if (event.kind === 'user_message') {
       messages.push({
         id: `event-${event.sequence}`,
@@ -368,7 +370,7 @@ export function toCopilotChatMessages(
       }
       upsertStatus({
         label: '处理失败',
-        batchId: typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined,
+        batchId,
         showBatchRetryAction: true,
       })
       continue
@@ -386,7 +388,7 @@ export function toCopilotChatMessages(
         const failedMaterials = failedMaterialsFromPayload(event.payload)
         upsertStatus({
           label,
-          batchId: typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined,
+          batchId,
           failedMaterials,
           showMaterialActions: status === 'waiting_for_materials' && failedMaterials.length > 0,
           showStopAction:

@@ -90,10 +90,6 @@ export function formatChineseDate(startDate: string): string {
 /** 线路视图资源区列名：按日/全程归属，不再称「行程段」。 */
 export const COST_SCOPE_COLUMN_LABEL = '归属日程'
 
-export function formatCostItemTitle(row: ProtoCostRow): string {
-  return `${row.resourceKindLabel} · ${row.title}`
-}
-
 export { formatCents }
 
 export const MOCK_ROUTE_NAMES = ['A线：天吐喀伊', 'B线：伊犁环线'] as const

@@ -1,5 +1,5 @@
 import { DepartureType } from '@xiaotuanbao/shared'
-import type { CopyDepartureDto, CreateDepartureDto } from '@/types/api'
+import type { CreateDepartureDto } from '@/types/api'
 
 export type RouteStepMode = 'manual' | 'template' | 'copy'
 
@@ -218,20 +218,6 @@ export function buildCreateDeparturePayload(
   }
 
   return payload
-}
-
-export function buildCopyDeparturePayload(
-  _route: RouteStepValues,
-  info: InfoStepValues,
-): CopyDepartureDto {
-  return {
-    name: info.name.trim(),
-    startDate: info.startDate,
-    endDate: info.endDate,
-    ownerUserId: info.ownerUserId,
-    departureType: info.departureType,
-    notes: info.notes?.trim() || undefined,
-  }
 }
 
 export function buildDepartureCreationDraftSnapshot(

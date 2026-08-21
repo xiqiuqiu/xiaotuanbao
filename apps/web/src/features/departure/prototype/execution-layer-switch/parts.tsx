@@ -6,20 +6,21 @@ import { MOCK_DAYS } from './shared'
 import productionStyles from '../../components/ExecutionTab.module.css'
 import styles from './execution-layer-switch-prototype.module.css'
 
+const MOCK_TABS = [
+  '概览信息',
+  '客源管理',
+  '执行安排',
+  '增收记录',
+  '应收管理',
+  '应付管理',
+  '收支流水',
+  '核销记录',
+]
+
 export function MockExecutionTabStrip() {
-  const tabs = [
-    '概览信息',
-    '客源管理',
-    '执行安排',
-    '增收记录',
-    '应收管理',
-    '应付管理',
-    '收支流水',
-    '核销记录',
-  ]
   return (
     <div className={styles.mockTabStrip} role="tablist" aria-label="发团详情 Tab">
-      {tabs.map((label) => (
+      {MOCK_TABS.map((label) => (
         <span
           key={label}
           role="tab"
