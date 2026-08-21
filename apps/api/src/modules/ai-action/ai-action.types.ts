@@ -67,7 +67,26 @@ export type AiActionRecordDraft = {
   executionStatus: AiActionExecutionStatus
 }
 
+export type AiActionFindOrCreateResult = {
+  action: AiActionSummary
+  created: boolean
+}
+
+export type AiActionRepeatObservationDraft = {
+  organizationId: string
+  name: string
+  targetRef: AiActionTargetRef | null
+  inputHash: string
+  actionId: string
+}
+
+export type AiActionRepeatObservation = {
+  fingerprint: string
+  actionId: string | null
+}
+
 export interface AiActionStore {
-  findOrCreate(draft: AiActionRecordDraft): Promise<AiActionSummary>
+  findOrCreate(draft: AiActionRecordDraft): Promise<AiActionFindOrCreateResult>
   updateExecution(id: string, executionStatus: AiActionExecutionStatus): Promise<AiActionSummary>
+  observeRepeat(draft: AiActionRepeatObservationDraft): Promise<void>
 }

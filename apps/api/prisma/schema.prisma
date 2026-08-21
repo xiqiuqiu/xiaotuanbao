@@ -345,6 +345,7 @@ model Organization {
   departureMaterials DepartureMaterial[]
   departureMaterialParseRuns DepartureMaterialParseRun[]
   aiActions AiAction[]
+  aiActionRepeatObservations AiActionRepeatObservation[]
 
   @@map("organizations")
 }
@@ -1314,10 +1315,27 @@ model AiAction {
   createdAt          DateTime                 @default(now()) @map("created_at")
   updatedAt          DateTime                 @updatedAt @map("updated_at")
   sourcedPackages    AiReviewPackage[]        @relation("ReviewPackageSourceAction")
+  repeatObservations AiActionRepeatObservation[]
 
   @@index([organizationId, createdAt])
   @@index([taskId, createdAt])
+  @@index([organizationId, name, targetKind, targetId, inputHash], map: "ai_actions_repeat_lookup_idx")
   @@map("ai_actions")
+}
+
+/// 模型打转观测：不含 attempt，不是 AI 动作身份，写失败不得挡住决策。
+model AiActionRepeatObservation {
+  id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  actionId       String?      @map("action_id")
+  action         AiAction?    @relation(fields: [actionId], references: [id], onDelete: SetNull)
+  fingerprint    String
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([fingerprint, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("ai_action_repeat_observations")
 }
 
 enum AiConversationStatus {
