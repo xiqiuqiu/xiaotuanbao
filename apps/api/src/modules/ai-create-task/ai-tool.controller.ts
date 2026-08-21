@@ -2,7 +2,6 @@ import { Body, Controller, HttpCode, Post, Req, UseGuards } from '@nestjs/common
 import type { GetTaskContextOutput } from '@xiaotuanbao/ai-contracts'
 import { SkipCsrf } from '../../common/decorators/skip-csrf.decorator'
 import { AgentServiceIdentityGuard } from './agent-service-identity.guard'
-import { AiCreateTaskService } from './ai-create-task.service'
 import { AiToolHttpAdapter } from './ai-tool-http.adapter'
 import {
   AiOperationDelegationGuard,
@@ -13,10 +12,7 @@ import {
 @SkipCsrf()
 @UseGuards(AgentServiceIdentityGuard, AiOperationDelegationGuard)
 export class AiToolController {
-  constructor(
-    private readonly aiCreateTaskService: AiCreateTaskService,
-    private readonly aiToolHttpAdapter: AiToolHttpAdapter,
-  ) {}
+  constructor(private readonly aiToolHttpAdapter: AiToolHttpAdapter) {}
 
   @Post('v1/get-task-context')
   @HttpCode(200)
@@ -35,7 +31,7 @@ export class AiToolController {
     @Req() request: { user: AiToolRequestUser },
     @Body() body: unknown,
   ) {
-    return this.aiCreateTaskService.submitReviewPackageForAgent(request.user, body)
+    return this.aiToolHttpAdapter.submitReviewPackage(request.user, body)
   }
 
   @Post('v1/search-route-templates')

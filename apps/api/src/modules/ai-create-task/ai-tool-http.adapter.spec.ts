@@ -2,6 +2,7 @@ import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
   SearchRouteTemplatesOutput,
+  SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { FailingAiActionStore, InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
@@ -47,12 +48,39 @@ const parsePayload = {
   pages: [{ pageNumber: 1, source: 'ocr', text: '行程' }],
 } as GetMaterialParseResultOutput
 
+const reviewOutput = {
+  reviewPackageId: 'pkg-1',
+  status: 'pending',
+  objectVersion: 1,
+  fieldKeys: ['name'],
+} as SubmitReviewPackageOutput
+
+const reviewInput = {
+  taskId: 'task-1',
+  runId: 'run-1',
+  objectVersion: 1,
+  confirmationUnit: 'basic_info_draft',
+  candidates: [
+    {
+      fieldKey: 'name',
+      proposedValue: '候选团名-含证件号110101199001011234',
+      clarity: 'clear',
+      evidence: [{ kind: 'user_message', excerpt: '护照页原文 E12345678', sequence: 1 }],
+    },
+  ],
+}
+
 function adapterWith(
   store: AiActionStore,
   methods: {
     getTaskContextForAgent?: () => Promise<GetTaskContextOutput>
     searchRouteTemplatesForAgent?: () => Promise<SearchRouteTemplatesOutput>
     getMaterialParseResultForAgent?: () => Promise<GetMaterialParseResultOutput>
+    submitReviewPackageForAgent?: (
+      caller: AiToolRequestUser,
+      rawInput: unknown,
+      options?: { sourceActionId: string },
+    ) => Promise<SubmitReviewPackageOutput>
   } = {},
 ) {
   const tasks = {
@@ -60,6 +88,7 @@ function adapterWith(
     searchRouteTemplatesForAgent: methods.searchRouteTemplatesForAgent ?? (async () => searchPayload),
     getMaterialParseResultForAgent:
       methods.getMaterialParseResultForAgent ?? (async () => parsePayload),
+    submitReviewPackageForAgent: methods.submitReviewPackageForAgent ?? (async () => reviewOutput),
   } as unknown as AiCreateTaskService
   return new AiToolHttpAdapter(new AiActionGateway(store), tasks)
 }
@@ -208,6 +237,93 @@ describe('AiToolHttpAdapter.getMaterialParseResult', () => {
         parseResultVersion: 1,
       }),
     ).rejects.toBeInstanceOf(AiCollaborationHttpException)
+  })
+})
+
+describe('AiToolHttpAdapter.submitReviewPackage', () => {
+  it('returns the original pending package result and leaves a review AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const forwarded: Array<{ sourceActionId: string | undefined }> = []
+    const adapter = adapterWith(store, {
+      submitReviewPackageForAgent: async (_caller, _input, options) => {
+        forwarded.push({ sourceActionId: options?.sourceActionId })
+        return reviewOutput
+      },
+    })
+
+    const result = await adapter.submitReviewPackage(user, reviewInput)
+
+    expect(result).toBe(reviewOutput)
+    expect(forwarded).toEqual([{ sourceActionId: store.records[0]?.id }])
+    expect(store.records).toHaveLength(1)
+    expect(store.records[0]).toMatchObject({
+      name: 'submitReviewPackage',
+      kind: 'write',
+      decision: 'review',
+      reasonCode: 'OBSERVATION_PERIOD',
+      executionStatus: 'succeeded',
+      targetRef: { kind: 'departure_creation_draft', id: 'task-1' },
+      candidateFieldKeys: ['name'],
+    })
+    expect(JSON.stringify(store.records[0])).not.toContain('110101199001011234')
+    expect(JSON.stringify(store.records[0])).not.toContain('护照页原文')
+  })
+
+  it('still returns the original pending-review error when a package is already pending, and leaves an AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const adapter = adapterWith(store, {
+      submitReviewPackageForAgent: async () => {
+        throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
+      },
+    })
+
+    await expect(adapter.submitReviewPackage(user, reviewInput)).rejects.toMatchObject({
+      response: {
+        data: { code: 'REVIEW_PENDING' },
+      },
+    })
+    expect(store.records).toHaveLength(1)
+    expect(store.records[0]).toMatchObject({
+      name: 'submitReviewPackage',
+      kind: 'write',
+      decision: 'review',
+      executionStatus: 'failed',
+    })
+  })
+
+  it('does not forward a write when the decision cannot persist', async () => {
+    const forwarded: unknown[] = []
+    const adapter = adapterWith(new FailingAiActionStore(), {
+      submitReviewPackageForAgent: async () => {
+        forwarded.push('called')
+        return reviewOutput
+      },
+    })
+
+    await expect(adapter.submitReviewPackage(user, reviewInput)).rejects.toThrow(
+      'decision store unavailable',
+    )
+    expect(forwarded).toEqual([])
+  })
+
+  it('replays the same proposal without an attempt onto the same AI action using the activity run', async () => {
+    const store = new InMemoryAiActionStore()
+    const userWithoutAttempt: AiToolRequestUser = {
+      userId: 'user-1',
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      runId: 'run-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+    }
+    const adapter = adapterWith(store)
+
+    const first = await adapter.submitReviewPackage(userWithoutAttempt, reviewInput)
+    const second = await adapter.submitReviewPackage(userWithoutAttempt, reviewInput)
+
+    expect(first).toBe(reviewOutput)
+    expect(second).toBe(reviewOutput)
+    expect(store.records).toHaveLength(1)
   })
 })
 

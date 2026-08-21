@@ -369,6 +369,60 @@ describe('AiActionGateway.execute', () => {
     expect(second.action?.id).not.toBe(first.action?.id)
   })
 
+  it('replays the same run, name, target and input hash when the actor has no attempt', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const actorWithoutAttempt = { ...actor, runId: 'run-1' }
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+    const persistCalls: string[] = []
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithoutAttempt,
+      input,
+      forward: async ({ action }) => {
+        persistCalls.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithoutAttempt,
+      input,
+      forward: async ({ action }) => {
+        persistCalls.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+
+    expect(store.records).toHaveLength(1)
+    expect(first.action?.id).toBe(store.records[0]?.id)
+    expect(second.action?.id).toBe(first.action?.id)
+    expect(persistCalls).toEqual([first.action?.id, first.action?.id])
+  })
+
+  it('does not replay across different activity runs when the actor has no attempt', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, runId: 'run-2' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-2' }),
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(second.action?.id).not.toBe(first.action?.id)
+  })
+
   it('records execution failure on the same action identity', async () => {
     const store = new InMemoryAiActionStore()
     const gateway = new AiActionGateway(store)

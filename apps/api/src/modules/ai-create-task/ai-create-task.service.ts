@@ -66,6 +66,7 @@ import {
   toStoredCandidates,
   type StoredReviewCandidate,
 } from './review-package.mapper'
+import { httpPendingReviewDisposition } from './review-package.projection'
 
 const CONFIRM_OPERATION = 'ai-create-task.confirm'
 
@@ -330,6 +331,7 @@ export class AiCreateTaskService {
   async submitReviewPackageForAgent(
     caller: { userId: string; organizationId: string; taskId: string; runId: string },
     rawInput: unknown,
+    options: { sourceActionId: string },
   ): Promise<SubmitReviewPackageOutput> {
     let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
     try {
@@ -375,8 +377,21 @@ export class AiCreateTaskService {
       }
 
       const pending = task.reviewPackages?.[0]
-      if (pending) {
+      const disposition = httpPendingReviewDisposition(pending, options.sourceActionId)
+      if (disposition === 'reject') {
         throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
+      }
+      if (disposition === 'replay' && pending) {
+        const stored = parseStoredCandidates(pending.candidates)
+        return submitReviewPackageOutputSchema.parse({
+          reviewPackageId: pending.id,
+          status: 'pending',
+          objectVersion: task.draft.version,
+          fieldKeys: stored.map((candidate) => candidate.fieldKey),
+        })
+      }
+      if (!options.sourceActionId) {
+        throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
       }
 
       const stored = toStoredCandidates(input.candidates)
@@ -390,6 +405,7 @@ export class AiCreateTaskService {
           baseObjectVersion: task.draft.version,
           baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
           candidates: stored as unknown as Prisma.InputJsonValue,
+          sourceActionId: options.sourceActionId,
         },
       })
 
