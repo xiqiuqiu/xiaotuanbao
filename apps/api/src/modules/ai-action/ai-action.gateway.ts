@@ -29,11 +29,12 @@ export class AiActionGateway {
     const registered = isRegisteredName(proposal.name)
       ? REGISTERED_ACTIONS[proposal.name]
       : null
+    const targetMismatch = Boolean(registered) && isClaimedTaskMismatch(proposal)
 
     const kind: AiActionKind = registered?.kind ?? 'write'
-    const decision: AiActionDecision = registered ? registered.decision : 'deny'
-    const reasonCode = registered ? 'OBSERVATION_PERIOD' : 'UNREGISTERED'
-    const executionStatus = registered ? 'not_started' : 'skipped'
+    const decision: AiActionDecision = registered && !targetMismatch ? registered.decision : 'deny'
+    const reasonCode = !registered ? 'UNREGISTERED' : targetMismatch ? 'TARGET_MISMATCH' : 'OBSERVATION_PERIOD'
+    const executionStatus = decision === 'deny' ? 'skipped' : 'not_started'
 
     const action = await this.persistDecision(proposal, {
       kind,
@@ -48,7 +49,7 @@ export class AiActionGateway {
         : null,
     })
 
-    if (!registered) {
+    if (decision === 'deny') {
       return { action }
     }
 
@@ -109,16 +110,28 @@ function isRegisteredName(name: string): name is (typeof AI_CREATE_TOOL_NAMES)[n
   return Object.hasOwn(REGISTERED_ACTIONS, name)
 }
 
+function claimedStringField(input: unknown, field: string): string | null {
+  if (!input || typeof input !== 'object' || !(field in input)) {
+    return null
+  }
+  const value = (input as Record<string, unknown>)[field]
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function isClaimedTaskMismatch(proposal: AiActionProposal): boolean {
+  if (proposal.name !== 'getTaskContext') {
+    return false
+  }
+  const claimedTaskId = claimedStringField(proposal.input, 'taskId')
+  return claimedTaskId !== null && claimedTaskId !== (proposal.actor.taskId ?? null)
+}
+
 function resolveTargetId(targetKind: string, proposal: AiActionProposal): string | null {
   if (targetKind === 'route_template_catalog') {
     return proposal.actor.organizationId
   }
   if (targetKind === 'departure_material') {
-    if (proposal.input && typeof proposal.input === 'object' && 'materialId' in proposal.input) {
-      const materialId = (proposal.input as { materialId: unknown }).materialId
-      return typeof materialId === 'string' && materialId.length > 0 ? materialId : null
-    }
-    return null
+    return claimedStringField(proposal.input, 'materialId')
   }
   return proposal.actor.taskId ?? null
 }

@@ -1,24 +1,5 @@
 import { AiActionGateway } from './ai-action.gateway'
-import { InMemoryAiActionStore } from './ai-action.in-memory.store'
-import type {
-  AiActionExecutionStatus,
-  AiActionRecordDraft,
-  AiActionStore,
-  AiActionSummary,
-} from './ai-action.types'
-
-class FailingAiActionStore implements AiActionStore {
-  async create(_draft: AiActionRecordDraft): Promise<AiActionSummary> {
-    throw new Error('decision store unavailable')
-  }
-
-  async updateExecution(
-    _id: string,
-    _executionStatus: AiActionExecutionStatus,
-  ): Promise<AiActionSummary> {
-    throw new Error('decision store unavailable')
-  }
-}
+import { FailingAiActionStore, InMemoryAiActionStore } from './ai-action.in-memory.store'
 
 describe('AiActionGateway.execute', () => {
   const actor = { organizationId: 'org-1', userId: 'user-1', taskId: 'task-1' }
@@ -129,6 +110,53 @@ describe('AiActionGateway.execute', () => {
 
     expect(result.action).toBeNull()
     expect(result.result).toBe(contextPayload)
+  })
+
+  it('does not forward getTaskContext when the claimed task is not the delegated task', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const leakedContext = { snapshot: { name: '别家团' } }
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'getTaskContext',
+      actor,
+      input: { taskId: 'task-other-org', runId: 'run-1' },
+      forward: async (context) => {
+        forwarded.push(context)
+        return leakedContext
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.result).toBeUndefined()
+    expect(result.action).toMatchObject({
+      name: 'getTaskContext',
+      kind: 'read',
+      decision: 'deny',
+      reasonCode: 'TARGET_MISMATCH',
+      executionStatus: 'skipped',
+      targetRef: { kind: 'ai_create_task', id: 'task-1' },
+    })
+  })
+
+  it('does not forward a mismatched getTaskContext even when decision persistence fails', async () => {
+    const gateway = new AiActionGateway(new FailingAiActionStore())
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'getTaskContext',
+      actor,
+      input: { taskId: 'task-other-org', runId: 'run-1' },
+      forward: async (context) => {
+        forwarded.push(context)
+        return { snapshot: { name: '别家团' } }
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.result).toBeUndefined()
+    expect(result.action).toBeNull()
   })
 
   it('records execution failure on the same action identity', async () => {
