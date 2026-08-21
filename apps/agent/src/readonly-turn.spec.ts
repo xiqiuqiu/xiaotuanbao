@@ -26,6 +26,7 @@ describe('READONLY_ASSIST_INSTRUCTIONS', () => {
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('matchReasons')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('不阻断手动创建')
     expect(READONLY_ASSIST_INSTRUCTIONS).toContain('团名、路线、常用路线')
+    expect(READONLY_ASSIST_INSTRUCTIONS).toContain('每个字段最多一条候选')
     expect(READONLY_ASSIST_INSTRUCTIONS).not.toContain('conversationEvents')
     expect(READONLY_ASSIST_INSTRUCTIONS).not.toContain('只能根据用户消息里的业务快照')
   })

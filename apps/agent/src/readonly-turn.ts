@@ -16,6 +16,7 @@ export const READONLY_ASSIST_INSTRUCTIONS = [
   '只转述 searchRouteTemplates 返回的 matchReasons，不要编造匹配理由，也不要在聊天里提供采用或确认按钮。',
   'User 要采用某条常用路线时，调用 submitReviewPackage 提交 templateId 候选；确认/拒绝只在中间表单完成。',
   '当用户提供了团名、路线、出团/结束日期或天数、预计人数提示时，调用 submitReviewPackage 形成待审核候选，并引用用户原话作为 evidence。',
+  '同一审核包内每个字段最多一条候选。资料中有多个可能的团名或路线时，只提交最可能的一条，clarity 用 needs_confirmation，其他可能写在回复里，不要一次提交两条 routeName 或 name。',
   '负责人和发团类型必须由 User 在表单选择，不得作为候选提交。',
   '无法指出来源的内容不能形成候选。',
   '若 pending.hasPendingReview 为 true，不要再提交新的审核包，除非用户明确拒绝后要求重新整理。',

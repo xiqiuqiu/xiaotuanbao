@@ -122,9 +122,24 @@ export const aiReviewCandidateInputSchema = z.discriminatedUnion('fieldKey', [
     .strip(),
 ])
 
+export const UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE = '同一审核包内每个字段最多一条候选'
+export const UNIQUE_CANDIDATE_FIELD_KEY_RETRY_MESSAGE =
+  '同一审核包内每个字段最多一条候选。请只提交最可能的一条，clarity 用 needs_confirmation，其他可能写在回复里。'
+
 function uniqueFieldKeys(candidates: Array<{ fieldKey: string }>): boolean {
   const keys = candidates.map((candidate) => candidate.fieldKey)
   return new Set(keys).size === keys.length
+}
+
+export function isDuplicateCandidateFieldError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('issues' in error)) {
+    return false
+  }
+  const issues = (error as { issues?: Array<{ message?: string }> }).issues
+  return (
+    Array.isArray(issues) &&
+    issues.some((issue) => issue.message === UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE)
+  )
 }
 
 function dateOrderValid(
@@ -146,7 +161,7 @@ export const submitReviewPackageInputSchema = z
   })
   .strip()
   .refine((value) => uniqueFieldKeys(value.candidates), {
-    message: '同一审核包内每个字段最多一条候选',
+    message: UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE,
     path: ['candidates'],
   })
   .refine((value) => dateOrderValid(value.candidates), {
@@ -162,7 +177,7 @@ export const submitReviewPackageModelInputSchema = z
   })
   .strip()
   .refine((value) => uniqueFieldKeys(value.candidates), {
-    message: '同一审核包内每个字段最多一条候选',
+    message: UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE,
     path: ['candidates'],
   })
   .refine((value) => dateOrderValid(value.candidates), {

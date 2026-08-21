@@ -146,4 +146,55 @@ describe('createSubmitReviewPackageTool', () => {
     expect(AiCollaborationError.fromCode('INVALID_FORMAT').retryable).toBe(false)
     expect(mockSubmit).not.toHaveBeenCalled()
   })
+
+  it('tells the model to keep one routeName when a daily report has two possible routes', async () => {
+    const tool = createSubmitReviewPackageTool(toolConfig)
+
+    await expect(
+      runWithAssistRequestContext(
+        { delegationToken: 'deleg-1', taskId: 'task-1', runId: 'run-1' },
+        () =>
+          tool.execute?.(
+            {
+              objectVersion: 1,
+              candidates: [
+                {
+                  fieldKey: 'routeName',
+                  proposedValue: '天吐喀伊10日',
+                  clarity: 'needs_confirmation',
+                  evidence: [
+                    {
+                      kind: 'material_region',
+                      materialId: 'material-1',
+                      parseResultVersion: 1,
+                      pageNumber: 1,
+                      excerpt: '2026年7月21日天吐喀伊10日日报表',
+                    },
+                  ],
+                },
+                {
+                  fieldKey: 'routeName',
+                  proposedValue: '喀伊8日',
+                  clarity: 'needs_confirmation',
+                  evidence: [
+                    {
+                      kind: 'material_region',
+                      materialId: 'material-1',
+                      parseResultVersion: 1,
+                      pageNumber: 1,
+                      excerpt: '2026年7月21日喀伊8日日报表（司机周雪豹，导游周超凡）',
+                    },
+                  ],
+                },
+              ],
+            } as never,
+            {} as never,
+          ),
+      ),
+    ).rejects.toMatchObject({
+      code: 'INVALID_FORMAT',
+      message: expect.stringContaining('每个字段最多一条候选'),
+    })
+    expect(mockSubmit).not.toHaveBeenCalled()
+  })
 })

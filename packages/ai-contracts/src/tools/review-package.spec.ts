@@ -2,8 +2,11 @@ import {
   AWAIT_REVIEW_PACKAGE_DECISION_TOOL,
   AI_CREATE_TOOL_NAMES,
   SUBMIT_REVIEW_PACKAGE_TOOL,
+  UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE,
   capabilitiesForPendingReview,
+  isDuplicateCandidateFieldError,
   submitReviewPackageInputSchema,
+  submitReviewPackageModelInputSchema,
   submitReviewPackageOutputSchema,
   awaitReviewPackageDecisionInputSchema,
   reviewPackageDecisionSchema,
@@ -309,5 +312,53 @@ describe('submitReviewPackage contract v1', () => {
         ],
       }),
     ).toThrow()
+  })
+
+  it('identifies duplicate routeName candidates so the agent can ask for a single retry', () => {
+    try {
+      submitReviewPackageModelInputSchema.parse({
+        objectVersion: 1,
+        candidates: [
+          {
+            fieldKey: 'routeName',
+            proposedValue: '天吐喀伊10日',
+            clarity: 'needs_confirmation',
+            evidence: [
+              {
+                kind: 'material_region',
+                materialId: 'material-1',
+                parseResultVersion: 1,
+                pageNumber: 1,
+                excerpt: '2026年7月21日天吐喀伊10日日报表',
+              },
+            ],
+          },
+          {
+            fieldKey: 'routeName',
+            proposedValue: '喀伊8日',
+            clarity: 'needs_confirmation',
+            evidence: [
+              {
+                kind: 'material_region',
+                materialId: 'material-1',
+                parseResultVersion: 1,
+                pageNumber: 1,
+                excerpt: '2026年7月21日喀伊8日日报表（司机周雪豹，导游周超凡）',
+              },
+            ],
+          },
+        ],
+      })
+      throw new Error('expected duplicate fieldKeys to fail')
+    } catch (error) {
+      expect(isDuplicateCandidateFieldError(error)).toBe(true)
+      expect(error).toEqual(
+        expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ message: UNIQUE_CANDIDATE_FIELD_KEY_MESSAGE }),
+          ]),
+        }),
+      )
+    }
   })
 })
