@@ -1,5 +1,9 @@
 import { AiActionGateway } from './ai-action.gateway'
-import { FailingAiActionStore, InMemoryAiActionStore } from './ai-action.in-memory.store'
+import {
+  FailingAiActionStore,
+  InMemoryAiActionStore,
+  ObservationFailingAiActionStore,
+} from './ai-action.in-memory.store'
 
 describe('AiActionGateway.execute', () => {
   const actor = { organizationId: 'org-1', userId: 'user-1', taskId: 'task-1' }
@@ -367,6 +371,238 @@ describe('AiActionGateway.execute', () => {
 
     expect(store.records).toHaveLength(2)
     expect(second.action?.id).not.toBe(first.action?.id)
+  })
+
+  it('observes a later attempt of the same name, target and input hash without changing the decision', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+    const forwarded: string[] = []
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(second.action?.id).not.toBe(first.action?.id)
+    expect(first.action).toMatchObject({ decision: 'review', reasonCode: 'OBSERVATION_PERIOD' })
+    expect(second.action).toMatchObject({ decision: 'review', reasonCode: 'OBSERVATION_PERIOD' })
+    expect(forwarded).toEqual([first.action?.id, second.action?.id])
+    expect(store.observations).toHaveLength(1)
+    expect(store.observations[0]?.actionId).toBe(second.action?.id)
+  })
+
+  it('still decides and forwards when repeat observation cannot persist', async () => {
+    const store = new ObservationFailingAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+    const forwarded: string[] = []
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(second.action?.id).not.toBe(first.action?.id)
+    expect(first.action).toMatchObject({ decision: 'review', reasonCode: 'OBSERVATION_PERIOD' })
+    expect(second.action).toMatchObject({ decision: 'review', reasonCode: 'OBSERVATION_PERIOD' })
+    expect(forwarded).toEqual([first.action?.id, second.action?.id])
+    expect(store.observations).toEqual([])
+  })
+
+  it('does not treat job replay as a model-loop observation', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const actorWithAttempt = { ...actor, attemptId: 'attempt-1', runId: 'run-1' }
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithAttempt,
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+    await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+    const replayed = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithAttempt,
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(replayed.action?.id).toBe(first.action?.id)
+    expect(store.observations).toHaveLength(1)
+    expect(store.observations[0]?.actionId).not.toBe(first.action?.id)
+  })
+
+  it('keeps loop fingerprints free of candidate text, evidence and attempt ids', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const secretName = '秘密团名-含证件号110101199001011234'
+    const secretEvidence = '护照页原文 E12345678'
+    const input = {
+      taskId: 'task-1',
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: secretName,
+          evidence: [{ kind: 'user_message', excerpt: secretEvidence, sequence: 1 }],
+        },
+      ],
+    }
+
+    await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+
+    const observed = JSON.stringify(store.observations)
+    expect(store.observations).toHaveLength(1)
+    expect(observed).not.toContain(secretName)
+    expect(observed).not.toContain(secretEvidence)
+    expect(observed).not.toContain('护照页原文')
+    expect(observed).not.toContain('attempt-1')
+    expect(observed).not.toContain('attempt-2')
+    expect(JSON.stringify(second.action)).not.toContain(secretName)
+    expect(JSON.stringify(store.records)).not.toContain(secretEvidence)
+  })
+
+  it('observes an unregistered repeat without forwarding or changing the deny', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const forwarded: unknown[] = []
+    const input = { taskId: 'task-1' }
+
+    const first = await gateway.execute({
+      name: 'deleteDepartureForever',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async (context) => {
+        forwarded.push(context)
+        return { ok: true }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'deleteDepartureForever',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async (context) => {
+        forwarded.push(context)
+        return { ok: true }
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(store.records).toHaveLength(2)
+    expect(first.action).toMatchObject({ decision: 'deny', reasonCode: 'UNREGISTERED' })
+    expect(second.action).toMatchObject({ decision: 'deny', reasonCode: 'UNREGISTERED' })
+    expect(store.observations).toHaveLength(1)
+    expect(store.observations[0]?.actionId).toBe(second.action?.id)
+  })
+
+  it('observes the same proposal across activity runs when the actor has no attempt', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+    const forwarded: string[] = []
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, runId: 'run-1' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, runId: 'run-2' },
+      input,
+      forward: async ({ action }) => {
+        forwarded.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-2' }
+      },
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(second.action?.id).not.toBe(first.action?.id)
+    expect(second.action).toMatchObject({ decision: 'review', reasonCode: 'OBSERVATION_PERIOD' })
+    expect(forwarded).toEqual([first.action?.id, second.action?.id])
+    expect(store.observations).toHaveLength(1)
+  })
+
+  it('does not treat the same proposal in another organization as a loop', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { taskId: 'shared-looking-payload' }
+
+    await gateway.execute({
+      name: 'deleteDepartureForever',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async () => ({ ok: true }),
+    })
+    const otherOrg = await gateway.execute({
+      name: 'deleteDepartureForever',
+      actor: {
+        organizationId: 'org-2',
+        userId: 'user-2',
+        taskId: 'task-2',
+        attemptId: 'attempt-org-2',
+        runId: 'run-org-2',
+      },
+      input,
+      forward: async () => ({ ok: true }),
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(otherOrg.action).toMatchObject({ decision: 'deny', reasonCode: 'UNREGISTERED' })
+    expect(store.observations).toEqual([])
   })
 
   it('replays the same run, name, target and input hash when the actor has no attempt', async () => {

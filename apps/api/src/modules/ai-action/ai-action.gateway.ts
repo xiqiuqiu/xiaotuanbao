@@ -5,6 +5,7 @@ import { AI_ACTION_STORE } from './ai-action.store'
 import type {
   AiActionDecision,
   AiActionExecuteResult,
+  AiActionFindOrCreateResult,
   AiActionKind,
   AiActionProposal,
   AiActionStore,
@@ -36,7 +37,7 @@ export class AiActionGateway {
     const reasonCode = !registered ? 'UNREGISTERED' : targetMismatch ? 'TARGET_MISMATCH' : 'OBSERVATION_PERIOD'
     const executionStatus = decision === 'deny' ? 'skipped' : 'not_started'
 
-    const action = await this.persistDecision(proposal, {
+    const persisted = await this.persistDecision(proposal, {
       kind,
       decision,
       reasonCode,
@@ -48,6 +49,8 @@ export class AiActionGateway {
           }
         : null,
     })
+    const action = persisted?.action ?? null
+    await this.observeRepeatQuietly(proposal, persisted)
 
     if (decision === 'deny') {
       return { action }
@@ -84,7 +87,7 @@ export class AiActionGateway {
       executionStatus: 'not_started' | 'skipped'
       targetRef: AiActionSummary['targetRef']
     },
-  ): Promise<AiActionSummary | null> {
+  ): Promise<AiActionFindOrCreateResult | null> {
     try {
       return await this.store.findOrCreate({
         ...proposal.actor,
@@ -102,6 +105,26 @@ export class AiActionGateway {
         return null
       }
       throw error
+    }
+  }
+
+  private async observeRepeatQuietly(
+    proposal: AiActionProposal,
+    persisted: AiActionFindOrCreateResult | null,
+  ): Promise<void> {
+    if (!persisted?.created) {
+      return
+    }
+    try {
+      await this.store.observeRepeat({
+        organizationId: proposal.actor.organizationId,
+        name: proposal.name,
+        targetRef: persisted.action.targetRef,
+        inputHash: persisted.action.inputHash,
+        actionId: persisted.action.id,
+      })
+    } catch {
+      // 观测写失败不得挡住决策行
     }
   }
 }

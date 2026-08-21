@@ -22,6 +22,10 @@ const IMPERATIVE_AUTH_CALL = /\.\s*(getMenuKeysForUser|getPermissionKeysForUser)
 const IMPERATIVE_AUTH_ALLOWLIST: Record<string, string> = {
   'modules/finance/payment-schedule.service.ts':
     'cancel/reopen/adjustAmount 所需 key 取决于节点 direction（应收→/finance/receivable、应付→/finance/payable），@RequireMenu 单键静态表达不了；controller 已挂 /finance/receivable，service 内按 direction 做运行时精确校验作更细防线。',
+  'modules/ai-create-task/ai-create-task.service.ts':
+    '协助是否可用同时要求 departure:write 与用户级协助开关；开关不是 Menu Key，@RequireMenu 表达不了「有写权限但未开通协助」。controller 已挂 departure:write，service 内再查一次与开关合流。',
+  'modules/ai-create-task/ai-conversation.service.ts':
+    '会话发送/恢复等内部入口同时要求 departure:write 与用户级协助开关；controller 已挂 departure:write，service 内 assertAssistAccess 作内部调用与开关合流。',
 }
 
 const SRC_ROOT = resolve(__dirname, '../..')
