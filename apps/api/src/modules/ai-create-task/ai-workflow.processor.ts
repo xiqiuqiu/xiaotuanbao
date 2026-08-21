@@ -13,7 +13,6 @@ import {
   AiConversationInteractionStatus,
   AiCreateActivityRunStatus,
   AiInputBatchStatus,
-  AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   OrganizationStatus,
@@ -28,6 +27,8 @@ import {
 } from '../../common/jwt-claims'
 import type { AiOperationDelegationPayload } from '../../common/types/api-response.type'
 import { PrismaService } from '../../database/prisma/prisma.service'
+import { AiActionGateway } from '../ai-action/ai-action.gateway'
+import { createPrismaAiActionStore } from '../ai-action/ai-action.prisma.store'
 import { AuthService } from '../auth/auth.service'
 import {
   assembleFrozenUserText,
@@ -51,13 +52,14 @@ import { lockAiCreateTask } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
+import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 import { DepartureMaterialService } from './departure-material.service'
 import {
   PARSE_FAILED_ERROR_CODE,
   materialProgressFromDeps,
   parseErrorMessage,
 } from './departure-material.constants'
-import { toStoredCandidates } from './review-package.mapper'
+import { projectPendingReviewPackage } from './review-package.projection'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
 
@@ -813,7 +815,7 @@ export class AiWorkflowProcessor {
 
       const reviewPackageId =
         result.kind === 'awaiting_review'
-          ? await this.persistReviewPackage(tx, job, result.reviewPackage)
+          ? await this.projectReviewPackageViaGateway(tx, job, attemptId, result.reviewPackage)
           : null
 
       const agentEvent = await this.conversationService.appendEvent(tx, {
@@ -1239,73 +1241,46 @@ export class AiWorkflowProcessor {
     return owned !== null
   }
 
-  private async persistReviewPackage(
+  private async projectReviewPackageViaGateway(
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
+    attemptId: string,
     reviewPackage: SubmitReviewPackageModelInput,
   ): Promise<string> {
-    const task = await tx.aiCreateTask.findFirst({
-      where: { id: job.taskId, organizationId: job.organizationId },
-      include: {
-        draft: true,
-        reviewPackages: {
-          where: { status: AiReviewPackageStatus.pending },
-          take: 1,
-        },
-      },
+    const attempt = await tx.aiAgentAttempt.findUniqueOrThrow({
+      where: { id: attemptId },
+      select: { activityRunId: true, contextManifestId: true },
     })
-    if (!task?.draft) {
-      throw new Error('REVIEW_PACKAGE_TASK_MISSING')
-    }
-    const existing = task.reviewPackages[0]
-    if (existing) {
-      if (!existing.inputBatchId) {
-        await tx.aiReviewPackage.update({
-          where: { id: existing.id },
-          data: { inputBatchId: job.inputBatchId },
-        })
-      }
-      return existing.id
-    }
-    if (task.draft.version !== reviewPackage.objectVersion) {
-      throw new Error('VERSION_CONFLICT')
-    }
-    const run = await this.getOrCreateRunningActivityRun(
-      tx,
-      job.organizationId,
-      job.taskId,
-      job.inputBatch.creatorUserId,
+    const adapter = new AiToolWorkerAdapter(
+      new AiActionGateway(createPrismaAiActionStore(tx)),
     )
-    const stored = toStoredCandidates(reviewPackage.candidates)
-    try {
-      const created = await tx.aiReviewPackage.create({
-        data: {
+    const projected = await adapter.projectReviewPackage({
+      actor: {
+        organizationId: job.organizationId,
+        userId: job.inputBatch.creatorUserId,
+        taskId: job.taskId,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        runId: attempt.activityRunId,
+        attemptId,
+        contextManifestId: attempt.contextManifestId,
+      },
+      input: reviewPackage,
+      persist: async ({ action }) => {
+        if (!action?.id) {
+          throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
+        }
+        return projectPendingReviewPackage(tx, {
           organizationId: job.organizationId,
           taskId: job.taskId,
-          runId: run.id,
           inputBatchId: job.inputBatchId,
-          status: AiReviewPackageStatus.pending,
-          confirmationUnit: reviewPackage.confirmationUnit,
-          baseObjectVersion: task.draft.version,
-          baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-          candidates: stored as unknown as Prisma.InputJsonValue,
-          version: 1,
-        },
-      })
-      return created.id
-    } catch (error) {
-      if (!isUniqueViolation(error)) {
-        throw error
-      }
-      const raced = await tx.aiReviewPackage.findFirst({
-        where: { taskId: job.taskId, status: AiReviewPackageStatus.pending },
-        select: { id: true },
-      })
-      if (!raced) {
-        throw error
-      }
-      return raced.id
-    }
+          runId: attempt.activityRunId,
+          reviewPackage,
+          sourceActionId: action.id,
+        })
+      },
+    })
+    return projected.reviewPackageId
   }
 }
 

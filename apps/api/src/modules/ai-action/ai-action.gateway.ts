@@ -86,7 +86,7 @@ export class AiActionGateway {
     },
   ): Promise<AiActionSummary | null> {
     try {
-      return await this.store.create({
+      return await this.store.findOrCreate({
         ...proposal.actor,
         name: proposal.name,
         kind: fields.kind,
