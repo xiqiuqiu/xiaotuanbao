@@ -29,16 +29,24 @@ export function useAiCreateAssistBootstrap({
 } {
   const [session, setSession] = useState<AiCreateAssistSession | null>(null)
   const [error, setError] = useState<Error | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<'idle' | 'loading'>('idle')
   const inFlightRef = useRef(false)
   const generationRef = useRef(0)
+
+  const finishBootstrap = useCallback((generation: number) => {
+    if (generation !== generationRef.current) {
+      return
+    }
+    inFlightRef.current = false
+    setStatus('idle')
+  }, [])
 
   const reset = useCallback(() => {
     generationRef.current += 1
     inFlightRef.current = false
     setSession(null)
     setError(null)
-    setLoading(false)
+    setStatus('idle')
   }, [])
 
   const bootstrap = useCallback(async () => {
@@ -47,7 +55,7 @@ export function useAiCreateAssistBootstrap({
     }
 
     inFlightRef.current = true
-    setLoading(true)
+    setStatus('loading')
     const generation = generationRef.current
     try {
       try {
@@ -56,33 +64,28 @@ export function useAiCreateAssistBootstrap({
         // 协助会话允许不完整草稿；保存失败不得挡住打开右栏。
       }
 
-      try {
-        const nextSession = await startAiCreateAssistSession({
-          taskId: getTaskId() ?? undefined,
-          draft: buildDraft(),
-        })
-        // 只绑定会话 taskId/version；flush 失败或跳过时不得把表单标成已保存。
-        applySavedDraft(nextSession.task, { keepDirty: true })
-        syncTaskSearch(nextSession.task.id)
-        if (generation !== generationRef.current) {
-          return
-        }
-        setSession(nextSession)
-        setError(null)
-      } catch (caught) {
-        if (generation !== generationRef.current) {
-          return
-        }
-        setSession(null)
-        setError(caught instanceof Error ? caught : new Error(ASSIST_ERROR_TEXT))
+      const nextSession = await startAiCreateAssistSession({
+        taskId: getTaskId() ?? undefined,
+        draft: buildDraft(),
+      })
+      // 只绑定会话 taskId/version；flush 失败或跳过时不得把表单标成已保存。
+      applySavedDraft(nextSession.task, { keepDirty: true })
+      syncTaskSearch(nextSession.task.id)
+      if (generation !== generationRef.current) {
+        return
       }
+      setSession(nextSession)
+      setError(null)
+    } catch (caught) {
+      if (generation !== generationRef.current) {
+        return
+      }
+      setSession(null)
+      setError(caught instanceof Error ? caught : new Error(ASSIST_ERROR_TEXT))
     } finally {
-      if (generation === generationRef.current) {
-        inFlightRef.current = false
-        setLoading(false)
-      }
+      finishBootstrap(generation)
     }
-  }, [applySavedDraft, buildDraft, enabled, flushDraft, getTaskId, syncTaskSearch])
+  }, [applySavedDraft, buildDraft, enabled, finishBootstrap, flushDraft, getTaskId, syncTaskSearch])
 
-  return { bootstrap, reset, session, error, loading }
+  return { bootstrap, reset, session, error, loading: status === 'loading' }
 }

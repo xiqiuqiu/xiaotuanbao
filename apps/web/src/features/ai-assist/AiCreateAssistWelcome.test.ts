@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { greetingForHour } from './AiCreateAssistWelcome'
+import { greetingForHour } from './ai-create-assist-welcome-data'
 
 describe('greetingForHour', () => {
   it('uses morning, afternoon and evening bands', () => {

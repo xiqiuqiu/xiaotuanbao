@@ -1,6 +1,6 @@
 import { CloseOutlined } from '@ant-design/icons'
 import { Button, Typography, theme } from 'antd'
-import { useEffect, useState, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from './assist-pane-slot'
 import styles from './AssistPane.module.css'
@@ -10,11 +10,6 @@ export function AssistPane() {
   const collapsed = useUiStore((state) => state.assistPaneCollapsed)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const { content, headerExtra } = useAssistPaneSlot()
-  const [motionReady, setMotionReady] = useState(false)
-  useEffect(() => {
-    setMotionReady(true)
-  }, [])
-
   return (
     <aside
       className={styles.slot}
@@ -22,7 +17,7 @@ export function AssistPane() {
       aria-hidden={collapsed}
       inert={collapsed || undefined}
       data-open={collapsed ? undefined : ''}
-      data-motion={motionReady ? '' : undefined}
+      data-motion=""
       style={
         {
           '--assist-border': token.colorBorderSecondary,
