@@ -37,3 +37,16 @@ export class InMemoryAiActionStore implements AiActionStore {
     return record
   }
 }
+
+export class FailingAiActionStore implements AiActionStore {
+  async create(_draft: AiActionRecordDraft): Promise<AiActionSummary> {
+    throw new Error('decision store unavailable')
+  }
+
+  async updateExecution(
+    _id: string,
+    _executionStatus: AiActionExecutionStatus,
+  ): Promise<AiActionSummary> {
+    throw new Error('decision store unavailable')
+  }
+}
