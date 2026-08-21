@@ -1308,6 +1308,7 @@ model AiAction {
   targetKind         String?                  @map("target_kind")
   targetId           String?                  @map("target_id")
   inputHash          String                   @map("input_hash")
+  replayKey          String                   @unique @map("replay_key")
   candidateFieldKeys String[]                 @default([]) @map("candidate_field_keys")
   executionStatus    AiActionExecutionStatus  @default(not_started) @map("execution_status")
   createdAt          DateTime                 @default(now()) @map("created_at")

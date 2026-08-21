@@ -310,6 +310,65 @@ describe('AiActionGateway.execute', () => {
     expect(result.action).toBeNull()
   })
 
+  it('replays the same attempt, name, target and input hash to the same AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const actorWithAttempt = { ...actor, attemptId: 'attempt-1', runId: 'run-1' }
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+    const persistCalls: string[] = []
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithAttempt,
+      input,
+      forward: async ({ action }) => {
+        persistCalls.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: actorWithAttempt,
+      input,
+      forward: async ({ action }) => {
+        persistCalls.push(action?.id ?? 'missing')
+        return { reviewPackageId: 'pkg-1' }
+      },
+    })
+
+    expect(store.records).toHaveLength(1)
+    expect(first.action?.id).toBe(store.records[0]?.id)
+    expect(second.action?.id).toBe(first.action?.id)
+    expect(persistCalls).toEqual([first.action?.id, first.action?.id])
+    expect(first.action).toMatchObject({
+      name: 'submitReviewPackage',
+      kind: 'write',
+      decision: 'review',
+    })
+  })
+
+  it('treats a later attempt of the same proposal as a new AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
+
+    const first = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+    const second = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
+      input,
+      forward: async () => ({ reviewPackageId: 'pkg-1' }),
+    })
+
+    expect(store.records).toHaveLength(2)
+    expect(second.action?.id).not.toBe(first.action?.id)
+  })
+
   it('records execution failure on the same action identity', async () => {
     const store = new InMemoryAiActionStore()
     const gateway = new AiActionGateway(store)

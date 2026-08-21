@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { replayKeyFromDraft } from './ai-action.replay'
 import type {
   AiActionExecutionStatus,
   AiActionRecordDraft,
@@ -8,8 +9,14 @@ import type {
 
 export class InMemoryAiActionStore implements AiActionStore {
   readonly records: AiActionSummary[] = []
+  private readonly byReplayKey = new Map<string, AiActionSummary>()
 
-  async create(draft: AiActionRecordDraft): Promise<AiActionSummary> {
+  async findOrCreate(draft: AiActionRecordDraft): Promise<AiActionSummary> {
+    const replayKey = replayKeyFromDraft(draft)
+    const existing = this.byReplayKey.get(replayKey)
+    if (existing) {
+      return existing
+    }
     const record: AiActionSummary = {
       id: randomUUID(),
       name: draft.name,
@@ -21,6 +28,7 @@ export class InMemoryAiActionStore implements AiActionStore {
       candidateFieldKeys: draft.candidateFieldKeys,
       executionStatus: draft.executionStatus,
     }
+    this.byReplayKey.set(replayKey, record)
     this.records.push(record)
     return record
   }
@@ -39,7 +47,7 @@ export class InMemoryAiActionStore implements AiActionStore {
 }
 
 export class FailingAiActionStore implements AiActionStore {
-  async create(_draft: AiActionRecordDraft): Promise<AiActionSummary> {
+  async findOrCreate(_draft: AiActionRecordDraft): Promise<AiActionSummary> {
     throw new Error('decision store unavailable')
   }
 

@@ -68,6 +68,6 @@ export type AiActionRecordDraft = {
 }
 
 export interface AiActionStore {
-  create(draft: AiActionRecordDraft): Promise<AiActionSummary>
+  findOrCreate(draft: AiActionRecordDraft): Promise<AiActionSummary>
   updateExecution(id: string, executionStatus: AiActionExecutionStatus): Promise<AiActionSummary>
 }
