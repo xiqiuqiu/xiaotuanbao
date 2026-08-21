@@ -207,7 +207,6 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       keyword: '川西 亚丁',
-      organizationId: otherOrg.id,
     }).expect(200)
 
     expect(found.body.data.items.map((item: { id: string }) => item.id)).toEqual([local.id])
@@ -226,6 +225,15 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     )
     expect(found.body.data.items.some((item: { id: string }) => item.id === foreign.id)).toBe(false)
     expect(found.body.data).not.toHaveProperty('organizationId')
+
+    const claimedOtherOrg = await agentSearch(opened.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.runId,
+      keyword: '川西 亚丁',
+      organizationId: otherOrg.id,
+    }).expect(401)
+    expect(claimedOtherOrg.body.data).toMatchObject({ code: 'DELEGATION_INVALID' })
+    expect(JSON.stringify(claimedOtherOrg.body)).not.toContain(foreign.id)
   })
 
   it('adopts a template into the pending review package and re-reads it on confirm', async () => {

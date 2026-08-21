@@ -44,7 +44,7 @@ export class AiToolController {
     @Req() request: { user: AiToolRequestUser },
     @Body() body: unknown,
   ) {
-    return this.aiCreateTaskService.searchRouteTemplatesForAgent(request.user, body)
+    return this.aiToolHttpAdapter.searchRouteTemplates(request.user, body)
   }
 
   @Post('v1/get-material-parse-result')
@@ -53,6 +53,6 @@ export class AiToolController {
     @Req() request: { user: AiToolRequestUser },
     @Body() body: unknown,
   ) {
-    return this.aiCreateTaskService.getMaterialParseResultForAgent(request.user, body)
+    return this.aiToolHttpAdapter.getMaterialParseResult(request.user, body)
   }
 }

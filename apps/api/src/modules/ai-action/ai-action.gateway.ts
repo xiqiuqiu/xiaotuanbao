@@ -29,7 +29,7 @@ export class AiActionGateway {
     const registered = isRegisteredName(proposal.name)
       ? REGISTERED_ACTIONS[proposal.name]
       : null
-    const targetMismatch = Boolean(registered) && isClaimedTaskMismatch(proposal)
+    const targetMismatch = Boolean(registered) && isClaimedTargetMismatch(proposal)
 
     const kind: AiActionKind = registered?.kind ?? 'write'
     const decision: AiActionDecision = registered && !targetMismatch ? registered.decision : 'deny'
@@ -118,12 +118,23 @@ function claimedStringField(input: unknown, field: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null
 }
 
-function isClaimedTaskMismatch(proposal: AiActionProposal): boolean {
-  if (proposal.name !== 'getTaskContext') {
+function isClaimedTargetMismatch(proposal: AiActionProposal): boolean {
+  if (
+    proposal.name !== 'getTaskContext' &&
+    proposal.name !== 'getMaterialParseResult' &&
+    proposal.name !== 'searchRouteTemplates'
+  ) {
     return false
   }
   const claimedTaskId = claimedStringField(proposal.input, 'taskId')
-  return claimedTaskId !== null && claimedTaskId !== (proposal.actor.taskId ?? null)
+  if (claimedTaskId !== null && claimedTaskId !== (proposal.actor.taskId ?? null)) {
+    return true
+  }
+  if (proposal.name !== 'searchRouteTemplates') {
+    return false
+  }
+  const claimedOrgId = claimedStringField(proposal.input, 'organizationId')
+  return claimedOrgId !== null && claimedOrgId !== proposal.actor.organizationId
 }
 
 function resolveTargetId(targetKind: string, proposal: AiActionProposal): string | null {

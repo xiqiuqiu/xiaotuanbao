@@ -112,6 +112,157 @@ describe('AiActionGateway.execute', () => {
     expect(result.result).toBe(contextPayload)
   })
 
+  it('records searchRouteTemplates against the organization route catalog', async () => {
+    const gateway = new AiActionGateway(new InMemoryAiActionStore())
+    const items = { items: [{ id: 'tpl-1', name: '川西环线' }] }
+
+    const result = await gateway.execute({
+      name: 'searchRouteTemplates',
+      actor,
+      input: { taskId: 'task-1', runId: 'run-1', keyword: '川西' },
+      forward: async () => items,
+    })
+
+    expect(result.result).toBe(items)
+    expect(result.action).toMatchObject({
+      name: 'searchRouteTemplates',
+      kind: 'read',
+      decision: 'allow',
+      reasonCode: 'OBSERVATION_PERIOD',
+      executionStatus: 'succeeded',
+      targetRef: { kind: 'route_template_catalog', id: 'org-1' },
+    })
+  })
+
+  it('does not forward searchRouteTemplates when the claimed organization is not the delegated organization', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const leakedItems = { items: [{ id: 'tpl-other', name: '别家路线' }] }
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'searchRouteTemplates',
+      actor,
+      input: {
+        taskId: 'task-1',
+        runId: 'run-1',
+        organizationId: 'org-other',
+        keyword: '川西',
+      },
+      forward: async (context) => {
+        forwarded.push(context)
+        return leakedItems
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.result).toBeUndefined()
+    expect(result.action).toMatchObject({
+      name: 'searchRouteTemplates',
+      kind: 'read',
+      decision: 'deny',
+      reasonCode: 'TARGET_MISMATCH',
+      executionStatus: 'skipped',
+      targetRef: { kind: 'route_template_catalog', id: 'org-1' },
+    })
+  })
+
+  it('does not forward searchRouteTemplates when the claimed task is not the delegated task', async () => {
+    const gateway = new AiActionGateway(new InMemoryAiActionStore())
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'searchRouteTemplates',
+      actor,
+      input: { taskId: 'task-other', runId: 'run-1', keyword: '川西' },
+      forward: async (context) => {
+        forwarded.push(context)
+        return { items: [] }
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.action).toMatchObject({
+      name: 'searchRouteTemplates',
+      decision: 'deny',
+      reasonCode: 'TARGET_MISMATCH',
+      executionStatus: 'skipped',
+      targetRef: { kind: 'route_template_catalog', id: 'org-1' },
+    })
+  })
+
+  it('records getMaterialParseResult against the specified departure material', async () => {
+    const gateway = new AiActionGateway(new InMemoryAiActionStore())
+    const parsePayload = {
+      materialId: 'mat-1',
+      parseResultVersion: 1,
+      pageCount: 1,
+      truncated: false,
+      pages: [{ pageNumber: 1, source: 'ocr', text: '行程' }],
+    }
+
+    const result = await gateway.execute({
+      name: 'getMaterialParseResult',
+      actor,
+      input: {
+        taskId: 'task-1',
+        runId: 'run-1',
+        materialId: 'mat-1',
+        parseResultVersion: 1,
+      },
+      forward: async () => parsePayload,
+    })
+
+    expect(result.result).toBe(parsePayload)
+    expect(result.action).toMatchObject({
+      name: 'getMaterialParseResult',
+      kind: 'read',
+      decision: 'allow',
+      reasonCode: 'OBSERVATION_PERIOD',
+      executionStatus: 'succeeded',
+      targetRef: { kind: 'departure_material', id: 'mat-1' },
+    })
+  })
+
+  it('does not forward getMaterialParseResult when the claimed task is not the delegated task', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    const leakedParse = {
+      materialId: 'mat-other',
+      parseResultVersion: 1,
+      pageCount: 1,
+      truncated: false,
+      pages: [{ pageNumber: 1, source: 'ocr', text: '别家资料' }],
+    }
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'getMaterialParseResult',
+      actor,
+      input: {
+        taskId: 'task-other',
+        runId: 'run-1',
+        materialId: 'mat-other',
+        parseResultVersion: 1,
+      },
+      forward: async (context) => {
+        forwarded.push(context)
+        return leakedParse
+      },
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.result).toBeUndefined()
+    expect(result.action).toMatchObject({
+      name: 'getMaterialParseResult',
+      kind: 'read',
+      decision: 'deny',
+      reasonCode: 'TARGET_MISMATCH',
+      executionStatus: 'skipped',
+      targetRef: { kind: 'departure_material', id: 'mat-other' },
+    })
+  })
+
   it('does not forward getTaskContext when the claimed task is not the delegated task', async () => {
     const store = new InMemoryAiActionStore()
     const gateway = new AiActionGateway(store)
