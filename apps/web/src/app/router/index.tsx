@@ -386,6 +386,25 @@ const executionLayerSwitchPrototypeRoute = createRoute({
   ),
 })
 
+const agentConversationPrototypeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/prototype/agent-conversation',
+  validateSearch: (search: Record<string, unknown>) => ({
+    variant:
+      typeof search.variant === 'string' && ['A', 'B', 'C'].includes(search.variant)
+        ? search.variant
+        : undefined,
+    mode:
+      typeof search.mode === 'string' && ['side', 'global'].includes(search.mode)
+        ? search.mode
+        : undefined,
+  }),
+  component: lazyRouteComponent(
+    () => import('@/pages/AgentConversationPrototypePage'),
+    'AgentConversationPrototypePage',
+  ),
+})
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   platformLayoutRoute.addChildren([
@@ -415,6 +434,7 @@ const routeTree = rootRoute.addChildren([
     systemUsersRoute,
     routeLedgerModePrototypeRoute,
     executionLayerSwitchPrototypeRoute,
+    agentConversationPrototypeRoute,
   ]),
 ])
 
