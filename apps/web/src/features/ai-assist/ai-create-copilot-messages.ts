@@ -61,7 +61,7 @@ type MaterialProgress = {
 export function batchStatusLabel(
   status: string,
   progress?: MaterialProgress | null,
-  extra?: { queued?: boolean; reason?: string; disposition?: string },
+  extra?: { queued?: boolean; reason?: string; disposition?: string; errorCode?: string },
 ): string | null {
   if (status === 'waiting_for_materials') {
     const ready = progress?.ready
@@ -83,13 +83,23 @@ export function batchStatusLabel(
     if (extra?.disposition === 'rejected') return '已拒绝本次建议'
     return '已完成'
   }
-  if (status === 'failed') return '处理失败'
+  if (status === 'failed') return failedBatchLabel(extra?.errorCode)
   if (status === 'cancelled') {
     if (extra?.reason === 'interaction_cancelled') return '已取消等待'
     if (extra?.reason === 'user_stop') return '已停止当前处理'
     return '已放弃本批'
   }
   return null
+}
+
+function failedBatchLabel(errorCode?: string): string {
+  if (errorCode === 'CONTEXT_CAPACITY_EXCEEDED') {
+    return '上下文超出容量上限，请拆分或精简后再试'
+  }
+  if (errorCode === 'CONTEXT_PROFILE_MISSING') {
+    return '当前模型未配置上下文容量'
+  }
+  return '处理失败'
 }
 
 export function interactionFromPayload(
@@ -368,8 +378,10 @@ export function toCopilotChatMessages(
       if (typeof event.payload.materialId === 'string') {
         continue
       }
+      const errorCode =
+        typeof event.payload.errorCode === 'string' ? event.payload.errorCode : undefined
       upsertStatus({
-        label: '处理失败',
+        label: failedBatchLabel(errorCode),
         batchId,
         showBatchRetryAction: true,
       })
@@ -378,11 +390,14 @@ export function toCopilotChatMessages(
     if (event.kind === 'batch_status') {
       const status = String(event.payload.status ?? '')
       const progress = progressFromPayload(event.payload)
+      const errorCode =
+        typeof event.payload.errorCode === 'string' ? event.payload.errorCode : undefined
       const label = batchStatusLabel(status, progress, {
         queued: event.payload.queued === true,
         reason: typeof event.payload.reason === 'string' ? event.payload.reason : undefined,
         disposition:
           typeof event.payload.disposition === 'string' ? event.payload.disposition : undefined,
+        errorCode,
       })
       if (label) {
         const failedMaterials = failedMaterialsFromPayload(event.payload)

@@ -32,6 +32,8 @@ export const WORKFLOW_IMMEDIATE_FAILURE_CODES = new Set([
   'PERMISSION_DENIED',
   'VERSION_CONFLICT',
   'BATCH_CANCELLED',
+  'CONTEXT_CAPACITY_EXCEEDED',
+  'CONTEXT_PROFILE_MISSING',
 ])
 
 export function workflowBackoffMs(attemptCount: number): number {

@@ -11,6 +11,9 @@ import {
   PLAINTEXT_TOOL_SCHEMA_VERSION,
 } from './ai-conversation.constants'
 
+export const CONTEXT_CAPACITY_EXCEEDED = 'CONTEXT_CAPACITY_EXCEEDED'
+export const CONTEXT_PROFILE_MISSING = 'CONTEXT_PROFILE_MISSING'
+
 const TOKEN_ESTIMATOR_VERSION = 'utf8-bytes-ceil-div3/v1'
 const PROVIDER_FRAMING_VERSION = 'openai-compatible-framing/v1'
 const OUTPUT_RESERVE_VERSION = 'ai-create-output-reserve/v1'
@@ -184,7 +187,7 @@ export function buildBudgetedContext(input: {
   }
 
   if (estimateTokens(userText) > dynamicBudgetTokens) {
-    throw new Error('CONTEXT_CAPACITY_EXCEEDED')
+    throw new Error(CONTEXT_CAPACITY_EXCEEDED)
   }
 
   projection.truncationReasons = [...reasons].sort()
@@ -245,7 +248,7 @@ function contextBudgetProfileFor(modelId: string): ContextBudgetProfile {
   const canonicalModelId = modelId === 'deepseek-chat' ? 'deepseek/deepseek-chat' : modelId
   const profile = CONTEXT_BUDGET_PROFILES[canonicalModelId]
   if (!profile) {
-    throw new Error(`未配置 Context budget profile: ${modelId}`)
+    throw new Error(`${CONTEXT_PROFILE_MISSING}: ${modelId}`)
   }
   return profile
 }

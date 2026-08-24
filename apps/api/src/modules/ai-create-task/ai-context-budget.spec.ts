@@ -134,7 +134,7 @@ describe('buildBudgetedContext', () => {
 
     expect(deterministic.budget.profileVersion).not.toBe(deepseek.budget.profileVersion)
     expect(() => buildBudgetedContext({ ...input, modelId: 'unknown/model' })).toThrow(
-      '未配置 Context budget profile',
+      'CONTEXT_PROFILE_MISSING',
     )
   })
 

@@ -49,6 +49,7 @@ import {
   resolveAttemptUserText,
 } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
+import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
   WORKFLOW_AGENT_CONCURRENCY,
@@ -1449,16 +1450,6 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code: string }).code === 'P2002'
   )
-}
-
-function workflowErrorCode(error: unknown): string {
-  if (error instanceof Error && error.message === 'VERSION_CONFLICT') {
-    return 'VERSION_CONFLICT'
-  }
-  if (error instanceof ServiceUnavailableException) {
-    return 'AGENT_UNAVAILABLE'
-  }
-  return 'AGENT_UNAVAILABLE'
 }
 
 function isTransientWorkflowError(error: unknown): boolean {
