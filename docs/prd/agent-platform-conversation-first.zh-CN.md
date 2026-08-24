@@ -15,7 +15,7 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - 每次 User 输入形成不可变 InputBatch，并可显式引用、创建或主要服务于零到多个 Task；Attempt、Action、Interaction、Review Package 和 ContextManifest 共同形成 PostgreSQL 权威运行链。
 - Mastra 作为可丢弃的 Agent 执行内核，通过版本化 AgentDefinition、CapabilityDefinition、类型化 RequestContext、Schema、Processor、Trace 和 Eval 运行；PostgreSQL/API/Worker 继续拥有权限、业务事实、持久 HITL、恢复与审计。
 - CopilotKit/AG-UI 继续承担会话壳和结构化 Activity 呈现；侧边栏与全局模式复用同一 Conversation、草稿、事件和业务组件。
-- 现有建团功能直接迁入通用平台；AiCreateTask 只保留为与 AgentTask 共享身份的建团领域扩展。
+- 现有建团功能直接迁入通用平台；当前 AiCreateTask 原位改造或重命名为与 AgentTask 共享身份的 DepartureCreationTask 领域扩展，不建立平行运行表族。
 - 第二业务竖切选择无 Task 的“合作伙伴往来账款查询”，用三个只读 Capability 验证平台能够脱离建团复用。
 - 会话只展示查询概览及有限预览；完整列表、筛选、排序和分页通过显式按钮进入正式业务页面。
 
@@ -38,9 +38,9 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 15. As a User, I want Task lifecycle updates displayed as structured activities in the Conversation timeline, so that I can understand progress, review requirements, success and failure.
 16. As a User, I want failed executions explained in the Conversation and recorded as failed, so that I can decide what to ask next without a separate operations console.
 17. As a coordinator, I want to create a Departure through the Agent and review proposed fields before applying them, so that AI assistance does not silently modify business data.
-18. As a coordinator, I want to continue from a confirmed Departure into later goals such as SourceOrder completion, so that creating a Departure is one capability rather than the Agent product itself.
+18. As a coordinator, I want the Conversation to remain available for a new goal after Departure creation completes, so that creating a Departure is one capability rather than the entire Agent product.
 19. As a User, I want multiple Conversations to produce independent proposals for the same business object, so that one pending review does not block all other work.
-20. As a User, I want stale proposals to report a version conflict instead of overwriting current data, so that concurrent work remains safe.
+20. As a User, I want stale proposals to report a version conflict and offer an explicit regenerate-from-latest action instead of overwriting current data or silently spending another model run, so that concurrent work remains safe and under my control.
 21. As a reviewer, I want every proposed value to retain its own evidence references, so that I can verify why it was suggested.
 22. As a reviewer, I want my corrections recorded separately from model evidence, so that audit records distinguish AI proposals from human input.
 23. As a User, I want uploaded files to belong only to the Conversation where I supplied them, so that attachments are not silently injected into unrelated Conversations.
@@ -77,20 +77,24 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - Conversation is the top-level private interaction object. It has its own owner, title, activity timestamp and `open / archived` lifecycle and does not require a Task.
 - Conversation and AgentTask have an explicit many-to-many relationship with auditable link metadata. Task completion or deletion never deletes a Conversation.
 - AgentTask is created only for long-lived goals requiring multi-turn progress, waiting, review or recovery. Ordinary queries and immediate governed actions remain taskless.
-- Generic AgentTask and the Departure-specific AiCreateTask extension share the same task ID. AgentTask owns the common goal, type, owner and lifecycle; the domain extension owns Departure draft, phase and Departure linkage.
+- Generic AgentTask and the Departure-specific DepartureCreationTask extension share the same task ID. AgentTask owns the common goal, type, owner and lifecycle; the domain extension owns Departure draft, phase and Departure linkage.
 - InputBatch is the primary immutable unit of User intent and may reference zero to many Tasks with `primary / referenced / created` roles. Workflow Job and Attempt follow the InputBatch rather than a required Task.
+- Agent execution is serialized by Conversation sequence, not by Task. One Conversation has at most one running Attempt; different Conversations may run concurrently even when they reference the same Task or business object. Waiting Review Packages and Interactions do not retain an execution lock.
 - ContextManifest freezes actual Conversation version, Task references, business object versions, source versions, authorized Definition/Capability versions, budgets and prompt summary for each Attempt.
 - Action uses server-resolved `targetKind + targetId + targetVersion` as its true business target. taskId is optional and is never the lock or uniqueness boundary.
-- Review Package uses a common envelope plus a versioned domain payload. Multiple pending proposals may coexist; confirmation revalidates current target version, permissions, proposal hash, evidence and domain invariants.
+- Review Package uses a common envelope plus a versioned domain payload. Multiple pending proposals may coexist; the first delivery requires an exact target-version match at confirmation and returns conflict after any version change. Field-level safe merge is disabled by default and may only be introduced later for a specific versioned Capability with an explicit domain merge policy and concurrency tests.
+- A stale confirmation appends a persistent conflict Activity with a safe change summary and a “基于最新状态重新生成” action. Only that explicit User action creates the replacement InputBatch/Attempt; the original package remains immutable in conflict state.
 - Candidate evidence remains attached to the candidate it supports. User corrections are separate reviewer inputs and never inherit model evidence.
 - ConversationSource owns uploads, web results, tool results and generated files for one Conversation. InputBatchSource freezes the exact version used. Sources are not synchronized through Task.
 - A source becomes a formal domain attachment only through an explicit authorized domain command. Cross-Conversation continuation reads the current business object, not prior source content.
 - Current-page context is a server-validated locator attached to an InputBatch. It contains no DOM, screenshot, unsaved form state, client cache or permission assertion.
 - Context capacity uses provider Token usage plus conservative estimation, a soft threshold, deterministic compression of older non-authoritative content, locator rereads, step-level limiting and lossless chunked extraction for oversized single inputs. Capacity handling cannot silently drop current commands, evidence or current business facts.
+- The relevant #352 delivery slices are native prerequisites rather than informal references: evidence/atomic proposal work blocks generic Review, target resolution blocks new Capabilities, message deduplication and unified budgeting block generic Conversation execution, TokenLimiter/usage blocks the platform-foundation exit, deterministic compression/locator recall blocks US27, and oversized-input persistence/chunked extraction blocks US28.
 - PostgreSQL/API/Worker are the sole authority for Conversation, Task, InputBatch, Attempt/generation, Action, Interaction, Review Package, permissions, idempotency, recovery and outcomes.
 - Mastra is the execution layer. The first platform phase introduces a versioned AgentDefinition registry, CapabilityDefinition registry, Agent factory, typed RequestContext, input/output/context Schema, Processor pipeline, Structured Output and usage/trace correlation.
-- Capability authorization is the intersection of Agent declaration, task/object scope, current User permissions, Organization entitlement/policy and platform risk policy. The model cannot request additional capabilities.
+- Capability authorization is resolved through one `CapabilityGrantResolver`. The first platform delivery enforces Agent declaration, task/object scope, current User permissions, Organization isolation and platform risk policy; Organization Module Entitlement integration is deferred and must be reported as unavailable rather than treated as implicitly enabled. When #171–#174 land, they extend the same resolver without changing Agent, Worker or Gateway state machines. The model cannot request additional capabilities.
 - Every read, propose and execute capability enters the Action Gateway. Read actions are audited; propose actions have no business side effect; execute actions require the policy-defined confirmation, idempotency and version checks.
+- Task is never a lock or idempotency scope. Domain writes use the resolved target version and domain transaction/CAS. Read Actions are attempt/tool-call audit records; proposal identity is derived from InputBatch, Capability version, resolved target and proposal hash; confirmed execution identity is derived from Review Package version and the persisted decision command. Attempt or generation retries reuse the logical write Action.
 - Mastra Workflow is used only for bounded steps inside one Attempt. Persistent HITL ends the Attempt and is resumed through a new InputBatch/Attempt reconstructed from PostgreSQL.
 - CopilotKit remains the Conversation shell. Ant Design remains the form, review and dense business-data UI. Current controlled messages use persisted Activity renderers; future AG-UI Tool Rendering may reuse the same components without changing authority.
 - Side mode and global mode are two projections of the same Conversation. Side mode overlays the current business page; global mode has Conversation history navigation. Mobile uses one full-screen single-column Conversation.
@@ -99,14 +103,17 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - Dense lists are not paginated inside Conversation. A compact Activity shows summary and, only when requested, the five most recently updated matching rows using the same deterministic order as the formal list.
 - Partner ledger navigation uses whitelisted route search parameters for Partner ID, accounts tab, direction, Departure date range and supported balance/window enums. Amounts, natural-language results and permission claims never enter the URL.
 - The second vertical slice consists of `partner.search.read`, `partner.ledger.summary.read` and `partner.ledger.items.read`. It uses existing Partner and PaymentSchedule services rather than direct database queries.
+- The Partner slice proves reusable taskless reads, authorization, audited Actions, Trace/Eval, result Activities and business deep links. It does not prove a second domain write path. Departure creation remains the only write-domain validation in this delivery; a future second write domain must independently verify Proposal/Review adaptation, target CAS, stable Action identity, idempotency and domain transactions before cross-domain writes are claimed as proven.
 - Partner search returns minimum disambiguation fields. Summary returns server-calculated direction/source groups. Items returns only a five-row white-listed preview and total/truncation metadata.
 - Partner ledger scope is server-owned: `all_active` includes non-closed/non-voided nodes including settled rows; `open_only` keeps positive unsettled balance; `overdue` applies only to receivables; payables expose open unpaid but no “overdue payable” label.
 - The platform is rebuilt directly because the product is still in development. Development Agent run data is disposable; no backfill, dual write, shadow read or per-Organization migration is required.
+- Existing generic-enough Conversation/InputBatch/Job/Attempt/Action persistence is generalized in place, with optional renaming during the same cutover; only missing domain concepts receive new models. No parallel writable `Ai*` and `Agent*` table families or duplicate Worker chains are allowed.
 - The old AI-create route may exist only briefly as a request adapter that writes the new structures. The new Conversation UI uses generic APIs; after cutover the old runtime models, routes and code are removed.
 - Resetting Agent run data must not cascade into Departure, SourceOrder, finance records or formal domain attachments.
 - Observational Memory is not part of the first delivery. A later PoC requires per-User/per-Organization isolation, two stable vertical slices, deterministic context engineering, traceability and A/B Eval.
 - Free Agent Network, broad specialist handoff, MCP and Skills are not enabled by default. They require later evidence and cannot grant permissions or replace the control plane.
 - Failures are persisted and shown in Conversation. Automatic retries are bounded. No separate operational retry UI or public retry API is introduced.
+- Stop-run, cancel-waiting-item and close-task are distinct server commands. Stop invalidates only the current InputBatch/Attempt generation; cancelling targets one Interaction or Review Package; closing a Task terminates its unfinished work without deleting Conversations or committed business facts. Hiding the panel has no lifecycle effect.
 
 ## Testing Decisions
 
@@ -114,10 +121,15 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - Browser acceptance uses a small number of Playwright flows against real Web/API behavior for side/global continuity, history, current-page context, query cards, permission-aware projection, business navigation and URL filters.
 - Real model behavior is evaluated through versioned offline Eval using the real Mastra AgentDefinition, Prompt, Processor and Capability Schema.
 - Model Eval never replaces server assertions for Organization isolation, permission, evidence validity, object versions, accounting amounts, idempotency or final business effects.
+- Until Organization Module Entitlement is integrated, acceptance proves current User permission and Organization isolation only and must not claim per-Organization Agent module enablement.
 - Focused contract and unit tests are added only for pure seams that high-level tests cannot diagnose precisely, including Schema validation, Context Builder budgets, Gateway policy, result projection and deterministic financial-scope mapping.
 - Tests assert externally observable state and business outcomes rather than private implementation details.
 - Existing AI workflow recovery, queued input, durable review, multi-device Conversation, Partner ledger and Web smoke tests are the preferred prior art.
 - Recovery fault injection covers Worker exit around claim/model/tool/outcome boundaries, stale generation, dependency timeout, permission revocation, object version changes, reconnect and context-capacity failures.
+- Concurrency tests prove Conversation-sequence ordering, parallel execution across Conversations referencing the same Task, release of execution ownership at persistent HITL, strict target-version conflicts and reuse of one logical write Action across Worker retry/generation takeover.
+- Review concurrency tests prove that independently created pending packages may coexist, the first valid confirmation succeeds, and every later package based on an older target version conflicts even when its fields appear disjoint.
+- Conflict UX tests prove that no replacement model run starts automatically, the conflict Activity survives refresh, and only the explicit regenerate action creates a new InputBatch/Attempt and package from current facts.
+- Lifecycle command tests separately cover stop-run, Interaction/Review cancellation, Task closure, late-generation rejection and panel close/hide with no server-side cancellation.
 - Second-slice deterministic scenarios include unique/no/multiple Partner matches, fake or cross-Organization locators, revoked `/partner` access, all supported ledger scopes, unsupported due-date wording, truncated preview, changed business data, history restore and explicit navigation.
 - A second vertical slice fails platform reuse acceptance if it requires Partner-specific fields or transitions in generic platform tables/state machines.
 - Required repository verification remains layered: typecheck, permission-matrix checks for permission-surface changes, React Doctor for Web/shared changes, focused tests locally, API E2E in CI, and browser E2E for selected critical journeys.
@@ -137,6 +149,8 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - A dedicated workflow operations console or public retry API.
 - Replacing CopilotKit as the Conversation shell or replacing Ant Design business UI without a separately demonstrated framework gap.
 - Production data migration or production rollout in this PRD.
+- Organization Module Entitlement implementation and its management API/UI; the platform keeps its grant-resolution seam but does not claim this enforcement in the first delivery.
+- SourceOrder completion through Agent; it remains a future example of a separate goal after Departure creation, not a #363 acceptance requirement.
 
 ## Further Notes
 
@@ -144,3 +158,4 @@ User 需要一个以 Conversation 为入口的 Agent：既能进行无需 Task �
 - The selected visual baseline is prototype branch `codex/prototype-agent-conversation-a`; prototype code is reference evidence only and is not production implementation.
 - CopilotKit business-query UI research concluded that Generative UI supports rich result components but does not provide a generic business-list pagination pattern; the product therefore uses compact Conversation summaries and explicit navigation to formal business pages.
 - Formal implementation issues must be tracer-bullet slices and sized so one agent can normally complete each issue within one context window.
+- US18 deliberately validates that the Conversation remains usable after one Task completes; SourceOrder creation itself is deferred to a later capability/vertical slice.

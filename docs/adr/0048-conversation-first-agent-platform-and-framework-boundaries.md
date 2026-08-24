@@ -24,13 +24,17 @@ CopilotKit/AG-UI 与浏览器只维护可从持久事件重建的交互投影和
 
 平台的分布式执行保证是“至少执行一次 + 执行权代次 fencing + 业务幂等”，不承诺外部模型、OCR 或工具恰好调用一次。持久作业每次有效认领获得单调递增 generation；heartbeat、短期工具委托、Agent 动作和最终提交都必须验证当前 generation。租约过期、被新 Worker 接管、停止或取消后的旧 generation 及迟到结果不得推进权威状态。稳定 Action 身份和领域命令幂等负责让重复技术调用最多形成一个有效业务结果；重复费用与运行轨迹可以保留。
 
+运行序列以 Conversation 而不是 Task 为边界：同一 Conversation 同时至多存在一个执行中的 Agent Attempt，后续 InputBatch 按服务端 Conversation Event sequence 认领；不同 Conversation 可以并行，即使它们关联同一 AgentTask 或业务对象。进入 `awaiting_review` 或 `awaiting_user_input` 时当前 Attempt 已到达持久终态并释放运行权，等待对象通过 Review Package 或 Interaction 独立存在，不锁住 Conversation、Task 或目标对象；后续普通消息可以形成新 InputBatch，只有明确回复某个等待对象的命令才能处置它。
+
 一次 attempt 的最终 Agent 消息或持久交互/审核包、相关 Agent 动作、输入批次结果、Attempt/Job 终态和任务活动投影必须由 Worker 重新校验并在一个权威事务中提交。Mastra 的审核工具只可返回副作用为零的提案或预校验结果；不得像当前过渡实现那样先经 HTTP 创建审核包、再由 Worker 二次投影。这个双写窗口是必须在平台迁移中消除的现有缺陷，而不是目标架构的兼容语义。
 
 每个逻辑业务命令使用稳定 Action 身份贯穿决策、执行、重试和结果。若进程在业务效果已经产生、Action 结果尚未落库时崩溃，重放必须根据领域幂等结果或外部回执对账并完成原 Action，不得创建第二个效果；能够同库提交的状态共享事务，外部副作用使用 outbox、回执、补偿或显式对账。Action Gateway 的登记记录本身不等于 execute-once。
 
+Action 身份按风险语义生成，不由 taskId、ActivityRun、Attempt 或 generation 充当业务幂等键。只读调用按 Attempt 与 Tool 调用形成可重复的审计 Action；提案使用 `inputBatchId + capabilityVersion + resolvedTarget + proposalHash` 识别同一逻辑提案；审核后的执行使用 `reviewPackageId + reviewVersion + decisionCommandId` 识别同一确认命令。Worker 重试或 generation 接管必须查找并继续原逻辑 Action，相同输入在目标、参数或提案内容变化后才建立新 Action。第一版不向模型开放无需审核的即时写 Capability；未来启用前必须为该 Capability 单独定义服务端持久化的稳定命令身份、重复语义和领域幂等契约。
+
 Action 审计与业务效果具有不同的回滚语义。稳定 Action 记录必须保留模型提议、服务端解析出的真实目标、generation、权限/策略决策以及执行结果或拒绝原因；业务事务失败或回滚不得同时抹去失败、拒绝、冲突或取消记录。写操作无法可靠建立审计时 fail closed；只读操作只有在服务端预先定义的降级策略下才可继续，并必须告警且形成可补偿的审计缺口，不能由模型或前端自行决定。
 
-停止与取消先在服务端事务中使当前 generation 失效并持久化取消状态，再尽力 abort Mastra 调用；所有迟到工具、Action 和 outcome 都在提交边界重新验证 generation。浏览器停止、连接断开或运行时 abort 只用于及时释放资源，不能作为隔离保证。
+停止本次运行、取消等待项与关闭任务是三个不同的服务端命令。停止只针对当前 InputBatch/Attempt：先在服务端事务中使当前 generation 失效并持久化批次取消状态，再尽力 abort Mastra 调用，不关闭 Conversation、AgentTask 或已经持久化的 Review Package/Interaction。取消等待项只取消指定 Interaction 或 Review Package，不关闭 Task。关闭 AgentTask 是 User 对长期目标的显式决定，必须终止或隔离该 Task 尚未完成的批次、等待项及迟到 Action，但不删除关联 Conversation 或回滚已经提交的业务事实。所有迟到工具、Action 和 outcome 都在提交边界重新验证 generation。浏览器停止、连接断开或运行时 abort 只用于及时释放资源，不能作为隔离保证；关闭或隐藏 Agent 面板不触发任何停止、取消或关闭命令。
 
 重试按错误语义分层：Mastra 可在单个 attempt 的预算内处理无独立业务副作用的模型瞬时失败、Schema 纠正和证据预校验；Worker 只为可恢复基础设施失败创建新 Attempt。权限拒绝、取消、过期版本、业务并发冲突及需要 User 输入的校验结果进入明确的失败或等待状态，不自动重跑。持久作业只有在其全部权威后处理已经原子完成，或剩余步骤已交给可恢复的 continuation/outbox 作业后才能成功；不得用“作业成功后 best-effort 固定资料或推进批次”维持业务链。
 
@@ -50,7 +54,9 @@ Context Manifest 冻结本次 Attempt 的会话、资料、启动业务快照、
 
 文件只有经正式业务命令成为合同、发票等领域附件后，才作为业务对象的一部分被其它会话按业务权限读取；这不建立通用 `AgentTaskMaterial`。当前 `DepartureMaterial.taskId` 和上传即任务资料是 AI 建团竖切的过渡结构，平台迁移时应改为 conversation/input-batch source 与版本化解析引用，不能提升为所有 Agent 任务共享资料的模型。
 
-Review Package 同样属于产生它的 Conversation、InputBatch、Attempt 和 Action，并绑定目标对象基准版本、write set 与一致性字段组；它不是任务级锁，也不以 Task/阶段全局唯一。会话 A 等待审核时，会话 B 仍可排队、读取最新事实并产生自己的提案。确认任一包时由领域服务复验当前版本：版本未变则提交；版本变化但登记策略能证明 write set 与一致性字段组未变时允许安全合并并完整留痕；高风险能力或无法证明安全时返回 stale/conflict，并从最新事实生成新包，原包标记过期或被替代但不改写。确认后跨会话共享的是新的业务事实，不是原会话的来源集合。
+Review Package 同样属于产生它的 Conversation、InputBatch、Attempt 和 Action，并绑定目标对象基准版本与 write set；它不是任务级锁，也不以 Task/阶段全局唯一。会话 A 等待审核时，会话 B 仍可排队、读取最新事实并产生自己的提案。第一版确认任一包时由领域服务严格复验当前版本：版本未变才可提交，版本变化一律返回 stale/conflict；只有 User 后续显式发起重新生成，系统才从最新事实创建新包，原包保持冲突历史且不改写。字段未重叠不构成通用安全合并证明，因为领域不变量可能跨字段成立。未来若某一 Capability 需要安全合并，必须通过独立决策登记版本化 write set、一致性字段组、领域合并策略及并发测试后显式启用；平台默认仍为严格冲突。确认后跨会话共享的是新的业务事实，不是原会话的来源集合。
+
+确认命令遇到版本冲突时不得自动调用模型或静默创建替代提案。Conversation 追加持久化冲突 Activity，展示目标已变化及可安全披露的变化摘要，并提供“基于最新状态重新生成”显式动作；User 点击后才创建新的 InputBatch/Attempt，重新读取当前事实并生成新的 Review Package。原包保持 `conflict` 历史状态，不原地更新为新版本。
 
 每次 Attempt 的默认上下文由 Context Builder 按业务优先级确定性装配：平台安全与能力约束、当前 InputBatch、当前回复所关联的 Interaction/Review Package、Task 目标/阶段/活动摘要/业务对象引用、领域 API 读取的最新事实与版本、当前会话开放问题及必要近期尾部、当前会话版本化摘要、本批明确引用的会话来源。其它会话消息、来源和待审核包、完整历史、页面未保存编辑及无关业务字段均不默认进入；页面只提供 locator 和交互语境。Mastra processors 只处理每次模型调用的技术安全与容量，不能改变该业务优先级或让 Manifest 与实际输入失配。
 
@@ -82,17 +88,19 @@ Review Package 同样属于产生它的 Conversation、InputBatch、Attempt 和 
 
 当前仍处开发阶段，开发期 Agent 任务、会话、批次、来源、Attempt、Action 与审核记录不构成必须迁移的历史资产。本次采用逻辑上的新架构切换，不编写历史回填、双写、shadow read 或按 Organization 迁移机制。先定义通用模型和契约，再把现有建团竖切迁入唯一的新 Worker、Gateway、Review 与审计链；验收后直接移除旧运行链，不能为了开发数据保留第二套平台。
 
+落表采用原位泛化而不是建立平行 `Agent*` 表族：现有会话、批次、作业、Attempt、Action 等语义仍通用的控制面表直接移除建团专属外键和约束，并可在同一次开发期切换中按领域术语重命名；只为当前缺失的 AgentTask、会话任务关联、批次任务引用和 ConversationSource 等概念新增模型。代码、契约和文档统一使用 `AgentConversation`、`AgentTask`、`InputBatch`、`Attempt`、`Action` 等领域术语，物理旧表名不得继续决定领域所有权。切换期间不得存在两套可写会话或 Worker 链。
+
 开发环境允许通过迁移或重置清理旧 Agent 运行数据，但清理边界只限 Agent 控制面及未被领域引用的临时来源。`Departure`、客源单、财务记录等正式业务对象，以及已由领域命令接收的正式附件或审计记录，不得被 Agent 表的清理级联删除、覆盖或回滚；必要时仅解除旧 Agent 关联并保留业务对象。
 
-通用 AgentTask 与 AiCreateTask 采用共享主键的一对一身份。新建建团任务时原子创建 AgentTask 和 AiCreateTask 领域扩展；AgentTask 保存 Organization、Owner、版本化 Goal、Task Type 与通用生命周期，AiCreateTask 只保存建团 phase、DepartureCreationDraft 与 departureId。新领域任务只创建 AgentTask，不为兼容性建立空 AiCreateTask，也不为开发期旧任务生成 ID 转换表。
+通用 AgentTask 与 `DepartureCreationTask` 采用共享主键的一对一身份。新建建团任务时原子创建 AgentTask 和 DepartureCreationTask 领域扩展；AgentTask 保存 Organization、Owner、版本化 Goal、Task Type 与通用生命周期，DepartureCreationTask 只保存建团 phase、DepartureCreationDraft 与 departureId。当前 `AiCreateTask` 通过开发期原位改造或重命名成为该领域扩展；新领域任务只创建 AgentTask，不建立空建团扩展，也不为开发期旧任务生成 ID 转换表。
 
-会话与任务只通过 AgentTaskConversation 多对多关系连接，至少保存 conversationId、taskId、linkedAt、linkedByUserId 与 linkReason，并唯一约束 `(conversationId, taskId)`。AiConversation 拥有标题/标题来源、Owner、最近活动和 `open / archived` 生命周期，不再持有必填 taskId；Task 删除或关闭不得删除 Conversation。旧 AiConversation.taskId 和旧状态不回填、不双写，新架构启用后直接停止使用。
+会话与任务只通过 AgentTaskConversation 多对多关系连接，至少保存 conversationId、taskId、linkedAt、linkedByUserId 与 linkReason，并唯一约束 `(conversationId, taskId)`。AgentConversation 拥有标题/标题来源、Owner、最近活动和 `open / archived` 生命周期，不再持有必填 taskId；现有 `AiConversation` 原位泛化为该模型，而不是与新表并行。Task 删除或关闭不得删除 Conversation；旧 taskId 和旧状态不回填、不双写，新架构启用后直接停止使用。
 
 通用运行链改以 Conversation 与 InputBatch 为主轴，不再要求每次输入先归属单一 Task。InputBatch 创建时可以尚未关联 Task，并通过 `AgentInputBatchTask` 以 `primary / referenced / created` 角色显式关联零到多个 AgentTask；关联只记录本批次实际使用或产生的任务，不能从 Conversation 当前关联反向推断。普通查询、目标澄清和即时操作不为满足外键而创建空 Task。
 
-AiWorkflowJob 只归属 InputBatch；AiAgentAttempt 只沿 Job、InputBatch 与 ContextManifest 建立运行身份，不再强制 `taskId` 或 `activityRunId`。`AiCreateActivityRun` 不进入新平台模型，User 可见任务活动改由会话事件和 Task 状态投影表达。ContextManifest 冻结本次实际 `taskRefs`，至少包含 taskId、目标版本、状态版本及其来源，同时继续记录实际读取的业务对象版本；Task 在后续变化不改写历史 Manifest。
+WorkflowJob 只归属 InputBatch；AgentAttempt 只沿 Job、InputBatch 与 ContextManifest 建立运行身份，不再强制 `taskId` 或 `activityRunId`。现有对应 `Ai*` 运行表原位泛化；`AiCreateActivityRun` 不进入新平台模型，User 可见任务活动改由会话事件和 Task 状态投影表达。Worker 以 conversationId 排除同一会话的并行 Attempt，不再以 taskId 排除不同会话执行。ContextManifest 冻结本次实际 `taskRefs`，至少包含 taskId、目标版本、状态版本及其来源，同时继续记录实际读取的业务对象版本；Task 在后续变化不改写历史 Manifest。
 
-AiAction 的 taskId 保持可选，真实作用目标以服务端解析的 `targetKind + targetId` 及目标版本为准。通用 Review Package 归属 Conversation、InputBatch、Attempt、来源 Action 与真实目标对象，taskId 仅在该提案确实服务于某一 Task 时作为引用，不作为唯一性、并发锁或确认边界。AiCreateActivityRun 及各运行表旧必填 taskId 不进入新平台契约，建团竖切迁完后随旧运行链删除。
+Action 的 taskId 保持可选，真实作用目标以服务端解析的 `targetKind + targetId` 及目标版本为准。通用 Review Package 归属 Conversation、InputBatch、Attempt、来源 Action 与真实目标对象，taskId 仅在该提案确实服务于某一 Task 时作为引用，不作为唯一性、并发锁或确认边界。AiCreateActivityRun 及各运行表旧必填 taskId 不进入新平台契约，建团竖切迁完后随旧运行链删除。
 
 附件与工具读取结果迁移为会话私有的 `ConversationSource`，保存来源类型、存储定位、解析状态和不可变解析版本；上传到会话的内容立即进入解析，但不会因为多个 Conversation 关联同一 Task 而跨会话同步。`InputBatchSource` 固定本批次实际使用的 sourceId 与 parseVersion，审核证据继续引用固定版本、页码或区域，后续重新解析不得改写历史证据。
 
@@ -102,7 +110,7 @@ AiAction 的 taskId 保持可选，真实作用目标以服务端解析的 `targ
 
 通用审核采用“审核信封 + 版本化领域载荷”。信封固定 Conversation、InputBatch、Attempt、来源 Action、`capabilityKey + capabilityVersion`、`targetKind + targetId + baseVersion`、提案内容 Hash、状态及审核身份和时间；领域载荷由 Capability 对应的不可变 Schema 定义候选、逐项证据、write set、一致性分组和必要的冲突语义。平台不设计覆盖建团、客源和财务的万能字段数组，也不让审核包绕过领域适配器直接修改业务表。
 
-同一目标可以由不同 Conversation 或 InputBatch 同时产生多个待审核包，不按 Task 或目标建立全局 pending 唯一约束。确认时服务端重新解析真实目标并读取最新版本，复验 User 权限、Organization 范围、提案 Hash、证据与领域不变量；baseVersion 不匹配时将该包标记或投影为 conflict，由后续新 InputBatch 基于最新事实重新提案，不能静默覆盖。确认操作直接提交已审核的同一载荷，不再要求模型生成 execute 参数。
+同一目标可以由不同 Conversation 或 InputBatch 同时产生多个待审核包，不按 Task 或目标建立全局 pending 唯一约束。确认时服务端重新解析真实目标并读取最新版本，复验 User 权限、Organization 范围、提案 Hash、证据与领域不变量；第一版 baseVersion 不匹配时一律将该包标记或投影为 conflict，由后续新 InputBatch 基于最新事实重新提案，不能静默覆盖或按字段自动合并。确认操作直接提交已审核的同一载荷，不再要求模型生成 execute 参数。
 
 每条候选与其 evidence 保持结构化归属，不能在审计记录中拍平成无法追溯到字段的数组。User 对候选的修正作为带审核 User、时间与原值/新值的独立输入保存，其来源是本次人工审核，不沿用或伪造模型原 evidence；最终提交值仍可回溯到原提案与人工修正。
 
@@ -123,6 +131,8 @@ AiAction 的 taskId 保持可选，真实作用目标以服务端解析的 `targ
 Capability 与 Agent Definition 的可执行契约采用 code-first registry：key/version、Schema、风险类型、Gateway 策略、领域适配器、instructions、processor 组合及测试/eval 随代码发布。数据库只在已登记版本中保存 Organization 启停与灰度、模型/成本策略、允许范围内的风险/确认策略及推荐版本，不能动态创造不存在于代码中的能力。Attempt 在 Context Manifest 固定实际 Definition/Capability 版本和 Schema 摘要；新版本不热替换运行中 Attempt，旧版本停用后仍保留审计识别。
 
 Organization 策略只能收窄能力、数据范围或增加确认，也可在代码登记的安全档位内选择阈值；不能越过平台硬性规则、User 业务权限、组织隔离、幂等、版本校验和强制审计，不能自行把高风险能力降级。平台保留全局紧急停用能力。最终授予始终是平台规则、实时业务权限、Organization 策略及当前任务/对象范围的交集。
+
+Organization Module Entitlement 的完整目录、持久化和管理能力不阻塞第一阶段 Agent 平台底座及开发期业务竖切。第一阶段仍须通过统一 `CapabilityGrantResolver` 计算授予，并强制实时 User 权限、Organization 隔离、业务对象范围和风险策略；尚未实现的 Entitlement 维度必须被明确标记为未启用，不能以隐式全开伪装成已经支持。后续 #171–#174 通过同一 Resolver 接入，不改变 AgentDefinition、CapabilityDefinition、Worker 或 Action Gateway 状态机。在 Entitlement 接入前，平台不得宣称已经支持按 Organization 开通 Agent 模块，也不得据此进行生产范围推广。
 
 所有 read、propose 与 execute 能力调用都进入 Action Gateway。Gateway 验证 capability key/version 确实属于本 Attempt 授予集合和当前 generation，依据数据库关系解析真实 Organization 与业务目标，复验权限和范围，建立稳定 Action 后才调用领域适配器并记录安全摘要、决策与结果。read 通常自动允许但仍受敏感字段策略约束，propose 不提交业务事实，execute 增加确认、幂等、版本与事务检查；任何 Tool 都不能自行选择绕过 Gateway。
 
@@ -147,6 +157,8 @@ Skills、MCP 与 Capability 分层：Skill 只提供版本化知识、操作说�
 Agent 路由按“确定性关联优先、模型辅助意图识别、服务端最终映射”执行。Interaction/Review Package/既有 Task 直接按关联类型和阶段路由；新自然语言目标可在同一 Attempt 的有界 Mastra Workflow 中生成结构化 intent、对象引用和置信度，但服务端只接受登记意图并映射到允许的 Agent Definition，再执行能力求交。低置信、多目标或对象不明时生成持久追问；模型不得直接返回可生效的 agentId 或 capability 列表。
 
 第一阶段先建立版本化 Agent/能力注册表、服务端类型化 Request Context、工具 input/output/context Schema、统一 processor pipeline、structured output、调用 usage/trace 和离线 eval；随后用一个建团之外的只读或低风险竖切证明平台契约可复用。`TokenLimiterProcessor` 作为每个模型 step 的容量安全网；Observational Memory 只在解决 per-User/per-Organization resource 隔离后作为非权威技术会话压缩 PoC，并继续由 Context Builder 注入当前业务事实、由 Context Manifest 记录模型实际输入。
+
+#352 不再作为一个未排期的整体被动引用，而须拆成可独立交付的加固切片并接入本平台依赖图：证据契约与 Worker 原子审核提交是通用 Review Package 的前置，Gateway 权威目标解析是新增 Capability 的前置，当前消息去重与统一动态预算是通用会话运行前置，Mastra TokenLimiter 与实际 usage 是第一阶段退出条件，确定性压缩、版本化摘要和原文 locator 回读是长会话连续性验收前置，超长输入持久化、稳定分块与结构化合并是超长输入能力验收前置。任何子能力在对应切片完成前不得由 #363 或其子票宣称已经交付。
 
 Mastra 分阶段采用的第一阶段固定为“可治理执行底座”：以版本化 AgentDefinition 与统一 Agent Factory 取代领域内散落的静态 Agent 实例；Factory 只通过类型化 RequestContext 接收服务端可信身份、组织、Attempt、Manifest 与授权集合，并从 CapabilityDefinition 装配本 Attempt 实际授予的 Tools。每个 Tool 具备 input/output/context Schema，所有模型调用经过统一 input/output processor pipeline，意图、追问和交互结果使用 Structured Output，并至少记录逐 step 的模型、Token、耗时和 Tool 调用用量。
 
@@ -184,6 +196,8 @@ Eval 数据采用版本化场景矩阵，每个案例固定场景 ID/目的、Us
 
 该场景保持无 Task、跨领域、实时只读，只能通过增加 AgentDefinition、CapabilityDefinition 和领域适配器接入，并复用既有 Conversation、InputBatch、Attempt、Action、Gateway、Trace 与 Eval；不得复制 `ai-create-*` 基础设施、为查询创建空 Task/Review Package，或新建第二套会话和恢复链。查询必须调用现有 Partner 与 PaymentSchedule 领域 API/Service 读取最新事实，复用其 Organization、`/partner` 权限和字段披露口径，不直接查询 Prisma 拼装旁路结果。只有不修改平台核心状态机即可接入、独立 Eval 达标且能明确分离平台与领域职责，才视为通过；供应商应付、发团财务概况和任何写操作不进入本竖切。
 
+该竖切只证明 taskless 读取能力、授权、Action 审计、Trace/Eval、结构化结果和业务深链可以跨领域复用，不证明第二个领域的写 Capability 已经成立。当前交付的通用写入契约只由建团场景验证；未来接入第二个写领域时，仍须重新验证该领域的 Proposal/Review 适配器、对象版本/CAS、稳定 Action 身份、幂等和事务边界，但不因此修改平台状态机。未完成该验证前，产品和发布报告不得宣称“跨领域通用写入已经验证”。
+
 能力拆为三个独立的只读 Capability。`partner.search.read` 只接收名称关键词并返回对象消歧所需的 partnerId、名称、类型和状态等最小候选，不披露联系人电话或结算备注；`partner.ledger.summary.read` 接收服务端已解析的 Partner locator 和可选出团日期范围，返回按 direction 与 sourceType 分组的笔数、约定、已核销和未结清金额；`partner.ledger.items.read` 再按方向、日期范围和分页参数返回白名单化的账款编号、关联发团、标题、到期日、金额和状态。
 
 三个能力全部经过 Action Gateway 并记录只读 Action。当前页面 locator 与模型提供的 partnerId 都只是候选，Gateway 仍须按数据库关系核验 Organization 与 `/partner` 权限。默认先调用 summary；只有 User 请求明细时才调用 items，并由服务端按固定业务排序返回最多 3–5 条预览。不得把现有 Controller 全响应原样暴露给模型，也不得用一个大工具隐藏搜索、汇总和明细的授权、容量及 Eval 边界。
@@ -207,7 +221,7 @@ Eval 数据采用版本化场景矩阵，每个案例固定场景 ID/目的、Us
 第二竖切只有同时满足以下条件才视为平台复用通过：
 
 1. 代码只增加 Partner 领域的 AgentDefinition、三个 CapabilityDefinition、领域适配器和结果 renderer，不复制 `ai-create-*` 基础设施，也不为 Partner 修改通用平台状态机。
-2. 查询产生 Conversation、InputBatch、ContextManifest、Attempt 和全部只读 Action，但不创建 AgentTask、AiCreateTask 或 Review Package。
+2. 查询产生 Conversation、InputBatch、ContextManifest、Attempt 和全部只读 Action，但不创建 AgentTask、DepartureCreationTask 或 Review Package。
 3. 汇总、过滤和预览与 Partner/PaymentSchedule 领域服务一致；伪造 Partner ID、跨 Organization、缺少 `/partner` 权限及不可信页面 locator 均由 Gateway 拒绝。
 4. 唯一名称正常执行，无结果或多候选形成刷新后可恢复的持久 Interaction，模型不自行消歧。
 5. `all_active / open_only / overdue`、开放未付与出团日期范围均有确定性场景；不生成逾期应付，预览固定为正式列表最近更新前 5 条。
