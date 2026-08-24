@@ -8,6 +8,8 @@ import {
   type HeadlessExecutionIdentity,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
+  requestContextSchema,
+  type RequestContext,
 } from '@xiaotuanbao/ai-contracts'
 import { runWithAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
@@ -127,17 +129,13 @@ export async function handleHeadlessRun(
   }
 
   const userText = parsedRequest.data.userText
+  const requestContext = bound.requestContext
 
   try {
     const result = await runWithAssistRequestContext(
       {
         delegationToken,
-        taskId: parsedRequest.data.taskId,
-        runId: bound.runId,
-        conversationId: parsedRequest.data.conversationId,
-        inputBatchId: parsedRequest.data.inputBatchId,
-        attemptId: parsedRequest.data.attemptId,
-        contextManifestId: parsedRequest.data.contextManifestId,
+        ...requestContext,
       },
       () => executor({ ...parsedRequest.data, userText }),
     )
@@ -160,8 +158,14 @@ export async function handleHeadlessRun(
 
 function boundIdentitiesFromDelegation(
   payload: Record<string, unknown>,
-): { identity: HeadlessExecutionIdentity; runId: string } | null {
+): {
+  identity: HeadlessExecutionIdentity
+  runId: string
+  requestContext: RequestContext
+} | null {
   const runId = stringClaim(payload.runId)
+  const organizationId = stringClaim(payload.organizationId)
+  const userId = stringClaim(payload.sub)
   const parsed = headlessExecutionIdentitySchema.safeParse({
     taskId: stringClaim(payload.taskId),
     conversationId: stringClaim(payload.conversationId),
@@ -169,10 +173,24 @@ function boundIdentitiesFromDelegation(
     attemptId: stringClaim(payload.attemptId),
     contextManifestId: stringClaim(payload.contextManifestId),
   })
-  if (!parsed.success || !runId) {
+  const requestContext = requestContextSchema.safeParse({
+    organizationId,
+    userId,
+    taskId: stringClaim(payload.taskId),
+    runId,
+    conversationId: stringClaim(payload.conversationId),
+    inputBatchId: stringClaim(payload.inputBatchId),
+    attemptId: stringClaim(payload.attemptId),
+    contextManifestId: stringClaim(payload.contextManifestId),
+    agentDefinition: payload.agentDefinition,
+    grantedCapabilities: payload.grantedCapabilities,
+    entitlementStatus: payload.entitlementStatus,
+    objectScopes: payload.objectScopes,
+  })
+  if (!parsed.success || !requestContext.success) {
     return null
   }
-  return { identity: parsed.data, runId }
+  return { identity: parsed.data, runId, requestContext: requestContext.data }
 }
 
 function identitiesMatch(

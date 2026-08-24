@@ -1,13 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import type { RequestContext } from '@xiaotuanbao/ai-contracts'
 
-export interface AssistRequestContext {
+export interface AssistRequestContext extends Partial<RequestContext> {
   delegationToken: string
   taskId: string
   runId: string
-  conversationId?: string
-  inputBatchId?: string
-  attemptId?: string
-  contextManifestId?: string
 }
 
 const storage = new AsyncLocalStorage<AssistRequestContext>()

@@ -17,6 +17,10 @@ import {
 } from '../../src/common/jwt-claims'
 import type { AiOperationDelegationPayload } from '../../src/common/types/api-response.type'
 import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+} from '@xiaotuanbao/ai-contracts'
+import {
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
   PLAINTEXT_SYSTEM_PROMPT_VERSION,
   PLAINTEXT_TOOL_SCHEMA_VERSION,
@@ -108,6 +112,9 @@ export async function mintRunningAttemptDelegation(options: {
       jobId: job.id,
       activityRunId: run.id,
       contextManifestId: manifest.id,
+      agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
+      agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
+      grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
       status: AiAgentAttemptStatus.running,
     },
   })
@@ -123,6 +130,10 @@ export async function mintRunningAttemptDelegation(options: {
     inputBatchId: batch.id,
     attemptId: attempt.id,
     contextManifestId: manifest.id,
+    agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+    grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+    entitlementStatus: 'unavailable',
+    objectScopes: [{ organizationId, kind: 'ai_create_task', id: taskId }],
   }
   const delegationToken = await jwt.signAsync(payload, {
     expiresIn: 600,

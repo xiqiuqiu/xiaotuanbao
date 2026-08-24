@@ -1,8 +1,10 @@
-import type {
-  GetMaterialParseResultOutput,
-  GetTaskContextOutput,
-  SearchRouteTemplatesOutput,
-  SubmitReviewPackageOutput,
+import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  type GetMaterialParseResultOutput,
+  type GetTaskContextOutput,
+  type SearchRouteTemplatesOutput,
+  type SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { FailingAiActionStore, InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
@@ -20,6 +22,10 @@ const user: AiToolRequestUser = {
   conversationId: 'conv-1',
   inputBatchId: 'batch-1',
   attemptId: 'attempt-1',
+  agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+  grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+  entitlementStatus: 'unavailable',
+  objectScopes: [{ organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' }],
 }
 
 const contextPayload = {
@@ -308,14 +314,7 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
 
   it('replays the same proposal without an attempt onto the same AI action using the activity run', async () => {
     const store = new InMemoryAiActionStore()
-    const userWithoutAttempt: AiToolRequestUser = {
-      userId: 'user-1',
-      organizationId: 'org-1',
-      taskId: 'task-1',
-      runId: 'run-1',
-      conversationId: 'conv-1',
-      inputBatchId: 'batch-1',
-    }
+    const userWithoutAttempt: AiToolRequestUser = { ...user, attemptId: undefined }
     const adapter = adapterWith(store)
 
     const first = await adapter.submitReviewPackage(userWithoutAttempt, reviewInput)
@@ -326,5 +325,3 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     expect(store.records).toHaveLength(1)
   })
 })
-
-

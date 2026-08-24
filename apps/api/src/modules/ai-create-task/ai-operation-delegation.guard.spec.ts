@@ -1,4 +1,8 @@
 import { ExecutionContext } from '@nestjs/common'
+import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+} from '@xiaotuanbao/ai-contracts'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiOperationDelegationGuard } from './ai-operation-delegation.guard'
 
@@ -28,6 +32,10 @@ describe('AiOperationDelegationGuard', () => {
     inputBatchId: 'batch-1',
     attemptId: 'attempt-1',
     contextManifestId: 'manifest-1',
+    agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+    grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+    entitlementStatus: 'unavailable' as const,
+    objectScopes: [{ organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' }],
   }
 
   function createGuard(options?: {
@@ -50,6 +58,9 @@ describe('AiOperationDelegationGuard', () => {
                 id: 'attempt-1',
                 status: 'running',
                 activityRun: { status: 'running' },
+                agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
+                agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
+                grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
               }
             : options.attempt,
         ),
@@ -116,6 +127,17 @@ describe('AiOperationDelegationGuard', () => {
     )
   })
 
+  it('rejects a delegation whose Capability versions differ from the persisted Attempt snapshot', async () => {
+    const { guard } = createGuard({
+      payload: {
+        grantedCapabilities: [AI_CREATE_CAPABILITY_REFS_BY_TOOL.searchRouteTemplates],
+      },
+    })
+    const { ctx } = contextWithBearer('tampered-capability-version')
+
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(AiCollaborationHttpException)
+  })
+
   it('accepts a Worker-shaped token bound to a running attempt', async () => {
     const { guard } = createGuard()
     const { ctx, request } = contextWithBearer('worker-token')
@@ -130,6 +152,10 @@ describe('AiOperationDelegationGuard', () => {
       inputBatchId: 'batch-1',
       attemptId: 'attempt-1',
       contextManifestId: 'manifest-1',
+      agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+      grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+      entitlementStatus: 'unavailable',
+      objectScopes: [{ organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' }],
     })
   })
 })

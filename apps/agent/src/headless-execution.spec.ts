@@ -37,6 +37,9 @@ jest.mock('./mastra-agent', () => {
     createAiCreateMastra: () => ({
       getAgent: () => ({ generate }),
     }),
+    createAiCreateDiscoveryMastra: () => ({
+      getAgent: () => ({ generate }),
+    }),
     mastraGenerateMock: generate,
   }
 })
@@ -91,6 +94,17 @@ function delegationToken(claims: Record<string, unknown> = {}): string {
       inputBatchId: IDENTITY.inputBatchId,
       attemptId: IDENTITY.attemptId,
       contextManifestId: IDENTITY.contextManifestId,
+      agentDefinition: { key: 'departure.create', version: 1 },
+      grantedCapabilities: [
+        { key: 'departure.task-context.read', version: 2 },
+        { key: 'departure.route-template.search', version: 1 },
+        { key: 'departure.review-package.propose', version: 1 },
+        { key: 'departure.material-parse-result.read', version: 1 },
+      ],
+      entitlementStatus: 'unavailable',
+      objectScopes: [
+        { organizationId: 'org-1', kind: 'ai_create_task', id: IDENTITY.taskId },
+      ],
       ...claims,
     }),
   ).toString('base64url')
@@ -309,7 +323,15 @@ describe('headless Agent runtime contract', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const { port } = server.address() as AddressInfo
     try {
-      const response = await postHeadless(port)
+      const response = await postHeadless(port, {
+        body: {
+          ...REQUEST,
+          organizationId: 'org-model-spoof',
+          userId: 'user-model-spoof',
+          agentDefinition: { key: 'evil.agent', version: 999 },
+          grantedCapabilities: [{ key: 'evil.capability', version: 999 }],
+        },
+      })
       expect(response.status).toBe(200)
       expect(mockFetchTaskContext).toHaveBeenCalledWith(
         {
@@ -320,12 +342,22 @@ describe('headless Agent runtime contract', () => {
         { taskId: 'task-1', runId: 'run-1' },
       )
       expect(seen).toMatchObject({
+        organizationId: 'org-1',
+        userId: 'user-1',
         taskId: 'task-1',
         runId: 'run-1',
         attemptId: 'attempt-1',
         conversationId: 'conversation-1',
         inputBatchId: 'batch-1',
         contextManifestId: 'manifest-1',
+        agentDefinition: { key: 'departure.create', version: 1 },
+        grantedCapabilities: [
+          { key: 'departure.task-context.read', version: 2 },
+          { key: 'departure.route-template.search', version: 1 },
+          { key: 'departure.review-package.propose', version: 1 },
+          { key: 'departure.material-parse-result.read', version: 1 },
+        ],
+        entitlementStatus: 'unavailable',
       })
     } finally {
       await new Promise<void>((resolve, reject) =>

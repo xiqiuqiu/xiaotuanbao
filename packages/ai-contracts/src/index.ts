@@ -127,3 +127,29 @@ export {
   type HeadlessAwaitingReviewResult,
   type HeadlessFailedResult,
 } from './runtime/headless-execution'
+export {
+  CAPABILITY_DENIAL_REASONS,
+  CAPABILITY_KINDS,
+  CAPABILITY_RISKS,
+  AgentDefinitionRegistry,
+  CapabilityDefinitionRegistry,
+  capabilityGrantResolver,
+  requestContextSchema,
+  versionedDefinitionRefSchema,
+  type AgentDefinition,
+  type AgentCapabilityDeclaration,
+  type CapabilityDefinition,
+  type CapabilityDenialReason,
+  type CapabilityGrantRequest,
+  type CapabilityGrantResult,
+  type RequestContext,
+  type VersionedDefinitionRef,
+} from './runtime/agent-platform'
+export {
+  AI_CREATE_AGENT_CAPABILITY_DECLARATION,
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_DEFINITIONS,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  aiCreateCapabilityDefinitionForTool,
+  aiCreateCapabilityDefinitionRegistry,
+} from './runtime/ai-create-definitions'

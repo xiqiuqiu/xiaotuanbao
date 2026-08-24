@@ -39,6 +39,10 @@ export function createPrismaAiActionStore(client: AiActionDb): AiActionStore {
             runId: draft.runId,
             attemptId: draft.attemptId,
             contextManifestId: draft.contextManifestId,
+            agentDefinitionKey: draft.agentDefinition.key,
+            agentDefinitionVersion: draft.agentDefinition.version,
+            capabilityKey: draft.capability?.key,
+            capabilityVersion: draft.capability?.version,
             name: draft.name,
             kind: draft.kind,
             decision: draft.decision,
@@ -163,6 +167,14 @@ function toSummary(row: AiAction): AiActionSummary {
     inputHash: row.inputHash,
     candidateFieldKeys: row.candidateFieldKeys,
     executionStatus: row.executionStatus,
+    agentDefinition: {
+      key: row.agentDefinitionKey,
+      version: row.agentDefinitionVersion,
+    },
+    capability:
+      row.capabilityKey && row.capabilityVersion
+        ? { key: row.capabilityKey, version: row.capabilityVersion }
+        : null,
   }
 }
 

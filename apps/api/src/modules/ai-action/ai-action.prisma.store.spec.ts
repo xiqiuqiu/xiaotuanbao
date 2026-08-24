@@ -54,3 +54,46 @@ describe('createPrismaAiActionStore.observeRepeat', () => {
     expect(created).toHaveLength(1)
   })
 })
+
+describe('createPrismaAiActionStore.findOrCreate', () => {
+  it('把 Agent Definition 与 Capability 版本写入 Action', async () => {
+    const writes: Array<Record<string, unknown>> = []
+    const store = createPrismaAiActionStore({
+      $executeRawUnsafe: async () => 0,
+      aiAction: {
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          writes.push(data)
+          return {
+            id: 'action-1',
+            ...data,
+            targetKind: null,
+            targetId: null,
+          }
+        },
+      },
+      aiActionRepeatObservation: {},
+    } as never)
+
+    await store.findOrCreate({
+      organizationId: 'org-1',
+      name: 'getTaskContext',
+      kind: 'read',
+      decision: 'allow',
+      reasonCode: 'OBSERVATION_PERIOD',
+      targetRef: null,
+      inputHash: 'hash-1',
+      candidateFieldKeys: [],
+      executionStatus: 'not_started',
+      agentDefinition: { key: 'departure.create', version: 1 },
+      capability: { key: 'departure.task-context.read', version: 2 },
+    })
+
+    expect(writes[0]).toMatchObject({
+      agentDefinitionKey: 'departure.create',
+      agentDefinitionVersion: 1,
+      capabilityKey: 'departure.task-context.read',
+      capabilityVersion: 2,
+    })
+  })
+})

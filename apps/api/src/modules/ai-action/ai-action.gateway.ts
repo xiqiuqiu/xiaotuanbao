@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
-import { AI_CREATE_TOOL_NAMES } from '@xiaotuanbao/ai-contracts'
+import { aiCreateCapabilityDefinitionForTool } from '@xiaotuanbao/ai-contracts'
 import { AI_ACTION_STORE } from './ai-action.store'
 import type {
   AiActionDecision,
@@ -12,29 +12,33 @@ import type {
   AiActionSummary,
 } from './ai-action.types'
 
-const REGISTERED_ACTIONS: Record<
-  (typeof AI_CREATE_TOOL_NAMES)[number],
-  { kind: AiActionKind; decision: AiActionDecision; targetKind: string }
-> = {
-  getTaskContext: { kind: 'read', decision: 'allow', targetKind: 'ai_create_task' },
-  searchRouteTemplates: { kind: 'read', decision: 'allow', targetKind: 'route_template_catalog' },
-  getMaterialParseResult: { kind: 'read', decision: 'allow', targetKind: 'departure_material' },
-  submitReviewPackage: { kind: 'write', decision: 'review', targetKind: 'departure_creation_draft' },
-}
-
 @Injectable()
 export class AiActionGateway {
   constructor(@Inject(AI_ACTION_STORE) private readonly store: AiActionStore) {}
 
   async execute(proposal: AiActionProposal): Promise<AiActionExecuteResult> {
-    const registered = isRegisteredName(proposal.name)
-      ? REGISTERED_ACTIONS[proposal.name]
+    const definition = aiCreateCapabilityDefinitionForTool(proposal.name)
+    const registered = definition?.gateway
+      ? { ...definition.gateway, capability: { key: definition.key, version: definition.version } }
       : null
     const targetMismatch = Boolean(registered) && isClaimedTargetMismatch(proposal)
+    const capabilityGranted =
+      registered != null &&
+      proposal.actor.grantedCapabilities.some(
+        (grant) =>
+          grant.key === registered.capability.key && grant.version === registered.capability.version,
+      )
 
-    const kind: AiActionKind = registered?.kind ?? 'write'
-    const decision: AiActionDecision = registered && !targetMismatch ? registered.decision : 'deny'
-    const reasonCode = !registered ? 'UNREGISTERED' : targetMismatch ? 'TARGET_MISMATCH' : 'OBSERVATION_PERIOD'
+    const kind: AiActionKind = registered?.actionKind ?? 'write'
+    const decision: AiActionDecision =
+      registered && capabilityGranted && !targetMismatch ? registered.decision : 'deny'
+    const reasonCode = !registered
+      ? 'UNREGISTERED'
+      : !capabilityGranted
+        ? 'CAPABILITY_NOT_GRANTED'
+        : targetMismatch
+          ? 'TARGET_MISMATCH'
+          : 'OBSERVATION_PERIOD'
     const executionStatus = decision === 'deny' ? 'skipped' : 'not_started'
 
     const persisted = await this.persistDecision(proposal, {
@@ -99,6 +103,8 @@ export class AiActionGateway {
         inputHash: hashInput(proposal.input),
         candidateFieldKeys: extractCandidateFieldKeys(proposal.input),
         executionStatus: fields.executionStatus,
+        agentDefinition: proposal.actor.agentDefinition,
+        capability: capabilityRefForTool(proposal.name),
       })
     } catch (error) {
       if (fields.kind === 'read') {
@@ -129,8 +135,9 @@ export class AiActionGateway {
   }
 }
 
-function isRegisteredName(name: string): name is (typeof AI_CREATE_TOOL_NAMES)[number] {
-  return Object.hasOwn(REGISTERED_ACTIONS, name)
+function capabilityRefForTool(name: string): { key: string; version: number } | null {
+  const definition = aiCreateCapabilityDefinitionForTool(name)
+  return definition ? { key: definition.key, version: definition.version } : null
 }
 
 function claimedStringField(input: unknown, field: string): string | null {

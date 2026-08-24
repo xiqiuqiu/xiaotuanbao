@@ -83,5 +83,7 @@ function actorFrom(user: AiToolRequestUser): AiActionActor {
     runId: user.runId,
     attemptId: user.attemptId,
     contextManifestId: user.contextManifestId,
+    agentDefinition: user.agentDefinition,
+    grantedCapabilities: user.grantedCapabilities,
   }
 }
