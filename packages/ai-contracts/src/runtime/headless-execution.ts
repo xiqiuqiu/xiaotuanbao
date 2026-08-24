@@ -24,6 +24,7 @@ export const headlessExecutionIdentitySchema = z
 export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
   .extend({
     userText: z.string().trim().min(1),
+    userTextSha256: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strip()
 

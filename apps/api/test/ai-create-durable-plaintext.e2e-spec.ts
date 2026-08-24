@@ -1,4 +1,5 @@
 import http from 'node:http'
+import { createHash } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
@@ -217,12 +218,36 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
         inputHash: expect.any(String),
         summaryVersion: null,
         excerptDigests: [],
+        budget: expect.objectContaining({
+          estimatorVersion: 'utf8-bytes-ceil-div3/v1',
+          outputReserveTokens: expect.any(Number),
+          providerFramingTokens: expect.any(Number),
+          overSoftLimit: false,
+        }),
+        sections: expect.arrayContaining([
+          expect.objectContaining({ key: 'assembled_user_message' }),
+        ]),
       },
     })
     const sequences = attempt?.contextManifest.eventSequences
     expect(Array.isArray(sequences)).toBe(true)
-    expect(agent.lastUserText()).toContain('【交流背景】')
-    expect(agent.lastUserText()).toContain('【本轮指令】')
+    const currentUserSequence = (sent.body.data.events as Array<{ sequence: number }>)[0]?.sequence
+    expect(sequences).not.toContain(currentUserSequence)
+    const actualUserText = agent.lastUserText()
+    expect(actualUserText).not.toBeNull()
+    if (actualUserText == null) {
+      throw new Error('deterministic Headless Agent 未收到 User 输入')
+    }
+    expect(actualUserText).toContain('【交流背景】')
+    expect(actualUserText).toContain('【本轮指令】')
+    expect(actualUserText.match(new RegExp(userText, 'g'))).toHaveLength(1)
+    const sections = attempt?.contextManifest.sections as Array<{
+      key: string
+      sha256: string
+    }>
+    expect(sections.find((section) => section.key === 'assembled_user_message')?.sha256).toBe(
+      createHash('sha256').update(actualUserText, 'utf8').digest('hex'),
+    )
     const jobsBeforeList = await prisma.aiWorkflowJob.count({ where: { taskId } })
     const listedAgain = await listEvents(taskId, conversationId)
     expect(listedAgain.events.length).toBeGreaterThan(0)

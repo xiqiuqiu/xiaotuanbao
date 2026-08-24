@@ -1,15 +1,11 @@
 import {
-  AGENT_MESSAGE_DROPPED_TRUNCATION,
-  FROZEN_PROJECTION_TOTAL_CHARS,
-} from '@xiaotuanbao/ai-contracts'
-import {
-  applyFrozenProjectionBudget,
   assembleFrozenUserText,
   buildContextManifest,
   buildFrozenProjection,
   composePlaintextUserText,
   digestExcerpt,
   excerptDigestsFor,
+  isConfirmedReviewContinuation,
   parseEventSequences,
   projectConversationEventsForAgent,
   resolveAttemptUserText,
@@ -95,6 +91,21 @@ describe('projectConversationEventsForAgent', () => {
 })
 
 describe('resolveAttemptUserText', () => {
+  it('detects review continuation from the frozen event instead of comparing message text', () => {
+    expect(
+      isConfirmedReviewContinuation({
+        kind: 'batch_status',
+        payload: { status: 'completed', disposition: 'confirmed' },
+      }),
+    ).toBe(true)
+    expect(
+      isConfirmedReviewContinuation({
+        kind: 'user_message',
+        payload: { text: REVIEW_CONFIRM_CONTINUATION_TEXT },
+      }),
+    ).toBe(false)
+  })
+
   it('replaces the original request after a confirmed review continuation', () => {
     expect(
       resolveAttemptUserText('请按这个团名建团', {
@@ -116,6 +127,24 @@ describe('resolveAttemptUserText', () => {
 })
 
 describe('frozen context projection', () => {
+  it('injects the current User event only as current input, never in the recent tail', () => {
+    const projection = buildFrozenProjection({
+      events: [
+        { sequence: 1, kind: 'user_message', payload: { text: '上一轮问题' } },
+        { sequence: 2, kind: 'agent_message', payload: { text: '上一轮回复' } },
+        { sequence: 3, kind: 'user_message', payload: { text: '本轮唯一指令' } },
+      ],
+      conversationVersion: 3,
+      originUserMessageSequence: 3,
+      currentUserMessageSequence: 3,
+      materials: [],
+    })
+
+    expect(projection.recentTail.map((event) => event.sequence)).toEqual([1, 2])
+    const assembled = assembleFrozenUserText('本轮唯一指令', projection)
+    expect(assembled.match(/本轮唯一指令/g)).toHaveLength(1)
+  })
+
   it('assembles reserved empty background, recent tail and pinned materials once', () => {
     const assembled = assembleFrozenUserText('看下附件', {
       conversationBackground: { summary: null, summaryVersion: null },
@@ -143,37 +172,23 @@ describe('frozen context projection', () => {
     expect(assembled).toContain('getMaterialParseResult')
   })
 
-  it('drops older agent messages before clipping the current user text', () => {
-    const filler = '甲'.repeat(8000)
-    const budgeted = applyFrozenProjectionBudget(
-      [
-        { sequence: 1, kind: 'user_message', text: '第一句' },
-        { sequence: 2, kind: 'agent_message', text: filler },
-        { sequence: 3, kind: 'agent_message', text: filler },
-        { sequence: 4, kind: 'user_message', text: '本批原文' },
+  it('只冻结完整候选区段，把唯一裁剪决策留给统一 Token 预算模块', () => {
+    const filler = '甲'.repeat(8_000)
+    const projection = buildFrozenProjection({
+      events: [
+        { sequence: 1, kind: 'user_message', payload: { text: '第一句' } },
+        { sequence: 2, kind: 'agent_message', payload: { text: filler } },
+        { sequence: 3, kind: 'agent_message', payload: { text: filler } },
       ],
-      [
-        {
-          materialId: 'mat-1',
-          parseResultVersion: 1,
-          status: 'ready',
-          pageCount: 1,
-          excerpt: '乙'.repeat(4000),
-          truncated: false,
-        },
-      ],
-      4,
-    )
-    expect(budgeted.truncationReasons).toContain(AGENT_MESSAGE_DROPPED_TRUNCATION)
-    expect(budgeted.recentTail.some((event) => event.kind === 'agent_message')).toBe(false)
-    expect(budgeted.recentTail.map((event) => event.text)).toEqual(['第一句', '本批原文'])
-    const chars =
-      budgeted.recentTail.reduce((sum, event) => sum + (event.text?.length ?? 0), 0) +
-      budgeted.pinnedMaterials.reduce((sum, item) => sum + item.excerpt.length, 0)
-    expect(chars).toBeLessThanOrEqual(FROZEN_PROJECTION_TOTAL_CHARS)
+      conversationVersion: 3,
+      materials: [],
+    })
+
+    expect(projection.recentTail.map((event) => event.sequence)).toEqual([1, 2, 3])
+    expect(projection.truncationReasons).toEqual([])
   })
 
-  it('hashes frozen references and ignores assembled prompt text', () => {
+  it('persists the exact budgeted model input hash and section usage', () => {
     const input = {
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
@@ -193,15 +208,39 @@ describe('frozen context projection', () => {
         },
       ]),
       truncationReasons: [] as string[],
+      inputHash: 'a'.repeat(64),
+      budget: {
+        profileVersion: 'test/v1',
+        estimatorVersion: 'test-estimator/v1',
+        providerFramingVersion: 'test-framing/v1',
+        outputReserveVersion: 'test-output/v1',
+        contextWindowTokens: 100,
+        softInputLimitTokens: 80,
+        outputReserveTokens: 10,
+        providerFramingTokens: 2,
+        safetyMarginTokens: 8,
+        staticInputTokens: 10,
+        dynamicBudgetTokens: 60,
+        estimatedInputTokens: 30,
+        overSoftLimit: false,
+      },
+      sections: [
+        {
+          key: 'assembled_user_message' as const,
+          version: null,
+          estimatedTokens: 20,
+          sha256: 'b'.repeat(64),
+        },
+      ],
     }
     const left = buildContextManifest(input)
     const right = buildContextManifest(input)
     expect(left.inputHash).toBe(right.inputHash)
+    expect(left.inputHash).toBe('a'.repeat(64))
+    expect(left.budget.estimatorVersion).toBe('test-estimator/v1')
+    expect(left.sections[0]?.sha256).toBe('b'.repeat(64))
     expect(left.summaryVersion).toBeNull()
     expect(left.excerptDigests[0]?.sha256).toBe(digestExcerpt('喀纳斯'))
-    expect(left.inputHash).not.toBe(
-      buildContextManifest({ ...input, businessSnapshotVersion: 3 }).inputHash,
-    )
   })
 
   it('does not pull events after the frozen conversation version into the projection', () => {
