@@ -1600,11 +1600,16 @@ describe('CreateDepartureWizard', () => {
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
 
     await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
-        expectedVersion: 2,
-        expectedPackageVersion: 1,
-        corrections: { name: '修正团名' },
-      })
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        {
+          expectedVersion: 2,
+          expectedPackageVersion: 1,
+          corrections: { name: '修正团名' },
+        },
+        expect.stringMatching(/\S+/),
+      )
     })
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: 'AI 阶段审核包' })).not.toBeInTheDocument()
@@ -1778,10 +1783,16 @@ describe('CreateDepartureWizard', () => {
     })
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
     await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenNthCalledWith(2, 'task-1', 'pkg-2', {
-        expectedVersion: 3,
-        expectedPackageVersion: 1,
-      })
+      expect(confirmAiReviewPackage).toHaveBeenNthCalledWith(
+        2,
+        'task-1',
+        'pkg-2',
+        {
+          expectedVersion: 3,
+          expectedPackageVersion: 1,
+        },
+        expect.stringMatching(/\S+/),
+      )
     })
   })
 
@@ -1837,10 +1848,15 @@ describe('CreateDepartureWizard', () => {
 
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
     await waitFor(() => {
-      expect(confirmAiReviewPackage).toHaveBeenCalledWith('task-1', 'pkg-1', {
-        expectedVersion: localVersion,
-        expectedPackageVersion: 1,
-      })
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-1',
+        {
+          expectedVersion: localVersion,
+          expectedPackageVersion: 1,
+        },
+        expect.stringMatching(/\S+/),
+      )
     })
   })
 

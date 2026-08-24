@@ -271,10 +271,14 @@ export async function confirmAiReviewPackage(
   taskId: string,
   packageId: string,
   payload: ConfirmAiReviewPackageDto,
+  idempotencyKey: string,
 ): Promise<AiCreateTaskSummary> {
   return request.post<AiCreateTaskSummary>(
     `/ai-create-tasks/${taskId}/review-packages/${packageId}/confirm`,
     payload,
+    {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
   )
 }
 

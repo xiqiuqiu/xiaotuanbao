@@ -719,11 +719,16 @@ function useCreateDepartureWizardController() {
       }
       const corrections = pendingCorrectionsRef.current
       pendingCorrectionsRef.current = {}
-      return confirmAiReviewPackage(taskId, pendingReview.id, {
-        expectedVersion: currentVersion,
-        expectedPackageVersion: pendingReview.version,
-        ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
-      })
+      return confirmAiReviewPackage(
+        taskId,
+        pendingReview.id,
+        {
+          expectedVersion: currentVersion,
+          expectedPackageVersion: pendingReview.version,
+          ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
+        },
+        newConfirmIdempotencyKey(taskId),
+      )
     },
     onSuccess: (summary) => {
       queryClient.setQueryData(['ai-create-task', summary.id], summary)
