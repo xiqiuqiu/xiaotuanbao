@@ -44,6 +44,19 @@ const CONTEXT_BUDGET_PROFILES: Readonly<Record<string, ContextBudgetProfile>> = 
     providerFramingTokens: 1_024,
     safetyMarginTokens: 2_048,
   },
+  'deepseek/deepseek-v4-flash': {
+    profileVersion: 'ai-create-deepseek-v4-flash-32k/v1',
+    contextWindowTokens: 32_768,
+    softInputLimitTokens: 24_576,
+    outputReserveTokens: 4_096,
+    providerFramingTokens: 1_024,
+    safetyMarginTokens: 2_048,
+  },
+}
+
+const MODEL_ID_ALIASES: Readonly<Record<string, string>> = {
+  'deepseek-chat': 'deepseek/deepseek-chat',
+  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
 }
 
 export interface BudgetProjection {
@@ -245,7 +258,7 @@ export function buildBudgetedContext(input: {
 }
 
 function contextBudgetProfileFor(modelId: string): ContextBudgetProfile {
-  const canonicalModelId = modelId === 'deepseek-chat' ? 'deepseek/deepseek-chat' : modelId
+  const canonicalModelId = MODEL_ID_ALIASES[modelId] ?? modelId
   const profile = CONTEXT_BUDGET_PROFILES[canonicalModelId]
   if (!profile) {
     throw new Error(`${CONTEXT_PROFILE_MISSING}: ${modelId}`)

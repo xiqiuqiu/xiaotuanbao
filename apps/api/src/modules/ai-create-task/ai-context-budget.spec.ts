@@ -131,8 +131,12 @@ describe('buildBudgetedContext', () => {
 
     const deterministic = buildBudgetedContext({ ...input, modelId: 'deterministic' })
     const deepseek = buildBudgetedContext({ ...input, modelId: 'deepseek/deepseek-chat' })
+    const v4Flash = buildBudgetedContext({ ...input, modelId: 'deepseek/deepseek-v4-flash' })
+    const v4FlashAlias = buildBudgetedContext({ ...input, modelId: 'deepseek-v4-flash' })
 
     expect(deterministic.budget.profileVersion).not.toBe(deepseek.budget.profileVersion)
+    expect(v4Flash.budget.profileVersion).toBe('ai-create-deepseek-v4-flash-32k/v1')
+    expect(v4FlashAlias.budget.profileVersion).toBe(v4Flash.budget.profileVersion)
     expect(() => buildBudgetedContext({ ...input, modelId: 'unknown/model' })).toThrow(
       'CONTEXT_PROFILE_MISSING',
     )
