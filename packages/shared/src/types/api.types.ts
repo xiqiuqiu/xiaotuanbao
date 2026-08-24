@@ -848,6 +848,8 @@ export interface AiCreateTaskSummary {
   currentPhase: 'basic_info'
   departureId: string | null
   creatorUserId: string
+  /** AgentTask.statusVersion; required by close/cancel as expectedStatusVersion. */
+  statusVersion: number
   createdAt: string
   updatedAt: string
   draft: DepartureCreationDraftView
@@ -884,6 +886,7 @@ export interface AiCreateAssistTaskState {
 }
 
 export interface StartAiCreateAssistSessionDto {
+  conversationId?: string
   taskId?: string
   draft?: DepartureCreationDraftSnapshot
 }

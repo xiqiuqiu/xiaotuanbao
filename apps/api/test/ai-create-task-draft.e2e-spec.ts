@@ -32,10 +32,10 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
       where: { organizationId, idempotencyKey: { startsWith: testPrefix } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.segmentResource.deleteMany({
       where: {
@@ -101,9 +101,9 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
 
     const task = await prisma.aiCreateTask.findUnique({
       where: { id: response.body.data.id },
-      include: { draft: true },
+      include: { draft: true, agentTask: true },
     })
-    expect(task?.status).toBe('in_progress')
+    expect(task?.agentTask.status).toBe('active')
     expect(task?.draft?.version).toBe(1)
     expect(task?.departureId).toBeNull()
   })
@@ -209,9 +209,12 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
     expect(departure?.status).toBe('editing')
     expect(departure?.notes).toBe('正式备注')
 
-    const task = await prisma.aiCreateTask.findUnique({ where: { id: taskId } })
+    const task = await prisma.aiCreateTask.findUnique({
+      where: { id: taskId },
+      include: { agentTask: true },
+    })
     expect(task?.departureId).toBe(confirmed.body.data.id)
-    expect(task?.status).toBe('in_progress')
+    expect(task?.agentTask.status).toBe('completed')
 
     const retry = await authRequest(app, coordinatorToken)
       .post(`/api/ai-create-tasks/${taskId}/confirm`)

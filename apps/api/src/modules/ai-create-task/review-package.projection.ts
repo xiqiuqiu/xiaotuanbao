@@ -17,19 +17,23 @@ export async function projectPendingReviewPackage(
   },
 ): Promise<string> {
   const task = await tx.aiCreateTask.findFirst({
-    where: { id: params.taskId, organizationId: params.organizationId },
+    where: { id: params.taskId, agentTask: { organizationId: params.organizationId } },
     include: {
       draft: true,
-      reviewPackages: {
-        where: { status: AiReviewPackageStatus.pending },
-        take: 1,
+      agentTask: {
+        include: {
+          reviewPackages: {
+            where: { status: AiReviewPackageStatus.pending },
+            take: 1,
+          },
+        },
       },
     },
   })
   if (!task?.draft) {
     throw new Error('REVIEW_PACKAGE_TASK_MISSING')
   }
-  const existing = task.reviewPackages[0]
+  const existing = task.agentTask.reviewPackages[0]
   if (existing) {
     if (!existing.inputBatchId) {
       await tx.aiReviewPackage.update({

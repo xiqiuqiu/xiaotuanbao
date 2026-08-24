@@ -66,16 +66,16 @@ describe('AI create material readiness barrier (e2e) #316', () => {
       where: { organizationId, createdByUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()
@@ -156,7 +156,9 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     const afterParseJobs = await prisma.aiWorkflowJob.findMany({
       where: { taskId, type: 'agent_batch' },
     })
-    const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { taskId } })
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({
+      where: { taskLinks: { some: { taskId } } },
+    })
     expect(batch.status).toBe('ready_for_agent')
     expect(afterParseJobs).toHaveLength(1)
     expect(agent.callCount()).toBe(beforeParse)
@@ -249,7 +251,9 @@ describe('AI create material readiness barrier (e2e) #316', () => {
       await processor.processDueJobs(1)
       expect(agent.callCount()).toBe(beforeAgent)
 
-      const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { taskId } })
+      const batch = await prisma.aiInputBatch.findFirstOrThrow({
+        where: { taskLinks: { some: { taskId } } },
+      })
       const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
       const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
         where: { taskId, type: 'material_parse' },
@@ -378,7 +382,9 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(ocr.callCount()).toBe(beforeOcr)
     expect(agent.callCount()).toBe(beforeAgent)
 
-    const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { taskId } })
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({
+      where: { taskLinks: { some: { taskId } } },
+    })
     const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
     const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { taskId, type: 'material_parse' },

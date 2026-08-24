@@ -31,13 +31,13 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await app.close()

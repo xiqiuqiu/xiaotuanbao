@@ -59,12 +59,14 @@ export async function mintRunningAttemptDelegation(options: {
   const batch = await prisma.aiInputBatch.create({
     data: {
       organizationId,
-      taskId,
       conversationId,
       creatorUserId: userId,
       userMessageEventId: event.id,
       conversationVersion: 1,
       status: AiInputBatchStatus.agent_running,
+      taskLinks: {
+        create: { organizationId, taskId, role: 'primary' },
+      },
     },
   })
   const job = await prisma.aiWorkflowJob.create({

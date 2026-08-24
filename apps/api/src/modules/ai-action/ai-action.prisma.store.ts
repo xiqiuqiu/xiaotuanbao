@@ -68,10 +68,11 @@ export function createPrismaAiActionStore(client: AiActionDb): AiActionStore {
       }
     },
     async updateExecution(id, executionStatus) {
-      const row = await client.aiAction.update({
-        where: { id },
+      await client.aiAction.updateMany({
+        where: { id, executionStatus: 'not_started' },
         data: { executionStatus },
       })
+      const row = await client.aiAction.findUniqueOrThrow({ where: { id } })
       return toSummary(row)
     },
     async observeRepeat(draft) {

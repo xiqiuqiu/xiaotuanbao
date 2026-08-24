@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
-import { AiCreateTaskStatus as PrismaTaskStatus, AiReviewPackageStatus } from '@prisma/client'
+import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
 
 describe('AiCreateTaskService.saveDraft pendingReview', () => {
@@ -57,26 +57,32 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
 
   const task = {
     id: taskId,
-    organizationId,
-    creatorUserId: userId,
-    status: PrismaTaskStatus.in_progress,
+    agentTask: {
+      id: taskId,
+      organizationId,
+      ownerUserId: userId,
+      status: AgentTaskStatus.active,
+      statusVersion: 2,
+      createdAt: now,
+      updatedAt: now,
+      reviewPackages: [pendingPackage],
+    },
     currentPhase: AiCreatePhase.BASIC_INFO,
     departureId: null,
     createdAt: now,
     updatedAt: now,
   }
 
-  function loadTask(include: { draft?: boolean; reviewPackages?: unknown }) {
+  function loadTask(include: { draft?: boolean; agentTask?: unknown }) {
     return {
       ...task,
       draft: include.draft ? { ...draft } : undefined,
-      reviewPackages: include.reviewPackages ? [pendingPackage] : undefined,
     }
   }
 
   function createService(options?: { draftVersion?: number; updateCount?: number }) {
     const currentDraft = { ...draft, version: options?.draftVersion ?? 1 }
-    const findFirst = jest.fn().mockImplementation(({ include }: { include: { draft?: boolean; reviewPackages?: unknown } }) =>
+    const findFirst = jest.fn().mockImplementation(({ include }: { include: { draft?: boolean; agentTask?: unknown } }) =>
       Promise.resolve({
         ...loadTask(include),
         draft: include.draft ? currentDraft : undefined,
@@ -161,5 +167,56 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       }
       expect(body.data.pendingReview).toMatchObject({ id: packageId })
     }
+  })
+})
+
+describe('AiCreateTaskService.getTask statusVersion', () => {
+  const organizationId = 'org-1'
+  const userId = 'user-1'
+  const taskId = 'task-1'
+  const now = new Date('2026-08-24T00:00:00.000Z')
+
+  it('exposes AgentTask.statusVersion on the task summary', async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.statusVersion).toBe(2)
   })
 })

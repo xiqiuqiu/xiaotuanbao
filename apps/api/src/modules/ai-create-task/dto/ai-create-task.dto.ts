@@ -116,6 +116,11 @@ export class StartAiCreateAssistSessionDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  conversationId?: string
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   taskId?: string
 
   @IsOptional()

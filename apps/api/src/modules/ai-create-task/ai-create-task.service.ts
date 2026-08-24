@@ -16,7 +16,6 @@ import type {
 } from '@xiaotuanbao/shared'
 import {
   AiCreatePhase,
-  AiCreateTaskStatus,
   DepartureCreationDraftMode,
   DepartureType,
 } from '@xiaotuanbao/shared'
@@ -38,8 +37,8 @@ import {
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
-import type { AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType } from '@prisma/client'
+import type { AgentTask, AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, TaskActivityKind } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
@@ -57,6 +56,7 @@ import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
+import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { DepartureMaterialService } from './departure-material.service'
 import {
@@ -72,15 +72,19 @@ const CONFIRM_OPERATION = 'ai-create-task.confirm'
 
 type TaskWithDraft = AiCreateTask & {
   draft: DepartureCreationDraft | null
-  reviewPackages?: AiReviewPackage[]
+  agentTask: AgentTask & { reviewPackages?: AiReviewPackage[] }
 }
 
 const TASK_WITH_PENDING_INCLUDE = {
   draft: true,
-  reviewPackages: {
-    where: { status: AiReviewPackageStatus.pending },
-    orderBy: { createdAt: 'desc' as const },
-    take: 1,
+  agentTask: {
+    include: {
+      reviewPackages: {
+        where: { status: AiReviewPackageStatus.pending },
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
+      },
+    },
   },
 } satisfies Prisma.AiCreateTaskInclude
 
@@ -189,6 +193,7 @@ export class AiCreateTaskService {
       organizationId,
       userId,
       task.id,
+      dto.conversationId,
     )
 
     return {
@@ -306,7 +311,7 @@ export class AiCreateTaskService {
     }
 
     const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
-    if (task.status !== AiCreateTaskStatus.IN_PROGRESS || task.departureId) {
+    if (task.agentTask.status !== AgentTaskStatus.active || task.departureId) {
       throw new BadRequestException('仅进行中的 AI 建团任务可查询常用路线')
     }
     const run = await this.prisma.aiCreateActivityRun.findFirst({
@@ -347,16 +352,16 @@ export class AiCreateTaskService {
       await lockAiCreateTask(tx, caller.organizationId, caller.taskId)
 
       const task = await tx.aiCreateTask.findFirst({
-        where: { id: caller.taskId, organizationId: caller.organizationId },
+        where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       if (!task || !task.draft) {
         throw new NotFoundException('AI 建团任务不存在')
       }
-      if (task.creatorUserId !== caller.userId) {
+      if (task.agentTask.ownerUserId !== caller.userId) {
         throw new ForbiddenException('仅任务创建者可提交审核包')
       }
-      if (task.status !== AiCreateTaskStatus.IN_PROGRESS || task.departureId) {
+      if (task.agentTask.status !== AgentTaskStatus.active || task.departureId) {
         throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
       }
 
@@ -376,7 +381,7 @@ export class AiCreateTaskService {
         throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
       }
 
-      const pending = task.reviewPackages?.[0]
+      const pending = task.agentTask.reviewPackages?.[0]
       const disposition = httpPendingReviewDisposition(pending, options.sourceActionId)
       if (disposition === 'reject') {
         throw AiCollaborationHttpException.fromCode('REVIEW_PENDING')
@@ -434,7 +439,7 @@ export class AiCreateTaskService {
         data: { candidates: candidates as unknown as Prisma.InputJsonValue },
       })
       const task = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, organizationId },
+        where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       return this.toSummary(task)
@@ -496,7 +501,7 @@ export class AiCreateTaskService {
         disposition: 'rejected',
       })
       const task = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, organizationId },
+        where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       return { summary: this.toSummary(task), events }
@@ -525,7 +530,7 @@ export class AiCreateTaskService {
         dto.expectedPackageVersion,
       )
       const task = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, organizationId },
+        where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       if (!task.draft) {
@@ -684,7 +689,7 @@ export class AiCreateTaskService {
       })
 
       const updated = await tx.aiCreateTask.findFirstOrThrow({
-        where: { id: taskId, organizationId },
+        where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       return { summary: this.toSummary(updated), events }
@@ -748,17 +753,14 @@ export class AiCreateTaskService {
         }
 
         const task = await tx.aiCreateTask.findFirst({
-          where: { id: taskId, organizationId },
-          include: { draft: true },
+          where: { id: taskId, agentTask: { organizationId } },
+          include: TASK_WITH_PENDING_INCLUDE,
         })
         if (!task || !task.draft) {
           throw new NotFoundException('AI 建团任务不存在')
         }
-        if (task.creatorUserId !== userId) {
+        if (task.agentTask.ownerUserId !== userId) {
           throw new ForbiddenException('仅任务创建者可确认创建发团')
-        }
-        if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
-          throw new BadRequestException('仅进行中的 AI 建团任务可确认创建')
         }
         if (task.departureId) {
           const created = await tx.departure.findUniqueOrThrow({
@@ -773,6 +775,9 @@ export class AiCreateTaskService {
             },
           })
           return summary
+        }
+        if (task.agentTask.status !== AgentTaskStatus.active) {
+          throw new BadRequestException('仅进行中的 AI 建团任务可确认创建')
         }
         if (task.draft.version !== dto.expectedVersion) {
           throw new ConflictException({
@@ -794,6 +799,34 @@ export class AiCreateTaskService {
         await tx.aiCreateTask.update({
           where: { id: taskId },
           data: { departureId: created.id },
+        })
+        await isolateOpenTaskRuntime(tx, {
+          taskId,
+          errorCode: 'TASK_COMPLETED',
+        })
+        await tx.agentTask.update({
+          where: { id: taskId },
+          data: {
+            status: AgentTaskStatus.completed,
+            statusVersion: { increment: 1 },
+            activities: {
+              create: [
+                {
+                  organizationId,
+                  actorUserId: userId,
+                  kind: TaskActivityKind.business_object,
+                  summary: '已创建发团',
+                  payload: { targetKind: 'departure', targetId: created.id },
+                },
+                {
+                  organizationId,
+                  actorUserId: userId,
+                  kind: TaskActivityKind.completed,
+                  summary: '建团任务已完成',
+                },
+              ],
+            },
+          },
         })
 
         await tx.aiCreateIdempotencyRecord.update({
@@ -884,20 +917,42 @@ export class AiCreateTaskService {
     userId: string,
     snapshot: DepartureCreationDraftSnapshot,
   ): Promise<AiCreateTaskSummary> {
-    const task = await this.prisma.aiCreateTask.create({
-      data: {
-        organizationId,
-        creatorUserId: userId,
-        status: AiCreateTaskStatus.IN_PROGRESS,
-        currentPhase: AiCreatePhase.BASIC_INFO,
-        draft: {
-          create: {
-            version: 1,
-            snapshot: snapshot as unknown as Prisma.InputJsonValue,
+    const task = await this.prisma.$transaction(async (tx) => {
+      const genericTask = await tx.agentTask.create({
+        data: {
+          organizationId,
+          ownerUserId: userId,
+          type: AgentTaskType.departure_creation,
+          goal: snapshot.routeName.trim()
+            ? `创建发团：${snapshot.routeName.trim()}`
+            : '创建发团',
+          status: AgentTaskStatus.active,
+          departureCreationTask: {
+            create: {
+              currentPhase: AiCreatePhase.BASIC_INFO,
+              draft: {
+                create: {
+                  version: 1,
+                  snapshot: snapshot as unknown as Prisma.InputJsonValue,
+                },
+              },
+            },
+          },
+          activities: {
+            create: {
+              organizationId,
+              actorUserId: userId,
+              kind: TaskActivityKind.goal,
+              summary: '创建发团',
+              payload: { goalVersion: 1 },
+            },
           },
         },
-      },
-      include: { draft: true },
+      })
+      return tx.aiCreateTask.findUniqueOrThrow({
+        where: { id: genericTask.id },
+        include: TASK_WITH_PENDING_INCLUDE,
+      })
     })
     return this.toSummary(task)
   }
@@ -913,16 +968,19 @@ export class AiCreateTaskService {
       await lockAiCreateTask(tx, organizationId, taskId)
 
       const task = await tx.aiCreateTask.findFirst({
-        where: { id: taskId, organizationId },
+        where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,
       })
       if (!task || !task.draft) {
         throw new NotFoundException('发团创建草稿不存在')
       }
-      if (task.creatorUserId !== userId) {
+      if (task.agentTask.ownerUserId !== userId) {
         throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
       }
-      if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+      if (
+        task.agentTask.status !== AgentTaskStatus.active &&
+        task.agentTask.status !== AgentTaskStatus.waiting
+      ) {
         throw new BadRequestException('仅进行中的 AI 建团任务可保存草稿')
       }
       if (task.departureId) {
@@ -944,7 +1002,7 @@ export class AiCreateTaskService {
       })
       if (updated.count !== 1) {
         const latest = await tx.aiCreateTask.findFirst({
-          where: { id: taskId, organizationId },
+          where: { id: taskId, agentTask: { organizationId } },
           include: TASK_WITH_PENDING_INCLUDE,
         })
         throw new ConflictException({
@@ -966,13 +1024,13 @@ export class AiCreateTaskService {
     taskId: string,
   ): Promise<TaskWithDraft> {
     const task = await this.prisma.aiCreateTask.findFirst({
-      where: { id: taskId, organizationId },
+      where: { id: taskId, agentTask: { organizationId } },
       include: TASK_WITH_PENDING_INCLUDE,
     })
     if (!task || !task.draft) {
       throw new NotFoundException('AI 建团任务不存在')
     }
-    if (task.creatorUserId !== userId) {
+    if (task.agentTask.ownerUserId !== userId) {
       throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
     }
     return task
@@ -984,7 +1042,10 @@ export class AiCreateTaskService {
     taskId: string,
   ): Promise<TaskWithDraft> {
     const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
-    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+    if (
+      task.agentTask.status !== AgentTaskStatus.active &&
+      task.agentTask.status !== AgentTaskStatus.waiting
+    ) {
       throw new BadRequestException('仅进行中的 AI 建团任务可启动 AI 辅助')
     }
     if (task.departureId) {
@@ -1084,15 +1145,19 @@ export class AiCreateTaskService {
   ): Promise<AiReviewPackage> {
     await lockAiCreateTask(tx, organizationId, taskId)
     const task = await tx.aiCreateTask.findFirst({
-      where: { id: taskId, organizationId },
+      where: { id: taskId, agentTask: { organizationId } },
+      include: { agentTask: true },
     })
     if (!task) {
       throw new NotFoundException('AI 建团任务不存在')
     }
-    if (task.creatorUserId !== userId) {
+    if (task.agentTask.ownerUserId !== userId) {
       throw new ForbiddenException('仅任务创建者可处理审核包')
     }
-    if (task.status !== AiCreateTaskStatus.IN_PROGRESS) {
+    if (
+      task.agentTask.status !== AgentTaskStatus.active &&
+      task.agentTask.status !== AgentTaskStatus.waiting
+    ) {
       throw new BadRequestException('仅进行中的 AI 建团任务可处理审核包')
     }
     const pkg = await tx.aiReviewPackage.findFirst({
@@ -1116,7 +1181,7 @@ export class AiCreateTaskService {
     taskId: string,
   ): Promise<never> {
     const task = await tx.aiCreateTask.findFirstOrThrow({
-      where: { id: taskId, organizationId },
+      where: { id: taskId, agentTask: { organizationId } },
       include: TASK_WITH_PENDING_INCLUDE,
     })
     throw new ConflictException({
@@ -1193,15 +1258,22 @@ export class AiCreateTaskService {
       throw new BadRequestException('发团创建草稿不存在')
     }
     const snapshot = this.parseSnapshot(task.draft.snapshot)
-    const pending = task.reviewPackages?.[0]
+    const pending = task.agentTask.reviewPackages?.[0]
     return {
       id: task.id,
-      status: task.status,
+      status:
+        task.agentTask.status === AgentTaskStatus.completed
+          ? 'completed'
+          : task.agentTask.status === AgentTaskStatus.cancelled ||
+              task.agentTask.status === AgentTaskStatus.closed
+            ? 'abandoned'
+            : 'in_progress',
       currentPhase: task.currentPhase,
       departureId: task.departureId,
-      creatorUserId: task.creatorUserId,
-      createdAt: task.createdAt.toISOString(),
-      updatedAt: task.updatedAt.toISOString(),
+      creatorUserId: task.agentTask.ownerUserId,
+      statusVersion: task.agentTask.statusVersion,
+      createdAt: task.agentTask.createdAt.toISOString(),
+      updatedAt: task.agentTask.updatedAt.toISOString(),
       draft: {
         version: task.draft.version,
         snapshot,

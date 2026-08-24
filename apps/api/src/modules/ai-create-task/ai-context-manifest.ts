@@ -31,6 +31,12 @@ export interface ContextManifestInput {
   conversationVersion: number
   eventSequences: number[]
   businessSnapshotVersion: number
+  taskRefs?: Array<{
+    taskId: string
+    role: 'primary' | 'referenced' | 'created'
+    goalVersion: number
+    statusVersion: number
+  }>
   modelId: string
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
   excerptDigests: ExcerptDigest[]
@@ -44,6 +50,12 @@ export interface ContextManifestRecord {
   conversationVersion: number
   eventSequences: number[]
   businessSnapshotVersion: number
+  taskRefs: Array<{
+    taskId: string
+    role: 'primary' | 'referenced' | 'created'
+    goalVersion: number
+    statusVersion: number
+  }>
   builderVersion: string
   systemPromptVersion: string
   toolSchemaVersion: string
@@ -97,6 +109,9 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
     conversationVersion: input.conversationVersion,
     eventSequences: input.eventSequences,
     businessSnapshotVersion: input.businessSnapshotVersion,
+    taskRefs: [...(input.taskRefs ?? [])].sort(
+      (left, right) => left.taskId.localeCompare(right.taskId) || left.role.localeCompare(right.role),
+    ),
     builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
     systemPromptVersion:
       sectionVersion(input.sections, 'system_constraints') ?? PLAINTEXT_SYSTEM_PROMPT_VERSION,

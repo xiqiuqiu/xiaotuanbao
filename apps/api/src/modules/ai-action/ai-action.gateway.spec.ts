@@ -94,6 +94,34 @@ describe('AiActionGateway.execute', () => {
     expect(result.action?.targetRef).toEqual({ kind: 'ai_create_task', id: 'task-1' })
   })
 
+  it('does not let a late completion overwrite a skipped action', async () => {
+    const store = new InMemoryAiActionStore()
+    const gateway = new AiActionGateway(store)
+    let releaseForward!: () => void
+    const forwarded = new Promise<void>((resolve) => {
+      releaseForward = resolve
+    })
+
+    const execution = gateway.execute({
+      name: 'getTaskContext',
+      actor,
+      input: { taskId: 'task-1' },
+      forward: async () => {
+        await forwarded
+        return { ok: true }
+      },
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+    const action = store.records[0]
+    expect(action).toBeDefined()
+    await store.updateExecution(action!.id, 'skipped')
+    releaseForward()
+
+    await expect(execution).resolves.toMatchObject({
+      action: { executionStatus: 'skipped' },
+    })
+  })
+
   it('does not forward a registered Capability missing from the Attempt grant snapshot', async () => {
     const gateway = new AiActionGateway(new InMemoryAiActionStore())
     const forwarded: unknown[] = []

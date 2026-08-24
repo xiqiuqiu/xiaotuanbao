@@ -2,7 +2,7 @@ import {
   AiConversationInteractionStatus,
   AiConversationInteractionType,
   AiConversationStatus,
-  AiCreateTaskStatus,
+  AgentTaskStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
@@ -47,14 +47,16 @@ function createHarness(options?: {
 
   const task = {
     id: taskId,
-    organizationId,
-    creatorUserId: userId,
-    status: AiCreateTaskStatus.in_progress,
+    agentTask: {
+      id: taskId,
+      organizationId,
+      ownerUserId: userId,
+      status: AgentTaskStatus.active,
+    },
     draft: { id: 'draft-1' },
   }
   const conversation = {
     id: conversationId,
-    taskId,
     organizationId,
     creatorUserId: userId,
     status: AiConversationStatus.open,
@@ -201,6 +203,8 @@ function createHarness(options?: {
     departureMaterialParseRun,
     aiWorkflowJob,
     aiConversationDraft,
+    taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
+    agentTask: { update: jest.fn() },
   }
 
   const prisma = {
