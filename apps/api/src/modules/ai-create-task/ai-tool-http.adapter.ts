@@ -19,8 +19,9 @@ export class AiToolHttpAdapter {
   ) {}
 
   getTaskContext(user: AiToolRequestUser, body: unknown): Promise<GetTaskContextOutput> {
-    return this.executeRegistered('getTaskContext', user, body, () =>
-      this.tasks.getTaskContextForAgent(user, body),
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('getTaskContext', caller, body, () =>
+      this.tasks.getTaskContextForAgent(caller, body),
     )
   }
 
@@ -28,8 +29,9 @@ export class AiToolHttpAdapter {
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<SearchRouteTemplatesOutput> {
-    return this.executeRegistered('searchRouteTemplates', user, body, () =>
-      this.tasks.searchRouteTemplatesForAgent(user, body),
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('searchRouteTemplates', caller, body, () =>
+      this.tasks.searchRouteTemplatesForAgent(caller, body),
     )
   }
 
@@ -37,8 +39,9 @@ export class AiToolHttpAdapter {
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<GetMaterialParseResultOutput> {
-    return this.executeRegistered('getMaterialParseResult', user, body, () =>
-      this.tasks.getMaterialParseResultForAgent(user, body),
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('getMaterialParseResult', caller, body, () =>
+      this.tasks.getMaterialParseResultForAgent(caller, body),
     )
   }
 
@@ -46,11 +49,12 @@ export class AiToolHttpAdapter {
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<SubmitReviewPackageOutput> {
-    return this.executeRegistered('submitReviewPackage', user, body, async ({ action }) => {
+    const caller = requireTaskBoundUser(user)
+    return this.executeRegistered('submitReviewPackage', caller, body, async ({ action }) => {
       if (!action?.id) {
         throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
       }
-      return this.tasks.submitReviewPackageForAgent(user, body, { sourceActionId: action.id })
+      return this.tasks.submitReviewPackageForAgent(caller, body, { sourceActionId: action.id })
     })
   }
 
@@ -71,6 +75,15 @@ export class AiToolHttpAdapter {
     }
     throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
   }
+}
+
+function requireTaskBoundUser(
+  user: AiToolRequestUser,
+): AiToolRequestUser & { taskId: string; runId: string } {
+  if (!user.taskId || !user.runId) {
+    throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+  }
+  return { ...user, taskId: user.taskId, runId: user.runId }
 }
 
 function actorFrom(user: AiToolRequestUser): AiActionActor {

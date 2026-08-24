@@ -15,8 +15,8 @@ export interface AiOperationDelegationPayload {
   aud?: 'ai-op-delegation'
   sub: string
   organizationId: string
-  taskId: string
-  runId: string
+  taskId?: string
+  runId?: string
   conversationId: string
   inputBatchId: string
   attemptId: string

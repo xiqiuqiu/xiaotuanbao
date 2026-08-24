@@ -110,14 +110,20 @@ export async function handleHeadlessRun(
   }
 
   try {
-    await fetchTaskContext(
-      {
-        apiBaseUrl: config.apiBaseUrl,
-        serviceSecret: config.serviceSecret,
-        delegationToken,
-      },
-      { taskId: parsedRequest.data.taskId, runId: bound.runId },
-    )
+    if (bound.identity.taskId) {
+      if (!bound.runId) {
+        json(response, 401, { data: AiCollaborationError.fromCode('DELEGATION_INVALID').toJSON() })
+        return
+      }
+      await fetchTaskContext(
+        {
+          apiBaseUrl: config.apiBaseUrl,
+          serviceSecret: config.serviceSecret,
+          delegationToken,
+        },
+        { taskId: bound.identity.taskId, runId: bound.runId },
+      )
+    }
   } catch (error) {
     const mapped = error instanceof AiCollaborationError ? error : mapAgentFetchError(error)
     json(response, statusForCollaborationError(mapped), { data: mapped.toJSON() })
@@ -167,14 +173,18 @@ function boundIdentitiesFromDelegation(
   payload: Record<string, unknown>,
 ): {
   identity: HeadlessExecutionIdentity
-  runId: string
+  runId?: string
   requestContext: RequestContext
 } | null {
-  const runId = stringClaim(payload.runId)
+  const runId = optionalClaim(payload.runId)
+  const taskId = optionalClaim(payload.taskId)
   const organizationId = stringClaim(payload.organizationId)
   const userId = stringClaim(payload.sub)
+  if (Boolean(taskId) !== Boolean(runId)) {
+    return null
+  }
   const parsed = headlessExecutionIdentitySchema.safeParse({
-    taskId: stringClaim(payload.taskId),
+    ...(taskId ? { taskId } : {}),
     conversationId: stringClaim(payload.conversationId),
     inputBatchId: stringClaim(payload.inputBatchId),
     attemptId: stringClaim(payload.attemptId),
@@ -183,8 +193,8 @@ function boundIdentitiesFromDelegation(
   const requestContext = requestContextSchema.safeParse({
     organizationId,
     userId,
-    taskId: stringClaim(payload.taskId),
-    runId,
+    ...(taskId ? { taskId } : {}),
+    ...(runId ? { runId } : {}),
     conversationId: stringClaim(payload.conversationId),
     inputBatchId: stringClaim(payload.inputBatchId),
     attemptId: stringClaim(payload.attemptId),
@@ -197,7 +207,7 @@ function boundIdentitiesFromDelegation(
   if (!parsed.success || !requestContext.success) {
     return null
   }
-  return { identity: parsed.data, runId, requestContext: requestContext.data }
+  return { identity: parsed.data, ...(runId ? { runId } : {}), requestContext: requestContext.data }
 }
 
 function identitiesMatch(
@@ -240,6 +250,11 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
 function stringClaim(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function optionalClaim(value: unknown): string | undefined {
+  const claimed = stringClaim(value)
+  return claimed.length > 0 ? claimed : undefined
 }
 
 function serviceKeyMatches(request: IncomingMessage, expected: string): boolean {

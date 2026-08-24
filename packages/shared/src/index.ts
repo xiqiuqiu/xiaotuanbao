@@ -98,6 +98,7 @@ export type {
   StartAiCreateAssistSessionDto,
   AiCreateAssistSession,
   AiConversationStatus,
+  AiConversationTitleSource,
   AiConversationEventKind,
   AiInputBatchStatus,
   AiConversationEventView,

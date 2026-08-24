@@ -155,4 +155,13 @@ describe('可信 RequestContext', () => {
   it('拒绝未知字段，避免模型参数伪装服务端身份或版本', () => {
     expect(() => requestContextSchema.parse({ ...requestContext, modelOrganizationId: 'org-2' })).toThrow()
   })
+
+  it('无任务会话可以省略 taskId 与 runId', () => {
+    const { taskId: _taskId, runId: _runId, ...taskless } = requestContext
+    expect(requestContextSchema.parse(taskless)).toEqual({
+      ...taskless,
+      grantedCapabilities: [],
+      entitlementStatus: 'unavailable',
+    })
+  })
 })

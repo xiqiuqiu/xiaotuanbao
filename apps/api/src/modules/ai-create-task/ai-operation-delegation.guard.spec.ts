@@ -39,8 +39,30 @@ describe('AiOperationDelegationGuard', () => {
   }
 
   function createGuard(options?: {
-    payload?: Partial<typeof payload> | null
-    attempt?: { status: string; activityRun?: { status: string } } | null
+    payload?: {
+      typ?: typeof payload.typ
+      sub?: string
+      organizationId?: string
+      taskId?: string
+      runId?: string
+      conversationId?: string
+      inputBatchId?: string
+      attemptId?: string
+      contextManifestId?: string
+      agentDefinition?: { key: string; version: number }
+      grantedCapabilities?: Array<{ key: string; version: number }>
+      entitlementStatus?: typeof payload.entitlementStatus
+      objectScopes?: Array<{ organizationId: string; kind: string; id: string }>
+    } | null
+    attempt?: {
+      id?: string
+      status: string
+      activityRun?: { status: string }
+      agentDefinitionKey?: string
+      agentDefinitionVersion?: number
+      grantedCapabilities?: unknown
+    } | null
+    permissionKeys?: string[]
   }) {
     const jwtService = {
       verifyAsync: jest.fn().mockResolvedValue(
@@ -67,7 +89,9 @@ describe('AiOperationDelegationGuard', () => {
       },
     }
     const authService = {
-      getPermissionKeysForUser: jest.fn().mockResolvedValue(['departure:write']),
+      getPermissionKeysForUser: jest.fn().mockResolvedValue(
+        options?.permissionKeys ?? ['departure:write'],
+      ),
     }
     const configService = {
       get: jest.fn((key: string) => {
@@ -83,7 +107,7 @@ describe('AiOperationDelegationGuard', () => {
       authService as never,
       configService as never,
     )
-    return { guard, prisma }
+    return { guard, prisma, authService }
   }
 
   it('rejects a window-shaped delegation that has a run but no running attempt', async () => {
@@ -157,5 +181,46 @@ describe('AiOperationDelegationGuard', () => {
       entitlementStatus: 'unavailable',
       objectScopes: [{ organizationId: 'org-1', kind: 'ai_create_task', id: 'task-1' }],
     })
+  })
+
+  it('accepts a taskless conversation token without departure write permission', async () => {
+    const { guard, prisma, authService } = createGuard({
+      payload: {
+        taskId: undefined,
+        runId: undefined,
+        agentDefinition: { key: 'conversation.general', version: 1 },
+        grantedCapabilities: [],
+        objectScopes: [{ organizationId: 'org-1', kind: 'agent_conversation', id: 'conv-1' }],
+      },
+      attempt: {
+        id: 'attempt-1',
+        status: 'running',
+        agentDefinitionKey: 'conversation.general',
+        agentDefinitionVersion: 1,
+        grantedCapabilities: [],
+      },
+      permissionKeys: [],
+    })
+    const { ctx, request } = contextWithBearer('taskless-token')
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true)
+    expect(authService.getPermissionKeysForUser).not.toHaveBeenCalled()
+    expect(prisma.aiAgentAttempt.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          taskId: null,
+          conversationId: 'conv-1',
+        }),
+      }),
+    )
+    expect(request.user).toMatchObject({
+      userId: 'user-1',
+      organizationId: 'org-1',
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      attemptId: 'attempt-1',
+    })
+    expect(request.user).not.toHaveProperty('taskId')
+    expect(request.user).not.toHaveProperty('runId')
   })
 })

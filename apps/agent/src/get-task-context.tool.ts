@@ -1,7 +1,7 @@
 import { AI_CREATE_TOOL_DESCRIPTIONS, AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getAssistRequestContext } from './assist-request-context'
+import { requireTaskBoundAssistContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
 
 export interface GetTaskContextToolConfig {
@@ -20,7 +20,7 @@ export function createGetTaskContextTool(config: GetTaskContextToolConfig) {
         throw AiCollaborationError.fromCode('AGENT_UNAVAILABLE')
       }
 
-      const { delegationToken, taskId, runId } = getAssistRequestContext()
+      const { delegationToken, taskId, runId } = requireTaskBoundAssistContext()
       return fetchTaskContext(
         {
           apiBaseUrl: config.apiBaseUrl,

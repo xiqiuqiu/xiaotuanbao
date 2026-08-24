@@ -5,7 +5,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getAssistRequestContext } from './assist-request-context'
+import { requireTaskBoundAssistContext } from './assist-request-context'
 import { searchRouteTemplates } from './search-route-templates.client'
 
 export interface SearchRouteTemplatesToolConfig {
@@ -34,7 +34,7 @@ export function createSearchRouteTemplatesTool(config: SearchRouteTemplatesToolC
         throw AiCollaborationError.fromCode('INVALID_FORMAT')
       }
 
-      const { delegationToken, taskId, runId } = getAssistRequestContext()
+      const { delegationToken, taskId, runId } = requireTaskBoundAssistContext()
       return searchRouteTemplates(
         {
           apiBaseUrl: config.apiBaseUrl,

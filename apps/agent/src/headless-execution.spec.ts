@@ -401,6 +401,38 @@ describe('headless Agent runtime contract', () => {
     }
   })
 
+  it('skips get-task-context for a taskless conversation run', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        authorization: `Bearer ${delegationToken({
+          taskId: undefined,
+          runId: undefined,
+          agentDefinition: { key: 'conversation.general', version: 1 },
+          grantedCapabilities: [],
+          objectScopes: [
+            { organizationId: 'org-1', kind: 'agent_conversation', id: IDENTITY.conversationId },
+          ],
+        })}`,
+        body: {
+          conversationId: IDENTITY.conversationId,
+          inputBatchId: IDENTITY.inputBatchId,
+          attemptId: IDENTITY.attemptId,
+          contextManifestId: IDENTITY.contextManifestId,
+          userText: USER_TEXT,
+          userTextSha256: REQUEST.userTextSha256,
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        data: { kind: 'completed' },
+      })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
+  })
+
   it('rejects a CopilotKit-shaped delegation that lacks batch and context manifest identity', async () => {
     const runtime = await listen()
     try {

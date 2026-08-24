@@ -62,33 +62,37 @@ export async function startDeterministicHeadlessAgent(options: {
 
       const token = authorization.slice('Bearer '.length)
       const claims = decodeJwtPayload(token)
-      const context = await fetch(`${options.getApiBaseUrl()}/api/ai-tools/v1/get-task-context`, {
-        method: 'POST',
-        headers: {
-          Authorization: authorization,
-          'Content-Type': 'application/json',
-          'X-Agent-Service-Key': options.serviceSecret,
-        },
-        body: JSON.stringify({
-          taskId: parsed.data.taskId,
-          runId: typeof claims.runId === 'string' ? claims.runId : '',
-        }),
-      })
-      const contextBody = await context.json().catch(() => null)
-      lastContext = contextBody
       lastUserText = parsed.data.userText
-      if (!context.ok) {
-        json(response, 200, {
-          data: headlessExecutionResultSchema.parse({
-            kind: 'failed',
-            error: {
-              code: 'DELEGATION_INVALID',
-              message: 'AI 操作委托无效或已过期，请重新打开侧栏',
-              retryable: false,
-            },
+      if (parsed.data.taskId) {
+        const context = await fetch(`${options.getApiBaseUrl()}/api/ai-tools/v1/get-task-context`, {
+          method: 'POST',
+          headers: {
+            Authorization: authorization,
+            'Content-Type': 'application/json',
+            'X-Agent-Service-Key': options.serviceSecret,
+          },
+          body: JSON.stringify({
+            taskId: parsed.data.taskId,
+            runId: typeof claims.runId === 'string' ? claims.runId : '',
           }),
         })
-        return
+        const contextBody = await context.json().catch(() => null)
+        lastContext = contextBody
+        if (!context.ok) {
+          json(response, 200, {
+            data: headlessExecutionResultSchema.parse({
+              kind: 'failed',
+              error: {
+                code: 'DELEGATION_INVALID',
+                message: 'AI 操作委托无效或已过期，请重新打开侧栏',
+                retryable: false,
+              },
+            }),
+          })
+          return
+        }
+      } else {
+        lastContext = null
       }
 
       callCount += 1
