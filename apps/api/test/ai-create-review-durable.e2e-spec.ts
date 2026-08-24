@@ -359,6 +359,23 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(rejected.body.data.pendingReview).toBeNull()
     expect(rejected.body.data.draft.version).toBe(opened.task.draft.version)
     expect(rejected.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
+    await expect(
+      prisma.taskActivity.findMany({
+        where: {
+          taskId,
+          actorUserId: ownerUserId,
+          payload: { path: ['reviewPackageId'], equals: pending.id },
+        },
+        select: { kind: true, summary: true, payload: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ).resolves.toEqual([
+      {
+        kind: 'progress',
+        summary: 'User 已拒绝审核项',
+        payload: { reviewPackageId: pending.id },
+      },
+    ])
 
     await processor.processDueJobs(5)
     expect(agent.callCount()).toBe(callsAfterSubmit)

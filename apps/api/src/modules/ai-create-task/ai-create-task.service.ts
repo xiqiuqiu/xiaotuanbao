@@ -499,16 +499,6 @@ export class AiCreateTaskService {
         inputBatchId: pkg.inputBatchId,
         disposition: 'rejected',
       })
-      await tx.taskActivity.create({
-        data: {
-          organizationId,
-          taskId,
-          actorUserId: userId,
-          kind: TaskActivityKind.waiting,
-          summary: 'User 已取消指定审核等待项',
-          payload: { reviewPackageId: pkg.id, disposition: 'rejected' },
-        },
-      })
       const task = await tx.aiCreateTask.findFirstOrThrow({
         where: { id: taskId, agentTask: { organizationId } },
         include: TASK_WITH_PENDING_INCLUDE,

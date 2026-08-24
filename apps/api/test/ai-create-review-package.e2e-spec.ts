@@ -198,14 +198,14 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .send({ expectedPackageVersion: 1 })
       .expect(200)
     await expect(
-      prisma.taskActivity.findFirst({
+      prisma.taskActivity.findMany({
         where: {
           taskId: opened.taskId,
-          kind: 'waiting',
           payload: { path: ['reviewPackageId'], equals: submitted.body.data.reviewPackageId },
         },
+        select: { kind: true, summary: true },
       }),
-    ).resolves.toMatchObject({ summary: 'User 已取消指定审核等待项' })
+    ).resolves.toEqual([])
 
     const resubmitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
