@@ -135,4 +135,8 @@ jobs:
         run: pnpm --filter api prisma:db:seed
 
       - name: API e2e (CI scope)
+        env:
+          # Jest --runInBand keeps the whole suite in one process. After #366 the
+          # default ~2GB heap OOMs on ubuntu-latest even when every spec passed.
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm test:e2e:ci
