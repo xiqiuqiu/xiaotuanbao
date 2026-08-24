@@ -262,8 +262,7 @@ export class AiWorkflowProcessor {
                 AND running.id <> j.input_batch_id
             )
             AND (
-              j.task_id IS NULL
-              OR NOT EXISTS (
+              NOT EXISTS (
                 SELECT 1
                 FROM ai_conversation_interactions pending
                 WHERE pending.conversation_id = j.conversation_id
