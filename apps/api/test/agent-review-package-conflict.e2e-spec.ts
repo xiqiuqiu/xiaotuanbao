@@ -412,4 +412,45 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     expect(draft.version).toBe(opened.version)
     expect((draft.snapshot as { name?: string }).name).toBe(`${testPrefix}-原团名`)
   })
+
+  it('replays a missing-template validation failure with the same decision command', async () => {
+    const opened = await openLinkedConversations()
+    const submitted = await agentSubmit(opened.mintedA.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.mintedA.runId,
+      objectVersion: opened.version,
+      candidates: [
+        {
+          fieldKey: 'templateId',
+          proposedValue: 'missing-template',
+          clarity: 'clear',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '用这条常用路线' }],
+        },
+      ],
+    }).expect(200)
+
+    const key = `e2e-367-missing-tpl-${submitted.body.data.reviewPackageId}`
+    const confirm = () =>
+      authRequest(app, coordinatorToken)
+        .post(
+          `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        )
+        .set('Idempotency-Key', key)
+        .send({
+          expectedVersion: opened.version,
+          expectedPackageVersion: 1,
+          decisionCommandId: key,
+        })
+
+    const first = await confirm().expect(400)
+    expect(first.body.message).toContain('常用路线已不可用')
+
+    const retry = await confirm().expect(400)
+    expect(retry.body.message).toContain('常用路线已不可用')
+
+    const pkg = await prisma.aiReviewPackage.findFirstOrThrow({
+      where: { id: submitted.body.data.reviewPackageId },
+    })
+    expect(pkg.status).toBe('pending')
+  })
 })

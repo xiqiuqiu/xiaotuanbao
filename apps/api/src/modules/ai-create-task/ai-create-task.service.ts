@@ -780,11 +780,24 @@ export class AiCreateTaskService {
             where: { id: taskId, agentTask: { organizationId } },
             include: TASK_WITH_PENDING_INCLUDE,
           })
+          const summary = this.toSummary(latest)
+          const message = '常用路线已不可用，请重新选择后确认'
+          await this.completeReviewDecision(tx, {
+            organizationId,
+            taskId,
+            decisionCommandId: identity.decisionCommandId,
+            requestHash,
+            result: {
+              kind: 'validation_failed',
+              summary,
+              message,
+            },
+          })
           return {
             kind: 'validation_failed' as const,
-            summary: this.toSummary(latest),
+            summary,
             events: [] as AiConversationEvent[],
-            message: '常用路线已不可用，请重新选择后确认',
+            message,
           }
         }
         merge.nextSnapshot.mode = DepartureCreationDraftMode.TEMPLATE
@@ -1414,6 +1427,12 @@ export class AiCreateTaskService {
         events: []
         changeSummary: ReturnType<typeof reviewConflictChangeSummary>
       }
+    | {
+        kind: 'validation_failed'
+        summary: AiCreateTaskSummary
+        events: []
+        message: string
+      }
     | null
   > {
     const record = await tx.aiCreateIdempotencyRecord.upsert({
@@ -1449,12 +1468,21 @@ export class AiCreateTaskService {
           summary: AiCreateTaskSummary
           changeSummary: ReturnType<typeof reviewConflictChangeSummary>
         }
+      | { kind: 'validation_failed'; summary: AiCreateTaskSummary; message: string }
       | null
     if (!stored || Array.isArray(stored)) {
       throw new ConflictException('决策命令结果不可用，请联系管理员')
     }
     if (stored.kind === 'conflict') {
       return { kind: 'conflict', summary: stored.summary, events: [], changeSummary: stored.changeSummary }
+    }
+    if (stored.kind === 'validation_failed') {
+      return {
+        kind: 'validation_failed',
+        summary: stored.summary,
+        events: [],
+        message: stored.message,
+      }
     }
     return { kind: 'ok', summary: stored.summary, events: [] }
   }
