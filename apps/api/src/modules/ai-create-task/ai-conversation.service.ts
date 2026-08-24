@@ -157,15 +157,26 @@ export class AiConversationService {
     conversationId: string | undefined,
     text: string,
     idempotencyKey: string | undefined,
+    reply: ConversationReplyInput = {},
   ): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(idempotencyKey)
     const trimmed = text.trim()
-    if (!trimmed) {
+    if (isReplyAttempt(reply)) {
+      if (!conversationId) {
+        throw new BadRequestException('回答追问必须指定会话')
+      }
+      requireCompleteReply(reply)
+    }
+    if (!trimmed && !reply.selectedOptionId) {
       throw new BadRequestException('消息不能为空')
     }
     const hash = requestHash({
       conversationId: conversationId ?? null,
       text: trimmed,
+      replyToEventId: reply.replyToEventId ?? null,
+      interactionId: reply.interactionId ?? null,
+      interactionVersion: reply.interactionVersion ?? null,
+      selectedOptionId: reply.selectedOptionId ?? null,
     })
     const existingRecord = await this.prisma.aiCreateIdempotencyRecord.findUnique({
       where: {
@@ -240,12 +251,24 @@ export class AiConversationService {
         return record.resultJson as unknown as SendAiConversationMessageResult
       }
 
-      await this.assertProcessingBatchCapacity(tx, {
-        organizationId,
-        userId,
-        conversationId: conversation.id,
-      })
-      const queued = await this.hasBlockingBatch(tx, conversation.id)
+      const answering = isReplyAttempt(reply)
+      if (!answering) {
+        await this.assertProcessingBatchCapacity(tx, {
+          organizationId,
+          userId,
+          conversationId: conversation.id,
+        })
+      }
+      const replyResult = answering
+        ? await this.consumeInteractionReply(tx, {
+            organizationId,
+            conversationId: conversation.id,
+            text: trimmed,
+            reply,
+          })
+        : null
+      const messageText = replyResult?.text ?? trimmed
+      const queued = !replyResult && (await this.hasBlockingBatch(tx, conversation.id))
       const lastEvent = await tx.aiConversationEvent.findFirst({
         where: { conversationId: conversation.id },
         orderBy: { sequence: 'desc' },
@@ -258,7 +281,16 @@ export class AiConversationService {
           conversationId: conversation.id,
           sequence: userSequence,
           kind: AiConversationEventKind.user_message,
-          payload: { text: trimmed },
+          payload: {
+            text: messageText,
+            ...(replyResult
+              ? {
+                  replyToEventId: replyResult.replyToEventId,
+                  interactionId: replyResult.interactionId,
+                  selectedOptionId: replyResult.selectedOptionId ?? null,
+                }
+              : {}),
+          },
         },
       })
       const batch = await tx.aiInputBatch.create({
@@ -267,6 +299,7 @@ export class AiConversationService {
           conversationId: conversation.id,
           creatorUserId: userId,
           userMessageEventId: userEvent.id,
+          replyToEventId: replyResult?.replyToEventId,
           conversationVersion: userSequence,
           status: AiInputBatchStatus.ready_for_agent,
         },
@@ -299,23 +332,31 @@ export class AiConversationService {
         where: { id: conversation.id },
         data: { lastActivityAt: new Date(), updatedAt: new Date() },
       })
-      const conversationDraft = await tx.aiConversationDraft.upsert({
-        where: { conversationId_userId: { conversationId: conversation.id, userId } },
-        create: {
-          organizationId,
-          conversationId: conversation.id,
-          userId,
-          text: '',
-          draftEpoch: 1,
-          revision: 1,
-        },
-        update: {
-          text: '',
-          draftEpoch: { increment: 1 },
-          revision: { increment: 1 },
-        },
-      })
-      const events = [toEventView(userEvent), toEventView(statusEvent)]
+      const conversationDraft = answering
+        ? await tx.aiConversationDraft.findUnique({
+            where: { conversationId_userId: { conversationId: conversation.id, userId } },
+          })
+        : await tx.aiConversationDraft.upsert({
+            where: { conversationId_userId: { conversationId: conversation.id, userId } },
+            create: {
+              organizationId,
+              conversationId: conversation.id,
+              userId,
+              text: '',
+              draftEpoch: 1,
+              revision: 1,
+            },
+            update: {
+              text: '',
+              draftEpoch: { increment: 1 },
+              revision: { increment: 1 },
+            },
+          })
+      const events = [
+        ...(replyResult?.events ?? []).map(toEventView),
+        toEventView(userEvent),
+        toEventView(statusEvent),
+      ]
       const payload: SendAiConversationMessageResult = {
         conversationId: conversation.id,
         batch: toBatchView(batch, { queued }),

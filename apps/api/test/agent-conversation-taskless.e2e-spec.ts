@@ -138,11 +138,17 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     conversationId: string,
     text: string,
     idempotencyKey: string,
+    reply: {
+      replyToEventId?: string
+      interactionId?: string
+      interactionVersion?: number
+      selectedOptionId?: string
+    } = {},
   ) {
     return authRequest(app, token)
       .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', idempotencyKey)
-      .send({ text })
+      .send({ text, ...reply })
   }
 
   async function listEvents(token: string, conversationId: string, afterSequence = 0) {
@@ -151,9 +157,23 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       .expect(200)
     return response.body.data as {
       conversationId: string
-      events: Array<{ sequence: number; kind: string; payload: Record<string, unknown> }>
+      events: Array<{
+        id: string
+        sequence: number
+        kind: string
+        payload: Record<string, unknown>
+      }>
       lastSequence: number
       activeBatch: { id: string; status: string } | null
+      pendingInteraction: {
+        id: string
+        eventId: string
+        type: string
+        prompt: string
+        status: string
+        version: number
+      } | null
+      queuedBatches: Array<{ id: string; status: string; queued?: boolean }>
     }
   }
 
@@ -320,7 +340,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     })
   })
 
-  it('ends the attempt and releases the run lock when waiting for user input', async () => {
+  it('ends the attempt and keeps the pending interaction when waiting for user input', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
       interaction: { type: 'free_text', prompt: '还需要补充哪一段？' },
@@ -344,19 +364,106 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       }),
     ).toBe(0)
 
+    const asked = await listEvents(coordinatorToken, conversationId)
+    expect(asked.activeBatch?.status).toBe('awaiting_user_input')
+    expect(asked.pendingInteraction).toMatchObject({
+      type: 'free_text',
+      prompt: '还需要补充哪一段？',
+      status: 'pending',
+      version: 1,
+    })
+
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     await sendFollowUp(
       coordinatorToken,
       conversationId,
-      `${testPrefix} 等待释放后继续`,
+      `${testPrefix} 不能冒充答案`,
       `${testPrefix}-hitl-next`,
     ).expect(201)
     await processor.processDueJobs(5)
-    const followUp = await prisma.aiInputBatch.findFirstOrThrow({
+
+    const stillWaiting = await listEvents(coordinatorToken, conversationId)
+    expect(stillWaiting.pendingInteraction?.id).toBe(asked.pendingInteraction?.id)
+    expect(stillWaiting.pendingInteraction?.status).toBe('pending')
+    expect(stillWaiting.activeBatch?.status).toBe('awaiting_user_input')
+    expect(stillWaiting.queuedBatches).toHaveLength(1)
+
+    const batches = await prisma.aiInputBatch.findMany({
       where: { conversationId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { conversationVersion: 'asc' },
     })
-    expect(followUp.status).toBe(AiInputBatchStatus.completed)
+    expect(batches.map((batch) => batch.status)).toEqual([
+      AiInputBatchStatus.awaiting_user_input,
+      AiInputBatchStatus.ready_for_agent,
+    ])
+  })
+
+  it('answers a pending interaction and resumes the taskless run', async () => {
+    agent.setOutcome({
+      kind: 'awaiting_user_input',
+      interaction: { type: 'free_text', prompt: '还需要补充哪一段？' },
+    })
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 回答追问`,
+      `${testPrefix}-hitl-reply`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    await processor.processDueJobs(5)
+
+    const asked = await listEvents(coordinatorToken, conversationId)
+    expect(asked.pendingInteraction?.status).toBe('pending')
+
+    await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      '补充行程第二天',
+      `${testPrefix}-hitl-incomplete`,
+      { interactionId: asked.pendingInteraction?.id, interactionVersion: 1 },
+    ).expect(400)
+
+    agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
+    const replied = await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      '补充行程第二天',
+      `${testPrefix}-hitl-answer`,
+      {
+        replyToEventId: asked.pendingInteraction?.eventId,
+        interactionId: asked.pendingInteraction?.id,
+        interactionVersion: 1,
+      },
+    ).expect(201)
+    expect(replied.body.data.batch.replyToEventId).toBe(asked.pendingInteraction?.eventId)
+
+    await processor.processDueJobs(5)
+    const afterReply = await listEvents(coordinatorToken, conversationId)
+    expect(afterReply.pendingInteraction).toBeNull()
+    expect(afterReply.activeBatch).toBeNull()
+    const replyEvent = afterReply.events.find(
+      (event) =>
+        event.kind === 'user_message' &&
+        event.payload.replyToEventId === asked.pendingInteraction?.eventId,
+    )
+    expect(replyEvent?.payload).toMatchObject({
+      text: '补充行程第二天',
+      replyToEventId: asked.pendingInteraction?.eventId,
+      interactionId: asked.pendingInteraction?.id,
+    })
+    expect(
+      afterReply.events.some(
+        (event) => event.kind === 'agent_message' && event.payload.text === COMPLETED_MESSAGE,
+      ),
+    ).toBe(true)
+
+    const batches = await prisma.aiInputBatch.findMany({
+      where: { conversationId },
+      orderBy: { conversationVersion: 'asc' },
+    })
+    expect(batches.map((batch) => batch.status)).toEqual([
+      AiInputBatchStatus.completed,
+      AiInputBatchStatus.completed,
+    ])
   })
 
   it('stops the current run without closing the conversation and drops a late outcome', async () => {

@@ -37,6 +37,12 @@ export class AgentConversationController {
       undefined,
       dto.text ?? '',
       idempotencyKey,
+      {
+        replyToEventId: dto.replyToEventId,
+        interactionId: dto.interactionId,
+        interactionVersion: dto.interactionVersion,
+        selectedOptionId: dto.selectedOptionId,
+      },
     )
   }
 
@@ -54,6 +60,12 @@ export class AgentConversationController {
       conversationId,
       dto.text ?? '',
       idempotencyKey,
+      {
+        replyToEventId: dto.replyToEventId,
+        interactionId: dto.interactionId,
+        interactionVersion: dto.interactionVersion,
+        selectedOptionId: dto.selectedOptionId,
+      },
     )
   }
 
