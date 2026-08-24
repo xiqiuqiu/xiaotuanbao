@@ -155,4 +155,42 @@ describe('buildBudgetedContext', () => {
       }),
     ).toThrow('CONTEXT_CAPACITY_EXCEEDED')
   })
+
+  it('在动态预算边界允许等值，超出一个估算单位即终止', () => {
+    const base = {
+      modelId: 'deterministic',
+      toolNames: ['getTaskContext'],
+      currentUserText: '边界',
+      businessFacts: {},
+      unresolvedState: {},
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    }
+    const baseline = buildBudgetedContext(base)
+    const baselineDynamicTokens = baseline.sections.find(
+      (section) => section.key === 'assembled_user_message',
+    )?.estimatedTokens
+    if (baselineDynamicTokens == null) {
+      throw new Error('缺少 assembled_user_message section')
+    }
+    const padding = baseline.budget.dynamicBudgetTokens - baselineDynamicTokens
+    const atBoundary = buildBudgetedContext({
+      ...base,
+      currentUserText: `${base.currentUserText}${'甲'.repeat(padding)}`,
+    })
+
+    expect(atBoundary.budget.estimatedInputTokens).toBe(
+      atBoundary.budget.staticInputTokens + atBoundary.budget.dynamicBudgetTokens,
+    )
+    expect(() =>
+      buildBudgetedContext({
+        ...base,
+        currentUserText: `${base.currentUserText}${'甲'.repeat(padding + 1)}`,
+      }),
+    ).toThrow('CONTEXT_CAPACITY_EXCEEDED')
+  })
 })

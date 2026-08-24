@@ -23,18 +23,15 @@ describe('AI Create actual tool model contract', () => {
     }
     const budgeted = JSON.parse(
       aiCreateModelContractForTools(AI_CREATE_TOOL_NAMES).toolSchemaText,
-    ) as Array<{
-      name: keyof typeof actualTools
-      description: string
-      inputSchema: unknown
-    }>
+    ) as unknown
+    const actualModelTools = Object.entries(actualTools).map(([name, tool]) => ({
+      type: 'function',
+      name,
+      description: tool.description,
+      inputSchema: standardSchemaToJSONSchema(tool.inputSchema as never, { io: 'input' }),
+    }))
 
-    for (const entry of budgeted) {
-      const actual = actualTools[entry.name]
-      expect(actual.description).toBe(entry.description)
-      expect(normalizeSchema(standardSchemaToJSONSchema(actual.inputSchema as never, { io: 'input' })))
-        .toEqual(normalizeSchema(entry.inputSchema))
-    }
+    expect(normalizeSchema(budgeted)).toEqual(normalizeSchema(actualModelTools))
   })
 })
 

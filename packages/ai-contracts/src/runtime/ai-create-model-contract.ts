@@ -51,7 +51,7 @@ export function aiCreateModelContractForTools(toolNames: readonly string[]): AiC
   const requested = new Set(toolNames)
   const definitions = AI_CREATE_CAPABILITY_DEFINITIONS.filter((definition) =>
     requested.has(definition.toolName),
-  ).sort((left, right) => left.toolName.localeCompare(right.toolName))
+  )
 
   if (definitions.length !== requested.size) {
     const registered = new Set<string>(definitions.map((definition) => definition.toolName))
@@ -63,8 +63,8 @@ export function aiCreateModelContractForTools(toolNames: readonly string[]): AiC
     toolNames: definitions.map((definition) => definition.toolName),
     toolSchemaText: JSON.stringify(
       definitions.map((definition) => ({
+        type: 'function',
         name: definition.toolName,
-        version: definition.version,
         description: AI_CREATE_TOOL_DESCRIPTIONS[definition.toolName],
         inputSchema: (
           AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS as Readonly<Record<string, unknown>>
