@@ -98,8 +98,10 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
     eventSequences: input.eventSequences,
     businessSnapshotVersion: input.businessSnapshotVersion,
     builderVersion: PLAINTEXT_CONTEXT_BUILDER_VERSION,
-    systemPromptVersion: PLAINTEXT_SYSTEM_PROMPT_VERSION,
-    toolSchemaVersion: PLAINTEXT_TOOL_SCHEMA_VERSION,
+    systemPromptVersion:
+      sectionVersion(input.sections, 'system_constraints') ?? PLAINTEXT_SYSTEM_PROMPT_VERSION,
+    toolSchemaVersion:
+      sectionVersion(input.sections, 'tool_schemas') ?? PLAINTEXT_TOOL_SCHEMA_VERSION,
     modelId: input.modelId,
     inputHash: input.inputHash,
     truncationReasons,
@@ -188,6 +190,13 @@ export function isConfirmedReviewContinuation(
 
 function uniqueReasons(reasons: string[]): string[] {
   return [...new Set(reasons)].sort()
+}
+
+function sectionVersion(
+  sections: ContextSectionUsage[],
+  key: ContextSectionUsage['key'],
+): string | undefined {
+  return sections.find((section) => section.key === key)?.version ?? undefined
 }
 
 export function buildFrozenProjection(input: {

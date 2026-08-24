@@ -223,6 +223,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
 
     const attempt = await prisma.aiAgentAttempt.findFirst({
       where: { conversationId },
+      include: { contextManifest: true },
     })
     expect(attempt).toMatchObject({
       status: 'completed',
@@ -230,7 +231,13 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       activityRunId: null,
       agentDefinitionKey: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key,
       agentDefinitionVersion: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.version,
+      contextManifest: {
+        systemPromptVersion: 'conversation-general/v1',
+        toolSchemaVersion: 'conversation-general-no-tools/v1',
+      },
     })
+    expect(attempt?.contextManifest?.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
+    expect(attempt?.contextManifest?.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
   })
 
   it('queues later turns on the same conversation and runs them in server sequence', async () => {

@@ -1,5 +1,9 @@
 import {
+  CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+  CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
   CONVERSATION_TITLE_MAX_CHARS,
+  PLAINTEXT_SYSTEM_PROMPT_VERSION,
+  PLAINTEXT_TOOL_SCHEMA_VERSION,
   SSE_CATCH_UP_IDLE_POLL_MS,
   SSE_CATCH_UP_POLL_MS,
   isImmediateWorkflowFailure,
@@ -20,6 +24,15 @@ describe('isImmediateWorkflowFailure', () => {
     expect(isImmediateWorkflowFailure('CONTEXT_CAPACITY_EXCEEDED')).toBe(true)
     expect(isImmediateWorkflowFailure('CONTEXT_PROFILE_MISSING')).toBe(true)
     expect(isImmediateWorkflowFailure('AGENT_UNAVAILABLE')).toBe(false)
+  })
+})
+
+describe('context contract versions', () => {
+  it('does not reuse AI建团 readonly-assist prompt or tool schema ids for conversation.general', () => {
+    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).toBe('conversation-general/v1')
+    expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).toBe('conversation-general-no-tools/v1')
+    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
+    expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
   })
 })
 

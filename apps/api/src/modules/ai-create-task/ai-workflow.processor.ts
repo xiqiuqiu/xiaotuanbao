@@ -7,6 +7,7 @@ import {
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  CONVERSATION_GENERAL_INSTRUCTIONS,
   aiCreateCapabilityDefinitionForTool,
   aiCreateCapabilityDefinitionRegistry,
   conversationGeneralCapabilityDefinitionRegistry,
@@ -55,6 +56,8 @@ import { buildBudgetedContext } from './ai-context-budget'
 import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
+  CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+  CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
   WORKFLOW_AGENT_CONCURRENCY,
   WORKFLOW_HEARTBEAT_MS,
   WORKFLOW_LEASE_MS,
@@ -921,6 +924,9 @@ export class AiWorkflowProcessor {
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: [],
+        systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+        systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
         currentUserText: userText,
         businessFacts: { conversationId: job.conversationId },
         unresolvedState: { hasPendingReview: false, reviewPackageId: null },

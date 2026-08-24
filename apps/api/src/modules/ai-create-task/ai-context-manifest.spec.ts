@@ -1,3 +1,5 @@
+import { CONVERSATION_GENERAL_INSTRUCTIONS } from '@xiaotuanbao/ai-contracts'
+import { buildBudgetedContext } from './ai-context-budget'
 import {
   buildContextManifest,
   buildFrozenProjection,
@@ -10,7 +12,13 @@ import {
   resolveAttemptUserText,
   selectPlaintextContextEvents,
 } from './ai-context-manifest'
-import { REVIEW_CONFIRM_CONTINUATION_TEXT } from './ai-conversation.constants'
+import {
+  CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+  CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+  PLAINTEXT_SYSTEM_PROMPT_VERSION,
+  PLAINTEXT_TOOL_SCHEMA_VERSION,
+  REVIEW_CONFIRM_CONTINUATION_TEXT,
+} from './ai-conversation.constants'
 
 describe('projectConversationEventsForAgent', () => {
   it('projects pinned User plaintext and drops unknown event kinds', () => {
@@ -227,5 +235,46 @@ describe('frozen context projection', () => {
     })
     expect(projection.recentTail.map((event) => event.sequence)).toEqual([1, 2])
     expect(projection.conversationBackground.summary).toBeNull()
+  })
+
+  it('无任务会话 Manifest 记录 conversation.general 的 prompt 与空工具版本，而不是建团 readonly-assist', () => {
+    const budgeted = buildBudgetedContext({
+      modelId: 'deterministic',
+      toolNames: [],
+      systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+      systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+      toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+      currentUserText: '今天合作伙伴账款怎么查？',
+      businessFacts: { conversationId: 'conv-1' },
+      unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    })
+    const manifest = buildContextManifest({
+      conversationId: 'conv-1',
+      inputBatchId: 'batch-1',
+      conversationVersion: 1,
+      eventSequences: [1],
+      businessSnapshotVersion: 0,
+      modelId: 'deterministic',
+      materialVersions: [],
+      excerptDigests: [],
+      truncationReasons: budgeted.truncationReasons,
+      inputHash: budgeted.inputHash,
+      budget: budgeted.budget,
+      sections: budgeted.sections,
+    })
+
+    expect(manifest.systemPromptVersion).toBe('conversation-general/v1')
+    expect(manifest.toolSchemaVersion).toBe('conversation-general-no-tools/v1')
+    expect(manifest.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
+    expect(manifest.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
+    expect(manifest.sections.find((section) => section.key === 'system_constraints')?.sha256).toBe(
+      digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
+    )
   })
 })

@@ -115,20 +115,26 @@ export function buildBudgetedContext(input: {
   businessFacts: unknown
   unresolvedState: unknown
   projection: BudgetProjection
+  systemInstructions?: string
+  systemPromptVersion?: string
+  toolSchemaVersion?: string
 }): BudgetedContext {
   const profile = contextBudgetProfileFor(input.modelId)
   const modelContract = aiCreateModelContractForTools(input.toolNames)
   const businessFactsText = stableJson(input.businessFacts)
   const unresolvedStateText = stableJson(input.unresolvedState)
+  const systemInstructions = input.systemInstructions ?? AI_CREATE_SYSTEM_INSTRUCTIONS
+  const systemPromptVersion = input.systemPromptVersion ?? PLAINTEXT_SYSTEM_PROMPT_VERSION
+  const toolSchemaVersion = input.toolSchemaVersion ?? PLAINTEXT_TOOL_SCHEMA_VERSION
   const systemSection = section(
     'system_constraints',
-    AI_CREATE_SYSTEM_INSTRUCTIONS,
-    PLAINTEXT_SYSTEM_PROMPT_VERSION,
+    systemInstructions,
+    systemPromptVersion,
   )
   const toolSchemaSection = section(
     'tool_schemas',
     modelContract.toolSchemaText,
-    PLAINTEXT_TOOL_SCHEMA_VERSION,
+    toolSchemaVersion,
   )
   const staticInputTokens = systemSection.estimatedTokens + toolSchemaSection.estimatedTokens
   const dynamicBudgetTokens = Math.min(
