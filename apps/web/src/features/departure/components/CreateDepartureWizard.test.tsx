@@ -314,9 +314,18 @@ function mockPendingReview(
     id: 'pkg-1',
     status: 'pending',
     confirmationUnit: 'basic_info_draft',
+    payloadSchema: 'departure.basic_info_draft@v1',
     baseObjectVersion: 1,
     version: 1,
     runId: 'run-1',
+    conversationId: 'conv-1',
+    inputBatchId: 'batch-1',
+    attemptId: 'attempt-1',
+    capabilityKey: 'departure.review-package.propose',
+    capabilityVersion: 1,
+    targetKind: 'departure_creation_draft',
+    targetId: 'draft-1',
+    proposalHash: 'a'.repeat(64),
     candidates: [
       {
         fieldKey: 'name',

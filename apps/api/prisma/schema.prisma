@@ -1292,6 +1292,8 @@ enum AiReviewPackageStatus {
   confirmed
   rejected
   superseded
+  conflict
+  cancelled
 
   @@map("ai_review_package_status")
 }
@@ -1299,6 +1301,7 @@ enum AiReviewPackageStatus {
 enum AiReviewRecordAction {
   confirm
   reject
+  cancel
 
   @@map("ai_review_record_action")
 }
@@ -1313,32 +1316,47 @@ enum AiReviewWriteResult {
   @@map("ai_review_write_result")
 }
 
-/// AI 阶段审核包：待确认候选，确认前不写入发团创建草稿。
+/// 通用审核信封：归属 Conversation / InputBatch / Attempt / Action，载荷由领域 Schema 定义。
 model AiReviewPackage {
   id                 String                @id @default(cuid())
   organizationId     String                @map("organization_id")
   organization       Organization          @relation(fields: [organizationId], references: [id])
-  taskId             String                @map("task_id")
-  task               AgentTask             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId             String?               @map("task_id")
+  task               AgentTask?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
   runId              String                @map("run_id")
   run                AiCreateActivityRun   @relation(fields: [runId], references: [id])
+  conversationId     String?               @map("conversation_id")
+  conversation       AiConversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   inputBatchId       String?               @map("input_batch_id")
   inputBatch         AiInputBatch?         @relation(fields: [inputBatchId], references: [id], onDelete: SetNull)
+  attemptId          String?               @map("attempt_id")
+  attempt            AiAgentAttempt?       @relation(fields: [attemptId], references: [id], onDelete: SetNull)
   status             AiReviewPackageStatus @default(pending)
   version            Int                   @default(1)
   confirmationUnit   String                @default("basic_info_draft") @map("confirmation_unit")
+  payloadSchema      String                @default("departure.basic_info_draft@v1") @map("payload_schema")
+  capabilityKey      String                @default("departure.review-package.propose") @map("capability_key")
+  capabilityVersion  Int                   @default(1) @map("capability_version")
+  targetKind         String                @default("departure_creation_draft") @map("target_kind")
+  targetId           String                @default("") @map("target_id")
+  proposalHash       String                @default("") @map("proposal_hash")
   baseObjectVersion  Int                   @map("base_object_version")
   baselineSnapshot   Json                  @map("baseline_snapshot")
   candidates         Json
+  userCorrections    Json                  @default("{}") @map("user_corrections")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
   records            AiReviewRecord[]
   sourceActionId     String?               @map("source_action_id")
   sourceAction       AiAction?             @relation("ReviewPackageSourceAction", fields: [sourceActionId], references: [id], onDelete: SetNull)
 
+  @@unique([inputBatchId, capabilityVersion, targetKind, targetId, proposalHash], map: "ai_review_packages_proposal_identity_key")
   @@index([taskId, status])
+  @@index([conversationId, status])
+  @@index([organizationId, targetKind, targetId, status], map: "ai_review_packages_target_status_idx")
   @@index([organizationId, createdAt])
   @@index([inputBatchId])
+  @@index([attemptId])
   @@index([sourceActionId])
   @@map("ai_review_packages")
 }
@@ -1353,6 +1371,7 @@ model AiReviewRecord {
   operatorUserId     String              @map("operator_user_id")
   operator           User                @relation("AiReviewRecordOperator", fields: [operatorUserId], references: [id])
   action             AiReviewRecordAction
+  decisionCommandId  String?             @map("decision_command_id")
   originalCandidates Json                @map("original_candidates")
   userCorrections    Json                @map("user_corrections")
   submittedValues    Json                @map("submitted_values")
@@ -1362,6 +1381,7 @@ model AiReviewRecord {
   conflictFields     Json?               @map("conflict_fields")
   createdAt          DateTime            @default(now()) @map("created_at")
 
+  @@unique([packageId, decisionCommandId], map: "ai_review_records_decision_identity_key")
   @@index([packageId, createdAt])
   @@index([organizationId, createdAt])
   @@map("ai_review_records")
@@ -1533,6 +1553,7 @@ model AiConversation {
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
   aiActions        AiAction[]
+  reviewPackages   AiReviewPackage[]
   taskLinks        ConversationTaskLink[]
 
   @@index([organizationId, creatorUserId, lastActivityAt], map: "ai_conversations_org_creator_activity_idx")
@@ -1750,6 +1771,7 @@ model AiAgentAttempt {
   startedAt         DateTime             @default(now()) @map("started_at")
   endedAt           DateTime?            @map("ended_at")
   aiActions         AiAction[]
+  reviewPackages    AiReviewPackage[]
 
   @@index([taskId, status])
   @@index([conversationId, status])

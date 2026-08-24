@@ -2,6 +2,7 @@ import { downloadBinary, request, type RequestConfig } from '@/lib/request'
 import type {
   AiCreateTaskSummary,
   ConfirmAiCreateTaskDto,
+  CancelAiReviewPackageDto,
   ConfirmAiReviewPackageDto,
   RejectAiReviewPackageDto,
   DepartureMaterialView,
@@ -285,5 +286,25 @@ export async function rejectAiReviewPackage(
   return request.post<AiCreateTaskSummary>(
     `/ai-create-tasks/${taskId}/review-packages/${packageId}/reject`,
     payload,
+  )
+}
+
+export async function cancelAiReviewPackage(
+  taskId: string,
+  packageId: string,
+  payload: CancelAiReviewPackageDto,
+): Promise<AiCreateTaskSummary> {
+  return request.post<AiCreateTaskSummary>(
+    `/ai-create-tasks/${taskId}/review-packages/${packageId}/cancel`,
+    payload,
+  )
+}
+
+export async function regenerateAiReviewPackage(
+  taskId: string,
+  packageId: string,
+): Promise<AiCreateTaskSummary> {
+  return request.post<AiCreateTaskSummary>(
+    `/ai-create-tasks/${taskId}/review-packages/${packageId}/regenerate`,
   )
 }

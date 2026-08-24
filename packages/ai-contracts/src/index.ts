@@ -104,6 +104,23 @@ export {
   type ReviewConfirmMergeResult,
 } from './review/merge-review-confirm'
 export {
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  DEPARTURE_REVIEW_TARGET_KIND,
+  REVIEW_PROPOSAL_IDENTITY_FIELDS,
+  canonicalizeReviewValue,
+  isTargetVersionStale,
+  reviewConflictChangeSummary,
+  reviewDecisionIdentitySchema,
+  reviewPackageEnvelopeSchema,
+  reviewProposalHash,
+  reviewProposalIdentitySchema,
+  sameReviewProposalIdentity,
+  type ReviewConflictChangeSummary,
+  type ReviewDecisionIdentity,
+  type ReviewPackageEnvelope,
+  type ReviewProposalIdentity,
+} from './review/envelope'
+export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,
   aiCollaborationErrorSchema,

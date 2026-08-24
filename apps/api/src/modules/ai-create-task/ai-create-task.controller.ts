@@ -40,6 +40,7 @@ import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-mat
 import { DepartureMaterialService } from './departure-material.service'
 import {
   ConfirmAiCreateTaskDto,
+  CancelAiReviewPackageDto,
   ConfirmAiReviewPackageDto,
   PatchAiReviewPackageDto,
   RejectAiReviewPackageDto,
@@ -423,6 +424,7 @@ export class AiCreateTaskController {
     @Param('taskId') taskId: string,
     @Param('packageId') packageId: string,
     @Body() dto: ConfirmAiReviewPackageDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<AiCreateTaskSummary> {
     return this.aiCreateTaskService.confirmReviewPackage(
       request.user.organizationId,
@@ -430,6 +432,7 @@ export class AiCreateTaskController {
       taskId,
       packageId,
       dto,
+      dto.decisionCommandId ?? idempotencyKey,
     )
   }
 
@@ -448,6 +451,40 @@ export class AiCreateTaskController {
       taskId,
       packageId,
       dto,
+    )
+  }
+
+  @Post(':taskId/review-packages/:packageId/cancel')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  cancelReviewPackage(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('packageId') packageId: string,
+    @Body() dto: CancelAiReviewPackageDto,
+  ): Promise<AiCreateTaskSummary> {
+    return this.aiCreateTaskService.cancelReviewPackage(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      packageId,
+      dto,
+    )
+  }
+
+  @Post(':taskId/review-packages/:packageId/regenerate')
+  @HttpCode(200)
+  @RequireMenu('departure:write')
+  regenerateReviewPackage(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('taskId') taskId: string,
+    @Param('packageId') packageId: string,
+  ): Promise<AiCreateTaskSummary> {
+    return this.aiCreateTaskService.regenerateReviewPackage(
+      request.user.organizationId,
+      request.user.userId,
+      taskId,
+      packageId,
     )
   }
 }

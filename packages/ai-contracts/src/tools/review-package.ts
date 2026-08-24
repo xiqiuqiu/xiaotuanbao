@@ -34,7 +34,14 @@ export const AI_USER_ONLY_BASIC_INFO_FIELDS = ['ownerUserId', 'departureType'] a
 export const AI_CANDIDATE_CLARITY = ['clear', 'needs_confirmation', 'undetermined'] as const
 export type AiCandidateClarity = (typeof AI_CANDIDATE_CLARITY)[number]
 
-export const AI_REVIEW_PACKAGE_STATUS = ['pending', 'confirmed', 'rejected', 'superseded'] as const
+export const AI_REVIEW_PACKAGE_STATUS = [
+  'pending',
+  'confirmed',
+  'rejected',
+  'superseded',
+  'conflict',
+  'cancelled',
+] as const
 export type AiReviewPackageStatus = (typeof AI_REVIEW_PACKAGE_STATUS)[number]
 
 export const AI_CANDIDATE_STATUS = ['pending', 'confirmed', 'rejected', 'superseded'] as const

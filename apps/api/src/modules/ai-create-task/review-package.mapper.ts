@@ -57,27 +57,64 @@ export function reviewConfirmValues(candidates: StoredReviewCandidate[]): {
   }
 }
 
+function parseUserCorrections(
+  raw: unknown,
+): Partial<Record<AiReviewableBasicInfoField, string | number | null>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const corrections: Partial<Record<AiReviewableBasicInfoField, string | number | null>> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(AI_REVIEWABLE_BASIC_INFO_FIELDS as readonly string[]).includes(key)) continue
+    if (value === null || typeof value === 'string' || typeof value === 'number') {
+      corrections[key as AiReviewableBasicInfoField] = value
+    }
+  }
+  return corrections
+}
+
 export function toReviewPackageView(pkg: {
   id: string
   status: string
   confirmationUnit: string
+  payloadSchema?: string | null
   baseObjectVersion: number
   version: number
   runId: string
+  conversationId?: string | null
+  inputBatchId?: string | null
+  attemptId?: string | null
+  capabilityKey?: string | null
+  capabilityVersion?: number | null
+  targetKind?: string | null
+  targetId?: string | null
+  proposalHash?: string | null
   candidates: unknown
   baselineSnapshot: unknown
+  userCorrections?: unknown
 }): AiReviewPackageView {
+  const corrections = parseUserCorrections(pkg.userCorrections)
   return {
     id: pkg.id,
     status: pkg.status as AiReviewPackageView['status'],
     confirmationUnit: 'basic_info_draft',
+    payloadSchema: 'departure.basic_info_draft@v1',
     baseObjectVersion: pkg.baseObjectVersion,
     version: pkg.version,
     runId: pkg.runId,
+    conversationId: pkg.conversationId ?? null,
+    inputBatchId: pkg.inputBatchId ?? null,
+    attemptId: pkg.attemptId ?? null,
+    capabilityKey: pkg.capabilityKey ?? 'departure.review-package.propose',
+    capabilityVersion: pkg.capabilityVersion ?? 1,
+    targetKind: pkg.targetKind ?? 'departure_creation_draft',
+    targetId: pkg.targetId ?? '',
+    proposalHash: pkg.proposalHash ?? '',
     candidates: parseStoredCandidates(pkg.candidates).map((candidate) => ({
       fieldKey: candidate.fieldKey,
       proposedValue: candidate.proposedValue,
-      userCorrectedValue: candidate.userCorrectedValue,
+      userCorrectedValue:
+        candidate.fieldKey in corrections
+          ? corrections[candidate.fieldKey]
+          : candidate.userCorrectedValue,
       clarity: candidate.clarity,
       status: candidate.status,
       evidence: candidate.evidence,

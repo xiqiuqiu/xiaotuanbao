@@ -80,6 +80,8 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  cancelAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  regenerateAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   // 资源应付作废：路径在 /finance 下，但后端要 departure:write（作废属发团编辑）。
   voidResourcePayable: { gating: 'departureWrite', endpointKey: 'departure:write' },
 

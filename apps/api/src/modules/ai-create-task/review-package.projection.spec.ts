@@ -1,6 +1,6 @@
 import { AiReviewPackageStatus } from '@prisma/client'
 import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
-import { projectPendingReviewPackage, httpPendingReviewDisposition } from './review-package.projection'
+import { projectPendingReviewPackage } from './review-package.projection'
 
 const reviewPackage: SubmitReviewPackageModelInput = {
   objectVersion: 1,
@@ -18,31 +18,33 @@ const reviewPackage: SubmitReviewPackageModelInput = {
 const snapshot = { name: '原团名' }
 
 function createTx(options?: {
-  pending?: { id: string; sourceActionId: string | null; inputBatchId: string | null }
+  existing?: { id: string; sourceActionId: string | null; candidates: unknown }
   draftVersion?: number
+  uniqueOnCreate?: boolean
 }) {
   const created = { id: 'pkg-new' }
   const draftUpdate = jest.fn()
-  const reviewCreate = jest.fn().mockResolvedValue(created)
-  const reviewUpdate = jest.fn().mockResolvedValue({ id: options?.pending?.id })
+  const reviewCreate = jest.fn().mockImplementation(async () => {
+    if (options?.uniqueOnCreate) {
+      const error = Object.assign(new Error('Unique constraint'), { code: 'P2002' })
+      throw error
+    }
+    return created
+  })
   const tx = {
     aiCreateTask: {
       findFirst: jest.fn().mockResolvedValue({
         id: 'task-1',
-        draft: { version: options?.draftVersion ?? 1, snapshot },
-        agentTask: {
-          reviewPackages: options?.pending ? [options.pending] : [],
-        },
+        draft: { id: 'draft-1', version: options?.draftVersion ?? 1, snapshot },
       }),
     },
     departureCreationDraft: { update: draftUpdate, updateMany: draftUpdate },
     aiReviewPackage: {
       create: reviewCreate,
-      update: reviewUpdate,
-      findFirst: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(options?.existing ?? null),
     },
   }
-  return { tx, reviewCreate, reviewUpdate, draftUpdate }
+  return { tx, reviewCreate, draftUpdate }
 }
 
 describe('projectPendingReviewPackage', () => {
@@ -52,7 +54,9 @@ describe('projectPendingReviewPackage', () => {
     const id = await projectPendingReviewPackage(tx as never, {
       organizationId: 'org-1',
       taskId: 'task-1',
+      conversationId: 'conv-1',
       inputBatchId: 'batch-1',
+      attemptId: 'attempt-1',
       runId: 'run-1',
       reviewPackage,
       sourceActionId: 'action-first',
@@ -61,48 +65,56 @@ describe('projectPendingReviewPackage', () => {
     expect(id).toBe('pkg-new')
     expect(reviewCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        organizationId: 'org-1',
-        taskId: 'task-1',
-        runId: 'run-1',
-        inputBatchId: 'batch-1',
         status: AiReviewPackageStatus.pending,
-        sourceActionId: 'action-first',
+        capabilityKey: 'departure.review-package.propose',
+        targetKind: 'departure_creation_draft',
+        targetId: 'draft-1',
+        conversation: { connect: { id: 'conv-1' } },
+        inputBatch: { connect: { id: 'batch-1' } },
+        sourceAction: { connect: { id: 'action-first' } },
         baseObjectVersion: 1,
       }),
     })
     expect(draftUpdate).not.toHaveBeenCalled()
   })
 
-  it('reuses an existing pending package without changing its source action', async () => {
-    const pending = { id: 'pkg-existing', sourceActionId: 'action-first', inputBatchId: 'batch-1' }
-    const { tx, reviewCreate, reviewUpdate } = createTx({ pending })
+  it('reuses the same proposal identity without rewriting the original package', async () => {
+    const existing = {
+      id: 'pkg-existing',
+      sourceActionId: 'action-first',
+      candidates: [{ fieldKey: 'name' }],
+    }
+    const { tx, reviewCreate } = createTx({ existing })
 
     const id = await projectPendingReviewPackage(tx as never, {
       organizationId: 'org-1',
       taskId: 'task-1',
-      inputBatchId: 'batch-2',
+      conversationId: 'conv-2',
+      inputBatchId: 'batch-1',
       runId: 'run-2',
-      reviewPackage: {
-        ...reviewPackage,
-        candidates: [
-          {
-            fieldKey: 'expectedGuestCountHint',
-            proposedValue: 20,
-            clarity: 'clear',
-            evidence: [{ kind: 'user_message', excerpt: '二十人', sequence: 2 }],
-          },
-        ],
-      },
+      reviewPackage,
       sourceActionId: 'action-later',
     })
 
     expect(id).toBe('pkg-existing')
     expect(reviewCreate).not.toHaveBeenCalled()
-    expect(reviewUpdate).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ sourceActionId: 'action-later' }),
-      }),
-    )
+  })
+
+  it('does not treat a different conversation pending package as a task-level lock', async () => {
+    const { tx, reviewCreate } = createTx()
+
+    const id = await projectPendingReviewPackage(tx as never, {
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      conversationId: 'conv-b',
+      inputBatchId: 'batch-b',
+      runId: 'run-b',
+      reviewPackage,
+      sourceActionId: 'action-b',
+    })
+
+    expect(id).toBe('pkg-new')
+    expect(reviewCreate).toHaveBeenCalled()
   })
 
   it('does not create a package when the draft version does not match', async () => {
@@ -112,6 +124,7 @@ describe('projectPendingReviewPackage', () => {
       projectPendingReviewPackage(tx as never, {
         organizationId: 'org-1',
         taskId: 'task-1',
+        conversationId: 'conv-1',
         inputBatchId: 'batch-1',
         runId: 'run-1',
         reviewPackage,
@@ -129,6 +142,7 @@ describe('projectPendingReviewPackage', () => {
       projectPendingReviewPackage(tx as never, {
         organizationId: 'org-1',
         taskId: 'task-1',
+        conversationId: 'conv-1',
         inputBatchId: 'batch-1',
         runId: 'run-1',
         reviewPackage,
@@ -137,27 +151,5 @@ describe('projectPendingReviewPackage', () => {
     ).rejects.toThrow('REVIEW_PACKAGE_MISSING_ACTION')
 
     expect(reviewCreate).not.toHaveBeenCalled()
-  })
-})
-
-describe('httpPendingReviewDisposition', () => {
-  it('creates when there is no pending package', () => {
-    expect(httpPendingReviewDisposition(undefined, 'action-1')).toBe('create')
-  })
-
-  it('replays the same source action onto the existing pending package', () => {
-    expect(
-      httpPendingReviewDisposition({ sourceActionId: 'action-1' }, 'action-1'),
-    ).toBe('replay')
-  })
-
-  it('rejects a later proposal without treating it as a source change', () => {
-    expect(
-      httpPendingReviewDisposition({ sourceActionId: 'action-first' }, 'action-later'),
-    ).toBe('reject')
-  })
-
-  it('rejects when an older pending package has no source action', () => {
-    expect(httpPendingReviewDisposition({ sourceActionId: null }, 'action-1')).toBe('reject')
   })
 })
