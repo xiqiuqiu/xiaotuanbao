@@ -48,22 +48,33 @@ export async function projectPendingReviewPackage(
     return existing.id
   }
 
-  const created = await tx.aiReviewPackage.create({
-    data: reviewPackageCreateData({
-      organizationId: params.organizationId,
-      taskId: params.taskId,
-      runId: params.runId,
-      conversationId: params.conversationId,
-      inputBatchId: params.inputBatchId,
-      attemptId: params.attemptId,
-      sourceActionId: params.sourceActionId,
-      targetId: task.draft.id,
-      baseObjectVersion: task.draft.version,
-      baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-      reviewPackage: params.reviewPackage,
-    }),
-  })
-  return created.id
+  try {
+    const created = await tx.aiReviewPackage.create({
+      data: reviewPackageCreateData({
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        runId: params.runId,
+        conversationId: params.conversationId,
+        inputBatchId: params.inputBatchId,
+        attemptId: params.attemptId,
+        sourceActionId: params.sourceActionId,
+        targetId: task.draft.id,
+        baseObjectVersion: task.draft.version,
+        baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
+        reviewPackage: params.reviewPackage,
+      }),
+    })
+    return created.id
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error
+    }
+    const raced = await findReviewPackageByProposalIdentity(tx, identity)
+    if (!raced) {
+      throw error
+    }
+    return raced.id
+  }
 }
 
 export async function findReviewPackageByProposalIdentity(
@@ -80,6 +91,15 @@ export async function findReviewPackageByProposalIdentity(
     where: identity,
     select: { id: true, sourceActionId: true, candidates: true },
   })
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: string }).code === 'P2002'
+  )
 }
 
 
