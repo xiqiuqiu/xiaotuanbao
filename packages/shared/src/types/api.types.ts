@@ -884,6 +884,7 @@ export interface AiCreateAssistTaskState {
 }
 
 export interface StartAiCreateAssistSessionDto {
+  conversationId?: string
   taskId?: string
   draft?: DepartureCreationDraftSnapshot
 }

@@ -23,17 +23,19 @@ import {
   AiConversationInteractionStatus,
   AiConversationStatus,
   AiConversationTitleSource,
-  AiCreateTaskStatus,
+  AgentTaskStatus,
   AiAgentAttemptStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   DepartureMaterialStatus,
+  InputBatchTaskRole,
+  TaskActivityKind,
+  type AgentTask,
   type AiConversation,
   type AiConversationEvent,
   type AiConversationInteraction,
   type AiCreateTask,
-  type AiInputBatch,
   type DepartureCreationDraft,
   type Prisma,
 } from '@prisma/client'
@@ -66,7 +68,6 @@ import {
   toEventView,
   toFailedMaterialPayload,
   toInteractionView,
-  type BatchMaterialSource,
 } from './ai-conversation.mapper'
 import {
   isReplyAttempt,
@@ -93,9 +94,11 @@ import {
 
 const TASK_INCLUDE = {
   draft: true,
+  agentTask: true,
 } satisfies Prisma.AiCreateTaskInclude
 
 const BATCH_MATERIAL_INCLUDE = {
+  taskLinks: true,
   materials: {
     include: {
       material: {
@@ -107,8 +110,17 @@ const BATCH_MATERIAL_INCLUDE = {
   },
 } satisfies Prisma.AiInputBatchInclude
 
-type TaskWithDraft = AiCreateTask & { draft: DepartureCreationDraft | null }
-type BatchWithMaterials = AiInputBatch & { materials: BatchMaterialSource[] }
+type TaskWithDraft = AiCreateTask & {
+  draft: DepartureCreationDraft | null
+  agentTask: AgentTask
+}
+type BatchWithMaterials = Prisma.AiInputBatchGetPayload<{
+  include: typeof BATCH_MATERIAL_INCLUDE
+}>
+
+function primaryTaskId(batch: BatchWithMaterials): string | null {
+  return batch.taskLinks.find((link) => link.role === InputBatchTaskRole.primary)?.taskId ?? null
+}
 
 @Injectable()
 export class AiConversationService {
@@ -124,15 +136,49 @@ export class AiConversationService {
     organizationId: string,
     userId: string,
     taskId: string,
+    preferredConversationId?: string,
   ): Promise<AiConversationView> {
     await this.assertAssistAccess(userId)
     const task = await this.findOwnedInProgressTask(organizationId, userId, taskId)
     const conversation = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, organizationId, task.id)
+      if (preferredConversationId) {
+        await lockConversationRuntime(tx, organizationId, preferredConversationId)
+        const preferred = await tx.aiConversation.findFirst({
+          where: { id: preferredConversationId, organizationId },
+        })
+        if (!preferred) {
+          throw new NotFoundException('会话不存在')
+        }
+        if (preferred.creatorUserId !== userId) {
+          throw new ForbiddenException('仅会话所有者可在该会话创建任务')
+        }
+        if (preferred.status !== AiConversationStatus.open) {
+          throw new BadRequestException('仅开放会话可创建任务')
+        }
+        await tx.conversationTaskLink.upsert({
+          where: {
+            conversationId_taskId: {
+              conversationId: preferred.id,
+              taskId: task.id,
+            },
+          },
+          create: {
+            organizationId,
+            conversationId: preferred.id,
+            taskId: task.id,
+            linkedByUserId: userId,
+            linkReason: 'created',
+            metadata: { source: 'departure_assist_session' },
+          },
+          update: {},
+        })
+        return preferred
+      }
       const existing = await tx.aiConversation.findFirst({
         where: {
-          taskId: task.id,
           organizationId,
+          taskLinks: { some: { taskId: task.id } },
           status: AiConversationStatus.open,
         },
         orderBy: { updatedAt: 'desc' },
@@ -143,8 +189,16 @@ export class AiConversationService {
       return tx.aiConversation.create({
         data: {
           organizationId,
-          taskId: task.id,
           creatorUserId: userId,
+          taskLinks: {
+            create: {
+              organizationId,
+              taskId: task.id,
+              linkedByUserId: userId,
+              linkReason: 'created',
+              metadata: { source: 'departure_assist_session' },
+            },
+          },
         },
       })
     })
@@ -541,7 +595,7 @@ export class AiConversationService {
       await lockAiCreateSender(tx, organizationId, userId)
       await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
       const conversation = await tx.aiConversation.findFirst({
-        where: { id: conversationId, taskId, organizationId },
+        where: { id: conversationId, organizationId, taskLinks: { some: { taskId } } },
       })
       if (!conversation) {
         throw new NotFoundException('AI 建团会话不存在')
@@ -585,7 +639,7 @@ export class AiConversationService {
     await this.assertAssistAccess(userId)
     await this.findOwnedInProgressTask(organizationId, userId, taskId)
     const conversation = await this.prisma.aiConversation.findFirst({
-      where: { organizationId, taskId, creatorUserId: userId, status: AiConversationStatus.open },
+      where: { organizationId, creatorUserId: userId, taskLinks: { some: { taskId } }, status: AiConversationStatus.open },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     })
@@ -685,7 +739,7 @@ export class AiConversationService {
         await lockAiCreateSender(tx, organizationId, userId)
         const task = await this.findOwnedInProgressTask(organizationId, userId, taskId, tx)
         const conversation = await tx.aiConversation.findFirst({
-          where: { id: conversationId, taskId: task.id, organizationId },
+          where: { id: conversationId, organizationId, taskLinks: { some: { taskId: task.id } } },
         })
         if (!conversation) {
           throw new NotFoundException('AI 建团会话不存在')
@@ -798,13 +852,19 @@ export class AiConversationService {
         const batch = await tx.aiInputBatch.create({
           data: {
             organizationId,
-            taskId: task.id,
             conversationId: conversation.id,
             creatorUserId: userId,
             userMessageEventId: userEvent.id,
             replyToEventId: replyResult?.replyToEventId,
             conversationVersion: userSequence,
             status: batchStatus,
+            taskLinks: {
+              create: {
+                organizationId,
+                taskId: task.id,
+                role: InputBatchTaskRole.primary,
+              },
+            },
             materials: {
               create: archived.map((item) => ({
                 organizationId,
@@ -815,6 +875,28 @@ export class AiConversationService {
             },
           },
           include: BATCH_MATERIAL_INCLUDE,
+        })
+        if (task.agentTask.status === AgentTaskStatus.waiting) {
+          await tx.agentTask.update({
+            where: { id: task.id },
+            data: {
+              status: AgentTaskStatus.active,
+              statusVersion: { increment: 1 },
+            },
+          })
+        }
+        await tx.taskActivity.create({
+          data: {
+            organizationId,
+            taskId: task.id,
+            actorUserId: userId,
+            kind: TaskActivityKind.progress,
+            summary:
+              task.agentTask.status === AgentTaskStatus.waiting
+                ? 'User 已继续推进任务'
+                : 'User 已提交新一轮任务输入',
+            payload: { inputBatchId: batch.id },
+          },
         })
 
         for (const item of archived) {
@@ -970,16 +1052,13 @@ export class AiConversationService {
           }
         }
         for (const item of failed) {
-          if (!batch.taskId) {
-            throw new ConflictException('该批次未绑定建团任务')
-          }
           await this.materialService.startNewParseRun(tx, {
             organizationId,
             materialId: item.materialId,
           })
           await this.materialService.enqueueParseJob(tx, {
             organizationId,
-            taskId: batch.taskId,
+            taskId,
             conversationId: batch.conversationId,
             inputBatchId: batch.id,
             materialId: item.materialId,
@@ -1038,7 +1117,7 @@ export class AiConversationService {
           const archived = await tx.departureMaterial.findFirst({
             where: {
               id,
-              taskId: batch.taskId ?? undefined,
+              taskId,
               organizationId: batch.organizationId,
             },
             select: { id: true },
@@ -1106,6 +1185,20 @@ export class AiConversationService {
           where: { id: batch.id },
           data: { status: AiInputBatchStatus.cancelled },
           include: BATCH_MATERIAL_INCLUDE,
+        })
+        await tx.agentTask.updateMany({
+          where: { id: taskId, status: AgentTaskStatus.waiting },
+          data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+        })
+        await tx.taskActivity.create({
+          data: {
+            organizationId,
+            taskId,
+            actorUserId: userId,
+            kind: TaskActivityKind.progress,
+            summary: 'User 已放弃指定批次',
+            payload: { inputBatchId: batch.id },
+          },
         })
         const statusEvent = await this.appendEvent(tx, {
           organizationId,
@@ -1330,6 +1423,20 @@ export class AiConversationService {
           data: { status: AiInputBatchStatus.cancelled },
           include: BATCH_MATERIAL_INCLUDE,
         })
+        await tx.agentTask.updateMany({
+          where: { id: taskId, status: AgentTaskStatus.waiting },
+          data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+        })
+        await tx.taskActivity.create({
+          data: {
+            organizationId,
+            taskId,
+            actorUserId: userId,
+            kind: TaskActivityKind.progress,
+            summary: 'User 已取消指定等待项',
+            payload: { interactionId: interaction.id },
+          },
+        })
         const statusEvent = await this.appendEvent(tx, {
           organizationId,
           conversationId,
@@ -1480,14 +1587,14 @@ export class AiConversationService {
       ? await tx.aiInputBatch.findFirst({
           where: {
             id: params.inputBatchId,
-            taskId: params.taskId,
+            taskLinks: { some: { taskId: params.taskId } },
             organizationId: params.organizationId,
             status: AiInputBatchStatus.awaiting_review,
           },
         })
       : await tx.aiInputBatch.findFirst({
           where: {
-            taskId: params.taskId,
+            taskLinks: { some: { taskId: params.taskId } },
             organizationId: params.organizationId,
             status: AiInputBatchStatus.awaiting_review,
           },
@@ -1500,6 +1607,21 @@ export class AiConversationService {
     await tx.aiInputBatch.update({
       where: { id: batch.id },
       data: { status: AiInputBatchStatus.completed },
+    })
+    await tx.agentTask.updateMany({
+      where: { id: params.taskId, status: AgentTaskStatus.waiting },
+      data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+    })
+    await tx.taskActivity.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        actorUserId: params.userId,
+        kind: TaskActivityKind.progress,
+        summary:
+          params.disposition === 'confirmed' ? 'User 已确认审核项' : 'User 已拒绝审核项',
+        payload: { reviewPackageId: params.reviewPackageId },
+      },
     })
     const statusEvent = await this.appendEvent(tx, {
       organizationId: params.organizationId,
@@ -1524,12 +1646,18 @@ export class AiConversationService {
     const continuation = await tx.aiInputBatch.create({
       data: {
         organizationId: params.organizationId,
-        taskId: params.taskId,
         conversationId: batch.conversationId,
         creatorUserId: params.userId,
         userMessageEventId: batch.userMessageEventId,
         conversationVersion: statusEvent.sequence,
         status: AiInputBatchStatus.ready_for_agent,
+        taskLinks: {
+          create: {
+            organizationId: params.organizationId,
+            taskId: params.taskId,
+            role: InputBatchTaskRole.primary,
+          },
+        },
       },
     })
     await tx.aiWorkflowJob.create({
@@ -1632,7 +1760,7 @@ export class AiConversationService {
     await tx.aiWorkflowJob.create({
       data: {
         organizationId: batch.organizationId,
-        taskId: batch.taskId,
+        taskId: primaryTaskId(batch),
         conversationId: batch.conversationId,
         inputBatchId: batch.id,
         type: AiWorkflowJobType.agent_batch,
@@ -1860,7 +1988,7 @@ export class AiConversationService {
     conversationId: string,
   ): Promise<AiConversation> {
     const conversation = await db.aiConversation.findFirst({
-      where: { id: conversationId, organizationId, taskId: null },
+      where: { id: conversationId, organizationId, taskLinks: { none: {} } },
     })
     if (!conversation) {
       throw new NotFoundException('会话不存在')
@@ -1962,7 +2090,7 @@ export class AiConversationService {
     conversationId: string,
   ): Promise<AiConversation> {
     const conversation = await this.prisma.aiConversation.findFirst({
-      where: { id: conversationId, taskId, organizationId },
+      where: { id: conversationId, organizationId, taskLinks: { some: { taskId } } },
     })
     if (!conversation) {
       throw new NotFoundException('AI 建团会话不存在')
@@ -2080,7 +2208,7 @@ export class AiConversationService {
         where: {
           id: params.batchId,
           conversationId: conversation.id,
-          taskId: params.taskId,
+          taskLinks: { some: { taskId: params.taskId } },
           organizationId: params.organizationId,
         },
         include: BATCH_MATERIAL_INCLUDE,
@@ -2127,16 +2255,19 @@ export class AiConversationService {
     tx: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<TaskWithDraft> {
     const task = await tx.aiCreateTask.findFirst({
-      where: { id: taskId, organizationId },
+      where: { id: taskId, agentTask: { organizationId } },
       include: TASK_INCLUDE,
     })
     if (!task || !task.draft) {
       throw new NotFoundException('AI 建团任务不存在')
     }
-    if (task.creatorUserId !== userId) {
+    if (task.agentTask.ownerUserId !== userId) {
       throw new ForbiddenException('仅任务创建者可访问该 AI 建团任务')
     }
-    if (task.status !== AiCreateTaskStatus.in_progress) {
+    if (
+      task.agentTask.status !== AgentTaskStatus.active &&
+      task.agentTask.status !== AgentTaskStatus.waiting
+    ) {
       throw new BadRequestException('仅进行中的 AI 建团任务可使用 AI 辅助')
     }
     return task

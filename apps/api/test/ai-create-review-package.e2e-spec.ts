@@ -40,19 +40,19 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewRecord.deleteMany({
-      where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
+      where: { package: { task: { organizationId, ownerUserId } } },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await app.close()
@@ -197,6 +197,15 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       )
       .send({ expectedPackageVersion: 1 })
       .expect(200)
+    await expect(
+      prisma.taskActivity.findFirst({
+        where: {
+          taskId: opened.taskId,
+          kind: 'waiting',
+          payload: { path: ['reviewPackageId'], equals: submitted.body.data.reviewPackageId },
+        },
+      }),
+    ).resolves.toMatchObject({ summary: 'User 已取消指定审核等待项' })
 
     const resubmitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,

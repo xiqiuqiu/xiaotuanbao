@@ -64,16 +64,16 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()
@@ -189,7 +189,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const running = processor.processDueJobs(5)
     await waitFor(async () => {
       const count = await prisma.aiInputBatch.count({
-        where: { taskId, status: 'agent_running' },
+        where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
       })
       expect(count).toBe(1)
     })
@@ -216,7 +216,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processor.processDueJobs(5)
     expect(
       await prisma.aiInputBatch.count({
-        where: { taskId, status: 'agent_running' },
+        where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
       }),
     ).toBe(1)
 
@@ -225,7 +225,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processor.processDueJobs(5)
 
     const batches = await prisma.aiInputBatch.findMany({
-      where: { taskId },
+      where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
     expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
@@ -455,7 +455,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
     expect(
       await prisma.aiInputBatch.count({
-        where: { taskId, replyToEventId: null, status: 'ready_for_agent' },
+        where: {
+          taskLinks: { some: { taskId } },
+          replyToEventId: null,
+          status: 'ready_for_agent',
+        },
       }),
     ).toBeGreaterThan(0)
 
@@ -463,7 +467,10 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await replyRun
     await processor.processDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
-      where: { taskId, status: { in: ['ready_for_agent', 'agent_running'] } },
+      where: {
+        taskLinks: { some: { taskId } },
+        status: { in: ['ready_for_agent', 'agent_running'] },
+      },
     })
     expect(remaining).toBe(0)
   })
@@ -538,7 +545,11 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
     expect(
       await prisma.aiInputBatch.count({
-        where: { taskId, replyToEventId: null, status: 'ready_for_agent' },
+        where: {
+          taskLinks: { some: { taskId } },
+          replyToEventId: null,
+          status: 'ready_for_agent',
+        },
       }),
     ).toBeGreaterThan(0)
 
@@ -547,7 +558,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await processor.processDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: {
-        taskId,
+        taskLinks: { some: { taskId } },
         status: { in: ['waiting_for_materials', 'ready_for_agent', 'agent_running'] },
       },
     })
@@ -574,6 +585,10 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     )
     await processor.processDueJobs(5)
     const asked = await listEvents(taskId, conversationId)
+    expect(asked.pendingInteraction).not.toBeNull()
+    expect(await prisma.agentTask.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+      status: 'waiting',
+    })
     expect(asked.pendingInteraction).toMatchObject({
       type: 'single_choice',
       prompt: SINGLE_CHOICE_PROMPT,
@@ -735,7 +750,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     }
     await processor.processDueJobs(5)
     const batches = await prisma.aiInputBatch.findMany({
-      where: { taskId },
+      where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
     expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
@@ -772,11 +787,14 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     const afterCancel = await listEvents(taskId, conversationId)
     expect(afterCancel.pendingInteraction).toBeNull()
+    expect(await prisma.agentTask.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
+      status: 'active',
+    })
     expect(afterCancel.activeBatch).toMatchObject({ status: 'ready_for_agent' })
 
     await processor.processDueJobs(5)
     const batches = await prisma.aiInputBatch.findMany({
-      where: { taskId },
+      where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
     })
     expect(batches.map((batch) => batch.status)).toEqual(['cancelled', 'completed'])
@@ -797,7 +815,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await waitFor(async () => {
       expect(
         await prisma.aiInputBatch.count({
-          where: { taskId, status: 'agent_running' },
+          where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
         }),
       ).toBe(1)
     })

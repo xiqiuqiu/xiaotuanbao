@@ -33,7 +33,7 @@ export async function lockAiCreateTask(
   `
   await tx.$queryRaw`
     SELECT id
-    FROM ai_create_tasks
+    FROM agent_tasks
     WHERE id = ${taskId}
       AND organization_id = ${organizationId}
     FOR UPDATE

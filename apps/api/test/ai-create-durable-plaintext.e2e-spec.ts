@@ -63,16 +63,16 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()
@@ -140,7 +140,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     await prisma.aiWorkflowJob.updateMany({
       where: {
         organizationId,
-        task: { creatorUserId: ownerUserId },
+        task: { ownerUserId },
         status: { in: ['pending', 'claimed'] },
       },
       data: { status: 'failed', lastErrorCode: 'e2e-cancelled-for-cap-test' },
@@ -267,14 +267,14 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     const first = processor.processDueJobs(5)
     await waitFor(async () => {
       const running = await prisma.aiInputBatch.count({
-        where: { taskId, status: 'agent_running' },
+        where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
       })
       expect(running).toBe(1)
     })
 
     await processor.processDueJobs(5)
     const stillOne = await prisma.aiInputBatch.count({
-      where: { taskId, status: 'agent_running' },
+      where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
     })
     expect(stillOne).toBe(1)
 
@@ -283,7 +283,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     await processor.processDueJobs(5)
     await waitFor(async () => {
       const done = await prisma.aiInputBatch.count({
-        where: { taskId, status: 'agent_running' },
+        where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
       })
       expect(done).toBe(0)
     })
@@ -321,7 +321,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     expect(agent.callCount()).toBe(beforeWorker + 2)
 
     const batches = await prisma.aiInputBatch.findMany({
-      where: { taskId },
+      where: { taskLinks: { some: { taskId } } },
       orderBy: { createdAt: 'asc' },
     })
     expect(batches.map((batch) => batch.status)).toEqual(['completed', 'completed'])
@@ -481,20 +481,20 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
         MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
       )
     } finally {
-      await prisma.aiCreateTask.deleteMany({ where: { id: taskId } })
+      await prisma.agentTask.deleteMany({ where: { id: taskId } })
     }
   })
 
   it('rejects further sends when the user already has the max in-flight processing batches', async () => {
     await cancelOwnerInFlightProcessing()
-    const opened: Array<{ taskId: string }> = []
+    const opened: Array<{ taskId: string; conversationId: string }> = []
     try {
       let remaining = MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER
       while (remaining > 0) {
         const session = await openSession()
         const taskId = session.task.id
         const conversationId = session.conversation.id
-        opened.push({ taskId })
+        opened.push({ taskId, conversationId })
         const take = Math.min(remaining, MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION)
         for (let index = 0; index < take; index += 1) {
           await sendText(
@@ -508,7 +508,10 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       }
 
       const overflowSession = await openSession()
-      opened.push({ taskId: overflowSession.task.id })
+      opened.push({
+        taskId: overflowSession.task.id,
+        conversationId: overflowSession.conversation.id,
+      })
       const rejected = await sendText(
         overflowSession.task.id,
         overflowSession.conversation.id,
@@ -520,7 +523,10 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       const listed = await listEvents(overflowSession.task.id, overflowSession.conversation.id)
       expect(listed.events.filter((event) => event.kind === 'user_message')).toHaveLength(0)
     } finally {
-      await prisma.aiCreateTask.deleteMany({
+      await prisma.aiConversation.deleteMany({
+        where: { id: { in: opened.map((item) => item.conversationId) } },
+      })
+      await prisma.agentTask.deleteMany({
         where: { id: { in: opened.map((item) => item.taskId) } },
       })
     }

@@ -61,16 +61,16 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()
@@ -159,7 +159,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await processor.processDueJobs(5)
     await waitFor(async () => {
       const batch = await prisma.aiInputBatch.findFirst({
-        where: { taskId, status: 'awaiting_review' },
+        where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
       })
       expect(batch).not.toBeNull()
     })
@@ -193,7 +193,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     const pkg = await prisma.aiReviewPackage.findFirstOrThrow({ where: { taskId } })
     const batch = await prisma.aiInputBatch.findFirstOrThrow({
-      where: { taskId, status: 'awaiting_review' },
+      where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
     })
     expect(pkg.inputBatchId).toBe(batch.id)
     const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
@@ -501,7 +501,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
 
     const batch = await prisma.aiInputBatch.findFirst({
-      where: { taskId, status: 'awaiting_review' },
+      where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
     })
     expect(batch).not.toBeNull()
   })

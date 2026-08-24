@@ -30,7 +30,9 @@ function createTx(options?: {
       findFirst: jest.fn().mockResolvedValue({
         id: 'task-1',
         draft: { version: options?.draftVersion ?? 1, snapshot },
-        reviewPackages: options?.pending ? [options.pending] : [],
+        agentTask: {
+          reviewPackages: options?.pending ? [options.pending] : [],
+        },
       }),
     },
     departureCreationDraft: { update: draftUpdate, updateMany: draftUpdate },

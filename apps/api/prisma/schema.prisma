@@ -328,7 +328,10 @@ model Organization {
   products Product[]
   productImportSessions ProductImportSession[]
   bookingNoticeTemplates BookingNoticeTemplate[]
-  aiCreateTasks AiCreateTask[]
+  agentTasks                   AgentTask[]
+  conversationTaskLinks        ConversationTaskLink[]
+  inputBatchTaskLinks          InputBatchTaskLink[]
+  taskActivities               TaskActivity[]
   aiCreateIdempotencyRecords AiCreateIdempotencyRecord[]
   aiCreateActivityRuns AiCreateActivityRun[]
   aiReviewPackages AiReviewPackage[]
@@ -419,7 +422,9 @@ model User {
   paymentScheduleActivities  PaymentScheduleActivity[] @relation("PaymentScheduleActivityOperator")
   createdStoredObjects StoredObject[] @relation("StoredObjectCreator")
   createdProductImportSessions ProductImportSession[] @relation("ProductImportSessionCreator")
-  createdAiCreateTasks AiCreateTask[] @relation("AiCreateTaskCreator")
+  ownedAgentTasks               AgentTask[]                  @relation("AgentTaskOwner")
+  linkedConversationTasks       ConversationTaskLink[]       @relation("ConversationTaskLinkUser")
+  taskActivities                TaskActivity[]               @relation("TaskActivityActor")
   aiCreateActivityRuns AiCreateActivityRun[] @relation("AiCreateActivityRunCreator")
   aiReviewRecords AiReviewRecord[] @relation("AiReviewRecordOperator")
   createdAiConversations AiConversation[] @relation("AiConversationCreator")
@@ -1074,12 +1079,43 @@ model ProductSchedule {
   @@map("product_schedules")
 }
 
-enum AiCreateTaskStatus {
-  in_progress
-  completed
-  abandoned
+enum AgentTaskType {
+  departure_creation
 
-  @@map("ai_create_task_status")
+  @@map("agent_task_type")
+}
+
+enum AgentTaskStatus {
+  proposed
+  active
+  waiting
+  completed
+  failed
+  cancelled
+  closed
+
+  @@map("agent_task_status")
+}
+
+enum InputBatchTaskRole {
+  primary
+  referenced
+  created
+
+  @@map("input_batch_task_role")
+}
+
+enum TaskActivityKind {
+  goal
+  progress
+  waiting
+  business_object
+  completed
+  failed
+  cancelled
+  closed
+
+  @@map("task_activity_kind")
 }
 
 enum AiCreatePhase {
@@ -1096,32 +1132,104 @@ enum AiCreateActivityRunStatus {
   @@map("ai_create_activity_run_status")
 }
 
-/// AI 建团任务：表单/AI 共用的可恢复任务壳；正式 Departure 创建前关联发团创建草稿。
-model AiCreateTask {
+/// 通用 Agent 长期目标：拥有任务身份、目标、所有者与生命周期。
+model AgentTask {
   id             String            @id @default(cuid())
   organizationId String            @map("organization_id")
   organization   Organization      @relation(fields: [organizationId], references: [id])
-  creatorUserId  String            @map("creator_user_id")
-  creator        User              @relation("AiCreateTaskCreator", fields: [creatorUserId], references: [id])
-  status         AiCreateTaskStatus @default(in_progress)
-  currentPhase   AiCreatePhase     @default(basic_info) @map("current_phase")
-  departureId    String?           @unique @map("departure_id")
-  departure      Departure?        @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  ownerUserId           String                      @map("owner_user_id")
+  owner                 User                        @relation("AgentTaskOwner", fields: [ownerUserId], references: [id])
+  type                  AgentTaskType
+  goal                  String
+  goalVersion           Int                         @default(1) @map("goal_version")
+  status                AgentTaskStatus             @default(proposed)
+  statusVersion         Int                         @default(1) @map("status_version")
   createdAt      DateTime          @default(now()) @map("created_at")
   updatedAt      DateTime          @updatedAt @map("updated_at")
-  draft          DepartureCreationDraft?
+  departureCreationTask AiCreateTask?
+  conversationLinks     ConversationTaskLink[]
+  inputBatchLinks       InputBatchTaskLink[]
+  activities            TaskActivity[]
   idempotencyRecords AiCreateIdempotencyRecord[]
   activityRuns   AiCreateActivityRun[]
   reviewPackages AiReviewPackage[]
-  conversations  AiConversation[]
-  inputBatches   AiInputBatch[]
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
-  departureMaterials DepartureMaterial[]
   aiActions AiAction[]
 
-  @@index([organizationId, creatorUserId, status, updatedAt])
+  @@index([organizationId, ownerUserId, status, updatedAt])
+  @@map("agent_tasks")
+}
+
+/// 会话与任务的可审计多对多关联。
+model ConversationTaskLink {
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String         @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  taskId         String         @map("task_id")
+  task           AgentTask      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  linkedByUserId String         @map("linked_by_user_id")
+  linkedByUser   User           @relation("ConversationTaskLinkUser", fields: [linkedByUserId], references: [id])
+  linkReason     String         @map("link_reason")
+  metadata       Json           @default("{}")
+  linkedAt       DateTime       @default(now()) @map("linked_at")
+
+  @@unique([conversationId, taskId])
+  @@index([taskId, linkedAt])
+  @@index([organizationId, linkedAt])
+  @@map("conversation_task_links")
+}
+
+/// 输入批次明确引用的任务及其语义角色。
+model InputBatchTaskLink {
+  id             String             @id @default(cuid())
+  organizationId String             @map("organization_id")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputBatchId   String             @map("input_batch_id")
+  inputBatch     AiInputBatch       @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  taskId         String             @map("task_id")
+  task           AgentTask          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  role           InputBatchTaskRole
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  @@unique([inputBatchId, taskId, role])
+  @@index([taskId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("input_batch_task_links")
+}
+
+/// 任务活动只记录目标、进展、等待项、业务对象引用与终态。
+model TaskActivity {
+  id             String           @id @default(cuid())
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taskId         String           @map("task_id")
+  task           AgentTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actorUserId    String?          @map("actor_user_id")
+  actorUser      User?            @relation("TaskActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  kind           TaskActivityKind
+  summary        String
+  payload        Json             @default("{}")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@index([taskId, createdAt])
+  @@index([organizationId, createdAt])
+  @@map("task_activities")
+}
+
+/// AI 建团任务领域扩展：与 AgentTask 共享主键，只保存建团状态。
+model AiCreateTask {
+  id                 String                  @id
+  agentTask          AgentTask               @relation(fields: [id], references: [id], onDelete: Cascade)
+  currentPhase       AiCreatePhase           @default(basic_info) @map("current_phase")
+  departureId        String?                 @unique @map("departure_id")
+  departure          Departure?              @relation(fields: [departureId], references: [id], onDelete: SetNull)
+  draft              DepartureCreationDraft?
+  departureMaterials DepartureMaterial[]
+
   @@map("ai_create_tasks")
 }
 
@@ -1143,7 +1251,7 @@ model AiCreateIdempotencyRecord {
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   taskId         String?      @map("task_id")
-  task           AiCreateTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task           AgentTask?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
   operation      String
   idempotencyKey String       @map("idempotency_key")
   requestHash    String       @map("request_hash")
@@ -1163,7 +1271,7 @@ model AiCreateActivityRun {
   organizationId String                     @map("organization_id")
   organization   Organization               @relation(fields: [organizationId], references: [id])
   taskId         String                     @map("task_id")
-  task           AiCreateTask               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task           AgentTask                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
   creatorUserId  String                     @map("creator_user_id")
   creator        User                       @relation("AiCreateActivityRunCreator", fields: [creatorUserId], references: [id])
   status         AiCreateActivityRunStatus  @default(running)
@@ -1211,7 +1319,7 @@ model AiReviewPackage {
   organizationId     String                @map("organization_id")
   organization       Organization          @relation(fields: [organizationId], references: [id])
   taskId             String                @map("task_id")
-  task               AiCreateTask          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task               AgentTask             @relation(fields: [taskId], references: [id], onDelete: Cascade)
   runId              String                @map("run_id")
   run                AiCreateActivityRun   @relation(fields: [runId], references: [id])
   inputBatchId       String?               @map("input_batch_id")
@@ -1291,7 +1399,7 @@ model AiAction {
   userId             String?                  @map("user_id")
   user               User?                    @relation("AiActionProposer", fields: [userId], references: [id], onDelete: SetNull)
   taskId             String?                  @map("task_id")
-  task               AiCreateTask?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task               AgentTask?              @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId     String?                  @map("conversation_id")
   conversation       AiConversation?          @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   inputBatchId       String?                  @map("input_batch_id")
@@ -1409,8 +1517,6 @@ model AiConversation {
   id             String               @id @default(cuid())
   organizationId String               @map("organization_id")
   organization   Organization         @relation(fields: [organizationId], references: [id])
-  taskId         String?              @map("task_id")
-  task           AiCreateTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   creatorUserId  String               @map("creator_user_id")
   creator        User                 @relation("AiConversationCreator", fields: [creatorUserId], references: [id])
   status         AiConversationStatus @default(open)
@@ -1427,8 +1533,8 @@ model AiConversation {
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
   aiActions        AiAction[]
+  taskLinks        ConversationTaskLink[]
 
-  @@index([taskId, status, updatedAt])
   @@index([organizationId, creatorUserId, lastActivityAt], map: "ai_conversations_org_creator_activity_idx")
   @@index([organizationId, creatorUserId, status])
   @@map("ai_conversations")
@@ -1479,8 +1585,6 @@ model AiInputBatch {
   id                   String              @id @default(cuid())
   organizationId       String              @map("organization_id")
   organization         Organization        @relation(fields: [organizationId], references: [id])
-  taskId               String?             @map("task_id")
-  task                 AiCreateTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId       String              @map("conversation_id")
   conversation         AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   creatorUserId        String              @map("creator_user_id")
@@ -1500,8 +1604,8 @@ model AiInputBatch {
   askedInteractions    AiConversationInteraction[]
   reviewPackages       AiReviewPackage[]
   aiActions            AiAction[]
+  taskLinks            InputBatchTaskLink[]
 
-  @@index([taskId, status])
   @@index([conversationId, createdAt])
   @@index([organizationId, createdAt])
   @@index([replyToEventId])
@@ -1555,7 +1659,7 @@ model AiWorkflowJob {
   organizationId String              @map("organization_id")
   organization   Organization        @relation(fields: [organizationId], references: [id])
   taskId         String?             @map("task_id")
-  task           AiCreateTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task           AgentTask?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId String              @map("conversation_id")
   conversation   AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId   String              @map("input_batch_id")
@@ -1589,7 +1693,7 @@ model AiContextManifest {
   organizationId           String         @map("organization_id")
   organization             Organization   @relation(fields: [organizationId], references: [id])
   taskId                   String?        @map("task_id")
-  task                     AiCreateTask?  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task                     AgentTask?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId           String         @map("conversation_id")
   conversation             AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId             String         @map("input_batch_id")
@@ -1604,6 +1708,7 @@ model AiContextManifest {
   inputHash                String         @map("input_hash")
   truncationReasons        Json           @map("truncation_reasons")
   materialVersions         Json           @default("[]") @map("material_versions")
+  taskRefs                 Json            @default("[]") @map("task_refs")
   summaryVersion           Int?           @map("summary_version")
   excerptDigests           Json           @default("[]") @map("excerpt_digests")
   budget                   Json           @default("{}")
@@ -1624,7 +1729,7 @@ model AiAgentAttempt {
   organizationId    String               @map("organization_id")
   organization      Organization         @relation(fields: [organizationId], references: [id])
   taskId            String?              @map("task_id")
-  task              AiCreateTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task              AgentTask?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId    String               @map("conversation_id")
   conversation      AiConversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId      String               @map("input_batch_id")
@@ -1743,4 +1848,3 @@ model AiInputBatchMaterial {
   @@index([organizationId, createdAt])
   @@map("ai_input_batch_materials")
 }
-

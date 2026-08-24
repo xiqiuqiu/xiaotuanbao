@@ -1,5 +1,5 @@
 import { AiCreatePhase, DepartureCreationDraftMode } from '@xiaotuanbao/shared'
-import { AiCreateTaskStatus as PrismaTaskStatus } from '@prisma/client'
+import { AgentTaskStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
 
 describe('AiCreateTaskService.startAssistSession', () => {
@@ -10,9 +10,15 @@ describe('AiCreateTaskService.startAssistSession', () => {
 
   const task = {
     id: taskId,
-    organizationId,
-    creatorUserId: userId,
-    status: PrismaTaskStatus.in_progress,
+    agentTask: {
+      id: taskId,
+      organizationId,
+      ownerUserId: userId,
+      status: AgentTaskStatus.active,
+      createdAt: now,
+      updatedAt: now,
+      reviewPackages: [],
+    },
     currentPhase: AiCreatePhase.BASIC_INFO,
     departureId: null,
     createdAt: now,
@@ -25,7 +31,6 @@ describe('AiCreateTaskService.startAssistSession', () => {
       createdAt: now,
       updatedAt: now,
     },
-    reviewPackages: [],
   }
 
   const conversation = {
@@ -73,7 +78,12 @@ describe('AiCreateTaskService.startAssistSession', () => {
 
     const result = await service.startAssistSession(organizationId, userId, { taskId })
 
-    expect(conversationService.openOrResume).toHaveBeenCalledWith(organizationId, userId, taskId)
+    expect(conversationService.openOrResume).toHaveBeenCalledWith(
+      organizationId,
+      userId,
+      taskId,
+      undefined,
+    )
     expect(prisma.$transaction).not.toHaveBeenCalled()
     expect(prisma.aiCreateActivityRun.findFirst).not.toHaveBeenCalled()
     expect(prisma.aiCreateActivityRun.create).not.toHaveBeenCalled()

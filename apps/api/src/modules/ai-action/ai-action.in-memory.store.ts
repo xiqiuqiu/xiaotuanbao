@@ -50,7 +50,9 @@ export class InMemoryAiActionStore implements AiActionStore {
     if (!record) {
       throw new Error(`AI 动作不存在: ${id}`)
     }
-    record.executionStatus = executionStatus
+    if (record.executionStatus === 'not_started') {
+      record.executionStatus = executionStatus
+    }
     return record
   }
 

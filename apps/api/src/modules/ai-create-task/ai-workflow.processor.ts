@@ -21,6 +21,7 @@ import {
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import {
+  AgentTaskStatus,
   AiAgentAttemptStatus,
   AiConversationEventKind,
   AiConversationInteractionStatus,
@@ -30,6 +31,7 @@ import {
   AiWorkflowJobStatus,
   AiWorkflowJobType,
   OrganizationStatus,
+  TaskActivityKind,
   UserStatus,
   type AiInputBatch,
   type AiWorkflowJob,
@@ -679,7 +681,7 @@ export class AiWorkflowProcessor {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       const task = await tx.aiCreateTask.findUniqueOrThrow({
         where: { id: taskId },
-        include: { draft: true },
+        include: { draft: true, agentTask: true },
       })
       if (!task.draft) {
         throw new Error('发团创建草稿不存在')
@@ -700,7 +702,7 @@ export class AiWorkflowProcessor {
         currentUserText: userText,
         businessFacts: {
           taskId: task.id,
-          status: task.status,
+          status: task.agentTask.status,
           currentPhase: task.currentPhase,
           objectVersion: draft.version,
           snapshot: draft.snapshot,
@@ -725,6 +727,14 @@ export class AiWorkflowProcessor {
             : userEvent.sequence,
         ),
         businessSnapshotVersion: draft.version,
+        taskRefs: [
+          {
+            taskId,
+            role: 'primary',
+            goalVersion: task.agentTask.goalVersion,
+            statusVersion: task.agentTask.statusVersion,
+          },
+        ],
         modelId,
         materialVersions,
         excerptDigests,
@@ -760,6 +770,7 @@ export class AiWorkflowProcessor {
               conversationVersion: manifestRecord.conversationVersion,
               eventSequences: manifestRecord.eventSequences,
               businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+              taskRefs: manifestRecord.taskRefs,
               builderVersion: manifestRecord.builderVersion,
               systemPromptVersion: manifestRecord.systemPromptVersion,
               toolSchemaVersion: manifestRecord.toolSchemaVersion,
@@ -940,6 +951,7 @@ export class AiWorkflowProcessor {
           userEvent.sequence,
         ),
         businessSnapshotVersion: 0,
+        taskRefs: [],
         modelId,
         materialVersions: [],
         excerptDigests: [],
@@ -968,6 +980,7 @@ export class AiWorkflowProcessor {
               conversationVersion: manifestRecord.conversationVersion,
               eventSequences: manifestRecord.eventSequences,
               businessSnapshotVersion: manifestRecord.businessSnapshotVersion,
+              taskRefs: manifestRecord.taskRefs,
               builderVersion: manifestRecord.builderVersion,
               systemPromptVersion: manifestRecord.systemPromptVersion,
               toolSchemaVersion: manifestRecord.toolSchemaVersion,
@@ -1240,6 +1253,45 @@ export class AiWorkflowProcessor {
           leaseExpiresAt: null,
         },
       })
+      if (job.taskId) {
+        const waiting =
+          batchStatus === AiInputBatchStatus.awaiting_review ||
+          batchStatus === AiInputBatchStatus.awaiting_user_input
+        await tx.agentTask.updateMany({
+          where: {
+            id: job.taskId,
+            AND: [
+              {
+                status: {
+                  in: [AgentTaskStatus.proposed, AgentTaskStatus.active, AgentTaskStatus.waiting],
+                },
+              },
+              {
+                status: {
+                  not: waiting ? AgentTaskStatus.waiting : AgentTaskStatus.active,
+                },
+              },
+            ],
+          },
+          data: {
+            status: waiting ? AgentTaskStatus.waiting : AgentTaskStatus.active,
+            statusVersion: { increment: 1 },
+          },
+        })
+        await tx.taskActivity.create({
+          data: {
+            organizationId: job.organizationId,
+            taskId: job.taskId,
+            kind: waiting ? TaskActivityKind.waiting : TaskActivityKind.progress,
+            summary: waiting ? '任务正在等待 User 处理' : 'Agent 已完成一轮推进',
+            payload: {
+              inputBatchId: job.inputBatchId,
+              interactionId,
+              reviewPackageId,
+            },
+          },
+        })
+      }
       if (job.taskId && isActivityRunCompleteBoundary(batchStatus)) {
         await tx.aiCreateActivityRun.updateMany({
           where: {

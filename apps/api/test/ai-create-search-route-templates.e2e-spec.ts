@@ -47,16 +47,16 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewRecord.deleteMany({
-      where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
+      where: { package: { task: { organizationId, ownerUserId } } },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
     await prisma.segmentResource.deleteMany({
       where: { segment: { departure: { organizationId, name: { startsWith: testPrefix } } } },
@@ -67,8 +67,8 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     await prisma.departure.deleteMany({
       where: { organizationId, name: { startsWith: testPrefix } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.routeTemplateResource.deleteMany({
       where: { templateSegment: { templateId: { in: createdTemplateIds } } },

@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
-import { AiCreateTaskStatus as PrismaTaskStatus, AiReviewPackageStatus } from '@prisma/client'
+import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
 
 describe('AiCreateTaskService.saveDraft pendingReview', () => {
@@ -57,26 +57,31 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
 
   const task = {
     id: taskId,
-    organizationId,
-    creatorUserId: userId,
-    status: PrismaTaskStatus.in_progress,
+    agentTask: {
+      id: taskId,
+      organizationId,
+      ownerUserId: userId,
+      status: AgentTaskStatus.active,
+      createdAt: now,
+      updatedAt: now,
+      reviewPackages: [pendingPackage],
+    },
     currentPhase: AiCreatePhase.BASIC_INFO,
     departureId: null,
     createdAt: now,
     updatedAt: now,
   }
 
-  function loadTask(include: { draft?: boolean; reviewPackages?: unknown }) {
+  function loadTask(include: { draft?: boolean; agentTask?: unknown }) {
     return {
       ...task,
       draft: include.draft ? { ...draft } : undefined,
-      reviewPackages: include.reviewPackages ? [pendingPackage] : undefined,
     }
   }
 
   function createService(options?: { draftVersion?: number; updateCount?: number }) {
     const currentDraft = { ...draft, version: options?.draftVersion ?? 1 }
-    const findFirst = jest.fn().mockImplementation(({ include }: { include: { draft?: boolean; reviewPackages?: unknown } }) =>
+    const findFirst = jest.fn().mockImplementation(({ include }: { include: { draft?: boolean; agentTask?: unknown } }) =>
       Promise.resolve({
         ...loadTask(include),
         draft: include.draft ? currentDraft : undefined,

@@ -95,7 +95,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       where: {
         organizationId,
         creatorUserId: ownerUserId,
-        taskId: null,
+        taskLinks: { none: {} },
         status: {
           in: [
             AiInputBatchStatus.ready_for_agent,
@@ -183,7 +183,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       .expect(404)
 
     const before = await prisma.aiConversation.count({
-      where: { organizationId, creatorUserId: ownerUserId, taskId: null },
+      where: { organizationId, creatorUserId: ownerUserId, taskLinks: { none: {} } },
     })
     const text = `${testPrefix} 首次发送才落库`
     const sent = await sendFirst(coordinatorToken, text, `${testPrefix}-first`).expect(201)
@@ -195,7 +195,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     ])
 
     const after = await prisma.aiConversation.count({
-      where: { organizationId, creatorUserId: ownerUserId, taskId: null },
+      where: { organizationId, creatorUserId: ownerUserId, taskLinks: { none: {} } },
     })
     expect(after).toBe(before + 1)
 
