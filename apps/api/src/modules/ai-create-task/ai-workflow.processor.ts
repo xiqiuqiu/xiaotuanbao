@@ -69,6 +69,7 @@ import {
   workflowBackoffMs,
 } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
+import { isOpenAgentTaskStatus } from './agent-task.runtime'
 import { lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
@@ -1148,6 +1149,15 @@ export class AiWorkflowProcessor {
       if (!currentAttempt || currentAttempt.generation !== currentJob.generation) {
         return
       }
+      if (job.taskId) {
+        const task = await tx.agentTask.findUnique({
+          where: { id: job.taskId },
+          select: { status: true },
+        })
+        if (!isOpenAgentTaskStatus(task?.status)) {
+          return
+        }
+      }
       const finalAuthorization = await this.recheckAuthorization(job)
       if (!finalAuthorization.ok) {
         throw AiCollaborationError.fromCode('PERMISSION_DENIED')
@@ -1653,15 +1663,15 @@ export class AiWorkflowProcessor {
   }
 
   private async ownsClaimedJob(tx: Prisma.TransactionClient, jobId: string): Promise<boolean> {
-    const owned = await tx.aiWorkflowJob.findFirst({
-      where: {
-        id: jobId,
-        status: AiWorkflowJobStatus.claimed,
-        claimedBy: this.workerId,
-      },
-      select: { id: true },
-    })
-    return owned !== null
+    const owned = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id
+      FROM ai_workflow_jobs
+      WHERE id = ${jobId}
+        AND status = 'claimed'::ai_workflow_job_status
+        AND claimed_by = ${this.workerId}
+      FOR UPDATE
+    `
+    return owned.length === 1
   }
 
   private async projectReviewPackageViaGateway(

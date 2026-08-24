@@ -7,17 +7,11 @@ import {
 import {
   AgentTaskStatus,
   AgentTaskType,
-  AiActionExecutionStatus,
-  AiAgentAttemptStatus,
-  AiConversationInteractionStatus,
-  AiInputBatchStatus,
-  InputBatchTaskRole,
-  AiReviewPackageStatus,
-  AiWorkflowJobStatus,
   TaskActivityKind,
 } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
+import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask, lockAgentConversation } from './ai-create-task.lock'
 
 @Injectable()
@@ -130,77 +124,10 @@ export class AgentTaskService {
         throw new ConflictException('任务状态已变化，请刷新后重试')
       }
 
-      const batchScope = {
-        taskLinks: {
-          some: {
-            taskId,
-            role: { in: [InputBatchTaskRole.primary, InputBatchTaskRole.created] },
-          },
-        },
-      }
-      const terminalErrorCode =
-        terminalStatus === AgentTaskStatus.closed ? 'TASK_CLOSED' : 'TASK_CANCELLED'
-      await tx.aiWorkflowJob.updateMany({
-        where: {
-          inputBatch: batchScope,
-          status: { in: [AiWorkflowJobStatus.pending, AiWorkflowJobStatus.claimed] },
-        },
-        data: {
-          status: AiWorkflowJobStatus.failed,
-          lastErrorCode: terminalErrorCode,
-          leaseExpiresAt: null,
-          generation: { increment: 1 },
-        },
-      })
-      await tx.aiAgentAttempt.updateMany({
-        where: {
-          inputBatch: batchScope,
-          status: AiAgentAttemptStatus.running,
-        },
-        data: {
-          status: AiAgentAttemptStatus.failed,
-          errorCode: terminalErrorCode,
-          endedAt: new Date(),
-        },
-      })
-      await tx.aiConversationInteraction.updateMany({
-        where: {
-          inputBatch: batchScope,
-          status: AiConversationInteractionStatus.pending,
-        },
-        data: {
-          status: AiConversationInteractionStatus.cancelled,
-          version: { increment: 1 },
-        },
-      })
-      await tx.aiReviewPackage.updateMany({
-        where: { taskId, status: AiReviewPackageStatus.pending },
-        data: {
-          status: AiReviewPackageStatus.superseded,
-          version: { increment: 1 },
-        },
-      })
-      await tx.aiInputBatch.updateMany({
-        where: {
-          ...batchScope,
-          status: {
-            in: [
-              AiInputBatchStatus.waiting_for_materials,
-              AiInputBatchStatus.ready_for_agent,
-              AiInputBatchStatus.agent_running,
-              AiInputBatchStatus.awaiting_user_input,
-              AiInputBatchStatus.awaiting_review,
-            ],
-          },
-        },
-        data: { status: AiInputBatchStatus.cancelled },
-      })
-      await tx.aiAction.updateMany({
-        where: {
-          taskId,
-          executionStatus: AiActionExecutionStatus.not_started,
-        },
-        data: { executionStatus: AiActionExecutionStatus.skipped },
+      await isolateOpenTaskRuntime(tx, {
+        taskId,
+        errorCode:
+          terminalStatus === AgentTaskStatus.closed ? 'TASK_CLOSED' : 'TASK_CANCELLED',
       })
 
       return tx.agentTask.update({

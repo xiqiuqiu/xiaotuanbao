@@ -56,6 +56,7 @@ import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { AiConversationService } from './ai-conversation.service'
 import { REVIEW_ALREADY_HANDLED_MESSAGE } from './ai-conversation.constants'
+import { isolateOpenTaskRuntime } from './agent-task.runtime'
 import { lockAiCreateTask } from './ai-create-task.lock'
 import { DepartureMaterialService } from './departure-material.service'
 import {
@@ -798,6 +799,10 @@ export class AiCreateTaskService {
         await tx.aiCreateTask.update({
           where: { id: taskId },
           data: { departureId: created.id },
+        })
+        await isolateOpenTaskRuntime(tx, {
+          taskId,
+          errorCode: 'TASK_COMPLETED',
         })
         await tx.agentTask.update({
           where: { id: taskId },
