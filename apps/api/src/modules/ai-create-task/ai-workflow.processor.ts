@@ -43,6 +43,7 @@ import { AuthService } from '../auth/auth.service'
 import {
   buildContextManifest,
   buildFrozenProjection,
+  eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
   resolveAttemptUserText,
@@ -701,8 +702,11 @@ export class AiWorkflowProcessor {
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
         conversationVersion: job.inputBatch.conversationVersion,
-        eventSequences: budgetedContext.projection.recentTail.map(
-          (event) => event.sequence,
+        eventSequences: eventSequencesForModelInput(
+          budgetedContext.projection.recentTail,
+          confirmedReviewContinuation
+            ? job.inputBatch.conversationVersion
+            : userEvent.sequence,
         ),
         businessSnapshotVersion: draft.version,
         modelId,

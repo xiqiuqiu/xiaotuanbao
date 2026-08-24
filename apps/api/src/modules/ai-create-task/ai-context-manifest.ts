@@ -3,7 +3,6 @@ import type { ConversationEventForAgent, MaterialParseIndexItem } from '@xiaotua
 import {
   AI_CONVERSATION_EVENT_KINDS,
   FROZEN_PROJECTION_TAIL_EVENT_LIMIT,
-  PINNED_PARSE_CONTEXT_PREFACE,
 } from '@xiaotuanbao/ai-contracts'
 import {
   PLAINTEXT_CONTEXT_BUILDER_VERSION,
@@ -122,6 +121,15 @@ export function parseEventSequences(value: unknown): number[] {
   return value.filter((item): item is number => Number.isInteger(item) && item > 0)
 }
 
+export function eventSequencesForModelInput(
+  recentTail: ReadonlyArray<{ sequence: number }>,
+  currentInputSourceSequence: number,
+): number[] {
+  return [...new Set([...recentTail.map((event) => event.sequence), currentInputSourceSequence])].sort(
+    (left, right) => left - right,
+  )
+}
+
 const CONTEXT_TAIL_KINDS = new Set(['user_message', 'agent_message'])
 
 export function selectRecentTailEvents(
@@ -202,65 +210,6 @@ export function buildFrozenProjection(input: {
     pinnedMaterials: input.materials.map((item) => ({ ...item })),
     truncationReasons: uniqueReasons(input.materialTruncationReasons ?? []),
   }
-}
-
-function formatTail(events: ConversationEventForAgent[]): string {
-  const lines = events.flatMap((event) => {
-    if (!event.text) {
-      return []
-    }
-    if (event.kind === 'user_message') {
-      return [`User: ${event.text}`]
-    }
-    if (event.kind === 'agent_message') {
-      return [`Assistant: ${event.text}`]
-    }
-    return []
-  })
-  return lines.length > 0 ? lines.join('\n') : '（无）'
-}
-
-function formatMaterials(materials: MaterialParseIndexItem[]): string {
-  if (materials.length === 0) {
-    return '（无）'
-  }
-  const blocks = materials.map((item) => {
-    const clip = item.truncated ? '，摘录已裁剪' : ''
-    const excerpt = item.excerpt.trim() ? `\n摘录：${item.excerpt}` : ''
-    return `资料 ${item.materialId}（解析版本 ${item.parseResultVersion}，已解析完成，共 ${item.pageCount} 页${clip}）${excerpt}`
-  })
-  return `${PINNED_PARSE_CONTEXT_PREFACE}\n\n${blocks.join('\n\n')}`
-}
-
-export function assembleFrozenUserText(
-  currentUserText: string,
-  projection: FrozenContextProjection,
-): string {
-  return [
-    '【交流背景】',
-    '本阶段无滚动摘要。',
-    '',
-    '【近期对话】',
-    formatTail(projection.recentTail),
-    '',
-    '【本批资料】',
-    formatMaterials(projection.pinnedMaterials),
-    '',
-    '【本轮指令】',
-    currentUserText,
-  ].join('\n')
-}
-
-export function composePlaintextUserText(
-  currentUserText: string,
-  events: ConversationEventForAgent[],
-): string {
-  return assembleFrozenUserText(currentUserText, {
-    conversationBackground: { summary: null, summaryVersion: null },
-    recentTail: events,
-    pinnedMaterials: [],
-    truncationReasons: [],
-  })
 }
 
 export function projectConversationEventsForAgent(

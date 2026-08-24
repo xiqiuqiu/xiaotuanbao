@@ -1,4 +1,4 @@
-import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { AI_CREATE_TOOL_DESCRIPTIONS, AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 import { getAssistRequestContext } from './assist-request-context'
@@ -13,8 +13,7 @@ export interface GetTaskContextToolConfig {
 export function createGetTaskContextTool(config: GetTaskContextToolConfig) {
   return createTool({
     id: 'getTaskContext',
-    description:
-      '读取当前 AI 建团任务的业务快照、字段覆盖和未解决审核状态。对话尾部与资料索引在冻结投影里，不在本工具中。不改写发团创建草稿。',
+    description: AI_CREATE_TOOL_DESCRIPTIONS.getTaskContext,
     inputSchema: z.object({}),
     execute: async () => {
       if (!config.modelApiKey?.trim()) {

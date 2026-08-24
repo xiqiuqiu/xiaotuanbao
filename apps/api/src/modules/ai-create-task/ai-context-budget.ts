@@ -12,15 +12,36 @@ import {
 } from './ai-conversation.constants'
 
 const TOKEN_ESTIMATOR_VERSION = 'utf8-bytes-ceil-div3/v1'
-const BUDGET_PROFILE_VERSION = 'ai-create-conservative-32k/v1'
 const PROVIDER_FRAMING_VERSION = 'openai-compatible-framing/v1'
 const OUTPUT_RESERVE_VERSION = 'ai-create-output-reserve/v1'
 
-const CONTEXT_WINDOW_TOKENS = 32_768
-const SOFT_INPUT_LIMIT_TOKENS = 24_576
-const OUTPUT_RESERVE_TOKENS = 4_096
-const PROVIDER_FRAMING_TOKENS = 1_024
-const SAFETY_MARGIN_TOKENS = 2_048
+interface ContextBudgetProfile {
+  profileVersion: string
+  contextWindowTokens: number
+  softInputLimitTokens: number
+  outputReserveTokens: number
+  providerFramingTokens: number
+  safetyMarginTokens: number
+}
+
+const CONTEXT_BUDGET_PROFILES: Readonly<Record<string, ContextBudgetProfile>> = {
+  deterministic: {
+    profileVersion: 'ai-create-deterministic-32k/v1',
+    contextWindowTokens: 32_768,
+    softInputLimitTokens: 24_576,
+    outputReserveTokens: 4_096,
+    providerFramingTokens: 1_024,
+    safetyMarginTokens: 2_048,
+  },
+  'deepseek/deepseek-chat': {
+    profileVersion: 'ai-create-deepseek-chat-32k/v1',
+    contextWindowTokens: 32_768,
+    softInputLimitTokens: 24_576,
+    outputReserveTokens: 4_096,
+    providerFramingTokens: 1_024,
+    safetyMarginTokens: 2_048,
+  },
+}
 
 export interface BudgetProjection {
   conversationBackground: { summary: string | null; summaryVersion: number | null }
@@ -79,6 +100,7 @@ export function buildBudgetedContext(input: {
   unresolvedState: unknown
   projection: BudgetProjection
 }): BudgetedContext {
+  const profile = contextBudgetProfileFor(input.modelId)
   const modelContract = aiCreateModelContractForTools(input.toolNames)
   const businessFactsText = stableJson(input.businessFacts)
   const unresolvedStateText = stableJson(input.unresolvedState)
@@ -94,11 +116,11 @@ export function buildBudgetedContext(input: {
   )
   const staticInputTokens = systemSection.estimatedTokens + toolSchemaSection.estimatedTokens
   const dynamicBudgetTokens = Math.min(
-    SOFT_INPUT_LIMIT_TOKENS - staticInputTokens,
-    CONTEXT_WINDOW_TOKENS -
-      OUTPUT_RESERVE_TOKENS -
-      PROVIDER_FRAMING_TOKENS -
-      SAFETY_MARGIN_TOKENS -
+    profile.softInputLimitTokens - staticInputTokens,
+    profile.contextWindowTokens -
+      profile.outputReserveTokens -
+      profile.providerFramingTokens -
+      profile.safetyMarginTokens -
       staticInputTokens,
   )
   const projection: BudgetProjection = {
@@ -161,6 +183,10 @@ export function buildBudgetedContext(input: {
     })
   }
 
+  if (estimateTokens(userText) > dynamicBudgetTokens) {
+    throw new Error('CONTEXT_CAPACITY_EXCEEDED')
+  }
+
   projection.truncationReasons = [...reasons].sort()
   const summaryText = projection.conversationBackground.summary ?? '本阶段无滚动摘要。'
   const recentTailText = formatTail(projection.recentTail)
@@ -196,23 +222,32 @@ export function buildBudgetedContext(input: {
     ),
     sections,
     budget: {
-      profileVersion: BUDGET_PROFILE_VERSION,
+      profileVersion: profile.profileVersion,
       estimatorVersion: TOKEN_ESTIMATOR_VERSION,
       providerFramingVersion: PROVIDER_FRAMING_VERSION,
       outputReserveVersion: OUTPUT_RESERVE_VERSION,
-      contextWindowTokens: CONTEXT_WINDOW_TOKENS,
-      softInputLimitTokens: SOFT_INPUT_LIMIT_TOKENS,
-      outputReserveTokens: OUTPUT_RESERVE_TOKENS,
-      providerFramingTokens: PROVIDER_FRAMING_TOKENS,
-      safetyMarginTokens: SAFETY_MARGIN_TOKENS,
+      contextWindowTokens: profile.contextWindowTokens,
+      softInputLimitTokens: profile.softInputLimitTokens,
+      outputReserveTokens: profile.outputReserveTokens,
+      providerFramingTokens: profile.providerFramingTokens,
+      safetyMarginTokens: profile.safetyMarginTokens,
       staticInputTokens,
       dynamicBudgetTokens,
       estimatedInputTokens,
-      overSoftLimit: estimatedInputTokens > SOFT_INPUT_LIMIT_TOKENS,
+      overSoftLimit: estimatedInputTokens > profile.softInputLimitTokens,
     },
     projection,
     truncationReasons: projection.truncationReasons,
   }
+}
+
+function contextBudgetProfileFor(modelId: string): ContextBudgetProfile {
+  const canonicalModelId = modelId === 'deepseek-chat' ? 'deepseek/deepseek-chat' : modelId
+  const profile = CONTEXT_BUDGET_PROFILES[canonicalModelId]
+  if (!profile) {
+    throw new Error(`未配置 Context budget profile: ${modelId}`)
+  }
+  return profile
 }
 
 function renderUserText(input: {

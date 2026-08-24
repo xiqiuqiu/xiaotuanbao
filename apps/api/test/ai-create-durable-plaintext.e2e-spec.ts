@@ -232,7 +232,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     const sequences = attempt?.contextManifest.eventSequences
     expect(Array.isArray(sequences)).toBe(true)
     const currentUserSequence = (sent.body.data.events as Array<{ sequence: number }>)[0]?.sequence
-    expect(sequences).not.toContain(currentUserSequence)
+    expect(sequences).toContain(currentUserSequence)
     const actualUserText = agent.lastUserText()
     expect(actualUserText).not.toBeNull()
     if (actualUserText == null) {

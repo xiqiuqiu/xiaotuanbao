@@ -1,5 +1,5 @@
-import { zodToJsonSchema } from 'zod-to-json-schema'
 import { AI_CREATE_CAPABILITY_DEFINITIONS } from './ai-create-definitions'
+import { AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS } from './ai-create-tool-model-schemas.generated'
 
 export const AI_CREATE_SYSTEM_INSTRUCTIONS = [
   '你是小团宝新建发团工作区的助手。',
@@ -36,7 +36,16 @@ export interface AiCreateModelContract {
   toolSchemaText: string
 }
 
-const projectJsonSchema = zodToJsonSchema as unknown as (schema: unknown) => unknown
+export const AI_CREATE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  getTaskContext:
+    '读取当前 AI 建团任务的业务快照、字段覆盖和未解决审核状态。对话尾部与资料索引在冻结投影里，不在本工具中。不改写发团创建草稿。',
+  searchRouteTemplates:
+    '按当前 Organization 用关键词和可选天数查询常用路线。只返回服务端给出的候选与匹配理由，不写草稿。关键词与天数都空时结果为空。',
+  submitReviewPackage:
+    '提交发团基础信息的待审核候选（团名、路线、出团/结束日期、预计人数提示）。不写入发团创建草稿，须由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。',
+  getMaterialParseResult:
+    '按冻结投影【本批资料】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。不要用文件名、预览或未钉版本编造候选。',
+}
 
 export function aiCreateModelContractForTools(toolNames: readonly string[]): AiCreateModelContract {
   const requested = new Set(toolNames)
@@ -56,7 +65,10 @@ export function aiCreateModelContractForTools(toolNames: readonly string[]): AiC
       definitions.map((definition) => ({
         name: definition.toolName,
         version: definition.version,
-        inputSchema: projectJsonSchema(definition.inputSchema),
+        description: AI_CREATE_TOOL_DESCRIPTIONS[definition.toolName],
+        inputSchema: (
+          AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS as Readonly<Record<string, unknown>>
+        )[definition.toolName],
       })),
     ),
   }

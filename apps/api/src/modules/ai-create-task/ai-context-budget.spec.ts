@@ -90,4 +90,69 @@ describe('buildBudgetedContext', () => {
     expect(result.projection.conversationBackground.summary).toBeNull()
     expect(result.projection.recentTail.length).toBeLessThan(12)
   })
+
+  it('追加任何实际模型输入都会改变 manifest input hash', () => {
+    const base = {
+      modelId: 'deterministic',
+      toolNames: ['getTaskContext'],
+      currentUserText: '建一个川西团',
+      businessFacts: { taskId: 'task-1', objectVersion: 1 },
+      unresolvedState: { hasPendingReview: false },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    }
+
+    const before = buildBudgetedContext(base)
+    const after = buildBudgetedContext({ ...base, currentUserText: `${base.currentUserText}。` })
+
+    expect(after.inputHash).not.toBe(before.inputHash)
+    expect(after.sections.find((section) => section.key === 'current_input')?.sha256).not.toBe(
+      before.sections.find((section) => section.key === 'current_input')?.sha256,
+    )
+  })
+
+  it('为每个实际模型选择显式版本化预算，拒绝未配置模型', () => {
+    const input = {
+      toolNames: ['getTaskContext'],
+      currentUserText: '建团',
+      businessFacts: {},
+      unresolvedState: {},
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    }
+
+    const deterministic = buildBudgetedContext({ ...input, modelId: 'deterministic' })
+    const deepseek = buildBudgetedContext({ ...input, modelId: 'deepseek/deepseek-chat' })
+
+    expect(deterministic.budget.profileVersion).not.toBe(deepseek.budget.profileVersion)
+    expect(() => buildBudgetedContext({ ...input, modelId: 'unknown/model' })).toThrow(
+      '未配置 Context budget profile',
+    )
+  })
+
+  it('保护区段本身超过边界时终止，不把超额输入发给模型', () => {
+    expect(() =>
+      buildBudgetedContext({
+        modelId: 'deterministic',
+        toolNames: ['getTaskContext'],
+        currentUserText: '甲'.repeat(40_000),
+        businessFacts: { protectedFact: '不得丢弃' },
+        unresolvedState: { protectedReview: 'review-1' },
+        projection: {
+          conversationBackground: { summary: null, summaryVersion: null },
+          recentTail: [],
+          pinnedMaterials: [],
+          truncationReasons: [],
+        },
+      }),
+    ).toThrow('CONTEXT_CAPACITY_EXCEEDED')
+  })
 })

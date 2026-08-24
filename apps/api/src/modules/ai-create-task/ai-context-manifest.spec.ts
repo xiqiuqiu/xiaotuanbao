@@ -1,9 +1,8 @@
 import {
-  assembleFrozenUserText,
   buildContextManifest,
   buildFrozenProjection,
-  composePlaintextUserText,
   digestExcerpt,
+  eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
   parseEventSequences,
@@ -45,18 +44,6 @@ describe('projectConversationEventsForAgent', () => {
       '另外预计人数大概20人',
     ])
     expect(
-      composePlaintextUserText(
-        '另外预计人数大概20人',
-        projected,
-      ),
-    ).toContain('出团日期是哪一天？')
-    expect(
-      composePlaintextUserText(
-        '另外预计人数大概20人',
-        projected,
-      ),
-    ).toContain('【交流背景】')
-    expect(
       selectPlaintextContextEvents(
         [
           { sequence: 1, kind: 'user_message', payload: { text: '路线按川西环线，日期还没定' } },
@@ -87,6 +74,11 @@ describe('projectConversationEventsForAgent', () => {
   it('reads integer event sequences from the ContextManifest JSON', () => {
     expect(parseEventSequences([1, 2, '3', 0, -1, 4.5, 3])).toEqual([1, 2, 3])
     expect(parseEventSequences({ sequences: [1] })).toEqual([])
+  })
+
+  it('记录 recent tail 与 current input 的实际来源序号，并去重排序', () => {
+    expect(eventSequencesForModelInput([{ sequence: 3 }, { sequence: 1 }], 4)).toEqual([1, 3, 4])
+    expect(eventSequencesForModelInput([{ sequence: 3 }, { sequence: 4 }], 4)).toEqual([3, 4])
   })
 })
 
@@ -141,35 +133,6 @@ describe('frozen context projection', () => {
     })
 
     expect(projection.recentTail.map((event) => event.sequence)).toEqual([1, 2])
-    const assembled = assembleFrozenUserText('本轮唯一指令', projection)
-    expect(assembled.match(/本轮唯一指令/g)).toHaveLength(1)
-  })
-
-  it('assembles reserved empty background, recent tail and pinned materials once', () => {
-    const assembled = assembleFrozenUserText('看下附件', {
-      conversationBackground: { summary: null, summaryVersion: null },
-      recentTail: [{ sequence: 1, kind: 'user_message', text: '看下附件' }],
-      pinnedMaterials: [
-        {
-          materialId: 'mat-1',
-          parseResultVersion: 2,
-          status: 'ready',
-          pageCount: 1,
-          excerpt: '喀纳斯10日游',
-          truncated: false,
-        },
-      ],
-      truncationReasons: [],
-    })
-    expect(assembled).toContain('【交流背景】')
-    expect(assembled).toContain('本阶段无滚动摘要')
-    expect(assembled).toContain('【近期对话】')
-    expect(assembled).toContain('【本批资料】')
-    expect(assembled).toContain('资料 mat-1')
-    expect(assembled).toContain('解析版本 2')
-    expect(assembled).toContain('喀纳斯10日游')
-    expect(assembled).toContain('【本轮指令】')
-    expect(assembled).toContain('getMaterialParseResult')
   })
 
   it('只冻结完整候选区段，把唯一裁剪决策留给统一 Token 预算模块', () => {
