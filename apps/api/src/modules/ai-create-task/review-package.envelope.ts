@@ -5,10 +5,15 @@ import {
   DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
   DEPARTURE_REVIEW_TARGET_KIND,
   canonicalizeReviewValue,
-  reviewProposalHash,
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
 import { toStoredCandidates } from './review-package.mapper'
+
+export function reviewProposalHash(payload: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalizeReviewValue(payload)))
+    .digest('hex')
+}
 
 export function departureReviewProposalHash(
   reviewPackage: SubmitReviewPackageModelInput,

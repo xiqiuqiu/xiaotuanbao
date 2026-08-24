@@ -112,7 +112,6 @@ export {
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
   reviewPackageEnvelopeSchema,
-  reviewProposalHash,
   reviewProposalIdentitySchema,
   sameReviewProposalIdentity,
   type ReviewConflictChangeSummary,

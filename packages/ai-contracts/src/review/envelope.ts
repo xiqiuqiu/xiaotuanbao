@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { AI_REVIEWABLE_BASIC_INFO_FIELDS, type AiReviewableBasicInfoField } from '../tools/review-package'
 
@@ -79,12 +78,6 @@ export function canonicalizeReviewValue(value: unknown): unknown {
     )
   }
   return value
-}
-
-export function reviewProposalHash(payload: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(canonicalizeReviewValue(payload)))
-    .digest('hex')
 }
 
 export function sameReviewProposalIdentity(

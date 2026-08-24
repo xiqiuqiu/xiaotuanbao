@@ -1,10 +1,10 @@
 import {
   DEPARTURE_REVIEW_TARGET_KIND,
+  canonicalizeReviewValue,
   isTargetVersionStale,
   reviewConflictChangeSummary,
   reviewDecisionIdentitySchema,
   reviewPackageEnvelopeSchema,
-  reviewProposalHash,
   reviewProposalIdentitySchema,
   sameReviewProposalIdentity,
 } from './envelope'
@@ -21,16 +21,17 @@ const payload = {
   ],
 }
 
+const HASH = 'a'.repeat(64)
+
 describe('generic Review Package envelope', () => {
-  it('hashes the versioned payload independently of key order', () => {
+  it('canonicalizes the versioned payload independently of key order', () => {
     const reversed = {
       candidates: payload.candidates,
       confirmationUnit: payload.confirmationUnit,
     }
-    expect(reviewProposalHash(reversed)).toBe(reviewProposalHash(payload))
-    expect(reviewProposalHash(payload)).toHaveLength(64)
-    expect(reviewProposalHash({ ...payload, confirmationUnit: 'other' })).not.toBe(
-      reviewProposalHash(payload),
+    expect(canonicalizeReviewValue(reversed)).toEqual(canonicalizeReviewValue(payload))
+    expect(canonicalizeReviewValue({ ...payload, confirmationUnit: 'other' })).not.toEqual(
+      canonicalizeReviewValue(payload),
     )
   })
 
@@ -40,7 +41,7 @@ describe('generic Review Package envelope', () => {
       capabilityVersion: 1,
       targetKind: DEPARTURE_REVIEW_TARGET_KIND,
       targetId: 'draft-1',
-      proposalHash: reviewProposalHash(payload),
+      proposalHash: HASH,
     })
     expect(
       sameReviewProposalIdentity(identity, {
@@ -93,7 +94,7 @@ describe('generic Review Package envelope', () => {
       targetKind: DEPARTURE_REVIEW_TARGET_KIND,
       targetId: 'draft-1',
       baseVersion: 1,
-      proposalHash: reviewProposalHash(payload),
+      proposalHash: HASH,
       status: 'pending',
     })
     expect(parsed.status).toBe('pending')
