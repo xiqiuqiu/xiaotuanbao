@@ -1266,6 +1266,7 @@ export class AiCreateTaskService {
       currentPhase: task.currentPhase,
       departureId: task.departureId,
       creatorUserId: task.agentTask.ownerUserId,
+      statusVersion: task.agentTask.statusVersion,
       createdAt: task.agentTask.createdAt.toISOString(),
       updatedAt: task.agentTask.updatedAt.toISOString(),
       draft: {

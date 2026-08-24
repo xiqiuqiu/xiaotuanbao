@@ -15,6 +15,7 @@ describe('AiCreateTaskService.startAssistSession', () => {
       organizationId,
       ownerUserId: userId,
       status: AgentTaskStatus.active,
+      statusVersion: 1,
       createdAt: now,
       updatedAt: now,
       reviewPackages: [],

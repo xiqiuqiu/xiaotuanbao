@@ -848,6 +848,8 @@ export interface AiCreateTaskSummary {
   currentPhase: 'basic_info'
   departureId: string | null
   creatorUserId: string
+  /** AgentTask.statusVersion; required by close/cancel as expectedStatusVersion. */
+  statusVersion: number
   createdAt: string
   updatedAt: string
   draft: DepartureCreationDraftView

@@ -8,6 +8,7 @@ const summary = {
   currentPhase: 'basic_info' as const,
   departureId: null,
   creatorUserId: 'user-1',
+  statusVersion: 1,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   draft: {

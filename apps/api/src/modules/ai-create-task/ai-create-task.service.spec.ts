@@ -62,6 +62,7 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       organizationId,
       ownerUserId: userId,
       status: AgentTaskStatus.active,
+      statusVersion: 2,
       createdAt: now,
       updatedAt: now,
       reviewPackages: [pendingPackage],
@@ -166,5 +167,56 @@ describe('AiCreateTaskService.saveDraft pendingReview', () => {
       }
       expect(body.data.pendingReview).toMatchObject({ id: packageId })
     }
+  })
+})
+
+describe('AiCreateTaskService.getTask statusVersion', () => {
+  const organizationId = 'org-1'
+  const userId = 'user-1'
+  const taskId = 'task-1'
+  const now = new Date('2026-08-24T00:00:00.000Z')
+
+  it('exposes AgentTask.statusVersion on the task summary', async () => {
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.statusVersion).toBe(2)
   })
 })
