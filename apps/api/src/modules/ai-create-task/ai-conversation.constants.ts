@@ -1,11 +1,14 @@
 export const SEND_TEXT_OPERATION = 'ai-conversation.send-text'
+export const SEND_TASKLESS_TEXT_OPERATION = 'agent-conversation.send-text'
 export const RETRY_FAILED_MATERIALS_OPERATION = 'ai-conversation.retry-failed-materials'
 export const RETRY_FAILED_BATCH_OPERATION = 'ai-conversation.retry-failed-batch'
 export const REMOVE_BATCH_MATERIALS_OPERATION = 'ai-conversation.remove-materials'
 export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
 export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
+export const STOP_TASKLESS_RUN_OPERATION = 'agent-conversation.stop-run'
 export const CANCEL_INTERACTION_OPERATION = 'ai-conversation.cancel-interaction'
 export const REVIEW_ALREADY_HANDLED_MESSAGE = '审核包已处理'
+export const CONVERSATION_TITLE_MAX_CHARS = 40
 
 /** 确认后续跑喂给模型的本轮原文；不写入 User 消息气泡。 */
 export const REVIEW_CONFIRM_CONTINUATION_TEXT =
@@ -20,6 +23,10 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v1'
 export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v6'
 export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v6'
+/** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
+export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v1'
+/** 无任务会话不向模型暴露建团工具；Manifest 必须与空 schema 对齐。 */
+export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-no-tools/v1'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
 export const WORKFLOW_LEASE_MS = 120_000
 export const WORKFLOW_HEARTBEAT_MS = 30_000
@@ -43,6 +50,14 @@ export function workflowBackoffMs(attemptCount: number): number {
 
 export function isImmediateWorkflowFailure(errorCode: string): boolean {
   return WORKFLOW_IMMEDIATE_FAILURE_CODES.has(errorCode)
+}
+
+export function titleFromFirstUserMessage(text: string): string {
+  const normalized = text.trim().replace(/\s+/g, ' ')
+  if (!normalized) {
+    return '新会话'
+  }
+  return normalized.slice(0, CONVERSATION_TITLE_MAX_CHARS)
 }
 
 /** Worker 与 API 分进程时内存 hub 收不到完成事件，按 sequence 轮询补读。 */

@@ -21,8 +21,8 @@ export const requestContextSchema = z
   .object({
     organizationId: z.string().min(1),
     userId: z.string().min(1),
-    taskId: z.string().min(1),
-    runId: z.string().min(1),
+    taskId: z.string().min(1).optional(),
+    runId: z.string().min(1).optional(),
     conversationId: z.string().min(1),
     inputBatchId: z.string().min(1),
     attemptId: z.string().min(1),

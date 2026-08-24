@@ -7,7 +7,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getAssistRequestContext } from './assist-request-context'
+import { requireTaskBoundAssistContext } from './assist-request-context'
 import { submitReviewPackage } from './submit-review-package.client'
 
 export interface SubmitReviewPackageToolConfig {
@@ -111,7 +111,7 @@ export function createSubmitReviewPackageTool(config: SubmitReviewPackageToolCon
         throw AiCollaborationError.fromCode('INVALID_FORMAT')
       }
 
-      const { delegationToken, taskId, runId } = getAssistRequestContext()
+      const { delegationToken, taskId, runId } = requireTaskBoundAssistContext()
       return submitReviewPackage(
         {
           apiBaseUrl: config.apiBaseUrl,

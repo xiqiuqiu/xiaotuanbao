@@ -28,7 +28,7 @@ const reviewPackage = {
 }
 
 describe('headless Agent execution contract', () => {
-  it('requires task, conversation, input batch, attempt and context manifest identities', () => {
+  it('requires conversation, input batch, attempt and context manifest identities', () => {
     expect(
       headlessExecutionRequestSchema.parse({
         ...identity,
@@ -40,6 +40,24 @@ describe('headless Agent execution contract', () => {
     ).toEqual({
       ...identity,
       userText: '帮我建一个喀纳斯3日团',
+      userTextSha256,
+    })
+
+    expect(
+      headlessExecutionRequestSchema.parse({
+        conversationId: identity.conversationId,
+        inputBatchId: identity.inputBatchId,
+        attemptId: identity.attemptId,
+        contextManifestId: identity.contextManifestId,
+        userText: '今天合作伙伴账款怎么查？',
+        userTextSha256,
+      }),
+    ).toEqual({
+      conversationId: identity.conversationId,
+      inputBatchId: identity.inputBatchId,
+      attemptId: identity.attemptId,
+      contextManifestId: identity.contextManifestId,
+      userText: '今天合作伙伴账款怎么查？',
       userTextSha256,
     })
 

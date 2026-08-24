@@ -1,5 +1,12 @@
+import { AI_CREATE_SYSTEM_INSTRUCTIONS, CONVERSATION_GENERAL_INSTRUCTIONS } from '@xiaotuanbao/ai-contracts'
 import { digestExcerpt } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
+import {
+  CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+  CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+  PLAINTEXT_SYSTEM_PROMPT_VERSION,
+  PLAINTEXT_TOOL_SCHEMA_VERSION,
+} from './ai-conversation.constants'
 
 describe('buildBudgetedContext', () => {
   it('统一计量首次模型输入、静态预留和每个动态区段', () => {
@@ -37,6 +44,12 @@ describe('buildBudgetedContext', () => {
       'current_input',
       'assembled_user_message',
     ])
+    expect(result.sections.find((section) => section.key === 'system_constraints')?.version).toBe(
+      PLAINTEXT_SYSTEM_PROMPT_VERSION,
+    )
+    expect(result.sections.find((section) => section.key === 'tool_schemas')?.version).toBe(
+      PLAINTEXT_TOOL_SCHEMA_VERSION,
+    )
     expect(result.sections.at(-1)).toMatchObject({
       sha256: digestExcerpt(result.userText),
     })
@@ -131,8 +144,12 @@ describe('buildBudgetedContext', () => {
 
     const deterministic = buildBudgetedContext({ ...input, modelId: 'deterministic' })
     const deepseek = buildBudgetedContext({ ...input, modelId: 'deepseek/deepseek-chat' })
+    const v4Flash = buildBudgetedContext({ ...input, modelId: 'deepseek/deepseek-v4-flash' })
+    const v4FlashAlias = buildBudgetedContext({ ...input, modelId: 'deepseek-v4-flash' })
 
     expect(deterministic.budget.profileVersion).not.toBe(deepseek.budget.profileVersion)
+    expect(v4Flash.budget.profileVersion).toBe('ai-create-deepseek-v4-flash-32k/v1')
+    expect(v4FlashAlias.budget.profileVersion).toBe(v4Flash.budget.profileVersion)
     expect(() => buildBudgetedContext({ ...input, modelId: 'unknown/model' })).toThrow(
       'CONTEXT_PROFILE_MISSING',
     )
@@ -192,5 +209,68 @@ describe('buildBudgetedContext', () => {
         currentUserText: `${base.currentUserText}${'甲'.repeat(padding + 1)}`,
       }),
     ).toThrow('CONTEXT_CAPACITY_EXCEEDED')
+  })
+
+  it('无任务会话按 conversation.general 计量指令与空工具 schema，不复用建团 readonly-assist 版本', () => {
+    const result = buildBudgetedContext({
+      modelId: 'deterministic',
+      toolNames: [],
+      systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+      systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+      toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+      currentUserText: '今天合作伙伴账款怎么查？',
+      businessFacts: { conversationId: 'conv-1' },
+      unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    })
+
+    expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
+      version: 'conversation-general/v1',
+      sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
+    })
+    expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({
+      version: 'conversation-general-no-tools/v1',
+      sha256: digestExcerpt('[]'),
+    })
+    expect(result.sections.find((section) => section.key === 'system_constraints')?.sha256).not.toBe(
+      digestExcerpt(AI_CREATE_SYSTEM_INSTRUCTIONS),
+    )
+    expect(result.sections.find((section) => section.key === 'system_constraints')?.version).not.toBe(
+      PLAINTEXT_SYSTEM_PROMPT_VERSION,
+    )
+    expect(result.sections.find((section) => section.key === 'tool_schemas')?.version).not.toBe(
+      PLAINTEXT_TOOL_SCHEMA_VERSION,
+    )
+  })
+
+  it('更换实际 system prompt 会改变 input hash，供审计与回放区分 Agent Definition', () => {
+    const base = {
+      modelId: 'deterministic' as const,
+      toolNames: [] as const,
+      currentUserText: '今天合作伙伴账款怎么查？',
+      businessFacts: { conversationId: 'conv-1' },
+      unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+      projection: {
+        conversationBackground: { summary: null, summaryVersion: null },
+        recentTail: [],
+        pinnedMaterials: [],
+        truncationReasons: [],
+      },
+    }
+
+    const aiCreate = buildBudgetedContext(base)
+    const taskless = buildBudgetedContext({
+      ...base,
+      systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+      systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+      toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+    })
+
+    expect(taskless.inputHash).not.toBe(aiCreate.inputHash)
   })
 })

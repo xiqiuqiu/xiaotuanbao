@@ -56,6 +56,36 @@ describe('Agent Factory', () => {
     ])
   })
 
+  it('通用纯文本 Capability 不向模型暴露建团工具', () => {
+    expect(
+      toolNamesForRequestContext({
+        ...context,
+        taskId: undefined,
+        runId: undefined,
+        agentDefinition: { key: 'conversation.general', version: 1 },
+        grantedCapabilities: [{ key: 'conversation.plaintext.reply', version: 1 }],
+        objectScopes: [
+          { organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' },
+        ],
+      }),
+    ).toEqual(['replyPlaintext'])
+
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
+      {
+        ...context,
+        taskId: undefined,
+        runId: undefined,
+        agentDefinition: { key: 'conversation.general', version: 1 },
+        grantedCapabilities: [{ key: 'conversation.plaintext.reply', version: 1 }],
+        objectScopes: [
+          { organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' },
+        ],
+      },
+    )
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([])
+  })
+
   it('拒绝上下文声明未注册的 Capability 版本', () => {
     expect(() =>
       toolNamesForRequestContext({

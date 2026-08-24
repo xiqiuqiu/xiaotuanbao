@@ -895,6 +895,8 @@ export interface AiCreateAssistSession {
 
 export type AiConversationStatus = 'open' | 'abandoned' | 'completed'
 
+export type AiConversationTitleSource = 'first_message' | 'agent' | 'user'
+
 export type AiConversationEventKind = 'user_message' | 'agent_message' | 'batch_status' | 'error'
 
 export type AiInputBatchStatus =
@@ -977,6 +979,9 @@ export interface AiInputBatchView {
 export interface AiConversationView {
   id: string
   status: AiConversationStatus
+  title?: string
+  titleSource?: AiConversationTitleSource
+  lastActivityAt?: string
   events: AiConversationEventView[]
   activeBatch: AiInputBatchView | null
   pendingInteraction?: AiConversationInteractionView | null

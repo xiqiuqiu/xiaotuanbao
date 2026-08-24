@@ -17,8 +17,8 @@ import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 export type AiToolRequestUser = {
   userId: string
   organizationId: string
-  taskId: string
-  runId: string
+  taskId?: string
+  runId?: string
   conversationId: string
   inputBatchId: string
   attemptId?: string
@@ -60,20 +60,22 @@ export class AiOperationDelegationGuard implements CanActivate {
       payload.typ !== AI_OP_DELEGATION_JWT_TYP ||
       !payload.sub ||
       !payload.organizationId ||
-      !payload.taskId ||
-      !payload.runId ||
       !payload.conversationId ||
       !payload.inputBatchId ||
       !payload.attemptId
     ) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
+    const taskBound = Boolean(payload.taskId)
+    if (taskBound !== Boolean(payload.runId)) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
 
     const trustedContext = requestContextSchema.safeParse({
       organizationId: payload.organizationId,
       userId: payload.sub,
-      taskId: payload.taskId,
-      runId: payload.runId,
+      ...(payload.taskId ? { taskId: payload.taskId } : {}),
+      ...(payload.runId ? { runId: payload.runId } : {}),
       conversationId: payload.conversationId,
       inputBatchId: payload.inputBatchId,
       attemptId: payload.attemptId,
@@ -101,13 +103,14 @@ export class AiOperationDelegationGuard implements CanActivate {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
-    const permissionKeys = await this.authService.getPermissionKeysForUser(user.id)
-    if (!permissionKeys.includes('departure:write')) {
-      throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
-    }
-
-    if (!isAiCreateAssistEnabledForUser(this.configService, user.id)) {
-      throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
+    if (taskBound) {
+      const permissionKeys = await this.authService.getPermissionKeysForUser(user.id)
+      if (!permissionKeys.includes('departure:write')) {
+        throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
+      }
+      if (!isAiCreateAssistEnabledForUser(this.configService, user.id)) {
+        throw AiCollaborationHttpException.fromCode('PERMISSION_DENIED')
+      }
     }
 
     const attempt = await this.prisma.aiAgentAttempt.findFirst({
@@ -115,11 +118,15 @@ export class AiOperationDelegationGuard implements CanActivate {
         id: payload.attemptId,
         status: AiAgentAttemptStatus.running,
         organizationId: payload.organizationId,
-        taskId: payload.taskId,
         conversationId: payload.conversationId,
         inputBatchId: payload.inputBatchId,
-        activityRunId: payload.runId,
-        activityRun: { status: AiCreateActivityRunStatus.running },
+        ...(taskBound
+          ? {
+              taskId: payload.taskId,
+              activityRunId: payload.runId,
+              activityRun: { status: AiCreateActivityRunStatus.running },
+            }
+          : { taskId: null }),
       },
       select: {
         id: true,
@@ -141,8 +148,8 @@ export class AiOperationDelegationGuard implements CanActivate {
     request.user = {
       userId: user.id,
       organizationId: user.organizationId,
-      taskId: payload.taskId,
-      runId: payload.runId,
+      ...(payload.taskId ? { taskId: payload.taskId } : {}),
+      ...(payload.runId ? { runId: payload.runId } : {}),
       conversationId: payload.conversationId,
       inputBatchId: payload.inputBatchId,
       attemptId: payload.attemptId,

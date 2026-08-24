@@ -159,3 +159,13 @@ export {
   aiCreateCapabilityDefinitionForTool,
   aiCreateCapabilityDefinitionRegistry,
 } from './runtime/ai-create-definitions'
+export {
+  CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
+  CONVERSATION_GENERAL_AGENT_DEFINITION,
+  CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  CONVERSATION_GENERAL_INSTRUCTIONS,
+  CONVERSATION_PLAINTEXT_REPLY_CAPABILITY,
+  CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
+  conversationGeneralCapabilityDefinitionRegistry,
+} from './runtime/conversation-general-definitions'

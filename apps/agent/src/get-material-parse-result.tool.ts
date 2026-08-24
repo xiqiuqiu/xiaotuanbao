@@ -1,7 +1,7 @@
 import { AI_CREATE_TOOL_DESCRIPTIONS, AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getAssistRequestContext } from './assist-request-context'
+import { requireTaskBoundAssistContext } from './assist-request-context'
 import { fetchMaterialParseResult } from './get-material-parse-result.client'
 
 export interface GetMaterialParseResultToolConfig {
@@ -44,7 +44,7 @@ export function createGetMaterialParseResultTool(config: GetMaterialParseResultT
         throw AiCollaborationError.fromCode('INVALID_FORMAT')
       }
 
-      const { delegationToken, taskId, runId } = getAssistRequestContext()
+      const { delegationToken, taskId, runId } = requireTaskBoundAssistContext()
       return fetchMaterialParseResult(
         {
           apiBaseUrl: config.apiBaseUrl,

@@ -1142,8 +1142,8 @@ model AiCreateIdempotencyRecord {
   id             String       @id @default(cuid())
   organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  taskId         String       @map("task_id")
-  task           AiCreateTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId         String?      @map("task_id")
+  task           AiCreateTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
   operation      String
   idempotencyKey String       @map("idempotency_key")
   requestHash    String       @map("request_hash")
@@ -1350,6 +1350,14 @@ enum AiConversationStatus {
   @@map("ai_conversation_status")
 }
 
+enum AiConversationTitleSource {
+  first_message
+  agent
+  user
+
+  @@map("ai_conversation_title_source")
+}
+
 enum AiConversationEventKind {
   user_message
   agent_message
@@ -1396,16 +1404,19 @@ enum AiAgentAttemptStatus {
   @@map("ai_agent_attempt_status")
 }
 
-/// AI 建团会话：跨刷新与跨设备稳定的交流容器，归属任务创建者。
+/// Agent 会话：跨刷新与跨设备稳定的交流容器，不要求归属任务。
 model AiConversation {
   id             String               @id @default(cuid())
   organizationId String               @map("organization_id")
   organization   Organization         @relation(fields: [organizationId], references: [id])
-  taskId         String               @map("task_id")
-  task           AiCreateTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId         String?              @map("task_id")
+  task           AiCreateTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   creatorUserId  String               @map("creator_user_id")
   creator        User                 @relation("AiConversationCreator", fields: [creatorUserId], references: [id])
   status         AiConversationStatus @default(open)
+  title          String               @default("")
+  titleSource    AiConversationTitleSource @default(first_message) @map("title_source")
+  lastActivityAt DateTime             @default(now()) @map("last_activity_at")
   createdAt      DateTime             @default(now()) @map("created_at")
   updatedAt      DateTime             @updatedAt @map("updated_at")
   events         AiConversationEvent[]
@@ -1418,6 +1429,7 @@ model AiConversation {
   aiActions        AiAction[]
 
   @@index([taskId, status, updatedAt])
+  @@index([organizationId, creatorUserId, lastActivityAt], map: "ai_conversations_org_creator_activity_idx")
   @@index([organizationId, creatorUserId, status])
   @@map("ai_conversations")
 }
@@ -1467,8 +1479,8 @@ model AiInputBatch {
   id                   String              @id @default(cuid())
   organizationId       String              @map("organization_id")
   organization         Organization        @relation(fields: [organizationId], references: [id])
-  taskId               String              @map("task_id")
-  task                 AiCreateTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId               String?             @map("task_id")
+  task                 AiCreateTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId       String              @map("conversation_id")
   conversation         AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   creatorUserId        String              @map("creator_user_id")
@@ -1542,8 +1554,8 @@ model AiWorkflowJob {
   id             String              @id @default(cuid())
   organizationId String              @map("organization_id")
   organization   Organization        @relation(fields: [organizationId], references: [id])
-  taskId         String              @map("task_id")
-  task           AiCreateTask        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId         String?             @map("task_id")
+  task           AiCreateTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId String              @map("conversation_id")
   conversation   AiConversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId   String              @map("input_batch_id")
@@ -1553,6 +1565,7 @@ model AiWorkflowJob {
   type           AiWorkflowJobType   @default(agent_batch)
   jobKey         String              @unique @map("job_key")
   status         AiWorkflowJobStatus @default(pending)
+  generation     Int                 @default(0)
   attemptCount   Int                 @default(0) @map("attempt_count")
   claimedAt      DateTime?           @map("claimed_at")
   claimedBy      String?             @map("claimed_by")
@@ -1575,8 +1588,8 @@ model AiContextManifest {
   id                       String         @id @default(cuid())
   organizationId           String         @map("organization_id")
   organization             Organization   @relation(fields: [organizationId], references: [id])
-  taskId                   String         @map("task_id")
-  task                     AiCreateTask   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId                   String?        @map("task_id")
+  task                     AiCreateTask?  @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId           String         @map("conversation_id")
   conversation             AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId             String         @map("input_batch_id")
@@ -1610,21 +1623,22 @@ model AiAgentAttempt {
   id                String               @id @default(cuid())
   organizationId    String               @map("organization_id")
   organization      Organization         @relation(fields: [organizationId], references: [id])
-  taskId            String               @map("task_id")
-  task              AiCreateTask         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId            String?              @map("task_id")
+  task              AiCreateTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   conversationId    String               @map("conversation_id")
   conversation      AiConversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   inputBatchId      String               @map("input_batch_id")
   inputBatch        AiInputBatch         @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
   jobId             String               @map("job_id")
   job               AiWorkflowJob        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  activityRunId     String               @map("activity_run_id")
-  activityRun       AiCreateActivityRun  @relation(fields: [activityRunId], references: [id])
+  activityRunId     String?              @map("activity_run_id")
+  activityRun       AiCreateActivityRun? @relation(fields: [activityRunId], references: [id])
   contextManifestId String            @map("context_manifest_id")
   contextManifest   AiContextManifest    @relation(fields: [contextManifestId], references: [id])
   agentDefinitionKey String               @default("departure.create") @map("agent_definition_key")
   agentDefinitionVersion Int              @default(1) @map("agent_definition_version")
   grantedCapabilities Json                @default("[]") @map("granted_capabilities")
+  generation        Int                  @default(0)
   status            AiAgentAttemptStatus @default(running)
   resultJson        Json?                @map("result_json")
   errorCode         String?              @map("error_code")
@@ -1633,6 +1647,7 @@ model AiAgentAttempt {
   aiActions         AiAction[]
 
   @@index([taskId, status])
+  @@index([conversationId, status])
   @@index([jobId, startedAt])
   @@index([organizationId, startedAt])
   @@index([contextManifestId])

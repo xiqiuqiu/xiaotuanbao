@@ -35,6 +35,10 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   // Platform FileStore slice (#156 / ADR-0027): any authenticated org member; no product menu yet.
   'POST /api/stored-objects',
   'DELETE /api/stored-objects/:id',
+  // 通用无任务会话：认证 + 所有者隔离，不挂业务菜单。
+  'POST /api/agent/conversations/messages',
+  'POST /api/agent/conversations/:conversationId/messages',
+  'POST /api/agent/conversations/:conversationId/stop',
   // AI 业务工具：双重身份（编排服务 + 短期 User 委托）替代浏览器 CSRF/@RequireMenu。
   'POST /api/ai-tools/v1/get-task-context',
   'POST /api/ai-tools/v1/submit-review-package',

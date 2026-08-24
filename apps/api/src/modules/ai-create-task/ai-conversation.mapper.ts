@@ -123,6 +123,9 @@ export function toConversationView(
   return {
     id: conversation.id,
     status: conversation.status,
+    title: conversation.title,
+    titleSource: conversation.titleSource,
+    lastActivityAt: conversation.lastActivityAt.toISOString(),
     events: events.map(toEventView),
     activeBatch: activeBatch ? toBatchView(activeBatch) : null,
     pendingInteraction: pendingInteraction ? toInteractionView(pendingInteraction) : null,

@@ -1,10 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { RequestContext } from '@xiaotuanbao/ai-contracts'
+import { AiCollaborationError, type RequestContext } from '@xiaotuanbao/ai-contracts'
 
 export interface AssistRequestContext extends Partial<RequestContext> {
   delegationToken: string
-  taskId: string
-  runId: string
 }
 
 const storage = new AsyncLocalStorage<AssistRequestContext>()
@@ -22,4 +20,15 @@ export function getAssistRequestContext(): AssistRequestContext {
     throw new Error('assist request context is not available')
   }
   return context
+}
+
+export function requireTaskBoundAssistContext(): AssistRequestContext & {
+  taskId: string
+  runId: string
+} {
+  const context = getAssistRequestContext()
+  if (!context.taskId || !context.runId) {
+    throw AiCollaborationError.fromCode('DELEGATION_INVALID')
+  }
+  return { ...context, taskId: context.taskId, runId: context.runId }
 }

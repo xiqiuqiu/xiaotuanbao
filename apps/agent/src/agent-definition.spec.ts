@@ -6,6 +6,15 @@ import {
 } from './agent-definition'
 
 describe('现有建团 Agent Definition', () => {
+  it('同时登记通用无任务会话 Definition', () => {
+    expect(agentDefinitionRegistry.get({ key: 'conversation.general', version: 1 }).key).toBe(
+      'conversation.general',
+    )
+    expect(
+      capabilityDefinitionRegistry.get({ key: 'conversation.plaintext.reply', version: 1 }).toolName,
+    ).toBe('replyPlaintext')
+  })
+
   it('登记稳定 Agent/Capability 版本及工具输入、输出、上下文 Schema', () => {
     expect(agentDefinitionRegistry.get({ key: 'departure.create', version: 1 })).toBe(
       AI_CREATE_AGENT_DEFINITION,
