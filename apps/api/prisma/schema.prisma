@@ -1593,6 +1593,8 @@ model AiContextManifest {
   materialVersions         Json           @default("[]") @map("material_versions")
   summaryVersion           Int?           @map("summary_version")
   excerptDigests           Json           @default("[]") @map("excerpt_digests")
+  budget                   Json           @default("{}")
+  sections                 Json           @default("[]")
   createdAt                DateTime       @default(now()) @map("created_at")
   attempts                 AiAgentAttempt[]
   aiActions                AiAction[]

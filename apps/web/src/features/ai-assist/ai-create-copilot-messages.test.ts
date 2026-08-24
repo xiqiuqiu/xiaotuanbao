@@ -54,6 +54,50 @@ describe('AI create chat status projection', () => {
     expect(JSON.stringify(messages)).not.toContain('修改后重试')
   })
 
+  it('distinguishes context capacity and missing profile failures from agent outages', () => {
+    expect(batchStatusLabel('failed', null, { errorCode: 'AGENT_UNAVAILABLE' })).toBe('处理失败')
+    expect(batchStatusLabel('failed', null, { errorCode: 'CONTEXT_CAPACITY_EXCEEDED' })).toBe(
+      '上下文超出容量上限，请拆分或精简后再试',
+    )
+    expect(batchStatusLabel('failed', null, { errorCode: 'CONTEXT_PROFILE_MISSING' })).toBe(
+      '当前模型未配置上下文容量',
+    )
+
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '超长资料' },
+          createdAt: '2026-08-20T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'error',
+          payload: { batchId: 'batch-cap', errorCode: 'CONTEXT_CAPACITY_EXCEEDED' },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'failed',
+            batchId: 'batch-cap',
+            errorCode: 'CONTEXT_CAPACITY_EXCEEDED',
+          },
+          createdAt: '2026-08-20T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    const statuses = messages
+      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .map((message) => message.content as { label?: string })
+    expect(statuses.map((item) => item.label)).toEqual(['上下文超出容量上限，请拆分或精简后再试'])
+  })
+
   it('keeps queued visible when the running batch starts waiting for an answer', () => {
     const messages = toCopilotChatMessages(
       [

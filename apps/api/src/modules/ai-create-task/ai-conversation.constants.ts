@@ -18,8 +18,8 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v1'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v5'
-export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v5'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v6'
+export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v6'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
 export const WORKFLOW_LEASE_MS = 120_000
 export const WORKFLOW_HEARTBEAT_MS = 30_000
@@ -32,6 +32,8 @@ export const WORKFLOW_IMMEDIATE_FAILURE_CODES = new Set([
   'PERMISSION_DENIED',
   'VERSION_CONFLICT',
   'BATCH_CANCELLED',
+  'CONTEXT_CAPACITY_EXCEEDED',
+  'CONTEXT_PROFILE_MISSING',
 ])
 
 export function workflowBackoffMs(attemptCount: number): number {

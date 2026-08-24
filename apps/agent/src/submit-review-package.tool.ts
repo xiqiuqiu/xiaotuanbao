@@ -1,4 +1,5 @@
 import {
+  AI_CREATE_TOOL_DESCRIPTIONS,
   AiCollaborationError,
   UNIQUE_CANDIDATE_FIELD_KEY_RETRY_MESSAGE,
   isDuplicateCandidateFieldError,
@@ -87,8 +88,7 @@ const candidateInputSchema = z.discriminatedUnion('fieldKey', [
 export function createSubmitReviewPackageTool(config: SubmitReviewPackageToolConfig) {
   return createTool({
     id: 'submitReviewPackage',
-    description:
-      '提交发团基础信息的待审核候选（团名、路线、出团/结束日期、预计人数提示）。不写入发团创建草稿，须由 User 在表单确认。同一审核包内每个字段最多一条候选；资料中有多个可能值时只提交最可能的一条。',
+    description: AI_CREATE_TOOL_DESCRIPTIONS.submitReviewPackage,
     inputSchema: z.object({
       objectVersion: z.number().int().positive(),
       candidates: z

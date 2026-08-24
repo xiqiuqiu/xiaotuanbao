@@ -1,4 +1,10 @@
 export {
+  AI_CREATE_SYSTEM_INSTRUCTIONS,
+  aiCreateModelContractForTools,
+  AI_CREATE_TOOL_DESCRIPTIONS,
+  type AiCreateModelContract,
+} from './runtime/ai-create-model-contract'
+export {
   classifyDraftFields,
   type AiCreateDraftMode,
   type AiCreateDraftSnapshot,

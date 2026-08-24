@@ -92,6 +92,13 @@ export async function handleHeadlessRun(
     json(response, 400, { data: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON() })
     return
   }
+  if (
+    createHash('sha256').update(parsedRequest.data.userText, 'utf8').digest('hex') !==
+    parsedRequest.data.userTextSha256
+  ) {
+    json(response, 400, { data: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON() })
+    return
+  }
 
   const bound = boundIdentitiesFromDelegation(payload)
   if (

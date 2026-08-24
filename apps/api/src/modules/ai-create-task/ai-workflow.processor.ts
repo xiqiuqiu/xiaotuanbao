@@ -41,12 +41,15 @@ import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { createPrismaAiActionStore } from '../ai-action/ai-action.prisma.store'
 import { AuthService } from '../auth/auth.service'
 import {
-  assembleFrozenUserText,
   buildContextManifest,
   buildFrozenProjection,
+  eventSequencesForModelInput,
   excerptDigestsFor,
+  isConfirmedReviewContinuation,
   resolveAttemptUserText,
 } from './ai-context-manifest'
+import { buildBudgetedContext } from './ai-context-budget'
+import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
   WORKFLOW_AGENT_CONCURRENCY,
@@ -595,6 +598,7 @@ export class AiWorkflowProcessor {
       attemptId: string
       contextManifestId: string
       userText: string
+      userTextSha256: string
     }
     attemptId: string
     delegationToken: string
@@ -611,19 +615,13 @@ export class AiWorkflowProcessor {
       },
       select: { kind: true, payload: true },
     })
-    const task = await this.prisma.aiCreateTask.findUniqueOrThrow({
-      where: { id: job.taskId },
-      include: { draft: true },
-    })
-    if (!task.draft) {
-      throw new Error('发团创建草稿不存在')
-    }
     const originalUserText = (
       userEvent.payload && typeof userEvent.payload === 'object' && 'text' in userEvent.payload
         ? String((userEvent.payload as { text: unknown }).text ?? '')
         : ''
     ).trim()
     const userText = resolveAttemptUserText(originalUserText, versionEvent).trim()
+    const confirmedReviewContinuation = isConfirmedReviewContinuation(versionEvent)
     if (!userText) {
       throw new Error('输入批次缺少 User 原文')
     }
@@ -658,25 +656,20 @@ export class AiWorkflowProcessor {
       events: historyEvents,
       conversationVersion: job.inputBatch.conversationVersion,
       originUserMessageSequence: userEvent.sequence,
+      currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
       materials: parseIndex.materials,
       materialTruncationReasons: parseIndex.truncationReasons,
     })
-    const composedUserText = assembleFrozenUserText(userText, projection)
-    const excerptDigests = excerptDigestsFor(projection.pinnedMaterials)
-    const manifestRecord = buildContextManifest({
-      conversationId: job.conversationId,
-      inputBatchId: job.inputBatchId,
-      conversationVersion: job.inputBatch.conversationVersion,
-      eventSequences: projection.recentTail.map((event) => event.sequence),
-      businessSnapshotVersion: task.draft.version,
-      modelId,
-      materialVersions,
-      excerptDigests,
-      truncationReasons: projection.truncationReasons,
-    })
-
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockAiCreateTask(tx, job.organizationId, job.taskId)
+      const task = await tx.aiCreateTask.findUniqueOrThrow({
+        where: { id: job.taskId },
+        include: { draft: true },
+      })
+      if (!task.draft) {
+        throw new Error('发团创建草稿不存在')
+      }
+      const draft = task.draft
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,
@@ -684,6 +677,46 @@ export class AiWorkflowProcessor {
           status: AiReviewPackageStatus.pending,
         },
         select: { id: true },
+      })
+      const availableToolNames = capabilitiesForPendingReview(pendingReview != null)
+      const budgetedContext = buildBudgetedContext({
+        modelId,
+        toolNames: availableToolNames,
+        currentUserText: userText,
+        businessFacts: {
+          taskId: task.id,
+          status: task.status,
+          currentPhase: task.currentPhase,
+          objectVersion: draft.version,
+          snapshot: draft.snapshot,
+        },
+        unresolvedState: {
+          hasPendingReview: pendingReview != null,
+          reviewPackageId: pendingReview?.id ?? null,
+        },
+        projection,
+      })
+      const excerptDigests = excerptDigestsFor(
+        budgetedContext.projection.pinnedMaterials,
+      )
+      const manifestRecord = buildContextManifest({
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        conversationVersion: job.inputBatch.conversationVersion,
+        eventSequences: eventSequencesForModelInput(
+          budgetedContext.projection.recentTail,
+          confirmedReviewContinuation
+            ? job.inputBatch.conversationVersion
+            : userEvent.sequence,
+        ),
+        businessSnapshotVersion: draft.version,
+        modelId,
+        materialVersions,
+        excerptDigests,
+        truncationReasons: budgetedContext.truncationReasons,
+        inputHash: budgetedContext.inputHash,
+        budget: budgetedContext.budget,
+        sections: budgetedContext.sections,
       })
       const run = await this.getOrCreateRunningActivityRun(
         tx,
@@ -721,6 +754,8 @@ export class AiWorkflowProcessor {
               materialVersions,
               summaryVersion: null,
               excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
+              budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
+              sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
             },
           })
       const attempt = await tx.aiAgentAttempt.create({
@@ -760,7 +795,7 @@ export class AiWorkflowProcessor {
         user: { organizationId: job.organizationId, permissionKeys },
         entitlements: { status: 'unavailable' },
         riskPolicy: { allowedRisks: ['low', 'medium'] },
-        availableCapabilities: capabilitiesForPendingReview(pendingReview != null).flatMap(
+        availableCapabilities: availableToolNames.flatMap(
           (toolName) => {
             const definition = aiCreateCapabilityDefinitionForTool(toolName)
             return definition ? [{ key: definition.key, version: definition.version }] : []
@@ -781,6 +816,8 @@ export class AiWorkflowProcessor {
         attemptId: attempt.id,
         contextManifestId: manifest.id,
         requestContext,
+        userText: budgetedContext.userText,
+        userTextSha256: budgetedContext.userTextSha256,
       }
     })
 
@@ -813,7 +850,8 @@ export class AiWorkflowProcessor {
         inputBatchId: job.inputBatchId,
         attemptId: prepared.attemptId,
         contextManifestId: prepared.contextManifestId,
-        userText: composedUserText,
+        userText: prepared.userText,
+        userTextSha256: prepared.userTextSha256,
       },
       attemptId: prepared.attemptId,
       delegationToken,
@@ -1412,16 +1450,6 @@ function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code: string }).code === 'P2002'
   )
-}
-
-function workflowErrorCode(error: unknown): string {
-  if (error instanceof Error && error.message === 'VERSION_CONFLICT') {
-    return 'VERSION_CONFLICT'
-  }
-  if (error instanceof ServiceUnavailableException) {
-    return 'AGENT_UNAVAILABLE'
-  }
-  return 'AGENT_UNAVAILABLE'
 }
 
 function isTransientWorkflowError(error: unknown): boolean {

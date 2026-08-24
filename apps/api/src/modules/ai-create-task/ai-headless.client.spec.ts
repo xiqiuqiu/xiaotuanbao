@@ -14,6 +14,7 @@ const identity = {
 const request = {
   ...identity,
   userText: '帮我建一个喀纳斯3日团',
+  userTextSha256: 'a'.repeat(64),
 }
 
 describe('AiHeadlessClient.run', () => {

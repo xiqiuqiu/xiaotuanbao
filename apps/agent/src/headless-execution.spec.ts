@@ -1,4 +1,5 @@
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { createHash } from 'node:crypto'
 import { AddressInfo } from 'node:net'
 import { getAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
@@ -65,7 +66,11 @@ const IDENTITY = {
 }
 
 const USER_TEXT = '帮我建一个喀纳斯3日团'
-const REQUEST = { ...IDENTITY, userText: USER_TEXT }
+const REQUEST = {
+  ...IDENTITY,
+  userText: USER_TEXT,
+  userTextSha256: createHash('sha256').update(USER_TEXT, 'utf8').digest('hex'),
+}
 
 const REVIEW_PACKAGE = {
   objectVersion: 2,
@@ -188,6 +193,20 @@ describe('headless Agent runtime contract', () => {
       availableCapabilities: ['getTaskContext'],
       fieldCoverage: { filled: [], missing: [], optionalPresent: [] },
     })
+  })
+
+  it('在调用模型前拒绝与 Context Manifest 摘要不一致的 User 输入', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        body: { ...REQUEST, userText: '被途中替换的输入' },
+      })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ data: { code: 'INVALID_FORMAT' } })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
   })
 
   afterEach(() => {
