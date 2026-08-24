@@ -33,6 +33,8 @@ export class InMemoryAiActionStore implements AiActionStore {
       inputHash: draft.inputHash,
       candidateFieldKeys: draft.candidateFieldKeys,
       executionStatus: draft.executionStatus,
+      agentDefinition: draft.agentDefinition,
+      capability: draft.capability,
     }
     this.byReplayKey.set(replayKey, record)
     this.organizationById.set(record.id, draft.organizationId)

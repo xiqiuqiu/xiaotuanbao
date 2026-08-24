@@ -21,4 +21,8 @@ export interface AiOperationDelegationPayload {
   inputBatchId: string
   attemptId: string
   contextManifestId?: string
+  agentDefinition: { key: string; version: number }
+  grantedCapabilities: Array<{ key: string; version: number }>
+  entitlementStatus: 'available' | 'unavailable'
+  objectScopes: Array<{ organizationId: string; kind: string; id: string }>
 }

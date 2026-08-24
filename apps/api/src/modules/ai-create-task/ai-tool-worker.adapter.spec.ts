@@ -1,4 +1,8 @@
-import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
+import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  type SubmitReviewPackageModelInput,
+} from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
 import type { AiActionActor, AiActionForwardContext } from '../ai-action/ai-action.types'
@@ -13,6 +17,8 @@ const actor: AiActionActor = {
   runId: 'run-1',
   attemptId: 'attempt-1',
   contextManifestId: 'manifest-1',
+  agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+  grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
 }
 
 const reviewInput: SubmitReviewPackageModelInput = {

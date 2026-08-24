@@ -2,15 +2,22 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { CopilotRuntime, createCopilotRuntimeHandler } from '@copilotkit/runtime/v2'
 import { createCopilotNodeHandler } from '@copilotkit/runtime/v2/node'
 import { MastraAgent } from '@ag-ui/mastra'
+import { requestContextSchema } from '@xiaotuanbao/ai-contracts'
 import {
   handleHeadlessRun,
   loadDeterministicAgentAdapterFromEnv,
   type HeadlessExecutor,
 } from './headless-execution'
 import { json } from './http'
-import { createAiCreateMastra, AI_CREATE_AGENT_ID } from './mastra-agent'
+import {
+  createAiCreateDiscoveryMastra,
+  createAiCreateMastra,
+  AI_CREATE_AGENT_ID,
+} from './mastra-agent'
 import { createMastraHeadlessExecutor } from './mastra-headless.executor'
 import { mapModelError } from './map-agent-error'
+import { getAssistRequestContext } from './assist-request-context'
+import { AI_CREATE_CAPABILITY_DEFINITIONS } from './agent-definition'
 
 export {
   createDeterministicAgentAdapter,
@@ -29,16 +36,10 @@ export interface AgentServerConfig {
   headlessExecutor?: HeadlessExecutor
 }
 
-const AI_CREATE_TOOLS = [
-  'getTaskContext',
-  'searchRouteTemplates',
-  'submitReviewPackage',
-  'getMaterialParseResult',
-] as const
 const ALLOWED_HEADERS = 'Authorization, Content-Type, X-Ai-Task-Id, X-Ai-Run-Id'
 
 export function createAgentServer(config: AgentServerConfig) {
-  const mastra = createAiCreateMastra(config)
+  const mastra = createAiCreateDiscoveryMastra(config)
   const runtime = new CopilotRuntime({
     agents: MastraAgent.getLocalAgents({
       mastra,
@@ -57,7 +58,12 @@ export function createAgentServer(config: AgentServerConfig) {
       async readUserText(request) {
         return request.userText.trim()
       },
-      generate: (userText) => mastra.getAgent(AI_CREATE_AGENT_ID).generate(userText),
+      generate: (userText) => {
+        const { delegationToken: _delegationToken, ...requestContext } = getAssistRequestContext()
+        const trusted = requestContextSchema.parse(requestContext)
+        const attemptMastra = createAiCreateMastra(config, trusted)
+        return attemptMastra.getAgent(AI_CREATE_AGENT_ID).generate(userText)
+      },
     })
 
   return createServer((request, response) => {
@@ -66,7 +72,7 @@ export function createAgentServer(config: AgentServerConfig) {
 }
 
 export function listAgentTools(): readonly string[] {
-  return AI_CREATE_TOOLS
+  return AI_CREATE_CAPABILITY_DEFINITIONS.map((definition) => definition.toolName)
 }
 
 async function handleRequest(

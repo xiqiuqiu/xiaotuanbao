@@ -1,12 +1,22 @@
 import { AiActionGateway } from './ai-action.gateway'
 import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+} from '@xiaotuanbao/ai-contracts'
+import {
   FailingAiActionStore,
   InMemoryAiActionStore,
   ObservationFailingAiActionStore,
 } from './ai-action.in-memory.store'
 
 describe('AiActionGateway.execute', () => {
-  const actor = { organizationId: 'org-1', userId: 'user-1', taskId: 'task-1' }
+  const actor = {
+    organizationId: 'org-1',
+    userId: 'user-1',
+    taskId: 'task-1',
+    agentDefinition: AI_CREATE_AGENT_DEFINITION_REF,
+    grantedCapabilities: Object.values(AI_CREATE_CAPABILITY_REFS_BY_TOOL),
+  }
 
   it('does not forward an unregistered action and still leaves a deny record', async () => {
     const store = new InMemoryAiActionStore()
@@ -78,8 +88,32 @@ describe('AiActionGateway.execute', () => {
       decision: 'allow',
       reasonCode: 'OBSERVATION_PERIOD',
       executionStatus: 'succeeded',
+      agentDefinition: { key: 'departure.create', version: 1 },
+      capability: { key: 'departure.task-context.read', version: 2 },
     })
     expect(result.action?.targetRef).toEqual({ kind: 'ai_create_task', id: 'task-1' })
+  })
+
+  it('does not forward a registered Capability missing from the Attempt grant snapshot', async () => {
+    const gateway = new AiActionGateway(new InMemoryAiActionStore())
+    const forwarded: unknown[] = []
+
+    const result = await gateway.execute({
+      name: 'submitReviewPackage',
+      actor: {
+        ...actor,
+        grantedCapabilities: [AI_CREATE_CAPABILITY_REFS_BY_TOOL.getTaskContext],
+      },
+      input: { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
+      forward: async () => forwarded.push('called'),
+    })
+
+    expect(forwarded).toEqual([])
+    expect(result.action).toMatchObject({
+      decision: 'deny',
+      reasonCode: 'CAPABILITY_NOT_GRANTED',
+      capability: AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage,
+    })
   })
 
   it('does not forward a write when the decision record cannot persist', async () => {
@@ -590,6 +624,7 @@ describe('AiActionGateway.execute', () => {
     const otherOrg = await gateway.execute({
       name: 'deleteDepartureForever',
       actor: {
+        ...actor,
         organizationId: 'org-2',
         userId: 'user-2',
         taskId: 'task-2',

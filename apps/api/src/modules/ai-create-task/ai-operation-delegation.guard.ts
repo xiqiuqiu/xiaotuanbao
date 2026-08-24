@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
 import { OrganizationStatus, UserStatus, AiAgentAttemptStatus, AiCreateActivityRunStatus } from '@prisma/client'
+import { requestContextSchema } from '@xiaotuanbao/ai-contracts'
 import {
   AI_OP_DELEGATION_JWT_AUD,
   AI_OP_DELEGATION_JWT_TYP,
@@ -22,6 +23,10 @@ export type AiToolRequestUser = {
   inputBatchId: string
   attemptId?: string
   contextManifestId?: string
+  agentDefinition: { key: string; version: number }
+  grantedCapabilities: Array<{ key: string; version: number }>
+  entitlementStatus: 'available' | 'unavailable'
+  objectScopes: Array<{ organizationId: string; kind: string; id: string }>
 }
 
 @Injectable()
@@ -64,6 +69,24 @@ export class AiOperationDelegationGuard implements CanActivate {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
+    const trustedContext = requestContextSchema.safeParse({
+      organizationId: payload.organizationId,
+      userId: payload.sub,
+      taskId: payload.taskId,
+      runId: payload.runId,
+      conversationId: payload.conversationId,
+      inputBatchId: payload.inputBatchId,
+      attemptId: payload.attemptId,
+      contextManifestId: payload.contextManifestId,
+      agentDefinition: payload.agentDefinition,
+      grantedCapabilities: payload.grantedCapabilities,
+      entitlementStatus: payload.entitlementStatus,
+      objectScopes: payload.objectScopes,
+    })
+    if (!trustedContext.success) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         id: payload.sub,
@@ -98,9 +121,20 @@ export class AiOperationDelegationGuard implements CanActivate {
         activityRunId: payload.runId,
         activityRun: { status: AiCreateActivityRunStatus.running },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        agentDefinitionKey: true,
+        agentDefinitionVersion: true,
+        grantedCapabilities: true,
+      },
     })
-    if (!attempt) {
+    if (
+      !attempt ||
+      attempt.agentDefinitionKey !== trustedContext.data.agentDefinition.key ||
+      attempt.agentDefinitionVersion !== trustedContext.data.agentDefinition.version ||
+      JSON.stringify(attempt.grantedCapabilities) !==
+        JSON.stringify(trustedContext.data.grantedCapabilities)
+    ) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
@@ -113,6 +147,10 @@ export class AiOperationDelegationGuard implements CanActivate {
       inputBatchId: payload.inputBatchId,
       attemptId: payload.attemptId,
       contextManifestId: payload.contextManifestId,
+      agentDefinition: trustedContext.data.agentDefinition,
+      grantedCapabilities: trustedContext.data.grantedCapabilities,
+      entitlementStatus: trustedContext.data.entitlementStatus,
+      objectScopes: trustedContext.data.objectScopes,
     }
     return true
   }

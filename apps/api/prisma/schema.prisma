@@ -1302,6 +1302,10 @@ model AiAction {
   attempt            AiAgentAttempt?          @relation(fields: [attemptId], references: [id], onDelete: SetNull)
   contextManifestId  String?                  @map("context_manifest_id")
   contextManifest    AiContextManifest?       @relation(fields: [contextManifestId], references: [id], onDelete: SetNull)
+  agentDefinitionKey String                   @default("departure.create") @map("agent_definition_key")
+  agentDefinitionVersion Int                  @default(1) @map("agent_definition_version")
+  capabilityKey      String?                  @map("capability_key")
+  capabilityVersion  Int?                     @map("capability_version")
   name               String
   kind               AiActionKind
   decision           AiActionDecision
@@ -1616,6 +1620,9 @@ model AiAgentAttempt {
   activityRun       AiCreateActivityRun  @relation(fields: [activityRunId], references: [id])
   contextManifestId String            @map("context_manifest_id")
   contextManifest   AiContextManifest    @relation(fields: [contextManifestId], references: [id])
+  agentDefinitionKey String               @default("departure.create") @map("agent_definition_key")
+  agentDefinitionVersion Int              @default(1) @map("agent_definition_version")
+  grantedCapabilities Json                @default("[]") @map("granted_capabilities")
   status            AiAgentAttemptStatus @default(running)
   resultJson        Json?                @map("result_json")
   errorCode         String?              @map("error_code")
