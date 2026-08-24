@@ -608,16 +608,15 @@ export class AiCreateTaskService {
   ): Promise<AiCreateTaskSummary> {
     await this.assertCurrentWritePermission(userId)
     const { summary, events } = await this.prisma.$transaction(async (tx) => {
-      await lockAiCreateTask(tx, organizationId, taskId)
-      const pkg = await tx.aiReviewPackage.findFirst({
-        where: { id: packageId, taskId, organizationId },
-      })
-      if (!pkg) {
-        throw new NotFoundException('审核包不存在')
-      }
-      if (pkg.status !== AiReviewPackageStatus.conflict) {
-        throw new BadRequestException('只有冲突的审核包可以基于最新状态重新生成')
-      }
+      const pkg = await this.lockPendingPackage(
+        tx,
+        organizationId,
+        userId,
+        taskId,
+        packageId,
+        undefined,
+        [AiReviewPackageStatus.conflict],
+      )
       if (!pkg.conversationId) {
         throw new BadRequestException('审核包缺少来源会话，无法重新生成')
       }

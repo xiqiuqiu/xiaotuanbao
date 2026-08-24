@@ -11,6 +11,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
   let prisma: PrismaClient
   let coordinatorToken: string
   let financeToken: string
+  let peerWriterToken: string
   let organizationId: string
   let ownerUserId: string
   const testPrefix = `e2e-ai-review-367-${Date.now()}`
@@ -26,6 +27,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     prisma = new PrismaClient()
     coordinatorToken = await loginAs(app, 'wangjie')
     financeToken = await loginAs(app, 'acai')
+    peerWriterToken = await loginAs(app, 'mazong')
     const user = await prisma.user.findFirstOrThrow({
       where: { username: 'wangjie', deletedAt: null },
     })
@@ -241,6 +243,52 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     expect(newBatch).not.toBeNull()
     expect(newBatch?.id).not.toBe(original.inputBatchId)
     expect(regenerated.body.data.draft.snapshot.name).toBe(`${testPrefix}-先确认`)
+  })
+
+  it('refuses a same-org departure writer from regenerating another owner conflicted package', async () => {
+    const opened = await openLinkedConversations()
+    const packageA = await agentSubmit(opened.mintedA.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.mintedA.runId,
+      objectVersion: opened.version,
+      candidates: [nameCandidate(`${testPrefix}-owner确认`, 'owner确认')],
+    }).expect(200)
+    const packageB = await agentSubmit(opened.mintedB.delegationToken, {
+      taskId: opened.taskId,
+      runId: opened.mintedB.runId,
+      objectVersion: opened.version,
+      candidates: [nameCandidate(`${testPrefix}-peer冲突`, 'peer冲突')],
+    }).expect(200)
+
+    await authRequest(app, coordinatorToken)
+      .post(
+        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageA.body.data.reviewPackageId}/confirm`,
+      )
+      .send({
+        expectedVersion: opened.version,
+        expectedPackageVersion: 1,
+      })
+      .expect(200)
+
+    const batchesBefore = await prisma.aiInputBatch.count({
+      where: { conversationId: opened.conversationB, status: 'ready_for_agent' },
+    })
+    const refused = await authRequest(app, peerWriterToken)
+      .post(
+        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageB.body.data.reviewPackageId}/regenerate`,
+      )
+      .expect(403)
+    expect(refused.body.message).toBe('仅任务创建者可处理审核包')
+
+    const stillConflicted = await prisma.aiReviewPackage.findFirstOrThrow({
+      where: { id: packageB.body.data.reviewPackageId },
+    })
+    expect(stillConflicted.status).toBe('conflict')
+    expect(
+      await prisma.aiInputBatch.count({
+        where: { conversationId: opened.conversationB, status: 'ready_for_agent' },
+      }),
+    ).toBe(batchesBefore)
   })
 
   it('reuses the same confirm decision command and refuses after permission revoke without writing', async () => {
