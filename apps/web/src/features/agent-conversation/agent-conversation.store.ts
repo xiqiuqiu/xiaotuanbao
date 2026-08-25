@@ -30,15 +30,20 @@ interface AgentConversationState {
   exitGlobal: () => AgentReturnLocation
   openGlobalFromRoute: (conversationId: string | null) => void
   setHistoryRailCollapsed: (collapsed: boolean) => void
+  reset: () => void
+}
+
+const INITIAL_CONVERSATION_STATE = {
+  view: 'page' as AgentConversationView,
+  conversationId: null as string | null,
+  title: NEW_CONVERSATION_TITLE,
+  returnLocation: null as AgentReturnLocation | null,
+  historyRailCollapsed: false,
+  globalOpen: false,
 }
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
-  view: 'page',
-  conversationId: null,
-  title: NEW_CONVERSATION_TITLE,
-  returnLocation: null,
-  historyRailCollapsed: false,
-  globalOpen: false,
+  ...INITIAL_CONVERSATION_STATE,
   selectConversation: (conversation) =>
     set({
       view: 'history',
@@ -97,4 +102,8 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
     }
   },
   setHistoryRailCollapsed: (collapsed) => set({ historyRailCollapsed: collapsed }),
+  reset: () => {
+    persistReturnLocation(null)
+    set({ ...INITIAL_CONVERSATION_STATE })
+  },
 }))

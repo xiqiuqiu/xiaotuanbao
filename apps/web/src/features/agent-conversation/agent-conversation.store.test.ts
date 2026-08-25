@@ -98,4 +98,27 @@ describe('agent conversation store #370', () => {
     const restored = useAgentConversationStore.getState().exitGlobal()
     expect(restored).toEqual({ pathname: '/', search: '', hash: '' })
   })
+
+  it('resets overlay, selected Conversation and persisted return location', () => {
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-prev',
+      title: '前一用户会话',
+    })
+    useAgentConversationStore.getState().expandToGlobal({
+      pathname: '/departure',
+    })
+    useAgentConversationStore.getState().setHistoryRailCollapsed(true)
+
+    useAgentConversationStore.getState().reset()
+
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      view: 'page',
+      conversationId: null,
+      title: '新会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
+      globalOpen: false,
+    })
+    expect(sessionStorage.getItem(AGENT_RETURN_LOCATION_STORAGE_KEY)).toBeNull()
+  })
 })
