@@ -816,6 +816,27 @@ export class AiConversationService {
     }
   }
 
+  async saveTasklessDraft(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    text: string,
+    draftEpoch: number,
+  ): Promise<AiConversationDraftView> {
+    return this.prisma.$transaction(async (tx) => {
+      await lockConversationRuntime(tx, organizationId, conversationId)
+      await lockAiCreateSender(tx, organizationId, userId)
+      await this.requireOwnedUserConversation(tx, organizationId, userId, conversationId)
+      return this.upsertConversationDraft(tx, {
+        organizationId,
+        userId,
+        conversationId,
+        text,
+        draftEpoch,
+      })
+    })
+  }
+
   async saveDraft(
     organizationId: string,
     userId: string,
@@ -838,32 +859,56 @@ export class AiConversationService {
       if (conversation.creatorUserId !== userId) {
         throw new ForbiddenException('仅任务创建者可访问该 AI 建团会话')
       }
-      const current = await tx.aiConversationDraft.findUnique({
-        where: { conversationId_userId: { conversationId, userId } },
+      return this.upsertConversationDraft(tx, {
+        organizationId,
+        userId,
+        conversationId,
+        text,
+        draftEpoch,
       })
-      if ((current?.draftEpoch ?? 0) !== draftEpoch) {
-        throw new ConflictException({
-          code: 'AI_DRAFT_EPOCH_STALE',
-          message: '草稿已随发送推进，请同步最新草稿后重试',
-        })
-      }
-      const saved = current
-        ? await tx.aiConversationDraft.update({
-            where: { id: current.id },
-            data: { text, revision: { increment: 1 } },
-          })
-        : await tx.aiConversationDraft.create({
-            data: {
-              organizationId,
-              conversationId,
-              userId,
-              text,
-              draftEpoch,
-              revision: 1,
-            },
-          })
-      return toConversationDraftView(conversationId, saved)
     })
+  }
+
+  private async upsertConversationDraft(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      userId: string
+      conversationId: string
+      text: string
+      draftEpoch: number
+    },
+  ): Promise<AiConversationDraftView> {
+    const current = await tx.aiConversationDraft.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId: params.conversationId,
+          userId: params.userId,
+        },
+      },
+    })
+    if ((current?.draftEpoch ?? 0) !== params.draftEpoch) {
+      throw new ConflictException({
+        code: 'AI_DRAFT_EPOCH_STALE',
+        message: '草稿已随发送推进，请同步最新草稿后重试',
+      })
+    }
+    const saved = current
+      ? await tx.aiConversationDraft.update({
+          where: { id: current.id },
+          data: { text: params.text, revision: { increment: 1 } },
+        })
+      : await tx.aiConversationDraft.create({
+          data: {
+            organizationId: params.organizationId,
+            conversationId: params.conversationId,
+            userId: params.userId,
+            text: params.text,
+            draftEpoch: params.draftEpoch,
+            revision: 1,
+          },
+        })
+    return toConversationDraftView(params.conversationId, saved)
   }
 
   async getTaskEntryState(

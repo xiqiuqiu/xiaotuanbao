@@ -2,26 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const get = vi.fn()
 const post = vi.fn()
+const put = vi.fn()
 
 vi.mock('@/lib/request', () => ({
   request: {
     get: (...args: unknown[]) => get(...args),
     post: (...args: unknown[]) => post(...args),
     patch: vi.fn(),
-    put: vi.fn(),
+    put: (...args: unknown[]) => put(...args),
     delete: vi.fn(),
   },
 }))
 
 import {
   listAgentConversations,
-  sendAgentConversationMessage,
+  saveAgentConversationDraft,
+  sendAgentConversationText,
 } from './agent-conversation.service'
 
 describe('agent conversation service', () => {
   beforeEach(() => {
     get.mockReset()
     post.mockReset()
+    put.mockReset()
   })
 
   it('lists history with search and cursor query params', async () => {
@@ -32,9 +35,19 @@ describe('agent conversation service', () => {
     })
   })
 
+  it('saves a taskless conversation draft by conversation id', async () => {
+    put.mockResolvedValue({ conversationId: 'c-1', text: '未发送', draftEpoch: 0, revision: 1 })
+    await saveAgentConversationDraft('c-1', { text: '未发送', draftEpoch: 0 })
+    expect(put).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/draft',
+      { text: '未发送', draftEpoch: 0 },
+      { silentError: true },
+    )
+  })
+
   it('sends the first message without a conversation id', async () => {
     post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 1 })
-    await sendAgentConversationMessage(null, { text: '你好' }, 'key-1')
+    await sendAgentConversationText(null, { text: '你好' }, 'key-1')
     expect(post).toHaveBeenCalledWith(
       '/agent/conversations/messages',
       { text: '你好' },

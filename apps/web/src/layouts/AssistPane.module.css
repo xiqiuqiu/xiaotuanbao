@@ -110,6 +110,16 @@
     min-width: 44px;
     min-height: 44px;
   }
+
+  .expand {
+    display: none;
+  }
+
+  .slot,
+  .slot[data-open] {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

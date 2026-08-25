@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useAgentConversationRuntimeStore } from '@/features/agent-conversation/agent-conversation-runtime.store'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import type { AuthUser } from '@/types/api'
 
 interface AuthState {
@@ -18,7 +20,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   sessionStatus: 'unknown',
   setSession: (user, menuKeys, actionKeys) =>
     set({ user, menuKeys, actionKeys, sessionStatus: 'authenticated' }),
-  clearSession: () =>
-    set({ user: null, menuKeys: [], actionKeys: [], sessionStatus: 'anonymous' }),
+  clearSession: () => {
+    useAgentConversationStore.getState().reset()
+    useAgentConversationRuntimeStore.getState().clear()
+    set({ user: null, menuKeys: [], actionKeys: [], sessionStatus: 'anonymous' })
+  },
   isAuthenticated: () => get().sessionStatus === 'authenticated',
 }))

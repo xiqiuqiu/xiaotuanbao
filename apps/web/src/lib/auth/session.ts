@@ -2,6 +2,7 @@ import { redirect } from '@tanstack/react-router'
 import { DEPARTURE_WRITE_ACTION_KEY } from '@xiaotuanbao/shared'
 import type { AuthUser } from '@/types/api'
 import { useAuthStore } from '@/app/store/auth.store'
+import { isAgentConversationPath } from '@/features/agent-conversation/agent-conversation-location'
 import { getMe } from '@/services/auth.service'
 import { isMenuPathAllowed } from '@/utils/menu-permission'
 
@@ -41,7 +42,7 @@ function isDevPrototypePath(pathname: string): boolean {
 }
 
 function isRouteAllowed(pathname: string, menuKeys: string[], actionKeys: string[]): boolean {
-  if (isDevPrototypePath(pathname)) {
+  if (isDevPrototypePath(pathname) || isAgentConversationPath(pathname)) {
     return true
   }
 

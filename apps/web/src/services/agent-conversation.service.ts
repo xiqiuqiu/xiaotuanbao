@@ -1,8 +1,10 @@
 import { request, type RequestConfig } from '@/lib/request'
 import type {
+  AiConversationDraftView,
   AiConversationEventView,
   AiConversationView,
   ConversationHistoryPage,
+  SaveAiConversationDraftDto,
   SendAiConversationMessageResult,
 } from '@/types/api'
 
@@ -41,6 +43,7 @@ export async function listAgentConversationEvents(
   conversationId: string
   events: AiConversationEventView[]
   lastSequence: number
+  draft?: AiConversationDraftView
 }> {
   return request.get(`/agent/conversations/${conversationId}/events`, {
     ...config,
@@ -48,7 +51,19 @@ export async function listAgentConversationEvents(
   })
 }
 
-export async function sendAgentConversationMessage(
+export async function saveAgentConversationDraft(
+  conversationId: string,
+  payload: SaveAiConversationDraftDto,
+  config?: RequestConfig,
+): Promise<AiConversationDraftView> {
+  return request.put<AiConversationDraftView>(
+    `/agent/conversations/${conversationId}/draft`,
+    payload,
+    { silentError: true, ...config },
+  )
+}
+
+export async function sendAgentConversationText(
   conversationId: string | null,
   payload: { text: string },
   idempotencyKey: string,

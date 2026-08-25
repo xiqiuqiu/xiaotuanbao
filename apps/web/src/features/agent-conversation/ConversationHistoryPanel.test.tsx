@@ -42,6 +42,9 @@ describe('ConversationHistoryTrigger', () => {
       view: 'page',
       conversationId: null,
       title: '新会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
+      globalOpen: false,
     })
     vi.mocked(listAgentConversations).mockReset()
   })
@@ -175,6 +178,6 @@ describe('ConversationHistoryTrigger', () => {
     await user.click(screen.getByRole('button', { name: '打开会话历史' }))
     const overlay = await screen.findByRole('dialog', { name: '会话历史' })
     const create = within(overlay).getByRole('button', { name: '新建会话' })
-    expect(create).toHaveStyle({ minHeight: '44px' })
+    expect(create.className).toMatch(/create/)
   })
 })

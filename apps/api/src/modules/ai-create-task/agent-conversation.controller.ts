@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
   Req,
   UploadedFiles,
@@ -13,6 +14,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common'
 import type {
+  AiConversationDraftView,
   AiConversationView,
   ConversationHistoryItem,
   ConversationHistoryPage,
@@ -29,6 +31,7 @@ import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-mat
 import {
   ListAgentConversationsQueryDto,
   ListAiConversationEventsQueryDto,
+  SaveAiConversationTextDraftDto,
   SendAiConversationMessageDto,
 } from './dto/ai-create-task.dto'
 
@@ -154,6 +157,21 @@ export class AgentConversationController {
       request.user.organizationId,
       request.user.userId,
       conversationId,
+    )
+  }
+
+  @Put(':conversationId/draft')
+  saveDraft(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Body() dto: SaveAiConversationTextDraftDto,
+  ): Promise<AiConversationDraftView> {
+    return this.conversationService.saveTasklessDraft(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
+      dto.text,
+      dto.draftEpoch,
     )
   }
 

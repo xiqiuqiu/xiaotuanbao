@@ -189,6 +189,21 @@ describe('cookie-backed route session', () => {
     ).toBe('/departure/new?copyFrom=departure-1')
   })
 
+  it('allows an authenticated tenant into the global Agent conversation route', async () => {
+    useAuthStore.getState().setSession(user, ['/departure'], [])
+
+    await ensureAuthenticatedSession('/agent/conversations/c-1')
+
+    expect(getMe).not.toHaveBeenCalled()
+    expect(useAuthStore.getState().isAuthenticated()).toBe(true)
+  })
+
+  it('preserves a global Agent conversation deep link after tenant login', () => {
+    expect(
+      resolvePostLoginDestination(user, ['/departure'], [], '/agent/conversations/c-1'),
+    ).toBe('/agent/conversations/c-1')
+  })
+
   it('preserves DEV prototype sandbox deep links without a matching menu key', () => {
     expect(
       resolvePostLoginDestination(

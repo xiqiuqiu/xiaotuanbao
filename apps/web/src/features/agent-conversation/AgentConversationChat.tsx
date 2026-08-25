@@ -6,10 +6,11 @@ import {
 import { Alert, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiConversationEventView, AiConversationView } from '@xiaotuanbao/shared'
+import '@copilotkit/react-core/v2/styles.css'
 import {
   getAgentConversation,
   listAgentConversationEvents,
-  sendAgentConversationMessage,
+  sendAgentConversationText,
 } from '@/services/agent-conversation.service'
 import {
   isCopilotChatRunning,
@@ -18,7 +19,9 @@ import {
 import { conversationCatchUpIntervalMs } from '@/features/ai-assist/ai-create-assist-polling'
 import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
 import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
+import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
+import { useAgentConversationDraft } from './use-agent-conversation-draft'
 
 const AGENT_ID = 'conversation-general'
 
@@ -47,43 +50,57 @@ function mergeEvents(
 export function AgentConversationChat() {
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const selectConversation = useAgentConversationStore((state) => state.selectConversation)
-  const [events, setEvents] = useState<AiConversationEventView[]>([])
-  const [draft, setDraft] = useState('')
-  const [pendingText, setPendingText] = useState<string | null>(null)
+  const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
+  const events = useAgentConversationRuntimeStore((state) => state.events)
+  const draft = useAgentConversationRuntimeStore((state) => state.draft)
+  const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const sendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
-  const idempotencyKeyRef = useRef<string | null>(null)
-  const conversationIdRef = useRef(conversationId)
-
-  useEffect(() => {
-    conversationIdRef.current = conversationId
-  }, [conversationId])
+  const { applyServerDraft, updateDraft, conversationIdRef, draftEpochRef, draftRevisionRef } =
+    useAgentConversationDraft(conversationId)
 
   useEffect(() => {
     lastSequenceRef.current = getContiguousSequence(events)
   }, [events])
 
   useEffect(() => {
+    useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
+  }, [conversationId])
+
+  useEffect(() => {
     let cancelled = false
-    setEvents([])
-    setDraft('')
-    setPendingText(null)
-    setErrorText(null)
-    lastSequenceRef.current = 0
+    const currentRuntime = useAgentConversationRuntimeStore.getState()
+    const alreadyHydrated =
+      runtimeConversationId === conversationId &&
+      (currentRuntime.events.length > 0 || currentRuntime.sending || currentRuntime.pendingText)
     if (!conversationId) {
+      setLoading(false)
+      setErrorText(null)
+      return
+    }
+    if (alreadyHydrated) {
       setLoading(false)
       return
     }
     setLoading(true)
+    setErrorText(null)
     void getAgentConversation(conversationId, { silentError: true })
       .then((conversation: AiConversationView) => {
         if (cancelled) {
           return
         }
-        setEvents(conversation.events)
-        setDraft(conversation.draft?.text ?? '')
+        const live = useAgentConversationRuntimeStore.getState()
+        useAgentConversationRuntimeStore.getState().hydrate({
+          conversationId,
+          events: mergeEvents(live.events, conversation.events),
+          draft: live.draft !== '' ? live.draft : (conversation.draft?.text ?? ''),
+          draftEpoch: conversation.draft?.draftEpoch ?? live.draftEpoch,
+          revision: conversation.draft?.revision ?? live.revision,
+        })
+        if (conversation.title) {
+          selectConversation({ id: conversation.id, title: conversation.title })
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -98,7 +115,7 @@ export function AgentConversationChat() {
     return () => {
       cancelled = true
     }
-  }, [conversationId])
+  }, [conversationId, runtimeConversationId, selectConversation])
 
   useEffect(() => {
     if (!conversationId) {
@@ -112,10 +129,21 @@ export function AgentConversationChat() {
         silentError: true,
       })
         .then((page) => {
-          if (abort.signal.aborted || cancelled || page.events.length === 0) {
+          if (abort.signal.aborted || cancelled) {
             return
           }
-          setEvents((current) => mergeEvents(current, page.events))
+          if (page.events.length > 0) {
+            useAgentConversationRuntimeStore.getState().hydrate({
+              conversationId,
+              events: mergeEvents(
+                useAgentConversationRuntimeStore.getState().events,
+                page.events,
+              ),
+            })
+          }
+          if (page.draft) {
+            applyServerDraft(page.draft)
+          }
         })
         .catch(() => undefined)
 
@@ -128,30 +156,43 @@ export function AgentConversationChat() {
       abort.abort()
       window.clearInterval(interval)
     }
-  }, [conversationId])
+  }, [applyServerDraft, conversationId])
 
   const send = useCallback(
     async (text: string) => {
-      const nextText = (text || pendingText || draft).trim()
-      if (sendingRef.current || !nextText) {
+      const current = useAgentConversationRuntimeStore.getState()
+      const nextText = (text || current.pendingText || current.draft).trim()
+      if (current.sending || !nextText) {
         return
       }
-      sendingRef.current = true
       setErrorText(null)
-      setPendingText(nextText)
-      setDraft('')
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current = crypto.randomUUID()
-      }
+      const sendIdempotencyKey = current.sendIdempotencyKey ?? crypto.randomUUID()
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: conversationIdRef.current,
+        pendingText: nextText,
+        draft: '',
+        sending: true,
+        sendIdempotencyKey,
+      })
       try {
-        const result = await sendAgentConversationMessage(
+        const result = await sendAgentConversationText(
           conversationIdRef.current,
           { text: nextText },
-          idempotencyKeyRef.current,
+          sendIdempotencyKey,
         )
-        setEvents((current) => mergeEvents(current, result.events))
-        setPendingText(null)
-        idempotencyKeyRef.current = null
+        useAgentConversationRuntimeStore.getState().hydrate({
+          conversationId: result.conversationId,
+          events: mergeEvents(
+            useAgentConversationRuntimeStore.getState().events,
+            result.events,
+          ),
+          pendingText: null,
+          draft: result.draft?.text ?? '',
+          draftEpoch: result.draft?.draftEpoch ?? draftEpochRef.current + 1,
+          revision: result.draft?.revision ?? draftRevisionRef.current + 1,
+          sending: false,
+          sendIdempotencyKey: null,
+        })
         if (!conversationIdRef.current) {
           selectConversation({
             id: result.conversationId,
@@ -160,13 +201,16 @@ export function AgentConversationChat() {
         }
       } catch {
         setErrorText(ASSIST_ERROR_TEXT)
-        setDraft(nextText)
-        setPendingText(null)
-      } finally {
-        sendingRef.current = false
+        useAgentConversationRuntimeStore.getState().hydrate({
+          conversationId: conversationIdRef.current,
+          draft: nextText,
+          pendingText: null,
+          sending: false,
+          sendIdempotencyKey: null,
+        })
       }
     },
-    [draft, pendingText, selectConversation],
+    [conversationIdRef, draftEpochRef, draftRevisionRef, selectConversation],
   )
 
   const messages = useMemo(
@@ -193,7 +237,7 @@ export function AgentConversationChat() {
                 messages={messages}
                 isRunning={isRunning}
                 inputValue={pendingText ? '' : draft}
-                onInputChange={setDraft}
+                onInputChange={updateDraft}
                 onSubmitMessage={(value) => {
                   void send(value)
                 }}

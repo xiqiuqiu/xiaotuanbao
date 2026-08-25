@@ -16,6 +16,13 @@ import { useUiStore } from '@/app/store/ui.store'
 import { filterMenuItems, findMenuKeyForPathname } from '@/utils/menu-permission'
 import { logout as logoutSession } from '@/services/auth.service'
 import { queryClient } from '@/lib/query/client'
+import {
+  isAgentConversationPath,
+  NEW_CONVERSATION_ROUTE_ID,
+  toReturnNavigateOptions,
+} from '@/features/agent-conversation/agent-conversation-location'
+import { AgentConversationPage } from '@/features/agent-conversation/AgentConversationPage'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { AssistPane } from './AssistPane'
 import { AssistPaneSlotProvider } from './assist-pane-slot'
 import styles from './MainLayout.module.css'
@@ -28,6 +35,20 @@ export function MainLayout({ children }: PropsWithChildren) {
   const navigate = useNavigate()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
+  const routeIsGlobalAgent = isAgentConversationPath(pathname)
+  const globalOpen = useAgentConversationStore((state) => state.globalOpen)
+  const exitGlobal = useAgentConversationStore((state) => state.exitGlobal)
+  const openGlobalFromRoute = useAgentConversationStore((state) => state.openGlobalFromRoute)
+  const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
+  const isGlobalAgent = globalOpen || routeIsGlobalAgent
+
+  useEffect(() => {
+    if (!routeIsGlobalAgent) {
+      return
+    }
+    const routeId = pathname.split('/').at(-1)
+    openGlobalFromRoute(routeId && routeId !== NEW_CONVERSATION_ROUTE_ID ? routeId : null)
+  }, [openGlobalFromRoute, pathname, routeIsGlobalAgent])
   const user = useAuthStore((state) => state.user)
   const menuKeys = useAuthStore((state) => state.menuKeys)
   const clearSession = useAuthStore((state) => state.clearSession)
@@ -108,6 +129,8 @@ export function MainLayout({ children }: PropsWithChildren) {
           { title: <Link to="/supplier">供应商管理</Link> },
           { title: '详情' },
         ]
+      : isGlobalAgent
+      ? [{ title: '小团宝 Agent' }]
       : pathname !== '/'
         ? [{ title: routeTitles[pathname] ?? '页面' }]
         : []),
@@ -117,10 +140,14 @@ export function MainLayout({ children }: PropsWithChildren) {
     <AssistPaneSlotProvider>
       <Layout
         className={styles.shell}
+        data-agent-global={isGlobalAgent ? '' : undefined}
         style={{
           '--shell-border': token.colorBorderSecondary,
           '--shell-text': token.colorText,
           '--shell-overlay-shadow': token.boxShadowSecondary,
+          '--shell-layout': token.colorBgLayout,
+          '--shell-mask': token.colorBgMask,
+          '--shell-overlay-pad': token.paddingLG,
         } as CSSProperties}
       >
         <Sider
@@ -191,15 +218,17 @@ export function MainLayout({ children }: PropsWithChildren) {
             </div>
 
             <div className={styles.headerTrailing}>
-              <Tooltip title={assistToggleLabel} placement="bottom">
-                <Button
-                  className={styles.assistToggle}
-                  type="text"
-                  icon={<CommentOutlined />}
-                  onClick={toggleAssistPane}
-                  aria-label={assistToggleLabel}
-                />
-              </Tooltip>
+              {isGlobalAgent ? null : (
+                <Tooltip title={assistToggleLabel} placement="bottom">
+                  <Button
+                    className={styles.assistToggle}
+                    type="text"
+                    icon={<CommentOutlined />}
+                    onClick={toggleAssistPane}
+                    aria-label={assistToggleLabel}
+                  />
+                </Tooltip>
+              )}
               <Dropdown
                 menu={{
                   items: [
@@ -245,7 +274,23 @@ export function MainLayout({ children }: PropsWithChildren) {
 
           {children}
         </Layout>
-        <AssistPane />
+        {isGlobalAgent ? null : <AssistPane />}
+        {isGlobalAgent ? (
+          <dialog
+            className={styles.agentOverlay}
+            open
+            aria-label="小团宝 Agent"
+          >
+            <AgentConversationPage
+              className={styles.agentOverlayPanel}
+              onExit={() => {
+                const restored = exitGlobal()
+                setAssistPaneCollapsed(false)
+                void navigate(toReturnNavigateOptions(restored))
+              }}
+            />
+          </dialog>
+        ) : null}
       </Layout>
     </AssistPaneSlotProvider>
   )

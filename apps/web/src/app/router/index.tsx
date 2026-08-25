@@ -90,6 +90,12 @@ const indexRoute = createRoute({
   component: lazyRouteComponent(() => import('@/pages/HomePage'), 'HomePage'),
 })
 
+const agentConversationRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/agent/conversations/$conversationId',
+  component: () => null,
+})
+
 const departureRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/departure',
@@ -395,6 +401,7 @@ const routeTree = rootRoute.addChildren([
   ]),
   appLayoutRoute.addChildren([
     indexRoute,
+    agentConversationRoute,
     departureRoute,
     departureNewRoute,
     pendingReceivableSourceOrdersRoute,

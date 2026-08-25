@@ -19,6 +19,12 @@ describe('AssistPane motion CSS', () => {
     expect(desktopCss).not.toContain('translateX')
   })
 
+  it('uses a full-screen single column on mobile and hides expand', () => {
+    expect(mobileCss).toContain('.expand')
+    expect(mobileCss).toContain('display: none')
+    expect(mobileCss).toContain('width: 100%')
+  })
+
   it('slides the mobile overlay with translateX and snaps under reduced motion', () => {
     expect(mobileCss).toContain('@media (max-width: 767px)')
     expect(mobileCss).toContain('translateX(100%)')
