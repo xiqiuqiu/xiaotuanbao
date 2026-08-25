@@ -16,6 +16,8 @@ import type {
   AiConversationView,
   AiCreateAssistTaskState,
   AiInputBatchView,
+  ConversationHistoryItem,
+  ConversationHistoryPage,
   SendAiConversationMessageResult,
 } from '@xiaotuanbao/shared'
 import {
@@ -48,6 +50,9 @@ import {
   ABANDON_BATCH_OPERATION,
   CANCEL_INTERACTION_OPERATION,
   CONVERSATION_EVENTS_PAGE_SIZE,
+  CONVERSATION_HISTORY_MAX_PAGE_SIZE,
+  CONVERSATION_HISTORY_PAGE_SIZE,
+  CONVERSATION_SEARCH_MAX_CHARS,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION,
   MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER,
   REMOVE_BATCH_MATERIALS_OPERATION,
@@ -69,6 +74,11 @@ import {
   toFailedMaterialPayload,
   toInteractionView,
 } from './ai-conversation.mapper'
+import {
+  decodeHistoryCursor,
+  encodeHistoryCursor,
+  toHistoryItem,
+} from './conversation-history'
 import {
   isReplyAttempt,
   requireCompleteReply,
@@ -273,7 +283,7 @@ export class AiConversationService {
       if (conversationId) {
         await lockConversationRuntime(tx, organizationId, conversationId)
         await lockAiCreateSender(tx, organizationId, userId)
-        conversation = await this.requireOwnedTasklessConversation(
+        conversation = await this.requireOwnedUserConversation(
           tx,
           organizationId,
           userId,
@@ -555,7 +565,7 @@ export class AiConversationService {
     const published: AiConversationEventView[] = []
     const result = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, organizationId, conversationId)
-      const conversation = await this.requireOwnedTasklessConversation(
+      const conversation = await this.requireOwnedUserConversation(
         tx,
         organizationId,
         userId,
@@ -627,7 +637,7 @@ export class AiConversationService {
     userId: string,
     conversationId: string,
   ): Promise<AiConversationView> {
-    const conversation = await this.requireOwnedTasklessConversation(
+    const conversation = await this.requireOwnedUserConversation(
       this.prisma,
       organizationId,
       userId,
@@ -636,13 +646,146 @@ export class AiConversationService {
     return this.loadConversationView(conversation, userId)
   }
 
+  async listOwnedConversations(
+    organizationId: string,
+    userId: string,
+    query: {
+      q?: string
+      includeArchived?: boolean
+      cursor?: string
+      limit?: number
+    },
+  ): Promise<ConversationHistoryPage> {
+    const now = new Date()
+    const limit = Math.min(
+      Math.max(query.limit ?? CONVERSATION_HISTORY_PAGE_SIZE, 1),
+      CONVERSATION_HISTORY_MAX_PAGE_SIZE,
+    )
+    const search = query.q?.trim().slice(0, CONVERSATION_SEARCH_MAX_CHARS)
+    const cursor = query.cursor ? decodeHistoryCursor(query.cursor) : null
+    if (query.cursor && !cursor) {
+      throw new BadRequestException('历史会话游标无效')
+    }
+    const filters: Prisma.AiConversationWhereInput[] = [
+      { organizationId },
+      { creatorUserId: userId },
+      query.includeArchived
+        ? { status: { in: [AiConversationStatus.open, AiConversationStatus.archived] } }
+        : { status: AiConversationStatus.open },
+    ]
+    if (search) {
+      filters.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          {
+            events: {
+              some: {
+                kind: AiConversationEventKind.user_message,
+                payload: {
+                  path: ['text'],
+                  string_contains: search,
+                },
+              },
+            },
+          },
+        ],
+      })
+    }
+    if (cursor) {
+      filters.push({
+        OR: [
+          { lastActivityAt: { lt: cursor.lastActivityAt } },
+          {
+            lastActivityAt: cursor.lastActivityAt,
+            id: { lt: cursor.id },
+          },
+        ],
+      })
+    }
+    const rows = await this.prisma.aiConversation.findMany({
+      where: { AND: filters },
+      orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        lastActivityAt: true,
+      },
+    })
+    const hasMore = rows.length > limit
+    const page = hasMore ? rows.slice(0, limit) : rows
+    const last = page[page.length - 1]
+    return {
+      items: page.map((row) => toHistoryItem(row, now)),
+      nextCursor: hasMore && last ? encodeHistoryCursor(last.lastActivityAt, last.id) : null,
+    }
+  }
+
+  async archiveOwnedConversation(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationHistoryItem> {
+    return this.setOwnedConversationLifecycle(
+      organizationId,
+      userId,
+      conversationId,
+      AiConversationStatus.archived,
+    )
+  }
+
+  async unarchiveOwnedConversation(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationHistoryItem> {
+    return this.setOwnedConversationLifecycle(
+      organizationId,
+      userId,
+      conversationId,
+      AiConversationStatus.open,
+    )
+  }
+
+  private async setOwnedConversationLifecycle(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    status: typeof AiConversationStatus.archived | typeof AiConversationStatus.open,
+  ): Promise<ConversationHistoryItem> {
+    const conversation = await this.prisma.$transaction(async (tx) => {
+      await lockConversationRuntime(tx, organizationId, conversationId)
+      const owned = await this.requireOwnedUserConversation(
+        tx,
+        organizationId,
+        userId,
+        conversationId,
+      )
+      if (
+        owned.status !== AiConversationStatus.open &&
+        owned.status !== AiConversationStatus.archived
+      ) {
+        throw new BadRequestException('仅开放或已归档会话可调整归档状态')
+      }
+      if (owned.status === status) {
+        return owned
+      }
+      return tx.aiConversation.update({
+        where: { id: owned.id },
+        data: { status },
+      })
+    })
+    return toHistoryItem(conversation, new Date())
+  }
+
   async listTasklessEvents(
     organizationId: string,
     userId: string,
     conversationId: string,
     afterSequence = 0,
   ) {
-    const conversation = await this.requireOwnedTasklessConversation(
+    const conversation = await this.requireOwnedUserConversation(
       this.prisma,
       organizationId,
       userId,
@@ -2303,14 +2446,14 @@ export class AiConversationService {
     }
   }
 
-  private async requireOwnedTasklessConversation(
+  private async requireOwnedUserConversation(
     db: { aiConversation: Prisma.TransactionClient['aiConversation'] },
     organizationId: string,
     userId: string,
     conversationId: string,
   ): Promise<AiConversation> {
     const conversation = await db.aiConversation.findFirst({
-      where: { id: conversationId, organizationId, taskLinks: { none: {} } },
+      where: { id: conversationId, organizationId },
     })
     if (!conversation) {
       throw new NotFoundException('会话不存在')

@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common'
 import type {
   AiConversationView,
+  ConversationHistoryItem,
+  ConversationHistoryPage,
   ConversationSourceView,
   SendAiConversationMessageResult,
 } from '@xiaotuanbao/shared'
@@ -25,6 +27,7 @@ import { AiConversationService } from './ai-conversation.service'
 import { DepartureMaterialService } from './departure-material.service'
 import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-material.constants'
 import {
+  ListAgentConversationsQueryDto,
   ListAiConversationEventsQueryDto,
   SendAiConversationMessageDto,
 } from './dto/ai-create-task.dto'
@@ -36,6 +39,18 @@ export class AgentConversationController {
     private readonly conversationService: AiConversationService,
     private readonly materialService: DepartureMaterialService,
   ) {}
+
+  @Get()
+  listConversations(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Query() query: ListAgentConversationsQueryDto,
+  ): Promise<ConversationHistoryPage> {
+    return this.conversationService.listOwnedConversations(
+      request.user.organizationId,
+      request.user.userId,
+      query,
+    )
+  }
 
   @Post('messages')
   @HttpCode(201)
@@ -126,6 +141,32 @@ export class AgentConversationController {
       request.user.userId,
       conversationId,
       idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/archive')
+  @HttpCode(200)
+  archiveConversation(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+  ): Promise<ConversationHistoryItem> {
+    return this.conversationService.archiveOwnedConversation(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
+    )
+  }
+
+  @Post(':conversationId/unarchive')
+  @HttpCode(200)
+  unarchiveConversation(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+  ): Promise<ConversationHistoryItem> {
+    return this.conversationService.unarchiveOwnedConversation(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
     )
   }
 

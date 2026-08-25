@@ -1,6 +1,9 @@
-import { CloseOutlined } from '@ant-design/icons'
-import { Button, Typography, theme } from 'antd'
+import { CloseOutlined, PlusOutlined } from '@ant-design/icons'
+import { Button, theme } from 'antd'
 import type { CSSProperties } from 'react'
+import { AgentConversationChat } from '@/features/agent-conversation/AgentConversationChat'
+import { ConversationHistoryTrigger } from '@/features/agent-conversation/ConversationHistoryTrigger'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from './assist-pane-slot'
 import styles from './AssistPane.module.css'
@@ -9,7 +12,10 @@ export function AssistPane() {
   const { token } = theme.useToken()
   const collapsed = useUiStore((state) => state.assistPaneCollapsed)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
+  const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
+  const conversationView = useAgentConversationStore((state) => state.view)
   const { content, headerExtra } = useAssistPaneSlot()
+  const showHistoryProjection = conversationView !== 'page' || !content
   return (
     <aside
       className={styles.slot}
@@ -28,8 +34,15 @@ export function AssistPane() {
     >
       <div className={styles.pane}>
         <div className={styles.paneHeader}>
-          <Typography.Text className={styles.paneTitle}>电子化助理</Typography.Text>
+          <ConversationHistoryTrigger />
           <div className={styles.headerActions}>
+            <Button
+              className={styles.iconButton}
+              type="text"
+              icon={<PlusOutlined aria-hidden />}
+              onClick={startNewConversation}
+              aria-label="新建会话"
+            />
             {headerExtra}
             <Button
               className={styles.close}
@@ -41,7 +54,7 @@ export function AssistPane() {
           </div>
         </div>
         <div className={styles.body}>
-          {content ?? <p className={styles.placeholder}>当前页尚未接入业务辅助</p>}
+          {showHistoryProjection ? <AgentConversationChat /> : content}
         </div>
       </div>
     </aside>

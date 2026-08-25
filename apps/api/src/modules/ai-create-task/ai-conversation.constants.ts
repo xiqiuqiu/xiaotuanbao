@@ -33,6 +33,9 @@ export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/
 /** 无任务会话不向模型暴露建团工具；Manifest 必须与空 schema 对齐。 */
 export const CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION = 'conversation-general-no-tools/v1'
 export const CONVERSATION_EVENTS_PAGE_SIZE = 100
+export const CONVERSATION_HISTORY_PAGE_SIZE = 20
+export const CONVERSATION_HISTORY_MAX_PAGE_SIZE = 50
+export const CONVERSATION_SEARCH_MAX_CHARS = 80
 export const WORKFLOW_LEASE_MS = 120_000
 export const WORKFLOW_HEARTBEAT_MS = 30_000
 export const WORKFLOW_PARSE_CONCURRENCY = 2

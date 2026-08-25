@@ -901,7 +901,22 @@ export interface AiCreateAssistSession {
   conversation: AiConversationView
 }
 
-export type AiConversationStatus = 'open' | 'abandoned' | 'completed'
+export type AiConversationStatus = 'open' | 'abandoned' | 'completed' | 'archived'
+
+export type ConversationHistoryActivityGroup = 'today' | 'yesterday' | 'last_7_days' | 'earlier'
+
+export interface ConversationHistoryItem {
+  id: string
+  title: string
+  status: Extract<AiConversationStatus, 'open' | 'archived'>
+  lastActivityAt: string
+  activityGroup: ConversationHistoryActivityGroup
+}
+
+export interface ConversationHistoryPage {
+  items: ConversationHistoryItem[]
+  nextCursor: string | null
+}
 
 export type AiConversationTitleSource = 'first_message' | 'agent' | 'user'
 
