@@ -24,5 +24,6 @@ import { PartnerService } from './partner.service'
       useClass: ExcelJsPartnerReconciliationStatementRenderer,
     },
   ],
+  exports: [PartnerService],
 })
 export class PartnerModule {}

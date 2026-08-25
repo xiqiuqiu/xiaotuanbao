@@ -54,4 +54,24 @@ describe('agent conversation service', () => {
       { silentError: true, headers: { 'Idempotency-Key': 'key-1' } },
     )
   })
+
+  it('sends an attached page locator only when present', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 1 })
+    await sendAgentConversationText(
+      'c-1',
+      {
+        text: '查一下账款',
+        pageLocator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+      },
+      'key-2',
+    )
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/messages',
+      {
+        text: '查一下账款',
+        pageLocator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+      },
+      { silentError: true, headers: { 'Idempotency-Key': 'key-2' } },
+    )
+  })
 })

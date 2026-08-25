@@ -12,6 +12,8 @@ describe('agent conversation store #370', () => {
       returnLocation: null,
       historyRailCollapsed: false,
       globalOpen: false,
+      attachedPageLocator: null,
+      pageContextDismissed: false,
     })
   })
 
@@ -120,5 +122,98 @@ describe('agent conversation store #370', () => {
       globalOpen: false,
     })
     expect(sessionStorage.getItem(AGENT_RETURN_LOCATION_STORAGE_KEY)).toBeNull()
+  })
+})
+
+describe('agent conversation page locator #371', () => {
+  beforeEach(() => {
+    useAgentConversationStore.getState().reset()
+  })
+
+  it('attaches the current page on a new conversation and drops it when switching history', () => {
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'partner',
+      objectId: 'partner-1',
+      section: 'accounts',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
+      kind: 'partner',
+      objectId: 'partner-1',
+      section: 'accounts',
+    })
+
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-new',
+      title: '刚发出的新会话',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
+      kind: 'partner',
+      objectId: 'partner-1',
+      section: 'accounts',
+    })
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toBeNull()
+  })
+
+  it('does not restore a dismissed locator until the user captures the page again', () => {
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+    useAgentConversationStore.getState().detachCurrentPage()
+    useAgentConversationStore.getState().syncDefaultPageLocator({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toBeNull()
+
+    useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'departure',
+      objectId: 'departure-1',
+      section: 'overview',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
+      kind: 'departure',
+      objectId: 'departure-1',
+      section: 'overview',
+    })
+  })
+
+  it('keeps the attached locator when the first send persists a new conversation', () => {
+    useAgentConversationStore.getState().startNewConversation({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-new',
+      title: '查一下账款',
+    })
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'c-new',
+      view: 'new',
+      attachedPageLocator: { kind: 'departure', objectId: 'departure-1' },
+    })
+  })
+
+  it('keeps an explicitly captured locator when the same conversation title is refreshed', () => {
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-1',
+      title: '历史会话（已更新）',
+    })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
   })
 })

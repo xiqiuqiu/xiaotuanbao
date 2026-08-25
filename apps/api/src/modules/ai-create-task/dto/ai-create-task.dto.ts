@@ -198,6 +198,10 @@ export class SendAiConversationMessageDto {
   @IsString()
   @IsNotEmpty()
   selectedOptionId?: string
+
+  @IsOptional()
+  @IsObject()
+  pageLocator?: Record<string, unknown>
 }
 
 export class SaveAiConversationTextDraftDto {

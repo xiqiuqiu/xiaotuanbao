@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common'
 import { AiActionModule } from '../ai-action/ai-action.module'
 import { AuthModule } from '../auth/auth.module'
 import { DepartureModule } from '../departure/departure.module'
+import { PartnerModule } from '../partner/partner.module'
 import { StoredObjectModule } from '../stored-object/stored-object.module'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
 import { AiConversationService } from './ai-conversation.service'
@@ -17,10 +18,17 @@ import { AiWorkflowProcessor } from './ai-workflow.processor'
 import { AgentServiceIdentityGuard } from './agent-service-identity.guard'
 import { AiOperationDelegationGuard } from './ai-operation-delegation.guard'
 import { DepartureMaterialService } from './departure-material.service'
+import { PageLocatorResolver } from './page-locator.resolver'
 import { ParseWorkerClient } from './parse-worker.client'
 
 @Module({
-  imports: [AiActionModule, AuthModule, forwardRef(() => DepartureModule), StoredObjectModule],
+  imports: [
+    AiActionModule,
+    AuthModule,
+    forwardRef(() => DepartureModule),
+    PartnerModule,
+    StoredObjectModule,
+  ],
   controllers: [
     AiCreateTaskController,
     AiToolController,
@@ -38,6 +46,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AgentServiceIdentityGuard,
     AiOperationDelegationGuard,
     DepartureMaterialService,
+    PageLocatorResolver,
     ParseWorkerClient,
   ],
   exports: [AiCreateTaskService, AiWorkflowProcessor],

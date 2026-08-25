@@ -5,6 +5,18 @@
   min-height: 0;
 }
 
+.pageContext {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+
+.pageContextChip {
+  margin-inline-end: 0;
+}
+
 .chat {
   flex: 1;
   min-height: 0;

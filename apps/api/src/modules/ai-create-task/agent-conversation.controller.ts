@@ -90,6 +90,7 @@ export class AgentConversationController {
         buffer: file.buffer,
         size: file.size,
       })),
+      dto.pageLocator,
     )
   }
 
@@ -129,6 +130,7 @@ export class AgentConversationController {
         buffer: file.buffer,
         size: file.size,
       })),
+      dto.pageLocator,
     )
   }
 

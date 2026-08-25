@@ -252,6 +252,7 @@ function createHarness(options?: {
     { getPermissionKeysForUser: async () => ['departure:write'] } as never,
     { publish: jest.fn() } as never,
     materialService,
+    { resolve: jest.fn().mockResolvedValue(undefined) } as never,
   )
 
   return { service, storedObjectService, callOrder, prisma, tx }

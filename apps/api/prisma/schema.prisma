@@ -1621,6 +1621,7 @@ model AiInputBatch {
   replyToEvent         AiConversationEvent? @relation("AiInputBatchReplyTo", fields: [replyToEventId], references: [id])
   conversationVersion  Int                 @map("conversation_version")
   status               AiInputBatchStatus  @default(ready_for_agent)
+  pageLocator          Json?               @map("page_locator")
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
   sources              InputBatchSource[]
