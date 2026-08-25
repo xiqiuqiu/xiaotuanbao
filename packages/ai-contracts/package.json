@@ -7,7 +7,7 @@
     "build:watch": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
     "test": "jest --config jest.config.js",
-    "eval:offline": "pnpm build && node dist/eval/cli.js"
+    "eval:offline": "pnpm build && node scripts/eval-offline.mjs"
   },
   "main": "./dist/index.js",
   "exports": {
