@@ -5,7 +5,15 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@copilotkit/react-core/v2', () => ({
+  CopilotKit: () => null,
+  CopilotChatConfigurationProvider: ({ children }: { children?: unknown }) => children,
+  CopilotChatView: () => null,
+}))
+vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
+
 import { router } from './index'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -81,5 +89,9 @@ describe('departure detail overview prototype removal', () => {
 
   it('registers execution-layer-switch as a throwaway sandbox route', () => {
     expect(Object.keys(router.routesByPath)).toContain('/prototype/execution-layer-switch')
+  })
+
+  it('registers the global Agent conversation route', () => {
+    expect(Object.keys(router.routesByPath)).toContain('/agent/conversations/$conversationId')
   })
 })

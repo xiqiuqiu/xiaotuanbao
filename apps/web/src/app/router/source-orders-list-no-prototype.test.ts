@@ -5,7 +5,15 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@copilotkit/react-core/v2', () => ({
+  CopilotKit: () => null,
+  CopilotChatConfigurationProvider: ({ children }: { children?: unknown }) => children,
+  CopilotChatView: () => null,
+}))
+vi.mock('@copilotkit/react-core/v2/styles.css', () => ({}))
+
 import { router } from './index'
 
 const repoRootPackageJson = resolve(

@@ -1,8 +1,9 @@
-import { CloseOutlined, PlusOutlined } from '@ant-design/icons'
-import { Button, theme } from 'antd'
+import { CloseOutlined, ExpandOutlined, PlusOutlined } from '@ant-design/icons'
+import { Button, Tooltip, theme } from 'antd'
 import type { CSSProperties } from 'react'
 import { AgentConversationChat } from '@/features/agent-conversation/AgentConversationChat'
 import { ConversationHistoryTrigger } from '@/features/agent-conversation/ConversationHistoryTrigger'
+import { useExpandAgentConversation } from '@/features/agent-conversation/use-expand-agent-conversation'
 import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAssistPaneSlot } from './assist-pane-slot'
@@ -13,6 +14,7 @@ export function AssistPane() {
   const collapsed = useUiStore((state) => state.assistPaneCollapsed)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
+  const expandToGlobal = useExpandAgentConversation()
   const conversationView = useAgentConversationStore((state) => state.view)
   const { content, headerExtra } = useAssistPaneSlot()
   const showHistoryProjection = conversationView !== 'page' || !content
@@ -44,6 +46,15 @@ export function AssistPane() {
               aria-label="新建会话"
             />
             {headerExtra}
+            <Tooltip title="进入全局模式" placement="bottom">
+              <Button
+                className={`${styles.iconButton} ${styles.expand}`}
+                type="text"
+                icon={<ExpandOutlined aria-hidden />}
+                aria-label="进入全局模式"
+                onClick={expandToGlobal}
+              />
+            </Tooltip>
             <Button
               className={styles.close}
               type="text"

@@ -16,7 +16,12 @@ vi.mock('@tanstack/react-router', () => ({
     <a href={to}>{children}</a>
   ),
   useNavigate: () => navigate,
-  useRouterState: () => ({ location: { pathname } }),
+  useRouterState: (options?: {
+    select?: (state: { location: { pathname: string; searchStr: string; hash: string } }) => unknown
+  }) => {
+    const state = { location: { pathname, searchStr: '', hash: '' } }
+    return options?.select ? options.select(state) : state
+  },
 }))
 
 vi.mock('@/services/auth.service', () => ({
@@ -372,6 +377,21 @@ describe('MainLayout 侧栏开关', () => {
     expect(within(mainColumn).getByRole('banner')).toBeInTheDocument()
     expect(within(mainColumn).getByText('内容')).toBeVisible()
     expect(screen.queryByRole('button', { name: '关闭侧边栏' })).not.toBeInTheDocument()
+  })
+
+  it('hides the side pane and assist toggle on the global Agent route', () => {
+    pathname = '/agent/conversations/c-1'
+    renderLayout(
+      <ConfigProvider>
+        <MainLayout>
+          <main>全局会话</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    expect(screen.getByText('全局会话')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '展开电子化助理' })).not.toBeInTheDocument()
+    expect(document.querySelector('aside[aria-label="电子化助理"]')).not.toBeInTheDocument()
   })
 
   it('persist 默认收起电子化助理', () => {

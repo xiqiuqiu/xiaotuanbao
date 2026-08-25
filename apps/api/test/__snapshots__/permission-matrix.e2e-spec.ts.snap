@@ -25,6 +25,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": null,
+    "route": "PUT /api/agent/conversations/:conversationId/draft",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": null,
     "route": "GET /api/agent/conversations/:conversationId/events",
   },
   {
@@ -997,6 +1002,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
     "POST /api/agent/conversations/:conversationId/archive [—]",
+    "PUT /api/agent/conversations/:conversationId/draft [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",
@@ -1188,6 +1194,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
     "POST /api/agent/conversations/:conversationId/archive [—]",
+    "PUT /api/agent/conversations/:conversationId/draft [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",
@@ -1347,6 +1354,7 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
     "POST /api/agent/conversations/:conversationId/archive [—]",
+    "PUT /api/agent/conversations/:conversationId/draft [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",

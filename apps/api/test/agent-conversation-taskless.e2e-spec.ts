@@ -211,6 +211,43 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(opened.body.data.taskId).toBeUndefined()
   })
 
+  it('saves a taskless draft by conversation and rejects a stale epoch after send', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 草稿会话`,
+      `${testPrefix}-draft-first`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+
+    const saved = await authRequest(app, coordinatorToken)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
+      .send({ text: '未发送的说明', draftEpoch: 1 })
+      .expect(200)
+    expect(saved.body.data).toMatchObject({
+      conversationId,
+      text: '未发送的说明',
+      draftEpoch: 1,
+      revision: 2,
+    })
+
+    await sendFollowUp(
+      coordinatorToken,
+      conversationId,
+      '未发送的说明',
+      `${testPrefix}-draft-send`,
+    ).expect(201)
+
+    await authRequest(app, coordinatorToken)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
+      .send({ text: '旧 epoch 延迟到达', draftEpoch: 1 })
+      .expect(409)
+
+    await authRequest(app, peerToken)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
+      .send({ text: '不应写入', draftEpoch: 2 })
+      .expect(403)
+  })
+
   it('replays the same first send with the same idempotency key', async () => {
     const key = `${testPrefix}-idempotent`
     const text = `${testPrefix} 重复提交`

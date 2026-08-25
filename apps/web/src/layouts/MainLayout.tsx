@@ -16,6 +16,7 @@ import { useUiStore } from '@/app/store/ui.store'
 import { filterMenuItems, findMenuKeyForPathname } from '@/utils/menu-permission'
 import { logout as logoutSession } from '@/services/auth.service'
 import { queryClient } from '@/lib/query/client'
+import { isAgentConversationPath } from '@/features/agent-conversation/agent-conversation-location'
 import { AssistPane } from './AssistPane'
 import { AssistPaneSlotProvider } from './assist-pane-slot'
 import styles from './MainLayout.module.css'
@@ -28,6 +29,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const navigate = useNavigate()
   const routerState = useRouterState()
   const pathname = routerState.location.pathname
+  const isGlobalAgent = isAgentConversationPath(pathname)
   const user = useAuthStore((state) => state.user)
   const menuKeys = useAuthStore((state) => state.menuKeys)
   const clearSession = useAuthStore((state) => state.clearSession)
@@ -108,6 +110,8 @@ export function MainLayout({ children }: PropsWithChildren) {
           { title: <Link to="/supplier">供应商管理</Link> },
           { title: '详情' },
         ]
+      : isGlobalAgent
+      ? [{ title: '小团宝 Agent' }]
       : pathname !== '/'
         ? [{ title: routeTitles[pathname] ?? '页面' }]
         : []),
@@ -117,6 +121,7 @@ export function MainLayout({ children }: PropsWithChildren) {
     <AssistPaneSlotProvider>
       <Layout
         className={styles.shell}
+        data-agent-global={isGlobalAgent ? '' : undefined}
         style={{
           '--shell-border': token.colorBorderSecondary,
           '--shell-text': token.colorText,
@@ -191,15 +196,17 @@ export function MainLayout({ children }: PropsWithChildren) {
             </div>
 
             <div className={styles.headerTrailing}>
-              <Tooltip title={assistToggleLabel} placement="bottom">
-                <Button
-                  className={styles.assistToggle}
-                  type="text"
-                  icon={<CommentOutlined />}
-                  onClick={toggleAssistPane}
-                  aria-label={assistToggleLabel}
-                />
-              </Tooltip>
+              {isGlobalAgent ? null : (
+                <Tooltip title={assistToggleLabel} placement="bottom">
+                  <Button
+                    className={styles.assistToggle}
+                    type="text"
+                    icon={<CommentOutlined />}
+                    onClick={toggleAssistPane}
+                    aria-label={assistToggleLabel}
+                  />
+                </Tooltip>
+              )}
               <Dropdown
                 menu={{
                   items: [
@@ -245,7 +252,7 @@ export function MainLayout({ children }: PropsWithChildren) {
 
           {children}
         </Layout>
-        <AssistPane />
+        {isGlobalAgent ? null : <AssistPane />}
       </Layout>
     </AssistPaneSlotProvider>
   )

@@ -8,6 +8,12 @@ import { useUiStore } from '@/app/store/ui.store'
 import { AssistPane } from './AssistPane'
 import { AssistPaneSlotProvider, useAssistPaneSlot } from './assist-pane-slot'
 
+const expandToGlobal = vi.fn()
+
+vi.mock('@/features/agent-conversation/use-expand-agent-conversation', () => ({
+  useExpandAgentConversation: () => expandToGlobal,
+}))
+
 vi.mock('@/features/agent-conversation/AgentConversationChat', () => ({
   AgentConversationChat: () => <p>通用会话</p>,
 }))
@@ -33,11 +39,14 @@ function SlotSetter({ text, extra }: { text: string; extra?: string }) {
 
 describe('AssistPane', () => {
   beforeEach(() => {
+    expandToGlobal.mockReset()
     useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.setState({
       view: 'page',
       conversationId: null,
       title: '新会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
     })
   })
   afterEach(() => cleanup())
@@ -97,6 +106,8 @@ describe('AssistPane', () => {
       view: 'history',
       conversationId: 'c-1',
       title: '历史会话甲',
+      returnLocation: null,
+      historyRailCollapsed: false,
     })
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -121,6 +132,41 @@ describe('AssistPane', () => {
       </QueryClientProvider>,
     )
     expect(screen.getByRole('button', { name: '发团资料' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '收起电子化助理' })).toBeInTheDocument()
+  })
+
+  it('expands the same Conversation into the global route and keeps the ID', async () => {
+    const user = userEvent.setup()
+    useUiStore.setState({ assistPaneCollapsed: false })
+    useAgentConversationStore.setState({
+      view: 'history',
+      conversationId: 'c-1',
+      title: '川西账款',
+      returnLocation: null,
+      historyRailCollapsed: false,
+    })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AssistPaneSlotProvider>
+          <AssistPane />
+        </AssistPaneSlotProvider>
+      </QueryClientProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '进入全局模式' }))
+    expect(expandToGlobal).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses a different accessible name for expand than for hiding the pane', () => {
+    useUiStore.setState({ assistPaneCollapsed: false })
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AssistPaneSlotProvider>
+          <AssistPane />
+        </AssistPaneSlotProvider>
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('button', { name: '进入全局模式' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '收起电子化助理' })).toBeInTheDocument()
   })
 

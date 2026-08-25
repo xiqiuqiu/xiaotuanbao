@@ -46,4 +46,5 @@ export const routeTitles: Record<string, string> = {
   '/product': '产品中心',
   '/system/organization': '组织管理',
   '/system/users': '员工管理',
+  '/agent/conversations': '小团宝 Agent',
 }

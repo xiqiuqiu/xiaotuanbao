@@ -39,6 +39,12 @@
   overflow: auto;
 }
 
+.shell[data-agent-global] .main :global(.app-content) {
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
 .brand {
   height: 64px;
   display: flex;
