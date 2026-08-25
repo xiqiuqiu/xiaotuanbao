@@ -853,6 +853,10 @@ export interface AiCreateTaskSummary {
   createdAt: string
   updatedAt: string
   draft: DepartureCreationDraftView
+  /**
+   * Convenience alias when exactly one package is pending.
+   * Ambiguous when multiple conversations await review; use `pendingReviews`.
+   */
   pendingReview: AiReviewPackageView | null
   pendingReviews?: AiReviewPackageView[]
 }

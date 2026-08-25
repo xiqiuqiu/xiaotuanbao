@@ -1617,6 +1617,105 @@ describe('CreateDepartureWizard', () => {
     expect(await screen.findByLabelText('团名')).toHaveValue('八月川西团')
   })
 
+  it('confirms the open conversation package instead of the newest pendingReview alias', async () => {
+    const user = userEvent.setup()
+    mockSearch = { taskId: 'task-1' }
+    const newestOther = mockPendingReview({
+      id: 'pkg-newest',
+      conversationId: 'conv-other',
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '另一会话团名',
+          userCorrectedValue: undefined,
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '另一会话团名' }],
+        },
+      ],
+    })
+    const currentConversation = mockPendingReview({
+      id: 'pkg-current',
+      conversationId: 'conv-1',
+    })
+    const restored = {
+      id: 'task-1',
+      status: 'in_progress' as const,
+      currentPhase: 'basic_info' as const,
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual' as const,
+          routeName: '喀纳斯阿勒泰10日线',
+          name: '喀纳斯阿勒泰10日线 8月1日团',
+          startDate: '2026-08-01',
+          endDate: '2026-08-10',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: newestOther,
+      pendingReviews: [newestOther, currentConversation],
+    }
+    vi.mocked(getAiCreateTask).mockResolvedValue(restored)
+    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
+      enabled: true,
+      agentRuntimeUrl: '/copilotkit',
+    })
+    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
+      task: restored,
+      conversation: {
+        id: 'conv-1',
+        status: 'open',
+        events: [],
+        activeBatch: null,
+      },
+    })
+    vi.mocked(confirmAiReviewPackage).mockResolvedValue({
+      ...restored,
+      pendingReview: newestOther,
+      pendingReviews: [newestOther],
+      draft: {
+        version: 3,
+        snapshot: {
+          ...restored.draft.snapshot,
+          name: '八月川西团',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+
+    renderWizard()
+    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
+    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(await screen.findByLabelText('团名候选')).toHaveValue('八月川西团')
+    expect(screen.queryByDisplayValue('另一会话团名')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
+
+    await waitFor(() => {
+      expect(confirmAiReviewPackage).toHaveBeenCalledWith(
+        'task-1',
+        'pkg-current',
+        {
+          expectedVersion: 2,
+          expectedPackageVersion: 1,
+        },
+        expect.stringMatching(/\S+/),
+      )
+    })
+    expect(confirmAiReviewPackage).not.toHaveBeenCalledWith(
+      'task-1',
+      'pkg-newest',
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
   it('rejects the pending package without writing the candidate into the draft', async () => {
     const user = userEvent.setup()
     mockSearch = { taskId: 'task-1' }

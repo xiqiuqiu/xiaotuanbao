@@ -219,6 +219,168 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
 
     expect(result.statusVersion).toBe(2)
   })
+
+  it('does not alias pendingReview to the newest package when several conversations are awaiting review', async () => {
+    const older = {
+      id: 'pkg-older',
+      organizationId,
+      taskId,
+      runId: 'run-older',
+      conversationId: 'conv-older',
+      inputBatchId: 'batch-older',
+      status: AiReviewPackageStatus.pending,
+      version: 1,
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      baselineSnapshot: {
+        mode: DepartureCreationDraftMode.MANUAL,
+        routeName: '川西',
+      },
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '旧会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '旧会话团名' }],
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    }
+    const newest = {
+      ...older,
+      id: 'pkg-newest',
+      runId: 'run-newest',
+      conversationId: 'conv-newest',
+      inputBatchId: 'batch-newest',
+      createdAt: new Date('2026-08-24T01:00:00.000Z'),
+      updatedAt: new Date('2026-08-24T01:00:00.000Z'),
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '新会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '新会话团名' }],
+        },
+      ],
+    }
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [newest, older],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.pendingReviews?.map((pkg) => pkg.id)).toEqual(['pkg-newest', 'pkg-older'])
+    expect(result.pendingReview).toBeNull()
+  })
+
+  it('keeps pendingReview when only one conversation is awaiting review', async () => {
+    const pending = {
+      id: 'pkg-only',
+      organizationId,
+      taskId,
+      runId: 'run-only',
+      conversationId: 'conv-only',
+      inputBatchId: 'batch-only',
+      status: AiReviewPackageStatus.pending,
+      version: 1,
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      baselineSnapshot: {
+        mode: DepartureCreationDraftMode.MANUAL,
+        routeName: '川西',
+      },
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '唯一会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '唯一会话团名' }],
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    }
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [pending],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.pendingReview).toMatchObject({ id: 'pkg-only' })
+    expect(result.pendingReviews).toHaveLength(1)
+  })
 })
 
 describe('AiCreateTaskService.regenerateReviewPackage owner check', () => {

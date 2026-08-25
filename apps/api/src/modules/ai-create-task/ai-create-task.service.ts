@@ -1771,7 +1771,7 @@ export class AiCreateTaskService {
         snapshot,
         updatedAt: task.draft.updatedAt.toISOString(),
       },
-      pendingReview: pendingReviews[0] ?? null,
+      pendingReview: pendingReviews.length === 1 ? pendingReviews[0] : null,
       pendingReviews,
     }
   }
