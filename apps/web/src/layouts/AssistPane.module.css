@@ -45,7 +45,9 @@
 }
 
 .paneTitle {
-  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .headerActions {
@@ -55,6 +57,7 @@
   flex: none;
 }
 
+.iconButton,
 .close {
   flex: none;
 }
@@ -102,6 +105,7 @@
     width: 100%;
   }
 
+  .iconButton,
   .close {
     min-width: 44px;
     min-height: 44px;

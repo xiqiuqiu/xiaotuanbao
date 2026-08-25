@@ -1,0 +1,64 @@
+.trigger {
+  max-width: 220px;
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+.triggerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel {
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search {
+  width: 100%;
+}
+
+.create {
+  min-height: 44px;
+}
+
+.list {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group + .group {
+  margin-top: 8px;
+}
+
+.groupItems {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item {
+  width: 100%;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 44px;
+  padding-block: 8px;
+  white-space: normal;
+  text-align: start;
+}
+
+@media (max-width: 767px) {
+  .trigger {
+    min-height: 44px;
+  }
+}

@@ -10,7 +10,17 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": null,
+    "route": "GET /api/agent/conversations",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": null,
     "route": "GET /api/agent/conversations/:conversationId",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": null,
+    "route": "POST /api/agent/conversations/:conversationId/archive",
   },
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
@@ -31,6 +41,11 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": null,
     "route": "POST /api/agent/conversations/:conversationId/stop",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": null,
+    "route": "POST /api/agent/conversations/:conversationId/unarchive",
   },
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
@@ -979,11 +994,14 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
 {
   "企业管理员": [
     "GET /api/account-generation-gaps [/departure]",
+    "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
+    "POST /api/agent/conversations/:conversationId/archive [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",
     "POST /api/agent/conversations/:conversationId/stop [—]",
+    "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "POST /api/agent/tasks/:taskId/cancel [departure:write]",
     "POST /api/agent/tasks/:taskId/close [departure:write]",
@@ -1167,11 +1185,14 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
   ],
   "计调": [
     "GET /api/account-generation-gaps [/departure]",
+    "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
+    "POST /api/agent/conversations/:conversationId/archive [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",
     "POST /api/agent/conversations/:conversationId/stop [—]",
+    "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "POST /api/agent/tasks/:taskId/cancel [departure:write]",
     "POST /api/agent/tasks/:taskId/close [departure:write]",
@@ -1323,11 +1344,14 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
   ],
   "财务": [
     "GET /api/account-generation-gaps [/departure]",
+    "GET /api/agent/conversations [—]",
     "GET /api/agent/conversations/:conversationId [—]",
+    "POST /api/agent/conversations/:conversationId/archive [—]",
     "GET /api/agent/conversations/:conversationId/events [—]",
     "POST /api/agent/conversations/:conversationId/messages [—]",
     "GET /api/agent/conversations/:conversationId/sources [—]",
     "POST /api/agent/conversations/:conversationId/stop [—]",
+    "POST /api/agent/conversations/:conversationId/unarchive [—]",
     "POST /api/agent/conversations/messages [—]",
     "GET /api/ai-create-tasks/assist-availability [—]",
     "POST /api/ai-tools/v1/get-material-parse-result [—]",

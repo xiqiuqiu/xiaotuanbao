@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App, ConfigProvider } from 'antd'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -22,6 +23,22 @@ vi.mock('@/services/auth.service', () => ({
   logout: vi.fn(),
 }))
 
+vi.mock('@/features/agent-conversation/AgentConversationChat', () => ({
+  AgentConversationChat: () => <p>通用会话</p>,
+}))
+
+vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
+  ConversationHistoryTrigger: () => <button type="button">打开会话历史</button>,
+}))
+
+function renderLayout(ui: React.ReactNode) {
+  return render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      {ui}
+    </QueryClientProvider>,
+  )
+}
+
 describe('MainLayout 侧栏开关', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -39,7 +56,7 @@ describe('MainLayout 侧栏开关', () => {
   })
 
   it('进入发团管理一览时不自动收起侧栏', async () => {
-    const { rerender } = render(
+    const { rerender } = renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>
@@ -65,7 +82,7 @@ describe('MainLayout 侧栏开关', () => {
   })
 
   it('进入发团管理详情时不自动收起侧栏', async () => {
-    const { rerender } = render(
+    const { rerender } = renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>
@@ -92,7 +109,7 @@ describe('MainLayout 侧栏开关', () => {
 
   it('从发团一览进入详情时保持侧栏展开', async () => {
     pathname = '/departure'
-    const { rerender } = render(
+    const { rerender } = renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>
@@ -135,7 +152,7 @@ describe('MainLayout 侧栏开关', () => {
     useUiStore.setState({ sidebarCollapsed: false })
     const user = userEvent.setup()
     try {
-      render(
+      renderLayout(
         <ConfigProvider>
           <MainLayout>
             <main>内容</main>
@@ -158,7 +175,7 @@ describe('MainLayout 侧栏开关', () => {
 
   it('Tooltip 与可访问名称随折叠状态同步', async () => {
     const user = userEvent.setup()
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>
@@ -187,7 +204,7 @@ describe('MainLayout 侧栏开关', () => {
       sessionStatus: 'authenticated',
     })
     const user = userEvent.setup()
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>
@@ -213,7 +230,7 @@ describe('MainLayout 侧栏开关', () => {
       resolveLogout = resolve
     }))
     const user = userEvent.setup()
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout><main>内容</main></MainLayout>
       </ConfigProvider>,
@@ -239,7 +256,7 @@ describe('MainLayout 侧栏开关', () => {
       message: { warning },
     } as never)
     const user = userEvent.setup()
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout><main>内容</main></MainLayout>
       </ConfigProvider>,
@@ -266,7 +283,7 @@ describe('MainLayout 侧栏开关', () => {
       menuKeys: ['/departure', '/partner', '/supplier', '/product'],
     })
 
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout><main>内容</main></MainLayout>
       </ConfigProvider>,
@@ -283,7 +300,7 @@ describe('MainLayout 侧栏开关', () => {
   ])('发团子页面 %s 展示明确层级', (currentPathname, currentLabel) => {
     pathname = currentPathname
 
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout><main>内容</main></MainLayout>
       </ConfigProvider>,
@@ -316,7 +333,7 @@ describe('MainLayout 侧栏开关', () => {
       ],
     })
 
-    const { rerender } = render(
+    const { rerender } = renderLayout(
       <ConfigProvider>
         <MainLayout><main>内容</main></MainLayout>
       </ConfigProvider>,
@@ -337,7 +354,7 @@ describe('MainLayout 侧栏开关', () => {
 
   it('默认两列；从中间顶栏展开后右栏与顶栏同高且主内容仍可访问', async () => {
     const user = userEvent.setup()
-    render(
+    renderLayout(
       <ConfigProvider>
         <MainLayout>
           <main>内容</main>

@@ -1477,6 +1477,7 @@ enum AiConversationStatus {
   open
   abandoned
   completed
+  archived
 
   @@map("ai_conversation_status")
 }

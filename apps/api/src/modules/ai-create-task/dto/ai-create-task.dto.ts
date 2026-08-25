@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -14,7 +15,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator'
-import { Type } from 'class-transformer'
+import { Transform, Type } from 'class-transformer'
 import { DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 
 export class DepartureCreationDraftSnapshotDto {
@@ -239,4 +240,28 @@ export class ListAiConversationEventsQueryDto {
   @IsInt()
   @Min(0)
   afterSequence?: number
+}
+
+export class ListAgentConversationsQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  q?: string
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  includeArchived?: boolean
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cursor?: string
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number
 }

@@ -21,6 +21,14 @@ import { AssistPane } from '@/layouts/AssistPane'
 import { AssistPaneSlotProvider } from '@/layouts/assist-pane-slot'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
 
+vi.mock('@/features/agent-conversation/AgentConversationChat', () => ({
+  AgentConversationChat: () => <p>通用会话</p>,
+}))
+
+vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
+  ConversationHistoryTrigger: () => <button type="button">打开会话历史</button>,
+}))
+
 const mockNavigate = vi.fn()
 let mockSearch: { copyFrom?: string; taskId?: string } = {}
 const hitlRegistration = vi.hoisted(() => ({
