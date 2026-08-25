@@ -12,6 +12,38 @@ export const AI_EVIDENCE_NORMALIZED_JSON_MAX_BYTES = 128_000
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/)
 const textRangeSchema = z.object({ start: z.number().int().nonnegative(), end: z.number().int().positive() }).strict()
 
+/** UTF-8 字节数。不依赖 DOM / @types/node，避免 CI 的 ES2022-only lib 编不过。 */
+function utf8ByteLength(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i += 1) {
+    const codeUnit = text.charCodeAt(i)
+    if (codeUnit <= 0x7f) {
+      bytes += 1
+      continue
+    }
+    if (codeUnit <= 0x7ff) {
+      bytes += 2
+      continue
+    }
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = text.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        i += 1
+        continue
+      }
+      bytes += 3
+      continue
+    }
+    bytes += 3
+  }
+  return bytes
+}
+
+function jsonUtf8ByteLength(value: unknown): number {
+  return utf8ByteLength(JSON.stringify(value))
+}
+
 export const evidenceGeometrySchemaV1 = z
   .object({
     x: z.number().nonnegative(),
@@ -130,7 +162,7 @@ export const evidenceProposalSchemaV1 = z
     { message: '同一证据提案内 candidateId 必须唯一' },
   )
   .refine(
-    (value) => new TextEncoder().encode(JSON.stringify(value)).byteLength <= AI_EVIDENCE_PROPOSAL_JSON_MAX_BYTES,
+    (value) => jsonUtf8ByteLength(value) <= AI_EVIDENCE_PROPOSAL_JSON_MAX_BYTES,
     { message: '证据提案超过 JSON 大小上限' },
   )
 
@@ -272,7 +304,7 @@ export const normalizedEvidenceProposalSchemaV1 = z
     })
   })
   .refine(
-    (value) => new TextEncoder().encode(JSON.stringify(value)).byteLength <= AI_EVIDENCE_NORMALIZED_JSON_MAX_BYTES,
+    (value) => jsonUtf8ByteLength(value) <= AI_EVIDENCE_NORMALIZED_JSON_MAX_BYTES,
     { message: '规范化证据记录超过 JSON 大小上限' },
   )
 
