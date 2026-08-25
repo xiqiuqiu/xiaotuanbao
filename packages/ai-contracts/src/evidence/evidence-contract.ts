@@ -123,11 +123,15 @@ export const evidenceCandidateProposalSchemaV1 = z
               kind: z.literal('material_region'),
               locator: z
                 .object({
-                  materialId: z.string().min(1),
+                  materialId: z.string().min(1).optional(),
+                  sourceId: z.string().min(1).optional(),
                   parseResultVersion: z.number().int().positive(),
                   pageNumber: z.number().int().positive(),
                 })
-                .strict(),
+                .strict()
+                .refine((locator) => Boolean(locator.sourceId ?? locator.materialId), {
+                  message: 'material_region 必须提供 sourceId 或 materialId',
+                }),
               excerpt: z.string().trim().min(1).max(AI_EVIDENCE_EXCERPT_MAX_CHARS),
             })
             .strict(),

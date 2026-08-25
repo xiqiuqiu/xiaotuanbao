@@ -486,8 +486,8 @@ export class AiWorkflowProcessor {
   private async executeParse(job: ClaimedJob): Promise<void> {
     const startedAt = Date.now()
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
-      if (job.materialId) {
-        await this.materialService.markParseTerminalFailure(job.materialId)
+      if (job.sourceId) {
+        await this.materialService.markParseTerminalFailure(job.sourceId)
       }
       await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
       this.workflowLog('failed', {
@@ -499,8 +499,8 @@ export class AiWorkflowProcessor {
       return
     }
     if (!(await this.organizationUsable(job.organizationId))) {
-      if (job.materialId) {
-        await this.materialService.markParseTerminalFailure(job.materialId)
+      if (job.sourceId) {
+        await this.materialService.markParseTerminalFailure(job.sourceId)
       }
       await this.persistParseBarrierFailure(job, 'PERMISSION_DENIED')
       this.workflowLog('failed', {
@@ -517,9 +517,10 @@ export class AiWorkflowProcessor {
         if (!parsed) {
           return false
         }
-        const batchIds = await this.materialService.pinMaterialVersion(
-          parsed.materialId,
-          parsed.parseResultVersion,
+        const batchIds = await this.materialService.pinSourceVersion(
+          parsed.sourceId,
+          parsed.parseVersion,
+          parsed.contentDigest,
         )
         for (const batchId of batchIds) {
           const published = await this.prisma.$transaction(async (tx) => {
@@ -559,8 +560,8 @@ export class AiWorkflowProcessor {
     } catch (error) {
       this.logger.warn(`资料解析失败 job=${job.id}: ${String(error)}`)
       if (!isTransientWorkflowError(error)) {
-        if (job.materialId) {
-          await this.materialService.markParseTerminalFailure(job.materialId)
+        if (job.sourceId) {
+          await this.materialService.markParseTerminalFailure(job.sourceId)
         }
         await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
         this.workflowLog('failed', {
@@ -645,17 +646,22 @@ export class AiWorkflowProcessor {
     }
     const modelId =
       this.configService.get<string>('app.aiCreateAssist.modelId')?.trim() || 'deterministic'
-    const pinnedMaterials = await this.prisma.aiInputBatchMaterial.findMany({
+    const pinnedSources = await this.prisma.inputBatchSource.findMany({
       where: {
         inputBatchId: job.inputBatchId,
         required: true,
-        parseResultVersion: { not: null },
+        parseVersion: { not: null },
       },
-      select: { materialId: true, parseResultVersion: true },
+      select: { sourceId: true, parseVersion: true, contentDigest: true },
     })
-    const materialVersions = pinnedMaterials.map((item) => ({
-      materialId: item.materialId,
-      parseResultVersion: item.parseResultVersion as number,
+    const materialVersions = pinnedSources.map((item) => ({
+      materialId: item.sourceId,
+      parseResultVersion: item.parseVersion as number,
+    }))
+    const sourceVersions = pinnedSources.map((item) => ({
+      sourceId: item.sourceId,
+      parseVersion: item.parseVersion as number,
+      contentDigest: item.contentDigest ?? '',
     }))
     const parseIndex = await this.materialService.loadPinnedParseIndex(
       job.organizationId,
@@ -738,6 +744,7 @@ export class AiWorkflowProcessor {
         ],
         modelId,
         materialVersions,
+        sourceVersions,
         excerptDigests,
         truncationReasons: budgetedContext.truncationReasons,
         inputHash: budgetedContext.inputHash,
@@ -779,6 +786,7 @@ export class AiWorkflowProcessor {
               inputHash: manifestRecord.inputHash,
               truncationReasons: manifestRecord.truncationReasons,
               materialVersions,
+              sourceVersions,
               summaryVersion: null,
               excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
@@ -922,13 +930,34 @@ export class AiWorkflowProcessor {
       orderBy: { sequence: 'asc' },
       select: { sequence: true, kind: true, payload: true },
     })
+    const parseIndex = await this.materialService.loadPinnedParseIndex(
+      job.organizationId,
+      job.inputBatchId,
+    )
+    const pinnedSources = await this.prisma.inputBatchSource.findMany({
+      where: {
+        inputBatchId: job.inputBatchId,
+        required: true,
+        parseVersion: { not: null },
+      },
+      select: { sourceId: true, parseVersion: true, contentDigest: true },
+    })
+    const materialVersions = pinnedSources.map((item) => ({
+      materialId: item.sourceId,
+      parseResultVersion: item.parseVersion as number,
+    }))
+    const sourceVersions = pinnedSources.map((item) => ({
+      sourceId: item.sourceId,
+      parseVersion: item.parseVersion as number,
+      contentDigest: item.contentDigest ?? '',
+    }))
     const projection = buildFrozenProjection({
       events: historyEvents,
       conversationVersion: job.inputBatch.conversationVersion,
       originUserMessageSequence: userEvent.sequence,
       currentUserMessageSequence: userEvent.sequence,
-      materials: [],
-      materialTruncationReasons: [],
+      materials: parseIndex.materials,
+      materialTruncationReasons: parseIndex.truncationReasons,
     })
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
@@ -954,8 +983,9 @@ export class AiWorkflowProcessor {
         businessSnapshotVersion: 0,
         taskRefs: [],
         modelId,
-        materialVersions: [],
-        excerptDigests: [],
+        materialVersions,
+        sourceVersions,
+        excerptDigests: excerptDigestsFor(budgetedContext.projection.pinnedMaterials),
         truncationReasons: budgetedContext.truncationReasons,
         inputHash: budgetedContext.inputHash,
         budget: budgetedContext.budget,
@@ -988,7 +1018,8 @@ export class AiWorkflowProcessor {
               modelId: manifestRecord.modelId,
               inputHash: manifestRecord.inputHash,
               truncationReasons: manifestRecord.truncationReasons,
-              materialVersions: [],
+              materialVersions,
+              sourceVersions,
               summaryVersion: null,
               excerptDigests: [],
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
@@ -1346,9 +1377,9 @@ export class AiWorkflowProcessor {
       const batch = await tx.aiInputBatch.findUnique({
         where: { id: job.inputBatchId },
         include: {
-          materials: {
+          sources: {
             include: {
-              material: {
+              source: {
                 include: {
                   parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
                 },
@@ -1360,8 +1391,8 @@ export class AiWorkflowProcessor {
       if (!batch || batch.status !== AiInputBatchStatus.waiting_for_materials) {
         return
       }
-      const failedMaterial = job.materialId
-        ? await tx.departureMaterial.findUnique({ where: { id: job.materialId } })
+      const failedSource = job.sourceId
+        ? await tx.conversationSource.findUnique({ where: { id: job.sourceId } })
         : null
       const errorEvent = await this.conversationService.appendEvent(tx, {
         organizationId: job.organizationId,
@@ -1369,18 +1400,18 @@ export class AiWorkflowProcessor {
         kind: AiConversationEventKind.error,
         payload: {
           batchId: job.inputBatchId,
-          materialId: job.materialId,
-          originalFilename: failedMaterial?.originalFilename ?? null,
+          materialId: job.sourceId,
+          originalFilename: failedSource?.originalFilename ?? null,
           errorCode,
           errorMessage: parseErrorMessage(errorCode),
         },
       })
       published.push(errorEvent.id)
       const progress = materialProgressFromDeps(
-        batch.materials.map((item) => ({
+        batch.sources.map((item) => ({
           required: item.required,
-          parseResultVersion: item.parseResultVersion,
-          failed: item.parseResultVersion == null && (item.materialId === job.materialId || isFailedDependency(item)),
+          parseResultVersion: item.parseVersion,
+          failed: item.parseVersion == null && (item.sourceId === job.sourceId || isFailedDependency(item)),
         })),
       )
       const statusEvent = await this.conversationService.appendEvent(tx, {
@@ -1393,7 +1424,7 @@ export class AiWorkflowProcessor {
           readyCount: progress.ready,
           totalCount: progress.total,
           failedCount: progress.failed,
-          failedMaterials: toFailedMaterialPayload(batch.materials),
+          failedMaterials: toFailedMaterialPayload(batch.sources),
         },
       })
       published.push(statusEvent.id)
@@ -1533,8 +1564,8 @@ export class AiWorkflowProcessor {
   ): Promise<void> {
     if (job.attemptCount > WORKFLOW_MAX_ATTEMPTS) {
       if (job.type === AiWorkflowJobType.material_parse) {
-        if (job.materialId) {
-          await this.materialService.markParseTerminalFailure(job.materialId)
+        if (job.sourceId) {
+          await this.materialService.markParseTerminalFailure(job.sourceId)
         }
         await this.persistParseBarrierFailure(job, PARSE_FAILED_ERROR_CODE)
         this.workflowLog('failed', {

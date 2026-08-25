@@ -256,15 +256,16 @@ function resolveMaterialRegion(
   evidence: Extract<EvidenceProposalItem, { kind: 'material_region' }>,
   authority: EvidenceAuthority,
 ): NormalizedEvidenceV1 | Pick<ValidationError, 'code' | 'message'> {
+  const sourceId = evidence.locator.sourceId ?? evidence.locator.materialId
   const pinned = authority.contextManifest.materialVersions.some(
     (item) =>
-      item.materialId === evidence.locator.materialId &&
+      item.materialId === sourceId &&
       item.parseResultVersion === evidence.locator.parseResultVersion,
   )
   const material = authority.materials.find(
     (item) =>
       item.inputBatchId === authority.contextManifest.inputBatchId &&
-      item.materialId === evidence.locator.materialId &&
+      item.materialId === sourceId &&
       item.parseResultVersion === evidence.locator.parseResultVersion,
   )
   if (!pinned || !material) {

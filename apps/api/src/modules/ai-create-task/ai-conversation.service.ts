@@ -28,7 +28,7 @@ import {
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
-  DepartureMaterialStatus,
+  ConversationSourceStatus,
   InputBatchTaskRole,
   TaskActivityKind,
   type AgentTask,
@@ -99,9 +99,9 @@ const TASK_INCLUDE = {
 
 const BATCH_MATERIAL_INCLUDE = {
   taskLinks: true,
-  materials: {
+  sources: {
     include: {
-      material: {
+      source: {
         include: {
           parseRuns: { orderBy: { resultVersion: 'desc' as const }, take: 1 },
         },
@@ -212,16 +212,18 @@ export class AiConversationService {
     text: string,
     idempotencyKey: string | undefined,
     reply: ConversationReplyInput = {},
+    files: IncomingMaterialFile[] = [],
   ): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(idempotencyKey)
-    const trimmed = text.trim()
+    const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
+    const trimmed = text.trim() || (attachments.length > 0 ? '请根据附件回答。' : '')
     if (isReplyAttempt(reply)) {
       if (!conversationId) {
         throw new BadRequestException('回答追问必须指定会话')
       }
       requireCompleteReply(reply)
     }
-    if (!trimmed && !reply.selectedOptionId) {
+    if (!trimmed && attachments.length === 0 && !reply.selectedOptionId) {
       throw new BadRequestException('消息不能为空')
     }
     const hash = requestHash({
@@ -231,6 +233,12 @@ export class AiConversationService {
       interactionId: reply.interactionId ?? null,
       interactionVersion: reply.interactionVersion ?? null,
       selectedOptionId: reply.selectedOptionId ?? null,
+      attachments: attachments.map((file) => ({
+        filename: file.originalname,
+        contentType: (file.mimetype ?? '').toLowerCase(),
+        sizeBytes: file.buffer.byteLength,
+        sha256: this.materialService.sha256(file.buffer),
+      })),
     })
     const existingRecord = await this.prisma.aiCreateIdempotencyRecord.findUnique({
       where: {
@@ -250,7 +258,16 @@ export class AiConversationService {
       return existingRecord.resultJson as unknown as SendAiConversationMessageResult
     }
 
+    const prepared = await this.materialService.prepareUploads({
+      organizationId,
+      userId,
+      conversationId,
+      files: attachments,
+    })
     const published: AiConversationEventView[] = []
+    const consumedStoredObjectIds = new Set<string>()
+    let committed = false
+    try {
     const result = await this.prisma.$transaction(async (tx) => {
       let conversation: AiConversation
       if (conversationId) {
@@ -337,6 +354,15 @@ export class AiConversationService {
           kind: AiConversationEventKind.user_message,
           payload: {
             text: messageText,
+            ...(attachments.length > 0
+              ? {
+                  attachments: attachments.map((file) => ({
+                    filename: file.originalname,
+                    contentType: (file.mimetype ?? '').toLowerCase(),
+                    sizeBytes: file.buffer.byteLength,
+                  })),
+                }
+              : {}),
             ...(replyResult
               ? {
                   replyToEventId: replyResult.replyToEventId,
@@ -347,6 +373,24 @@ export class AiConversationService {
           },
         },
       })
+      const archived = []
+      for (const file of attachments) {
+        const item = await this.materialService.archiveForConversation(tx, {
+          organizationId,
+          userId,
+          conversationId: conversation.id,
+          file,
+          stored: prepared.storedByFileKey.get(materialFileKey(file)),
+        })
+        if (item.consumedStoredObjectId) {
+          consumedStoredObjectIds.add(item.consumedStoredObjectId)
+        }
+        archived.push(item)
+      }
+      const waitingForMaterials = archived.some((item) => item.parseVersion == null)
+      const batchStatus = waitingForMaterials
+        ? AiInputBatchStatus.waiting_for_materials
+        : AiInputBatchStatus.ready_for_agent
       const batch = await tx.aiInputBatch.create({
         data: {
           organizationId,
@@ -355,20 +399,54 @@ export class AiConversationService {
           userMessageEventId: userEvent.id,
           replyToEventId: replyResult?.replyToEventId,
           conversationVersion: userSequence,
-          status: AiInputBatchStatus.ready_for_agent,
+          status: batchStatus,
+          sources: {
+            create: archived.map((item) => ({
+              organizationId,
+              sourceId: item.source.id,
+              required: true,
+              parseVersion: item.parseVersion,
+              contentDigest: item.contentDigest,
+              locator: {
+                kind: item.source.kind,
+                storedObjectId: item.source.storedObjectId,
+                sha256: item.source.sha256,
+              },
+            })),
+          },
         },
         include: BATCH_MATERIAL_INCLUDE,
       })
-      await tx.aiWorkflowJob.create({
-        data: {
-          organizationId,
-          conversationId: conversation.id,
-          inputBatchId: batch.id,
-          type: AiWorkflowJobType.agent_batch,
-          jobKey: agentBatchJobKey(batch.id),
-          status: AiWorkflowJobStatus.pending,
-        },
-      })
+      for (const item of archived) {
+        if (item.needsParseJob) {
+          if (item.source.status === ConversationSourceStatus.failed) {
+            await this.materialService.startNewParseRun(tx, {
+              organizationId,
+              sourceId: item.source.id,
+            })
+          }
+          await this.materialService.enqueueParseJob(tx, {
+            organizationId,
+            conversationId: conversation.id,
+            inputBatchId: batch.id,
+            sourceId: item.source.id,
+          })
+        }
+      }
+      if (batchStatus === AiInputBatchStatus.ready_for_agent) {
+        await tx.aiWorkflowJob.create({
+          data: {
+            organizationId,
+            conversationId: conversation.id,
+            inputBatchId: batch.id,
+            type: AiWorkflowJobType.agent_batch,
+            jobKey: agentBatchJobKey(batch.id),
+            status: AiWorkflowJobStatus.pending,
+          },
+        })
+      }
+      const snapshot = await this.loadBatch(tx, batch.id)
+      const progress = progressOf(snapshot)
       const statusEvent = await tx.aiConversationEvent.create({
         data: {
           organizationId,
@@ -377,8 +455,11 @@ export class AiConversationService {
           kind: AiConversationEventKind.batch_status,
           payload: {
             batchId: batch.id,
-            status: AiInputBatchStatus.ready_for_agent,
+            status: batchStatus,
             queued,
+            readyCount: progress.ready,
+            totalCount: progress.total,
+            failedCount: progress.failed,
           },
         },
       })
@@ -413,7 +494,7 @@ export class AiConversationService {
       ]
       const payload: SendAiConversationMessageResult = {
         conversationId: conversation.id,
-        batch: toBatchView(batch, { queued }),
+        batch: toBatchView(snapshot, { queued }),
         events,
         lastSequence: statusSequence,
         draft: toConversationDraftView(conversation.id, conversationDraft),
@@ -428,10 +509,21 @@ export class AiConversationService {
       published.push(...events)
       return payload
     })
+    committed = true
+    await this.materialService.discardStoredObjects(
+      organizationId,
+      prepared.uploadedIds.filter((id) => !consumedStoredObjectIds.has(id)),
+    )
     for (const event of published) {
       this.eventHub.publish(result.conversationId, event)
     }
     return result
+    } catch (error) {
+      if (!committed) {
+        await this.materialService.discardStoredObjects(organizationId, prepared.uploadedIds)
+      }
+      throw error
+    }
   }
 
   async stopTasklessRun(
@@ -728,7 +820,7 @@ export class AiConversationService {
     const prepared = await this.materialService.prepareUploads({
       organizationId,
       userId,
-      taskId,
+      conversationId,
       files: attachments,
     })
 
@@ -831,10 +923,10 @@ export class AiConversationService {
 
         const archived = []
         for (const file of attachments) {
-          const item = await this.materialService.archiveForTask(tx, {
+          const item = await this.materialService.archiveForConversation(tx, {
             organizationId,
             userId,
-            taskId: task.id,
+            conversationId: conversation.id,
             file,
             stored: prepared.storedByFileKey.get(materialFileKey(file)),
           })
@@ -843,7 +935,7 @@ export class AiConversationService {
           }
           archived.push(item)
         }
-        const waitingForMaterials = archived.some((item) => item.parseResultVersion == null)
+        const waitingForMaterials = archived.some((item) => item.parseVersion == null)
         const batchStatus = waitingForMaterials
           ? AiInputBatchStatus.waiting_for_materials
           : AiInputBatchStatus.ready_for_agent
@@ -865,12 +957,18 @@ export class AiConversationService {
                 role: InputBatchTaskRole.primary,
               },
             },
-            materials: {
+            sources: {
               create: archived.map((item) => ({
                 organizationId,
-                materialId: item.material.id,
+                sourceId: item.source.id,
                 required: true,
-                parseResultVersion: item.parseResultVersion,
+                parseVersion: item.parseVersion,
+                contentDigest: item.contentDigest,
+                locator: {
+                  kind: item.source.kind,
+                  storedObjectId: item.source.storedObjectId,
+                  sha256: item.source.sha256,
+                },
               })),
             },
           },
@@ -901,10 +999,10 @@ export class AiConversationService {
 
         for (const item of archived) {
           if (item.needsParseJob) {
-            if (item.material.status === DepartureMaterialStatus.failed) {
+            if (item.source.status === ConversationSourceStatus.failed) {
               await this.materialService.startNewParseRun(tx, {
                 organizationId,
-                materialId: item.material.id,
+                sourceId: item.source.id,
               })
             }
             await this.materialService.enqueueParseJob(tx, {
@@ -912,7 +1010,7 @@ export class AiConversationService {
               taskId: task.id,
               conversationId: conversation.id,
               inputBatchId: batch.id,
-              materialId: item.material.id,
+              sourceId: item.source.id,
             })
           }
         }
@@ -1039,14 +1137,14 @@ export class AiConversationService {
       mutate: async (tx, batch) => {
         this.assertWaitingBatch(batch)
         const requested = new Set(materialIds ?? [])
-        const failed = batch.materials.filter((item) => {
+        const failed = batch.sources.filter((item) => {
           if (!isFailedDependency(item)) {
             return false
           }
-          return requested.size === 0 || requested.has(item.materialId)
+          return requested.size === 0 || requested.has(item.sourceId)
         })
         if (materialIds && materialIds.length > 0 && failed.length === 0) {
-          const known = new Set(batch.materials.map((item) => item.materialId))
+          const known = new Set(batch.sources.map((item) => item.sourceId))
           if (materialIds.some((id) => !known.has(id))) {
             throw new NotFoundException('批次中不存在指定资料依赖')
           }
@@ -1054,14 +1152,14 @@ export class AiConversationService {
         for (const item of failed) {
           await this.materialService.startNewParseRun(tx, {
             organizationId,
-            materialId: item.materialId,
+            sourceId: item.sourceId,
           })
           await this.materialService.enqueueParseJob(tx, {
             organizationId,
             taskId,
             conversationId: batch.conversationId,
             inputBatchId: batch.id,
-            materialId: item.materialId,
+            sourceId: item.sourceId,
           })
         }
         const reloaded = await this.loadBatch(tx, batch.id)
@@ -1076,7 +1174,7 @@ export class AiConversationService {
             readyCount: progress.ready,
             totalCount: progress.total,
             failedCount: progress.failed,
-            failedMaterials: toFailedMaterialPayload(reloaded.materials),
+            failedMaterials: toFailedMaterialPayload(reloaded.sources),
           },
         })
         return { batch: reloaded, events: [statusEvent] }
@@ -1106,7 +1204,7 @@ export class AiConversationService {
         this.assertWaitingBatch(batch)
         const toRemove: string[] = []
         for (const id of materialIds) {
-          const dep = batch.materials.find((item) => item.materialId === id)
+          const dep = batch.sources.find((item) => item.sourceId === id)
           if (dep) {
             if (!isFailedDependency(dep)) {
               throw new ConflictException('只能移除解析失败的资料依赖')
@@ -1114,21 +1212,21 @@ export class AiConversationService {
             toRemove.push(id)
             continue
           }
-          const archived = await tx.departureMaterial.findFirst({
+          const archived = await tx.conversationSource.findFirst({
             where: {
               id,
-              taskId,
+              conversationId: batch.conversationId,
               organizationId: batch.organizationId,
             },
             select: { id: true },
           })
           if (!archived) {
-            throw new NotFoundException('发团资料档案不存在')
+            throw new NotFoundException('会话来源不存在')
           }
         }
         if (toRemove.length > 0) {
-          await tx.aiInputBatchMaterial.deleteMany({
-            where: { inputBatchId: batch.id, materialId: { in: toRemove } },
+          await tx.inputBatchSource.deleteMany({
+            where: { inputBatchId: batch.id, sourceId: { in: toRemove } },
           })
         }
         const published = await this.tryPromoteBatch(tx, batch.id)
@@ -1954,9 +2052,9 @@ export class AiConversationService {
       return []
     }
     const progress = materialProgressFromDeps(
-      batch.materials.map((item) => ({
+      batch.sources.map((item) => ({
         required: item.required,
-        parseResultVersion: item.parseResultVersion,
+        parseResultVersion: item.parseVersion,
         failed: isFailedDependency(item),
       })),
     )
@@ -1971,7 +2069,7 @@ export class AiConversationService {
               readyCount: progress.ready,
               totalCount: progress.total,
               failedCount: progress.failed,
-              failedMaterials: toFailedMaterialPayload(batch.materials),
+              failedMaterials: toFailedMaterialPayload(batch.sources),
             },
       })
       return [{ conversationId: batch.conversationId, eventId: statusEvent.id }]
@@ -2545,9 +2643,9 @@ function requireIdempotencyKey(idempotencyKey: string | undefined): string {
 
 function progressOf(batch: BatchWithMaterials) {
   return materialProgressFromDeps(
-    batch.materials.map((item) => ({
+    batch.sources.map((item) => ({
       required: item.required,
-      parseResultVersion: item.parseResultVersion,
+      parseResultVersion: item.parseVersion,
       failed: isFailedDependency(item),
     })),
   )

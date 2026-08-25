@@ -39,6 +39,7 @@ export interface ContextManifestInput {
   }>
   modelId: string
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
+  sourceVersions?: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>
   excerptDigests: ExcerptDigest[]
   truncationReasons?: string[]
   inputHash: string
@@ -65,6 +66,7 @@ export interface ContextManifestRecord {
   summaryVersion: null
   excerptDigests: ExcerptDigest[]
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
+  sourceVersions: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>
   budget: ContextBudgetRecord
   sections: ContextSectionUsage[]
 }
@@ -100,6 +102,10 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
       left.materialId.localeCompare(right.materialId) ||
       left.parseResultVersion - right.parseResultVersion,
   )
+  const sourceVersions = [...(input.sourceVersions ?? [])].sort(
+    (left, right) =>
+      left.sourceId.localeCompare(right.sourceId) || left.parseVersion - right.parseVersion,
+  )
   const excerptDigests = [...input.excerptDigests].sort(
     (left, right) =>
       left.materialId.localeCompare(right.materialId) ||
@@ -123,6 +129,7 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
     summaryVersion: null,
     excerptDigests,
     materialVersions,
+    sourceVersions,
     budget: { ...input.budget },
     sections: input.sections.map((section) => ({ ...section })),
   }

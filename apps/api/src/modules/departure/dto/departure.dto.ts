@@ -248,3 +248,14 @@ export class CopyDepartureDto {
   @IsString()
   notes?: string
 }
+
+export class RegisterDepartureAttachmentDto {
+  @IsString()
+  @IsNotEmpty()
+  sourceId!: string
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  parseVersion!: number
+}

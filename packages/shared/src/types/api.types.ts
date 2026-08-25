@@ -1017,7 +1017,9 @@ export interface SendAiConversationMessageResult {
   draft?: AiConversationDraftView
 }
 
-export type DepartureMaterialStatus =
+export type ConversationSourceKind = 'upload' | 'web_result' | 'tool_result' | 'generated_file'
+
+export type ConversationSourceStatus =
   | 'uploaded'
   | 'queued'
   | 'parsing'
@@ -1025,6 +1027,21 @@ export type DepartureMaterialStatus =
   | 'partially_available'
   | 'failed'
   | 'isolated'
+
+export interface ConversationSourceView {
+  id: string
+  kind: ConversationSourceKind
+  originalFilename: string
+  contentType: string
+  status: ConversationSourceStatus
+  statusVersion: number
+  sha256: string
+  sizeBytes: number
+  createdAt: string
+  latestParseVersion: number | null
+}
+
+export type DepartureMaterialStatus = ConversationSourceStatus
 
 export interface DepartureMaterialView {
   id: string
@@ -1036,6 +1053,19 @@ export interface DepartureMaterialView {
   sizeBytes: number
   createdAt: string
   latestResultVersion: number | null
+}
+
+export interface FormalDepartureAttachmentView {
+  id: string
+  departureId: string
+  sourceId: string | null
+  originalFilename: string
+  contentType: string
+  sha256: string
+  sizeBytes: number
+  parseVersion: number | null
+  contentDigest: string
+  createdAt: string
 }
 
 export type AiReviewableBasicInfoField =

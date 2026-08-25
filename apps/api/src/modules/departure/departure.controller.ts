@@ -17,6 +17,7 @@ import type {
   DepartureOperationsSheetSnapshot,
   DepartureRouteNamesResult,
   DepartureSummary,
+  FormalDepartureAttachmentView,
   DepartureIncomeRecordListResult,
   DepartureIncomeRecordSummary,
   RouteLedgerResult,
@@ -34,6 +35,7 @@ import {
   TransitionDepartureDto,
   UnarchiveDepartureDto,
   UpdateDepartureDto,
+  RegisterDepartureAttachmentDto,
 } from './dto/departure.dto'
 import { DepartureService } from './departure.service'
 import { DepartureOperationsSheetService } from './departure-operations-sheet.service'
@@ -213,6 +215,30 @@ export class DepartureController {
     res.setHeader('Content-Type', file.contentType)
     res.setHeader('Content-Disposition', buildOperationsSheetContentDisposition(file.filename))
     res.send(file.buffer)
+  }
+
+  @Get(':id/formal-attachments')
+  @RequireMenu('/departure')
+  listFormalAttachments(
+    @Req() request: { user: { organizationId: string } },
+    @Param('id') id: string,
+  ): Promise<FormalDepartureAttachmentView[]> {
+    return this.departureService.listFormalAttachments(request.user.organizationId, id)
+  }
+
+  @Post(':id/formal-attachments')
+  @RequireMenu('departure:write')
+  registerFormalAttachment(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('id') id: string,
+    @Body() dto: RegisterDepartureAttachmentDto,
+  ): Promise<FormalDepartureAttachmentView> {
+    return this.departureService.registerFormalAttachment(
+      request.user.organizationId,
+      request.user.userId,
+      id,
+      dto,
+    )
   }
 
   @Get(':id')

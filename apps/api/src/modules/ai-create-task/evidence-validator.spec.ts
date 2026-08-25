@@ -161,6 +161,38 @@ describe('validateEvidenceProposal', () => {
     expect(result).toMatchObject({ success: false, errors: [{ code: 'EXCERPT_NOT_FOUND' }] })
   })
 
+  it('accepts sourceId as an alias for a pinned conversation source', () => {
+    const result = validateEvidenceProposal({
+      proposal: proposal([
+        {
+          schemaVersion: 1,
+          kind: 'material_region',
+          locator: { sourceId: 'material-1', parseResultVersion: 2, pageNumber: 1 },
+          excerpt: '九月川西团 人数：12 人',
+        },
+      ]),
+      authority,
+      systemRules: {},
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      normalizedProposal: {
+        evidenceCatalog: [
+          {
+            kind: 'material_region',
+            locator: {
+              inputBatchId: 'batch-1',
+              materialId: 'material-1',
+              parseResultVersion: 2,
+              pageNumber: 1,
+            },
+          },
+        ],
+      },
+    })
+  })
+
   it('normalizes a pinned OCR material locator and keeps raw line quality signals', () => {
     const result = validateEvidenceProposal({
       proposal: proposal([

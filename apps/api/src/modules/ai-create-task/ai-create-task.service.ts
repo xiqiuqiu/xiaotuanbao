@@ -301,10 +301,9 @@ export class AiCreateTaskService {
     }
     const result = await this.materialService.getPinnedParseResult({
       organizationId: caller.organizationId,
-      taskId: caller.taskId,
       inputBatchId: caller.inputBatchId,
-      materialId: input.materialId,
-      parseResultVersion: input.parseResultVersion,
+      sourceId: input.materialId,
+      parseVersion: input.parseResultVersion,
       pageNumber: input.pageNumber,
     })
     return getMaterialParseResultOutputSchema.parse(result)
