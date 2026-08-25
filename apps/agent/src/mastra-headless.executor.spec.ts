@@ -37,6 +37,7 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(executor(IDENTITY)).resolves.toEqual({
       kind: 'completed',
       message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+      diagnostic: { usageSource: 'missing', toolSteps: [] },
     })
   })
 
@@ -52,6 +53,18 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(executor(IDENTITY)).resolves.toEqual({
       kind: 'awaiting_review',
       reviewPackage: REVIEW_ARGS,
+      diagnostic: {
+        usageSource: 'missing',
+        toolSteps: [
+          {
+            stepId: 'tool-1',
+            toolName: 'submitReviewPackage',
+            capabilityKey: 'departure.review-package.propose',
+            capabilityVersion: 1,
+            status: 'succeeded',
+          },
+        ],
+      },
     })
   })
 
@@ -66,6 +79,11 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(executor(IDENTITY)).resolves.toEqual({
       kind: 'failed',
       error: AiCollaborationError.fromCode('MODEL_TIMEOUT').toJSON(),
+      diagnostic: {
+        usageSource: 'missing',
+        errorCode: 'MODEL_TIMEOUT',
+        toolSteps: [],
+      },
     })
   })
 })

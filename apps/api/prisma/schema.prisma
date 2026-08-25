@@ -1536,6 +1536,14 @@ enum AiAgentAttemptStatus {
   @@map("ai_agent_attempt_status")
 }
 
+enum AiUsageSource {
+  missing
+  estimated
+  actual
+
+  @@map("ai_usage_source")
+}
+
 /// Agent 会话：跨刷新与跨设备稳定的交流容器，不要求归属任务。
 model AiConversation {
   id             String               @id @default(cuid())
@@ -1775,6 +1783,11 @@ model AiAgentAttempt {
   status            AiAgentAttemptStatus @default(running)
   resultJson        Json?                @map("result_json")
   errorCode         String?              @map("error_code")
+  mastraTraceId     String?              @map("mastra_trace_id")
+  usageSource       AiUsageSource        @default(missing) @map("usage_source")
+  usage             Json?
+  latencyMs         Int?                 @map("latency_ms")
+  toolSteps         Json                 @default("[]") @map("tool_steps")
   startedAt         DateTime             @default(now()) @map("started_at")
   endedAt           DateTime?            @map("ended_at")
   aiActions         AiAction[]

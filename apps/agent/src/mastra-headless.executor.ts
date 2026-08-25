@@ -1,6 +1,10 @@
 import {
+  AI_CREATE_CAPABILITY_DEFINITIONS,
+  CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
   submitReviewPackageModelInputSchema,
+  type HeadlessDiagnostic,
   type HeadlessExecutionRequest,
+  type ToolStepDiagnostic,
 } from '@xiaotuanbao/ai-contracts'
 import type { HeadlessExecutor } from './headless-execution'
 import { mapModelError } from './map-agent-error'
@@ -22,19 +26,79 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
     try {
       const userText = (await deps.readUserText(request)).trim() || FALLBACK_USER_TEXT
       const output = await deps.generate(userText)
+      const diagnostic = diagnosticFromGenerate(output.toolCalls)
       const reviewPackage = reviewPackageFromToolCalls(output.toolCalls)
       if (reviewPackage) {
-        return { kind: 'awaiting_review', reviewPackage }
+        return { kind: 'awaiting_review', reviewPackage, diagnostic }
       }
       const message = output.text?.trim() || '已处理当前说明。'
-      return { kind: 'completed', message }
+      return { kind: 'completed', message, diagnostic }
     } catch (error) {
+      const mapped = mapModelError(error)
       return {
         kind: 'failed',
-        error: mapModelError(error).toJSON(),
+        error: mapped.toJSON(),
+        diagnostic: {
+          usageSource: 'missing',
+          errorCode: mapped.code,
+          toolSteps: [],
+        },
       }
     }
   }
+}
+
+function diagnosticFromGenerate(toolCalls: unknown[] | undefined): HeadlessDiagnostic {
+  return {
+    usageSource: 'missing',
+    toolSteps: toolStepsFromCalls(toolCalls),
+  }
+}
+
+function toolStepsFromCalls(toolCalls: unknown[] | undefined): ToolStepDiagnostic[] {
+  if (!toolCalls) {
+    return []
+  }
+  return toolCalls.flatMap((call, index) => {
+    const toolName = toolNameFromCall(call)
+    if (!toolName) {
+      return []
+    }
+    const capability = capabilityForToolName(toolName)
+    return [
+      {
+        stepId: `tool-${index + 1}`,
+        toolName,
+        ...(capability
+          ? { capabilityKey: capability.key, capabilityVersion: capability.version }
+          : {}),
+        status: 'succeeded' as const,
+      },
+    ]
+  })
+}
+
+function capabilityForToolName(toolName: string) {
+  return [...AI_CREATE_CAPABILITY_DEFINITIONS, ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS].find(
+    (definition) => definition.toolName === toolName,
+  )
+}
+
+function toolNameFromCall(call: unknown): string | null {
+  if (!call || typeof call !== 'object') {
+    return null
+  }
+  const candidate = call as {
+    toolName?: unknown
+    payload?: { toolName?: unknown }
+  }
+  if (typeof candidate.toolName === 'string') {
+    return candidate.toolName
+  }
+  if (typeof candidate.payload?.toolName === 'string') {
+    return candidate.payload.toolName
+  }
+  return null
 }
 
 function reviewPackageFromToolCalls(toolCalls: unknown[] | undefined) {

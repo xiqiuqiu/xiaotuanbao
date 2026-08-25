@@ -1,6 +1,7 @@
 import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
+import { recoveryFromAttempt } from '../src/modules/ai-create-task/attempt-diagnostic'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import { authRequest, createTestApp, loginAs } from './helpers'
 import { startDeterministicHeadlessAgent } from './support/deterministic-headless-agent'
@@ -150,6 +151,22 @@ describe('Durable form review batch continuation (e2e) #319', () => {
           },
         ],
       },
+      diagnostic: {
+        mastraTraceId: `trace-${testPrefix}`,
+        usageSource: 'estimated' as const,
+        usage: { total: 88 },
+        latencyMs: 420,
+        toolSteps: [
+          {
+            stepId: 'step-1',
+            toolName: 'submitReviewPackage',
+            capabilityKey: 'departure.review-package.propose',
+            capabilityVersion: 1,
+            status: 'succeeded' as const,
+            latencyMs: 40,
+          },
+        ],
+      },
     }
   }
 
@@ -198,8 +215,50 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(pkg.inputBatchId).toBe(batch.id)
     const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
       where: { inputBatchId: batch.id },
+      include: { aiActions: true },
     })
     expect(attempt.status).toBe('completed')
+    expect(attempt.agentDefinitionKey).toBe('departure.create')
+    expect(attempt.agentDefinitionVersion).toBe(1)
+    expect(attempt.usageSource).toBe('estimated')
+    expect(attempt.usage).toEqual({ total: 88 })
+    expect(attempt.latencyMs).toBe(420)
+    expect(attempt.mastraTraceId).toBe(`trace-${testPrefix}`)
+    expect(attempt.toolSteps).toEqual([
+      expect.objectContaining({
+        toolName: 'submitReviewPackage',
+        capabilityKey: 'departure.review-package.propose',
+        capabilityVersion: 1,
+      }),
+    ])
+    expect(attempt.aiActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          attemptId: attempt.id,
+          capabilityKey: 'departure.review-package.propose',
+          capabilityVersion: 1,
+          agentDefinitionKey: 'departure.create',
+        }),
+      ]),
+    )
+    await prisma.aiAgentAttempt.update({
+      where: { id: attempt.id },
+      data: { mastraTraceId: null },
+    })
+    const recovered = await prisma.aiAgentAttempt.findUniqueOrThrow({ where: { id: attempt.id } })
+    expect(recovered.status).toBe('completed')
+    expect(recovered.mastraTraceId).toBeNull()
+    expect(
+      recoveryFromAttempt({
+        status: recovered.status,
+        errorCode: recovered.errorCode,
+        resultJson: recovered.resultJson,
+        mastraTraceId: recovered.mastraTraceId,
+      }),
+    ).toEqual({ recoverable: true, status: 'completed', errorCode: null })
+    expect(
+      await prisma.aiReviewPackage.findFirstOrThrow({ where: { id: pkg.id } }),
+    ).toMatchObject({ attemptId: attempt.id, status: 'pending' })
     const run = await prisma.aiCreateActivityRun.findFirstOrThrow({ where: { taskId } })
     expect(run.status).toBe('completed')
     expect(run.endedAt).not.toBeNull()
