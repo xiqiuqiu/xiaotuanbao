@@ -142,11 +142,24 @@ export class ConfirmAiReviewPackageDto {
   expectedPackageVersion!: number
 
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  decisionCommandId?: string
+
+  @IsOptional()
   @IsObject()
   corrections?: Record<string, string | number | null>
 }
 
 export class RejectAiReviewPackageDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedPackageVersion!: number
+}
+
+export class CancelAiReviewPackageDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)

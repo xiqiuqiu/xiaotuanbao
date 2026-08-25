@@ -130,7 +130,17 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 全部路由 → 权限 ke
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
     "requiredKey": "departure:write",
+    "route": "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/cancel",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
     "route": "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/confirm",
+  },
+  {
+    "guards": "JwtAuthGuard+MenuPermissionGuard",
+    "requiredKey": "departure:write",
+    "route": "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/regenerate",
   },
   {
     "guards": "JwtAuthGuard+MenuPermissionGuard",
@@ -978,7 +988,9 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/ai-create-tasks/:taskId/materials [departure:write]",
     "GET /api/ai-create-tasks/:taskId/materials/:materialId/preview [departure:write]",
     "PATCH /api/ai-create-tasks/:taskId/review-packages/:packageId [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/cancel [departure:write]",
     "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/confirm [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/regenerate [departure:write]",
     "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/reject [departure:write]",
     "GET /api/ai-create-tasks/assist-availability [—]",
     "POST /api/ai-create-tasks/assist-session [departure:write]",
@@ -1161,7 +1173,9 @@ exports[`权限矩阵 — 后端权威事实源 (e2e) 角色 × 可调端点 矩
     "GET /api/ai-create-tasks/:taskId/materials [departure:write]",
     "GET /api/ai-create-tasks/:taskId/materials/:materialId/preview [departure:write]",
     "PATCH /api/ai-create-tasks/:taskId/review-packages/:packageId [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/cancel [departure:write]",
     "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/confirm [departure:write]",
+    "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/regenerate [departure:write]",
     "POST /api/ai-create-tasks/:taskId/review-packages/:packageId/reject [departure:write]",
     "GET /api/ai-create-tasks/assist-availability [—]",
     "POST /api/ai-create-tasks/assist-session [departure:write]",

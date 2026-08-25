@@ -1690,6 +1690,230 @@ export class AiConversationService {
     return events
   }
 
+  async recordReviewConflict(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      taskId: string
+      userId: string
+      reviewPackageId: string
+      conversationId: string | null
+      inputBatchId: string | null
+      changeSummary: {
+        baseVersion: number
+        currentVersion: number
+        changedFieldKeys: readonly string[]
+      }
+    },
+  ): Promise<AiConversationEvent[]> {
+    await tx.taskActivity.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        actorUserId: params.userId,
+        kind: TaskActivityKind.progress,
+        summary: '审核方案因目标版本变化进入冲突',
+        payload: {
+          reviewPackageId: params.reviewPackageId,
+          changeSummary: params.changeSummary,
+        },
+      },
+    })
+    if (!params.conversationId) {
+      return []
+    }
+    const event = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: params.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: params.inputBatchId,
+        status: 'conflict',
+        reviewPackageId: params.reviewPackageId,
+        disposition: 'conflict',
+        changeSummary: params.changeSummary,
+      },
+    })
+    await tx.aiConversation.update({
+      where: { id: params.conversationId },
+      data: { updatedAt: new Date() },
+    })
+    return [event]
+  }
+
+  async finalizeReviewCancel(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      taskId: string
+      userId: string
+      reviewPackageId: string
+      inputBatchId: string | null
+      conversationId: string | null
+    },
+  ): Promise<AiConversationEvent[]> {
+    if (params.inputBatchId) {
+      await tx.aiInputBatch.updateMany({
+        where: {
+          id: params.inputBatchId,
+          status: AiInputBatchStatus.awaiting_review,
+        },
+        data: { status: AiInputBatchStatus.cancelled },
+      })
+    }
+    const remaining = await tx.aiReviewPackage.count({
+      where: {
+        taskId: params.taskId,
+        status: { in: ['pending', 'conflict'] },
+      },
+    })
+    if (remaining === 0) {
+      await tx.agentTask.updateMany({
+        where: { id: params.taskId, status: AgentTaskStatus.waiting },
+        data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+      })
+    }
+    await tx.taskActivity.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        actorUserId: params.userId,
+        kind: TaskActivityKind.progress,
+        summary: 'User 已取消指定审核等待项',
+        payload: { reviewPackageId: params.reviewPackageId },
+      },
+    })
+    const conversationId =
+      params.conversationId ??
+      (
+        await tx.aiInputBatch.findFirst({
+          where: { id: params.inputBatchId ?? '' },
+          select: { conversationId: true },
+        })
+      )?.conversationId
+    if (!conversationId) {
+      return []
+    }
+    const statusEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: params.inputBatchId,
+        status: AiInputBatchStatus.cancelled,
+        reason: 'review_package_cancelled',
+        reviewPackageId: params.reviewPackageId,
+      },
+    })
+    await tx.aiConversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    })
+    return [statusEvent]
+  }
+
+  async startReviewRegenerate(
+    tx: Prisma.TransactionClient,
+    params: {
+      organizationId: string
+      userId: string
+      taskId: string
+      reviewPackageId: string
+      conversationId: string
+      inputBatchId: string | null
+    },
+  ): Promise<AiConversationEvent[]> {
+    if (params.inputBatchId) {
+      await tx.aiInputBatch.updateMany({
+        where: {
+          id: params.inputBatchId,
+          status: AiInputBatchStatus.awaiting_review,
+        },
+        data: { status: AiInputBatchStatus.cancelled },
+      })
+    }
+    const statusEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: params.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: params.inputBatchId,
+        status: 'regenerating',
+        reviewPackageId: params.reviewPackageId,
+        disposition: 'regenerate',
+      },
+    })
+    const continuation = await tx.aiInputBatch.create({
+      data: {
+        organizationId: params.organizationId,
+        conversationId: params.conversationId,
+        creatorUserId: params.userId,
+        userMessageEventId: (
+          await tx.aiInputBatch.findFirstOrThrow({
+            where: params.inputBatchId
+              ? { id: params.inputBatchId }
+              : { conversationId: params.conversationId },
+            orderBy: { createdAt: 'desc' },
+            select: { userMessageEventId: true },
+          })
+        ).userMessageEventId,
+        conversationVersion: statusEvent.sequence,
+        status: AiInputBatchStatus.ready_for_agent,
+        taskLinks: {
+          create: {
+            organizationId: params.organizationId,
+            taskId: params.taskId,
+            role: InputBatchTaskRole.primary,
+          },
+        },
+      },
+    })
+    await tx.aiWorkflowJob.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        conversationId: params.conversationId,
+        inputBatchId: continuation.id,
+        type: AiWorkflowJobType.agent_batch,
+        jobKey: agentBatchJobKey(continuation.id),
+        status: AiWorkflowJobStatus.pending,
+      },
+    })
+    await tx.agentTask.updateMany({
+      where: { id: params.taskId, status: AgentTaskStatus.waiting },
+      data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+    })
+    await tx.taskActivity.create({
+      data: {
+        organizationId: params.organizationId,
+        taskId: params.taskId,
+        actorUserId: params.userId,
+        kind: TaskActivityKind.progress,
+        summary: 'User 基于最新状态重新生成审核方案',
+        payload: {
+          reviewPackageId: params.reviewPackageId,
+          inputBatchId: continuation.id,
+        },
+      },
+    })
+    const readyEvent = await this.appendEvent(tx, {
+      organizationId: params.organizationId,
+      conversationId: params.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: {
+        batchId: continuation.id,
+        status: AiInputBatchStatus.ready_for_agent,
+        reviewPackageId: params.reviewPackageId,
+        disposition: 'regenerate',
+      },
+    })
+    await tx.aiConversation.update({
+      where: { id: params.conversationId },
+      data: { updatedAt: new Date() },
+    })
+    return [statusEvent, readyEvent]
+  }
+
   async appendEvent(
     tx: Prisma.TransactionClient,
     params: {

@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common'
+import { ConflictException, ForbiddenException } from '@nestjs/common'
 import { AiCreatePhase, DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
 import { AgentTaskStatus, AiReviewPackageStatus } from '@prisma/client'
 import { AiCreateTaskService } from './ai-create-task.service'
@@ -218,5 +218,301 @@ describe('AiCreateTaskService.getTask statusVersion', () => {
     const result = await service.getTask(organizationId, userId, taskId)
 
     expect(result.statusVersion).toBe(2)
+  })
+
+  it('does not alias pendingReview to the newest package when several conversations are awaiting review', async () => {
+    const older = {
+      id: 'pkg-older',
+      organizationId,
+      taskId,
+      runId: 'run-older',
+      conversationId: 'conv-older',
+      inputBatchId: 'batch-older',
+      status: AiReviewPackageStatus.pending,
+      version: 1,
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      baselineSnapshot: {
+        mode: DepartureCreationDraftMode.MANUAL,
+        routeName: '川西',
+      },
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '旧会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '旧会话团名' }],
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    }
+    const newest = {
+      ...older,
+      id: 'pkg-newest',
+      runId: 'run-newest',
+      conversationId: 'conv-newest',
+      inputBatchId: 'batch-newest',
+      createdAt: new Date('2026-08-24T01:00:00.000Z'),
+      updatedAt: new Date('2026-08-24T01:00:00.000Z'),
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '新会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '新会话团名' }],
+        },
+      ],
+    }
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [newest, older],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.pendingReviews?.map((pkg) => pkg.id)).toEqual(['pkg-newest', 'pkg-older'])
+    expect(result.pendingReview).toBeNull()
+  })
+
+  it('keeps pendingReview when only one conversation is awaiting review', async () => {
+    const pending = {
+      id: 'pkg-only',
+      organizationId,
+      taskId,
+      runId: 'run-only',
+      conversationId: 'conv-only',
+      inputBatchId: 'batch-only',
+      status: AiReviewPackageStatus.pending,
+      version: 1,
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      baselineSnapshot: {
+        mode: DepartureCreationDraftMode.MANUAL,
+        routeName: '川西',
+      },
+      candidates: [
+        {
+          fieldKey: 'name',
+          proposedValue: '唯一会话团名',
+          clarity: 'clear',
+          status: 'pending',
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '唯一会话团名' }],
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    }
+    const findFirst = jest.fn().mockResolvedValue({
+      id: taskId,
+      currentPhase: AiCreatePhase.BASIC_INFO,
+      departureId: null,
+      createdAt: now,
+      updatedAt: now,
+      draft: {
+        id: 'draft-1',
+        taskId,
+        version: 1,
+        snapshot: {
+          mode: DepartureCreationDraftMode.MANUAL,
+          routeName: '川西',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      agentTask: {
+        id: taskId,
+        organizationId,
+        ownerUserId: userId,
+        status: AgentTaskStatus.active,
+        statusVersion: 2,
+        createdAt: now,
+        updatedAt: now,
+        reviewPackages: [pending],
+      },
+    })
+    const service = new AiCreateTaskService(
+      { aiCreateTask: { findFirst } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+
+    const result = await service.getTask(organizationId, userId, taskId)
+
+    expect(result.pendingReview).toMatchObject({ id: 'pkg-only' })
+    expect(result.pendingReviews).toHaveLength(1)
+  })
+})
+
+describe('AiCreateTaskService.regenerateReviewPackage owner check', () => {
+  const organizationId = 'org-1'
+  const ownerUserId = 'user-owner'
+  const peerUserId = 'user-peer'
+  const taskId = 'task-1'
+  const packageId = 'pkg-1'
+  const conversationId = 'conv-1'
+  const now = new Date('2026-08-24T00:00:00.000Z')
+
+  const snapshot = {
+    mode: DepartureCreationDraftMode.MANUAL,
+    routeName: '川西',
+    name: '原团名',
+    startDate: '2026-09-01',
+    endDate: '2026-09-05',
+    ownerUserId,
+    departureType: DepartureType.COMBINED,
+  }
+
+  const conflictPackage = {
+    id: packageId,
+    organizationId,
+    taskId,
+    runId: 'run-1',
+    conversationId,
+    inputBatchId: 'batch-1',
+    status: AiReviewPackageStatus.conflict,
+    version: 1,
+    confirmationUnit: 'basic_info_draft',
+    baseObjectVersion: 1,
+    baselineSnapshot: snapshot,
+    candidates: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const task = {
+    id: taskId,
+    agentTask: {
+      id: taskId,
+      organizationId,
+      ownerUserId,
+      status: AgentTaskStatus.active,
+      statusVersion: 2,
+      createdAt: now,
+      updatedAt: now,
+      reviewPackages: [],
+    },
+    currentPhase: AiCreatePhase.BASIC_INFO,
+    departureId: null,
+    createdAt: now,
+    updatedAt: now,
+    draft: {
+      id: 'draft-1',
+      taskId,
+      version: 1,
+      snapshot,
+      createdAt: now,
+      updatedAt: now,
+    },
+  }
+
+  function createService() {
+    const authService = {
+      getPermissionKeysForUser: jest.fn().mockResolvedValue(['departure:write']),
+    }
+    const conversationService = {
+      startReviewRegenerate: jest.fn().mockResolvedValue([]),
+      publish: jest.fn(),
+    }
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ lock: '1' }]),
+      aiCreateTask: {
+        findFirst: jest.fn().mockResolvedValue(task),
+        findFirstOrThrow: jest.fn().mockResolvedValue(task),
+      },
+      aiReviewPackage: {
+        findFirst: jest.fn().mockResolvedValue(conflictPackage),
+      },
+    }
+    const prisma = {
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      ),
+    }
+    const service = new AiCreateTaskService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      authService as never,
+      conversationService as never,
+      {} as never,
+    )
+    return { service, conversationService }
+  }
+
+  it('rejects a write-capable peer who is not the task owner', async () => {
+    const { service, conversationService } = createService()
+
+    try {
+      await service.regenerateReviewPackage(organizationId, peerUserId, taskId, packageId)
+      throw new Error('expected ForbiddenException')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ForbiddenException)
+      expect((error as ForbiddenException).message).toBe('仅任务创建者可处理审核包')
+    }
+
+    expect(conversationService.startReviewRegenerate).not.toHaveBeenCalled()
+  })
+
+  it('allows the task owner to enqueue regenerate for a conflicted package', async () => {
+    const { service, conversationService } = createService()
+
+    const result = await service.regenerateReviewPackage(
+      organizationId,
+      ownerUserId,
+      taskId,
+      packageId,
+    )
+
+    expect(conversationService.startReviewRegenerate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        userId: ownerUserId,
+        taskId,
+        reviewPackageId: packageId,
+        conversationId,
+      }),
+    )
+    expect(result.id).toBe(taskId)
   })
 })

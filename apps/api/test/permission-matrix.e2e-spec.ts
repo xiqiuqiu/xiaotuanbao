@@ -63,6 +63,8 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'PATCH', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/confirm' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/reject' },
+    { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/cancel' },
+    { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/regenerate' },
     { method: 'POST', path: '/api/departures/:id/copy' },
     { method: 'PATCH', path: '/api/departures/:id' },
     { method: 'DELETE', path: '/api/departures/:id' },

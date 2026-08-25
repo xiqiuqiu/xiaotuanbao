@@ -691,7 +691,7 @@ export class AiWorkflowProcessor {
       const pendingReview = await tx.aiReviewPackage.findFirst({
         where: {
           organizationId: job.organizationId,
-          taskId,
+          conversationId: job.conversationId,
           status: AiReviewPackageStatus.pending,
         },
         select: { id: true },
@@ -1727,7 +1727,9 @@ export class AiWorkflowProcessor {
         return projectPendingReviewPackage(tx, {
           organizationId: job.organizationId,
           taskId,
+          conversationId: job.conversationId,
           inputBatchId: job.inputBatchId,
+          attemptId,
           runId,
           reviewPackage,
           sourceActionId: action.id,

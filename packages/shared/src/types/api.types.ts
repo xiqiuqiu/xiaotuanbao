@@ -853,7 +853,12 @@ export interface AiCreateTaskSummary {
   createdAt: string
   updatedAt: string
   draft: DepartureCreationDraftView
+  /**
+   * Convenience alias when exactly one package is pending.
+   * Ambiguous when multiple conversations await review; use `pendingReviews`.
+   */
   pendingReview: AiReviewPackageView | null
+  pendingReviews?: AiReviewPackageView[]
 }
 
 export interface SaveDepartureCreationDraftDto {
@@ -1043,7 +1048,13 @@ export type AiReviewableBasicInfoField =
 
 export type AiCandidateClarity = 'clear' | 'needs_confirmation' | 'undetermined'
 
-export type AiReviewPackageStatus = 'pending' | 'confirmed' | 'rejected' | 'superseded'
+export type AiReviewPackageStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'rejected'
+  | 'superseded'
+  | 'conflict'
+  | 'cancelled'
 
 export type AiCandidateEvidence =
   | { kind: 'user_message'; excerpt: string; sequence: number; messageId?: string }
@@ -1069,9 +1080,18 @@ export interface AiReviewPackageView {
   id: string
   status: AiReviewPackageStatus
   confirmationUnit: 'basic_info_draft'
+  payloadSchema: 'departure.basic_info_draft@v1'
   baseObjectVersion: number
   version: number
   runId: string
+  conversationId: string | null
+  inputBatchId: string | null
+  attemptId: string | null
+  capabilityKey: string
+  capabilityVersion: number
+  targetKind: string
+  targetId: string
+  proposalHash: string
   candidates: AiReviewCandidateView[]
   /** 候选提交时的发团创建草稿快照；确认前自动保存不得覆盖这些候选字段。 */
   baselineSnapshot: DepartureCreationDraftSnapshot
@@ -1080,10 +1100,15 @@ export interface AiReviewPackageView {
 export interface ConfirmAiReviewPackageDto {
   expectedVersion: number
   expectedPackageVersion: number
+  decisionCommandId?: string
   corrections?: Partial<Record<AiReviewableBasicInfoField, string | number | null>>
 }
 
 export interface RejectAiReviewPackageDto {
+  expectedPackageVersion: number
+}
+
+export interface CancelAiReviewPackageDto {
   expectedPackageVersion: number
 }
 

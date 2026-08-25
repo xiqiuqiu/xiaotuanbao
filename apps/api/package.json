@@ -13,7 +13,7 @@
     "lint": "pnpm typecheck",
     "test": "jest --config jest.config.js",
     "test:e2e": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand",
-    "test:e2e:ci": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand --testPathIgnorePatterns=seed-demo-business-loop",
+    "test:e2e:ci": "NODE_OPTIONS='--max-old-space-size=4096' dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand --testPathIgnorePatterns=seed-demo-business-loop",
     "test:permission-matrix": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand test/permission-matrix.e2e-spec.ts",
     "test:permission-matrix:update": "dotenv -e ../../.env -- jest --config jest-e2e.config.js --runInBand -u test/permission-matrix.e2e-spec.ts",
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",

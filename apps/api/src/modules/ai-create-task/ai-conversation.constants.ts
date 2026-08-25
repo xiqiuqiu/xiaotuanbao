@@ -7,12 +7,17 @@ export const ABANDON_BATCH_OPERATION = 'ai-conversation.abandon-batch'
 export const STOP_BATCH_OPERATION = 'ai-conversation.stop-batch'
 export const STOP_TASKLESS_RUN_OPERATION = 'agent-conversation.stop-run'
 export const CANCEL_INTERACTION_OPERATION = 'ai-conversation.cancel-interaction'
+export const CANCEL_REVIEW_PACKAGE_OPERATION = 'ai-review-package.cancel'
 export const REVIEW_ALREADY_HANDLED_MESSAGE = '审核包已处理'
 export const CONVERSATION_TITLE_MAX_CHARS = 40
 
 /** 确认后续跑喂给模型的本轮原文；不写入 User 消息气泡。 */
 export const REVIEW_CONFIRM_CONTINUATION_TEXT =
   'User 已在中间表单确认上一轮审核建议。请调用 getTaskContext 读取最新草稿，简短说明已写入字段，只问一个当前阶段仍缺少的问题。不要再次提交已经写入草稿的字段。'
+
+/** 冲突后由 User 显式触发的重新生成原文；不写入 User 消息气泡。 */
+export const REVIEW_REGENERATE_TEXT =
+  'User 请求基于最新业务状态重新生成审核方案。请调用 getTaskContext 读取最新草稿并提交新的审核包。'
 
 /** 同一会话中仍会占用 Worker 的在途批次上限（排队 + 执行中，不含等待用户的暂停态）。 */
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3

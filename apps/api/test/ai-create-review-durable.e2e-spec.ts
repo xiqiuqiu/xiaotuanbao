@@ -457,7 +457,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     ).toHaveLength(0)
   })
 
-  it('keeps the package pending on package-version conflict, permission denial and draft conflict', async () => {
+  it('keeps the package pending on package-version conflict and permission denial, and marks target-version stale as conflict', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -508,14 +508,19 @@ describe('Durable form review batch continuation (e2e) #319', () => {
         expectedPackageVersion: pending.version,
       })
       .expect(409)
-    expect(staleDraft.body.message).toContain('旧候选不能覆盖新值')
+    expect(staleDraft.body.message).toContain('目标版本已变化')
+    expect(staleDraft.body.data.reviewConflict.status).toBe('stale_target_version')
 
     const after = await authRequest(app, coordinatorToken)
       .get(`/api/ai-create-tasks/${taskId}`)
       .expect(200)
-    expect(after.body.data.pendingReview.id).toBe(pending.id)
-    expect(after.body.data.pendingReview.status).toBe('pending')
+    expect(after.body.data.pendingReview).toBeNull()
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
+    const conflicted = await prisma.aiReviewPackage.findFirstOrThrow({
+      where: { id: pending.id },
+    })
+    expect(conflicted.status).toBe('conflict')
+    expect(conflicted.candidates).toEqual(expect.any(Array))
 
     const batch = await prisma.aiInputBatch.findFirst({
       where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
