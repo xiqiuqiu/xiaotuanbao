@@ -8,12 +8,22 @@ import {
   Post,
   Query,
   Req,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common'
-import type { AiConversationView, SendAiConversationMessageResult } from '@xiaotuanbao/shared'
+import type {
+  AiConversationView,
+  ConversationSourceView,
+  SendAiConversationMessageResult,
+} from '@xiaotuanbao/shared'
+import { FilesInterceptor } from '@nestjs/platform-express'
+import { memoryStorage } from 'multer'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { AiConversationService } from './ai-conversation.service'
+import { DepartureMaterialService } from './departure-material.service'
+import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-material.constants'
 import {
   ListAiConversationEventsQueryDto,
   SendAiConversationMessageDto,
@@ -22,13 +32,26 @@ import {
 @Controller('agent/conversations')
 @UseGuards(JwtAuthGuard, MenuPermissionGuard)
 export class AgentConversationController {
-  constructor(private readonly conversationService: AiConversationService) {}
+  constructor(
+    private readonly conversationService: AiConversationService,
+    private readonly materialService: DepartureMaterialService,
+  ) {}
 
   @Post('messages')
   @HttpCode(201)
+  @UseInterceptors(
+    FilesInterceptor('files', MATERIAL_MAX_FILES_PER_SEND, {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: MATERIAL_MAX_BYTES,
+        files: MATERIAL_MAX_FILES_PER_SEND,
+      },
+    }),
+  )
   sendFirstMessage(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Body() dto: SendAiConversationMessageDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<SendAiConversationMessageResult> {
     return this.conversationService.sendTasklessText(
@@ -43,15 +66,31 @@ export class AgentConversationController {
         interactionVersion: dto.interactionVersion,
         selectedOptionId: dto.selectedOptionId,
       },
+      (files ?? []).map((file) => ({
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        buffer: file.buffer,
+        size: file.size,
+      })),
     )
   }
 
   @Post(':conversationId/messages')
   @HttpCode(201)
+  @UseInterceptors(
+    FilesInterceptor('files', MATERIAL_MAX_FILES_PER_SEND, {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: MATERIAL_MAX_BYTES,
+        files: MATERIAL_MAX_FILES_PER_SEND,
+      },
+    }),
+  )
   sendMessage(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('conversationId') conversationId: string,
     @Body() dto: SendAiConversationMessageDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<SendAiConversationMessageResult> {
     return this.conversationService.sendTasklessText(
@@ -66,6 +105,12 @@ export class AgentConversationController {
         interactionVersion: dto.interactionVersion,
         selectedOptionId: dto.selectedOptionId,
       },
+      (files ?? []).map((file) => ({
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        buffer: file.buffer,
+        size: file.size,
+      })),
     )
   }
 
@@ -90,6 +135,18 @@ export class AgentConversationController {
     @Param('conversationId') conversationId: string,
   ): Promise<AiConversationView> {
     return this.conversationService.getTasklessConversation(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
+    )
+  }
+
+  @Get(':conversationId/sources')
+  listSources(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+  ): Promise<ConversationSourceView[]> {
+    return this.materialService.listConversationSources(
       request.user.organizationId,
       request.user.userId,
       conversationId,

@@ -21,7 +21,7 @@ type JobRow = {
   nextAttemptAt: Date
   organizationId: string
   taskId: string
-  materialId: string
+  sourceId: string
   type: AiWorkflowJobType
 }
 
@@ -30,7 +30,7 @@ const params = {
   taskId: 'task-1',
   conversationId: 'conv-1',
   inputBatchId: 'batch-new',
-  materialId: 'mat-1',
+  sourceId: 'mat-1',
 }
 
 function createStore(initial: JobRow | null) {
@@ -72,12 +72,12 @@ function createStore(initial: JobRow | null) {
         leaseExpiresAt: null,
         nextAttemptAt: new Date('2026-08-14T00:00:00.000Z'),
         type: AiWorkflowJobType.material_parse,
-        jobKey: materialParseJobKey(params.materialId),
+        jobKey: materialParseJobKey(params.sourceId),
         organizationId: params.organizationId,
         taskId: params.taskId,
         conversationId: params.conversationId,
         inputBatchId: params.inputBatchId,
-        materialId: params.materialId,
+        sourceId: params.sourceId,
         status: AiWorkflowJobStatus.pending,
         ...data,
       }
@@ -129,7 +129,7 @@ function createStore(initial: JobRow | null) {
 function terminalJob(status: AiWorkflowJobStatus): JobRow {
   return {
     id: 'job-1',
-    jobKey: materialParseJobKey(params.materialId),
+    jobKey: materialParseJobKey(params.sourceId),
     status,
     attemptCount: WORKFLOW_MAX_ATTEMPTS,
     inputBatchId: 'batch-old',
@@ -141,7 +141,7 @@ function terminalJob(status: AiWorkflowJobStatus): JobRow {
     nextAttemptAt: new Date('2026-08-14T00:00:00.000Z'),
     organizationId: params.organizationId,
     taskId: params.taskId,
-    materialId: params.materialId,
+    sourceId: params.sourceId,
     type: AiWorkflowJobType.material_parse,
   }
 }

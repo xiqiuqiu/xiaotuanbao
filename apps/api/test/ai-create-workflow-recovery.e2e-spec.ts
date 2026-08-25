@@ -339,7 +339,9 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     expect(job.lastErrorCode).toBe('PARSE_UNAVAILABLE')
     expect(job.attemptCount).toBe(1)
     expect(job.nextAttemptAt.getTime()).toBeGreaterThanOrEqual(before + workflowBackoffMs(1) - 500)
-    const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
+    const material = await prisma.conversationSource.findFirstOrThrow({
+      where: { conversationId: opened.conversation.id },
+    })
     expect(material.status).not.toBe('failed')
   })
 
@@ -510,8 +512,8 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
       data: { status: UserStatus.disabled },
     })
     await runJobs()
-    const material = await prisma.departureMaterial.findFirstOrThrow({
-      where: { taskId: opened.task.id },
+    const material = await prisma.conversationSource.findFirstOrThrow({
+      where: { conversationId: opened.conversation.id },
     })
     expect(['available', 'partially_available']).toContain(material.status)
   })

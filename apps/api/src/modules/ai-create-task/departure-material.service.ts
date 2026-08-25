@@ -10,12 +10,12 @@ import {
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
-  DepartureMaterialParseRunStatus,
-  DepartureMaterialStatus,
-  type DepartureMaterial,
+  ConversationSourceParseRunStatus,
+  ConversationSourceStatus,
+  type ConversationSource,
   type Prisma,
 } from '@prisma/client'
-import type { DepartureMaterialView, StoredObjectSummary } from '@xiaotuanbao/shared'
+import type { ConversationSourceView, StoredObjectSummary } from '@xiaotuanbao/shared'
 import { buildMaterialParseIndex, projectParseResultPages } from '@xiaotuanbao/ai-contracts'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { StoredObjectService } from '../stored-object/stored-object.service'
@@ -28,9 +28,9 @@ import {
 } from './departure-material.constants'
 import { ParseWorkerClient } from './parse-worker.client'
 
-const CONSUMABLE: DepartureMaterialStatus[] = [
-  DepartureMaterialStatus.available,
-  DepartureMaterialStatus.partially_available,
+const CONSUMABLE: ConversationSourceStatus[] = [
+  ConversationSourceStatus.available,
+  ConversationSourceStatus.partially_available,
 ]
 
 export type IncomingMaterialFile = {
@@ -40,9 +40,10 @@ export type IncomingMaterialFile = {
   size: number
 }
 
-export type ArchivedMaterial = {
-  material: DepartureMaterial
-  parseResultVersion: number | null
+export type ArchivedSource = {
+  source: ConversationSource
+  parseVersion: number | null
+  contentDigest: string
   needsParseJob: boolean
   consumedStoredObjectId: string | null
 }
@@ -93,7 +94,7 @@ export class DepartureMaterialService {
   async prepareUploads(params: {
     organizationId: string
     userId: string
-    taskId: string
+    conversationId?: string
     files: IncomingMaterialFile[]
   }): Promise<PreparedMaterialUploads> {
     const storedByFileKey = new Map<string, StoredObjectSummary>()
@@ -101,19 +102,21 @@ export class DepartureMaterialService {
     try {
       for (const file of params.files) {
         const contentType = (file.mimetype ?? '').toLowerCase()
-        const existing = await this.prisma.departureMaterial.findUnique({
-          where: {
-            taskId_sha256_sizeBytes_contentType: {
-              taskId: params.taskId,
-              sha256: this.sha256(file.buffer),
-              sizeBytes: file.buffer.byteLength,
-              contentType,
+        if (params.conversationId) {
+          const existing = await this.prisma.conversationSource.findUnique({
+            where: {
+              conversationId_sha256_sizeBytes_contentType: {
+                conversationId: params.conversationId,
+                sha256: this.sha256(file.buffer),
+                sizeBytes: file.buffer.byteLength,
+                contentType,
+              },
             },
-          },
-          select: { id: true },
-        })
-        if (existing) {
-          continue
+            select: { id: true },
+          })
+          if (existing) {
+            continue
+          }
         }
         const stored = await this.storedObjectService.upload(
           params.organizationId,
@@ -143,22 +146,22 @@ export class DepartureMaterialService {
     }
   }
 
-  async archiveForTask(
+  async archiveForConversation(
     tx: Prisma.TransactionClient,
     params: {
       organizationId: string
       userId: string
-      taskId: string
+      conversationId: string
       file: IncomingMaterialFile
       stored?: StoredObjectSummary
     },
-  ): Promise<ArchivedMaterial> {
+  ): Promise<ArchivedSource> {
     const contentType = (params.file.mimetype ?? '').toLowerCase()
     const sha256 = this.sha256(params.file.buffer)
-    const existing = await tx.departureMaterial.findUnique({
+    const existing = await tx.conversationSource.findUnique({
       where: {
-        taskId_sha256_sizeBytes_contentType: {
-          taskId: params.taskId,
+        conversationId_sha256_sizeBytes_contentType: {
+          conversationId: params.conversationId,
           sha256,
           sizeBytes: params.file.buffer.byteLength,
           contentType,
@@ -166,14 +169,14 @@ export class DepartureMaterialService {
       },
       include: {
         parseRuns: {
-          where: { status: DepartureMaterialParseRunStatus.succeeded },
+          where: { status: ConversationSourceParseRunStatus.succeeded },
           orderBy: { resultVersion: 'desc' },
           take: 1,
         },
       },
     })
     if (existing) {
-      return reusedMaterial(existing)
+      return reusedSource(existing)
     }
 
     const stored = params.stored
@@ -182,40 +185,42 @@ export class DepartureMaterialService {
     }
 
     try {
-      const material = await tx.departureMaterial.create({
+      const source = await tx.conversationSource.create({
         data: {
           organizationId: params.organizationId,
-          taskId: params.taskId,
+          conversationId: params.conversationId,
+          kind: 'upload',
           storedObjectId: stored.id,
           originalFilename: stored.originalFilename,
           contentType,
           sizeBytes: params.file.buffer.byteLength,
           sha256,
-          status: DepartureMaterialStatus.queued,
+          status: ConversationSourceStatus.queued,
           createdByUserId: params.userId,
         },
       })
-      await tx.departureMaterialParseRun.create({
+      await tx.conversationSourceParseRun.create({
         data: {
           organizationId: params.organizationId,
-          materialId: material.id,
-          status: DepartureMaterialParseRunStatus.queued,
+          sourceId: source.id,
+          status: ConversationSourceParseRunStatus.queued,
           resultVersion: 1,
           parserVersions: {},
         },
       })
       return {
-        material,
-        parseResultVersion: null,
+        source,
+        parseVersion: null,
+        contentDigest: sha256,
         needsParseJob: true,
         consumedStoredObjectId: stored.id,
       }
     } catch (error) {
       if (isUniqueViolation(error)) {
-        const raced = await tx.departureMaterial.findUniqueOrThrow({
+        const raced = await tx.conversationSource.findUniqueOrThrow({
           where: {
-            taskId_sha256_sizeBytes_contentType: {
-              taskId: params.taskId,
+            conversationId_sha256_sizeBytes_contentType: {
+              conversationId: params.conversationId,
               sha256,
               sizeBytes: params.file.buffer.byteLength,
               contentType,
@@ -223,13 +228,13 @@ export class DepartureMaterialService {
           },
           include: {
             parseRuns: {
-              where: { status: DepartureMaterialParseRunStatus.succeeded },
+              where: { status: ConversationSourceParseRunStatus.succeeded },
               orderBy: { resultVersion: 'desc' },
               take: 1,
             },
           },
         })
-        return reusedMaterial(raced)
+        return reusedSource(raced)
       }
       throw error
     }
@@ -239,21 +244,21 @@ export class DepartureMaterialService {
     tx: Prisma.TransactionClient,
     params: {
       organizationId: string
-      taskId: string
+      taskId?: string | null
       conversationId: string
       inputBatchId: string
-      materialId: string
+      sourceId: string
     },
   ): Promise<void> {
-    const jobKey = materialParseJobKey(params.materialId)
+    const jobKey = materialParseJobKey(params.sourceId)
     await tx.aiWorkflowJob.upsert({
       where: { jobKey },
       create: {
         organizationId: params.organizationId,
-        taskId: params.taskId,
+        taskId: params.taskId ?? undefined,
         conversationId: params.conversationId,
         inputBatchId: params.inputBatchId,
-        materialId: params.materialId,
+        sourceId: params.sourceId,
         type: AiWorkflowJobType.material_parse,
         jobKey,
         status: AiWorkflowJobStatus.pending,
@@ -281,71 +286,145 @@ export class DepartureMaterialService {
     })
   }
 
-  async list(organizationId: string, userId: string, taskId: string): Promise<DepartureMaterialView[]> {
-    await this.assertOwnedTask(organizationId, userId, taskId)
-    const materials = await this.prisma.departureMaterial.findMany({
-      where: { organizationId, taskId },
+  async list(
+    organizationId: string,
+    userId: string,
+    taskId: string,
+  ): Promise<import('@xiaotuanbao/shared').DepartureMaterialView[]> {
+    const sources = await this.prisma.conversationSource.findMany({
+      where: {
+        organizationId,
+        conversation: {
+          creatorUserId: userId,
+          taskLinks: { some: { taskId } },
+        },
+      },
       orderBy: { createdAt: 'asc' },
       include: {
         parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
       },
     })
-    return materials.map((material) =>
-      toMaterialView(
-        material,
-        material.parseRuns[0]?.status === DepartureMaterialParseRunStatus.succeeded
-          ? material.parseRuns[0].resultVersion
+    return sources.map((source) => {
+      const view = toSourceView(
+        source,
+        source.parseRuns[0]?.status === ConversationSourceParseRunStatus.succeeded
+          ? source.parseRuns[0].resultVersion
+          : null,
+      )
+      return {
+        id: view.id,
+        originalFilename: view.originalFilename,
+        contentType: view.contentType,
+        status: view.status,
+        statusVersion: view.statusVersion,
+        sha256: view.sha256,
+        sizeBytes: view.sizeBytes,
+        createdAt: view.createdAt,
+        latestResultVersion: view.latestParseVersion,
+      }
+    })
+  }
+
+  async preview(organizationId: string, userId: string, taskId: string, materialId: string) {
+    const source = await this.prisma.conversationSource.findFirst({
+      where: {
+        id: materialId,
+        organizationId,
+        conversation: {
+          creatorUserId: userId,
+          taskLinks: { some: { taskId } },
+        },
+      },
+    })
+    if (!source) {
+      throw new NotFoundException('会话来源不存在')
+    }
+    return this.storedObjectService.download(organizationId, source.storedObjectId)
+  }
+
+  async listConversationSources(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+  ): Promise<ConversationSourceView[]> {
+    const conversation = await this.prisma.aiConversation.findFirst({
+      where: { id: conversationId, organizationId, creatorUserId: userId },
+      select: { id: true },
+    })
+    if (!conversation) {
+      throw new NotFoundException('会话不存在')
+    }
+    const sources = await this.prisma.conversationSource.findMany({
+      where: { organizationId, conversationId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
+      },
+    })
+    return sources.map((source) =>
+      toSourceView(
+        source,
+        source.parseRuns[0]?.status === ConversationSourceParseRunStatus.succeeded
+          ? source.parseRuns[0].resultVersion
           : null,
       ),
     )
   }
 
-  async preview(organizationId: string, userId: string, taskId: string, materialId: string) {
-    await this.assertOwnedTask(organizationId, userId, taskId)
-    const material = await this.prisma.departureMaterial.findFirst({
-      where: { id: materialId, organizationId, taskId },
+  async previewConversationSource(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    sourceId: string,
+  ) {
+    const source = await this.prisma.conversationSource.findFirst({
+      where: {
+        id: sourceId,
+        organizationId,
+        conversationId,
+        conversation: { creatorUserId: userId },
+      },
     })
-    if (!material) {
-      throw new NotFoundException('发团资料档案不存在')
+    if (!source) {
+      throw new NotFoundException('会话来源不存在')
     }
-    return this.storedObjectService.download(organizationId, material.storedObjectId)
+    return this.storedObjectService.download(organizationId, source.storedObjectId)
   }
 
   async getPinnedParseResult(params: {
     organizationId: string
-    taskId: string
     inputBatchId: string
-    materialId: string
-    parseResultVersion: number
+    sourceId: string
+    parseVersion: number
     pageNumber?: number
   }) {
-    const dependency = await this.prisma.aiInputBatchMaterial.findFirst({
+    const dependency = await this.prisma.inputBatchSource.findFirst({
       where: {
         organizationId: params.organizationId,
         inputBatchId: params.inputBatchId,
-        materialId: params.materialId,
-        parseResultVersion: params.parseResultVersion,
+        sourceId: params.sourceId,
+        parseVersion: params.parseVersion,
       },
     })
     if (!dependency) {
       throw new NotFoundException('该批次未固定此解析版本')
     }
-    const run = await this.prisma.departureMaterialParseRun.findFirst({
+    const run = await this.prisma.conversationSourceParseRun.findFirst({
       where: {
-        materialId: params.materialId,
-        resultVersion: params.parseResultVersion,
-        status: DepartureMaterialParseRunStatus.succeeded,
+        sourceId: params.sourceId,
+        resultVersion: params.parseVersion,
+        status: ConversationSourceParseRunStatus.succeeded,
       },
     })
     if (!run) {
-      throw new NotFoundException('发团资料解析结果不存在')
+      throw new NotFoundException('会话来源解析结果不存在')
     }
     const projected = projectParseResultPages(mapParsePages(run.pages), params.pageNumber)
     if (params.pageNumber != null && projected.pages.length === 0) {
-      throw new NotFoundException('发团资料解析页不存在')
+      throw new NotFoundException('会话来源解析页不存在')
     }
     return {
-      materialId: params.materialId,
+      materialId: params.sourceId,
       parseResultVersion: run.resultVersion,
       pageCount: projected.pageCount,
       truncated: projected.truncated,
@@ -354,37 +433,37 @@ export class DepartureMaterialService {
   }
 
   async loadPinnedParseIndex(organizationId: string, inputBatchId: string) {
-    const deps = await this.prisma.aiInputBatchMaterial.findMany({
+    const deps = await this.prisma.inputBatchSource.findMany({
       where: {
         organizationId,
         inputBatchId,
         required: true,
-        parseResultVersion: { not: null },
+        parseVersion: { not: null },
       },
       orderBy: { createdAt: 'asc' },
     })
     if (deps.length === 0) {
       return { materials: [], truncationReasons: [] as string[] }
     }
-    const runs = await this.prisma.departureMaterialParseRun.findMany({
+    const runs = await this.prisma.conversationSourceParseRun.findMany({
       where: {
-        status: DepartureMaterialParseRunStatus.succeeded,
+        status: ConversationSourceParseRunStatus.succeeded,
         OR: deps.map((item) => ({
-          materialId: item.materialId,
-          resultVersion: item.parseResultVersion as number,
+          sourceId: item.sourceId,
+          resultVersion: item.parseVersion as number,
         })),
       },
-      select: { materialId: true, resultVersion: true, pages: true },
+      select: { sourceId: true, resultVersion: true, pages: true },
     })
     const runByKey = new Map(
-      runs.map((run) => [`${run.materialId}:${run.resultVersion}`, run] as const),
+      runs.map((run) => [`${run.sourceId}:${run.resultVersion}`, run] as const),
     )
     return buildMaterialParseIndex(
       deps.map((item) => {
-        const parseResultVersion = item.parseResultVersion as number
-        const run = runByKey.get(`${item.materialId}:${parseResultVersion}`)
+        const parseResultVersion = item.parseVersion as number
+        const run = runByKey.get(`${item.sourceId}:${parseResultVersion}`)
         return {
-          materialId: item.materialId,
+          materialId: item.sourceId,
           parseResultVersion,
           pages: mapParsePages(run?.pages),
         }
@@ -395,71 +474,75 @@ export class DepartureMaterialService {
   async executeParseJob(job: {
     id: string
     organizationId: string
-    materialId: string | null
-  }): Promise<{ materialId: string; parseResultVersion: number } | null> {
-    if (!job.materialId) {
+    sourceId: string | null
+  }): Promise<{ sourceId: string; parseVersion: number; contentDigest: string } | null> {
+    if (!job.sourceId) {
       return null
     }
-    const material = await this.prisma.departureMaterial.findFirst({
-      where: { id: job.materialId, organizationId: job.organizationId },
+    const source = await this.prisma.conversationSource.findFirst({
+      where: { id: job.sourceId, organizationId: job.organizationId },
       include: {
         parseRuns: { orderBy: { resultVersion: 'desc' }, take: 1 },
       },
     })
-    if (!material) {
+    if (!source) {
       return null
     }
-    const run = material.parseRuns[0]
-    if (!run || run.status === DepartureMaterialParseRunStatus.failed) {
+    const run = source.parseRuns[0]
+    if (!run || run.status === ConversationSourceParseRunStatus.failed) {
       return null
     }
     if (
-      run.status === DepartureMaterialParseRunStatus.succeeded &&
-      CONSUMABLE.includes(material.status)
+      run.status === ConversationSourceParseRunStatus.succeeded &&
+      CONSUMABLE.includes(source.status)
     ) {
       await this.finishParseJob(job.id)
-      return { materialId: material.id, parseResultVersion: run.resultVersion }
+      return {
+        sourceId: source.id,
+        parseVersion: run.resultVersion,
+        contentDigest: source.sha256,
+      }
     }
 
-    await this.prisma.departureMaterial.update({
-      where: { id: material.id },
-      data: { status: DepartureMaterialStatus.parsing, statusVersion: { increment: 1 } },
+    await this.prisma.conversationSource.update({
+      where: { id: source.id },
+      data: { status: ConversationSourceStatus.parsing, statusVersion: { increment: 1 } },
     })
-    await this.prisma.departureMaterialParseRun.update({
+    await this.prisma.conversationSourceParseRun.update({
       where: { id: run.id },
-      data: { status: DepartureMaterialParseRunStatus.running, startedAt: new Date() },
+      data: { status: ConversationSourceParseRunStatus.running, startedAt: new Date() },
     })
 
-    const stored = await this.storedObjectService.download(job.organizationId, material.storedObjectId)
+    const stored = await this.storedObjectService.download(job.organizationId, source.storedObjectId)
     const parsed = await this.parseWorkerClient.parse({
       buffer: stored.buffer,
       filename: stored.filename,
-      contentType: stored.contentType || material.contentType,
+      contentType: stored.contentType || source.contentType,
     })
     const failedPages = parsed.pages.filter((page) => !page.text.trim()).length
     const status =
       parsed.pages.length > 0 && failedPages > 0 && failedPages < parsed.pages.length
-        ? DepartureMaterialStatus.partially_available
+        ? ConversationSourceStatus.partially_available
         : parsed.pages.some((page) => page.text.trim())
-          ? DepartureMaterialStatus.available
-          : DepartureMaterialStatus.failed
+          ? ConversationSourceStatus.available
+          : ConversationSourceStatus.failed
     const resultVersion = run.resultVersion
     await this.prisma.$transaction(async (tx) => {
-      await tx.departureMaterialParseRun.update({
+      await tx.conversationSourceParseRun.update({
         where: { id: run.id },
         data: {
           status:
-            status === DepartureMaterialStatus.failed
-              ? DepartureMaterialParseRunStatus.failed
-              : DepartureMaterialParseRunStatus.succeeded,
+            status === ConversationSourceStatus.failed
+              ? ConversationSourceParseRunStatus.failed
+              : ConversationSourceParseRunStatus.succeeded,
           pages: parsed.pages as unknown as Prisma.InputJsonValue,
           parserVersions: parsed.parserVersions as Prisma.InputJsonValue,
-          errorCode: status === DepartureMaterialStatus.failed ? PARSE_FAILED_ERROR_CODE : null,
+          errorCode: status === ConversationSourceStatus.failed ? PARSE_FAILED_ERROR_CODE : null,
           endedAt: new Date(),
         },
       })
-      await tx.departureMaterial.update({
-        where: { id: material.id },
+      await tx.conversationSource.update({
+        where: { id: source.id },
         data: { status, statusVersion: { increment: 1 } },
       })
       if (CONSUMABLE.includes(status)) {
@@ -474,34 +557,38 @@ export class DepartureMaterialService {
       }
     })
     if (CONSUMABLE.includes(status)) {
-      return { materialId: material.id, parseResultVersion: resultVersion }
+      return {
+        sourceId: source.id,
+        parseVersion: resultVersion,
+        contentDigest: source.sha256,
+      }
     }
     return null
   }
 
-  async markParseTerminalFailure(materialId: string): Promise<void> {
+  async markParseTerminalFailure(sourceId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      await tx.departureMaterial.updateMany({
+      await tx.conversationSource.updateMany({
         where: {
-          id: materialId,
+          id: sourceId,
           status: {
-            in: [DepartureMaterialStatus.queued, DepartureMaterialStatus.parsing],
+            in: [ConversationSourceStatus.queued, ConversationSourceStatus.parsing],
           },
         },
-        data: { status: DepartureMaterialStatus.failed, statusVersion: { increment: 1 } },
+        data: { status: ConversationSourceStatus.failed, statusVersion: { increment: 1 } },
       })
-      await tx.departureMaterialParseRun.updateMany({
+      await tx.conversationSourceParseRun.updateMany({
         where: {
-          materialId,
+          sourceId,
           status: {
             in: [
-              DepartureMaterialParseRunStatus.queued,
-              DepartureMaterialParseRunStatus.running,
+              ConversationSourceParseRunStatus.queued,
+              ConversationSourceParseRunStatus.running,
             ],
           },
         },
         data: {
-          status: DepartureMaterialParseRunStatus.failed,
+          status: ConversationSourceParseRunStatus.failed,
           errorCode: PARSE_FAILED_ERROR_CODE,
           endedAt: new Date(),
         },
@@ -509,12 +596,16 @@ export class DepartureMaterialService {
     })
   }
 
-  async pinMaterialVersion(materialId: string, parseResultVersion: number): Promise<string[]> {
-    const waiting = await this.prisma.aiInputBatchMaterial.findMany({
+  async pinSourceVersion(
+    sourceId: string,
+    parseVersion: number,
+    contentDigest: string,
+  ): Promise<string[]> {
+    const waiting = await this.prisma.inputBatchSource.findMany({
       where: {
-        materialId,
+        sourceId,
         required: true,
-        parseResultVersion: null,
+        parseVersion: null,
         inputBatch: { status: AiInputBatchStatus.waiting_for_materials },
       },
       select: { id: true, inputBatchId: true },
@@ -522,34 +613,34 @@ export class DepartureMaterialService {
     if (waiting.length === 0) {
       return []
     }
-    await this.prisma.aiInputBatchMaterial.updateMany({
+    await this.prisma.inputBatchSource.updateMany({
       where: { id: { in: waiting.map((item) => item.id) } },
-      data: { parseResultVersion },
+      data: { parseVersion, contentDigest },
     })
     return [...new Set(waiting.map((item) => item.inputBatchId))]
   }
 
   async startNewParseRun(
     tx: Prisma.TransactionClient,
-    params: { organizationId: string; materialId: string },
+    params: { organizationId: string; sourceId: string },
   ): Promise<number> {
-    const latest = await tx.departureMaterialParseRun.findFirst({
-      where: { materialId: params.materialId },
+    const latest = await tx.conversationSourceParseRun.findFirst({
+      where: { sourceId: params.sourceId },
       orderBy: { resultVersion: 'desc' },
     })
     const resultVersion = (latest?.resultVersion ?? 0) + 1
-    await tx.departureMaterialParseRun.create({
+    await tx.conversationSourceParseRun.create({
       data: {
         organizationId: params.organizationId,
-        materialId: params.materialId,
-        status: DepartureMaterialParseRunStatus.queued,
+        sourceId: params.sourceId,
+        status: ConversationSourceParseRunStatus.queued,
         resultVersion,
         parserVersions: {},
       },
     })
-    await tx.departureMaterial.update({
-      where: { id: params.materialId },
-      data: { status: DepartureMaterialStatus.queued, statusVersion: { increment: 1 } },
+    await tx.conversationSource.update({
+      where: { id: params.sourceId },
+      data: { status: ConversationSourceStatus.queued, statusVersion: { increment: 1 } },
     })
     return resultVersion
   }
@@ -560,44 +651,33 @@ export class DepartureMaterialService {
       data: { status: AiWorkflowJobStatus.succeeded, leaseExpiresAt: null },
     })
   }
-
-  private async assertOwnedTask(organizationId: string, userId: string, taskId: string) {
-    const task = await this.prisma.aiCreateTask.findFirst({
-      where: {
-        id: taskId,
-        agentTask: { organizationId, ownerUserId: userId },
-      },
-    })
-    if (!task) {
-      throw new NotFoundException('AI 建团任务不存在')
-    }
-    return task
-  }
 }
 
-export function toMaterialView(
-  material: {
+export function toSourceView(
+  source: {
     id: string
+    kind: string
     originalFilename: string
     contentType: string
-    status: DepartureMaterialStatus
+    status: ConversationSourceStatus
     statusVersion: number
     sha256: string
     sizeBytes: number
     createdAt: Date
   },
-  latestResultVersion: number | null,
-): DepartureMaterialView {
+  latestParseVersion: number | null,
+): ConversationSourceView {
   return {
-    id: material.id,
-    originalFilename: material.originalFilename,
-    contentType: material.contentType,
-    status: material.status,
-    statusVersion: material.statusVersion,
-    sha256: material.sha256,
-    sizeBytes: material.sizeBytes,
-    createdAt: material.createdAt.toISOString(),
-    latestResultVersion,
+    id: source.id,
+    kind: source.kind as ConversationSourceView['kind'],
+    originalFilename: source.originalFilename,
+    contentType: source.contentType,
+    status: source.status,
+    statusVersion: source.statusVersion,
+    sha256: source.sha256,
+    sizeBytes: source.sizeBytes,
+    createdAt: source.createdAt.toISOString(),
+    latestParseVersion,
   }
 }
 
@@ -628,14 +708,15 @@ function mapParsePages(pages: unknown): Array<{
   })
 }
 
-function reusedMaterial(material: DepartureMaterial & {
+function reusedSource(source: ConversationSource & {
   parseRuns: Array<{ resultVersion: number }>
-}): ArchivedMaterial {
-  const version = material.parseRuns[0]?.resultVersion ?? null
-  const ready = CONSUMABLE.includes(material.status) && version != null
+}): ArchivedSource {
+  const version = source.parseRuns[0]?.resultVersion ?? null
+  const ready = CONSUMABLE.includes(source.status) && version != null
   return {
-    material,
-    parseResultVersion: ready ? version : null,
+    source,
+    parseVersion: ready ? version : null,
+    contentDigest: source.sha256,
     needsParseJob: !ready,
     consumedStoredObjectId: null,
   }

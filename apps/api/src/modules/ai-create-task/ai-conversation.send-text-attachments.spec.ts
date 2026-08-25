@@ -6,7 +6,7 @@ import {
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
-  DepartureMaterialStatus,
+  ConversationSourceStatus,
 } from '@prisma/client'
 import { AiConversationService } from './ai-conversation.service'
 import { DepartureMaterialService } from './departure-material.service'
@@ -62,12 +62,12 @@ function createHarness(options?: {
     status: AiConversationStatus.open,
   }
 
-  const departureMaterial = {
+  const conversationSource = {
     findUnique: jest.fn().mockResolvedValue(null),
     findUniqueOrThrow: jest.fn(),
     create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 'mat-1',
-      status: DepartureMaterialStatus.queued,
+      status: ConversationSourceStatus.queued,
       statusVersion: 1,
       createdAt: now,
       updatedAt: now,
@@ -75,11 +75,11 @@ function createHarness(options?: {
     })),
     update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 'mat-1',
-      status: DepartureMaterialStatus.queued,
+      status: ConversationSourceStatus.queued,
       ...data,
     })),
   }
-  const departureMaterialParseRun = {
+  const conversationSourceParseRun = {
     findFirst: jest.fn().mockResolvedValue(null),
     create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
       id: 'run-1',
@@ -114,11 +114,11 @@ function createHarness(options?: {
         data,
       }: {
         data: {
-          materials?: {
+          sources?: {
             create: Array<{
               required: boolean
-              parseResultVersion: number | null
-              materialId: string
+              parseVersion: number | null
+              sourceId: string
               organizationId: string
             }>
           }
@@ -131,11 +131,11 @@ function createHarness(options?: {
           createdAt: now,
           updatedAt: now,
           ...data,
-          materials: (data.materials?.create ?? []).map((row, index) => ({
+          sources: (data.sources?.create ?? []).map((row, index) => ({
             id: `dep-${index}`,
             required: row.required,
-            parseResultVersion: row.parseResultVersion,
-            materialId: row.materialId,
+            parseVersion: row.parseVersion,
+            sourceId: row.sourceId,
             organizationId: row.organizationId,
           })),
         }
@@ -199,8 +199,8 @@ function createHarness(options?: {
     aiInputBatch,
     aiConversationEvent,
     aiConversationInteraction,
-    departureMaterial,
-    departureMaterialParseRun,
+    conversationSource,
+    conversationSourceParseRun,
     aiWorkflowJob,
     aiConversationDraft,
     taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
@@ -208,7 +208,7 @@ function createHarness(options?: {
   }
 
   const prisma = {
-    departureMaterial,
+    conversationSource,
     aiCreateIdempotencyRecord: {
       ...aiCreateIdempotencyRecord,
       findUnique: jest.fn().mockResolvedValue(null),
@@ -306,11 +306,11 @@ describe('AiConversationService.sendText attachment upload', () => {
   it('deletes a pre-uploaded object when the task already has the same material', async () => {
     const existing = {
       id: 'mat-existing',
-      status: DepartureMaterialStatus.queued,
+      status: ConversationSourceStatus.queued,
       parseRuns: [] as Array<{ resultVersion: number }>,
     }
     const { service, storedObjectService, tx } = createHarness()
-    tx.departureMaterial.findUnique
+    tx.conversationSource.findUnique
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(existing)
 
@@ -326,7 +326,7 @@ describe('AiConversationService.sendText attachment upload', () => {
 
     expect(storedObjectService.upload).toHaveBeenCalled()
     expect(storedObjectService.delete).toHaveBeenCalledWith(organizationId, stored.id)
-    expect(tx.departureMaterial.create).not.toHaveBeenCalled()
+    expect(tx.conversationSource.create).not.toHaveBeenCalled()
   })
 
   it('deletes already uploaded objects if a later attachment upload fails', async () => {
@@ -361,27 +361,27 @@ describe('AiConversationService.sendText attachment upload', () => {
     const failedMaterial = {
       id: 'mat-failed',
       originalFilename: file.originalname,
-      status: DepartureMaterialStatus.failed,
+      status: ConversationSourceStatus.failed,
       parseRuns: [{ errorCode: 'PARSE_FAILED', status: 'failed', resultVersion: 1 }],
     }
     const queuedMaterial = {
       ...failedMaterial,
-      status: DepartureMaterialStatus.queued,
+      status: ConversationSourceStatus.queued,
       parseRuns: [{ errorCode: null, status: 'queued', resultVersion: 2 }],
     }
     const { service, tx } = createHarness()
-    tx.departureMaterial.findUnique.mockResolvedValue(failedMaterial)
-    tx.departureMaterialParseRun.findFirst.mockResolvedValue({ resultVersion: 1 })
+    tx.conversationSource.findUnique.mockResolvedValue(failedMaterial)
+    tx.conversationSourceParseRun.findFirst.mockResolvedValue({ resultVersion: 1 })
     tx.aiInputBatch.create.mockImplementation(
       async ({
         data,
       }: {
         data: {
-          materials?: {
+          sources?: {
             create: Array<{
               required: boolean
-              parseResultVersion: number | null
-              materialId: string
+              parseVersion: number | null
+              sourceId: string
               organizationId: string
             }>
           }
@@ -393,13 +393,13 @@ describe('AiConversationService.sendText attachment upload', () => {
         createdAt: now,
         updatedAt: now,
         ...data,
-        materials: (data.materials?.create ?? []).map((row, index) => ({
+        sources: (data.sources?.create ?? []).map((row, index) => ({
           id: `dep-${index}`,
           required: row.required,
-          parseResultVersion: row.parseResultVersion,
-          materialId: row.materialId,
+          parseVersion: row.parseVersion,
+          sourceId: row.sourceId,
           organizationId: row.organizationId,
-          material: failedMaterial,
+          source: failedMaterial,
         })),
       }),
     )
@@ -407,14 +407,14 @@ describe('AiConversationService.sendText attachment upload', () => {
       id: 'batch-1',
       status: AiInputBatchStatus.waiting_for_materials,
       conversationVersion: 1,
-      materials: [
+      sources: [
         {
           id: 'dep-0',
           required: true,
-          parseResultVersion: null,
-          materialId: failedMaterial.id,
+          parseVersion: null,
+          sourceId: failedMaterial.id,
           organizationId,
-          material: queuedMaterial,
+          source: queuedMaterial,
         },
       ],
     })

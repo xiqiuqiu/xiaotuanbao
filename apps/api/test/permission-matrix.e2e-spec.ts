@@ -66,6 +66,7 @@ const CAPABILITY_ENDPOINTS: Record<CapabilityId, Array<{ method: string; path: s
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/cancel' },
     { method: 'POST', path: '/api/ai-create-tasks/:taskId/review-packages/:packageId/regenerate' },
     { method: 'POST', path: '/api/departures/:id/copy' },
+    { method: 'POST', path: '/api/departures/:id/formal-attachments' },
     { method: 'PATCH', path: '/api/departures/:id' },
     { method: 'DELETE', path: '/api/departures/:id' },
     { method: 'POST', path: '/api/departures/:id/transition' },

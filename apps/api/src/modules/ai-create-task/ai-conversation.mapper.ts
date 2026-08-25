@@ -7,7 +7,7 @@ import type {
   AiInputBatchView,
 } from '@xiaotuanbao/shared'
 import {
-  DepartureMaterialStatus,
+  ConversationSourceStatus,
   type AiConversation,
   type AiConversationEvent,
   type AiConversationDraft,
@@ -17,12 +17,13 @@ import {
 import { materialProgressFromDeps, parseErrorMessage } from './departure-material.constants'
 
 export type BatchMaterialSource = {
-  materialId: string
+  sourceId: string
   required: boolean
-  parseResultVersion: number | null
-  material?: {
+  parseVersion: number | null
+  contentDigest?: string | null
+  source?: {
     originalFilename: string
-    status: DepartureMaterialStatus
+    status: ConversationSourceStatus
     parseRuns?: Array<{
       errorCode: string | null
       status: string
@@ -75,11 +76,11 @@ export function toBatchMaterialView(dep: BatchMaterialSource): AiInputBatchMater
   const failed = isFailedDependency(dep)
   const errorCode = failed ? latestErrorCode(dep) : null
   return {
-    materialId: dep.materialId,
-    originalFilename: dep.material?.originalFilename ?? '',
+    materialId: dep.sourceId,
+    originalFilename: dep.source?.originalFilename ?? '',
     required: dep.required,
-    parseResultVersion: dep.parseResultVersion,
-    status: dep.parseResultVersion != null ? 'ready' : failed ? 'failed' : 'pending',
+    parseResultVersion: dep.parseVersion,
+    status: dep.parseVersion != null ? 'ready' : failed ? 'failed' : 'pending',
     errorCode,
     errorMessage: errorCode ? parseErrorMessage(errorCode) : null,
   }
@@ -87,16 +88,16 @@ export function toBatchMaterialView(dep: BatchMaterialSource): AiInputBatchMater
 
 export function toBatchView(
   batch: AiInputBatch & {
-    materials?: BatchMaterialSource[]
+    sources?: BatchMaterialSource[]
   },
   options?: { queued?: boolean },
 ): AiInputBatchView {
-  const materials = batch.materials?.map(toBatchMaterialView)
-  const materialProgress = batch.materials
+  const materials = batch.sources?.map(toBatchMaterialView)
+  const materialProgress = batch.sources
     ? materialProgressFromDeps(
-        batch.materials.map((item) => ({
+        batch.sources.map((item) => ({
           required: item.required,
-          parseResultVersion: item.parseResultVersion,
+          parseResultVersion: item.parseVersion,
           failed: isFailedDependency(item),
         })),
       )
@@ -115,9 +116,9 @@ export function toBatchView(
 export function toConversationView(
   conversation: AiConversation,
   events: AiConversationEvent[],
-  activeBatch: (AiInputBatch & { materials?: BatchMaterialSource[] }) | null,
+  activeBatch: (AiInputBatch & { sources?: BatchMaterialSource[] }) | null,
   pendingInteraction: AiConversationInteraction | null = null,
-  queuedBatches: Array<AiInputBatch & { materials?: BatchMaterialSource[] }> = [],
+  queuedBatches: Array<AiInputBatch & { sources?: BatchMaterialSource[] }> = [],
   draft: AiConversationDraft | null = null,
 ): AiConversationView {
   return {
@@ -160,11 +161,11 @@ export function toFailedMaterialPayload(deps: BatchMaterialSource[]) {
 }
 
 export function isFailedDependency(dep: BatchMaterialSource): boolean {
-  return dep.parseResultVersion == null && dep.material?.status === DepartureMaterialStatus.failed
+  return dep.parseVersion == null && dep.source?.status === ConversationSourceStatus.failed
 }
 
 function latestErrorCode(dep: BatchMaterialSource): string | null {
-  return dep.material?.parseRuns?.[0]?.errorCode ?? 'PARSE_FAILED'
+  return dep.source?.parseRuns?.[0]?.errorCode ?? 'PARSE_FAILED'
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

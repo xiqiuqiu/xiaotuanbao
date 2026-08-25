@@ -157,14 +157,14 @@ describe('AI create material failure control (e2e) #317', () => {
 
     const batch = await prisma.aiInputBatch.findUniqueOrThrow({
       where: { id: sent.body.data.batch.id as string },
-      include: { materials: { include: { material: true } } },
+      include: { sources: { include: { source: true } } },
     })
     expect(batch.status).toBe('waiting_for_materials')
-    const failed = batch.materials.find((item) => item.material.originalFilename === '空白.png')
-    const ready = batch.materials.find((item) => item.material.originalFilename === '可用.png')
-    expect(failed?.material.status).toBe('failed')
-    expect(failed?.parseResultVersion).toBeNull()
-    expect(ready?.parseResultVersion).toBe(1)
+    const failed = batch.sources.find((item) => item.source.originalFilename === '空白.png')
+    const ready = batch.sources.find((item) => item.source.originalFilename === '可用.png')
+    expect(failed?.source.status).toBe('failed')
+    expect(failed?.parseVersion).toBeNull()
+    expect(ready?.parseVersion).toBe(1)
 
     const restored = await authRequest(app, coordinatorToken)
       .post('/api/ai-create-tasks/assist-session')
@@ -190,7 +190,7 @@ describe('AI create material failure control (e2e) #317', () => {
     )
     const errorEvent = restored.body.data.conversation.events.find(
       (event: { kind: string; payload: { materialId?: string } }) =>
-        event.kind === 'error' && event.payload.materialId === failed?.materialId,
+        event.kind === 'error' && event.payload.materialId === failed?.sourceId,
     )
     expect(errorEvent?.payload).toMatchObject({
       errorCode: 'PARSE_FAILED',
@@ -207,11 +207,11 @@ describe('AI create material failure control (e2e) #317', () => {
     )
     await processor.processDueJobs(2)
     const batchId = sent.body.data.batch.id as string
-    const failed = await prisma.aiInputBatchMaterial.findFirstOrThrow({
-      where: { inputBatchId: batchId, material: { originalFilename: '空白.png' } },
+    const failed = await prisma.inputBatchSource.findFirstOrThrow({
+      where: { inputBatchId: batchId, source: { originalFilename: '空白.png' } },
     })
-    const ready = await prisma.aiInputBatchMaterial.findFirstOrThrow({
-      where: { inputBatchId: batchId, material: { originalFilename: '可用.png' } },
+    const ready = await prisma.inputBatchSource.findFirstOrThrow({
+      where: { inputBatchId: batchId, source: { originalFilename: '可用.png' } },
     })
     const beforeOcr = ocr.callCount()
     const beforeAgent = agent.callCount()
@@ -220,7 +220,7 @@ describe('AI create material failure control (e2e) #317', () => {
     const retry = await authRequest(app, coordinatorToken)
       .post(batchPath(opened.task.id, opened.conversation.id, batchId, 'retry-failed-materials'))
       .set('Idempotency-Key', `e2e-retry-${opened.task.id}`)
-      .send({ materialIds: [failed.materialId] })
+      .send({ materialIds: [failed.sourceId] })
       .expect(200)
     expect(retry.body.data.batch.status).toBe('waiting_for_materials')
     expect(retry.body.data.batch.id).toBe(batchId)
@@ -228,7 +228,7 @@ describe('AI create material failure control (e2e) #317', () => {
     const replay = await authRequest(app, coordinatorToken)
       .post(batchPath(opened.task.id, opened.conversation.id, batchId, 'retry-failed-materials'))
       .set('Idempotency-Key', `e2e-retry-${opened.task.id}`)
-      .send({ materialIds: [failed.materialId] })
+      .send({ materialIds: [failed.sourceId] })
       .expect(200)
     expect(replay.body.data.batch.id).toBe(batchId)
 
@@ -236,18 +236,18 @@ describe('AI create material failure control (e2e) #317', () => {
     expect(ocr.callCount()).toBe(beforeOcr + 1)
     expect(agent.callCount()).toBe(beforeAgent)
 
-    const afterReady = await prisma.aiInputBatchMaterial.findUniqueOrThrow({
+    const afterReady = await prisma.inputBatchSource.findUniqueOrThrow({
       where: { id: ready.id },
     })
-    const afterFailed = await prisma.aiInputBatchMaterial.findUniqueOrThrow({
+    const afterFailed = await prisma.inputBatchSource.findUniqueOrThrow({
       where: { id: failed.id },
     })
-    expect(afterReady.parseResultVersion).toBe(1)
-    expect(afterFailed.parseResultVersion).toBe(2)
+    expect(afterReady.parseVersion).toBe(1)
+    expect(afterFailed.parseVersion).toBe(2)
     const batch = await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: batchId } })
     expect(batch.status).toBe('ready_for_agent')
-    const parseRuns = await prisma.departureMaterialParseRun.findMany({
-      where: { materialId: failed.materialId },
+    const parseRuns = await prisma.conversationSourceParseRun.findMany({
+      where: { sourceId: failed.sourceId },
       orderBy: { resultVersion: 'asc' },
     })
     expect(parseRuns.map((run) => run.resultVersion)).toEqual([1, 2])
@@ -264,10 +264,10 @@ describe('AI create material failure control (e2e) #317', () => {
     )
     await processor.processDueJobs(2)
     const batchId = sent.body.data.batch.id as string
-    const failed = await prisma.aiInputBatchMaterial.findFirstOrThrow({
-      where: { inputBatchId: batchId, material: { originalFilename: '空白.png' } },
+    const failed = await prisma.inputBatchSource.findFirstOrThrow({
+      where: { inputBatchId: batchId, source: { originalFilename: '空白.png' } },
     })
-    const materialId = failed.materialId
+    const materialId = failed.sourceId
     const beforeAgent = agent.callCount()
 
     const removed = await authRequest(app, coordinatorToken)
@@ -285,10 +285,10 @@ describe('AI create material failure control (e2e) #317', () => {
       .expect(200)
     expect(replay.body.data.batch.status).toBe('ready_for_agent')
 
-    const remaining = await prisma.aiInputBatchMaterial.findMany({ where: { inputBatchId: batchId } })
+    const remaining = await prisma.inputBatchSource.findMany({ where: { inputBatchId: batchId } })
     expect(remaining).toHaveLength(1)
-    expect(remaining[0]?.materialId).not.toBe(materialId)
-    const archived = await prisma.departureMaterial.findUniqueOrThrow({ where: { id: materialId } })
+    expect(remaining[0]?.sourceId).not.toBe(materialId)
+    const archived = await prisma.conversationSource.findUniqueOrThrow({ where: { id: materialId } })
     expect(archived.id).toBe(materialId)
     expect(agent.callCount()).toBe(beforeAgent)
 
@@ -328,8 +328,8 @@ describe('AI create material failure control (e2e) #317', () => {
 
     const batch = await prisma.aiInputBatch.findUniqueOrThrow({ where: { id: batchId } })
     expect(batch.status).toBe('cancelled')
-    const material = await prisma.departureMaterial.findFirstOrThrow({
-      where: { taskId: opened.task.id },
+    const material = await prisma.conversationSource.findFirstOrThrow({
+      where: { conversationId: opened.conversation.id },
     })
     expect(material.status).toBe('available')
     const agentJobs = await prisma.aiWorkflowJob.findMany({
@@ -356,15 +356,15 @@ describe('AI create material failure control (e2e) #317', () => {
       expect(batch.status).toBe('agent_running')
     })
 
-    const dependency = await prisma.aiInputBatchMaterial.findFirstOrThrow({
+    const dependency = await prisma.inputBatchSource.findFirstOrThrow({
       where: { inputBatchId: batchId },
     })
-    expect(dependency.parseResultVersion).toBe(1)
+    expect(dependency.parseVersion).toBe(1)
 
-    await prisma.departureMaterialParseRun.create({
+    await prisma.conversationSourceParseRun.create({
       data: {
         organizationId,
-        materialId: dependency.materialId,
+        sourceId: dependency.sourceId,
         status: 'succeeded',
         resultVersion: 2,
         pages: [{ pageNumber: 1, source: 'ocr', text: '被重新解析的内容' }],
@@ -375,21 +375,21 @@ describe('AI create material failure control (e2e) #317', () => {
     await authRequest(app, coordinatorToken)
       .post(batchPath(opened.task.id, opened.conversation.id, batchId, 'remove-materials'))
       .set('Idempotency-Key', `e2e-reparse-remove-${opened.task.id}`)
-      .send({ materialIds: [dependency.materialId] })
+      .send({ materialIds: [dependency.sourceId] })
       .expect(409)
 
     agent.release()
     await running
 
-    const pinned = await prisma.aiInputBatchMaterial.findUniqueOrThrow({
+    const pinned = await prisma.inputBatchSource.findUniqueOrThrow({
       where: { id: dependency.id },
     })
-    expect(pinned.parseResultVersion).toBe(1)
+    expect(pinned.parseVersion).toBe(1)
     const context = agent.lastTaskContext() as {
       data?: { materials?: Array<{ materialId: string; parseResultVersion: number }> }
     }
     expect(context.data).not.toHaveProperty('materials')
-    expect(agent.lastUserText()).toContain(dependency.materialId)
+    expect(agent.lastUserText()).toContain(dependency.sourceId)
     expect(agent.lastUserText()).toContain('解析版本 1')
   })
 
@@ -447,8 +447,8 @@ describe('AI create material failure control (e2e) #317', () => {
       .attach('files', PNG_OK, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
     await processor.processDueJobs(2)
-    const firstMaterial = await prisma.departureMaterial.findFirstOrThrow({
-      where: { taskId: first.task.id },
+    const firstMaterial = await prisma.conversationSource.findFirstOrThrow({
+      where: { conversationId: first.conversation.id },
     })
 
     const duplicate = await authRequest(app, coordinatorToken)
@@ -465,8 +465,8 @@ describe('AI create material failure control (e2e) #317', () => {
         status: 'ready',
       }),
     ])
-    const sameTaskMaterials = await prisma.departureMaterial.findMany({
-      where: { taskId: first.task.id },
+    const sameTaskMaterials = await prisma.conversationSource.findMany({
+      where: { conversationId: first.conversation.id },
     })
     expect(sameTaskMaterials).toHaveLength(1)
     expect(sameTaskMaterials[0]?.sha256).toBe(createHash('sha256').update(PNG_OK).digest('hex'))
@@ -478,8 +478,8 @@ describe('AI create material failure control (e2e) #317', () => {
       .field('text', '另一任务上传同一原件。')
       .attach('files', PNG_OK, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
-    const otherMaterial = await prisma.departureMaterial.findFirstOrThrow({
-      where: { taskId: second.task.id },
+    const otherMaterial = await prisma.conversationSource.findFirstOrThrow({
+      where: { conversationId: second.conversation.id },
     })
     expect(otherMaterial.id).not.toBe(firstMaterial.id)
     expect(otherMaterial.sha256).toBe(firstMaterial.sha256)

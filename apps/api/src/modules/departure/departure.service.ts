@@ -10,6 +10,7 @@ import type {
   DepartureListResult,
   DepartureRouteNamesResult,
   DepartureSettlementHistoryItem,
+  FormalDepartureAttachmentView,
   DepartureSummary,
   RouteLedgerDateBlock,
   RouteLedgerDepartureGroup,
@@ -45,6 +46,7 @@ import type {
   TransitionDepartureDto,
   UnarchiveDepartureDto,
   UpdateDepartureDto,
+  RegisterDepartureAttachmentDto,
 } from './dto/departure.dto'
 import {
   computeDayCount,
@@ -765,6 +767,82 @@ export class DepartureService {
     return this.toDepartureDetailAsync(updated)
   }
 
+  async registerFormalAttachment(
+    organizationId: string,
+    userId: string,
+    departureId: string,
+    dto: RegisterDepartureAttachmentDto,
+  ): Promise<FormalDepartureAttachmentView> {
+    await this.findDepartureOrThrow(organizationId, departureId)
+    const source = await this.prisma.conversationSource.findFirst({
+      where: {
+        id: dto.sourceId,
+        organizationId,
+        conversation: { creatorUserId: userId },
+      },
+      include: {
+        parseRuns: {
+          where: { resultVersion: dto.parseVersion, status: 'succeeded' },
+          take: 1,
+        },
+      },
+    })
+    if (!source || source.parseRuns.length === 0) {
+      throw new NotFoundException('会话来源或冻结解析版本不存在')
+    }
+    const used = await this.prisma.inputBatchSource.findFirst({
+      where: {
+        organizationId,
+        sourceId: source.id,
+        parseVersion: dto.parseVersion,
+        inputBatch: { conversationId: source.conversationId },
+      },
+      select: { id: true },
+    })
+    if (!used) {
+      throw new BadRequestException('只能登记已被输入批次冻结使用的来源版本')
+    }
+    const existing = await this.prisma.departureMaterial.findUnique({
+      where: {
+        departureId_sourceId: {
+          departureId,
+          sourceId: source.id,
+        },
+      },
+    })
+    if (existing) {
+      return toFormalAttachmentView(existing)
+    }
+    const created = await this.prisma.departureMaterial.create({
+      data: {
+        organizationId,
+        departureId,
+        sourceId: source.id,
+        storedObjectId: source.storedObjectId,
+        originalFilename: source.originalFilename,
+        contentType: source.contentType,
+        sizeBytes: source.sizeBytes,
+        sha256: source.sha256,
+        parseVersion: dto.parseVersion,
+        contentDigest: source.sha256,
+        createdByUserId: userId,
+      },
+    })
+    return toFormalAttachmentView(created)
+  }
+
+  async listFormalAttachments(
+    organizationId: string,
+    departureId: string,
+  ): Promise<FormalDepartureAttachmentView[]> {
+    await this.findDepartureOrThrow(organizationId, departureId)
+    const attachments = await this.prisma.departureMaterial.findMany({
+      where: { organizationId, departureId },
+      orderBy: { createdAt: 'asc' },
+    })
+    return attachments.map(toFormalAttachmentView)
+  }
+
   /**
    * Departure Purge：物理删除无客源、无任何财务痕迹的编辑中/待结算发团。
    * @see docs/adr/0028-departure-purge-for-empty-shells.md
@@ -1283,6 +1361,32 @@ export class DepartureService {
       estimatedMarginCents: readModel.estimatedMarginCents,
       canPurge,
     }
+  }
+}
+
+function toFormalAttachmentView(attachment: {
+  id: string
+  departureId: string
+  sourceId: string | null
+  originalFilename: string
+  contentType: string
+  sha256: string
+  sizeBytes: number
+  parseVersion: number | null
+  contentDigest: string
+  createdAt: Date
+}): FormalDepartureAttachmentView {
+  return {
+    id: attachment.id,
+    departureId: attachment.departureId,
+    sourceId: attachment.sourceId,
+    originalFilename: attachment.originalFilename,
+    contentType: attachment.contentType,
+    sha256: attachment.sha256,
+    sizeBytes: attachment.sizeBytes,
+    parseVersion: attachment.parseVersion,
+    contentDigest: attachment.contentDigest,
+    createdAt: attachment.createdAt.toISOString(),
   }
 }
 

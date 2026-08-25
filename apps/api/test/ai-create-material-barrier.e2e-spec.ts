@@ -130,7 +130,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
       totalCount: 1,
     })
 
-    const materials = await prisma.departureMaterial.findMany({ where: { taskId } })
+    const materials = await prisma.conversationSource.findMany({ where: { conversationId } })
     expect(materials).toHaveLength(1)
     expect(materials[0]?.sha256).toBe(createHash('sha256').update(PNG_1X1).digest('hex'))
     expect(materials[0]?.status).toBe('queued')
@@ -254,7 +254,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
       const batch = await prisma.aiInputBatch.findFirstOrThrow({
         where: { taskLinks: { some: { taskId } } },
       })
-      const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
+      const material = await prisma.conversationSource.findFirstOrThrow({ where: { conversationId } })
       const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
         where: { taskId, type: 'material_parse' },
       })
@@ -385,7 +385,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     const batch = await prisma.aiInputBatch.findFirstOrThrow({
       where: { taskLinks: { some: { taskId } } },
     })
-    const material = await prisma.departureMaterial.findFirstOrThrow({ where: { taskId } })
+    const material = await prisma.conversationSource.findFirstOrThrow({ where: { conversationId } })
     const parseJob = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { taskId, type: 'material_parse' },
     })
