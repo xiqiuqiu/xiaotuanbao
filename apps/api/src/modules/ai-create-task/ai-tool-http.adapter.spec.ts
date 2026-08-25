@@ -8,6 +8,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { FailingAiActionStore, InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
+import { authorityForActor } from '../ai-action/ai-action.in-memory.target-authority'
 import type { AiActionStore } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import type { AiCreateTaskService } from './ai-create-task.service'
@@ -81,7 +82,10 @@ function adapterWith(
   methods: {
     getTaskContextForAgent?: () => Promise<GetTaskContextOutput>
     searchRouteTemplatesForAgent?: () => Promise<SearchRouteTemplatesOutput>
-    getMaterialParseResultForAgent?: () => Promise<GetMaterialParseResultOutput>
+    getMaterialParseResultForAgent?: (
+      caller?: AiToolRequestUser,
+      rawInput?: unknown,
+    ) => Promise<GetMaterialParseResultOutput>
     submitReviewPackageForAgent?: (
       caller: AiToolRequestUser,
       rawInput: unknown,
@@ -96,7 +100,7 @@ function adapterWith(
       methods.getMaterialParseResultForAgent ?? (async () => parsePayload),
     submitReviewPackageForAgent: methods.submitReviewPackageForAgent ?? (async () => reviewOutput),
   } as unknown as AiCreateTaskService
-  return new AiToolHttpAdapter(new AiActionGateway(store), tasks)
+  return new AiToolHttpAdapter(new AiActionGateway(store, authorityForActor(user)), tasks)
 }
 
 describe('AiToolHttpAdapter.getTaskContext', () => {
@@ -212,6 +216,34 @@ describe('AiToolHttpAdapter.getMaterialParseResult', () => {
     })
   })
 
+  it('forwards the normalized material target instead of rebuilding identity from the model payload', async () => {
+    const received: unknown[] = []
+    const adapter = adapterWith(new InMemoryAiActionStore(), {
+      getMaterialParseResultForAgent: async (_caller, rawInput) => {
+        received.push(rawInput)
+        return parsePayload
+      },
+    })
+
+    await adapter.getMaterialParseResult(user, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      materialId: 'mat-1',
+      parseResultVersion: 1,
+      pageNumber: 1,
+    })
+
+    expect(received).toEqual([
+      {
+        taskId: 'task-1',
+        runId: 'run-1',
+        materialId: 'mat-1',
+        parseResultVersion: 1,
+        pageNumber: 1,
+      },
+    ])
+  })
+
   it('still returns the original parse result when the decision cannot persist', async () => {
     const adapter = adapterWith(new FailingAiActionStore())
 
@@ -249,10 +281,10 @@ describe('AiToolHttpAdapter.getMaterialParseResult', () => {
 describe('AiToolHttpAdapter.submitReviewPackage', () => {
   it('returns the original pending package result and leaves a review AI action', async () => {
     const store = new InMemoryAiActionStore()
-    const forwarded: Array<{ sourceActionId: string | undefined }> = []
+    const forwarded: Array<{ sourceActionId: string | undefined; input: unknown }> = []
     const adapter = adapterWith(store, {
-      submitReviewPackageForAgent: async (_caller, _input, options) => {
-        forwarded.push({ sourceActionId: options?.sourceActionId })
+      submitReviewPackageForAgent: async (_caller, rawInput, options) => {
+        forwarded.push({ sourceActionId: options?.sourceActionId, input: rawInput })
         return reviewOutput
       },
     })
@@ -260,7 +292,18 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     const result = await adapter.submitReviewPackage(user, reviewInput)
 
     expect(result).toBe(reviewOutput)
-    expect(forwarded).toEqual([{ sourceActionId: store.records[0]?.id }])
+    expect(forwarded).toEqual([
+      {
+        sourceActionId: store.records[0]?.id,
+        input: {
+          taskId: 'task-1',
+          runId: 'run-1',
+          objectVersion: 1,
+          confirmationUnit: 'basic_info_draft',
+          candidates: reviewInput.candidates,
+        },
+      },
+    ])
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
       name: 'submitReviewPackage',
@@ -268,7 +311,7 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',
       executionStatus: 'succeeded',
-      targetRef: { kind: 'departure_creation_draft', id: 'task-1' },
+      targetRef: { kind: 'departure_creation_draft', id: 'draft-1' },
       candidateFieldKeys: ['name'],
     })
     expect(JSON.stringify(store.records[0])).not.toContain('110101199001011234')

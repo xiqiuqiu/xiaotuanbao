@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
-import { aiCreateCapabilityDefinitionForTool } from '@xiaotuanbao/ai-contracts'
+import { registeredCapabilityDefinitionForTool } from '@xiaotuanbao/ai-contracts'
 import { AI_ACTION_STORE } from './ai-action.store'
+import { resolveRegisteredTarget } from './ai-action.target-resolvers'
+import { AI_ACTION_TARGET_AUTHORITY } from './ai-action.target'
+import type { AiActionTargetAuthority } from './ai-action.target'
 import type {
   AiActionDecision,
   AiActionExecuteResult,
@@ -14,14 +17,16 @@ import type {
 
 @Injectable()
 export class AiActionGateway {
-  constructor(@Inject(AI_ACTION_STORE) private readonly store: AiActionStore) {}
+  constructor(
+    @Inject(AI_ACTION_STORE) private readonly store: AiActionStore,
+    @Inject(AI_ACTION_TARGET_AUTHORITY) private readonly authority: AiActionTargetAuthority,
+  ) {}
 
   async execute(proposal: AiActionProposal): Promise<AiActionExecuteResult> {
-    const definition = aiCreateCapabilityDefinitionForTool(proposal.name)
+    const definition = registeredCapabilityDefinitionForTool(proposal.name)
     const registered = definition?.gateway
       ? { ...definition.gateway, capability: { key: definition.key, version: definition.version } }
       : null
-    const targetMismatch = Boolean(registered) && isClaimedTargetMismatch(proposal)
     const capabilityGranted =
       registered != null &&
       proposal.actor.grantedCapabilities.some(
@@ -30,39 +35,41 @@ export class AiActionGateway {
       )
 
     const kind: AiActionKind = registered?.actionKind ?? 'write'
+    const resolved =
+      registered && capabilityGranted
+        ? await resolveRegisteredTarget(proposal.name, proposal.actor, proposal.input, this.authority)
+        : null
+    const targetDenied = resolved != null && resolved.ok === false
     const decision: AiActionDecision =
-      registered && capabilityGranted && !targetMismatch ? registered.decision : 'deny'
+      registered && capabilityGranted && !targetDenied ? registered.decision : 'deny'
     const reasonCode = !registered
       ? 'UNREGISTERED'
       : !capabilityGranted
         ? 'CAPABILITY_NOT_GRANTED'
-        : targetMismatch
-          ? 'TARGET_MISMATCH'
+        : targetDenied
+          ? resolved.reasonCode
           : 'OBSERVATION_PERIOD'
     const executionStatus = decision === 'deny' ? 'skipped' : 'not_started'
+    const normalizedTarget = resolved?.ok === true ? resolved.target : null
+    const targetRef = targetRefFor(registered?.targetKind, resolved, proposal)
 
     const persisted = await this.persistDecision(proposal, {
       kind,
       decision,
       reasonCode,
       executionStatus,
-      targetRef: registered
-        ? {
-            kind: registered.targetKind,
-            id: resolveTargetId(registered.targetKind, proposal),
-          }
-        : null,
+      targetRef,
     })
     const action = persisted?.action ?? null
     await this.observeRepeatQuietly(proposal, persisted)
 
-    if (decision === 'deny') {
+    if (decision === 'deny' || !normalizedTarget) {
       return { action }
     }
 
     let result: unknown
     try {
-      result = await proposal.forward({ action })
+      result = await proposal.forward({ action, target: normalizedTarget })
     } catch (error) {
       if (action) {
         try {
@@ -136,43 +143,36 @@ export class AiActionGateway {
 }
 
 function capabilityRefForTool(name: string): { key: string; version: number } | null {
-  const definition = aiCreateCapabilityDefinitionForTool(name)
+  const definition = registeredCapabilityDefinitionForTool(name)
   return definition ? { key: definition.key, version: definition.version } : null
 }
 
-function claimedStringField(input: unknown, field: string): string | null {
-  if (!input || typeof input !== 'object' || !(field in input)) {
+function targetRefFor(
+  registeredKind: string | undefined,
+  resolved: Awaited<ReturnType<typeof resolveRegisteredTarget>> | null,
+  proposal: AiActionProposal,
+): AiActionSummary['targetRef'] {
+  if (resolved?.ok === true) {
+    return { kind: resolved.target.kind, id: resolved.target.id }
+  }
+  if (resolved && resolved.ok === false) {
+    return resolved.targetRef
+  }
+  if (!registeredKind) {
     return null
   }
-  const value = (input as Record<string, unknown>)[field]
-  return typeof value === 'string' && value.length > 0 ? value : null
+  return {
+    kind: registeredKind,
+    id: fallbackTargetId(registeredKind, proposal),
+  }
 }
 
-function isClaimedTargetMismatch(proposal: AiActionProposal): boolean {
-  if (
-    proposal.name !== 'getTaskContext' &&
-    proposal.name !== 'getMaterialParseResult' &&
-    proposal.name !== 'searchRouteTemplates'
-  ) {
-    return false
-  }
-  const claimedTaskId = claimedStringField(proposal.input, 'taskId')
-  if (claimedTaskId !== null && claimedTaskId !== (proposal.actor.taskId ?? null)) {
-    return true
-  }
-  if (proposal.name !== 'searchRouteTemplates') {
-    return false
-  }
-  const claimedOrgId = claimedStringField(proposal.input, 'organizationId')
-  return claimedOrgId !== null && claimedOrgId !== proposal.actor.organizationId
-}
-
-function resolveTargetId(targetKind: string, proposal: AiActionProposal): string | null {
+function fallbackTargetId(targetKind: string, proposal: AiActionProposal): string | null {
   if (targetKind === 'route_template_catalog') {
     return proposal.actor.organizationId
   }
-  if (targetKind === 'departure_material') {
-    return claimedStringField(proposal.input, 'materialId')
+  if (targetKind === 'agent_conversation') {
+    return proposal.actor.conversationId ?? null
   }
   return proposal.actor.taskId ?? null
 }

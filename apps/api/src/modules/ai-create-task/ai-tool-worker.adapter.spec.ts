@@ -5,6 +5,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
+import { authorityForActor } from '../ai-action/ai-action.in-memory.target-authority'
 import type { AiActionActor, AiActionForwardContext } from '../ai-action/ai-action.types'
 import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 
@@ -37,27 +38,27 @@ const reviewInput: SubmitReviewPackageModelInput = {
 describe('AiToolWorkerAdapter.projectReviewPackage', () => {
   it('leaves a review AI action before forwarding the existing projection', async () => {
     const store = new InMemoryAiActionStore()
-    const adapter = new AiToolWorkerAdapter(new AiActionGateway(store))
-    const forwarded: Array<{ actionId: string | undefined; packageId: string }> = []
+    const adapter = new AiToolWorkerAdapter(new AiActionGateway(store, authorityForActor(actor)))
+    const forwarded: Array<{ actionId: string | undefined; packageId: string; targetId: string }> = []
 
     const result = await adapter.projectReviewPackage({
       actor,
       input: reviewInput,
-      persist: async ({ action }: AiActionForwardContext) => {
-        forwarded.push({ actionId: action?.id, packageId: 'pkg-1' })
+      persist: async ({ action, target }: AiActionForwardContext) => {
+        forwarded.push({ actionId: action?.id, packageId: 'pkg-1', targetId: target.id })
         return 'pkg-1'
       },
     })
 
     expect(result.reviewPackageId).toBe('pkg-1')
-    expect(forwarded).toEqual([{ actionId: store.records[0]?.id, packageId: 'pkg-1' }])
+    expect(forwarded).toEqual([{ actionId: store.records[0]?.id, packageId: 'pkg-1', targetId: 'draft-1' }])
     expect(result.action).toMatchObject({
       name: 'submitReviewPackage',
       kind: 'write',
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',
       executionStatus: 'succeeded',
-      targetRef: { kind: 'departure_creation_draft', id: 'task-1' },
+      targetRef: { kind: 'departure_creation_draft', id: 'draft-1' },
     })
     expect(result.action?.candidateFieldKeys).toEqual(['name'])
     expect(JSON.stringify(result.action)).not.toContain('110101199001011234')

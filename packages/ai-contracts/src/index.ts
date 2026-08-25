@@ -167,6 +167,7 @@ export {
 } from './runtime/headless-execution'
 export {
   CAPABILITY_DENIAL_REASONS,
+  CAPABILITY_TARGET_DENY_CODES,
   CAPABILITY_KINDS,
   CAPABILITY_RISKS,
   AgentDefinitionRegistry,
@@ -178,6 +179,7 @@ export {
   type AgentCapabilityDeclaration,
   type CapabilityDefinition,
   type CapabilityDenialReason,
+  type CapabilityTargetDenyCode,
   type CapabilityGrantRequest,
   type CapabilityGrantResult,
   type RequestContext,
@@ -215,6 +217,10 @@ export {
   aiCreateCapabilityDefinitionForTool,
   aiCreateCapabilityDefinitionRegistry,
 } from './runtime/ai-create-definitions'
+export {
+  REGISTERED_CAPABILITY_DEFINITIONS,
+  registeredCapabilityDefinitionForTool,
+} from './runtime/capability-catalog'
 export {
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION,

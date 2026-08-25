@@ -36,6 +36,12 @@ export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY = {
     })
     .strict(),
   contextSchema: requestContextSchema,
+  gateway: {
+    actionKind: 'read',
+    decision: 'allow',
+    targetKind: 'agent_conversation',
+    denyCodes: ['TARGET_MISSING', 'CROSS_ORGANIZATION', 'OBJECT_SCOPE_DENIED', 'TARGET_MISMATCH'],
+  },
 } as const satisfies CapabilityDefinition
 
 export const CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS = [
