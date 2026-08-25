@@ -101,6 +101,9 @@ export class AiToolHttpAdapter {
     if (executed.result !== undefined) {
       return executed.result as T
     }
+    if (executed.action?.reasonCode === 'TARGET_VERSION_MISMATCH') {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
     throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
   }
 }

@@ -60,12 +60,17 @@ async function resolveRouteCatalog(
   actor: AiActionActor,
   input: unknown,
 ): Promise<AiActionTargetResolveResult> {
-  const mismatch = denyClaimedMismatch(actor, input, {
+  const targetRef = {
     kind: 'route_template_catalog',
     id: actor.organizationId,
-  })
+  }
+  const mismatch = denyClaimedMismatch(actor, input, targetRef)
   if (mismatch) {
     return mismatch
+  }
+  const claimedOrgId = claimedStringField(input, 'organizationId')
+  if (claimedOrgId !== null && claimedOrgId !== actor.organizationId) {
+    return deny('TARGET_MISMATCH', targetRef)
   }
   return {
     ok: true,

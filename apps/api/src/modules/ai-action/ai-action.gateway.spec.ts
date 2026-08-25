@@ -348,6 +348,27 @@ describe('AiActionGateway.execute', () => {
     })
   })
 
+  it('forwards getTaskContext when the payload claims a leaked organizationId', async () => {
+    const contextPayload = { snapshot: { name: '川西环线' } }
+    const gateway = createGateway()
+
+    const result = await gateway.execute({
+      name: 'getTaskContext',
+      actor,
+      input: { taskId: 'task-1', runId: 'run-1', organizationId: 'leak' },
+      forward: async () => contextPayload,
+    })
+
+    expect(result.result).toBe(contextPayload)
+    expect(result.action).toMatchObject({
+      name: 'getTaskContext',
+      decision: 'allow',
+      reasonCode: 'OBSERVATION_PERIOD',
+      executionStatus: 'succeeded',
+      targetRef: { kind: 'ai_create_task', id: 'task-1' },
+    })
+  })
+
   it('does not forward getTaskContext when the claimed task is not the delegated task', async () => {
     const store = new InMemoryAiActionStore()
     const gateway = createGateway(store)

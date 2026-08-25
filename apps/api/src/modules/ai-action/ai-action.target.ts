@@ -69,14 +69,10 @@ export function claimedPositiveIntField(input: unknown, field: string): number |
 export function claimedIdentityMismatch(
   actor: AiActionActor,
   input: unknown,
-): 'task' | 'organization' | 'conversation' | null {
+): 'task' | 'conversation' | null {
   const claimedTaskId = claimedStringField(input, 'taskId')
   if (claimedTaskId !== null && claimedTaskId !== (actor.taskId ?? null)) {
     return 'task'
-  }
-  const claimedOrgId = claimedStringField(input, 'organizationId')
-  if (claimedOrgId !== null && claimedOrgId !== actor.organizationId) {
-    return 'organization'
   }
   const claimedConversationId = claimedStringField(input, 'conversationId')
   if (claimedConversationId !== null && claimedConversationId !== (actor.conversationId ?? null)) {

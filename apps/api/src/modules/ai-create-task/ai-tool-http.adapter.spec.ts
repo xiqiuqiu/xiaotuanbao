@@ -130,6 +130,24 @@ describe('AiToolHttpAdapter.getTaskContext', () => {
     )
   })
 
+  it('returns task context when the payload claims a leaked organizationId', async () => {
+    const store = new InMemoryAiActionStore()
+    const adapter = adapterWith(store)
+
+    const result = await adapter.getTaskContext(user, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      organizationId: 'leak',
+    })
+
+    expect(result).toBe(contextPayload)
+    expect(store.records[0]).toMatchObject({
+      name: 'getTaskContext',
+      decision: 'allow',
+      executionStatus: 'succeeded',
+    })
+  })
+
   it('rejects a claimed task that is not the delegated task without returning context', async () => {
     const leakedContext = { ...contextPayload, snapshot: { mode: 'manual', routeName: '别家团' } }
     const adapter = adapterWith(new InMemoryAiActionStore(), {
@@ -353,6 +371,18 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
       'decision store unavailable',
     )
     expect(forwarded).toEqual([])
+  })
+
+  it('rejects a stale objectVersion as VERSION_CONFLICT instead of unauthorized', async () => {
+    const adapter = adapterWith(new InMemoryAiActionStore())
+
+    await expect(
+      adapter.submitReviewPackage(user, { ...reviewInput, objectVersion: 10 }),
+    ).rejects.toMatchObject({
+      response: {
+        data: { code: 'VERSION_CONFLICT' },
+      },
+    })
   })
 
   it('replays the same proposal without an attempt onto the same AI action using the activity run', async () => {

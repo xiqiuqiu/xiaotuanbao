@@ -64,4 +64,18 @@ describe('AiToolWorkerAdapter.projectReviewPackage', () => {
     expect(JSON.stringify(result.action)).not.toContain('110101199001011234')
     expect(JSON.stringify(result.action)).not.toContain('护照页原文')
   })
+
+  it('fails with VERSION_CONFLICT when the claimed object version is not the current draft', async () => {
+    const adapter = new AiToolWorkerAdapter(
+      new AiActionGateway(new InMemoryAiActionStore(), authorityForActor(actor)),
+    )
+
+    await expect(
+      adapter.projectReviewPackage({
+        actor,
+        input: { ...reviewInput, objectVersion: 10 },
+        persist: async () => 'pkg-1',
+      }),
+    ).rejects.toThrow('VERSION_CONFLICT')
+  })
 })
