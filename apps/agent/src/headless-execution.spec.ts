@@ -1,4 +1,5 @@
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { createHash } from 'node:crypto'
 import { AddressInfo } from 'node:net'
 import { getAssistRequestContext } from './assist-request-context'
 import { fetchTaskContext } from './get-task-context.client'
@@ -37,6 +38,9 @@ jest.mock('./mastra-agent', () => {
     createAiCreateMastra: () => ({
       getAgent: () => ({ generate }),
     }),
+    createAiCreateDiscoveryMastra: () => ({
+      getAgent: () => ({ generate }),
+    }),
     mastraGenerateMock: generate,
   }
 })
@@ -62,7 +66,11 @@ const IDENTITY = {
 }
 
 const USER_TEXT = '帮我建一个喀纳斯3日团'
-const REQUEST = { ...IDENTITY, userText: USER_TEXT }
+const REQUEST = {
+  ...IDENTITY,
+  userText: USER_TEXT,
+  userTextSha256: createHash('sha256').update(USER_TEXT, 'utf8').digest('hex'),
+}
 
 const REVIEW_PACKAGE = {
   objectVersion: 2,
@@ -91,6 +99,17 @@ function delegationToken(claims: Record<string, unknown> = {}): string {
       inputBatchId: IDENTITY.inputBatchId,
       attemptId: IDENTITY.attemptId,
       contextManifestId: IDENTITY.contextManifestId,
+      agentDefinition: { key: 'departure.create', version: 1 },
+      grantedCapabilities: [
+        { key: 'departure.task-context.read', version: 2 },
+        { key: 'departure.route-template.search', version: 1 },
+        { key: 'departure.review-package.propose', version: 1 },
+        { key: 'departure.material-parse-result.read', version: 1 },
+      ],
+      entitlementStatus: 'unavailable',
+      objectScopes: [
+        { organizationId: 'org-1', kind: 'ai_create_task', id: IDENTITY.taskId },
+      ],
       ...claims,
     }),
   ).toString('base64url')
@@ -174,6 +193,20 @@ describe('headless Agent runtime contract', () => {
       availableCapabilities: ['getTaskContext'],
       fieldCoverage: { filled: [], missing: [], optionalPresent: [] },
     })
+  })
+
+  it('在调用模型前拒绝与 Context Manifest 摘要不一致的 User 输入', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        body: { ...REQUEST, userText: '被途中替换的输入' },
+      })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toMatchObject({ data: { code: 'INVALID_FORMAT' } })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
   })
 
   afterEach(() => {
@@ -309,7 +342,15 @@ describe('headless Agent runtime contract', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const { port } = server.address() as AddressInfo
     try {
-      const response = await postHeadless(port)
+      const response = await postHeadless(port, {
+        body: {
+          ...REQUEST,
+          organizationId: 'org-model-spoof',
+          userId: 'user-model-spoof',
+          agentDefinition: { key: 'evil.agent', version: 999 },
+          grantedCapabilities: [{ key: 'evil.capability', version: 999 }],
+        },
+      })
       expect(response.status).toBe(200)
       expect(mockFetchTaskContext).toHaveBeenCalledWith(
         {
@@ -320,12 +361,22 @@ describe('headless Agent runtime contract', () => {
         { taskId: 'task-1', runId: 'run-1' },
       )
       expect(seen).toMatchObject({
+        organizationId: 'org-1',
+        userId: 'user-1',
         taskId: 'task-1',
         runId: 'run-1',
         attemptId: 'attempt-1',
         conversationId: 'conversation-1',
         inputBatchId: 'batch-1',
         contextManifestId: 'manifest-1',
+        agentDefinition: { key: 'departure.create', version: 1 },
+        grantedCapabilities: [
+          { key: 'departure.task-context.read', version: 2 },
+          { key: 'departure.route-template.search', version: 1 },
+          { key: 'departure.review-package.propose', version: 1 },
+          { key: 'departure.material-parse-result.read', version: 1 },
+        ],
+        entitlementStatus: 'unavailable',
       })
     } finally {
       await new Promise<void>((resolve, reject) =>
@@ -343,6 +394,38 @@ describe('headless Agent runtime contract', () => {
       expect(response.status).toBe(401)
       expect(await response.json()).toMatchObject({
         data: { code: 'DELEGATION_INVALID' },
+      })
+      expect(mockFetchTaskContext).not.toHaveBeenCalled()
+    } finally {
+      await runtime.close()
+    }
+  })
+
+  it('skips get-task-context for a taskless conversation run', async () => {
+    const runtime = await listen()
+    try {
+      const response = await postHeadless(runtime.port, {
+        authorization: `Bearer ${delegationToken({
+          taskId: undefined,
+          runId: undefined,
+          agentDefinition: { key: 'conversation.general', version: 1 },
+          grantedCapabilities: [],
+          objectScopes: [
+            { organizationId: 'org-1', kind: 'agent_conversation', id: IDENTITY.conversationId },
+          ],
+        })}`,
+        body: {
+          conversationId: IDENTITY.conversationId,
+          inputBatchId: IDENTITY.inputBatchId,
+          attemptId: IDENTITY.attemptId,
+          contextManifestId: IDENTITY.contextManifestId,
+          userText: USER_TEXT,
+          userTextSha256: REQUEST.userTextSha256,
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        data: { kind: 'completed' },
       })
       expect(mockFetchTaskContext).not.toHaveBeenCalled()
     } finally {

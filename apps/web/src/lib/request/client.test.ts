@@ -51,6 +51,27 @@ describe('authenticated request client', () => {
     })
   })
 
+  it('auto-injects Idempotency-Key only for finance writes', async () => {
+    await import('./client')
+    const requestHandler = mocks.requestInterceptor.mock.calls[0]?.[0] as (config: {
+      url?: string
+      method?: string
+      headers: { has: (name: string) => boolean; set: (name: string, value: string) => void }
+    }) => unknown
+
+    const financeHeaders = { has: vi.fn(() => false), set: vi.fn() }
+    requestHandler({ url: '/finance/verifications', method: 'post', headers: financeHeaders })
+    expect(financeHeaders.set).toHaveBeenCalledWith('Idempotency-Key', expect.any(String))
+
+    const reviewConfirmHeaders = { has: vi.fn(() => false), set: vi.fn() }
+    requestHandler({
+      url: '/ai-create-tasks/task-1/review-packages/pkg-1/confirm',
+      method: 'post',
+      headers: reviewConfirmHeaders,
+    })
+    expect(reviewConfirmHeaders.set).not.toHaveBeenCalled()
+  })
+
   it('uses browser credentials and never injects an Authorization header', async () => {
     await import('./client')
 

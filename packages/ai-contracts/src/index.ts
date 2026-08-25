@@ -1,4 +1,10 @@
 export {
+  AI_CREATE_SYSTEM_INSTRUCTIONS,
+  aiCreateModelContractForTools,
+  AI_CREATE_TOOL_DESCRIPTIONS,
+  type AiCreateModelContract,
+} from './runtime/ai-create-model-contract'
+export {
   classifyDraftFields,
   type AiCreateDraftMode,
   type AiCreateDraftSnapshot,
@@ -98,6 +104,22 @@ export {
   type ReviewConfirmMergeResult,
 } from './review/merge-review-confirm'
 export {
+  DEPARTURE_REVIEW_PAYLOAD_SCHEMA,
+  DEPARTURE_REVIEW_TARGET_KIND,
+  REVIEW_PROPOSAL_IDENTITY_FIELDS,
+  canonicalizeReviewValue,
+  isTargetVersionStale,
+  reviewConflictChangeSummary,
+  reviewDecisionIdentitySchema,
+  reviewPackageEnvelopeSchema,
+  reviewProposalIdentitySchema,
+  sameReviewProposalIdentity,
+  type ReviewConflictChangeSummary,
+  type ReviewDecisionIdentity,
+  type ReviewPackageEnvelope,
+  type ReviewProposalIdentity,
+} from './review/envelope'
+export {
   AI_COLLABORATION_ERROR_CODES,
   AiCollaborationError,
   aiCollaborationErrorSchema,
@@ -127,6 +149,42 @@ export {
   type HeadlessAwaitingReviewResult,
   type HeadlessFailedResult,
 } from './runtime/headless-execution'
+export {
+  CAPABILITY_DENIAL_REASONS,
+  CAPABILITY_KINDS,
+  CAPABILITY_RISKS,
+  AgentDefinitionRegistry,
+  CapabilityDefinitionRegistry,
+  capabilityGrantResolver,
+  requestContextSchema,
+  versionedDefinitionRefSchema,
+  type AgentDefinition,
+  type AgentCapabilityDeclaration,
+  type CapabilityDefinition,
+  type CapabilityDenialReason,
+  type CapabilityGrantRequest,
+  type CapabilityGrantResult,
+  type RequestContext,
+  type VersionedDefinitionRef,
+} from './runtime/agent-platform'
+export {
+  AI_CREATE_AGENT_CAPABILITY_DECLARATION,
+  AI_CREATE_AGENT_DEFINITION_REF,
+  AI_CREATE_CAPABILITY_DEFINITIONS,
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  aiCreateCapabilityDefinitionForTool,
+  aiCreateCapabilityDefinitionRegistry,
+} from './runtime/ai-create-definitions'
+export {
+  CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
+  CONVERSATION_GENERAL_AGENT_DEFINITION,
+  CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  CONVERSATION_GENERAL_INSTRUCTIONS,
+  CONVERSATION_PLAINTEXT_REPLY_CAPABILITY,
+  CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
+  conversationGeneralCapabilityDefinitionRegistry,
+} from './runtime/conversation-general-definitions'
 export {
   AI_EVIDENCE_SCHEMA_VERSION,
   AI_EVIDENCE_NORMALIZATION_VERSION,

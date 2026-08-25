@@ -70,16 +70,16 @@ describe('AI create material failure control (e2e) #317', () => {
       where: { organizationId, createdByUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()

@@ -633,12 +633,21 @@ function useCreateDepartureWizardController() {
     refetchInterval: (current) =>
       taskReviewRefetchInterval({
         paneOpen: Boolean(session && !assistPaneCollapsed),
-        hasPendingReview: Boolean(current.state.data?.pendingReview),
+        hasPendingReview: Boolean(
+          current.state.data?.pendingReview || (current.state.data?.pendingReviews?.length ?? 0) > 0,
+        ),
         assistStatus: assistTaskState?.status,
       }),
     refetchIntervalInBackground: false,
   })
-  const pendingReview = taskReview?.pendingReview ?? null
+  const pendingReview = session
+    ? ((taskReview?.pendingReviews ?? []).find(
+        (pkg) => pkg.conversationId === session.conversation.id,
+      ) ??
+      (taskReview?.pendingReview?.conversationId === session.conversation.id
+        ? taskReview.pendingReview
+        : null))
+    : (taskReview?.pendingReview ?? null)
   useEffect(() => {
     pendingReviewRef.current = pendingReview
   }, [pendingReview])
@@ -719,11 +728,16 @@ function useCreateDepartureWizardController() {
       }
       const corrections = pendingCorrectionsRef.current
       pendingCorrectionsRef.current = {}
-      return confirmAiReviewPackage(taskId, pendingReview.id, {
-        expectedVersion: currentVersion,
-        expectedPackageVersion: pendingReview.version,
-        ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
-      })
+      return confirmAiReviewPackage(
+        taskId,
+        pendingReview.id,
+        {
+          expectedVersion: currentVersion,
+          expectedPackageVersion: pendingReview.version,
+          ...(Object.keys(corrections).length > 0 ? { corrections } : {}),
+        },
+        newConfirmIdempotencyKey(taskId),
+      )
     },
     onSuccess: (summary) => {
       queryClient.setQueryData(['ai-create-task', summary.id], summary)
@@ -833,8 +847,8 @@ function useCreateDepartureWizardController() {
           snapshotVersion={currentTask.draft.version}
           stageKey="basic_info"
           runStatus="idle"
-          reviewPackageId={currentTask.pendingReview?.id ?? null}
-          progress={currentTask.pendingReview ? 'awaiting_review' : 'collecting'}
+          reviewPackageId={pendingReview?.id ?? null}
+          progress={pendingReview ? 'awaiting_review' : 'collecting'}
           onReviewPackageSubmitted={() => {
             void refetchTaskReview()
           }}
@@ -876,6 +890,7 @@ function useCreateDepartureWizardController() {
     session,
     setContent,
     taskReview,
+    pendingReview,
     bootstrap,
     refetchTaskReview,
   ])

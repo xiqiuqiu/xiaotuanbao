@@ -5,6 +5,9 @@ import { DepartureModule } from '../departure/departure.module'
 import { StoredObjectModule } from '../stored-object/stored-object.module'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
 import { AiConversationService } from './ai-conversation.service'
+import { AgentConversationController } from './agent-conversation.controller'
+import { AgentTaskController } from './agent-task.controller'
+import { AgentTaskService } from './agent-task.service'
 import { AiCreateTaskController } from './ai-create-task.controller'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiHeadlessClient } from './ai-headless.client'
@@ -18,11 +21,17 @@ import { ParseWorkerClient } from './parse-worker.client'
 
 @Module({
   imports: [AiActionModule, AuthModule, forwardRef(() => DepartureModule), StoredObjectModule],
-  controllers: [AiCreateTaskController, AiToolController],
+  controllers: [
+    AiCreateTaskController,
+    AiToolController,
+    AgentConversationController,
+    AgentTaskController,
+  ],
   providers: [
     AiCreateTaskService,
     AiToolHttpAdapter,
     AiConversationService,
+    AgentTaskService,
     AiConversationEventHub,
     AiHeadlessClient,
     AiWorkflowProcessor,

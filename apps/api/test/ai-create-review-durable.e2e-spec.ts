@@ -61,16 +61,16 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await agent.close()
@@ -159,7 +159,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await processor.processDueJobs(5)
     await waitFor(async () => {
       const batch = await prisma.aiInputBatch.findFirst({
-        where: { taskId, status: 'awaiting_review' },
+        where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
       })
       expect(batch).not.toBeNull()
     })
@@ -193,7 +193,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     const pkg = await prisma.aiReviewPackage.findFirstOrThrow({ where: { taskId } })
     const batch = await prisma.aiInputBatch.findFirstOrThrow({
-      where: { taskId, status: 'awaiting_review' },
+      where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
     })
     expect(pkg.inputBatchId).toBe(batch.id)
     const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
@@ -359,6 +359,23 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(rejected.body.data.pendingReview).toBeNull()
     expect(rejected.body.data.draft.version).toBe(opened.task.draft.version)
     expect(rejected.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
+    await expect(
+      prisma.taskActivity.findMany({
+        where: {
+          taskId,
+          actorUserId: ownerUserId,
+          payload: { path: ['reviewPackageId'], equals: pending.id },
+        },
+        select: { kind: true, summary: true, payload: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ).resolves.toEqual([
+      {
+        kind: 'progress',
+        summary: 'User 已拒绝审核项',
+        payload: { reviewPackageId: pending.id },
+      },
+    ])
 
     await processor.processDueJobs(5)
     expect(agent.callCount()).toBe(callsAfterSubmit)
@@ -440,7 +457,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     ).toHaveLength(0)
   })
 
-  it('keeps the package pending on package-version conflict, permission denial and draft conflict', async () => {
+  it('keeps the package pending on package-version conflict and permission denial, and marks target-version stale as conflict', async () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
@@ -491,17 +508,22 @@ describe('Durable form review batch continuation (e2e) #319', () => {
         expectedPackageVersion: pending.version,
       })
       .expect(409)
-    expect(staleDraft.body.message).toContain('旧候选不能覆盖新值')
+    expect(staleDraft.body.message).toContain('目标版本已变化')
+    expect(staleDraft.body.data.reviewConflict.status).toBe('stale_target_version')
 
     const after = await authRequest(app, coordinatorToken)
       .get(`/api/ai-create-tasks/${taskId}`)
       .expect(200)
-    expect(after.body.data.pendingReview.id).toBe(pending.id)
-    expect(after.body.data.pendingReview.status).toBe('pending')
+    expect(after.body.data.pendingReview).toBeNull()
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
+    const conflicted = await prisma.aiReviewPackage.findFirstOrThrow({
+      where: { id: pending.id },
+    })
+    expect(conflicted.status).toBe('conflict')
+    expect(conflicted.candidates).toEqual(expect.any(Array))
 
     const batch = await prisma.aiInputBatch.findFirst({
-      where: { taskId, status: 'awaiting_review' },
+      where: { taskLinks: { some: { taskId } }, status: 'awaiting_review' },
     })
     expect(batch).not.toBeNull()
   })

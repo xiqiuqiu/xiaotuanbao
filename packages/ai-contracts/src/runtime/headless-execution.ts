@@ -13,7 +13,7 @@ export type HeadlessExecutionOutcomeKind = (typeof HEADLESS_EXECUTION_OUTCOME_KI
 
 export const headlessExecutionIdentitySchema = z
   .object({
-    taskId: z.string().min(1),
+    taskId: z.string().min(1).optional(),
     conversationId: z.string().min(1),
     inputBatchId: z.string().min(1),
     attemptId: z.string().min(1),
@@ -24,6 +24,7 @@ export const headlessExecutionIdentitySchema = z
 export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
   .extend({
     userText: z.string().trim().min(1),
+    userTextSha256: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strip()
 

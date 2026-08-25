@@ -27,6 +27,7 @@ jest.mock('@ag-ui/mastra', () => ({
 
 jest.mock('./mastra-agent', () => ({
   createAiCreateMastra: () => ({}),
+  createAiCreateDiscoveryMastra: () => ({}),
 }))
 
 jest.mock('./get-task-context.client', () => ({

@@ -40,19 +40,19 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       where: { organizationId, creatorUserId: ownerUserId },
     })
     await prisma.aiReviewRecord.deleteMany({
-      where: { package: { task: { organizationId, creatorUserId: ownerUserId } } },
+      where: { package: { task: { organizationId, ownerUserId } } },
     })
     await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { organizationId, ownerUserId } },
     })
     await prisma.departureCreationDraft.deleteMany({
-      where: { task: { organizationId, creatorUserId: ownerUserId } },
+      where: { task: { agentTask: { organizationId, ownerUserId } } },
     })
-    await prisma.aiCreateTask.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
+    await prisma.agentTask.deleteMany({
+      where: { organizationId, ownerUserId },
     })
     await prisma.$disconnect()
     await app.close()
@@ -171,7 +171,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     ])
   })
 
-  it('freezes a second submit until the pending package is rejected', async () => {
+  it('allows a second independent proposal to coexist until one is confirmed', async () => {
     const opened = await openTask()
     const submitted = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
@@ -180,36 +180,31 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       candidates: [nameCandidate()],
     }).expect(200)
 
-    const frozen = await agentSubmit(opened.delegationToken, {
+    const second = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
       candidates: [nameCandidate('另一条候选')],
-    }).expect(409)
-    expect(frozen.body.data).toMatchObject({
-      code: 'REVIEW_PENDING',
-      retryable: false,
-    })
+    }).expect(200)
+    expect(second.body.data.reviewPackageId).not.toBe(submitted.body.data.reviewPackageId)
 
-    await authRequest(app, coordinatorToken)
-      .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/reject`,
-      )
-      .send({ expectedPackageVersion: 1 })
-      .expect(200)
-
-    const resubmitted = await agentSubmit(opened.delegationToken, {
+    const replayed = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate('重新整理')],
+      candidates: [nameCandidate()],
     }).expect(200)
-    expect(resubmitted.body.data.fieldKeys).toEqual(['name'])
+    expect(replayed.body.data.reviewPackageId).toBe(submitted.body.data.reviewPackageId)
 
     const after = await authRequest(app, coordinatorToken)
       .get(`/api/ai-create-tasks/${opened.taskId}`)
       .expect(200)
-    expect(after.body.data.pendingReview.id).toBe(resubmitted.body.data.reviewPackageId)
+    expect(after.body.data.pendingReviews).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: submitted.body.data.reviewPackageId, status: 'pending' }),
+        expect.objectContaining({ id: second.body.data.reviewPackageId, status: 'pending' }),
+      ]),
+    )
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
   })
 
@@ -355,18 +350,18 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       .send({ expectedVersion: opened.version + 1, expectedPackageVersion: 1 })
       .expect(409)
 
-    expect(conflict.body.message).toContain('旧候选不能覆盖新值')
-    expect(conflict.body.data.reviewConflict).toMatchObject({
-      status: 'candidate_stale',
-      conflictFields: ['name'],
-    })
+    expect(conflict.body.message).toContain('目标版本已变化')
+    expect(conflict.body.data.reviewConflict.status).toBe('stale_target_version')
+    expect(conflict.body.data.reviewConflict.conflictFields).toEqual(
+      expect.arrayContaining(['name']),
+    )
     expect(conflict.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
 
     const after = await authRequest(app, coordinatorToken)
       .get(`/api/ai-create-tasks/${opened.taskId}`)
       .expect(200)
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
-    expect(after.body.data.pendingReview.id).toBe(packageId)
+    expect(after.body.data.pendingReview).toBeNull()
   })
 
   it('forbids finance, rejects agent confirm, and does not write owner or type', async () => {

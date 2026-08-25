@@ -1,7 +1,7 @@
-import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { AI_CREATE_TOOL_DESCRIPTIONS, AiCollaborationError } from '@xiaotuanbao/ai-contracts'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
-import { getAssistRequestContext } from './assist-request-context'
+import { requireTaskBoundAssistContext } from './assist-request-context'
 import { fetchMaterialParseResult } from './get-material-parse-result.client'
 
 export interface GetMaterialParseResultToolConfig {
@@ -13,8 +13,7 @@ export interface GetMaterialParseResultToolConfig {
 export function createGetMaterialParseResultTool(config: GetMaterialParseResultToolConfig) {
   return createTool({
     id: 'getMaterialParseResult',
-    description:
-      '按冻结投影【本批资料】中的档案指针读取固定解析版本的原文证据。必须传入 materialId 与 parseResultVersion；页数较多时应再传入 pageNumber。不要用文件名、预览或未钉版本编造候选。',
+    description: AI_CREATE_TOOL_DESCRIPTIONS.getMaterialParseResult,
     inputSchema: z.object({
       materialId: z.string().min(1).describe('冻结投影资料索引中的 materialId'),
       parseResultVersion: z
@@ -45,7 +44,7 @@ export function createGetMaterialParseResultTool(config: GetMaterialParseResultT
         throw AiCollaborationError.fromCode('INVALID_FORMAT')
       }
 
-      const { delegationToken, taskId, runId } = getAssistRequestContext()
+      const { delegationToken, taskId, runId } = requireTaskBoundAssistContext()
       return fetchMaterialParseResult(
         {
           apiBaseUrl: config.apiBaseUrl,

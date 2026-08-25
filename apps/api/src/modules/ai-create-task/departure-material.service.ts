@@ -563,7 +563,10 @@ export class DepartureMaterialService {
 
   private async assertOwnedTask(organizationId: string, userId: string, taskId: string) {
     const task = await this.prisma.aiCreateTask.findFirst({
-      where: { id: taskId, organizationId, creatorUserId: userId },
+      where: {
+        id: taskId,
+        agentTask: { organizationId, ownerUserId: userId },
+      },
     })
     if (!task) {
       throw new NotFoundException('AI 建团任务不存在')

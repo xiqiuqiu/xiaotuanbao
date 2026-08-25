@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "gen:ai-create-tool-schemas": "tsx scripts/generate-ai-create-tool-model-schemas.ts",
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "build": "tsc -p tsconfig.build.json",

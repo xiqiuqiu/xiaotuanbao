@@ -33,6 +33,8 @@ export class InMemoryAiActionStore implements AiActionStore {
       inputHash: draft.inputHash,
       candidateFieldKeys: draft.candidateFieldKeys,
       executionStatus: draft.executionStatus,
+      agentDefinition: draft.agentDefinition,
+      capability: draft.capability,
     }
     this.byReplayKey.set(replayKey, record)
     this.organizationById.set(record.id, draft.organizationId)
@@ -48,7 +50,9 @@ export class InMemoryAiActionStore implements AiActionStore {
     if (!record) {
       throw new Error(`AI 动作不存在: ${id}`)
     }
-    record.executionStatus = executionStatus
+    if (record.executionStatus === 'not_started') {
+      record.executionStatus = executionStatus
+    }
     return record
   }
 

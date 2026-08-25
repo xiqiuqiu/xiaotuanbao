@@ -12,6 +12,8 @@ const identity = {
   contextManifestId: 'manifest-1',
 }
 
+const userTextSha256 = 'a'.repeat(64)
+
 const reviewPackage = {
   objectVersion: 2,
   confirmationUnit: 'basic_info_draft' as const,
@@ -26,17 +28,37 @@ const reviewPackage = {
 }
 
 describe('headless Agent execution contract', () => {
-  it('requires task, conversation, input batch, attempt and context manifest identities', () => {
+  it('requires conversation, input batch, attempt and context manifest identities', () => {
     expect(
       headlessExecutionRequestSchema.parse({
         ...identity,
         userText: '帮我建一个喀纳斯3日团',
+        userTextSha256,
         runId: 'legacy-run',
         messages: ['must not become execution identity'],
       }),
     ).toEqual({
       ...identity,
       userText: '帮我建一个喀纳斯3日团',
+      userTextSha256,
+    })
+
+    expect(
+      headlessExecutionRequestSchema.parse({
+        conversationId: identity.conversationId,
+        inputBatchId: identity.inputBatchId,
+        attemptId: identity.attemptId,
+        contextManifestId: identity.contextManifestId,
+        userText: '今天合作伙伴账款怎么查？',
+        userTextSha256,
+      }),
+    ).toEqual({
+      conversationId: identity.conversationId,
+      inputBatchId: identity.inputBatchId,
+      attemptId: identity.attemptId,
+      contextManifestId: identity.contextManifestId,
+      userText: '今天合作伙伴账款怎么查？',
+      userTextSha256,
     })
 
     expect(() =>
@@ -53,11 +75,29 @@ describe('headless Agent execution contract', () => {
       headlessExecutionRequestSchema.parse({
         ...identity,
         userText: '  帮我建一个喀纳斯3日团  ',
+        userTextSha256,
       }),
     ).toEqual({
       ...identity,
       userText: '帮我建一个喀纳斯3日团',
+      userTextSha256,
     })
+  })
+
+  it('requires the Manifest hash of the assembled User message', () => {
+    expect(() =>
+      headlessExecutionRequestSchema.parse({
+        ...identity,
+        userText: '帮我建一个喀纳斯3日团',
+      }),
+    ).toThrow()
+    expect(() =>
+      headlessExecutionRequestSchema.parse({
+        ...identity,
+        userText: '帮我建一个喀纳斯3日团',
+        userTextSha256: 'not-a-digest',
+      }),
+    ).toThrow()
   })
 
   it('accepts only structured terminal outcomes and rejects model prose as a status', () => {

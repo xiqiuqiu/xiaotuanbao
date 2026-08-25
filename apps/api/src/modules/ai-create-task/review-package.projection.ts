@@ -1,76 +1,75 @@
+import { type Prisma } from '@prisma/client'
 import {
-  AiReviewPackageStatus,
-  type Prisma,
-} from '@prisma/client'
-import type { SubmitReviewPackageModelInput } from '@xiaotuanbao/ai-contracts'
-import { toStoredCandidates } from './review-package.mapper'
+  AI_CREATE_CAPABILITY_REFS_BY_TOOL,
+  DEPARTURE_REVIEW_TARGET_KIND,
+  type SubmitReviewPackageModelInput,
+} from '@xiaotuanbao/ai-contracts'
+import { reviewPackageCreateData, departureReviewProposalHash } from './review-package.envelope'
 
 export async function projectPendingReviewPackage(
   tx: Prisma.TransactionClient,
   params: {
     organizationId: string
     taskId: string
+    conversationId: string
     inputBatchId: string
+    attemptId?: string | null
     runId: string
     reviewPackage: SubmitReviewPackageModelInput
     sourceActionId: string
   },
 ): Promise<string> {
   const task = await tx.aiCreateTask.findFirst({
-    where: { id: params.taskId, organizationId: params.organizationId },
-    include: {
-      draft: true,
-      reviewPackages: {
-        where: { status: AiReviewPackageStatus.pending },
-        take: 1,
-      },
-    },
+    where: { id: params.taskId, agentTask: { organizationId: params.organizationId } },
+    include: { draft: true },
   })
   if (!task?.draft) {
     throw new Error('REVIEW_PACKAGE_TASK_MISSING')
   }
-  const existing = task.reviewPackages[0]
-  if (existing) {
-    if (!existing.inputBatchId) {
-      await tx.aiReviewPackage.update({
-        where: { id: existing.id },
-        data: { inputBatchId: params.inputBatchId },
-      })
-    }
-    return existing.id
-  }
   if (!params.sourceActionId) {
     throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
+  }
+  if (!params.conversationId || !params.inputBatchId) {
+    throw new Error('REVIEW_PACKAGE_MISSING_SOURCE')
   }
   if (task.draft.version !== params.reviewPackage.objectVersion) {
     throw new Error('VERSION_CONFLICT')
   }
-  const stored = toStoredCandidates(params.reviewPackage.candidates)
+
+  const identity = {
+    inputBatchId: params.inputBatchId,
+    capabilityVersion: AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage.version,
+    targetKind: DEPARTURE_REVIEW_TARGET_KIND,
+    targetId: task.draft.id,
+    proposalHash: departureReviewProposalHash(params.reviewPackage),
+  }
+  const existing = await findReviewPackageByProposalIdentity(tx, identity)
+  if (existing) {
+    return existing.id
+  }
+
   try {
     const created = await tx.aiReviewPackage.create({
-      data: {
+      data: reviewPackageCreateData({
         organizationId: params.organizationId,
         taskId: params.taskId,
         runId: params.runId,
+        conversationId: params.conversationId,
         inputBatchId: params.inputBatchId,
-        status: AiReviewPackageStatus.pending,
-        confirmationUnit: params.reviewPackage.confirmationUnit,
+        attemptId: params.attemptId,
+        sourceActionId: params.sourceActionId,
+        targetId: task.draft.id,
         baseObjectVersion: task.draft.version,
         baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-        candidates: stored as unknown as Prisma.InputJsonValue,
-        version: 1,
-        sourceActionId: params.sourceActionId,
-      },
+        reviewPackage: params.reviewPackage,
+      }),
     })
     return created.id
   } catch (error) {
     if (!isUniqueViolation(error)) {
       throw error
     }
-    const raced = await tx.aiReviewPackage.findFirst({
-      where: { taskId: params.taskId, status: AiReviewPackageStatus.pending },
-      select: { id: true },
-    })
+    const raced = await findReviewPackageByProposalIdentity(tx, identity)
     if (!raced) {
       throw error
     }
@@ -78,14 +77,20 @@ export async function projectPendingReviewPackage(
   }
 }
 
-export function httpPendingReviewDisposition(
-  pending: { sourceActionId: string | null } | undefined,
-  sourceActionId: string,
-): 'create' | 'replay' | 'reject' {
-  if (!pending) {
-    return 'create'
-  }
-  return pending.sourceActionId === sourceActionId ? 'replay' : 'reject'
+export async function findReviewPackageByProposalIdentity(
+  tx: Prisma.TransactionClient,
+  identity: {
+    inputBatchId: string
+    capabilityVersion: number
+    targetKind: string
+    targetId: string
+    proposalHash: string
+  },
+): Promise<{ id: string; sourceActionId: string | null; candidates: Prisma.JsonValue } | null> {
+  return tx.aiReviewPackage.findFirst({
+    where: identity,
+    select: { id: true, sourceActionId: true, candidates: true },
+  })
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -96,3 +101,5 @@ function isUniqueViolation(error: unknown): boolean {
     (error as { code: string }).code === 'P2002'
   )
 }
+
+

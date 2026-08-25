@@ -19,10 +19,14 @@ export type AiActionSummary = {
   inputHash: string
   candidateFieldKeys: string[]
   executionStatus: AiActionExecutionStatus
+  agentDefinition: { key: string; version: number }
+  capability: { key: string; version: number } | null
 }
 
 export type AiActionActor = {
   organizationId: string
+  agentDefinition: { key: string; version: number }
+  grantedCapabilities: Array<{ key: string; version: number }>
   userId?: string
   taskId?: string
   conversationId?: string
@@ -65,6 +69,8 @@ export type AiActionRecordDraft = {
   inputHash: string
   candidateFieldKeys: string[]
   executionStatus: AiActionExecutionStatus
+  agentDefinition: { key: string; version: number }
+  capability: { key: string; version: number } | null
 }
 
 export type AiActionFindOrCreateResult = {

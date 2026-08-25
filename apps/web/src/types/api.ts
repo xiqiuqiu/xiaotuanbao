@@ -108,6 +108,7 @@ export type {
   AiReviewPackageView,
   ConfirmAiReviewPackageDto,
   RejectAiReviewPackageDto,
+  CancelAiReviewPackageDto,
   PatchAiReviewPackageDto,
   UpdateDepartureDto,
   TransitionDepartureDto,
