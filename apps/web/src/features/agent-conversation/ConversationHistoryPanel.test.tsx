@@ -44,6 +44,7 @@ describe('ConversationHistoryTrigger', () => {
       title: '新会话',
       returnLocation: null,
       historyRailCollapsed: false,
+      globalOpen: false,
     })
     vi.mocked(listAgentConversations).mockReset()
   })

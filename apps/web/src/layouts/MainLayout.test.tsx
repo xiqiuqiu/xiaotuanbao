@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { logout } from '@/services/auth.service'
 import { MainLayout } from './MainLayout'
 
@@ -36,6 +37,10 @@ vi.mock('@/features/agent-conversation/ConversationHistoryTrigger', () => ({
   ConversationHistoryTrigger: () => <button type="button">打开会话历史</button>,
 }))
 
+vi.mock('@/features/agent-conversation/ConversationHistoryList', () => ({
+  ConversationHistoryList: () => <div>历史列表</div>,
+}))
+
 function renderLayout(ui: React.ReactNode) {
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -53,7 +58,15 @@ describe('MainLayout 侧栏开关', () => {
       menuKeys: ['/', '/departure'],
       sessionStatus: 'authenticated',
     })
-    useUiStore.setState({ sidebarCollapsed: false })
+    useUiStore.setState({ sidebarCollapsed: false, assistPaneCollapsed: true })
+    useAgentConversationStore.setState({
+      view: 'page',
+      conversationId: null,
+      title: '新会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
+      globalOpen: false,
+    })
   })
 
   afterEach(() => {
@@ -379,19 +392,69 @@ describe('MainLayout 侧栏开关', () => {
     expect(screen.queryByRole('button', { name: '关闭侧边栏' })).not.toBeInTheDocument()
   })
 
-  it('hides the side pane and assist toggle on the global Agent route', () => {
-    pathname = '/agent/conversations/c-1'
+  it('covers the business shell with a global conversation overlay instead of replacing content', () => {
+    pathname = '/departure'
+    useUiStore.setState({ assistPaneCollapsed: false })
+    useAgentConversationStore.setState({
+      view: 'history',
+      conversationId: 'c-1',
+      title: '川西账款',
+      returnLocation: { pathname: '/departure', search: '', hash: '' },
+      historyRailCollapsed: false,
+      globalOpen: true,
+    })
     renderLayout(
       <ConfigProvider>
         <MainLayout>
-          <main>全局会话</main>
+          <main>发团管理内容</main>
         </MainLayout>
       </ConfigProvider>,
     )
 
-    expect(screen.getByText('全局会话')).toBeVisible()
+    expect(screen.getByText('发团管理内容')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '小团宝 Agent' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '返回业务页面' })).toBeVisible()
+    expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '展开电子化助理' })).not.toBeInTheDocument()
-    expect(document.querySelector('aside[aria-label="电子化助理"]')).not.toBeInTheDocument()
+  })
+
+  it('restores the side conversation after leaving the global overlay', async () => {
+    const user = userEvent.setup()
+    pathname = '/departure'
+    useUiStore.setState({ assistPaneCollapsed: false })
+    useAgentConversationStore.setState({
+      view: 'history',
+      conversationId: 'c-1',
+      title: '川西账款',
+      returnLocation: { pathname: '/departure', search: '', hash: '' },
+      historyRailCollapsed: false,
+      globalOpen: true,
+    })
+    renderLayout(
+      <ConfigProvider>
+        <MainLayout>
+          <main>发团管理内容</main>
+        </MainLayout>
+      </ConfigProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '返回业务页面' }))
+
+    expect(screen.queryByRole('dialog', { name: '小团宝 Agent' })).not.toBeInTheDocument()
+    const pane = screen.getByRole('complementary', { name: '电子化助理' })
+    expect(pane).toBeVisible()
+    expect(screen.getByText('发团管理内容')).toBeVisible()
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'c-1',
+      title: '川西账款',
+      globalOpen: false,
+    })
+    expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/departure',
+      search: undefined,
+      hash: undefined,
+    })
   })
 
   it('persist 默认收起电子化助理', () => {

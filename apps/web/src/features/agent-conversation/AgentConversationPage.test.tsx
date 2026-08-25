@@ -5,15 +5,6 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationPage } from './AgentConversationPage'
 import { useAgentConversationStore } from './agent-conversation.store'
-import { useUiStore } from '@/app/store/ui.store'
-
-const navigate = vi.fn()
-let routeConversationId = 'c-1'
-
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => navigate,
-  useParams: () => ({ conversationId: routeConversationId }),
-}))
 
 vi.mock('./AgentConversationChat', () => ({
   AgentConversationChat: () => <p>当前聊天</p>,
@@ -23,27 +14,28 @@ vi.mock('./ConversationHistoryList', () => ({
   ConversationHistoryList: () => <div>历史列表</div>,
 }))
 
-function renderPage() {
-  return render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ConfigProvider>
-        <AgentConversationPage />
-      </ConfigProvider>
-    </QueryClientProvider>,
-  )
+function renderPage(onExit = vi.fn()) {
+  return {
+    onExit,
+    ...render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ConfigProvider>
+          <AgentConversationPage onExit={onExit} />
+        </ConfigProvider>
+      </QueryClientProvider>,
+    ),
+  }
 }
 
 describe('AgentConversationPage #370', () => {
   beforeEach(() => {
-    navigate.mockReset()
-    routeConversationId = 'c-1'
-    useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.setState({
       view: 'history',
       conversationId: 'c-1',
       title: '川西账款',
       returnLocation: { pathname: '/departure', search: '?status=open', hash: '' },
       historyRailCollapsed: false,
+      globalOpen: true,
     })
   })
 
@@ -62,19 +54,9 @@ describe('AgentConversationPage #370', () => {
 
   it('returns to the captured business location and restores the side pane', async () => {
     const user = userEvent.setup()
-    renderPage()
+    const { onExit } = renderPage()
     await user.click(screen.getByRole('button', { name: '返回业务页面' }))
-    expect(navigate).toHaveBeenCalledWith({
-      to: '/departure',
-      search: { status: 'open' },
-      hash: undefined,
-    })
-    expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
-    expect(useAgentConversationStore.getState()).toMatchObject({
-      conversationId: 'c-1',
-      title: '川西账款',
-      returnLocation: null,
-    })
+    expect(onExit).toHaveBeenCalledTimes(1)
   })
 
   it('uses a distinct accessible name for collapsing history versus exiting global mode', () => {

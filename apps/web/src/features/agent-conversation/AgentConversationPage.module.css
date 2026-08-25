@@ -2,7 +2,9 @@
   display: flex;
   min-height: 0;
   height: 100%;
-  background: var(--agent-layout);
+  width: 100%;
+  overflow: hidden;
+  background: var(--agent-bg);
 }
 
 .rail {

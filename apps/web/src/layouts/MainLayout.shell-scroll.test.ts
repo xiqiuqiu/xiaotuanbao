@@ -37,4 +37,11 @@ describe('MainLayout 壳层滚动契约', () => {
     expect(content).toMatch(/overflow(?:-y)?:\s*(auto|scroll)/)
     expect(content).toMatch(/min-height:\s*0/)
   })
+
+  it('pads the global overlay and uses the mask token so the business page shows through', () => {
+    const overlay = blockFor(css, '.agentOverlay')
+    expect(overlay).toMatch(/padding:\s*var\(--shell-overlay-pad\)/)
+    expect(overlay).toMatch(/background:\s*var\(--shell-mask\)/)
+    expect(overlay).not.toMatch(/padding:\s*0/)
+  })
 })

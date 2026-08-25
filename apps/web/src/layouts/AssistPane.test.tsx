@@ -47,6 +47,7 @@ describe('AssistPane', () => {
       title: '新会话',
       returnLocation: null,
       historyRailCollapsed: false,
+      globalOpen: false,
     })
   })
   afterEach(() => cleanup())
@@ -108,6 +109,7 @@ describe('AssistPane', () => {
       title: '历史会话甲',
       returnLocation: null,
       historyRailCollapsed: false,
+      globalOpen: false,
     })
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -144,6 +146,7 @@ describe('AssistPane', () => {
       title: '川西账款',
       returnLocation: null,
       historyRailCollapsed: false,
+      globalOpen: false,
     })
     render(
       <QueryClientProvider client={new QueryClient()}>

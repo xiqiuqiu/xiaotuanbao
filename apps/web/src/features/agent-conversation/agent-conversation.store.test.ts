@@ -11,6 +11,7 @@ describe('agent conversation store #370', () => {
       title: '新会话',
       returnLocation: null,
       historyRailCollapsed: false,
+      globalOpen: false,
     })
   })
 
@@ -35,6 +36,7 @@ describe('agent conversation store #370', () => {
     expect(useAgentConversationStore.getState()).toMatchObject({
       conversationId: 'c-1',
       title: '川西账款',
+      globalOpen: true,
       returnLocation: { pathname: '/departure', search: '?status=open', hash: '' },
     })
     expect(sessionStorage.getItem(AGENT_RETURN_LOCATION_STORAGE_KEY)).toContain('/departure')
@@ -73,9 +75,23 @@ describe('agent conversation store #370', () => {
     expect(useAgentConversationStore.getState()).toMatchObject({
       conversationId: 'c-2',
       title: '历史会话',
+      globalOpen: false,
       returnLocation: null,
     })
     expect(sessionStorage.getItem(AGENT_RETURN_LOCATION_STORAGE_KEY)).toBeNull()
+  })
+
+  it('opens global mode from a conversation route without losing the selected Conversation', () => {
+    useAgentConversationStore.getState().selectConversation({
+      id: 'c-3',
+      title: '深链会话',
+    })
+    useAgentConversationStore.getState().openGlobalFromRoute('c-3')
+    expect(useAgentConversationStore.getState()).toMatchObject({
+      conversationId: 'c-3',
+      title: '深链会话',
+      globalOpen: true,
+    })
   })
 
   it('falls back to the workbench when no usable return location exists', () => {

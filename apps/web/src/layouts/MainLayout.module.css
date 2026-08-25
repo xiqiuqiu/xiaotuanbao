@@ -39,10 +39,29 @@
   overflow: auto;
 }
 
-.shell[data-agent-global] .main :global(.app-content) {
-  overflow: hidden;
-  padding: 0;
+.agentOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
   margin: 0;
+  padding: var(--shell-overlay-pad);
+  border: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--shell-mask);
+}
+
+.agentOverlayPanel {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: var(--shell-overlay-shadow);
 }
 
 .brand {
@@ -139,5 +158,14 @@
 
   .userName {
     display: none;
+  }
+
+  .agentOverlay {
+    padding: 0;
+  }
+
+  .agentOverlayPanel {
+    border-radius: 0;
+    box-shadow: none;
   }
 }

@@ -7,63 +7,31 @@ import {
 } from '@ant-design/icons'
 import { Button, Drawer, Tooltip, Typography, theme } from 'antd'
 import type { CSSProperties } from 'react'
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from '@tanstack/react-router'
-import { useUiStore } from '@/app/store/ui.store'
+import { useState } from 'react'
 import { AgentConversationChat } from './AgentConversationChat'
 import { ConversationHistoryList } from './ConversationHistoryList'
-import { toReturnNavigateOptions } from './agent-conversation-location'
-import { nextAgentConversationRoute } from './agent-conversation-route'
-import { NEW_CONVERSATION_TITLE, useAgentConversationStore } from './agent-conversation.store'
+import { useAgentConversationStore } from './agent-conversation.store'
 import styles from './AgentConversationPage.module.css'
 
-export function AgentConversationPage() {
+export function AgentConversationPage({
+  onExit,
+  className,
+}: {
+  onExit?: () => void
+  className?: string
+}) {
   const { token } = theme.useToken()
-  const navigate = useNavigate()
-  const params = useParams({ from: '/app/agent/conversations/$conversationId' })
-  const conversationId = useAgentConversationStore((state) => state.conversationId)
   const title = useAgentConversationStore((state) => state.title)
   const historyRailCollapsed = useAgentConversationStore((state) => state.historyRailCollapsed)
   const setHistoryRailCollapsed = useAgentConversationStore((state) => state.setHistoryRailCollapsed)
-  const selectConversation = useAgentConversationStore((state) => state.selectConversation)
   const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
-  const exitGlobal = useAgentConversationStore((state) => state.exitGlobal)
-  const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false)
-
-  useEffect(() => {
-    const next = nextAgentConversationRoute({
-      routeId: params.conversationId,
-      conversationId,
-    })
-    if (next.kind === 'keep') {
-      return
-    }
-    if (next.kind === 'hydrate') {
-      selectConversation({
-        id: next.conversationId,
-        title: title === NEW_CONVERSATION_TITLE ? NEW_CONVERSATION_TITLE : title,
-      })
-      return
-    }
-    void navigate({
-      to: '/agent/conversations/$conversationId',
-      params: { conversationId: next.conversationId },
-      replace: true,
-    })
-  }, [conversationId, navigate, params.conversationId, selectConversation, title])
 
   const collapseLabel = historyRailCollapsed ? '展开历史导航' : '折叠历史导航'
 
-  const returnToBusiness = () => {
-    const restored = exitGlobal()
-    setAssistPaneCollapsed(false)
-    void navigate(toReturnNavigateOptions(restored))
-  }
-
   return (
     <div
-      className={styles.page}
+      className={[styles.page, className].filter(Boolean).join(' ')}
       data-rail-collapsed={historyRailCollapsed ? '' : undefined}
       style={
         {
@@ -123,7 +91,7 @@ export function AgentConversationPage() {
               type="text"
               icon={<ShrinkOutlined aria-hidden />}
               aria-label="返回业务页面"
-              onClick={returnToBusiness}
+              onClick={onExit}
             />
           </Tooltip>
         </header>
