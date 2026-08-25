@@ -76,8 +76,20 @@ function searchParam(search: string | undefined, key: string): string | undefine
   if (!search) {
     return undefined
   }
-  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
-  return params.get(key) ?? undefined
+  const query = search.startsWith('?') ? search.slice(1) : search
+  for (const pair of query.split('&')) {
+    if (!pair) {
+      continue
+    }
+    const eq = pair.indexOf('=')
+    const rawKey = eq === -1 ? pair : pair.slice(0, eq)
+    if (decodeURIComponent(rawKey.replace(/\+/g, ' ')) !== key) {
+      continue
+    }
+    const rawValue = eq === -1 ? '' : pair.slice(eq + 1)
+    return decodeURIComponent(rawValue.replace(/\+/g, ' '))
+  }
+  return undefined
 }
 
 export function parsePageLocatorFromLocation(

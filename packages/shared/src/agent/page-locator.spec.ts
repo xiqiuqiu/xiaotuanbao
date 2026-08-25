@@ -44,7 +44,7 @@ describe('page locator schema #371', () => {
   })
 
   it('parses supported business routes and ignores lists, create pages and Agent routes', () => {
-    expect(parsePageLocatorFromLocation('/partner/partner-1', '?tab=accounts')).toEqual({
+    expect(parsePageLocatorFromLocation('/partner/partner-1', '?tab=accounts&other=1')).toEqual({
       kind: 'partner',
       objectId: 'partner-1',
       section: 'accounts',
