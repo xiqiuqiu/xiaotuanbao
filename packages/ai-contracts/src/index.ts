@@ -136,9 +136,21 @@ export {
 } from './events/assist-stream-event'
 export {
   HEADLESS_EXECUTION_OUTCOME_KINDS,
+  TOOL_STEP_STATUSES,
+  USAGE_SOURCES,
+  attemptDiagnosticPersist,
+  attemptRecoveryJudgment,
+  diagnosticFromResult,
+  headlessDiagnosticSchema,
   headlessExecutionIdentitySchema,
   headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
+  toolStepDiagnosticSchema,
+  usageCountsSchema,
+  type AttemptDiagnosticRecord,
+  type AttemptRecoveryJudgment,
+  type AttemptRecoverySnapshot,
+  type HeadlessDiagnostic,
   type HeadlessExecutionOutcomeKind,
   type HeadlessExecutionIdentity,
   type HeadlessExecutionRequest,
@@ -148,6 +160,10 @@ export {
   type HeadlessAwaitingUserInputResult,
   type HeadlessAwaitingReviewResult,
   type HeadlessFailedResult,
+  type ToolStepDiagnostic,
+  type ToolStepStatus,
+  type UsageCounts,
+  type UsageSource,
 } from './runtime/headless-execution'
 export {
   CAPABILITY_DENIAL_REASONS,
@@ -167,6 +183,30 @@ export {
   type RequestContext,
   type VersionedDefinitionRef,
 } from './runtime/agent-platform'
+export {
+  firstBatchEvalCatalog,
+  HARD_ASSERTION_KINDS,
+  EVAL_LAYERS,
+  type EvalLayer,
+  type EvalObservation,
+  type EvalScenario,
+  type FirstBatchEvalScenarioId,
+  type HardAssertionKind,
+} from './eval/catalog'
+export {
+  OFFLINE_EVAL_BASELINE_INPUT,
+  runOfflineEvalBaseline,
+} from './eval/baseline'
+export {
+  compareEvalReports,
+  runOfflineEval,
+  type EvalFailure,
+  type GoldenResult,
+  type HardAssertionResult,
+  type ModelScore,
+  type OfflineEvalInput,
+  type OfflineEvalReport,
+} from './eval/runner'
 export {
   AI_CREATE_AGENT_CAPABILITY_DECLARATION,
   AI_CREATE_AGENT_DEFINITION_REF,

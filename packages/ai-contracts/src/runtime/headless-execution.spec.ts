@@ -1,5 +1,6 @@
 import { AiCollaborationError } from '../errors/ai-collaboration-error'
 import {
+  diagnosticFromResult,
   headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
 } from './headless-execution'
@@ -188,6 +189,88 @@ describe('headless Agent execution contract', () => {
       headlessExecutionResultSchema.parse({
         status: 'waiting for user',
         message: '出团日期是哪一天？',
+      }),
+    ).toThrow()
+  })
+
+  it('treats omitted diagnostic as missing usage and never invents provider tokens', () => {
+    expect(
+      diagnosticFromResult(
+        headlessExecutionResultSchema.parse({
+          kind: 'completed',
+          message: '已根据当前资料整理出团基础信息。',
+        }),
+      ),
+    ).toEqual({
+      usageSource: 'missing',
+      toolSteps: [],
+    })
+  })
+
+  it('accepts optional diagnostic and distinguishes missing, estimated and actual usage', () => {
+    expect(
+      headlessExecutionResultSchema.parse({
+        kind: 'completed',
+        message: '已根据当前资料整理出团基础信息。',
+        diagnostic: {
+          mastraTraceId: 'trace-1',
+          usageSource: 'actual',
+          usage: { input: 120, output: 40, total: 160 },
+          latencyMs: 850,
+          toolSteps: [
+            {
+              stepId: 'step-1',
+              toolName: 'getTaskContext',
+              capabilityKey: 'departure.task-context.read',
+              capabilityVersion: 2,
+              status: 'succeeded',
+              latencyMs: 40,
+            },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      diagnostic: {
+        mastraTraceId: 'trace-1',
+        usageSource: 'actual',
+        usage: { input: 120, output: 40, total: 160 },
+        latencyMs: 850,
+      },
+    })
+
+    expect(
+      headlessExecutionResultSchema.parse({
+        kind: 'failed',
+        error: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON(),
+        diagnostic: {
+          usageSource: 'estimated',
+          usage: { total: 90 },
+          errorCode: 'INVALID_FORMAT',
+          toolSteps: [
+            {
+              stepId: 'step-1',
+              toolName: 'submitReviewPackage',
+              status: 'schema_rejected',
+              errorCode: 'INVALID_FORMAT',
+            },
+          ],
+        },
+      }).diagnostic,
+    ).toMatchObject({ usageSource: 'estimated', usage: { total: 90 } })
+
+    expect(() =>
+      headlessExecutionResultSchema.parse({
+        kind: 'completed',
+        message: 'ok',
+        diagnostic: { usageSource: 'actual' },
+      }),
+    ).toThrow()
+
+    expect(() =>
+      headlessExecutionResultSchema.parse({
+        kind: 'completed',
+        message: 'ok',
+        diagnostic: { usageSource: 'missing', usage: { total: 10 } },
       }),
     ).toThrow()
   })

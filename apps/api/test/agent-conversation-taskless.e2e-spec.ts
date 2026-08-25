@@ -288,6 +288,10 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       activityRunId: null,
       agentDefinitionKey: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key,
       agentDefinitionVersion: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.version,
+      usageSource: 'missing',
+      usage: null,
+      mastraTraceId: null,
+      toolSteps: [],
       contextManifest: {
         systemPromptVersion: 'conversation-general/v1',
         toolSchemaVersion: 'conversation-general-no-tools/v1',

@@ -82,6 +82,7 @@ import {
   materialProgressFromDeps,
   parseErrorMessage,
 } from './departure-material.constants'
+import { attemptDiagnosticUpdate } from './attempt-diagnostic'
 import { projectPendingReviewPackage } from './review-package.projection'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
@@ -1293,6 +1294,7 @@ export class AiWorkflowProcessor {
         data: {
           status: AiAgentAttemptStatus.completed,
           resultJson: result as unknown as Prisma.InputJsonValue,
+          ...attemptDiagnosticUpdate(result),
           endedAt: new Date(),
         },
       })
@@ -1503,6 +1505,7 @@ export class AiWorkflowProcessor {
                 errorCode === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'AGENT_UNAVAILABLE',
               ).toJSON(),
             }) as unknown as Prisma.InputJsonValue,
+            ...attemptDiagnosticUpdate(result),
             endedAt: new Date(),
           },
         })
@@ -1605,6 +1608,7 @@ export class AiWorkflowProcessor {
           data: {
             status: AiAgentAttemptStatus.failed,
             errorCode,
+            ...attemptDiagnosticUpdate(),
             endedAt: new Date(),
           },
         })

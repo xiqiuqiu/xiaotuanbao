@@ -9,6 +9,7 @@
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter api build",
     "preview:web": "pnpm --filter web preview",
+    "eval:offline": "pnpm --filter @xiaotuanbao/ai-contracts eval:offline",
     "typecheck": "pnpm -r run typecheck",
     "typecheck:web": "pnpm --filter web typecheck",
     "typecheck:api": "pnpm --filter api typecheck",

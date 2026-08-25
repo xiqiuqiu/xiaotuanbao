@@ -1,0 +1,13 @@
+{
+  "catalogVersion": 1,
+  "layers": ["hard", "deterministic", "golden", "model"],
+  "scenarios": [
+    "intent.taskless.plaintext",
+    "tool.departure.get-task-context",
+    "schema.review-package.valid",
+    "token.usage-source.missing-estimated-actual",
+    "latency.within-budget",
+    "golden.language.clarity",
+    "model.explanation.clarity"
+  ]
+}
