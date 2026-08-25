@@ -41,12 +41,40 @@ describe('createMastraHeadlessExecutor', () => {
     })
   })
 
-  it('returns awaiting_review when submitReviewPackage was called', async () => {
+  it('returns awaiting_review only after proposeReviewPackage is accepted', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async () => '帮我建一个喀纳斯3日团',
       generate: async () => ({
         text: '已提交待审核建议。',
-        toolCalls: [{ toolName: 'submitReviewPackage', args: REVIEW_ARGS }],
+        toolCalls: [{ toolName: 'proposeReviewPackage', args: REVIEW_ARGS }],
+        toolResults: [
+          {
+            type: 'tool-result',
+            payload: {
+              toolName: 'proposeReviewPackage',
+              result: {
+                status: 'accepted',
+                objectVersion: REVIEW_ARGS.objectVersion,
+                confirmationUnit: REVIEW_ARGS.confirmationUnit,
+                candidates: REVIEW_ARGS.candidates,
+                normalizedProposal: {
+                  schemaVersion: 1,
+                  normalizationVersion: 'unicode-nfc-whitespace-v1',
+                  policyVersion: 'evidence-authenticity-v1',
+                  candidates: [
+                    {
+                      candidateIndex: 0,
+                      candidateId: 'routeName',
+                      proposedValue: '喀纳斯3日线',
+                      evidenceIds: ['e1'],
+                    },
+                  ],
+                  evidenceCatalog: [],
+                },
+              },
+            },
+          },
+        ],
       }),
     })
 
@@ -58,7 +86,50 @@ describe('createMastraHeadlessExecutor', () => {
         toolSteps: [
           {
             stepId: 'tool-1',
-            toolName: 'submitReviewPackage',
+            toolName: 'proposeReviewPackage',
+            capabilityKey: 'departure.review-package.propose',
+            capabilityVersion: 1,
+            status: 'succeeded',
+          },
+        ],
+      },
+    })
+  })
+
+  it('stays in the current attempt when proposeReviewPackage is rejected', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      generate: async () => ({
+        text: '摘录对不上冻结消息，请修正后再提。',
+        toolCalls: [{ toolName: 'proposeReviewPackage', args: REVIEW_ARGS }],
+        toolResults: [
+          {
+            toolName: 'proposeReviewPackage',
+            result: {
+              status: 'rejected',
+              errors: [
+                {
+                  candidateIndex: 0,
+                  evidenceIndex: 0,
+                  code: 'EXCERPT_NOT_FOUND',
+                  message: '摘录对不上冻结消息',
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    })
+
+    await expect(executor(IDENTITY)).resolves.toEqual({
+      kind: 'completed',
+      message: '摘录对不上冻结消息，请修正后再提。',
+      diagnostic: {
+        usageSource: 'missing',
+        toolSteps: [
+          {
+            stepId: 'tool-1',
+            toolName: 'proposeReviewPackage',
             capabilityKey: 'departure.review-package.propose',
             capabilityVersion: 1,
             status: 'succeeded',

@@ -63,7 +63,7 @@ describe('buildBudgetedContext', () => {
       toolNames: [
         'getTaskContext',
         'searchRouteTemplates',
-        'submitReviewPackage',
+        'proposeReviewPackage',
         'getMaterialParseResult',
       ],
       currentUserText,

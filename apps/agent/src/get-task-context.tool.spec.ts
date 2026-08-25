@@ -91,7 +91,7 @@ describe('createGetTaskContextTool', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
-      'submitReviewPackage',
+      'proposeReviewPackage',
       'getMaterialParseResult',
     ])
   })

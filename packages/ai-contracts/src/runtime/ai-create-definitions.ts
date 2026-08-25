@@ -12,7 +12,7 @@ import {
 import {
   SUBMIT_REVIEW_PACKAGE_TOOL,
   submitReviewPackageModelInputSchema,
-  submitReviewPackageOutputSchema,
+  proposeReviewPackageOutputSchema,
 } from '../tools/review-package'
 import {
   CapabilityDefinitionRegistry,
@@ -83,7 +83,7 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
     requiredPermissionKeys: ['departure:write'],
     requiredObjectScopes: [{ kind: 'ai_create_task', idFromContext: 'taskId' }],
     inputSchema: submitReviewPackageModelInputSchema,
-    outputSchema: submitReviewPackageOutputSchema,
+    outputSchema: proposeReviewPackageOutputSchema,
     contextSchema: requestContextSchema,
     gateway: {
       actionKind: 'write',

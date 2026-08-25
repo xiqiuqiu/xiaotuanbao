@@ -112,12 +112,14 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     return { taskId, version, conversationA, conversationB, mintedA, mintedB }
   }
 
-  function nameCandidate(value: string, excerpt: string) {
+  function nameCandidate(value: string, sequence: number) {
     return {
       fieldKey: 'name' as const,
       proposedValue: value,
       clarity: 'clear' as const,
-      evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt }],
+      evidence: [
+        { kind: 'user_message' as const, sequence, excerpt: 'e2e worker-shaped attempt' },
+      ],
     }
   }
 
@@ -127,13 +129,13 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       taskId: opened.taskId,
       runId: opened.mintedA.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-A`, '会话A团名')],
+      candidates: [nameCandidate(`${testPrefix}-A`, opened.mintedA.userMessageSequence)],
     }).expect(200)
     const packageB = await agentSubmit(opened.mintedB.delegationToken, {
       taskId: opened.taskId,
       runId: opened.mintedB.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-B`, '会话B团名')],
+      candidates: [nameCandidate(`${testPrefix}-B`, opened.mintedB.userMessageSequence)],
     }).expect(200)
 
     expect(packageA.body.data.reviewPackageId).not.toBe(packageB.body.data.reviewPackageId)
@@ -170,13 +172,13 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       taskId: opened.taskId,
       runId: opened.mintedA.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-先确认`, '先确认')],
+      candidates: [nameCandidate(`${testPrefix}-先确认`, opened.mintedA.userMessageSequence)],
     }).expect(200)
     const packageB = await agentSubmit(opened.mintedB.delegationToken, {
       taskId: opened.taskId,
       runId: opened.mintedB.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-后冲突`, '后冲突')],
+      candidates: [nameCandidate(`${testPrefix}-后冲突`, opened.mintedB.userMessageSequence)],
     }).expect(200)
 
     const confirmed = await authRequest(app, coordinatorToken)
@@ -251,13 +253,13 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       taskId: opened.taskId,
       runId: opened.mintedA.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-owner确认`, 'owner确认')],
+      candidates: [nameCandidate(`${testPrefix}-owner确认`, opened.mintedA.userMessageSequence)],
     }).expect(200)
     const packageB = await agentSubmit(opened.mintedB.delegationToken, {
       taskId: opened.taskId,
       runId: opened.mintedB.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-peer冲突`, 'peer冲突')],
+      candidates: [nameCandidate(`${testPrefix}-peer冲突`, opened.mintedB.userMessageSequence)],
     }).expect(200)
 
     await authRequest(app, coordinatorToken)
@@ -297,7 +299,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       taskId: opened.taskId,
       runId: opened.mintedA.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate(`${testPrefix}-幂等`, '幂等确认')],
+      candidates: [nameCandidate(`${testPrefix}-幂等`, opened.mintedA.userMessageSequence)],
     }).expect(200)
 
     await authRequest(app, financeToken)
@@ -353,7 +355,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       taskId: opened.taskId,
       runId: opened.mintedB.runId,
       objectVersion: opened.version + 1,
-      candidates: [nameCandidate(`${testPrefix}-取消项`, '取消等待')],
+      candidates: [nameCandidate(`${testPrefix}-取消项`, opened.mintedA.userMessageSequence)],
     }).expect(200)
     const taskBefore = await prisma.agentTask.findFirstOrThrow({ where: { id: opened.taskId } })
     await authRequest(app, coordinatorToken)
@@ -387,7 +389,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
           fieldKey: 'templateId',
           proposedValue: 'missing-template',
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '用这条常用路线' }],
+          evidence: [{ kind: 'user_message', sequence: opened.mintedA.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     }).expect(200)
@@ -424,7 +426,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
           fieldKey: 'templateId',
           proposedValue: 'missing-template',
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '用这条常用路线' }],
+          evidence: [{ kind: 'user_message', sequence: opened.mintedA.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     }).expect(200)

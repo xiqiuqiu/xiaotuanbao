@@ -155,7 +155,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
           availableCapabilities: [
             'getTaskContext',
             'searchRouteTemplates',
-            'submitReviewPackage',
+            'proposeReviewPackage',
             'getMaterialParseResult',
           ],
           pending: { hasPendingReview: false, reviewPackageId: null },

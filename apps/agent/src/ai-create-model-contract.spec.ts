@@ -18,7 +18,7 @@ describe('AI Create actual tool model contract', () => {
     const actualTools = {
       getTaskContext: createGetTaskContextTool(config),
       searchRouteTemplates: createSearchRouteTemplatesTool(config),
-      submitReviewPackage: createSubmitReviewPackageTool(config),
+      proposeReviewPackage: createSubmitReviewPackageTool(config),
       getMaterialParseResult: createGetMaterialParseResultTool(config),
     }
     const budgeted = JSON.parse(

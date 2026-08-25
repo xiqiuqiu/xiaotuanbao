@@ -193,7 +193,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
             fieldKey: 'name' as const,
             proposedValue: `${testPrefix}-候选团名`,
             clarity: 'clear' as const,
-            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名' }],
+            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '请提交审核' }],
           },
         ],
       },

@@ -14,6 +14,7 @@ const FALLBACK_USER_TEXT = '请根据 getTaskContext 处理当前输入批次。
 export interface MastraGenerateLike {
   text?: string
   toolCalls?: unknown[]
+  toolResults?: unknown[]
 }
 
 export interface MastraHeadlessExecutorDeps {
@@ -27,7 +28,7 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const userText = (await deps.readUserText(request)).trim() || FALLBACK_USER_TEXT
       const output = await deps.generate(userText)
       const diagnostic = diagnosticFromGenerate(output.toolCalls)
-      const reviewPackage = reviewPackageFromToolCalls(output.toolCalls)
+      const reviewPackage = acceptedReviewPackageFromGenerate(output)
       if (reviewPackage) {
         return { kind: 'awaiting_review', reviewPackage, diagnostic }
       }
@@ -101,29 +102,68 @@ function toolNameFromCall(call: unknown): string | null {
   return null
 }
 
-function reviewPackageFromToolCalls(toolCalls: unknown[] | undefined) {
-  if (!toolCalls) {
+function acceptedReviewPackageFromGenerate(output: MastraGenerateLike) {
+  const accepted = lastAcceptedProposeResult(output.toolResults)
+  if (!accepted) {
     return null
   }
-  for (const call of toolCalls) {
-    if (!call || typeof call !== 'object') {
+  const parsed = submitReviewPackageModelInputSchema.safeParse({
+    objectVersion: accepted.objectVersion,
+    confirmationUnit: accepted.confirmationUnit,
+    candidates: accepted.candidates,
+  })
+  return parsed.success ? parsed.data : null
+}
+
+function lastAcceptedProposeResult(toolResults: unknown[] | undefined) {
+  if (!toolResults) {
+    return null
+  }
+  let last: {
+    objectVersion: number
+    confirmationUnit: string
+    candidates: unknown
+  } | null = null
+  for (const item of toolResults) {
+    if (!item || typeof item !== 'object') {
       continue
     }
-    const candidate = call as { toolName?: unknown; payload?: { toolName?: unknown; args?: unknown }; args?: unknown }
+    const candidate = item as {
+      toolName?: unknown
+      payload?: { toolName?: unknown; result?: unknown }
+      result?: unknown
+    }
     const toolName =
       typeof candidate.toolName === 'string'
         ? candidate.toolName
         : typeof candidate.payload?.toolName === 'string'
           ? candidate.payload.toolName
           : null
-    if (toolName !== 'submitReviewPackage') {
+    if (toolName !== 'proposeReviewPackage') {
       continue
     }
-    const args = candidate.args ?? candidate.payload?.args
-    const parsed = submitReviewPackageModelInputSchema.safeParse(args)
-    if (parsed.success) {
-      return parsed.data
+    const result = candidate.result ?? candidate.payload?.result
+    if (!result || typeof result !== 'object') {
+      continue
+    }
+    const parsed = result as {
+      status?: unknown
+      objectVersion?: unknown
+      confirmationUnit?: unknown
+      candidates?: unknown
+    }
+    if (parsed.status !== 'accepted') {
+      last = null
+      continue
+    }
+    if (typeof parsed.objectVersion !== 'number' || typeof parsed.confirmationUnit !== 'string') {
+      continue
+    }
+    last = {
+      objectVersion: parsed.objectVersion,
+      confirmationUnit: parsed.confirmationUnit,
+      candidates: parsed.candidates,
     }
   }
-  return null
+  return last
 }

@@ -66,7 +66,7 @@ describe('agent server', () => {
     expect(listAgentTools()).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
-      'submitReviewPackage',
+      'proposeReviewPackage',
       'getMaterialParseResult',
     ])
   })
@@ -88,7 +88,7 @@ describe('agent server', () => {
         tools: [
           'getTaskContext',
           'searchRouteTemplates',
-          'submitReviewPackage',
+          'proposeReviewPackage',
           'getMaterialParseResult',
         ],
       })

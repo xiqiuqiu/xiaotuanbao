@@ -14,7 +14,7 @@ const config = {
 const tools = {
   getTaskContext: createGetTaskContextTool(config),
   searchRouteTemplates: createSearchRouteTemplatesTool(config),
-  submitReviewPackage: createSubmitReviewPackageTool(config),
+  proposeReviewPackage: createSubmitReviewPackageTool(config),
   getMaterialParseResult: createGetMaterialParseResultTool(config),
 }
 const schemas = Object.fromEntries(

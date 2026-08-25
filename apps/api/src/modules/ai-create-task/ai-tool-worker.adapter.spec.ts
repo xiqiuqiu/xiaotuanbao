@@ -52,7 +52,7 @@ describe('AiToolWorkerAdapter.projectReviewPackage', () => {
     expect(result.reviewPackageId).toBe('pkg-1')
     expect(forwarded).toEqual([{ actionId: store.records[0]?.id, packageId: 'pkg-1' }])
     expect(result.action).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',

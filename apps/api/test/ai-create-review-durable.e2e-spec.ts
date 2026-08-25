@@ -147,7 +147,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
             fieldKey: 'name' as const,
             proposedValue: name,
             clarity: 'clear' as const,
-            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: `团名叫${name}` }],
+            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '请按这个团名建团' }],
           },
         ],
       },
@@ -159,7 +159,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
         toolSteps: [
           {
             stepId: 'step-1',
-            toolName: 'submitReviewPackage',
+            toolName: 'proposeReviewPackage',
             capabilityKey: 'departure.review-package.propose',
             capabilityVersion: 1,
             status: 'succeeded' as const,
@@ -203,7 +203,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
         {
           fieldKey: 'name',
           proposedValue: `${testPrefix}-候选团名`,
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: `团名叫${testPrefix}-候选团名` }],
+          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '请按这个团名建团' }],
         },
       ],
     })
@@ -226,7 +226,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(attempt.mastraTraceId).toBe(`trace-${testPrefix}`)
     expect(attempt.toolSteps).toEqual([
       expect.objectContaining({
-        toolName: 'submitReviewPackage',
+        toolName: 'proposeReviewPackage',
         capabilityKey: 'departure.review-package.propose',
         capabilityVersion: 1,
       }),

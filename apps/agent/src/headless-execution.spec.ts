@@ -237,7 +237,7 @@ describe('headless Agent runtime contract', () => {
       expect(listAgentTools()).toEqual([
         'getTaskContext',
         'searchRouteTemplates',
-        'submitReviewPackage',
+        'proposeReviewPackage',
         'getMaterialParseResult',
       ])
     } finally {
@@ -563,6 +563,7 @@ describe('headless Agent runtime contract', () => {
         data: {
           kind: 'completed',
           message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+          diagnostic: { usageSource: 'missing', toolSteps: [] },
         },
       })
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
