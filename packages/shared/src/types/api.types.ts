@@ -1,3 +1,4 @@
+import type { PageLocator } from '../agent/page-locator'
 import type { DepartureIncomeCollectionStatus } from '../enums/departure-income-collection-status.enum'
 import type { DepartureIncomeCommissionStatus } from '../enums/departure-income-commission-status.enum'
 import type { DepartureIncomeSettlementComposite } from '../enums/departure-income-settlement-composite.enum'
@@ -991,6 +992,7 @@ export interface AiInputBatchView {
   conversationVersion: number
   replyToEventId?: string | null
   queued?: boolean
+  pageLocator?: PageLocator | null
   materialProgress?: {
     ready: number
     total: number
@@ -1018,6 +1020,7 @@ export interface SendAiConversationMessageDto {
   interactionId?: string
   interactionVersion?: number
   selectedOptionId?: string
+  pageLocator?: PageLocator
 }
 
 export interface CancelAiConversationInteractionDto {

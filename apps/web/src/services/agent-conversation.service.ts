@@ -4,6 +4,7 @@ import type {
   AiConversationEventView,
   AiConversationView,
   ConversationHistoryPage,
+  PageLocator,
   SaveAiConversationDraftDto,
   SendAiConversationMessageResult,
 } from '@/types/api'
@@ -65,14 +66,21 @@ export async function saveAgentConversationDraft(
 
 export async function sendAgentConversationText(
   conversationId: string | null,
-  payload: { text: string },
+  payload: { text: string; pageLocator?: PageLocator | null },
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   const path = conversationId
     ? `/agent/conversations/${conversationId}/messages`
     : '/agent/conversations/messages'
-  return request.post<SendAiConversationMessageResult>(path, { text: payload.text }, {
-    silentError: true,
-    headers: { 'Idempotency-Key': idempotencyKey },
-  })
+  return request.post<SendAiConversationMessageResult>(
+    path,
+    {
+      text: payload.text,
+      ...(payload.pageLocator ? { pageLocator: payload.pageLocator } : {}),
+    },
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
 }

@@ -235,6 +235,18 @@ export type {
   StoredObjectSummary,
 } from './types/api.types'
 
+export {
+  PAGE_LOCATOR_KINDS,
+  PAGE_LOCATOR_SECTIONS,
+  PAGE_LOCATOR_UNSUPPORTED,
+  pageLocatorLabel,
+  parsePageLocator,
+  parsePageLocatorFromLocation,
+  type PageLocator,
+  type PageLocatorKind,
+  type PageLocatorSection,
+} from './agent/page-locator'
+
 export { PARTNER_RECONCILIATION_CONFIRMATION_NOTES } from './constants/partner-reconciliation'
 export {
   PLATFORM_ORGANIZATION_NAME,

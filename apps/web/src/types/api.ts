@@ -101,6 +101,7 @@ export type {
   AiConversationInteractionView,
   AiInputBatchView,
   AiConversationView,
+  PageLocator,
   SendAiConversationMessageDto,
   SaveAiConversationDraftDto,
   SendAiConversationMessageResult,

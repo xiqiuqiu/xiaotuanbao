@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { PageLocator } from '@xiaotuanbao/shared'
 import {
   agentConversationPath,
   captureReturnLocation,
@@ -7,6 +8,7 @@ import {
   readPersistedReturnLocation,
   type AgentReturnLocation,
 } from './agent-conversation-location'
+import { nextPageLocatorAttachment } from './page-locator-attachment'
 
 export const NEW_CONVERSATION_TITLE = '新会话'
 
@@ -19,8 +21,13 @@ interface AgentConversationState {
   returnLocation: AgentReturnLocation | null
   historyRailCollapsed: boolean
   globalOpen: boolean
+  attachedPageLocator: PageLocator | null
   selectConversation: (conversation: { id: string; title: string }) => void
-  startNewConversation: () => void
+  startNewConversation: (currentLocator?: PageLocator | null) => void
+  pageContextDismissed: boolean
+  attachCurrentPage: (currentLocator: PageLocator | null) => void
+  detachCurrentPage: () => void
+  syncDefaultPageLocator: (currentLocator: PageLocator | null) => void
   expandToGlobal: (location: {
     pathname: string
     search?: string
@@ -40,22 +47,76 @@ const INITIAL_CONVERSATION_STATE = {
   returnLocation: null as AgentReturnLocation | null,
   historyRailCollapsed: false,
   globalOpen: false,
+  attachedPageLocator: null as PageLocator | null,
+  pageContextDismissed: false,
 }
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
   ...INITIAL_CONVERSATION_STATE,
-  selectConversation: (conversation) =>
+  selectConversation: (conversation) => {
+    const current = get()
+    const persistingNewConversation = current.conversationId === null && current.view !== 'history'
+    const switching = !persistingNewConversation && current.conversationId !== conversation.id
     set({
-      view: 'history',
+      view: persistingNewConversation ? current.view : 'history',
       conversationId: conversation.id,
       title: conversation.title || NEW_CONVERSATION_TITLE,
-    }),
-  startNewConversation: () =>
+      ...(switching
+        ? {
+            attachedPageLocator: nextPageLocatorAttachment({
+              view: 'history',
+              conversationId: conversation.id,
+              currentLocator: null,
+              attachedLocator: current.attachedPageLocator,
+              captured: false,
+            }),
+            pageContextDismissed: false,
+          }
+        : {}),
+    })
+  },
+  startNewConversation: (currentLocator = null) =>
     set({
       view: 'new',
       conversationId: null,
       title: NEW_CONVERSATION_TITLE,
+      attachedPageLocator: nextPageLocatorAttachment({
+        view: 'new',
+        conversationId: null,
+        currentLocator,
+        attachedLocator: null,
+        captured: false,
+      }),
+      pageContextDismissed: false,
     }),
+  attachCurrentPage: (currentLocator) =>
+    set({
+      attachedPageLocator: nextPageLocatorAttachment({
+        view: get().view,
+        conversationId: get().conversationId,
+        currentLocator,
+        attachedLocator: get().attachedPageLocator,
+        captured: true,
+      }),
+      pageContextDismissed: false,
+    }),
+  detachCurrentPage: () => set({ attachedPageLocator: null, pageContextDismissed: true }),
+  syncDefaultPageLocator: (currentLocator) => {
+    const current = get()
+    if (current.conversationId || current.view === 'history' || current.pageContextDismissed) {
+      return
+    }
+    const next = nextPageLocatorAttachment({
+      view: current.view === 'page' ? 'new' : current.view,
+      conversationId: current.conversationId,
+      currentLocator,
+      attachedLocator: current.attachedPageLocator,
+      captured: false,
+    })
+    if (next && !current.attachedPageLocator) {
+      set({ attachedPageLocator: next })
+    }
+  },
   expandToGlobal: (location) => {
     const current = get()
     const captured = captureReturnLocation(location)
@@ -85,6 +146,14 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         view: 'history',
         conversationId,
         title: current.title || NEW_CONVERSATION_TITLE,
+        attachedPageLocator: nextPageLocatorAttachment({
+          view: 'history',
+          conversationId,
+          currentLocator: null,
+          attachedLocator: current.attachedPageLocator,
+          captured: false,
+        }),
+        pageContextDismissed: false,
       })
       return
     }
@@ -94,6 +163,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         view: 'new',
         conversationId: null,
         title: NEW_CONVERSATION_TITLE,
+        attachedPageLocator: current.attachedPageLocator,
       })
       return
     }

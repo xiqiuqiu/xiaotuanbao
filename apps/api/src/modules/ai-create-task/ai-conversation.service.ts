@@ -101,6 +101,7 @@ import {
   materialFileKey,
   type IncomingMaterialFile,
 } from './departure-material.service'
+import { PageLocatorResolver } from './page-locator.resolver'
 
 const TASK_INCLUDE = {
   draft: true,
@@ -140,6 +141,7 @@ export class AiConversationService {
     private readonly authService: AuthService,
     private readonly eventHub: AiConversationEventHub,
     private readonly materialService: DepartureMaterialService,
+    private readonly pageLocatorResolver: PageLocatorResolver,
   ) {}
 
   async openOrResume(
@@ -223,10 +225,16 @@ export class AiConversationService {
     idempotencyKey: string | undefined,
     reply: ConversationReplyInput = {},
     files: IncomingMaterialFile[] = [],
+    pageLocatorInput?: unknown,
   ): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(idempotencyKey)
     const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
     const trimmed = text.trim() || (attachments.length > 0 ? '请根据附件回答。' : '')
+    const resolvedPage = await this.pageLocatorResolver.resolve(
+      organizationId,
+      userId,
+      pageLocatorInput,
+    )
     if (isReplyAttempt(reply)) {
       if (!conversationId) {
         throw new BadRequestException('回答追问必须指定会话')
@@ -243,6 +251,7 @@ export class AiConversationService {
       interactionId: reply.interactionId ?? null,
       interactionVersion: reply.interactionVersion ?? null,
       selectedOptionId: reply.selectedOptionId ?? null,
+      pageLocator: resolvedPage?.locator ?? null,
       attachments: attachments.map((file) => ({
         filename: file.originalname,
         contentType: (file.mimetype ?? '').toLowerCase(),
@@ -410,6 +419,9 @@ export class AiConversationService {
           replyToEventId: replyResult?.replyToEventId,
           conversationVersion: userSequence,
           status: batchStatus,
+          pageLocator: resolvedPage
+            ? (JSON.parse(JSON.stringify(resolvedPage.locator)) as Prisma.InputJsonValue)
+            : undefined,
           sources: {
             create: archived.map((item) => ({
               organizationId,

@@ -76,6 +76,7 @@ import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
 import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 import { DepartureMaterialService } from './departure-material.service'
+import { PageLocatorResolver } from './page-locator.resolver'
 import {
   PARSE_FAILED_ERROR_CODE,
   materialProgressFromDeps,
@@ -100,6 +101,7 @@ export class AiWorkflowProcessor {
     private readonly conversationService: AiConversationService,
     private readonly headlessClient: AiHeadlessClient,
     private readonly materialService: DepartureMaterialService,
+    private readonly pageLocatorResolver: PageLocatorResolver,
   ) {}
 
   async processDueJobs(limit = 10): Promise<number> {
@@ -959,6 +961,11 @@ export class AiWorkflowProcessor {
       materials: parseIndex.materials,
       materialTruncationReasons: parseIndex.truncationReasons,
     })
+    const pageContext = await this.pageLocatorResolver.resolve(
+      job.organizationId,
+      job.inputBatch.creatorUserId,
+      job.inputBatch.pageLocator,
+    )
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       const budgetedContext = buildBudgetedContext({
@@ -968,7 +975,9 @@ export class AiWorkflowProcessor {
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
         currentUserText: userText,
-        businessFacts: { conversationId: job.conversationId },
+        businessFacts: pageContext
+          ? { conversationId: job.conversationId, page: pageContext.facts }
+          : { conversationId: job.conversationId },
         unresolvedState: { hasPendingReview: false, reviewPackageId: null },
         projection,
       })
@@ -980,7 +989,7 @@ export class AiWorkflowProcessor {
           budgetedContext.projection.recentTail,
           userEvent.sequence,
         ),
-        businessSnapshotVersion: 0,
+        businessSnapshotVersion: pageContext?.objectVersion ?? 0,
         taskRefs: [],
         modelId,
         materialVersions,

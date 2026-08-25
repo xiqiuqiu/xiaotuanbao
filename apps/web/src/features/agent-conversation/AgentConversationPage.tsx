@@ -64,7 +64,7 @@ export function AgentConversationPage({
                 type="text"
                 icon={<PlusOutlined aria-hidden />}
                 aria-label="新建会话"
-                onClick={startNewConversation}
+                onClick={() => startNewConversation()}
               />
             </Tooltip>
           </div>

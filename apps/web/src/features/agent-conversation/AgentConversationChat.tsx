@@ -3,9 +3,13 @@ import {
   CopilotChatView,
   CopilotKit,
 } from '@copilotkit/react-core/v2'
-import { Alert, Typography } from 'antd'
+import { Alert, Button, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AiConversationEventView, AiConversationView } from '@xiaotuanbao/shared'
+import {
+  pageLocatorLabel,
+  type AiConversationEventView,
+  type AiConversationView,
+} from '@xiaotuanbao/shared'
 import '@copilotkit/react-core/v2/styles.css'
 import {
   getAgentConversation,
@@ -22,6 +26,7 @@ import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationDraft } from './use-agent-conversation-draft'
+import { useCurrentPageLocator } from './use-current-page-locator'
 
 const AGENT_ID = 'conversation-general'
 
@@ -49,6 +54,12 @@ function mergeEvents(
 
 export function AgentConversationChat() {
   const conversationId = useAgentConversationStore((state) => state.conversationId)
+  const conversationView = useAgentConversationStore((state) => state.view)
+  const attachedPageLocator = useAgentConversationStore((state) => state.attachedPageLocator)
+  const attachCurrentPage = useAgentConversationStore((state) => state.attachCurrentPage)
+  const detachCurrentPage = useAgentConversationStore((state) => state.detachCurrentPage)
+  const syncDefaultPageLocator = useAgentConversationStore((state) => state.syncDefaultPageLocator)
+  const currentPageLocator = useCurrentPageLocator()
   const selectConversation = useAgentConversationStore((state) => state.selectConversation)
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
@@ -63,6 +74,10 @@ export function AgentConversationChat() {
   useEffect(() => {
     lastSequenceRef.current = getContiguousSequence(events)
   }, [events])
+
+  useEffect(() => {
+    syncDefaultPageLocator(currentPageLocator)
+  }, [conversationId, conversationView, currentPageLocator, syncDefaultPageLocator])
 
   useEffect(() => {
     useAgentConversationRuntimeStore.getState().resetIfConversationChanged(conversationId)
@@ -177,7 +192,10 @@ export function AgentConversationChat() {
       try {
         const result = await sendAgentConversationText(
           conversationIdRef.current,
-          { text: nextText },
+          {
+            text: nextText,
+            pageLocator: useAgentConversationStore.getState().attachedPageLocator,
+          },
           sendIdempotencyKey,
         )
         useAgentConversationRuntimeStore.getState().hydrate({
@@ -222,6 +240,32 @@ export function AgentConversationChat() {
   return (
     <div className={chatStyles.root}>
       {errorText ? <Alert type="error" showIcon message={errorText} /> : null}
+      {attachedPageLocator ? (
+        <div className={chatStyles.pageContext}>
+          <Tag className={chatStyles.pageContextChip} data-testid="current-page-chip">
+            {pageLocatorLabel(attachedPageLocator)}
+            <Button
+              type="text"
+              size="small"
+              aria-label="移除当前页面"
+              onClick={detachCurrentPage}
+            >
+              移除
+            </Button>
+          </Tag>
+        </div>
+      ) : currentPageLocator ? (
+        <div className={chatStyles.pageContext}>
+          <Button
+            type="link"
+            size="small"
+            aria-label="获取当前页面"
+            onClick={() => attachCurrentPage(currentPageLocator)}
+          >
+            获取当前页面
+          </Button>
+        </div>
+      ) : null}
       {loading ? (
         <Typography.Text type="secondary">正在加载会话</Typography.Text>
       ) : (

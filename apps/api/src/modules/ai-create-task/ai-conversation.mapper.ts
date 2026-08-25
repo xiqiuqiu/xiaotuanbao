@@ -6,6 +6,7 @@ import type {
   AiInputBatchMaterialView,
   AiInputBatchView,
 } from '@xiaotuanbao/shared'
+import { parsePageLocator } from '@xiaotuanbao/shared'
 import {
   ConversationSourceStatus,
   type AiConversation,
@@ -102,12 +103,14 @@ export function toBatchView(
         })),
       )
     : undefined
+  const pageLocator = parsePageLocator(batch.pageLocator)
   return {
     id: batch.id,
     status: batch.status,
     conversationVersion: batch.conversationVersion,
     replyToEventId: batch.replyToEventId,
     ...(options?.queued ? { queued: true } : {}),
+    ...(pageLocator ? { pageLocator } : {}),
     ...(materialProgress && materialProgress.total > 0 ? { materialProgress } : {}),
     ...(materials && materials.length > 0 ? { materials } : {}),
   }

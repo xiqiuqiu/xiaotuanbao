@@ -42,7 +42,7 @@ export function AssistPane() {
               className={styles.iconButton}
               type="text"
               icon={<PlusOutlined aria-hidden />}
-              onClick={startNewConversation}
+              onClick={() => startNewConversation()}
               aria-label="新建会话"
             />
             {headerExtra}
