@@ -1,5 +1,5 @@
 import type { StoredReviewCandidate } from './review-package.mapper'
-import { effectiveCandidateValue, reviewConfirmValues } from './review-package.mapper'
+import { effectiveCandidateValue, reviewConfirmValues, toReviewPackageView } from './review-package.mapper'
 
 function candidate(
   overrides: Partial<StoredReviewCandidate> & Pick<StoredReviewCandidate, 'fieldKey' | 'proposedValue'>,
@@ -80,5 +80,36 @@ describe('reviewConfirmValues', () => {
       startDate: null,
       expectedGuestCountHint: null,
     })
+  })
+})
+
+describe('toReviewPackageView user provenance', () => {
+  it('keeps model evidence and proposedValue when the user supplies a correction', () => {
+    const view = toReviewPackageView({
+      id: 'pkg-1',
+      status: 'pending',
+      confirmationUnit: 'basic_info_draft',
+      baseObjectVersion: 1,
+      version: 1,
+      runId: 'run-1',
+      candidates: [
+        candidate({
+          fieldKey: 'name',
+          proposedValue: '九月川西团',
+          evidence: [{ kind: 'user_message', sequence: 3, excerpt: '九月川西团' }],
+        }),
+      ],
+      baselineSnapshot: { name: '原团名' },
+      userCorrections: { name: '用户修正团名' },
+    })
+
+    expect(view.candidates).toEqual([
+      expect.objectContaining({
+        fieldKey: 'name',
+        proposedValue: '九月川西团',
+        userCorrectedValue: '用户修正团名',
+        evidence: [{ kind: 'user_message', sequence: 3, excerpt: '九月川西团' }],
+      }),
+    ])
   })
 })

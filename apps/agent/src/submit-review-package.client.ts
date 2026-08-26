@@ -1,5 +1,5 @@
-import type { SubmitReviewPackageInput, SubmitReviewPackageOutput } from '@xiaotuanbao/ai-contracts'
-import { submitReviewPackageOutputSchema } from '@xiaotuanbao/ai-contracts'
+import type { ProposeReviewPackageOutput, SubmitReviewPackageInput } from '@xiaotuanbao/ai-contracts'
+import { proposeReviewPackageOutputSchema } from '@xiaotuanbao/ai-contracts'
 import { mapAgentFetchError } from './map-agent-error'
 
 export interface SubmitReviewPackageClientOptions {
@@ -11,10 +11,10 @@ export interface SubmitReviewPackageClientOptions {
 export async function submitReviewPackage(
   options: SubmitReviewPackageClientOptions,
   input: SubmitReviewPackageInput,
-): Promise<SubmitReviewPackageOutput> {
+): Promise<ProposeReviewPackageOutput> {
   let response: Response
   try {
-    response = await fetch(`${options.apiBaseUrl.replace(/\/$/, '')}/api/ai-tools/v1/submit-review-package`, {
+    response = await fetch(`${options.apiBaseUrl.replace(/\/$/, '')}/api/ai-tools/v1/propose-review-package`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -36,5 +36,5 @@ export async function submitReviewPackage(
     throw mapAgentFetchError(payload?.data ?? { status: response.status })
   }
 
-  return submitReviewPackageOutputSchema.parse(payload?.data)
+  return proposeReviewPackageOutputSchema.parse(payload?.data)
 }

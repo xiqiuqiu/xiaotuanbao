@@ -3,7 +3,7 @@ import type { AiActionRepeatObservationDraft } from './ai-action.types'
 
 const draft: AiActionRepeatObservationDraft = {
   organizationId: 'org-1',
-  name: 'submitReviewPackage',
+  name: 'proposeReviewPackage',
   targetRef: { kind: 'departure_creation_draft', id: 'task-1' },
   inputHash: 'abc',
   actionId: 'action-2',

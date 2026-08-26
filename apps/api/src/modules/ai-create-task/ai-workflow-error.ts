@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common'
 import { CONTEXT_CAPACITY_EXCEEDED, CONTEXT_PROFILE_MISSING } from './ai-context-budget'
+import { ReviewProposalRejectedError } from './review-proposal.commit'
 
 const TYPED_WORKFLOW_ERROR_CODES = [
   'VERSION_CONFLICT',
@@ -8,6 +9,9 @@ const TYPED_WORKFLOW_ERROR_CODES = [
 ] as const
 
 export function workflowErrorCode(error: unknown): string {
+  if (error instanceof ReviewProposalRejectedError) {
+    return 'INVALID_FORMAT'
+  }
   if (error instanceof Error) {
     const code = TYPED_WORKFLOW_ERROR_CODES.find(
       (item) => error.message === item || error.message.startsWith(`${item}:`),

@@ -26,8 +26,8 @@ export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_CONVERSATION = 3
 export const MAX_IN_FLIGHT_PROCESSING_BATCHES_PER_USER = 8
 
 export const PLAINTEXT_CONTEXT_BUILDER_VERSION = 'ai-create-frozen-projection/v1'
-export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v6'
-export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v6'
+export const PLAINTEXT_SYSTEM_PROMPT_VERSION = 'ai-create-readonly-assist/v7'
+export const PLAINTEXT_TOOL_SCHEMA_VERSION = 'ai-create-tools/v7'
 /** 无任务会话实际执行 `conversation.general` 指令，不得复用建团 readonly-assist 版本号。 */
 export const CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION = 'conversation-general/v1'
 /** 无任务会话不向模型暴露建团工具；Manifest 必须与空 schema 对齐。 */
@@ -47,6 +47,7 @@ export const WORKFLOW_IMMEDIATE_FAILURE_CODES = new Set([
   'PERMISSION_DENIED',
   'VERSION_CONFLICT',
   'BATCH_CANCELLED',
+  'INVALID_FORMAT',
   'CONTEXT_CAPACITY_EXCEEDED',
   'CONTEXT_PROFILE_MISSING',
 ])

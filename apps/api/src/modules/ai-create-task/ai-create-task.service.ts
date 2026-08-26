@@ -40,6 +40,7 @@ import {
   reviewDecisionIdentitySchema,
   type GetTaskContextOutput,
   type SearchRouteTemplatesOutput,
+  type ProposeReviewPackageOutput,
   type SubmitReviewPackageOutput,
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
@@ -74,6 +75,12 @@ import {
   type StoredReviewCandidate,
 } from './review-package.mapper'
 import { findReviewPackageByProposalIdentity } from './review-package.projection'
+import { loadEvidenceAuthority } from './evidence-authority'
+import {
+  requireValidReviewProposal,
+  ReviewProposalRejectedError,
+} from './review-proposal.commit'
+import { validateReviewProposal } from './review-proposal.validator'
 import {
   departureReviewProposalHash,
   reviewDecisionRequestHash,
@@ -346,6 +353,94 @@ export class AiCreateTaskService {
     return searchRouteTemplatesOutputSchema.parse({ items })
   }
 
+  async proposeReviewPackageForAgent(
+    caller: {
+      userId: string
+      organizationId: string
+      taskId: string
+      runId: string
+      conversationId: string
+      inputBatchId: string
+      attemptId?: string
+      contextManifestId?: string
+    },
+    rawInput: unknown,
+  ): Promise<ProposeReviewPackageOutput> {
+    let input: ReturnType<typeof submitReviewPackageInputSchema.parse>
+    try {
+      input = submitReviewPackageInputSchema.parse(rawInput)
+    } catch {
+      throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+    }
+    if (input.taskId !== caller.taskId || input.runId !== caller.runId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (!caller.conversationId || !caller.inputBatchId || !caller.attemptId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+
+    const task = await this.prisma.aiCreateTask.findFirst({
+      where: { id: caller.taskId, agentTask: { organizationId: caller.organizationId } },
+      include: TASK_WITH_PENDING_INCLUDE,
+    })
+    if (!task || !task.draft) {
+      throw new NotFoundException('AI 建团任务不存在')
+    }
+    if (task.agentTask.ownerUserId !== caller.userId) {
+      throw new ForbiddenException('仅任务创建者可提交审核包')
+    }
+    if (
+      (task.agentTask.status !== AgentTaskStatus.active &&
+        task.agentTask.status !== AgentTaskStatus.waiting) ||
+      task.departureId
+    ) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
+    }
+    const run = await this.prisma.aiCreateActivityRun.findFirst({
+      where: {
+        id: caller.runId,
+        taskId: caller.taskId,
+        organizationId: caller.organizationId,
+        creatorUserId: caller.userId,
+      },
+    })
+    if (!run || run.status !== AiCreateActivityRunStatus.running) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (task.draft.version !== input.objectVersion) {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
+
+    const authority = await loadEvidenceAuthority(this.prisma, {
+      organizationId: caller.organizationId,
+      conversationId: caller.conversationId,
+      inputBatchId: caller.inputBatchId,
+      attemptId: caller.attemptId,
+      contextManifestId: caller.contextManifestId,
+    })
+    if (!authority) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const validated = validateReviewProposal({
+      proposal: {
+        objectVersion: input.objectVersion,
+        confirmationUnit: input.confirmationUnit,
+        candidates: input.candidates,
+      },
+      authority,
+    })
+    if (!validated.success) {
+      return { status: 'rejected', errors: validated.errors }
+    }
+    return {
+      status: 'accepted',
+      objectVersion: input.objectVersion,
+      confirmationUnit: input.confirmationUnit,
+      candidates: input.candidates,
+      normalizedProposal: validated.normalizedProposal,
+    }
+  }
+
   async submitReviewPackageForAgent(
     caller: {
       userId: string
@@ -411,18 +506,46 @@ export class AiCreateTaskService {
       if (task.draft.version !== input.objectVersion) {
         throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
       }
+      if (!caller.attemptId) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      const authority = await loadEvidenceAuthority(tx, {
+        organizationId: caller.organizationId,
+        conversationId: caller.conversationId,
+        inputBatchId: caller.inputBatchId,
+        attemptId: caller.attemptId,
+      })
+      if (!authority) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      let validated
+      try {
+        validated = requireValidReviewProposal({
+          proposal: {
+            objectVersion: input.objectVersion,
+            confirmationUnit: input.confirmationUnit,
+            candidates: input.candidates,
+          },
+          authority,
+        })
+      } catch (error) {
+        if (error instanceof ReviewProposalRejectedError) {
+          throw AiCollaborationHttpException.fromCode('INVALID_FORMAT')
+        }
+        throw error
+      }
 
       const replayed = await this.replaySubmittedReviewPackage(tx, {
         sourceActionId: options.sourceActionId,
         inputBatchId: caller.inputBatchId,
         targetId: task.draft.id,
-        reviewPackage: input,
+        reviewPackage: validated.reviewPackage,
       })
       if (replayed) {
         return replayed
       }
 
-      const stored = toStoredCandidates(input.candidates)
+      const stored = toStoredCandidates(validated.reviewPackage.candidates)
       const created = await tx.aiReviewPackage.create({
         data: reviewPackageCreateData({
           organizationId: caller.organizationId,
@@ -435,7 +558,7 @@ export class AiCreateTaskService {
           targetId: task.draft.id,
           baseObjectVersion: task.draft.version,
           baselineSnapshot: task.draft.snapshot as Prisma.InputJsonValue,
-          reviewPackage: input,
+          reviewPackage: validated.reviewPackage,
         }),
       })
       return submitReviewPackageOutputSchema.parse({
@@ -1376,7 +1499,11 @@ export class AiCreateTaskService {
       sourceActionId: string
       inputBatchId: string
       targetId: string
-      reviewPackage: ReturnType<typeof submitReviewPackageInputSchema.parse>
+      reviewPackage: {
+        objectVersion: number
+        confirmationUnit: 'basic_info_draft'
+        candidates: ReturnType<typeof submitReviewPackageInputSchema.parse>['candidates']
+      }
     },
   ): Promise<SubmitReviewPackageOutput | null> {
     const byAction = await tx.aiReviewPackage.findFirst({

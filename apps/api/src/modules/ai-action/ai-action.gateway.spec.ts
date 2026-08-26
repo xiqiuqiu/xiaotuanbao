@@ -146,7 +146,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: {
         ...actor,
         grantedCapabilities: [AI_CREATE_CAPABILITY_REFS_BY_TOOL.getTaskContext],
@@ -169,7 +169,7 @@ describe('AiActionGateway.execute', () => {
 
     await expect(
       gateway.execute({
-        name: 'submitReviewPackage',
+        name: 'proposeReviewPackage',
         actor,
         input: reviewInput,
         forward: async (context) => {
@@ -424,7 +424,7 @@ describe('AiActionGateway.execute', () => {
     const persistCalls: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async ({ action }) => {
@@ -433,7 +433,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async ({ action }) => {
@@ -447,7 +447,7 @@ describe('AiActionGateway.execute', () => {
     expect(second.action?.id).toBe(first.action?.id)
     expect(persistCalls).toEqual([first.action?.id, first.action?.id])
     expect(first.action).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
     })
@@ -459,13 +459,13 @@ describe('AiActionGateway.execute', () => {
     const input = reviewInput
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -482,7 +482,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -491,7 +491,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -516,7 +516,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -525,7 +525,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -549,19 +549,19 @@ describe('AiActionGateway.execute', () => {
     const input = reviewInput
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const replayed = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -591,13 +591,13 @@ describe('AiActionGateway.execute', () => {
     }
 
     await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -654,7 +654,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -663,7 +663,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-2' },
       input,
       forward: async ({ action }) => {
@@ -717,7 +717,7 @@ describe('AiActionGateway.execute', () => {
     const persistCalls: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithoutAttempt,
       input,
       forward: async ({ action }) => {
@@ -726,7 +726,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithoutAttempt,
       input,
       forward: async ({ action }) => {
@@ -747,13 +747,13 @@ describe('AiActionGateway.execute', () => {
     const input = reviewInput
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-2' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-2' }),
@@ -769,7 +769,7 @@ describe('AiActionGateway.execute', () => {
 
     await expect(
       gateway.execute({
-        name: 'submitReviewPackage',
+        name: 'proposeReviewPackage',
         actor,
         input: reviewInput,
         forward: async () => {
@@ -780,7 +780,7 @@ describe('AiActionGateway.execute', () => {
 
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
       executionStatus: 'failed',
@@ -794,7 +794,7 @@ describe('AiActionGateway.execute', () => {
     const secretEvidence = '护照页原文 E12345678'
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: {
         taskId: 'task-1',
@@ -841,7 +841,7 @@ describe('AiActionGateway.execute', () => {
       targetRef: { kind: 'departure_material', id: 'mat-1' },
     },
     {
-      name: 'submitReviewPackage' as const,
+      name: 'proposeReviewPackage' as const,
       input: reviewInput,
       targetRef: { kind: 'departure_creation_draft', id: 'draft-1' },
     },
@@ -1060,12 +1060,12 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     })
   })
 
-  it('does not forward submitReviewPackage when the claimed object version is not the current draft', async () => {
+  it('does not forward proposeReviewPackage when the claimed object version is not the current draft', async () => {
     const { gateway } = createGateway(authorityForActor(actor))
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: { objectVersion: 2, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
       forward: async (context) => forwarded.push(context),
@@ -1085,7 +1085,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
 
     await expect(
       gateway.execute({
-        name: 'submitReviewPackage',
+        name: 'proposeReviewPackage',
         actor,
         input: { objectVersion: 1, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
         forward: async ({ target }) => {
@@ -1102,7 +1102,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
 
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',
       executionStatus: 'failed',
@@ -1136,12 +1136,12 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     expect(store.records[0]?.targetRef).toEqual(result.action?.targetRef)
   })
 
-  it('does not forward submitReviewPackage when the draft is missing', async () => {
+  it('does not forward proposeReviewPackage when the draft is missing', async () => {
     const { gateway } = createGateway(new InMemoryAiActionTargetAuthority())
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: { objectVersion: 1, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
       forward: async (context) => forwarded.push(context),
@@ -1154,7 +1154,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     })
   })
 
-  it('does not forward submitReviewPackage when the task belongs to another Organization', async () => {
+  it('does not forward proposeReviewPackage when the task belongs to another Organization', async () => {
     const { gateway } = createGateway(
       new InMemoryAiActionTargetAuthority({
         tasks: [
@@ -1171,7 +1171,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: { objectVersion: 1, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
       forward: async (context) => forwarded.push(context),
@@ -1185,7 +1185,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     })
   })
 
-  it('does not forward submitReviewPackage when the actor is not the task owner', async () => {
+  it('does not forward proposeReviewPackage when the actor is not the task owner', async () => {
     const { gateway } = createGateway(
       new InMemoryAiActionTargetAuthority({
         tasks: [
@@ -1202,7 +1202,7 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: { objectVersion: 1, candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
       forward: async (context) => forwarded.push(context),
@@ -1215,12 +1215,12 @@ describe('AiActionGateway.execute 权威目标解析', () => {
     })
   })
 
-  it('does not forward submitReviewPackage when the claimed task is not the delegated task', async () => {
+  it('does not forward proposeReviewPackage when the claimed task is not the delegated task', async () => {
     const { gateway } = createGateway(authorityForActor(actor))
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: {
         taskId: 'task-other',

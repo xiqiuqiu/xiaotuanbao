@@ -38,7 +38,35 @@ describe('真实 Mastra offline Eval smoke', () => {
       readUserText: async (request) => request.userText,
       generate: async () => ({
         text: '已提交待审核建议。',
-        toolCalls: [{ toolName: 'submitReviewPackage', args: REVIEW_ARGS }],
+        toolCalls: [{ toolName: 'proposeReviewPackage', args: REVIEW_ARGS }],
+        toolResults: [
+          {
+            type: 'tool-result',
+            payload: {
+              toolName: 'proposeReviewPackage',
+              result: {
+                status: 'accepted',
+                objectVersion: REVIEW_ARGS.objectVersion,
+                confirmationUnit: REVIEW_ARGS.confirmationUnit,
+                candidates: REVIEW_ARGS.candidates,
+                normalizedProposal: {
+                  schemaVersion: 1,
+                  normalizationVersion: 'unicode-nfc-whitespace-v1',
+                  policyVersion: 'evidence-authenticity-v1',
+                  candidates: [
+                    {
+                      candidateIndex: 0,
+                      candidateId: 'routeName',
+                      proposedValue: '喀纳斯3日线',
+                      evidenceIds: ['e1'],
+                    },
+                  ],
+                  evidenceCatalog: [],
+                },
+              },
+            },
+          },
+        ],
       }),
     })
     const outcome = await executor(IDENTITY)
@@ -46,7 +74,7 @@ describe('真实 Mastra offline Eval smoke', () => {
     expect(outcome.kind).toBe('awaiting_review')
     expect(outcome.diagnostic?.toolSteps).toEqual([
       expect.objectContaining({
-        toolName: 'submitReviewPackage',
+        toolName: 'proposeReviewPackage',
         capabilityKey: 'departure.review-package.propose',
         capabilityVersion: 1,
       }),

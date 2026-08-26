@@ -25,7 +25,7 @@ const proposeCapability: CapabilityDefinition = {
   ...readCapability,
   key: 'departure.review-package.propose',
   version: 1,
-  toolName: 'submitReviewPackage',
+  toolName: 'proposeReviewPackage',
   kind: 'propose',
   risk: 'medium',
   entitlementKey: 'module:departure',

@@ -111,16 +111,17 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId,
       version,
       runId: minted.runId,
+      userMessageSequence: minted.userMessageSequence,
       delegationToken: minted.delegationToken,
     }
   }
 
-  function nameCandidate(excerpt = '团名叫八月川西团') {
+  function nameCandidate(sequence: number) {
     return {
       fieldKey: 'name',
       proposedValue: `${testPrefix}-候选团名`,
       clarity: 'clear',
-      evidence: [{ kind: 'user_message', sequence: 1, excerpt }],
+      evidence: [{ kind: 'user_message', sequence, excerpt: 'e2e worker-shaped attempt' }],
     }
   }
 
@@ -131,7 +132,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
 
     expect(submitted.body.data).toMatchObject({
@@ -177,14 +178,19 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
 
     const second = await agentSubmit(opened.delegationToken, {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate('另一条候选')],
+      candidates: [
+        {
+          ...nameCandidate(opened.userMessageSequence),
+          proposedValue: `${testPrefix}-另一条候选`,
+        },
+      ],
     }).expect(200)
     expect(second.body.data.reviewPackageId).not.toBe(submitted.body.data.reviewPackageId)
 
@@ -192,7 +198,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
     expect(replayed.body.data.reviewPackageId).toBe(submitted.body.data.reviewPackageId)
 
@@ -214,7 +220,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
     const packageId = submitted.body.data.reviewPackageId as string
 
@@ -232,7 +238,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: rejectedOpened.taskId,
       runId: rejectedOpened.runId,
       objectVersion: rejectedOpened.version,
-      candidates: [nameCandidate('拒绝这条')],
+      candidates: [nameCandidate(rejectedOpened.userMessageSequence)],
     }).expect(200)
     const rejected = await authRequest(app, coordinatorToken)
       .post(
@@ -277,13 +283,13 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
           fieldKey: 'startDate',
           proposedValue: '2026-09-08',
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '9月8日出团' }],
+          evidence: [{ kind: 'user_message', sequence: opened.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
         {
           fieldKey: 'expectedGuestCountHint',
           proposedValue: 12,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '大概12人' }],
+          evidence: [{ kind: 'user_message', sequence: opened.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     }).expect(200)
@@ -323,7 +329,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
     const packageId = submitted.body.data.reviewPackageId as string
 
@@ -370,7 +376,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       taskId: opened.taskId,
       runId: opened.runId,
       objectVersion: opened.version,
-      candidates: [nameCandidate()],
+      candidates: [nameCandidate(opened.userMessageSequence)],
     }).expect(200)
     const packageId = submitted.body.data.reviewPackageId as string
 
@@ -395,7 +401,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
           fieldKey: 'ownerUserId',
           proposedValue: ownerUserId,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '负责人我来' }],
+          evidence: [{ kind: 'user_message', sequence: opened.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     })

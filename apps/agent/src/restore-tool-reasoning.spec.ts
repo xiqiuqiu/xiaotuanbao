@@ -70,7 +70,7 @@ describe('recordReasoningFromStream', () => {
           yield { type: 'reasoning-delta', payload: { text: 'submit candidates' } }
           yield {
             type: 'tool-call',
-            payload: { toolCallId: 'call-submit', toolName: 'submitReviewPackage', args: {} },
+            payload: { toolCallId: 'call-submit', toolName: 'proposeReviewPackage', args: {} },
           }
           yield { type: 'step-finish', payload: {} }
         })(),
@@ -85,7 +85,7 @@ describe('recordReasoningFromStream', () => {
             {
               type: 'tool-call',
               toolCallId: 'call-submit',
-              toolName: 'submitReviewPackage',
+              toolName: 'proposeReviewPackage',
               args: {},
             },
           ],
@@ -99,7 +99,7 @@ describe('recordReasoningFromStream', () => {
           {
             type: 'tool-call',
             toolCallId: 'call-submit',
-            toolName: 'submitReviewPackage',
+            toolName: 'proposeReviewPackage',
             args: {},
           },
         ],

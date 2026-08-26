@@ -84,6 +84,8 @@ import {
   parseErrorMessage,
 } from './departure-material.constants'
 import { attemptDiagnosticUpdate } from './attempt-diagnostic'
+import { loadEvidenceAuthority } from './evidence-authority'
+import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage } from './review-package.projection'
 
 type ClaimedJob = AiWorkflowJob & { inputBatch: AiInputBatch }
@@ -1743,6 +1745,20 @@ export class AiWorkflowProcessor {
       throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
     }
     const runId = attempt.activityRunId
+    const authority = await loadEvidenceAuthority(tx, {
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      inputBatchId: job.inputBatchId,
+      attemptId,
+      contextManifestId: attempt.contextManifestId ?? undefined,
+    })
+    if (!authority) {
+      throw new Error('REVIEW_PACKAGE_AUTHORITY_MISSING')
+    }
+    const validated = requireValidReviewProposal({
+      proposal: reviewPackage,
+      authority,
+    })
     const adapter = new AiToolWorkerAdapter(
       new AiActionGateway(
         createPrismaAiActionStore(tx),
@@ -1767,7 +1783,7 @@ export class AiWorkflowProcessor {
           .array()
           .parse(attempt.grantedCapabilities),
       },
-      input: reviewPackage,
+      input: validated.reviewPackage,
       persist: async ({ action, target }) => {
         if (!action?.id) {
           throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
@@ -1782,7 +1798,7 @@ export class AiWorkflowProcessor {
           inputBatchId: job.inputBatchId,
           attemptId,
           runId,
-          reviewPackage: { ...reviewPackage, objectVersion: target.version },
+          reviewPackage: { ...validated.reviewPackage, objectVersion: target.version },
           sourceActionId: action.id,
         })
       },

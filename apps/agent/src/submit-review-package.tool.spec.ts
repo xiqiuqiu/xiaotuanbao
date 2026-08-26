@@ -32,10 +32,17 @@ describe('createSubmitReviewPackageTool', () => {
   beforeEach(() => {
     mockSubmit.mockReset()
     mockSubmit.mockResolvedValue({
-      reviewPackageId: 'pkg-1',
-      status: 'pending',
+      status: 'accepted',
       objectVersion: 2,
-      fieldKeys: ['name'],
+      confirmationUnit: 'basic_info_draft',
+      candidates: modelInput.candidates,
+      normalizedProposal: {
+        schemaVersion: 1,
+        normalizationVersion: 'unicode-nfc-whitespace-v1',
+        policyVersion: 'evidence-authenticity-v1',
+        candidates: [{ candidateIndex: 0, candidateId: 'name', proposedValue: '八月川西团', evidenceIds: ['e1'] }],
+        evidenceCatalog: [],
+      },
     })
   })
 

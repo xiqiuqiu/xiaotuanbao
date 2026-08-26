@@ -99,6 +99,19 @@ function adapterWith(
     getMaterialParseResultForAgent:
       methods.getMaterialParseResultForAgent ?? (async () => parsePayload),
     submitReviewPackageForAgent: methods.submitReviewPackageForAgent ?? (async () => reviewOutput),
+    proposeReviewPackageForAgent: async () => ({
+      status: 'accepted' as const,
+      objectVersion: 1,
+      confirmationUnit: 'basic_info_draft' as const,
+      candidates: reviewInput.candidates,
+      normalizedProposal: {
+        schemaVersion: 1,
+        normalizationVersion: 'unicode-nfc-whitespace-v1',
+        policyVersion: 'evidence-authenticity-v1',
+        candidates: [{ candidateIndex: 0, candidateId: 'name', proposedValue: '候选团名', evidenceIds: ['e1'] }],
+        evidenceCatalog: [],
+      },
+    }),
   } as unknown as AiCreateTaskService
   return new AiToolHttpAdapter(new AiActionGateway(store, authorityForActor(user)), tasks)
 }
@@ -324,7 +337,7 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     ])
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',
@@ -351,7 +364,7 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     })
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
       executionStatus: 'failed',
@@ -396,5 +409,17 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     expect(first).toBe(reviewOutput)
     expect(second).toBe(reviewOutput)
     expect(store.records).toHaveLength(1)
+  })
+})
+
+describe('AiToolHttpAdapter.proposeReviewPackage', () => {
+  it('prevalidates without creating an AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const adapter = adapterWith(store)
+
+    const result = await adapter.proposeReviewPackage(user, reviewInput)
+
+    expect(result.status).toBe('accepted')
+    expect(store.records).toHaveLength(0)
   })
 })

@@ -249,7 +249,7 @@ describe('headless Agent execution contract', () => {
           toolSteps: [
             {
               stepId: 'step-1',
-              toolName: 'submitReviewPackage',
+              toolName: 'proposeReviewPackage',
               status: 'schema_rejected',
               errorCode: 'INVALID_FORMAT',
             },

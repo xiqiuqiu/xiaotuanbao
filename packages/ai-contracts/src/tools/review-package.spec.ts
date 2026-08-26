@@ -49,13 +49,13 @@ describe('submitReviewPackage contract v1', () => {
 
   it('declares the versioned tool name among AI create tools', () => {
     expect(SUBMIT_REVIEW_PACKAGE_TOOL).toEqual({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       version: 1,
     })
     expect(AI_CREATE_TOOL_NAMES).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
-      'submitReviewPackage',
+      'proposeReviewPackage',
       'getMaterialParseResult',
     ])
   })
@@ -183,11 +183,11 @@ describe('submitReviewPackage contract v1', () => {
     })
   })
 
-  it('freezes submitReviewPackage while a package is pending', () => {
+  it('freezes proposeReviewPackage while a package is pending', () => {
     expect(capabilitiesForPendingReview(false)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
-      'submitReviewPackage',
+      'proposeReviewPackage',
       'getMaterialParseResult',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([

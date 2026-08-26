@@ -35,7 +35,7 @@ type TargetResolver = (
 const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   getTaskContext: resolveTaskContext,
   searchRouteTemplates: resolveRouteCatalog,
-  submitReviewPackage: resolveDepartureDraft,
+  proposeReviewPackage: resolveDepartureDraft,
   getMaterialParseResult: resolvePinnedMaterial,
   replyPlaintext: resolveConversation,
 }
