@@ -113,6 +113,12 @@ export class CurrentInstructionTokenLimiterProcessor {
         suffix = suffix.slice(1)
         continue
       }
+      if (args.stepNumber === 0 && original.some((message) => !kept.has(message.id))) {
+        args.abort(CONTEXT_CAPACITY_ABORT_REASON, {
+          retry: false,
+          metadata: { cause: 'initial_input_exceeds_safety_limit' },
+        })
+      }
       applyKeptIds(args.messageList, original, kept)
       return
     }

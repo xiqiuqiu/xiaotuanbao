@@ -34,7 +34,6 @@ describe('provider usage diagnostic', () => {
           text: 'ok',
           steps: [
             { usage: { inputTokens: 11, outputTokens: 2, totalTokens: 13 } },
-            { usage: undefined },
             { usage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 } },
           ],
         },
@@ -45,10 +44,30 @@ describe('provider usage diagnostic', () => {
       usage: { input: 20, output: 6, total: 26 },
       modelSteps: [
         { stepIndex: 0, usageSource: 'actual', usage: { input: 11, output: 2, total: 13 } },
+        { stepIndex: 1, usageSource: 'actual', usage: { input: 9, output: 4, total: 13 } },
+      ],
+    })
+
+    const partial = diagnosticFromMastraGenerate(
+      {
+        text: 'ok',
+        steps: [
+          { usage: { inputTokens: 11, outputTokens: 2, totalTokens: 13 } },
+          { usage: undefined },
+          { usage: { inputTokens: 9, outputTokens: 4, totalTokens: 13 } },
+        ],
+      },
+      [],
+    )
+    expect(partial).toMatchObject({
+      usageSource: 'missing',
+      modelSteps: [
+        { stepIndex: 0, usageSource: 'actual', usage: { input: 11, output: 2, total: 13 } },
         { stepIndex: 1, usageSource: 'missing' },
         { stepIndex: 2, usageSource: 'actual', usage: { input: 9, output: 4, total: 13 } },
       ],
     })
+    expect(partial.usage).toBeUndefined()
   })
 
   it('records missing usage when the provider omits token counts', () => {

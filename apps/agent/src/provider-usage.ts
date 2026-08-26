@@ -28,7 +28,7 @@ export function diagnosticFromMastraGenerate(
   const provider =
     usageCountsFromProvider(output.totalUsage) ??
     usageCountsFromProvider(output.usage) ??
-    aggregateUsageCounts(modelSteps.map((step) => step.usage))
+    completeStepUsage(modelSteps)
   const resolved = resolveDiagnosticUsage({ provider })
   const traceId = output.traceId ?? output.runId
   return {
@@ -52,6 +52,13 @@ export function isCapacityTripwire(output: MastraGenerateLike): boolean {
     reason.includes('TokenLimiterProcessor') ||
     reason === 'CONTEXT_CAPACITY_EXCEEDED'
   )
+}
+
+function completeStepUsage(modelSteps: ModelStepUsage[]) {
+  if (modelSteps.length === 0 || modelSteps.some((step) => step.usageSource !== 'actual')) {
+    return undefined
+  }
+  return aggregateUsageCounts(modelSteps.map((step) => step.usage))
 }
 
 function modelStepsFromGenerate(steps: unknown[] | undefined): ModelStepUsage[] {

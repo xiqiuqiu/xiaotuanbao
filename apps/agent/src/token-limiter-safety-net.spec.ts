@@ -125,6 +125,25 @@ describe('TokenLimiter safety net', () => {
     expect(ids.at(-1)).toBe('tool-new')
   })
 
+  it('fails observably instead of silently trimming the initial model step', async () => {
+    const limiter = createTokenLimiterSafetyNet({
+      limit: 250,
+      inner: createContiguousLimiter(250),
+    })
+    const list = createList(
+      [
+        textMessage('user-1', 'user', 'CURRENT'),
+        textMessage('extra', 'assistant', `HISTORY-${'甲'.repeat(400)}`),
+      ],
+      'sys',
+    )
+
+    await expect(limiter.processInputStep(stepArgs(list, 0))).rejects.toThrow(
+      CONTEXT_CAPACITY_ABORT_REASON,
+    )
+    expect(list.get.all.db().map((message) => message.id)).toEqual(['user-1', 'extra'])
+  })
+
   it('fails observably when mandatory content itself exceeds the safety limit', async () => {
     const limiter = createTokenLimiterSafetyNet({
       limit: 20,
