@@ -22,7 +22,8 @@ interface AgentConversationState {
   historyRailCollapsed: boolean
   globalOpen: boolean
   attachedPageLocator: PageLocator | null
-  selectConversation: (conversation: { id: string; title: string }) => void
+  persistConversation: (conversation: { id: string; title: string }) => void
+  openHistoricalConversation: (conversation: { id: string; title: string }) => void
   startNewConversation: (currentLocator?: PageLocator | null) => void
   pageContextDismissed: boolean
   attachCurrentPage: (currentLocator: PageLocator | null) => void
@@ -53,26 +54,21 @@ const INITIAL_CONVERSATION_STATE = {
 
 export const useAgentConversationStore = create<AgentConversationState>((set, get) => ({
   ...INITIAL_CONVERSATION_STATE,
-  selectConversation: (conversation) => {
-    const current = get()
-    const persistingNewConversation = current.conversationId === null && current.view !== 'history'
-    const switching = !persistingNewConversation && current.conversationId !== conversation.id
+  persistConversation: (conversation) =>
     set({
-      view: persistingNewConversation ? current.view : 'history',
       conversationId: conversation.id,
       title: conversation.title || NEW_CONVERSATION_TITLE,
-      ...(switching
-        ? {
-            attachedPageLocator: nextPageLocatorAttachment({
-              view: 'history',
-              conversationId: conversation.id,
-              currentLocator: null,
-              attachedLocator: current.attachedPageLocator,
-              captured: false,
-            }),
-            pageContextDismissed: false,
-          }
-        : {}),
+    }),
+  openHistoricalConversation: (conversation) => {
+    const current = get()
+    const reopeningCurrentHistory =
+      current.view === 'history' && current.conversationId === conversation.id
+    set({
+      view: 'history',
+      conversationId: conversation.id,
+      title: conversation.title || NEW_CONVERSATION_TITLE,
+      attachedPageLocator: reopeningCurrentHistory ? current.attachedPageLocator : null,
+      pageContextDismissed: false,
     })
   },
   startNewConversation: (currentLocator = null) =>

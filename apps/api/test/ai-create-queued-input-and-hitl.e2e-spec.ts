@@ -1,4 +1,6 @@
 import type { AddressInfo } from 'node:net'
+import { execFileSync } from 'node:child_process'
+import { resolve } from 'node:path'
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
@@ -20,16 +22,40 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
   let prisma: PrismaClient
   let processor: AiWorkflowProcessor
   let coordinatorToken: string
-  let organizationId: string
   let ownerUserId: string
   let agent: Awaited<ReturnType<typeof startDeterministicHeadlessAgent>>
   let ocr: Awaited<ReturnType<typeof startDeterministicParseWorker>>
   const testPrefix = `e2e-ai-hitl-${Date.now()}`
+  const testSchema = `e2e_hitl_${process.pid}_${Date.now()}`
+  const createdTaskIds = new Set<string>()
+  const createdConversationIds = new Set<string>()
+  const activeProcessorRuns = new Set<Promise<number>>()
+  let originalDatabaseUrl: string | undefined
+  let schemaProvisionAttempted = false
 
   beforeAll(async () => {
     let apiBaseUrl = ''
     process.env.AI_CREATE_ASSIST_ENABLED = 'true'
     process.env.AGENT_SERVICE_SECRET = AGENT_SECRET
+    originalDatabaseUrl = process.env.DATABASE_URL ?? ''
+    if (!originalDatabaseUrl) {
+      throw new Error('HITL E2E 需要 DATABASE_URL')
+    }
+    const isolatedUrl = new URL(originalDatabaseUrl)
+    isolatedUrl.searchParams.set('schema', testSchema)
+    process.env.DATABASE_URL = isolatedUrl.toString()
+    const apiRoot = resolve(__dirname, '..')
+    schemaProvisionAttempted = true
+    execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
+      cwd: apiRoot,
+      env: process.env,
+      stdio: 'pipe',
+    })
+    execFileSync('pnpm', ['exec', 'tsx', 'prisma/seed.ts'], {
+      cwd: apiRoot,
+      env: process.env,
+      stdio: 'pipe',
+    })
 
     ocr = await startDeterministicParseWorker({ text: '出团日期 2026-10-01' })
     process.env.OCR_BASE_URL = ocr.origin
@@ -55,36 +81,63 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     if (!user) {
       throw new Error('Seed user wangjie not found')
     }
-    organizationId = user.organizationId
     ownerUserId = user.id
   })
 
   afterAll(async () => {
-    await prisma.aiConversation.deleteMany({
-      where: { organizationId, creatorUserId: ownerUserId },
-    })
-    await prisma.aiReviewPackage.deleteMany({
-      where: { task: { organizationId, ownerUserId } },
-    })
-    await prisma.aiCreateActivityRun.deleteMany({
-      where: { task: { organizationId, ownerUserId } },
-    })
-    await prisma.departureCreationDraft.deleteMany({
-      where: { task: { agentTask: { organizationId, ownerUserId } } },
-    })
-    await prisma.agentTask.deleteMany({
-      where: { organizationId, ownerUserId },
-    })
-    await prisma.$disconnect()
-    await agent.close()
-    await ocr.close()
-    await app.close()
+    const failures: unknown[] = []
+    const settle = async (operation: Promise<unknown> | undefined) => {
+      if (!operation) {
+        return
+      }
+      try {
+        await operation
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+
+    await settle((prisma as PrismaClient | undefined)?.$disconnect())
+    await settle((agent as typeof agent | undefined)?.close())
+    await settle((ocr as typeof ocr | undefined)?.close())
+    await settle((app as INestApplication | undefined)?.close())
+
+    if (originalDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL
+    } else {
+      process.env.DATABASE_URL = originalDatabaseUrl
+    }
+    if (schemaProvisionAttempted && originalDatabaseUrl) {
+      const cleanup = new PrismaClient({ datasources: { db: { url: originalDatabaseUrl } } })
+      await settle(
+        cleanup.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${testSchema}" CASCADE`),
+      )
+      await settle(cleanup.$disconnect())
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'HITL E2E teardown failed')
+    }
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     agent.release()
     ocr.release()
+    await Promise.allSettled([...activeProcessorRuns])
+    const taskIds = [...createdTaskIds]
+    const conversationIds = [...createdConversationIds]
+    if (conversationIds.length > 0) {
+      await prisma.aiConversation.deleteMany({ where: { id: { in: conversationIds } } })
+    }
+    if (taskIds.length > 0) {
+      await prisma.aiReviewPackage.deleteMany({ where: { taskId: { in: taskIds } } })
+      await prisma.aiCreateActivityRun.deleteMany({ where: { taskId: { in: taskIds } } })
+      await prisma.departureCreationDraft.deleteMany({ where: { taskId: { in: taskIds } } })
+      await prisma.aiCreateIdempotencyRecord.deleteMany({ where: { taskId: { in: taskIds } } })
+      await prisma.agentTask.deleteMany({ where: { id: { in: taskIds } } })
+    }
+    createdTaskIds.clear()
+    createdConversationIds.clear()
   })
 
   async function openSession(taskId?: string) {
@@ -106,7 +159,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
             },
       )
       .expect(201)
-    return response.body.data as {
+    const opened = response.body.data as {
       task: { id: string; draft: { version: number } }
       conversation: {
         id: string
@@ -130,6 +183,16 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
         queuedBatches: Array<{ id: string; status: string; queued?: boolean }>
       }
     }
+    createdTaskIds.add(opened.task.id)
+    createdConversationIds.add(opened.conversation.id)
+    return opened
+  }
+
+  async function processOwnedDueJobs(limit = 5): Promise<number> {
+    const run = processor.processDueJobs(limit)
+    activeProcessorRuns.add(run)
+    void run.finally(() => activeProcessorRuns.delete(run)).catch(() => undefined)
+    return run
   }
 
   function sendMessage(
@@ -186,7 +249,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-queue-a-${taskId}`,
     ).expect(201)
     agent.holdNextCall()
-    const running = processor.processDueJobs(5)
+    const running = processOwnedDueJobs(5)
     await waitFor(async () => {
       const count = await prisma.aiInputBatch.count({
         where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
@@ -213,7 +276,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
     expect(listed.queuedBatches.map((batch) => batch.id)).toEqual([second.body.data.batch.id])
 
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     expect(
       await prisma.aiInputBatch.count({
         where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
@@ -222,7 +285,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     agent.release()
     await running
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
 
     const batches = await prisma.aiInputBatch.findMany({
       where: { taskLinks: { some: { taskId } } },
@@ -268,7 +331,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '先记下路线，日期还没定' },
       `e2e-ask-${taskId}`,
     ).expect(201)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
 
     const listed = await listEvents(taskId, conversationId)
     expect(listed.activeBatch?.status).toBe('awaiting_user_input')
@@ -324,7 +387,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '先记下路线，日期还没定' },
       `e2e-draft-ask-${taskId}`,
     ).expect(201)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
 
     const asked = await listEvents(taskId, conversationId)
     const saved = await authRequest(app, coordinatorToken)
@@ -378,7 +441,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '这是提问前就排队的消息，不能当答案' },
       `e2e-iso-b-${taskId}`,
     ).expect(201)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
 
     const asked = await listEvents(taskId, conversationId)
     expect(asked.pendingInteraction?.status).toBe('pending')
@@ -446,7 +509,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
 
     agent.holdNextCall()
-    const replyRun = processor.processDueJobs(1)
+    const replyRun = processOwnedDueJobs(1)
     await waitFor(async () => {
       const replyBatch = await prisma.aiInputBatch.findUnique({
         where: { id: replied.body.data.batch.id as string },
@@ -465,7 +528,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     agent.release()
     await replyRun
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: {
         taskLinks: { some: { taskId } },
@@ -493,7 +556,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '提问前就排队的消息，不能抢在带附件的答案前面' },
       `e2e-mat-iso-b-${taskId}`,
     ).expect(201)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
 
     const asked = await listEvents(taskId, conversationId)
     expect(asked.pendingInteraction?.status).toBe('pending')
@@ -516,12 +579,12 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       replyToEventId: asked.pendingInteraction?.eventId,
     })
 
-    const parseRun = processor.processDueJobs(1)
+    const parseRun = processOwnedDueJobs(1)
     await waitFor(async () => {
       expect(ocr.callCount()).toBeGreaterThan(0)
     })
 
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const queuedDuringParse = await prisma.aiInputBatch.findUnique({
       where: { id: queuedBatchId as string },
     })
@@ -536,7 +599,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await parseRun
 
     agent.holdNextCall()
-    const replyRun = processor.processDueJobs(1)
+    const replyRun = processOwnedDueJobs(1)
     await waitFor(async () => {
       const replyBatch = await prisma.aiInputBatch.findUnique({
         where: { id: replied.body.data.batch.id as string },
@@ -555,7 +618,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     agent.release()
     await replyRun
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const remaining = await prisma.aiInputBatch.count({
       where: {
         taskLinks: { some: { taskId } },
@@ -583,7 +646,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     await sendMessage(taskId, conversationId, { text: '天数还没定' }, `e2e-cas-a-${taskId}`).expect(
       201,
     )
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const asked = await listEvents(taskId, conversationId)
     expect(asked.pendingInteraction).not.toBeNull()
     expect(await prisma.agentTask.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({
@@ -675,7 +738,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       queued: true,
     })
 
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const queuedDuringReview = await prisma.aiInputBatch.findUnique({
       where: { id: second.body.data.batch.id as string },
     })
@@ -693,7 +756,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       where: { id: first.body.data.batch.id as string },
       data: { status: 'completed' },
     })
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const afterReview = await prisma.aiInputBatch.findUnique({
       where: { id: second.body.data.batch.id as string },
     })
@@ -714,7 +777,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       .expect(201)
     expect(first.body.data.batch.status).toBe('waiting_for_materials')
 
-    const parseRun = processor.processDueJobs(1)
+    const parseRun = processOwnedDueJobs(1)
     try {
       await waitFor(async () => {
         expect(ocr.callCount()).toBeGreaterThan(0)
@@ -731,7 +794,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
         queued: true,
       })
 
-      await processor.processDueJobs(5)
+      await processOwnedDueJobs(5)
       const queuedDuringParse = await prisma.aiInputBatch.findUnique({
         where: { id: second.body.data.batch.id as string },
       })
@@ -748,7 +811,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       ocr.release()
       await parseRun
     }
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const batches = await prisma.aiInputBatch.findMany({
       where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
@@ -773,7 +836,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       { text: '提问前排队，取消后仍按原序执行' },
       `e2e-cancel-b-${taskId}`,
     ).expect(201)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const asked = await listEvents(taskId, conversationId)
 
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
@@ -792,7 +855,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     })
     expect(afterCancel.activeBatch).toMatchObject({ status: 'ready_for_agent' })
 
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const batches = await prisma.aiInputBatch.findMany({
       where: { taskLinks: { some: { taskId } } },
       orderBy: { conversationVersion: 'asc' },
@@ -811,7 +874,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-stop-a-${taskId}`,
     ).expect(201)
     agent.holdNextCall()
-    const running = processor.processDueJobs(5)
+    const running = processOwnedDueJobs(5)
     await waitFor(async () => {
       expect(
         await prisma.aiInputBatch.count({
@@ -846,7 +909,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
       `e2e-stop-b-${taskId}`,
     ).expect(201)
     expect(next.body.data.batch.id).not.toBe(sent.body.data.batch.id)
-    await processor.processDueJobs(5)
+    await processOwnedDueJobs(5)
     const listed = await listEvents(taskId, conversationId)
     expect(
       listed.events.some(

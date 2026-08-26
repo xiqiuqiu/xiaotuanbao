@@ -22,7 +22,7 @@ describe('agent conversation store #370', () => {
   })
 
   it('keeps the same Conversation ID when expanding into global mode', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-1',
       title: '川西账款',
     })
@@ -58,7 +58,7 @@ describe('agent conversation store #370', () => {
   })
 
   it('returns to the captured business location and restores the same conversation', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-2',
       title: '历史会话',
     })
@@ -84,7 +84,7 @@ describe('agent conversation store #370', () => {
   })
 
   it('opens global mode from a conversation route without losing the selected Conversation', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-3',
       title: '深链会话',
     })
@@ -102,7 +102,7 @@ describe('agent conversation store #370', () => {
   })
 
   it('resets overlay, selected Conversation and persisted return location', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-prev',
       title: '前一用户会话',
     })
@@ -142,7 +142,7 @@ describe('agent conversation page locator #371', () => {
       section: 'accounts',
     })
 
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-new',
       title: '刚发出的新会话',
     })
@@ -151,7 +151,7 @@ describe('agent conversation page locator #371', () => {
       objectId: 'partner-1',
       section: 'accounts',
     })
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().openHistoricalConversation({
       id: 'c-1',
       title: '历史会话',
     })
@@ -187,7 +187,7 @@ describe('agent conversation page locator #371', () => {
       kind: 'departure',
       objectId: 'departure-1',
     })
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-new',
       title: '查一下账款',
     })
@@ -199,7 +199,7 @@ describe('agent conversation page locator #371', () => {
   })
 
   it('keeps an explicitly captured locator when the same conversation title is refreshed', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-1',
       title: '历史会话',
     })
@@ -207,10 +207,31 @@ describe('agent conversation page locator #371', () => {
       kind: 'departure',
       objectId: 'departure-1',
     })
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().persistConversation({
       id: 'c-1',
       title: '历史会话（已更新）',
     })
+    expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+  })
+
+  it('keeps an explicitly captured locator when reopening the same historical conversation', () => {
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationStore.getState().attachCurrentPage({
+      kind: 'departure',
+      objectId: 'departure-1',
+    })
+
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+
     expect(useAgentConversationStore.getState().attachedPageLocator).toEqual({
       kind: 'departure',
       objectId: 'departure-1',

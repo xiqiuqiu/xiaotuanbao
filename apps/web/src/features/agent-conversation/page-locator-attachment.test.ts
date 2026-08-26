@@ -27,7 +27,7 @@ describe('page locator attachment #371', () => {
   })
 
   it('does not auto-attach when switching to a historical conversation', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().openHistoricalConversation({
       id: 'c-1',
       title: '历史会话',
     })

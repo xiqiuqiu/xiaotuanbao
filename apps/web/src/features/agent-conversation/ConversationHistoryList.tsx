@@ -19,7 +19,9 @@ export function ConversationHistoryList({
   onCreate?: () => void
 }) {
   const conversationId = useAgentConversationStore((state) => state.conversationId)
-  const selectConversation = useAgentConversationStore((state) => state.selectConversation)
+  const openHistoricalConversation = useAgentConversationStore(
+    (state) => state.openHistoricalConversation,
+  )
   const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
   const [query, setQuery] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
@@ -97,7 +99,7 @@ export function ConversationHistoryList({
                     role="option"
                     aria-selected={item.id === conversationId}
                     onClick={() => {
-                      selectConversation({ id: item.id, title: item.title })
+                      openHistoricalConversation({ id: item.id, title: item.title })
                       onSelect?.()
                     }}
                   >

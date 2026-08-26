@@ -14,7 +14,16 @@ export async function loginAs(page: Page, user: E2eUser): Promise<void> {
   await loginForm.getByRole('button', { name: /登\s*录/ }).click()
 
   await expect(page).not.toHaveURL(/\/login/)
-  await expect(page.getByRole('button', { name: user.displayName })).toBeVisible()
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('/api/auth/me')
+      if (!response.ok()) {
+        return null
+      }
+      const body = (await response.json()) as { data?: { user?: { name?: string } } }
+      return body.data?.user?.name ?? null
+    })
+    .toBe(user.displayName)
 }
 
 export async function logout(page: Page, displayName: string): Promise<void> {
