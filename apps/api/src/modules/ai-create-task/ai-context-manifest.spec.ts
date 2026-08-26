@@ -25,7 +25,7 @@ describe('projectConversationEventsForAgent', () => {
     expect(
       projectConversationEventsForAgent([
         { sequence: 1, kind: 'user_message', payload: { text: '  帮我建一个喀纳斯3日团  ' } },
-        { sequence: 2, kind: 'batch_status', payload: { batchId: 'batch-1', status: 'agent_running' } },
+        { sequence: 2, kind: 'batch_status', payload: { batchId: 'batch-1', status: 'agent_running', attemptId: 'attempt-9', generation: 3 } },
         { sequence: 3, kind: 'hidden_reasoning', payload: { text: 'should not leak' } },
       ]),
     ).toEqual([

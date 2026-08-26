@@ -5,6 +5,38 @@ import {
 } from './ai-create-copilot-messages'
 
 describe('AI create chat status projection', () => {
+  it('still shows AI 处理中 when agent_running carries Attempt and generation', () => {
+    const messages = toCopilotChatMessages(
+      [
+        {
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我查一下账款' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+      null,
+      null,
+    )
+
+    const labels = messages
+      .filter((message) => message.activityType === 'ai-create-batch-status')
+      .map((message) => (message.content as { label?: string }).label)
+    expect(labels).toEqual(['AI 处理中'])
+    expect(messages.some((message) => message.role === 'assistant')).toBe(false)
+  })
+
   it('labels running, queued and waiting-for-answer from server status', () => {
     expect(batchStatusLabel('agent_running')).toBe('AI 处理中')
     expect(batchStatusLabel('preparing_context')).toBe('正在整理会话上下文')
