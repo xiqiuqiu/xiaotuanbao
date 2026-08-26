@@ -58,6 +58,7 @@ import {
 } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
 import { resolvePreparedProjection } from './ai-context-compaction'
+import { resolveModelCurrentInput, userMessageSourceOrigin, withSourceIndexTruncation } from './ai-context-source-index'
 import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
@@ -738,6 +739,14 @@ export class AiWorkflowProcessor {
         modelId,
         toolNames: availableToolNames,
       })
+      const modelInput = await resolveModelCurrentInput(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        origin: userMessageSourceOrigin(job.conversationId, userEvent),
+        originalText: userText,
+        plan: preparedProjection.plan,
+      })
       const runningEventId = await this.markBatchAgentRunning(tx, job)
       if (runningEventId) {
         published.push({ conversationId: job.conversationId, eventId: runningEventId })
@@ -745,7 +754,7 @@ export class AiWorkflowProcessor {
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: availableToolNames,
-        currentUserText: userText,
+        currentUserText: modelInput.currentUserText,
         businessFacts: {
           taskId: task.id,
           status: task.agentTask.status,
@@ -757,7 +766,10 @@ export class AiWorkflowProcessor {
           hasPendingReview: pendingReview != null,
           reviewPackageId: pendingReview?.id ?? null,
         },
-        projection: preparedProjection.projection,
+        projection: withSourceIndexTruncation(
+          preparedProjection.projection,
+          modelInput.truncationReasons,
+        ),
       })
       const excerptDigests = excerptDigestsFor(
         budgetedContext.projection.pinnedMaterials,
@@ -790,6 +802,7 @@ export class AiWorkflowProcessor {
         budget: budgetedContext.budget,
         sections: budgetedContext.sections,
         summaryVersion: preparedProjection.summaryVersion,
+        sourceIndexVersion: modelInput.sourceIndexVersion,
       })
       const run = await this.getOrCreateRunningActivityRun(
         tx,
@@ -828,6 +841,7 @@ export class AiWorkflowProcessor {
               materialVersions,
               sourceVersions,
               summaryVersion: preparedProjection.summaryVersion,
+              sourceIndexVersion: modelInput.sourceIndexVersion,
               excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
@@ -1030,6 +1044,14 @@ export class AiWorkflowProcessor {
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
       })
+      const modelInput = await resolveModelCurrentInput(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        inputBatchId: job.inputBatchId,
+        origin: userMessageSourceOrigin(job.conversationId, userEvent),
+        originalText: userText,
+        plan: preparedProjection.plan,
+      })
       const runningEventId = await this.markBatchAgentRunning(tx, job)
       if (runningEventId) {
         published.push({ conversationId: job.conversationId, eventId: runningEventId })
@@ -1040,10 +1062,13 @@ export class AiWorkflowProcessor {
         systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
-        currentUserText: userText,
+        currentUserText: modelInput.currentUserText,
         businessFacts,
         unresolvedState: { hasPendingReview: false, reviewPackageId: null },
-        projection: preparedProjection.projection,
+        projection: withSourceIndexTruncation(
+          preparedProjection.projection,
+          modelInput.truncationReasons,
+        ),
       })
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
@@ -1064,6 +1089,7 @@ export class AiWorkflowProcessor {
         budget: budgetedContext.budget,
         sections: budgetedContext.sections,
         summaryVersion: preparedProjection.summaryVersion,
+        sourceIndexVersion: modelInput.sourceIndexVersion,
       })
       const existingManifest = await tx.aiContextManifest.findFirst({
         where: {
@@ -1095,6 +1121,7 @@ export class AiWorkflowProcessor {
               materialVersions,
               sourceVersions,
               summaryVersion: preparedProjection.summaryVersion,
+              sourceIndexVersion: modelInput.sourceIndexVersion,
               excerptDigests: [],
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,

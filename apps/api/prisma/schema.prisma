@@ -348,6 +348,7 @@ model Organization {
   aiAgentAttempts AiAgentAttempt[]
   aiContextManifests AiContextManifest[]
   aiContextCompactionVersions AiContextCompactionVersion[]
+  aiSourceIndexVersions AiSourceIndexVersion[]
   departureMaterials DepartureMaterial[]
   aiActions AiAction[]
   aiActionRepeatObservations AiActionRepeatObservation[]
@@ -1567,6 +1568,7 @@ model AiConversation {
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
   compactionVersions AiContextCompactionVersion[]
+  sourceIndexVersions AiSourceIndexVersion[]
   aiActions        AiAction[]
   reviewPackages   AiReviewPackage[]
   taskLinks        ConversationTaskLink[]
@@ -1643,6 +1645,7 @@ model AiInputBatch {
   reviewPackages       AiReviewPackage[]
   aiActions            AiAction[]
   taskLinks            InputBatchTaskLink[]
+  sourceIndexVersions  AiSourceIndexVersion[]
 
   @@index([conversationId, createdAt])
   @@index([organizationId, createdAt])
@@ -1749,6 +1752,7 @@ model AiContextManifest {
   sourceVersions           Json           @default("[]") @map("source_versions")
   taskRefs                 Json            @default("[]") @map("task_refs")
   summaryVersion           Int?           @map("summary_version")
+  sourceIndexVersion       Int?           @map("source_index_version")
   excerptDigests           Json           @default("[]") @map("excerpt_digests")
   budget                   Json           @default("{}")
   sections                 Json           @default("[]")
@@ -1802,6 +1806,48 @@ model AiContextCompactionVersion {
   @@unique([conversationId, inputDigest, policyVersion], map: "ai_compaction_input_digest_key")
   @@index([organizationId, createdAt], map: "ai_compaction_org_created_idx")
   @@map("ai_context_compaction_versions")
+}
+
+enum AiSourceIndexVersionStatus {
+  pending
+  running
+  completed
+  failed
+
+  @@map("ai_source_index_version_status")
+}
+
+/// 超长输入来源索引：原文逐字持久化后的版本化分块抽取合并结果。
+model AiSourceIndexVersion {
+  id                   String                     @id @default(cuid())
+  organizationId       String                     @map("organization_id")
+  organization         Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId       String                     @map("conversation_id")
+  conversation         AiConversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId         String                     @map("input_batch_id")
+  inputBatch           AiInputBatch               @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  originKind           String                     @map("origin_kind")
+  originEventId        String?                    @map("origin_event_id")
+  originSourceId       String?                    @map("origin_source_id")
+  originParseVersion   Int?                       @map("origin_parse_version")
+  version              Int
+  status               AiSourceIndexVersionStatus @default(pending)
+  policyVersion        String                     @map("policy_version")
+  configVersion        String                     @map("config_version")
+  extractSchemaVersion String                     @map("extract_schema_version")
+  chunkCount           Int                        @map("chunk_count")
+  chunks               Json
+  indexJson            Json                       @map("index_json")
+  digest               String
+  inputDigest          String                     @map("input_digest")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([conversationId, version], map: "ai_source_index_conversation_version_key")
+  @@unique([conversationId, inputDigest, policyVersion], map: "ai_source_index_input_digest_key")
+  @@index([organizationId, createdAt], map: "ai_source_index_org_created_idx")
+  @@index([inputBatchId], map: "ai_source_index_batch_idx")
+  @@map("ai_source_index_versions")
 }
 
 /// Agent attempt：Worker 对已齐套输入批次的一次执行。

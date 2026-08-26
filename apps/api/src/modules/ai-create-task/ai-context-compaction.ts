@@ -29,6 +29,7 @@ export type CompactionPlan = {
   record: ContextCompactionVersionRecord | null
   useSummary: boolean
   persist: boolean
+  currentInputOverflow: boolean
 }
 
 export function planContextCompaction(input: {
@@ -74,7 +75,16 @@ export function planContextCompaction(input: {
   })
   if (!record) {
     if (!originalFits) {
-      throw new Error(CONTEXT_CAPACITY_EXCEEDED)
+      return overflowOrFail(
+        {
+          originProjection,
+          originalFits,
+          record: null,
+          useSummary: false,
+          persist: false,
+        },
+        { ...budgetInput(input), projection: originProjection },
+      )
     }
     return {
       originProjection,
@@ -82,6 +92,7 @@ export function planContextCompaction(input: {
       record: null,
       useSummary: false,
       persist: false,
+      currentInputOverflow: false,
     }
   }
 
@@ -117,7 +128,31 @@ export function planContextCompaction(input: {
       }),
     })
     if (!compactedFits) {
-      throw new Error(CONTEXT_CAPACITY_EXCEEDED)
+      return overflowOrFail(
+        {
+          originProjection,
+          originalFits,
+          record,
+          useSummary: true,
+          persist: !alreadyStored,
+        },
+        {
+          ...budgetInput(input),
+          projection: buildFrozenProjection({
+            events: input.events,
+            conversationVersion: input.conversationVersion,
+            originUserMessageSequence: input.originUserMessageSequence,
+            currentUserMessageSequence: input.currentUserMessageSequence,
+            materials: input.materials,
+            materialTruncationReasons: input.materialTruncationReasons,
+            compaction: {
+              summary: record.summary,
+              summaryVersion: input.existingCompleted?.version ?? 1,
+              coveredEventSequences: record.coveredEventSequences,
+            },
+          }),
+        },
+      )
     }
     return {
       originProjection,
@@ -125,6 +160,7 @@ export function planContextCompaction(input: {
       record,
       useSummary: true,
       persist: !alreadyStored,
+      currentInputOverflow: false,
     }
   }
 
@@ -135,6 +171,7 @@ export function planContextCompaction(input: {
       record,
       useSummary: true,
       persist: !alreadyStored,
+      currentInputOverflow: false,
     }
   }
   if (overBuffer) {
@@ -144,6 +181,7 @@ export function planContextCompaction(input: {
       record,
       useSummary: false,
       persist: !alreadyStored,
+      currentInputOverflow: false,
     }
   }
   return {
@@ -152,6 +190,7 @@ export function planContextCompaction(input: {
     record,
     useSummary: false,
     persist: false,
+    currentInputOverflow: false,
   }
 }
 
@@ -203,6 +242,13 @@ export async function resolvePreparedProjection(
       })
       summaryVersion = persisted.version
     } catch {
+      if (plan.currentInputOverflow) {
+        return {
+          projection: plan.originProjection,
+          summaryVersion: null,
+          plan: { ...plan, useSummary: false, persist: false },
+        }
+      }
       if (!plan.originalFits) {
         throw new Error(CONTEXT_PREPARE_FAILED)
       }
@@ -377,6 +423,16 @@ function contextFits(
     }
     throw error
   }
+}
+
+function overflowOrFail(
+  plan: Omit<CompactionPlan, 'currentInputOverflow'>,
+  budget: Parameters<typeof buildBudgetedContext>[0],
+): CompactionPlan {
+  if (contextFits({ ...budget, currentUserText: '' })) {
+    return { ...plan, currentInputOverflow: true }
+  }
+  throw new Error(CONTEXT_CAPACITY_EXCEEDED)
 }
 
 export function budgetedContextForPlan(
