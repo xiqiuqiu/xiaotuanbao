@@ -31,4 +31,6 @@ export interface AgentLiveOutput {
   observe(conversationId: string): Observable<LiveOutputSnapshot>
   getCurrent(conversationId: string): Promise<LiveOutputSnapshot | null>
   clear(attemptId: string): Promise<void>
+  /** 新 Attempt 取代当前即时输出：删除同会话上其它 Attempt 的残留行。 */
+  supersede(conversationId: string, attemptId: string): Promise<void>
 }

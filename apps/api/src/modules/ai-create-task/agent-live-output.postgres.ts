@@ -36,6 +36,12 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
   async publish(snapshot: LiveOutputSnapshot): Promise<void> {
     const expiresAt = new Date(Date.now() + LIVE_OUTPUT_TTL_MS)
     await this.prisma.$transaction(async (tx) => {
+      await tx.aiAgentLiveOutput.deleteMany({
+        where: {
+          conversationId: snapshot.conversationId,
+          attemptId: { not: snapshot.attemptId },
+        },
+      })
       await tx.aiAgentLiveOutput.upsert({
         where: { attemptId: snapshot.attemptId },
         create: {
@@ -86,6 +92,12 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
   async clear(attemptId: string): Promise<void> {
     await this.prisma.aiAgentLiveOutput.deleteMany({ where: { attemptId } })
     await this.prisma.$executeRaw`SELECT pg_notify(${LIVE_OUTPUT_NOTIFY_CHANNEL}, ${attemptId})`
+  }
+
+  async supersede(conversationId: string, attemptId: string): Promise<void> {
+    await this.prisma.aiAgentLiveOutput.deleteMany({
+      where: { conversationId, attemptId: { not: attemptId } },
+    })
   }
 
   async onModuleDestroy(): Promise<void> {

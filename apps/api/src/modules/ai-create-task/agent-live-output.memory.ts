@@ -13,6 +13,7 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
   }
 
   async publish(snapshot: LiveOutputSnapshot): Promise<void> {
+    await this.supersede(snapshot.conversationId, snapshot.attemptId)
     this.byAttempt.set(snapshot.attemptId, snapshot)
     this.emitter.emit(snapshot.conversationId, snapshot)
   }
@@ -46,5 +47,13 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
 
   async clear(attemptId: string): Promise<void> {
     this.byAttempt.delete(attemptId)
+  }
+
+  async supersede(conversationId: string, attemptId: string): Promise<void> {
+    for (const [id, existing] of this.byAttempt) {
+      if (existing.conversationId === conversationId && id !== attemptId) {
+        this.byAttempt.delete(id)
+      }
+    }
   }
 }

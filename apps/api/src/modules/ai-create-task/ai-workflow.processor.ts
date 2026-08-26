@@ -466,6 +466,7 @@ export class AiWorkflowProcessor {
     try {
       // Attempt 与 batch_status:agent_running 在同一事务提交后，才开启模型流。
       const prepared = await this.prepareAttempt(job, authorized.permissionKeys)
+      await this.liveOutput.supersede(job.conversationId, prepared.attemptId)
       this.workflowLog('agent_started', {
         job: job.id,
         attemptId: prepared.attemptId,

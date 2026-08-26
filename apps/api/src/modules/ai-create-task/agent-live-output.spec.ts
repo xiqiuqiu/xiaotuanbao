@@ -11,7 +11,7 @@ const identity = {
 }
 
 describe('InMemoryAgentLiveOutput', () => {
-  it('isolates snapshots by Attempt and drops them on clear', async () => {
+  it('isolates snapshots by Attempt and drops superseded leftovers', async () => {
     const live = new InMemoryAgentLiveOutput()
     await live.publish({
       ...identity,
@@ -34,12 +34,32 @@ describe('InMemoryAgentLiveOutput', () => {
     })
 
     await live.clear('attempt-2')
-    expect(await live.getCurrent(identity.conversationId)).toMatchObject({
-      attemptId: 'attempt-1',
-      text: '已',
-    })
-    await live.clear('attempt-1')
     expect(await live.getCurrent(identity.conversationId)).toBeNull()
+  })
+
+  it('drops older Attempt leftovers when a new Attempt claims the conversation', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    await live.publish({
+      ...identity,
+      revision: 4,
+      reasoningText: '',
+      text: '上一代残留',
+    })
+    await live.supersede(identity.conversationId, 'attempt-2')
+    expect(await live.getCurrent(identity.conversationId)).toBeNull()
+
+    await live.publish({
+      ...identity,
+      attemptId: 'attempt-2',
+      generation: 3,
+      revision: 1,
+      reasoningText: '',
+      text: '新尝试',
+    })
+    expect(await live.getCurrent(identity.conversationId)).toMatchObject({
+      attemptId: 'attempt-2',
+      text: '新尝试',
+    })
   })
 })
 
