@@ -247,6 +247,12 @@ describe('planContextCompaction', () => {
     expect(backgroundBlock).toContain(CONTEXT_COMPACTION_DISCLAIMER)
     expect(budgeted.userText).toContain('pkg-1')
     expect(budgeted.userText).toContain('本轮唯一指令')
+    expect(budgeted.sections.find((section) => section.key === 'system_constraints')?.estimatedTokens).toBeGreaterThan(
+      0,
+    )
+    expect(budgeted.sections.find((section) => section.key === 'system_constraints')?.sha256).not.toBe(
+      budgeted.sections.find((section) => section.key === 'conversation_summary')?.sha256,
+    )
   })
 })
 

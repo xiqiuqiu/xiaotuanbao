@@ -385,6 +385,8 @@ export class AiWorkflowProcessor {
           },
         })
         let batchStatus = job.inputBatch.status
+        // 压缩在 prepareAttempt 内同步完成；认领时先进入 preparing_context，
+        // 使租约过期后的跨 Worker 续跑与槽位占用把「整理上下文」视同在途。
         if (job.inputBatch.status === AiInputBatchStatus.ready_for_agent) {
           await tx.aiInputBatch.update({
             where: { id: job.inputBatchId },
