@@ -17,6 +17,7 @@ import type {
   AiConversationDraftView,
   AiConversationInteractionView,
   AiInputBatchView,
+  ConversationSourceView,
   SendAiConversationMessageResult,
   SaveAiConversationDraftDto,
 } from '@/types/api'
@@ -29,7 +30,7 @@ export async function saveDepartureCreationDraft(
 }
 
 export async function getAiCreateTask(taskId: string): Promise<AiCreateTaskSummary> {
-  return request.get<AiCreateTaskSummary>(`/ai-create-tasks/${taskId}`)
+  return request.get<AiCreateTaskSummary>(`/agent/tasks/${taskId}`)
 }
 
 export async function confirmAiCreateTask(
@@ -51,7 +52,7 @@ export async function getAiCreateAssistAvailability(): Promise<AiCreateAssistAva
 export async function getAiCreateAssistTaskState(
   taskId: string,
 ): Promise<AiCreateAssistTaskState> {
-  return request.get<AiCreateAssistTaskState>(`/ai-create-tasks/${taskId}/assist-state`, {
+  return request.get<AiCreateAssistTaskState>(`/agent/tasks/${taskId}/runtime-state`, {
     silentError: true,
   })
 }
@@ -59,7 +60,7 @@ export async function getAiCreateAssistTaskState(
 export async function startAiCreateAssistSession(
   payload: StartAiCreateAssistSessionDto = {},
 ): Promise<AiCreateAssistSession> {
-  return request.post<AiCreateAssistSession>('/ai-create-tasks/assist-session', payload)
+  return request.post<AiCreateAssistSession>('/agent/tasks/departure-creation/sessions', payload)
 }
 
 export async function sendAiConversationMessage(
@@ -85,6 +86,7 @@ export async function sendAiConversationMessage(
   if (files.length > 0) {
     const form = new FormData()
     form.append('text', payload.text)
+    form.append('primaryTaskId', taskId)
     if (reply.replyToEventId) form.append('replyToEventId', reply.replyToEventId)
     if (reply.interactionId) form.append('interactionId', reply.interactionId)
     if (reply.interactionVersion != null) {
@@ -95,7 +97,7 @@ export async function sendAiConversationMessage(
       form.append('files', file)
     }
     return request.post<SendAiConversationMessageResult>(
-      `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
+      `/agent/conversations/${conversationId}/messages`,
       form,
       {
         silentError: true,
@@ -104,8 +106,8 @@ export async function sendAiConversationMessage(
     )
   }
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`,
-    { text: payload.text, ...reply },
+    `/agent/conversations/${conversationId}/messages`,
+    { text: payload.text, primaryTaskId: taskId, ...reply },
     {
       silentError: true,
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -114,27 +116,27 @@ export async function sendAiConversationMessage(
 }
 
 export async function saveAiConversationDraft(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   payload: SaveAiConversationDraftDto,
   config?: RequestConfig,
 ): Promise<AiConversationDraftView> {
   return request.put<AiConversationDraftView>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`,
+    `/agent/conversations/${conversationId}/draft`,
     payload,
     { silentError: true, ...config },
   )
 }
 
 export async function cancelAiConversationInteraction(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   interactionId: string,
   version: number,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/interactions/${interactionId}/cancel`,
+    `/agent/conversations/${conversationId}/interactions/${interactionId}/cancel`,
     { version },
     {
       silentError: true,
@@ -144,14 +146,14 @@ export async function cancelAiConversationInteraction(
 }
 
 export async function retryFailedConversationMaterials(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   batchId: string,
   materialIds: string[] | undefined,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry-failed-materials`,
+    `/agent/conversations/${conversationId}/batches/${batchId}/retry-failed-materials`,
     materialIds ? { materialIds } : {},
     {
       silentError: true,
@@ -161,14 +163,14 @@ export async function retryFailedConversationMaterials(
 }
 
 export async function removeConversationMaterials(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   batchId: string,
   materialIds: string[],
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/remove-materials`,
+    `/agent/conversations/${conversationId}/batches/${batchId}/remove-materials`,
     { materialIds },
     {
       silentError: true,
@@ -178,13 +180,13 @@ export async function removeConversationMaterials(
 }
 
 export async function abandonConversationBatch(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   batchId: string,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/abandon`,
+    `/agent/conversations/${conversationId}/batches/${batchId}/abandon`,
     {},
     {
       silentError: true,
@@ -194,13 +196,13 @@ export async function abandonConversationBatch(
 }
 
 export async function stopConversationBatch(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   batchId: string,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/stop`,
+    `/agent/conversations/${conversationId}/batches/${batchId}/stop`,
     {},
     {
       silentError: true,
@@ -210,13 +212,13 @@ export async function stopConversationBatch(
 }
 
 export async function retryFailedConversationBatch(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   batchId: string,
   idempotencyKey: string,
 ): Promise<SendAiConversationMessageResult> {
   return request.post<SendAiConversationMessageResult>(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry`,
+    `/agent/conversations/${conversationId}/batches/${batchId}/retry`,
     {},
     {
       silentError: true,
@@ -226,7 +228,7 @@ export async function retryFailedConversationBatch(
 }
 
 export async function listAiConversationEvents(
-  taskId: string,
+  _taskId: string,
   conversationId: string,
   afterSequence = 0,
   config?: RequestConfig,
@@ -240,75 +242,75 @@ export async function listAiConversationEvents(
   draft?: AiConversationDraftView
 }> {
   return request.get(
-    `/ai-create-tasks/${taskId}/conversations/${conversationId}/events`,
+    `/agent/conversations/${conversationId}/events`,
     { ...config, params: { afterSequence, ...config?.params } },
   )
 }
 
-export async function listDepartureMaterials(taskId: string): Promise<DepartureMaterialView[]> {
-  return request.get<DepartureMaterialView[]>(`/ai-create-tasks/${taskId}/materials`)
+export async function listDepartureMaterials(
+  conversationId: string,
+): Promise<DepartureMaterialView[]> {
+  const sources = await request.get<ConversationSourceView[]>(
+    `/agent/conversations/${conversationId}/sources`,
+  )
+  return sources.map((source) => ({
+    id: source.id,
+    originalFilename: source.originalFilename,
+    contentType: source.contentType,
+    status: source.status,
+    statusVersion: source.statusVersion,
+    sha256: source.sha256,
+    sizeBytes: source.sizeBytes,
+    createdAt: source.createdAt,
+    latestResultVersion: source.latestParseVersion,
+  }))
 }
 
 export async function previewDepartureMaterial(
-  taskId: string,
+  conversationId: string,
   materialId: string,
 ): Promise<{ blob: Blob; filename: string | null }> {
-  return downloadBinary(`/ai-create-tasks/${taskId}/materials/${materialId}/preview`)
+  return downloadBinary(`/agent/conversations/${conversationId}/sources/${materialId}/preview`)
 }
 
 export async function patchAiReviewPackage(
-  taskId: string,
+  _taskId: string,
   packageId: string,
   payload: PatchAiReviewPackageDto,
 ): Promise<AiCreateTaskSummary> {
-  return request.patch<AiCreateTaskSummary>(
-    `/ai-create-tasks/${taskId}/review-packages/${packageId}`,
-    payload,
-  )
+  return request.patch<AiCreateTaskSummary>(`/agent/review-packages/${packageId}`, payload)
 }
 
 export async function confirmAiReviewPackage(
-  taskId: string,
+  _taskId: string,
   packageId: string,
   payload: ConfirmAiReviewPackageDto,
   idempotencyKey: string,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>(
-    `/ai-create-tasks/${taskId}/review-packages/${packageId}/confirm`,
-    payload,
-    {
-      headers: { 'Idempotency-Key': idempotencyKey },
-    },
-  )
+  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/confirm`, payload, {
+    headers: { 'Idempotency-Key': idempotencyKey },
+  })
 }
 
 export async function rejectAiReviewPackage(
-  taskId: string,
+  _taskId: string,
   packageId: string,
   payload: RejectAiReviewPackageDto,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>(
-    `/ai-create-tasks/${taskId}/review-packages/${packageId}/reject`,
-    payload,
-  )
+  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/reject`, payload)
 }
 
 export async function cancelAiReviewPackage(
-  taskId: string,
+  _taskId: string,
   packageId: string,
   payload: CancelAiReviewPackageDto,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>(
-    `/ai-create-tasks/${taskId}/review-packages/${packageId}/cancel`,
-    payload,
-  )
+  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/cancel`, payload)
 }
 
 export async function regenerateAiReviewPackage(
-  taskId: string,
+  _taskId: string,
   packageId: string,
 ): Promise<AiCreateTaskSummary> {
-  return request.post<AiCreateTaskSummary>(
-    `/ai-create-tasks/${taskId}/review-packages/${packageId}/regenerate`,
-  )
+  return request.post<AiCreateTaskSummary>(`/agent/review-packages/${packageId}/regenerate`)
 }

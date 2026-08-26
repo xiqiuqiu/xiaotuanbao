@@ -14,7 +14,6 @@ export async function projectPendingReviewPackage(
     conversationId: string
     inputBatchId: string
     attemptId?: string | null
-    runId: string
     reviewPackage: SubmitReviewPackageModelInput
     sourceActionId: string
   },
@@ -53,7 +52,6 @@ export async function projectPendingReviewPackage(
       data: reviewPackageCreateData({
         organizationId: params.organizationId,
         taskId: params.taskId,
-        runId: params.runId,
         conversationId: params.conversationId,
         inputBatchId: params.inputBatchId,
         attemptId: params.attemptId,

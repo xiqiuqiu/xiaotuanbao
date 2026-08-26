@@ -205,6 +205,24 @@ function createHarness(options?: {
     aiConversationDraft,
     taskActivity: { create: jest.fn().mockResolvedValue({ id: 'activity-1' }) },
     agentTask: { update: jest.fn() },
+    conversationTaskLink: {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          taskId,
+          task: {
+            id: taskId,
+            organizationId,
+            ownerUserId: userId,
+            status: AgentTaskStatus.active,
+            departureCreationTask: {
+              id: taskId,
+              departureId: null,
+              draft: { id: 'draft-1' },
+            },
+          },
+        },
+      ]),
+    },
   }
 
   const prisma = {
@@ -449,6 +467,46 @@ describe('AiConversationService.sendText attachment upload', () => {
           }),
         }),
       ]),
+    )
+  })
+})
+
+describe('AiConversationService.sendTasklessText linked departure task', () => {
+  it('attaches an explicit in-progress departure task as the batch primary task', async () => {
+    const { service, tx } = createHarness()
+
+    await service.sendTasklessText(
+      organizationId,
+      userId,
+      conversationId,
+      '继续完善团期',
+      'idem-linked',
+      undefined,
+      [],
+      undefined,
+      taskId,
+    )
+
+    expect(tx.aiInputBatch.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskLinks: {
+            create: {
+              organizationId,
+              taskId,
+              role: 'primary',
+            },
+          },
+        }),
+      }),
+    )
+    expect(tx.taskActivity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskId,
+          kind: 'progress',
+        }),
+      }),
     )
   })
 })

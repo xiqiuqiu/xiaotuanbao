@@ -27,7 +27,7 @@ describe('AiOperationDelegationGuard', () => {
     sub: 'user-1',
     organizationId: 'org-1',
     taskId: 'task-1',
-    runId: 'run-1',
+    runId: 'attempt-1',
     conversationId: 'conv-1',
     inputBatchId: 'batch-1',
     attemptId: 'attempt-1',
@@ -144,7 +144,6 @@ describe('AiOperationDelegationGuard', () => {
           status: 'running',
           conversationId: 'conv-1',
           inputBatchId: 'batch-1',
-          activityRunId: 'run-1',
           taskId: 'task-1',
         }),
       }),
@@ -162,6 +161,16 @@ describe('AiOperationDelegationGuard', () => {
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(AiCollaborationHttpException)
   })
 
+  it('rejects a task-bound token whose runId is not the attempt id', async () => {
+    const { guard, prisma } = createGuard({
+      payload: { runId: 'legacy-activity-run' },
+    })
+    const { ctx } = contextWithBearer('legacy-run-id')
+
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(AiCollaborationHttpException)
+    expect(prisma.aiAgentAttempt.findFirst).not.toHaveBeenCalled()
+  })
+
   it('accepts a Worker-shaped token bound to a running attempt', async () => {
     const { guard } = createGuard()
     const { ctx, request } = contextWithBearer('worker-token')
@@ -171,7 +180,7 @@ describe('AiOperationDelegationGuard', () => {
       userId: 'user-1',
       organizationId: 'org-1',
       taskId: 'task-1',
-      runId: 'run-1',
+      runId: 'attempt-1',
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
       attemptId: 'attempt-1',

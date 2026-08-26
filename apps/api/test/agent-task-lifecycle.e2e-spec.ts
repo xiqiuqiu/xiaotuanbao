@@ -37,7 +37,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
 
   it('creates a departure task as a shared-id AgentTask domain extension', async () => {
     const response = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: '' } })
       .expect(201)
 
@@ -80,18 +80,18 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
 
   it('links multiple tasks to one conversation and continues one task from another conversation', async () => {
     const first = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: '川西' } })
       .expect(201)
     const second = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         conversationId: first.body.data.conversation.id,
         draft: { mode: 'manual', routeName: '云南' },
       })
       .expect(201)
     const third = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: '西藏' } })
       .expect(201)
     const firstTaskId = first.body.data.task.id as string
@@ -113,9 +113,10 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
       .expect(201)
 
     const continued = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${firstTaskId}/conversations/${secondConversationId}/messages`)
+      .post(`/api/agent/conversations/${secondConversationId}/messages`)
       .set('Idempotency-Key', `e2e366-cross-${Date.now()}`)
       .field('text', '从另一会话继续这个建团目标')
+      .field('primaryTaskId', firstTaskId)
       .expect(201)
 
     const links = await prisma.conversationTaskLink.findMany({
@@ -136,7 +137,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
 
   it('keeps stop, waiting-item cancellation, and explicit task close as separate commands', async () => {
     const session = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: '新疆' } })
       .expect(201)
     const taskId = session.body.data.task.id as string
@@ -145,13 +146,14 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
     conversationIds.push(conversationId)
 
     const first = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e366-stop-send-${Date.now()}`)
       .field('text', '先停止这一次运行')
+      .field('primaryTaskId', taskId)
       .expect(201)
     await authRequest(app, token)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${first.body.data.batch.id}/stop`,
+        `/api/agent/conversations/${conversationId}/batches/${first.body.data.batch.id}/stop`,
       )
       .set('Idempotency-Key', `e2e366-stop-${Date.now()}`)
       .expect(200)
@@ -160,9 +162,10 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
     )
 
     const second = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e366-wait-send-${Date.now()}`)
       .field('text', '制造一个等待项')
+      .field('primaryTaskId', taskId)
       .expect(201)
     const lastEvent = await prisma.aiConversationEvent.findFirstOrThrow({
       where: { conversationId },
@@ -194,7 +197,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
     })
     await authRequest(app, token)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/interactions/${interaction.id}/cancel`,
+        `/api/agent/conversations/${conversationId}/interactions/${interaction.id}/cancel`,
       )
       .set('Idempotency-Key', `e2e366-cancel-wait-${Date.now()}`)
       .send({ version: 1 })
@@ -204,9 +207,10 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
     )
 
     const third = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e366-close-send-${Date.now()}`)
       .field('text', '关闭整个任务')
+      .field('primaryTaskId', taskId)
       .expect(201)
     const action = await prisma.aiAction.create({
       data: {
@@ -253,7 +257,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
 
   it('cancels a task without deleting its conversation', async () => {
     const session = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: '取消任务' } })
       .expect(201)
     const taskId = session.body.data.task.id as string

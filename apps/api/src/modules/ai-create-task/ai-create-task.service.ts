@@ -45,7 +45,7 @@ import {
   type AiReviewableBasicInfoField,
 } from '@xiaotuanbao/ai-contracts'
 import type { AgentTask, AiConversationEvent, AiCreateTask, AiReviewPackage, DepartureCreationDraft, Prisma } from '@prisma/client'
-import { AgentTaskStatus, AgentTaskType, AiCreateActivityRunStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, TaskActivityKind } from '@prisma/client'
+import { AgentTaskStatus, AgentTaskType, AiAgentAttemptStatus, AiReviewPackageStatus, AiReviewRecordAction, AiReviewWriteResult, DepartureType as PrismaDepartureType, TaskActivityKind } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { DepartureService } from '../departure/departure.service'
 import { RouteTemplateService } from '../departure/route-template.service'
@@ -174,6 +174,30 @@ export class AiCreateTaskService {
     )
   }
 
+  private async requireRunningAttempt(caller: {
+    organizationId: string
+    taskId?: string
+    runId?: string
+    attemptId?: string
+  }): Promise<void> {
+    const attemptId = caller.attemptId ?? caller.runId
+    if (!attemptId || !caller.taskId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    const attempt = await this.prisma.aiAgentAttempt.findFirst({
+      where: {
+        id: attemptId,
+        taskId: caller.taskId,
+        organizationId: caller.organizationId,
+        status: AiAgentAttemptStatus.running,
+      },
+      select: { id: true },
+    })
+    if (!attempt) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+  }
+
   async getTask(
     organizationId: string,
     userId: string,
@@ -181,6 +205,31 @@ export class AiCreateTaskService {
   ): Promise<AiCreateTaskSummary> {
     const task = await this.findOwnedTaskOrThrow(organizationId, userId, taskId)
     return this.toSummary(task)
+  }
+
+  async resolveOwnedReviewTaskId(
+    organizationId: string,
+    userId: string,
+    packageId: string,
+  ): Promise<string> {
+    const pkg = await this.prisma.aiReviewPackage.findFirst({
+      where: { id: packageId, organizationId },
+      select: { taskId: true },
+    })
+    if (!pkg?.taskId) {
+      throw new NotFoundException('审核包不存在')
+    }
+    const task = await this.prisma.aiCreateTask.findFirst({
+      where: { id: pkg.taskId, agentTask: { organizationId } },
+      include: { agentTask: true },
+    })
+    if (!task) {
+      throw new NotFoundException('审核包不存在')
+    }
+    if (task.agentTask.ownerUserId !== userId) {
+      throw new ForbiddenException('仅任务创建者可处理审核包')
+    }
+    return pkg.taskId
   }
 
   async getAssistAvailability(userId: string): Promise<AiCreateAssistAvailability> {
@@ -244,17 +293,7 @@ export class AiCreateTaskService {
     }
 
     const task = await this.findOwnedTaskOrThrow(caller.organizationId, caller.userId, caller.taskId)
-    const run = await this.prisma.aiCreateActivityRun.findFirst({
-      where: {
-        id: caller.runId,
-        taskId: caller.taskId,
-        organizationId: caller.organizationId,
-        creatorUserId: caller.userId,
-      },
-    })
-    if (!run || run.status !== AiCreateActivityRunStatus.running) {
-      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
-    }
+    await this.requireRunningAttempt(caller)
 
     const summary = this.toSummary(task)
     const conversationPending = caller.conversationId
@@ -334,17 +373,7 @@ export class AiCreateTaskService {
     if (task.agentTask.status !== AgentTaskStatus.active || task.departureId) {
       throw new BadRequestException('仅进行中的 AI 建团任务可查询常用路线')
     }
-    const run = await this.prisma.aiCreateActivityRun.findFirst({
-      where: {
-        id: caller.runId,
-        taskId: caller.taskId,
-        organizationId: caller.organizationId,
-        creatorUserId: caller.userId,
-      },
-    })
-    if (!run || run.status !== AiCreateActivityRunStatus.running) {
-      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
-    }
+    await this.requireRunningAttempt(caller)
 
     const items = await this.routeTemplateService.searchForAgent(caller.organizationId, {
       keyword: input.keyword,
@@ -396,17 +425,7 @@ export class AiCreateTaskService {
     ) {
       throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
     }
-    const run = await this.prisma.aiCreateActivityRun.findFirst({
-      where: {
-        id: caller.runId,
-        taskId: caller.taskId,
-        organizationId: caller.organizationId,
-        creatorUserId: caller.userId,
-      },
-    })
-    if (!run || run.status !== AiCreateActivityRunStatus.running) {
-      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
-    }
+    await this.requireRunningAttempt(caller)
     if (task.draft.version !== input.objectVersion) {
       throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
     }
@@ -491,17 +510,7 @@ export class AiCreateTaskService {
         throw new BadRequestException('仅进行中的 AI 建团任务可提交审核包')
       }
 
-      const run = await tx.aiCreateActivityRun.findFirst({
-        where: {
-          id: caller.runId,
-          taskId: caller.taskId,
-          organizationId: caller.organizationId,
-          creatorUserId: caller.userId,
-        },
-      })
-      if (!run || run.status !== AiCreateActivityRunStatus.running) {
-        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
-      }
+      await this.requireRunningAttempt(caller)
 
       if (task.draft.version !== input.objectVersion) {
         throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
@@ -550,7 +559,6 @@ export class AiCreateTaskService {
         data: reviewPackageCreateData({
           organizationId: caller.organizationId,
           taskId: caller.taskId,
-          runId: caller.runId,
           conversationId: caller.conversationId,
           inputBatchId: caller.inputBatchId,
           attemptId: caller.attemptId,

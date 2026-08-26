@@ -105,6 +105,7 @@ export type {
   SendAiConversationMessageDto,
   SaveAiConversationDraftDto,
   SendAiConversationMessageResult,
+  ConversationSourceView,
   DepartureMaterialStatus,
   DepartureMaterialView,
   AiReviewableBasicInfoField,

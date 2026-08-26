@@ -45,7 +45,7 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
 
   async function openSession() {
     const response = await authRequest(app, ownerToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -70,18 +70,18 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
 
   function saveDraft(
     sessionCookie: string,
-    taskId: string,
+    _taskId: string,
     conversationId: string,
     text: string,
     draftEpoch: number,
   ) {
     return authRequest(app, sessionCookie)
-      .put(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
       .send({ text, draftEpoch })
   }
 
   async function readNextSseEvent(
-    taskId: string,
+    _taskId: string,
     conversationId: string,
     afterSequence: number,
   ): Promise<{ id: number; data: { sequence: number } }> {
@@ -89,7 +89,7 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
     const timeout = setTimeout(() => abort.abort(), 5_000)
     try {
       const response = await fetch(
-        `${await app.getUrl()}/api/ai-create-tasks/${taskId}/conversations/${conversationId}/stream`,
+        `${await app.getUrl()}/api/agent/conversations/${conversationId}/stream`,
         {
           headers: {
             Cookie: ownerPhoneToken,
@@ -145,10 +145,10 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
 
     const [computerView, phoneView] = await Promise.all([
       authRequest(app, ownerToken)
-        .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+        .get(`/api/agent/conversations/${conversationId}/events`)
         .expect(200),
       authRequest(app, ownerPhoneToken)
-        .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+        .get(`/api/agent/conversations/${conversationId}/events`)
         .expect(200),
     ])
     for (const view of [computerView, phoneView]) {
@@ -164,9 +164,9 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
     await saveDraft(ownerToken, taskId, conversationId, '准备发送的文本', 0).expect(200)
 
     const sent = await authRequest(app, ownerToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-draft-send-${taskId}`)
-      .send({ text: '准备发送的文本' })
+      .send({ text: '准备发送的文本', primaryTaskId: taskId })
       .expect(201)
 
     expect(sent.body.data.draft).toMatchObject({ text: '', draftEpoch: 1, revision: 2 })
@@ -174,13 +174,13 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
     expect(resumed.id).toBe(2)
     expect(resumed.data.sequence).toBe(2)
     const entryState = await authRequest(app, ownerToken)
-      .get(`/api/ai-create-tasks/${taskId}/assist-state`)
+      .get(`/api/agent/tasks/${taskId}/runtime-state`)
       .expect(200)
     expect(entryState.body.data).toMatchObject({ status: 'ai_processing' })
     await saveDraft(ownerPhoneToken, taskId, conversationId, '旧 epoch 延迟到达', 0).expect(409)
 
     const listed = await authRequest(app, ownerToken)
-      .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+      .get(`/api/agent/conversations/${conversationId}/events`)
       .expect(200)
     expect(listed.body.data.draft).toMatchObject({ text: '', draftEpoch: 1, revision: 2 })
     expect(listed.body.data.events.some((event: { payload?: { text?: string } }) =>
@@ -194,14 +194,14 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
     const { id: conversationId } = opened.conversation
 
     await authRequest(app, peerToken)
-      .put(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
       .send({ text: '不应写入', draftEpoch: 0 })
       .expect(403)
     await authRequest(app, peerToken)
-      .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+      .get(`/api/agent/conversations/${conversationId}/events`)
       .expect(403)
     await authRequest(app, peerToken)
-      .get(`/api/ai-create-tasks/${taskId}/assist-state`)
+      .get(`/api/agent/tasks/${taskId}/runtime-state`)
       .expect(403)
   })
 })

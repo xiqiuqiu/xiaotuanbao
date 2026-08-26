@@ -105,7 +105,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
 
   async function openTask(draft?: Record<string, unknown>) {
     const session = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -276,7 +276,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
     }).expect(200)
 
     const afterSubmit = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
     expect(afterSubmit.body.data.draft.snapshot.templateId ?? null).toBeNull()
     expect(afterSubmit.body.data.draft.snapshot.mode).toBe('manual')
@@ -289,7 +289,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
 
     const confirmed = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(200)
@@ -352,14 +352,14 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
 
     const failed = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(400)
     expect(failed.body.message).toContain('常用路线已不可用')
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
     expect(after.body.data.draft.version).toBe(opened.version)
     expect(after.body.data.draft.snapshot).toMatchObject({

@@ -1022,6 +1022,7 @@ export interface SendAiConversationMessageDto {
   interactionVersion?: number
   selectedOptionId?: string
   pageLocator?: PageLocator
+  primaryTaskId?: string
 }
 
 export interface CancelAiConversationInteractionDto {
@@ -1132,7 +1133,7 @@ export interface AiReviewPackageView {
   payloadSchema: 'departure.basic_info_draft@v1'
   baseObjectVersion: number
   version: number
-  runId: string
+  runId: string | null
   conversationId: string | null
   inputBatchId: string | null
   attemptId: string | null

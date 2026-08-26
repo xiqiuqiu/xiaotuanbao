@@ -27,7 +27,6 @@ import {
   AiAgentAttemptStatus,
   AiConversationEventKind,
   AiConversationInteractionStatus,
-  AiCreateActivityRunStatus,
   AiInputBatchStatus,
   AiReviewPackageStatus,
   AiWorkflowJobStatus,
@@ -804,12 +803,6 @@ export class AiWorkflowProcessor {
         summaryVersion: preparedProjection.summaryVersion,
         sourceIndexVersion: modelInput.sourceIndexVersion,
       })
-      const run = await this.getOrCreateRunningActivityRun(
-        tx,
-        job.organizationId,
-        taskId,
-        job.inputBatch.creatorUserId,
-      )
       const existingManifest = await tx.aiContextManifest.findFirst({
         where: {
           organizationId: job.organizationId,
@@ -855,7 +848,6 @@ export class AiWorkflowProcessor {
           conversationId: job.conversationId,
           inputBatchId: job.inputBatchId,
           jobId: job.id,
-          activityRunId: run.id,
           contextManifestId: manifest.id,
           agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
           agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
@@ -868,7 +860,7 @@ export class AiWorkflowProcessor {
         organizationId: job.organizationId,
         userId: job.inputBatch.creatorUserId,
         taskId,
-        runId: run.id,
+        runId: attempt.id,
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
         attemptId: attempt.id,
@@ -903,7 +895,7 @@ export class AiWorkflowProcessor {
         data: { grantedCapabilities: grants.granted },
       })
       return {
-        runId: run.id,
+        runId: attempt.id,
         attemptId: attempt.id,
         contextManifestId: manifest.id,
         requestContext,
@@ -1228,24 +1220,6 @@ export class AiWorkflowProcessor {
     }
   }
 
-  private async getOrCreateRunningActivityRun(
-    tx: Prisma.TransactionClient,
-    organizationId: string,
-    taskId: string,
-    creatorUserId: string,
-  ) {
-    const existing = await tx.aiCreateActivityRun.findFirst({
-      where: { taskId, organizationId, status: AiCreateActivityRunStatus.running },
-      orderBy: { startedAt: 'desc' },
-    })
-    if (existing) {
-      return existing
-    }
-    return tx.aiCreateActivityRun.create({
-      data: { organizationId, taskId, creatorUserId },
-    })
-  }
-
   private async persistOutcome(
     job: ClaimedJob,
     attemptId: string,
@@ -1446,18 +1420,6 @@ export class AiWorkflowProcessor {
           },
         })
       }
-      if (job.taskId && isActivityRunCompleteBoundary(batchStatus)) {
-        await tx.aiCreateActivityRun.updateMany({
-          where: {
-            taskId: job.taskId,
-            status: AiCreateActivityRunStatus.running,
-          },
-          data: {
-            status: AiCreateActivityRunStatus.completed,
-            endedAt: new Date(),
-          },
-        })
-      }
       await tx.aiConversation.update({
         where: { id: job.conversationId },
         data: { lastActivityAt: new Date(), updatedAt: new Date() },
@@ -1621,16 +1583,7 @@ export class AiWorkflowProcessor {
           leaseExpiresAt: null,
         },
       })
-      if (job.taskId) {
-        await tx.aiCreateActivityRun.updateMany({
-          where: { taskId: job.taskId, status: AiCreateActivityRunStatus.running },
-          data: {
-            status: AiCreateActivityRunStatus.failed,
-            endedAt: new Date(),
-            errorCode,
-          },
-        })
-      }
+
       await tx.aiConversation.update({
         where: { id: job.conversationId },
         data: { lastActivityAt: new Date(), updatedAt: new Date() },
@@ -1876,17 +1829,12 @@ export class AiWorkflowProcessor {
     const attempt = await tx.aiAgentAttempt.findUniqueOrThrow({
       where: { id: attemptId },
       select: {
-        activityRunId: true,
         contextManifestId: true,
         agentDefinitionKey: true,
         agentDefinitionVersion: true,
         grantedCapabilities: true,
       },
     })
-    if (!attempt.activityRunId) {
-      throw new Error('REVIEW_PACKAGE_REQUIRES_TASK')
-    }
-    const runId = attempt.activityRunId
     const authority = await loadEvidenceAuthority(tx, {
       organizationId: job.organizationId,
       conversationId: job.conversationId,
@@ -1914,7 +1862,6 @@ export class AiWorkflowProcessor {
         taskId,
         conversationId: job.conversationId,
         inputBatchId: job.inputBatchId,
-        runId,
         attemptId,
         contextManifestId: attempt.contextManifestId,
         agentDefinition: {
@@ -1939,7 +1886,6 @@ export class AiWorkflowProcessor {
           conversationId: job.conversationId,
           inputBatchId: job.inputBatchId,
           attemptId,
-          runId,
           reviewPackage: { ...validated.reviewPackage, objectVersion: target.version },
           sourceActionId: action.id,
         })
@@ -1965,14 +1911,6 @@ function definitionRefLog(ref: { key: string; version: number }): string {
 
 function capabilityRefsLog(refs: readonly { key: string; version: number }[]): string {
   return refs.map(definitionRefLog).join(',')
-}
-
-function isActivityRunCompleteBoundary(batchStatus: AiInputBatchStatus): boolean {
-  return (
-    batchStatus === AiInputBatchStatus.completed ||
-    batchStatus === AiInputBatchStatus.awaiting_review ||
-    batchStatus === AiInputBatchStatus.awaiting_user_input
-  )
 }
 
 function collaborationErrorCodeForWorkflowFailure(

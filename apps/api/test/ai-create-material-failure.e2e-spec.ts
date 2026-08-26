@@ -108,7 +108,7 @@ describe('AI create material failure control (e2e) #317', () => {
 
   async function openSession() {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -127,16 +127,17 @@ describe('AI create material failure control (e2e) #317', () => {
     }
   }
 
-  function batchPath(taskId: string, conversationId: string, batchId: string, action: string) {
-    return `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/${action}`
+  function batchPath(_taskId: string, conversationId: string, batchId: string, action: string) {
+    return `/api/agent/conversations/${conversationId}/batches/${batchId}/${action}`
   }
 
   async function sendTwoAttachments(taskId: string, conversationId: string, key: string) {
     ocr.queuePageTexts(['九月川西线 预计 12 人', '   '])
     return authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', key)
       .field('text', '这是团期资料，请按附件填写。')
+      .field('primaryTaskId', taskId)
       .attach('files', PNG_OK, { filename: '可用.png', contentType: 'image/png' })
       .attach('files', PNG_FAIL, { filename: '空白.png', contentType: 'image/png' })
       .expect(201)
@@ -167,7 +168,7 @@ describe('AI create material failure control (e2e) #317', () => {
     expect(ready?.parseVersion).toBe(1)
 
     const restored = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ taskId: opened.task.id })
       .expect(201)
     const view = restored.body.data.conversation.activeBatch as AiInputBatchView
@@ -300,9 +301,10 @@ describe('AI create material failure control (e2e) #317', () => {
     const opened = await openSession()
     ocr.holdNextCall()
     const sent = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.task.id}/conversations/${opened.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${opened.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-fail-abandon-${opened.task.id}`)
       .field('text', '这是团期资料，请按附件填写。')
+      .field('primaryTaskId', opened.task.id)
       .attach('files', PNG_OK, { filename: '迟到.png', contentType: 'image/png' })
       .expect(201)
     const batchId = sent.body.data.batch.id as string
@@ -343,9 +345,10 @@ describe('AI create material failure control (e2e) #317', () => {
     const opened = await openSession()
     agent.holdNextCall()
     const sent = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.task.id}/conversations/${opened.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${opened.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-fail-reparse-${opened.task.id}`)
       .field('text', '这是团期资料，请按附件填写。')
+      .field('primaryTaskId', opened.task.id)
       .attach('files', PNG_OK, { filename: '固定.png', contentType: 'image/png' })
       .expect(201)
     const batchId = sent.body.data.batch.id as string
@@ -397,9 +400,10 @@ describe('AI create material failure control (e2e) #317', () => {
     const opened = await openSession()
     agent.holdNextCall()
     const sent = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.task.id}/conversations/${opened.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${opened.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-fail-stop-${opened.task.id}`)
       .field('text', '这是团期资料，请按附件填写。')
+      .field('primaryTaskId', opened.task.id)
       .attach('files', PNG_OK, { filename: '停止.png', contentType: 'image/png' })
       .expect(201)
     const batchId = sent.body.data.batch.id as string
@@ -430,9 +434,9 @@ describe('AI create material failure control (e2e) #317', () => {
     expect(batch.status).toBe('cancelled')
 
     const next = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.task.id}/conversations/${opened.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${opened.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-fail-stop-next-${opened.task.id}`)
-      .send({ text: '改用文字说明：九月川西线 12 人。' })
+      .send({ text: '改用文字说明：九月川西线 12 人。', primaryTaskId: opened.task.id })
       .expect(201)
     expect(next.body.data.batch.id).not.toBe(batchId)
     expect(next.body.data.batch.status).toBe('ready_for_agent')
@@ -441,9 +445,10 @@ describe('AI create material failure control (e2e) #317', () => {
   it('reuses the same-task duplicate archive and keeps cross-task archives independent', async () => {
     const first = await openSession()
     await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${first.task.id}/conversations/${first.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${first.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-dup-first-${first.task.id}`)
       .field('text', '请根据附件整理。')
+      .field('primaryTaskId', first.task.id)
       .attach('files', PNG_OK, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
     await processor.processDueJobs(2)
@@ -452,9 +457,10 @@ describe('AI create material failure control (e2e) #317', () => {
     })
 
     const duplicate = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${first.task.id}/conversations/${first.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${first.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-dup-second-${first.task.id}`)
       .field('text', '同一份资料再发一次。')
+      .field('primaryTaskId', first.task.id)
       .attach('files', PNG_OK, { filename: '团期副本.png', contentType: 'image/png' })
       .expect(201)
     expect(duplicate.body.data.batch.status).toBe('ready_for_agent')
@@ -473,9 +479,10 @@ describe('AI create material failure control (e2e) #317', () => {
 
     const second = await openSession()
     await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${second.task.id}/conversations/${second.conversation.id}/messages`)
+      .post(`/api/agent/conversations/${second.conversation.id}/messages`)
       .set('Idempotency-Key', `e2e-dup-other-${second.task.id}`)
       .field('text', '另一任务上传同一原件。')
+      .field('primaryTaskId', second.task.id)
       .attach('files', PNG_OK, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
     const otherMaterial = await prisma.conversationSource.findFirstOrThrow({

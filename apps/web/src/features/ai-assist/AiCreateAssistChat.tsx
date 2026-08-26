@@ -679,7 +679,7 @@ function useConversationEventSync({
     )
     const errorHandler = createCatchUpErrorHandler(catchUp, isCancelled)
     const source = new EventSource(
-      `${env.apiBaseUrl}/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
+      `${env.apiBaseUrl}/agent/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
       { withCredentials: true },
     )
     source.onmessage = (message) => {
@@ -1125,9 +1125,11 @@ export function AiCreateAssistChat({
     if (!setHeaderExtra) {
       return
     }
-    setHeaderExtra(<AssistMaterialsTrigger taskId={taskId} refreshKey={materialsRefreshKey} />)
+    setHeaderExtra(
+      <AssistMaterialsTrigger conversationId={conversationId} refreshKey={materialsRefreshKey} />,
+    )
     return () => setHeaderExtra(null)
-  }, [materialsRefreshKey, setHeaderExtra, taskId])
+  }, [conversationId, materialsRefreshKey, setHeaderExtra])
 
   useConversationEventSync({
     taskId,

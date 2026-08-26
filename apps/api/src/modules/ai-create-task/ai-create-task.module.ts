@@ -8,6 +8,7 @@ import { AiConversationEventHub } from './ai-conversation-event.hub'
 import { AiConversationService } from './ai-conversation.service'
 import { AiConversationRecallService } from './ai-conversation-recall.service'
 import { AgentConversationController } from './agent-conversation.controller'
+import { AgentReviewController } from './agent-review.controller'
 import { AgentTaskController } from './agent-task.controller'
 import { AgentTaskService } from './agent-task.service'
 import { AiCreateTaskController } from './ai-create-task.controller'
@@ -35,6 +36,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AiToolController,
     AgentConversationController,
     AgentTaskController,
+    AgentReviewController,
   ],
   providers: [
     AiCreateTaskService,

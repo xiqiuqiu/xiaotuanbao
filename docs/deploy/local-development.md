@@ -46,6 +46,7 @@ pnpm dev:web
 | `pnpm db:down` | 停止 PostgreSQL |
 | `pnpm db:migrate` | 开发迁移（`prisma migrate dev`） |
 | `pnpm db:seed` | 初始化演示数据 |
+| `pnpm --filter api db:reset-agent-run-data` | 仅开发环境重置 Agent 运行数据；不删除 Departure、客源、财务或正式附件 |
 | `pnpm typecheck` | 全项目类型检查（web + api + shared） |
 | `pnpm typecheck:web` | 前端类型检查 |
 | `pnpm typecheck:api` | 后端类型检查 |

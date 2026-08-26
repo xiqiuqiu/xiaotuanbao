@@ -5,7 +5,6 @@ import { JwtService } from '@nestjs/jwt'
 import {
   AiAgentAttemptStatus,
   AiConversationEventKind,
-  AiCreateActivityRunStatus,
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
@@ -81,14 +80,6 @@ export async function mintRunningAttemptDelegation(options: {
       status: AiWorkflowJobStatus.succeeded,
     },
   })
-  const run = await prisma.aiCreateActivityRun.create({
-    data: {
-      organizationId,
-      taskId,
-      creatorUserId: userId,
-      status: AiCreateActivityRunStatus.running,
-    },
-  })
   const manifest = await prisma.aiContextManifest.create({
     data: {
       organizationId,
@@ -113,7 +104,6 @@ export async function mintRunningAttemptDelegation(options: {
       conversationId,
       inputBatchId: batch.id,
       jobId: job.id,
-      activityRunId: run.id,
       contextManifestId: manifest.id,
       agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
       agentDefinitionVersion: AI_CREATE_AGENT_DEFINITION_REF.version,
@@ -128,7 +118,7 @@ export async function mintRunningAttemptDelegation(options: {
     sub: userId,
     organizationId,
     taskId,
-    runId: run.id,
+    runId: attempt.id,
     conversationId,
     inputBatchId: batch.id,
     attemptId: attempt.id,
@@ -144,7 +134,7 @@ export async function mintRunningAttemptDelegation(options: {
     audience: AI_OP_DELEGATION_JWT_AUD,
   })
   return {
-    runId: run.id,
+    runId: attempt.id,
     attemptId: attempt.id,
     inputBatchId: batch.id,
     conversationId,

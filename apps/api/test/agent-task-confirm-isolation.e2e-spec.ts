@@ -75,7 +75,7 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
 
   async function openConfirmableSession(name: string) {
     const response = await authRequest(app, token)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -103,9 +103,10 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
     const name = `${testPrefix}-isolate`
     const opened = await openConfirmableSession(name)
     const sent = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${opened.taskId}/conversations/${opened.conversationId}/messages`)
+      .post(`/api/agent/conversations/${opened.conversationId}/messages`)
       .set('Idempotency-Key', `${testPrefix}-isolate-send`)
       .field('text', '确认前仍有未完成作业')
+      .field('primaryTaskId', opened.taskId)
       .expect(201)
     const batchId = sent.body.data.batch.id as string
     const action = await prisma.aiAction.create({
@@ -156,9 +157,10 @@ describe('AgentTask confirm isolates runtime like terminate (e2e) #366', () => {
     const name = `${testPrefix}-late-outcome`
     const opened = await openConfirmableSession(name)
     const sent = await authRequest(app, token)
-      .post(`/api/ai-create-tasks/${opened.taskId}/conversations/${opened.conversationId}/messages`)
+      .post(`/api/agent/conversations/${opened.conversationId}/messages`)
       .set('Idempotency-Key', `${testPrefix}-late-send`)
       .field('text', '确认时 Worker 仍在跑')
+      .field('primaryTaskId', opened.taskId)
       .expect(201)
     const batchId = sent.body.data.batch.id as string
 

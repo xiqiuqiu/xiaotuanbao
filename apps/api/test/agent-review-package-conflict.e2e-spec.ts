@@ -62,7 +62,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
   async function openLinkedConversations() {
     const first = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -77,7 +77,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       })
       .expect(201)
     const second = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: `${testPrefix}-另一会话` } })
       .expect(201)
 
@@ -160,7 +160,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     expect(packages[0]?.targetId).toBe(packages[1]?.targetId)
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
     expect(after.body.data.pendingReviews).toHaveLength(2)
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
@@ -183,7 +183,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     const confirmed = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageA.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${packageA.body.data.reviewPackageId}/confirm`,
       )
       .send({
         expectedVersion: opened.version,
@@ -195,7 +195,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     const conflict = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageB.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${packageB.body.data.reviewPackageId}/confirm`,
       )
       .send({
         expectedVersion: opened.version + 1,
@@ -227,7 +227,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     const regenerated = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageB.body.data.reviewPackageId}/regenerate`,
+        `/api/agent/review-packages/${packageB.body.data.reviewPackageId}/regenerate`,
       )
       .expect(200)
     const original = await prisma.aiReviewPackage.findFirstOrThrow({
@@ -264,7 +264,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageA.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${packageA.body.data.reviewPackageId}/confirm`,
       )
       .send({
         expectedVersion: opened.version,
@@ -277,7 +277,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     })
     const refused = await authRequest(app, peerWriterToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${packageB.body.data.reviewPackageId}/regenerate`,
+        `/api/agent/review-packages/${packageB.body.data.reviewPackageId}/regenerate`,
       )
       .expect(403)
     expect(refused.body.message).toBe('仅任务创建者可处理审核包')
@@ -304,7 +304,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     await authRequest(app, financeToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .send({
         expectedVersion: opened.version,
@@ -320,7 +320,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     const key = `e2e-367-confirm-${submitted.body.data.reviewPackageId}`
     const first = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .set('Idempotency-Key', key)
       .send({
@@ -331,7 +331,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
       .expect(200)
     const second = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .set('Idempotency-Key', key)
       .send({
@@ -360,7 +360,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     const taskBefore = await prisma.agentTask.findFirstOrThrow({ where: { id: opened.taskId } })
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${cancelled.body.data.reviewPackageId}/cancel`,
+        `/api/agent/review-packages/${cancelled.body.data.reviewPackageId}/cancel`,
       )
       .send({ expectedPackageVersion: 1 })
       .expect(200)
@@ -396,7 +396,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
 
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+        `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
       )
       .send({
         expectedVersion: opened.version,
@@ -435,7 +435,7 @@ describe('Generic Review Package concurrent conflict (e2e) #367', () => {
     const confirm = () =>
       authRequest(app, coordinatorToken)
         .post(
-          `/api/ai-create-tasks/${opened.taskId}/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
+          `/api/agent/review-packages/${submitted.body.data.reviewPackageId}/confirm`,
         )
         .set('Idempotency-Key', key)
         .send({

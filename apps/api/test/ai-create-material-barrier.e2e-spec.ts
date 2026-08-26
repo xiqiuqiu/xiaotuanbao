@@ -85,7 +85,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
 
   async function openSession() {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -112,9 +112,10 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     ocr.holdNextCall()
 
     const sent = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-material-${taskId}`)
       .field('text', userText)
+      .field('primaryTaskId', taskId)
       .attach('files', PNG_1X1, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
 
@@ -182,7 +183,7 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(agent.lastUserText()).not.toContain(PNG_1X1.toString('base64'))
 
     const restored = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ taskId })
       .expect(201)
     const kinds = restored.body.data.conversation.events.map((event: { kind: string }) => event.kind)
@@ -193,17 +194,17 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     expect(agentMessage?.payload).toMatchObject({ text: COMPLETED_MESSAGE })
 
     const listed = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}/materials`)
+      .get(`/api/agent/conversations/${conversationId}/sources`)
       .expect(200)
     expect(listed.body.data).toHaveLength(1)
     expect(listed.body.data[0]).toMatchObject({
       id: materials[0]?.id,
       status: 'available',
-      latestResultVersion: 1,
+      latestParseVersion: 1,
     })
 
     const preview = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}/materials/${materials[0]?.id}/preview`)
+      .get(`/api/agent/conversations/${conversationId}/sources/${materials[0]?.id}/preview`)
       .buffer(true)
       .parse((res, callback) => {
         const chunks: Buffer[] = []
@@ -240,9 +241,10 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     ocr.setPageText('   ')
     try {
       const sent = await authRequest(app, coordinatorToken)
-        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .post(`/api/agent/conversations/${conversationId}/messages`)
         .set('Idempotency-Key', `e2e-material-empty-${taskId}`)
         .field('text', '这是团期资料，请按附件填写。')
+        .field('primaryTaskId', taskId)
         .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
         .expect(201)
       expect(sent.body.data.batch.status).toBe('waiting_for_materials')
@@ -290,9 +292,10 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     ocr.setPageText('   ')
     try {
       const sent = await authRequest(app, coordinatorToken)
-        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .post(`/api/agent/conversations/${conversationId}/messages`)
         .set('Idempotency-Key', `e2e-material-resend-${taskId}`)
         .field('text', '这是团期资料，请按附件填写。')
+        .field('primaryTaskId', taskId)
         .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
         .expect(201)
       expect(sent.body.data.batch.status).toBe('waiting_for_materials')
@@ -305,9 +308,10 @@ describe('AI create material readiness barrier (e2e) #316', () => {
 
       ocr.setPageText('九月川西线 预计 12 人')
       const retry = await authRequest(app, coordinatorToken)
-        .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+        .post(`/api/agent/conversations/${conversationId}/messages`)
         .set('Idempotency-Key', `e2e-material-resend-retry-${taskId}`)
         .field('text', '同一份资料再发一次。')
+        .field('primaryTaskId', taskId)
         .attach('files', PNG_1X1, { filename: '空白.png', contentType: 'image/png' })
         .expect(201)
       expect(retry.body.data.batch.status).toBe('waiting_for_materials')
@@ -364,9 +368,10 @@ describe('AI create material readiness barrier (e2e) #316', () => {
     const conversationId = opened.conversation.id
 
     const sent = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-material-exhausted-${taskId}`)
       .field('text', '这是团期资料，请按附件填写。')
+      .field('primaryTaskId', taskId)
       .attach('files', PNG_1X1, { filename: '超时.png', contentType: 'image/png' })
       .expect(201)
     expect(sent.body.data.batch.status).toBe('waiting_for_materials')

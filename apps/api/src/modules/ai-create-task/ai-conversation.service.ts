@@ -226,6 +226,7 @@ export class AiConversationService {
     reply: ConversationReplyInput = {},
     files: IncomingMaterialFile[] = [],
     pageLocatorInput?: unknown,
+    requestedPrimaryTaskId?: string,
   ): Promise<SendAiConversationMessageResult> {
     const key = requireIdempotencyKey(idempotencyKey)
     const attachments = dedupeFiles(this.materialService.validateIncomingFiles(files))
@@ -252,6 +253,7 @@ export class AiConversationService {
       interactionVersion: reply.interactionVersion ?? null,
       selectedOptionId: reply.selectedOptionId ?? null,
       pageLocator: resolvedPage?.locator ?? null,
+      primaryTaskId: requestedPrimaryTaskId ?? null,
       attachments: attachments.map((file) => ({
         filename: file.originalname,
         contentType: (file.mimetype ?? '').toLowerCase(),
@@ -410,6 +412,13 @@ export class AiConversationService {
       const batchStatus = waitingForMaterials
         ? AiInputBatchStatus.waiting_for_materials
         : AiInputBatchStatus.ready_for_agent
+      const primaryTask = await this.resolvePrimaryDepartureTask(
+        tx,
+        organizationId,
+        userId,
+        conversation.id,
+        requestedPrimaryTaskId,
+      )
       const batch = await tx.aiInputBatch.create({
         data: {
           organizationId,
@@ -422,6 +431,17 @@ export class AiConversationService {
           pageLocator: resolvedPage
             ? (JSON.parse(JSON.stringify(resolvedPage.locator)) as Prisma.InputJsonValue)
             : undefined,
+          ...(primaryTask
+            ? {
+                taskLinks: {
+                  create: {
+                    organizationId,
+                    taskId: primaryTask.id,
+                    role: InputBatchTaskRole.primary,
+                  },
+                },
+              }
+            : {}),
           sources: {
             create: archived.map((item) => ({
               organizationId,
@@ -439,6 +459,30 @@ export class AiConversationService {
         },
         include: BATCH_MATERIAL_INCLUDE,
       })
+      if (primaryTask) {
+        if (primaryTask.status === AgentTaskStatus.waiting) {
+          await tx.agentTask.update({
+            where: { id: primaryTask.id },
+            data: {
+              status: AgentTaskStatus.active,
+              statusVersion: { increment: 1 },
+            },
+          })
+        }
+        await tx.taskActivity.create({
+          data: {
+            organizationId,
+            taskId: primaryTask.id,
+            actorUserId: userId,
+            kind: TaskActivityKind.progress,
+            summary:
+              primaryTask.status === AgentTaskStatus.waiting
+                ? 'User 已继续推进任务'
+                : 'User 已提交新一轮任务输入',
+            payload: { inputBatchId: batch.id },
+          },
+        })
+      }
       for (const item of archived) {
         if (item.needsParseJob) {
           if (item.source.status === ConversationSourceStatus.failed) {
@@ -449,6 +493,7 @@ export class AiConversationService {
           }
           await this.materialService.enqueueParseJob(tx, {
             organizationId,
+            taskId: primaryTask?.id,
             conversationId: conversation.id,
             inputBatchId: batch.id,
             sourceId: item.source.id,
@@ -459,6 +504,7 @@ export class AiConversationService {
         await tx.aiWorkflowJob.create({
           data: {
             organizationId,
+            taskId: primaryTask?.id,
             conversationId: conversation.id,
             inputBatchId: batch.id,
             type: AiWorkflowJobType.agent_batch,
@@ -1319,7 +1365,7 @@ export class AiConversationService {
   async retryFailedMaterials(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     batchId: string,
     materialIds: string[] | undefined,
@@ -1356,7 +1402,7 @@ export class AiConversationService {
           })
           await this.materialService.enqueueParseJob(tx, {
             organizationId,
-            taskId,
+            taskId: taskId ?? primaryTaskId(batch),
             conversationId: batch.conversationId,
             inputBatchId: batch.id,
             sourceId: item.sourceId,
@@ -1385,7 +1431,7 @@ export class AiConversationService {
   async removeMaterials(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     batchId: string,
     materialIds: string[],
@@ -1460,7 +1506,7 @@ export class AiConversationService {
   async abandonBatch(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     batchId: string,
     idempotencyKey: string | undefined,
@@ -1484,20 +1530,23 @@ export class AiConversationService {
           data: { status: AiInputBatchStatus.cancelled },
           include: BATCH_MATERIAL_INCLUDE,
         })
-        await tx.agentTask.updateMany({
-          where: { id: taskId, status: AgentTaskStatus.waiting },
-          data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
-        })
-        await tx.taskActivity.create({
-          data: {
-            organizationId,
-            taskId,
-            actorUserId: userId,
-            kind: TaskActivityKind.progress,
-            summary: 'User 已放弃指定批次',
-            payload: { inputBatchId: batch.id },
-          },
-        })
+        const abandonedTaskId = taskId ?? primaryTaskId(batch)
+        if (abandonedTaskId) {
+          await tx.agentTask.updateMany({
+            where: { id: abandonedTaskId, status: AgentTaskStatus.waiting },
+            data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+          })
+          await tx.taskActivity.create({
+            data: {
+              organizationId,
+              taskId: abandonedTaskId,
+              actorUserId: userId,
+              kind: TaskActivityKind.progress,
+              summary: 'User 已放弃指定批次',
+              payload: { inputBatchId: batch.id },
+            },
+          })
+        }
         const statusEvent = await this.appendEvent(tx, {
           organizationId,
           conversationId: batch.conversationId,
@@ -1512,7 +1561,7 @@ export class AiConversationService {
   async stopBatch(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     batchId: string,
     idempotencyKey: string | undefined,
@@ -1597,7 +1646,7 @@ export class AiConversationService {
   async retryFailedBatch(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     batchId: string,
     idempotencyKey: string | undefined,
@@ -1643,7 +1692,7 @@ export class AiConversationService {
           await tx.aiWorkflowJob.create({
             data: {
               organizationId,
-              taskId,
+              taskId: taskId ?? primaryTaskId(batch),
               conversationId: batch.conversationId,
               inputBatchId: batch.id,
               type: AiWorkflowJobType.agent_batch,
@@ -1674,13 +1723,12 @@ export class AiConversationService {
   async cancelInteraction(
     organizationId: string,
     userId: string,
-    taskId: string,
+    taskId: string | undefined,
     conversationId: string,
     interactionId: string,
     version: number,
     idempotencyKey: string | undefined,
   ): Promise<SendAiConversationMessageResult> {
-    await this.assertAssistAccess(userId)
     const existing = await this.prisma.aiConversationInteraction.findFirst({
       where: { id: interactionId, conversationId, organizationId },
     })
@@ -1722,20 +1770,23 @@ export class AiConversationService {
           data: { status: AiInputBatchStatus.cancelled },
           include: BATCH_MATERIAL_INCLUDE,
         })
-        await tx.agentTask.updateMany({
-          where: { id: taskId, status: AgentTaskStatus.waiting },
-          data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
-        })
-        await tx.taskActivity.create({
-          data: {
-            organizationId,
-            taskId,
-            actorUserId: userId,
-            kind: TaskActivityKind.progress,
-            summary: 'User 已取消指定等待项',
-            payload: { interactionId: interaction.id },
-          },
-        })
+        const cancelledTaskId = taskId ?? primaryTaskId(updated)
+        if (cancelledTaskId) {
+          await tx.agentTask.updateMany({
+            where: { id: cancelledTaskId, status: AgentTaskStatus.waiting },
+            data: { status: AgentTaskStatus.active, statusVersion: { increment: 1 } },
+          })
+          await tx.taskActivity.create({
+            data: {
+              organizationId,
+              taskId: cancelledTaskId,
+              actorUserId: userId,
+              kind: TaskActivityKind.progress,
+              summary: 'User 已取消指定等待项',
+              payload: { interactionId: interaction.id },
+            },
+          })
+        }
         const statusEvent = await this.appendEvent(tx, {
           organizationId,
           conversationId,
@@ -1800,6 +1851,16 @@ export class AiConversationService {
     }
   }
 
+  async streamOwnedEvents(
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    afterSequence = 0,
+  ): Promise<Observable<{ id: string; data: AiConversationEventView }>> {
+    await this.requireOwnedUserConversation(this.prisma, organizationId, userId, conversationId)
+    return this.observeConversationEvents(conversationId, afterSequence)
+  }
+
   async streamEvents(
     organizationId: string,
     userId: string,
@@ -1810,7 +1871,13 @@ export class AiConversationService {
     await this.assertAssistAccess(userId)
     await this.findOwnedInProgressTask(organizationId, userId, taskId)
     await this.requireOwnedConversation(organizationId, userId, taskId, conversationId)
+    return this.observeConversationEvents(conversationId, afterSequence)
+  }
 
+  private observeConversationEvents(
+    conversationId: string,
+    afterSequence = 0,
+  ): Observable<{ id: string; data: AiConversationEventView }> {
     return new Observable((subscriber) => {
       let cancelled = false
       let lastSeq = afterSequence
@@ -2507,6 +2574,56 @@ export class AiConversationService {
     }
   }
 
+  private async resolvePrimaryDepartureTask(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    userId: string,
+    conversationId: string,
+    requestedPrimaryTaskId?: string,
+  ): Promise<{ id: string; status: AgentTaskStatus } | null> {
+    const links = await tx.conversationTaskLink.findMany({
+      where: {
+        organizationId,
+        conversationId,
+        ...(requestedPrimaryTaskId ? { taskId: requestedPrimaryTaskId } : {}),
+      },
+      include: {
+        task: {
+          include: {
+            departureCreationTask: {
+              include: { draft: true },
+            },
+          },
+        },
+      },
+      orderBy: { linkedAt: 'asc' },
+    })
+    if (requestedPrimaryTaskId && links.length === 0) {
+      throw new NotFoundException('会话未关联该任务')
+    }
+    const eligible = links
+      .map((link) => link.task)
+      .filter((task) => {
+        const extension = task.departureCreationTask
+        return (
+          task.organizationId === organizationId &&
+          task.ownerUserId === userId &&
+          (task.status === AgentTaskStatus.active || task.status === AgentTaskStatus.waiting) &&
+          extension != null &&
+          extension.departureId == null &&
+          extension.draft != null
+        )
+      })
+    if (!requestedPrimaryTaskId) {
+      return null
+    }
+    const selected = eligible[0]
+    if (!selected) {
+      throw new BadRequestException('仅进行中的 AI 建团任务可作为本轮主任务')
+    }
+    return { id: selected.id, status: selected.status }
+  }
+
   private async requireOwnedUserConversation(
     db: { aiConversation: Prisma.TransactionClient['aiConversation'] },
     organizationId: string,
@@ -2657,7 +2774,7 @@ export class AiConversationService {
   private async runBatchCommand(params: {
     organizationId: string
     userId: string
-    taskId: string
+    taskId?: string
     conversationId: string
     batchId: string
     operation: string
@@ -2668,10 +2785,9 @@ export class AiConversationService {
       batch: BatchWithMaterials,
     ) => Promise<{ batch: BatchWithMaterials; events: AiConversationEvent[] }>
   }): Promise<SendAiConversationMessageResult> {
-    await this.assertAssistAccess(params.userId)
     const key = requireIdempotencyKey(params.idempotencyKey)
     const hash = requestHash({
-      taskId: params.taskId,
+      taskId: params.taskId ?? null,
       conversationId: params.conversationId,
       batchId: params.batchId,
       request: params.request,
@@ -2689,7 +2805,7 @@ export class AiConversationService {
       existingRecord?.completedAt &&
       existingRecord.resultJson &&
       existingRecord.requestHash === hash &&
-      existingRecord.taskId === params.taskId
+      (params.taskId == null || existingRecord.taskId === params.taskId)
     ) {
       return existingRecord.resultJson as unknown as SendAiConversationMessageResult
     }
@@ -2697,15 +2813,31 @@ export class AiConversationService {
     const published: AiConversationEventView[] = []
     const result = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, params.organizationId, params.conversationId)
-      await this.findOwnedInProgressTask(params.organizationId, params.userId, params.taskId, tx)
-      const conversation = await this.requireOwnedConversation(
+      const conversation = await this.requireOwnedUserConversation(
+        tx,
         params.organizationId,
         params.userId,
-        params.taskId,
         params.conversationId,
       )
       if (conversation.status !== AiConversationStatus.open) {
-        throw new BadRequestException('仅未完成的 AI 建团会话可处理资料批次')
+        throw new BadRequestException('仅未完成的会话可处理资料批次')
+      }
+      const batch = await tx.aiInputBatch.findFirst({
+        where: {
+          id: params.batchId,
+          conversationId: conversation.id,
+          organizationId: params.organizationId,
+          ...(params.taskId ? { taskLinks: { some: { taskId: params.taskId } } } : {}),
+        },
+        include: BATCH_MATERIAL_INCLUDE,
+      })
+      if (!batch) {
+        throw new NotFoundException('AI 输入批次不存在')
+      }
+      const resolvedTaskId = params.taskId ?? primaryTaskId(batch)
+      if (resolvedTaskId) {
+        await this.assertAssistAccess(params.userId)
+        await this.findOwnedInProgressTask(params.organizationId, params.userId, resolvedTaskId, tx)
       }
       const record = await tx.aiCreateIdempotencyRecord.upsert({
         where: {
@@ -2717,14 +2849,14 @@ export class AiConversationService {
         },
         create: {
           organizationId: params.organizationId,
-          taskId: params.taskId,
+          taskId: resolvedTaskId,
           operation: params.operation,
           idempotencyKey: key,
           requestHash: hash,
         },
         update: {},
       })
-      if (record.taskId !== params.taskId) {
+      if ((record.taskId ?? null) !== (resolvedTaskId ?? null)) {
         throw new ConflictException('幂等键已被其他任务使用')
       }
       if (record.requestHash !== hash) {
@@ -2734,18 +2866,6 @@ export class AiConversationService {
         return record.resultJson as unknown as SendAiConversationMessageResult
       }
 
-      const batch = await tx.aiInputBatch.findFirst({
-        where: {
-          id: params.batchId,
-          conversationId: conversation.id,
-          taskLinks: { some: { taskId: params.taskId } },
-          organizationId: params.organizationId,
-        },
-        include: BATCH_MATERIAL_INCLUDE,
-      })
-      if (!batch) {
-        throw new NotFoundException('AI 输入批次不存在')
-      }
       const mutated = await params.mutate(tx, batch)
       await tx.aiConversation.update({
         where: { id: conversation.id },

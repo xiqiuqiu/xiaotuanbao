@@ -142,7 +142,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
   async function openSession(taskId?: string) {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send(
         taskId
           ? { taskId }
@@ -202,15 +202,15 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     idempotencyKey: string,
   ) {
     return authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', idempotencyKey)
-      .send(body)
+      .send({ ...body, primaryTaskId: taskId })
   }
 
-  async function listEvents(taskId: string, conversationId: string, afterSequence = 0) {
+  async function listEvents(_taskId: string, conversationId: string, afterSequence = 0) {
     const response = await authRequest(app, coordinatorToken)
       .get(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
+        `/api/agent/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
       )
       .expect(200)
     return response.body.data as {
@@ -335,9 +335,9 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     const listed = await listEvents(taskId, conversationId)
     expect(listed.activeBatch?.status).toBe('awaiting_user_input')
-    const run = await prisma.aiCreateActivityRun.findFirstOrThrow({ where: { taskId } })
-    expect(run.status).toBe('completed')
-    expect(run.endedAt).not.toBeNull()
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({ where: { taskId } })
+    expect(attempt.status).toBe('completed')
+    expect(attempt.endedAt).not.toBeNull()
     expect(listed.pendingInteraction).toMatchObject({
       type: 'free_text',
       prompt: FREE_TEXT_PROMPT,
@@ -391,7 +391,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     const asked = await listEvents(taskId, conversationId)
     const saved = await authRequest(app, coordinatorToken)
-      .put(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/draft`)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
       .send({ text: '还没发出去的备注', draftEpoch: 1 })
       .expect(200)
     expect(saved.body.data).toMatchObject({
@@ -566,9 +566,10 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     ocr.holdNextCall()
     const replied = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-mat-iso-ok-${taskId}`)
       .field('text', '2026-10-01')
+      .field('primaryTaskId', taskId)
       .field('replyToEventId', asked.pendingInteraction?.eventId ?? '')
       .field('interactionId', asked.pendingInteraction?.id ?? '')
       .field('interactionVersion', '1')
@@ -770,9 +771,10 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     ocr.holdNextCall()
     const first = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-wait-mat-a-${taskId}`)
       .field('text', '先解析这张图')
+      .field('primaryTaskId', taskId)
       .attach('files', PNG_1X1, { filename: '行程.png', contentType: 'image/png' })
       .expect(201)
     expect(first.body.data.batch.status).toBe('waiting_for_materials')
@@ -842,7 +844,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     agent.setOutcome({ kind: 'completed', message: COMPLETED_MESSAGE })
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`,
+        `/api/agent/conversations/${conversationId}/interactions/${asked.pendingInteraction?.id}/cancel`,
       )
       .set('Idempotency-Key', `e2e-cancel-${taskId}`)
       .send({ version: 1 })
@@ -885,7 +887,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
 
     const stopped = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${sent.body.data.batch.id}/stop`,
+        `/api/agent/conversations/${conversationId}/batches/${sent.body.data.batch.id}/stop`,
       )
       .set('Idempotency-Key', `e2e-stop-${taskId}`)
       .expect(200)

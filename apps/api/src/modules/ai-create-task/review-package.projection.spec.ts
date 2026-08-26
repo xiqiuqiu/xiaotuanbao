@@ -72,7 +72,6 @@ describe('projectPendingReviewPackage', () => {
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
       attemptId: 'attempt-1',
-      runId: 'run-1',
       reviewPackage,
       sourceActionId: 'action-first',
     })
@@ -106,7 +105,6 @@ describe('projectPendingReviewPackage', () => {
       taskId: 'task-1',
       conversationId: 'conv-2',
       inputBatchId: 'batch-1',
-      runId: 'run-2',
       reviewPackage,
       sourceActionId: 'action-later',
     })
@@ -123,7 +121,6 @@ describe('projectPendingReviewPackage', () => {
       taskId: 'task-1',
       conversationId: 'conv-b',
       inputBatchId: 'batch-b',
-      runId: 'run-b',
       reviewPackage,
       sourceActionId: 'action-b',
     })
@@ -141,7 +138,6 @@ describe('projectPendingReviewPackage', () => {
         taskId: 'task-1',
         conversationId: 'conv-1',
         inputBatchId: 'batch-1',
-        runId: 'run-1',
         reviewPackage,
         sourceActionId: 'action-first',
       }),
@@ -158,7 +154,6 @@ describe('projectPendingReviewPackage', () => {
       taskId: 'task-1',
       conversationId: 'conv-1',
       inputBatchId: 'batch-1',
-      runId: 'run-1',
       reviewPackage,
       sourceActionId: 'action-later',
     })
@@ -176,7 +171,6 @@ describe('projectPendingReviewPackage', () => {
         taskId: 'task-1',
         conversationId: 'conv-1',
         inputBatchId: 'batch-1',
-        runId: 'run-1',
         reviewPackage,
         sourceActionId: 'action-later',
       }),
@@ -192,7 +186,6 @@ describe('projectPendingReviewPackage', () => {
         taskId: 'task-1',
         conversationId: 'conv-1',
         inputBatchId: 'batch-1',
-        runId: 'run-1',
         reviewPackage,
         sourceActionId: '',
       }),
