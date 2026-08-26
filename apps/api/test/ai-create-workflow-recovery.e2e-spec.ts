@@ -182,7 +182,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     }
   }
 
-  function reviewOutcome(objectVersion: number) {
+  function reviewOutcome(objectVersion: number, excerpt: string) {
     return {
       kind: 'awaiting_review' as const,
       reviewPackage: {
@@ -193,7 +193,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
             fieldKey: 'name' as const,
             proposedValue: `${testPrefix}-候选团名`,
             clarity: 'clear' as const,
-            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt: '团名' }],
+            evidence: [{ kind: 'user_message' as const, sequence: 1, excerpt }],
           },
         ],
       },
@@ -269,7 +269,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     await retryBatch(taskId, conversationId, batchId, `e2e-retry-cancelled-${taskId}`).expect(409)
 
     const review = await openSession()
-    agent.setOutcome(reviewOutcome(review.task.draft.version))
+    agent.setOutcome(reviewOutcome(review.task.draft.version, '请提交审核'))
     const reviewing = await sendText(
       review.task.id,
       review.conversation.id,
@@ -347,7 +347,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
 
   it('fails immediately on VERSION_CONFLICT and after permission revoke without calling tools', async () => {
     const conflict = await openSession()
-    agent.setOutcome(reviewOutcome(conflict.task.draft.version + 9))
+    agent.setOutcome(reviewOutcome(conflict.task.draft.version + 9, '版本冲突'))
     await sendText(
       conflict.task.id,
       conflict.conversation.id,
@@ -393,7 +393,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     const opened = await openSession()
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
-    agent.setOutcome(reviewOutcome(opened.task.draft.version))
+    agent.setOutcome(reviewOutcome(opened.task.draft.version, '崩溃后回包'))
     const sent = await sendText(taskId, conversationId, '崩溃后回包', `e2e-crash-${taskId}`).expect(201)
     const job = await prisma.aiWorkflowJob.findFirstOrThrow({
       where: { taskId, type: 'agent_batch' },

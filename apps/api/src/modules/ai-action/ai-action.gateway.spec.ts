@@ -127,7 +127,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: unknown[] = []
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: {
         ...actor,
         grantedCapabilities: [AI_CREATE_CAPABILITY_REFS_BY_TOOL.getTaskContext],
@@ -150,7 +150,7 @@ describe('AiActionGateway.execute', () => {
 
     await expect(
       gateway.execute({
-        name: 'submitReviewPackage',
+        name: 'proposeReviewPackage',
         actor,
         input: { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
         forward: async (context) => {
@@ -384,7 +384,7 @@ describe('AiActionGateway.execute', () => {
     const persistCalls: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async ({ action }) => {
@@ -393,7 +393,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async ({ action }) => {
@@ -407,7 +407,7 @@ describe('AiActionGateway.execute', () => {
     expect(second.action?.id).toBe(first.action?.id)
     expect(persistCalls).toEqual([first.action?.id, first.action?.id])
     expect(first.action).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
     })
@@ -419,13 +419,13 @@ describe('AiActionGateway.execute', () => {
     const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -442,7 +442,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -451,7 +451,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -476,7 +476,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -485,7 +485,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -509,19 +509,19 @@ describe('AiActionGateway.execute', () => {
     const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const replayed = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithAttempt,
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -550,13 +550,13 @@ describe('AiActionGateway.execute', () => {
     }
 
     await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-1', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, attemptId: 'attempt-2', runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
@@ -613,7 +613,7 @@ describe('AiActionGateway.execute', () => {
     const forwarded: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-1' },
       input,
       forward: async ({ action }) => {
@@ -622,7 +622,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-2' },
       input,
       forward: async ({ action }) => {
@@ -676,7 +676,7 @@ describe('AiActionGateway.execute', () => {
     const persistCalls: string[] = []
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithoutAttempt,
       input,
       forward: async ({ action }) => {
@@ -685,7 +685,7 @@ describe('AiActionGateway.execute', () => {
       },
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: actorWithoutAttempt,
       input,
       forward: async ({ action }) => {
@@ -706,13 +706,13 @@ describe('AiActionGateway.execute', () => {
     const input = { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] }
 
     const first = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-1' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-1' }),
     })
     const second = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: { ...actor, runId: 'run-2' },
       input,
       forward: async () => ({ reviewPackageId: 'pkg-2' }),
@@ -728,7 +728,7 @@ describe('AiActionGateway.execute', () => {
 
     await expect(
       gateway.execute({
-        name: 'submitReviewPackage',
+        name: 'proposeReviewPackage',
         actor,
         input: { candidates: [{ fieldKey: 'name', proposedValue: '新团名' }] },
         forward: async () => {
@@ -739,7 +739,7 @@ describe('AiActionGateway.execute', () => {
 
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       kind: 'write',
       decision: 'review',
       executionStatus: 'failed',
@@ -753,7 +753,7 @@ describe('AiActionGateway.execute', () => {
     const secretEvidence = '护照页原文 E12345678'
 
     const result = await gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor,
       input: {
         taskId: 'task-1',
@@ -783,7 +783,7 @@ describe('AiActionGateway.execute', () => {
     expect(JSON.stringify(store.records[0])).not.toContain(secretName)
   })
 
-  it.each(['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult', 'submitReviewPackage'] as const)(
+  it.each(['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult', 'proposeReviewPackage'] as const)(
     'forwards registered action %s in observation',
     async (name) => {
       const store = new InMemoryAiActionStore()

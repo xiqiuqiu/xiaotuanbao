@@ -28,7 +28,7 @@ describe('现有建团 Agent Definition', () => {
     ).toEqual([
       { key: 'departure.task-context.read', version: 2, toolName: 'getTaskContext' },
       { key: 'departure.route-template.search', version: 1, toolName: 'searchRouteTemplates' },
-      { key: 'departure.review-package.propose', version: 1, toolName: 'submitReviewPackage' },
+      { key: 'departure.review-package.propose', version: 1, toolName: 'proposeReviewPackage' },
       { key: 'departure.material-parse-result.read', version: 1, toolName: 'getMaterialParseResult' },
     ])
     for (const capability of AI_CREATE_CAPABILITY_DEFINITIONS) {

@@ -1,5 +1,6 @@
 import { ServiceUnavailableException } from '@nestjs/common'
 import { workflowErrorCode } from './ai-workflow-error'
+import { ReviewProposalRejectedError } from './review-proposal.commit'
 
 describe('workflowErrorCode', () => {
   it('keeps VERSION_CONFLICT distinct from agent outages', () => {
@@ -17,6 +18,10 @@ describe('workflowErrorCode', () => {
     expect(workflowErrorCode(new Error('CONTEXT_PROFILE_MISSING: unknown/model'))).toBe(
       'CONTEXT_PROFILE_MISSING',
     )
+  })
+
+  it('maps rejected review proposals to INVALID_FORMAT instead of retrying the Worker job', () => {
+    expect(workflowErrorCode(new ReviewProposalRejectedError([]))).toBe('INVALID_FORMAT')
   })
 
   it('still treats runtime and unknown failures as AGENT_UNAVAILABLE', () => {

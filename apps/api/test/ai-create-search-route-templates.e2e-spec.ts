@@ -133,6 +133,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
       taskId: session.body.data.task.id as string,
       version: session.body.data.task.draft.version as number,
       runId: minted.runId,
+      userMessageSequence: minted.userMessageSequence,
       delegationToken: minted.delegationToken,
     }
   }
@@ -269,7 +270,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
           fieldKey: 'templateId',
           proposedValue: template.id,
           clarity: 'clear',
-          evidence: [{ kind: 'system_derivation', rule: 'searchRouteTemplates:name_contains_token:采用' }],
+          evidence: [{ kind: 'user_message', sequence: opened.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     }).expect(200)
@@ -342,7 +343,7 @@ describe('AI searchRouteTemplates and template adopt (e2e) #299', () => {
           fieldKey: 'templateId',
           proposedValue: template.id,
           clarity: 'clear',
-          evidence: [{ kind: 'user_message', sequence: 1, excerpt: '用那条常用路线' }],
+          evidence: [{ kind: 'user_message', sequence: opened.userMessageSequence, excerpt: 'e2e worker-shaped attempt' }],
         },
       ],
     }).expect(200)

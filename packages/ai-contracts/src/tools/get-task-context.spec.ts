@@ -104,7 +104,7 @@ describe('getTaskContext contract v2', () => {
     expect(parsed).not.toHaveProperty('materials')
   })
 
-  it('allows submitReviewPackage and rejects confirm or other write tools', () => {
+  it('allows proposeReviewPackage and rejects confirm or other write tools', () => {
     const parsed = getTaskContextOutputSchema.parse({
       task: {
         id: 'task-1',
@@ -131,10 +131,10 @@ describe('getTaskContext contract v2', () => {
       },
       objectVersion: 1,
       pending: { hasPendingReview: false, reviewPackageId: null },
-      availableCapabilities: ['getTaskContext', 'submitReviewPackage'],
+      availableCapabilities: ['getTaskContext', 'proposeReviewPackage'],
       fieldCoverage: { filled: ['routeName', 'departureType'], missing: ['name'], optionalPresent: [] },
     })
-    expect(parsed.availableCapabilities).toEqual(['getTaskContext', 'submitReviewPackage'])
+    expect(parsed.availableCapabilities).toEqual(['getTaskContext', 'proposeReviewPackage'])
 
     expect(() =>
       getTaskContextOutputSchema.parse({

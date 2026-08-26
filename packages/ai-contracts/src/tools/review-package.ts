@@ -1,9 +1,12 @@
 import { z } from 'zod'
+import { normalizedEvidenceProposalSchemaV1 } from '../evidence/evidence-contract'
 
 export const SUBMIT_REVIEW_PACKAGE_TOOL = {
-  name: 'submitReviewPackage',
+  name: 'proposeReviewPackage',
   version: 1,
 } as const
+
+export const PROPOSE_REVIEW_PACKAGE_TOOL = SUBMIT_REVIEW_PACKAGE_TOOL
 
 export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
   name: 'awaitReviewPackageDecision',
@@ -13,7 +16,7 @@ export const AWAIT_REVIEW_PACKAGE_DECISION_TOOL = {
 export const AI_CREATE_TOOL_NAMES = [
   'getTaskContext',
   'searchRouteTemplates',
-  'submitReviewPackage',
+  'proposeReviewPackage',
   'getMaterialParseResult',
 ] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
@@ -201,6 +204,33 @@ export const submitReviewPackageOutputSchema = z
   })
   .strip()
 
+export const reviewProposalErrorSchema = z
+  .object({
+    candidateIndex: z.number().int().nonnegative(),
+    evidenceIndex: z.number().int().nonnegative(),
+    code: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .strip()
+
+export const proposeReviewPackageOutputSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('accepted'),
+      objectVersion: z.number().int().positive(),
+      confirmationUnit: z.literal(AI_REVIEW_CONFIRMATION_UNIT),
+      candidates: z.array(aiReviewCandidateInputSchema).min(1),
+      normalizedProposal: normalizedEvidenceProposalSchemaV1,
+    })
+    .strip(),
+  z
+    .object({
+      status: z.literal('rejected'),
+      errors: z.array(reviewProposalErrorSchema).min(1),
+    })
+    .strip(),
+])
+
 export const awaitReviewPackageDecisionInputSchema = z
   .object({
     reviewPackageId: z.string().min(1),
@@ -229,7 +259,7 @@ export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreat
   if (hasPendingReview) {
     return ['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult']
   }
-  return ['getTaskContext', 'searchRouteTemplates', 'submitReviewPackage', 'getMaterialParseResult']
+  return ['getTaskContext', 'searchRouteTemplates', 'proposeReviewPackage', 'getMaterialParseResult']
 }
 
 export type AiCandidateEvidence = z.infer<typeof aiCandidateEvidenceSchema>
@@ -237,6 +267,7 @@ export type AiReviewCandidateInput = z.infer<typeof aiReviewCandidateInputSchema
 export type SubmitReviewPackageInput = z.infer<typeof submitReviewPackageInputSchema>
 export type SubmitReviewPackageModelInput = z.infer<typeof submitReviewPackageModelInputSchema>
 export type SubmitReviewPackageOutput = z.infer<typeof submitReviewPackageOutputSchema>
+export type ProposeReviewPackageOutput = z.infer<typeof proposeReviewPackageOutputSchema>
 export type AwaitReviewPackageDecisionInput = z.infer<
   typeof awaitReviewPackageDecisionInputSchema
 >

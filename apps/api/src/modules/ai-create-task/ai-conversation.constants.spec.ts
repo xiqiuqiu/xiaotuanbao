@@ -23,6 +23,7 @@ describe('isImmediateWorkflowFailure', () => {
   it('fails closed on context capacity and missing profile instead of retrying as an agent outage', () => {
     expect(isImmediateWorkflowFailure('CONTEXT_CAPACITY_EXCEEDED')).toBe(true)
     expect(isImmediateWorkflowFailure('CONTEXT_PROFILE_MISSING')).toBe(true)
+    expect(isImmediateWorkflowFailure('INVALID_FORMAT')).toBe(true)
     expect(isImmediateWorkflowFailure('AGENT_UNAVAILABLE')).toBe(false)
   })
 })

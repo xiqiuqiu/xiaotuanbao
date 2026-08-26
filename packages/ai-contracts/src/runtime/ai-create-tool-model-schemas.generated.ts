@@ -24,7 +24,7 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
     },
     "additionalProperties": false
   },
-  "submitReviewPackage": {
+  "proposeReviewPackage": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {

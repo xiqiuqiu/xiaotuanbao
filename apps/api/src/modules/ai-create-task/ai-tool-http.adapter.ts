@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
+  ProposeReviewPackageOutput,
   SearchRouteTemplatesOutput,
   SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
@@ -45,12 +46,20 @@ export class AiToolHttpAdapter {
     )
   }
 
+  proposeReviewPackage(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ProposeReviewPackageOutput> {
+    const caller = requireTaskBoundUser(user)
+    return this.tasks.proposeReviewPackageForAgent(caller, body)
+  }
+
   submitReviewPackage(
     user: AiToolRequestUser,
     body: unknown,
   ): Promise<SubmitReviewPackageOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.executeRegistered('submitReviewPackage', caller, body, async ({ action }) => {
+    return this.executeRegistered('proposeReviewPackage', caller, body, async ({ action }) => {
       if (!action?.id) {
         throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
       }
@@ -59,7 +68,7 @@ export class AiToolHttpAdapter {
   }
 
   private async executeRegistered<T>(
-    name: 'getTaskContext' | 'searchRouteTemplates' | 'getMaterialParseResult' | 'submitReviewPackage',
+    name: 'getTaskContext' | 'searchRouteTemplates' | 'getMaterialParseResult' | 'proposeReviewPackage',
     user: AiToolRequestUser,
     body: unknown,
     forward: (context: AiActionForwardContext) => Promise<T>,

@@ -25,6 +25,15 @@ export class AiToolController {
     return this.aiToolHttpAdapter.getTaskContext(request.user, body)
   }
 
+  @Post('v1/propose-review-package')
+  @HttpCode(200)
+  proposeReviewPackage(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.proposeReviewPackage(request.user, body)
+  }
+
   @Post('v1/submit-review-package')
   @HttpCode(200)
   submitReviewPackage(

@@ -6,20 +6,20 @@ import {
 describe('AI 建团模型输入契约', () => {
   it('以稳定顺序投影实际可见工具及其输入 Schema', () => {
     const left = aiCreateModelContractForTools([
-      'submitReviewPackage',
+      'proposeReviewPackage',
       'getTaskContext',
     ])
     const right = aiCreateModelContractForTools([
       'getTaskContext',
-      'submitReviewPackage',
+      'proposeReviewPackage',
     ])
 
     expect(left.toolSchemaText).toBe(right.toolSchemaText)
     expect(JSON.parse(left.toolSchemaText)).toMatchObject([
       { name: 'getTaskContext' },
-      { name: 'submitReviewPackage' },
+      { name: 'proposeReviewPackage' },
     ])
-    expect(left.toolNames).toEqual(['getTaskContext', 'submitReviewPackage'])
+    expect(left.toolNames).toEqual(['getTaskContext', 'proposeReviewPackage'])
     expect(AI_CREATE_SYSTEM_INSTRUCTIONS).toContain('必须先调用 getTaskContext')
   })
 

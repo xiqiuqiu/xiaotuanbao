@@ -47,7 +47,7 @@ function createMastra(
   const registeredTools = {
     getTaskContext: createGetTaskContextTool(config),
     searchRouteTemplates: createSearchRouteTemplatesTool(config),
-    submitReviewPackage: createSubmitReviewPackageTool(config),
+    proposeReviewPackage: createSubmitReviewPackageTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
   }
   const tools = Object.fromEntries(

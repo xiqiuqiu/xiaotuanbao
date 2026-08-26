@@ -87,8 +87,8 @@ const candidateInputSchema = z.discriminatedUnion('fieldKey', [
 
 export function createSubmitReviewPackageTool(config: SubmitReviewPackageToolConfig) {
   return createTool({
-    id: 'submitReviewPackage',
-    description: AI_CREATE_TOOL_DESCRIPTIONS.submitReviewPackage,
+    id: 'proposeReviewPackage',
+    description: AI_CREATE_TOOL_DESCRIPTIONS.proposeReviewPackage,
     inputSchema: z.object({
       objectVersion: z.number().int().positive(),
       candidates: z

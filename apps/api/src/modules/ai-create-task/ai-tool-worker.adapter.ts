@@ -17,7 +17,7 @@ export class AiToolWorkerAdapter {
     persist: (context: AiActionForwardContext) => Promise<string>
   }): Promise<{ action: AiActionSummary | null; reviewPackageId: string }> {
     const executed = await this.gateway.execute({
-      name: 'submitReviewPackage',
+      name: 'proposeReviewPackage',
       actor: params.actor,
       input: params.input,
       forward: params.persist,

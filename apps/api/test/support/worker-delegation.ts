@@ -38,6 +38,7 @@ export async function mintRunningAttemptDelegation(options: {
   attemptId: string
   inputBatchId: string
   conversationId: string
+  userMessageSequence: number
   delegationToken: string
 }> {
   const { app, prisma, organizationId, userId, taskId, conversationId } = options
@@ -147,6 +148,7 @@ export async function mintRunningAttemptDelegation(options: {
     attemptId: attempt.id,
     inputBatchId: batch.id,
     conversationId,
+    userMessageSequence: sequence,
     delegationToken,
   }
 }
