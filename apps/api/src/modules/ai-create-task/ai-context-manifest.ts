@@ -19,7 +19,7 @@ export interface ExcerptDigest {
 }
 
 export interface FrozenContextProjection {
-  conversationBackground: { summary: null; summaryVersion: null }
+  conversationBackground: { summary: string | null; summaryVersion: number | null }
   recentTail: ConversationEventForAgent[]
   pinnedMaterials: MaterialParseIndexItem[]
   truncationReasons: string[]
@@ -45,6 +45,7 @@ export interface ContextManifestInput {
   inputHash: string
   budget: ContextBudgetRecord
   sections: ContextSectionUsage[]
+  summaryVersion?: number | null
 }
 
 export interface ContextManifestRecord {
@@ -63,7 +64,7 @@ export interface ContextManifestRecord {
   modelId: string
   inputHash: string
   truncationReasons: string[]
-  summaryVersion: null
+  summaryVersion: number | null
   excerptDigests: ExcerptDigest[]
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
   sourceVersions: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>
@@ -126,7 +127,7 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
     modelId: input.modelId,
     inputHash: input.inputHash,
     truncationReasons,
-    summaryVersion: null,
+    summaryVersion: input.summaryVersion ?? null,
     excerptDigests,
     materialVersions,
     sourceVersions,
@@ -161,10 +162,14 @@ export function selectRecentTailEvents(
   conversationVersion: number,
   originUserMessageSequence?: number,
   currentUserMessageSequence?: number,
+  excludeSequences?: ReadonlySet<number>,
 ): ConversationEventRecord[] {
   return events
     .filter((event) => {
       if (event.sequence > conversationVersion || !CONTEXT_TAIL_KINDS.has(event.kind)) {
+        return false
+      }
+      if (excludeSequences?.has(event.sequence)) {
         return false
       }
       if (event.kind === 'user_message' && event.sequence === currentUserMessageSequence) {
@@ -228,15 +233,26 @@ export function buildFrozenProjection(input: {
   currentUserMessageSequence?: number
   materials: MaterialParseIndexItem[]
   materialTruncationReasons?: string[]
+  compaction?: {
+    summary: string
+    summaryVersion: number
+    coveredEventSequences: readonly number[]
+  } | null
 }): FrozenContextProjection {
   const selected = selectRecentTailEvents(
     input.events,
     input.conversationVersion,
     input.originUserMessageSequence,
     input.currentUserMessageSequence,
+    input.compaction ? new Set(input.compaction.coveredEventSequences) : undefined,
   )
   return {
-    conversationBackground: { summary: null, summaryVersion: null },
+    conversationBackground: input.compaction
+      ? {
+          summary: input.compaction.summary,
+          summaryVersion: input.compaction.summaryVersion,
+        }
+      : { summary: null, summaryVersion: null },
     recentTail: projectConversationEventsForAgent(selected),
     pinnedMaterials: input.materials.map((item) => ({ ...item })),
     truncationReasons: uniqueReasons(input.materialTruncationReasons ?? []),
@@ -263,9 +279,14 @@ export function projectConversationEventsForAgent(
 }
 
 function textFromPayload(payload: unknown): string | undefined {
+  const text = conversationEventText(payload)
+  return text ? text : undefined
+}
+
+export function conversationEventText(payload: unknown): string {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !('text' in payload)) {
-    return undefined
+    return ''
   }
   const text = (payload as { text: unknown }).text
-  return typeof text === 'string' && text.trim() ? text.trim() : undefined
+  return typeof text === 'string' && text.trim() ? text.trim() : ''
 }

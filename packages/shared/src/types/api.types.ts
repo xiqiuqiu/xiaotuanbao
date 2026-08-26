@@ -926,6 +926,7 @@ export type AiConversationEventKind = 'user_message' | 'agent_message' | 'batch_
 export type AiInputBatchStatus =
   | 'waiting_for_materials'
   | 'ready_for_agent'
+  | 'preparing_context'
   | 'agent_running'
   | 'awaiting_user_input'
   | 'awaiting_review'

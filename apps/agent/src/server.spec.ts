@@ -68,6 +68,8 @@ describe('agent server', () => {
       'searchRouteTemplates',
       'proposeReviewPackage',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 
@@ -90,6 +92,8 @@ describe('agent server', () => {
           'searchRouteTemplates',
           'proposeReviewPackage',
           'getMaterialParseResult',
+          'readConversationHistory',
+          'readConversationSource',
         ],
       })
     } finally {

@@ -174,6 +174,13 @@ function fallbackTargetId(targetKind: string, proposal: AiActionProposal): strin
   if (targetKind === 'agent_conversation') {
     return proposal.actor.conversationId ?? null
   }
+  if (targetKind === 'conversation_source') {
+    const input = proposal.input
+    if (input && typeof input === 'object' && 'sourceId' in input && typeof input.sourceId === 'string') {
+      return input.sourceId
+    }
+    return null
+  }
   return proposal.actor.taskId ?? null
 }
 

@@ -5,6 +5,8 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { createGetMaterialParseResultTool } from './get-material-parse-result.tool'
 import { createGetTaskContextTool } from './get-task-context.tool'
+import { createReadConversationHistoryTool } from './read-conversation-history.tool'
+import { createReadConversationSourceTool } from './read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 
@@ -20,6 +22,8 @@ describe('AI Create actual tool model contract', () => {
       searchRouteTemplates: createSearchRouteTemplatesTool(config),
       proposeReviewPackage: createSubmitReviewPackageTool(config),
       getMaterialParseResult: createGetMaterialParseResultTool(config),
+      readConversationHistory: createReadConversationHistoryTool(config),
+      readConversationSource: createReadConversationSourceTool(config),
     }
     const budgeted = JSON.parse(
       aiCreateModelContractForTools(AI_CREATE_TOOL_NAMES).toolSchemaText,

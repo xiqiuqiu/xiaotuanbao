@@ -32,3 +32,18 @@ export function requireTaskBoundAssistContext(): AssistRequestContext & {
   }
   return { ...context, taskId: context.taskId, runId: context.runId }
 }
+
+export function requireConversationAssistContext(): AssistRequestContext & {
+  conversationId: string
+  inputBatchId: string
+} {
+  const context = getAssistRequestContext()
+  if (!context.conversationId || !context.inputBatchId) {
+    throw AiCollaborationError.fromCode('DELEGATION_INVALID')
+  }
+  return {
+    ...context,
+    conversationId: context.conversationId,
+    inputBatchId: context.inputBatchId,
+  }
+}

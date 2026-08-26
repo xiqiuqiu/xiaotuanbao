@@ -57,6 +57,8 @@ describe('submitReviewPackage contract v1', () => {
       'searchRouteTemplates',
       'proposeReviewPackage',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 
@@ -189,11 +191,15 @@ describe('submitReviewPackage contract v1', () => {
       'searchRouteTemplates',
       'proposeReviewPackage',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
     expect(capabilitiesForPendingReview(true)).toEqual([
       'getTaskContext',
       'searchRouteTemplates',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 

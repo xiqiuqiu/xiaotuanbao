@@ -92,6 +92,13 @@ export function buildBudgetedContext(input: {
   const systemInstructions = input.systemInstructions ?? AI_CREATE_SYSTEM_INSTRUCTIONS
   const systemPromptVersion = input.systemPromptVersion ?? PLAINTEXT_SYSTEM_PROMPT_VERSION
   const toolSchemaVersion = input.toolSchemaVersion ?? PLAINTEXT_TOOL_SCHEMA_VERSION
+  const { staticInputTokens, dynamicBudgetTokens } = measureStaticContextBudget({
+    modelId: input.modelId,
+    toolNames: input.toolNames,
+    systemInstructions,
+    systemPromptVersion,
+    toolSchemaVersion,
+  })
   const systemSection = section(
     'system_constraints',
     systemInstructions,
@@ -101,15 +108,6 @@ export function buildBudgetedContext(input: {
     'tool_schemas',
     modelContract.toolSchemaText,
     toolSchemaVersion,
-  )
-  const staticInputTokens = systemSection.estimatedTokens + toolSchemaSection.estimatedTokens
-  const dynamicBudgetTokens = Math.min(
-    profile.softInputLimitTokens - staticInputTokens,
-    profile.contextWindowTokens -
-      profile.outputReserveTokens -
-      profile.providerFramingTokens -
-      profile.safetyMarginTokens -
-      staticInputTokens,
   )
   const projection: BudgetProjection = {
     conversationBackground: { ...input.projection.conversationBackground },
@@ -273,7 +271,37 @@ function section(
 }
 
 function estimateTokens(text: string): number {
+  return estimateContextTokens(text)
+}
+
+export function estimateContextTokens(text: string): number {
   return Math.ceil(Buffer.byteLength(text, 'utf8') / 3)
+}
+
+export function measureStaticContextBudget(input: {
+  modelId: string
+  toolNames: readonly string[]
+  systemInstructions?: string
+  systemPromptVersion?: string
+  toolSchemaVersion?: string
+}): { staticInputTokens: number; dynamicBudgetTokens: number } {
+  const profile = contextCapacityProfileFor(input.modelId)
+  const modelContract = aiCreateModelContractForTools(input.toolNames)
+  const systemInstructions = input.systemInstructions ?? AI_CREATE_SYSTEM_INSTRUCTIONS
+  const systemPromptVersion = input.systemPromptVersion ?? PLAINTEXT_SYSTEM_PROMPT_VERSION
+  const toolSchemaVersion = input.toolSchemaVersion ?? PLAINTEXT_TOOL_SCHEMA_VERSION
+  const staticInputTokens =
+    section('system_constraints', systemInstructions, systemPromptVersion).estimatedTokens +
+    section('tool_schemas', modelContract.toolSchemaText, toolSchemaVersion).estimatedTokens
+  const dynamicBudgetTokens = Math.min(
+    profile.softInputLimitTokens - staticInputTokens,
+    profile.contextWindowTokens -
+      profile.outputReserveTokens -
+      profile.providerFramingTokens -
+      profile.safetyMarginTokens -
+      staticInputTokens,
+  )
+  return { staticInputTokens, dynamicBudgetTokens }
 }
 
 function sha256(content: string): string {

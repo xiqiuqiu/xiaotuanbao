@@ -3,6 +3,8 @@ import type {
   GetMaterialParseResultOutput,
   GetTaskContextOutput,
   ProposeReviewPackageOutput,
+  ReadConversationHistoryOutput,
+  ReadConversationSourceOutput,
   SearchRouteTemplatesOutput,
   SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
@@ -10,6 +12,7 @@ import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { claimedPositiveIntField, claimedStringField } from '../ai-action/ai-action.target'
 import type { AiActionActor, AiActionForwardContext, AiActionNormalizedTarget } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
+import { AiConversationRecallService } from './ai-conversation-recall.service'
 import { AiCreateTaskService } from './ai-create-task.service'
 import type { AiToolRequestUser } from './ai-operation-delegation.guard'
 
@@ -18,6 +21,7 @@ export class AiToolHttpAdapter {
   constructor(
     private readonly gateway: AiActionGateway,
     private readonly tasks: AiCreateTaskService,
+    private readonly recall: AiConversationRecallService,
   ) {}
 
   getTaskContext(user: AiToolRequestUser, body: unknown): Promise<GetTaskContextOutput> {
@@ -64,6 +68,39 @@ export class AiToolHttpAdapter {
     )
   }
 
+  readConversationHistory(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ReadConversationHistoryOutput> {
+    return this.executeRegistered('readConversationHistory', user, body, () => {
+      if (!user.conversationId || !user.inputBatchId) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      return this.recall.readHistory({
+        organizationId: user.organizationId,
+        conversationId: user.conversationId,
+        inputBatchId: user.inputBatchId,
+        rawInput: body,
+      })
+    })
+  }
+
+  readConversationSource(
+    user: AiToolRequestUser,
+    body: unknown,
+  ): Promise<ReadConversationSourceOutput> {
+    return this.executeRegistered('readConversationSource', user, body, () => {
+      if (!user.conversationId) {
+        throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+      }
+      return this.recall.readSource({
+        organizationId: user.organizationId,
+        conversationId: user.conversationId,
+        rawInput: body,
+      })
+    })
+  }
+
   proposeReviewPackage(
     user: AiToolRequestUser,
     body: unknown,
@@ -96,7 +133,13 @@ export class AiToolHttpAdapter {
   }
 
   private async executeRegistered<T>(
-    name: 'getTaskContext' | 'searchRouteTemplates' | 'getMaterialParseResult' | 'proposeReviewPackage',
+    name:
+      | 'getTaskContext'
+      | 'searchRouteTemplates'
+      | 'getMaterialParseResult'
+      | 'proposeReviewPackage'
+      | 'readConversationHistory'
+      | 'readConversationSource',
     user: AiToolRequestUser,
     body: unknown,
     forward: (context: AiActionForwardContext) => Promise<T>,

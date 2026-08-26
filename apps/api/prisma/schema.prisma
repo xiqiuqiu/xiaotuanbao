@@ -347,6 +347,7 @@ model Organization {
   aiWorkflowJobs AiWorkflowJob[]
   aiAgentAttempts AiAgentAttempt[]
   aiContextManifests AiContextManifest[]
+  aiContextCompactionVersions AiContextCompactionVersion[]
   departureMaterials DepartureMaterial[]
   aiActions AiAction[]
   aiActionRepeatObservations AiActionRepeatObservation[]
@@ -1502,6 +1503,7 @@ enum AiConversationEventKind {
 enum AiInputBatchStatus {
   waiting_for_materials
   ready_for_agent
+  preparing_context
   agent_running
   awaiting_user_input
   awaiting_review
@@ -1564,6 +1566,7 @@ model AiConversation {
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
   contextManifests AiContextManifest[]
+  compactionVersions AiContextCompactionVersion[]
   aiActions        AiAction[]
   reviewPackages   AiReviewPackage[]
   taskLinks        ConversationTaskLink[]
@@ -1761,6 +1764,44 @@ model AiContextManifest {
   @@index([inputBatchId, inputHash])
   @@index([organizationId, createdAt])
   @@map("ai_context_manifests")
+}
+
+enum AiContextCompactionVersionStatus {
+  pending
+  running
+  completed
+  failed
+
+  @@map("ai_context_compaction_version_status")
+}
+
+/// AI 上下文压缩版本：确定性事件索引摘要，供长会话投影与受控原文回读。
+model AiContextCompactionVersion {
+  id                         String                           @id @default(cuid())
+  organizationId             String                           @map("organization_id")
+  organization               Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId             String                           @map("conversation_id")
+  conversation               AiConversation                   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  version                    Int
+  status                     AiContextCompactionVersionStatus @default(pending)
+  conversationVersionCeiling Int                              @map("conversation_version_ceiling")
+  coveredSequenceStart       Int                              @map("covered_sequence_start")
+  coveredSequenceEnd         Int                              @map("covered_sequence_end")
+  coveredEventSequences      Json                             @map("covered_event_sequences")
+  policyVersion              String                           @map("policy_version")
+  configVersion              String                           @map("config_version")
+  modelId                    String                           @map("model_id")
+  summary                    String                           @db.Text
+  digest                     String
+  inputDigest                String                           @map("input_digest")
+  locators                   Json
+  createdAt                  DateTime                         @default(now()) @map("created_at")
+  updatedAt                  DateTime                         @updatedAt @map("updated_at")
+
+  @@unique([conversationId, version], map: "ai_compaction_conversation_version_key")
+  @@unique([conversationId, inputDigest, policyVersion], map: "ai_compaction_input_digest_key")
+  @@index([organizationId, createdAt], map: "ai_compaction_org_created_idx")
+  @@map("ai_context_compaction_versions")
 }
 
 /// Agent attempt：Worker 对已齐套输入批次的一次执行。

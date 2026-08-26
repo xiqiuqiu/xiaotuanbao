@@ -5,6 +5,7 @@ import {
   CONVERSATION_GENERAL_AGENT_DEFINITION,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
   CapabilityDefinitionRegistry,
+  uniqueCapabilityDefinitions,
   type AgentDefinition,
 } from '@xiaotuanbao/ai-contracts'
 import { READONLY_ASSIST_INSTRUCTIONS } from './readonly-turn'
@@ -21,7 +22,9 @@ export const agentDefinitionRegistry = new AgentDefinitionRegistry([
   AI_CREATE_AGENT_DEFINITION,
   CONVERSATION_GENERAL_AGENT_DEFINITION,
 ])
-export const capabilityDefinitionRegistry = new CapabilityDefinitionRegistry([
-  ...AI_CREATE_CAPABILITY_DEFINITIONS,
-  ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
-])
+export const capabilityDefinitionRegistry = new CapabilityDefinitionRegistry(
+  uniqueCapabilityDefinitions([
+    ...AI_CREATE_CAPABILITY_DEFINITIONS,
+    ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  ]),
+)

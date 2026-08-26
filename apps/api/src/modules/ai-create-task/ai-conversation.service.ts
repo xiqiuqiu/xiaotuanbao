@@ -946,7 +946,7 @@ export class AiConversationService {
         })
     const status = projection.activeBatch?.status ?? latestTerminal?.status
     if (status === AiInputBatchStatus.waiting_for_materials) return { status: 'parsing' }
-    if (status === AiInputBatchStatus.ready_for_agent || status === AiInputBatchStatus.agent_running) {
+    if (status === AiInputBatchStatus.ready_for_agent || status === AiInputBatchStatus.preparing_context || status === AiInputBatchStatus.agent_running) {
       return { status: 'ai_processing' }
     }
     if (status === AiInputBatchStatus.awaiting_user_input) return { status: 'awaiting_user_input' }
@@ -1532,6 +1532,7 @@ export class AiConversationService {
         }
         if (
           batch.status !== AiInputBatchStatus.ready_for_agent &&
+          batch.status !== AiInputBatchStatus.preparing_context &&
           batch.status !== AiInputBatchStatus.agent_running &&
           batch.status !== AiInputBatchStatus.awaiting_user_input
         ) {
@@ -2344,6 +2345,7 @@ export class AiConversationService {
           status: {
             in: [
               AiInputBatchStatus.ready_for_agent,
+              AiInputBatchStatus.preparing_context,
               AiInputBatchStatus.agent_running,
               AiInputBatchStatus.waiting_for_materials,
               AiInputBatchStatus.awaiting_user_input,
@@ -2457,6 +2459,7 @@ export class AiConversationService {
           in: [
             AiInputBatchStatus.waiting_for_materials,
             AiInputBatchStatus.ready_for_agent,
+            AiInputBatchStatus.preparing_context,
             AiInputBatchStatus.agent_running,
             AiInputBatchStatus.awaiting_user_input,
             AiInputBatchStatus.awaiting_review,
@@ -2476,6 +2479,7 @@ export class AiConversationService {
       in: [
         AiInputBatchStatus.waiting_for_materials,
         AiInputBatchStatus.ready_for_agent,
+        AiInputBatchStatus.preparing_context,
         AiInputBatchStatus.agent_running,
       ],
     }
@@ -2526,7 +2530,10 @@ export class AiConversationService {
     conversationId: string,
   ): Promise<BatchWithMaterials | null> {
     const running = await tx.aiInputBatch.findFirst({
-      where: { conversationId, status: AiInputBatchStatus.agent_running },
+      where: {
+        conversationId,
+        status: { in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context] },
+      },
       include: BATCH_MATERIAL_INCLUDE,
       orderBy: { conversationVersion: 'asc' },
     })
@@ -2629,6 +2636,7 @@ export class AiConversationService {
     }
     if (
       batch.status === AiInputBatchStatus.ready_for_agent ||
+      batch.status === AiInputBatchStatus.preparing_context ||
       batch.status === AiInputBatchStatus.agent_running
     ) {
       throw new ConflictException('Agent 认领后不可修改本批资料，请先停止当前处理并重新整理')
@@ -2809,6 +2817,7 @@ export class AiConversationService {
 function pickActiveBatch(batches: BatchWithMaterials[]): BatchWithMaterials | null {
   const rank: Partial<Record<AiInputBatchStatus, number>> = {
     [AiInputBatchStatus.agent_running]: 0,
+    [AiInputBatchStatus.preparing_context]: 0,
     [AiInputBatchStatus.waiting_for_materials]: 1,
     [AiInputBatchStatus.awaiting_user_input]: 2,
     [AiInputBatchStatus.awaiting_review]: 3,

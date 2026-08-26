@@ -149,7 +149,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       where: {
         organizationId,
         creatorUserId: ownerUserId,
-        status: { in: ['waiting_for_materials', 'ready_for_agent', 'agent_running'] },
+        status: { in: ['waiting_for_materials', 'ready_for_agent', 'preparing_context', 'agent_running'] },
       },
       data: { status: 'cancelled' },
     })
@@ -214,7 +214,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       status: 'completed',
       contextManifest: {
         conversationVersion: expect.any(Number),
-        builderVersion: 'ai-create-frozen-projection/v1',
+        builderVersion: 'ai-create-frozen-projection/v2',
         inputHash: expect.any(String),
         summaryVersion: null,
         excerptDigests: [],

@@ -8,6 +8,7 @@ import {
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
   CONVERSATION_GENERAL_INSTRUCTIONS,
+  CONVERSATION_RECALL_TOOL_NAMES,
   aiCreateCapabilityDefinitionForTool,
   aiCreateCapabilityDefinitionRegistry,
   conversationGeneralCapabilityDefinitionRegistry,
@@ -50,13 +51,13 @@ import { createPrismaAiActionTargetAuthority } from '../ai-action/ai-action.pris
 import { AuthService } from '../auth/auth.service'
 import {
   buildContextManifest,
-  buildFrozenProjection,
   eventSequencesForModelInput,
   excerptDigestsFor,
   isConfirmedReviewContinuation,
   resolveAttemptUserText,
 } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
+import { resolvePreparedProjection } from './ai-context-compaction'
 import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
@@ -271,7 +272,10 @@ export class AiWorkflowProcessor {
               SELECT 1
               FROM ai_input_batches running
               WHERE running.conversation_id = j.conversation_id
-                AND running.status = 'agent_running'::ai_input_batch_status
+                AND running.status IN (
+                  'agent_running'::ai_input_batch_status,
+                  'preparing_context'::ai_input_batch_status
+                )
                 AND running.id <> j.input_batch_id
             )
             AND (
@@ -296,7 +300,8 @@ export class AiWorkflowProcessor {
                 WHERE reply.conversation_id = j.conversation_id
                   AND reply.status IN (
                     'waiting_for_materials'::ai_input_batch_status,
-                    'ready_for_agent'::ai_input_batch_status
+                    'ready_for_agent'::ai_input_batch_status,
+                    'preparing_context'::ai_input_batch_status
                   )
                   AND reply.reply_to_event_id IS NOT NULL
               )
@@ -334,7 +339,9 @@ export class AiWorkflowProcessor {
         const running = await tx.aiInputBatch.findFirst({
           where: {
             conversationId: job.conversationId,
-            status: AiInputBatchStatus.agent_running,
+            status: {
+              in: [AiInputBatchStatus.agent_running, AiInputBatchStatus.preparing_context],
+            },
             id: { not: job.inputBatchId },
           },
           select: { id: true },
@@ -377,23 +384,27 @@ export class AiWorkflowProcessor {
             generation: { increment: 1 },
           },
         })
-        if (job.inputBatch.status !== AiInputBatchStatus.agent_running) {
+        let batchStatus = job.inputBatch.status
+        // 压缩在 prepareAttempt 内同步完成；认领时先进入 preparing_context，
+        // 使租约过期后的跨 Worker 续跑与槽位占用把「整理上下文」视同在途。
+        if (job.inputBatch.status === AiInputBatchStatus.ready_for_agent) {
           await tx.aiInputBatch.update({
             where: { id: job.inputBatchId },
-            data: { status: AiInputBatchStatus.agent_running },
+            data: { status: AiInputBatchStatus.preparing_context },
           })
           const statusEvent = await this.conversationService.appendEvent(tx, {
             organizationId: job.organizationId,
             conversationId: job.conversationId,
             kind: AiConversationEventKind.batch_status,
-            payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.agent_running },
+            payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.preparing_context },
           })
           published.push({ conversationId: job.conversationId, eventId: statusEvent.id })
+          batchStatus = AiInputBatchStatus.preparing_context
         }
         return {
           ...job,
           ...claimedJob,
-          inputBatch: { ...job.inputBatch, status: AiInputBatchStatus.agent_running },
+          inputBatch: { ...job.inputBatch, status: batchStatus },
         }
       })
 
@@ -683,14 +694,7 @@ export class AiWorkflowProcessor {
       orderBy: { sequence: 'asc' },
       select: { sequence: true, kind: true, payload: true },
     })
-    const projection = buildFrozenProjection({
-      events: historyEvents,
-      conversationVersion: job.inputBatch.conversationVersion,
-      originUserMessageSequence: userEvent.sequence,
-      currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
-      materials: parseIndex.materials,
-      materialTruncationReasons: parseIndex.truncationReasons,
-    })
+    const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
       const task = await tx.aiCreateTask.findUniqueOrThrow({
@@ -710,6 +714,34 @@ export class AiWorkflowProcessor {
         select: { id: true },
       })
       const availableToolNames = capabilitiesForPendingReview(pendingReview != null)
+      const preparedProjection = await resolvePreparedProjection(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        conversationVersion: job.inputBatch.conversationVersion,
+        originUserMessageSequence: userEvent.sequence,
+        currentUserMessageSequence: confirmedReviewContinuation ? undefined : userEvent.sequence,
+        events: historyEvents,
+        materials: parseIndex.materials,
+        materialTruncationReasons: parseIndex.truncationReasons,
+        currentUserText: userText,
+        businessFacts: {
+          taskId: task.id,
+          status: task.agentTask.status,
+          currentPhase: task.currentPhase,
+          objectVersion: draft.version,
+          snapshot: draft.snapshot,
+        },
+        unresolvedState: {
+          hasPendingReview: pendingReview != null,
+          reviewPackageId: pendingReview?.id ?? null,
+        },
+        modelId,
+        toolNames: availableToolNames,
+      })
+      const runningEventId = await this.markBatchAgentRunning(tx, job)
+      if (runningEventId) {
+        published.push({ conversationId: job.conversationId, eventId: runningEventId })
+      }
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: availableToolNames,
@@ -725,7 +757,7 @@ export class AiWorkflowProcessor {
           hasPendingReview: pendingReview != null,
           reviewPackageId: pendingReview?.id ?? null,
         },
-        projection,
+        projection: preparedProjection.projection,
       })
       const excerptDigests = excerptDigestsFor(
         budgetedContext.projection.pinnedMaterials,
@@ -757,6 +789,7 @@ export class AiWorkflowProcessor {
         inputHash: budgetedContext.inputHash,
         budget: budgetedContext.budget,
         sections: budgetedContext.sections,
+        summaryVersion: preparedProjection.summaryVersion,
       })
       const run = await this.getOrCreateRunningActivityRun(
         tx,
@@ -794,7 +827,7 @@ export class AiWorkflowProcessor {
               truncationReasons: manifestRecord.truncationReasons,
               materialVersions,
               sourceVersions,
-              summaryVersion: null,
+              summaryVersion: preparedProjection.summaryVersion,
               excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
@@ -864,6 +897,15 @@ export class AiWorkflowProcessor {
         userTextSha256: budgetedContext.userTextSha256,
       }
     })
+
+    for (const item of published) {
+      const event = await this.prisma.aiConversationEvent.findUnique({
+        where: { id: item.eventId },
+      })
+      if (event) {
+        this.conversationService.publish(item.conversationId, event)
+      }
+    }
 
     const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
     const payload: AiOperationDelegationPayload = {
@@ -959,33 +1001,49 @@ export class AiWorkflowProcessor {
       parseVersion: item.parseVersion as number,
       contentDigest: item.contentDigest ?? '',
     }))
-    const projection = buildFrozenProjection({
-      events: historyEvents,
-      conversationVersion: job.inputBatch.conversationVersion,
-      originUserMessageSequence: userEvent.sequence,
-      currentUserMessageSequence: userEvent.sequence,
-      materials: parseIndex.materials,
-      materialTruncationReasons: parseIndex.truncationReasons,
-    })
     const pageContext = await this.pageLocatorResolver.resolve(
       job.organizationId,
       job.inputBatch.creatorUserId,
       job.inputBatch.pageLocator,
     )
+    const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
+      const businessFacts = pageContext
+        ? { conversationId: job.conversationId, page: pageContext.facts }
+        : { conversationId: job.conversationId }
+      const preparedProjection = await resolvePreparedProjection(tx, {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        conversationVersion: job.inputBatch.conversationVersion,
+        originUserMessageSequence: userEvent.sequence,
+        currentUserMessageSequence: userEvent.sequence,
+        events: historyEvents,
+        materials: parseIndex.materials,
+        materialTruncationReasons: parseIndex.truncationReasons,
+        currentUserText: userText,
+        businessFacts,
+        unresolvedState: { hasPendingReview: false, reviewPackageId: null },
+        modelId,
+        toolNames: CONVERSATION_RECALL_TOOL_NAMES,
+        systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
+        systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
+        toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
+      })
+      const runningEventId = await this.markBatchAgentRunning(tx, job)
+      if (runningEventId) {
+        published.push({ conversationId: job.conversationId, eventId: runningEventId })
+      }
       const budgetedContext = buildBudgetedContext({
         modelId,
-        toolNames: [],
+        toolNames: CONVERSATION_RECALL_TOOL_NAMES,
         systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
         systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
         toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
         currentUserText: userText,
-        businessFacts: pageContext
-          ? { conversationId: job.conversationId, page: pageContext.facts }
-          : { conversationId: job.conversationId },
+        businessFacts,
         unresolvedState: { hasPendingReview: false, reviewPackageId: null },
-        projection,
+        projection: preparedProjection.projection,
       })
       const manifestRecord = buildContextManifest({
         conversationId: job.conversationId,
@@ -1005,6 +1063,7 @@ export class AiWorkflowProcessor {
         inputHash: budgetedContext.inputHash,
         budget: budgetedContext.budget,
         sections: budgetedContext.sections,
+        summaryVersion: preparedProjection.summaryVersion,
       })
       const existingManifest = await tx.aiContextManifest.findFirst({
         where: {
@@ -1035,7 +1094,7 @@ export class AiWorkflowProcessor {
               truncationReasons: manifestRecord.truncationReasons,
               materialVersions,
               sourceVersions,
-              summaryVersion: null,
+              summaryVersion: preparedProjection.summaryVersion,
               excerptDigests: [],
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
@@ -1098,6 +1157,15 @@ export class AiWorkflowProcessor {
         userTextSha256: budgetedContext.userTextSha256,
       }
     })
+
+    for (const item of published) {
+      const event = await this.prisma.aiConversationEvent.findUnique({
+        where: { id: item.eventId },
+      })
+      if (event) {
+        this.conversationService.publish(item.conversationId, event)
+      }
+    }
 
     const ttlSec = this.configService.get<number>('app.aiCreateAssist.delegationTtlSec') ?? 600
     const payload: AiOperationDelegationPayload = {
@@ -1658,6 +1726,30 @@ export class AiWorkflowProcessor {
       attempt: job.attemptCount,
       delayMs,
     })
+  }
+
+  private async markBatchAgentRunning(
+    tx: Prisma.TransactionClient,
+    job: ClaimedJob,
+  ): Promise<string | null> {
+    const batch = await tx.aiInputBatch.findUniqueOrThrow({
+      where: { id: job.inputBatchId },
+      select: { status: true },
+    })
+    if (batch.status === AiInputBatchStatus.agent_running) {
+      return null
+    }
+    await tx.aiInputBatch.update({
+      where: { id: job.inputBatchId },
+      data: { status: AiInputBatchStatus.agent_running },
+    })
+    const statusEvent = await this.conversationService.appendEvent(tx, {
+      organizationId: job.organizationId,
+      conversationId: job.conversationId,
+      kind: AiConversationEventKind.batch_status,
+      payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.agent_running },
+    })
+    return statusEvent.id
   }
 
   private async organizationUsable(organizationId: string): Promise<boolean> {

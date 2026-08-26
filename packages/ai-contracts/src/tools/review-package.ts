@@ -18,6 +18,8 @@ export const AI_CREATE_TOOL_NAMES = [
   'searchRouteTemplates',
   'proposeReviewPackage',
   'getMaterialParseResult',
+  'readConversationHistory',
+  'readConversationSource',
 ] as const
 export type AiCreateToolName = (typeof AI_CREATE_TOOL_NAMES)[number]
 
@@ -257,9 +259,22 @@ export const aiCreateToolNameSchema = z.enum(AI_CREATE_TOOL_NAMES)
 
 export function capabilitiesForPendingReview(hasPendingReview: boolean): AiCreateToolName[] {
   if (hasPendingReview) {
-    return ['getTaskContext', 'searchRouteTemplates', 'getMaterialParseResult']
+    return [
+      'getTaskContext',
+      'searchRouteTemplates',
+      'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
+    ]
   }
-  return ['getTaskContext', 'searchRouteTemplates', 'proposeReviewPackage', 'getMaterialParseResult']
+  return [
+    'getTaskContext',
+    'searchRouteTemplates',
+    'proposeReviewPackage',
+    'getMaterialParseResult',
+    'readConversationHistory',
+    'readConversationSource',
+  ]
 }
 
 export type AiCandidateEvidence = z.infer<typeof aiCandidateEvidenceSchema>

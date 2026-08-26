@@ -1,5 +1,6 @@
 import type {
   AiActionConversationFact,
+  AiActionConversationSourceFact,
   AiActionMaterialFact,
   AiActionMaterialPinFact,
   AiActionTargetAuthority,
@@ -11,17 +12,20 @@ export class InMemoryAiActionTargetAuthority implements AiActionTargetAuthority 
   readonly materials: AiActionMaterialFact[]
   readonly pins: Array<AiActionMaterialPinFact & { inputBatchId: string }>
   readonly conversations: AiActionConversationFact[]
+  readonly sources: AiActionConversationSourceFact[]
 
   constructor(seed: {
     tasks?: AiActionTaskFact[]
     materials?: AiActionMaterialFact[]
     pins?: Array<AiActionMaterialPinFact & { inputBatchId: string }>
     conversations?: AiActionConversationFact[]
+    sources?: AiActionConversationSourceFact[]
   } = {}) {
     this.tasks = seed.tasks ? [...seed.tasks] : []
     this.materials = seed.materials ? [...seed.materials] : []
     this.pins = seed.pins ? [...seed.pins] : []
     this.conversations = seed.conversations ? [...seed.conversations] : []
+    this.sources = seed.sources ? [...seed.sources] : []
   }
 
   async findTask(taskId: string): Promise<AiActionTaskFact | null> {
@@ -51,6 +55,20 @@ export class InMemoryAiActionTargetAuthority implements AiActionTargetAuthority 
 
   async findConversation(conversationId: string): Promise<AiActionConversationFact | null> {
     return this.conversations.find((conversation) => conversation.id === conversationId) ?? null
+  }
+
+  async findConversationSource(params: {
+    sourceId: string
+    parseVersion: number
+  }): Promise<AiActionConversationSourceFact | null> {
+    const source = this.sources.find((item) => item.id === params.sourceId)
+    if (!source) {
+      return null
+    }
+    return {
+      ...source,
+      parseVersion: source.parseVersion === params.parseVersion ? source.parseVersion : null,
+    }
   }
 }
 
@@ -93,6 +111,16 @@ export function authorityForActor(actor: {
             id: actor.conversationId,
             organizationId: actor.organizationId,
             creatorUserId: actor.userId ?? 'user-1',
+          },
+        ]
+      : [],
+    sources: actor.conversationId
+      ? [
+          {
+            id: 'src-1',
+            organizationId: actor.organizationId,
+            conversationId: actor.conversationId,
+            parseVersion: 2,
           },
         ]
       : [],

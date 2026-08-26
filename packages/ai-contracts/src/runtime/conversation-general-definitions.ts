@@ -6,6 +6,12 @@ import {
   type AgentDefinition,
   type CapabilityDefinition,
 } from './agent-platform'
+import {
+  CONVERSATION_HISTORY_READ_CAPABILITY,
+  CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+  CONVERSATION_SOURCE_READ_CAPABILITY,
+  CONVERSATION_SOURCE_READ_CAPABILITY_REF,
+} from './conversation-recall-definitions'
 
 export const CONVERSATION_GENERAL_AGENT_DEFINITION_REF = {
   key: 'conversation.general',
@@ -19,7 +25,11 @@ export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF = {
 
 export const CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION = {
   ...CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
-  capabilities: [CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF],
+  capabilities: [
+    CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
+    CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+    CONVERSATION_SOURCE_READ_CAPABILITY_REF,
+  ],
 } as const satisfies AgentCapabilityDeclaration
 
 export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY = {
@@ -46,10 +56,12 @@ export const CONVERSATION_PLAINTEXT_REPLY_CAPABILITY = {
 
 export const CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS = [
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY,
+  CONVERSATION_HISTORY_READ_CAPABILITY,
+  CONVERSATION_SOURCE_READ_CAPABILITY,
 ] as const satisfies readonly CapabilityDefinition[]
 
 export const CONVERSATION_GENERAL_INSTRUCTIONS =
-  '你是小团宝的通用会话助手。根据当前 User 输入用中文给出简洁、可执行的说明。不要创建任务、不要猜测未授权的业务对象、不要调用建团专用工具。'
+  '你是小团宝的通用会话助手。根据当前 User 输入用中文给出简洁、可执行的说明。不要创建任务、不要猜测未授权的业务对象、不要调用建团专用工具。【交流背景】只是带 locator 的非权威摘要，不是业务事实或授权。需要核对历史措辞时调用 readConversationHistory；需要核对本会话来源原文时调用 readConversationSource。'
 
 export const CONVERSATION_GENERAL_AGENT_DEFINITION = {
   ...CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,

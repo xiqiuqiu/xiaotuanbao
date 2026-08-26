@@ -293,8 +293,8 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       mastraTraceId: null,
       toolSteps: [],
       contextManifest: {
-        systemPromptVersion: 'conversation-general/v1',
-        toolSchemaVersion: 'conversation-general-no-tools/v1',
+        systemPromptVersion: 'conversation-general/v2',
+        toolSchemaVersion: 'conversation-general-recall/v1',
       },
     })
     expect(attempt?.contextManifest?.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
@@ -573,6 +573,41 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
         status: AiWorkflowJobStatus.claimed,
         claimedAt: new Date(Date.now() - 130_000),
         claimedBy: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 10_000),
+        attemptCount: 1,
+      },
+    })
+
+    const beforeWorker = agent.callCount()
+    await processor.processDueJobs(5)
+    expect(agent.callCount()).toBe(beforeWorker + 1)
+    const restored = await prisma.aiInputBatch.findFirstOrThrow({
+      where: { id: job.inputBatchId },
+    })
+    expect(restored.status).toBe(AiInputBatchStatus.completed)
+  })
+
+  it('recovers an expired lease while the batch is still preparing_context', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 整理中断恢复`,
+      `${testPrefix}-prepare-recover`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+    })
+    await prisma.aiInputBatch.update({
+      where: { id: job.inputBatchId },
+      data: { status: AiInputBatchStatus.preparing_context },
+    })
+    await prisma.aiWorkflowJob.update({
+      where: { id: job.id },
+      data: {
+        status: AiWorkflowJobStatus.claimed,
+        claimedAt: new Date(Date.now() - 130_000),
+        claimedBy: 'dead-prepare-worker',
         leaseExpiresAt: new Date(Date.now() - 10_000),
         attemptCount: 1,
       },

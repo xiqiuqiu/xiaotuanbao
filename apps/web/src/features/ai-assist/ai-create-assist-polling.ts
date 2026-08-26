@@ -22,6 +22,7 @@ const IN_FLIGHT_ASSIST = new Set<AiCreateAssistTaskStatus>(['parsing', 'ai_proce
 const IN_FLIGHT_BATCH = new Set<AiInputBatchStatus>([
   'waiting_for_materials',
   'ready_for_agent',
+  'preparing_context',
   'agent_running',
 ])
 

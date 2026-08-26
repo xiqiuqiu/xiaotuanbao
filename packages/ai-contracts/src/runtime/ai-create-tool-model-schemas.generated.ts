@@ -801,5 +801,56 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
       "parseResultVersion"
     ],
     "additionalProperties": false
+  },
+  "readConversationHistory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "sequenceStart": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "回读起始 sequence（含）"
+      },
+      "sequenceEnd": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "回读结束 sequence（含），单次最多 20 条"
+      }
+    },
+    "required": [
+      "sequenceStart",
+      "sequenceEnd"
+    ],
+    "additionalProperties": false
+  },
+  "readConversationSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "sourceId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "当前会话来源 id"
+      },
+      "parseVersion": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "description": "固定解析版本，必须原样传入"
+      },
+      "pageNumber": {
+        "description": "可选。按页读取原文",
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991
+      }
+    },
+    "required": [
+      "sourceId",
+      "parseVersion"
+    ],
+    "additionalProperties": false
   }
 } as const

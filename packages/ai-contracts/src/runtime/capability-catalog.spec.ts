@@ -12,4 +12,15 @@ describe('登记 Capability 目标解析拒绝码', () => {
       }
     },
   )
+
+  it('同一 key@version 只登记一次，供建团与通用会话共用回读能力', () => {
+    const ids = REGISTERED_CAPABILITY_DEFINITIONS.map(
+      (definition) => `${definition.key}@${definition.version}`,
+    )
+    expect(ids).toEqual([...new Set(ids)])
+    expect(ids).toEqual(expect.arrayContaining([
+      'conversation.history.read@1',
+      'conversation.source.read@1',
+    ]))
+  })
 })
