@@ -642,15 +642,23 @@ function parseSse(
     }
     try {
       const parsed = JSON.parse(dataLine.slice('data:'.length).trim()) as {
+        type?: string
+        event?: {
+          sequence?: number
+          kind?: string
+          payload?: Record<string, unknown>
+        }
         sequence?: number
         kind?: string
         payload?: Record<string, unknown>
       }
-      if (typeof parsed.sequence === 'number' && typeof parsed.kind === 'string') {
+      const event =
+        parsed.type === 'conversation.event' && parsed.event ? parsed.event : parsed
+      if (typeof event.sequence === 'number' && typeof event.kind === 'string') {
         events.push({
-          sequence: parsed.sequence,
-          kind: parsed.kind,
-          payload: parsed.payload ?? {},
+          sequence: event.sequence,
+          kind: event.kind,
+          payload: event.payload ?? {},
         })
       }
     } catch {

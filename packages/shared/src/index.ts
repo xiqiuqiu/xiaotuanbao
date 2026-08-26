@@ -235,6 +235,9 @@ export type {
   StoredObjectSummary,
 } from './types/api.types'
 
+export type { ConversationStreamFrame, AssistantSnapshotFrame } from './types/conversation-stream'
+export { parseConversationStreamFrame } from './types/conversation-stream'
+
 export {
   PAGE_LOCATOR_KINDS,
   PAGE_LOCATOR_SECTIONS,

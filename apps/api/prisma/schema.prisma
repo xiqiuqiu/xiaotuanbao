@@ -346,6 +346,7 @@ model Organization {
   inputBatchSources InputBatchSource[]
   aiWorkflowJobs AiWorkflowJob[]
   aiAgentAttempts AiAgentAttempt[]
+  aiAgentLiveOutputs AiAgentLiveOutput[]
   aiContextManifests AiContextManifest[]
   aiContextCompactionVersions AiContextCompactionVersion[]
   aiSourceIndexVersions AiSourceIndexVersion[]
@@ -1566,6 +1567,7 @@ model AiConversation {
   inputBatches   AiInputBatch[]
   workflowJobs   AiWorkflowJob[]
   agentAttempts  AiAgentAttempt[]
+  liveOutputs    AiAgentLiveOutput[]
   contextManifests AiContextManifest[]
   compactionVersions AiContextCompactionVersion[]
   sourceIndexVersions AiSourceIndexVersion[]
@@ -1640,6 +1642,7 @@ model AiInputBatch {
   sources              InputBatchSource[]
   workflowJobs         AiWorkflowJob[]
   agentAttempts        AiAgentAttempt[]
+  liveOutputs          AiAgentLiveOutput[]
   contextManifests     AiContextManifest[]
   askedInteractions    AiConversationInteraction[]
   reviewPackages       AiReviewPackage[]
@@ -1883,6 +1886,7 @@ model AiAgentAttempt {
   endedAt           DateTime?            @map("ended_at")
   aiActions         AiAction[]
   reviewPackages    AiReviewPackage[]
+  liveOutput        AiAgentLiveOutput?
 
   @@index([taskId, status])
   @@index([conversationId, status])
@@ -1890,6 +1894,30 @@ model AiAgentAttempt {
   @@index([organizationId, startedAt])
   @@index([contextManifestId])
   @@map("ai_agent_attempts")
+}
+
+/// Agent 即时输出：当前 Attempt 上可丢失的累计公开回复，不属于会话事件。
+model AiAgentLiveOutput {
+  attemptId      String         @id @map("attempt_id")
+  attempt        AiAgentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  organizationId String         @map("organization_id")
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String         @map("conversation_id")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  inputBatchId   String         @map("input_batch_id")
+  inputBatch     AiInputBatch   @relation(fields: [inputBatchId], references: [id], onDelete: Cascade)
+  generation     Int
+  revision       Int
+  reasoningText  String         @default("") @map("reasoning_text") @db.Text
+  text           String         @db.Text
+  expiresAt      DateTime       @map("expires_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@index([conversationId, updatedAt])
+  @@index([expiresAt])
+  @@index([organizationId])
+  @@map("ai_agent_live_outputs")
 }
 
 enum ConversationSourceKind {

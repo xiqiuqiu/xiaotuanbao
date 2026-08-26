@@ -14,6 +14,8 @@ import { AgentTaskService } from './agent-task.service'
 import { AiCreateTaskController } from './ai-create-task.controller'
 import { AiCreateTaskService } from './ai-create-task.service'
 import { AiHeadlessClient } from './ai-headless.client'
+import { AGENT_LIVE_OUTPUT } from './agent-live-output'
+import { PostgresAgentLiveOutput } from './agent-live-output.postgres'
 import { AiToolController } from './ai-tool.controller'
 import { AiToolHttpAdapter } from './ai-tool-http.adapter'
 import { AiWorkflowProcessor } from './ai-workflow.processor'
@@ -46,6 +48,10 @@ import { ParseWorkerClient } from './parse-worker.client'
     AgentTaskService,
     AiConversationEventHub,
     AiHeadlessClient,
+    {
+      provide: AGENT_LIVE_OUTPUT,
+      useClass: PostgresAgentLiveOutput,
+    },
     AiWorkflowProcessor,
     AgentServiceIdentityGuard,
     AiOperationDelegationGuard,

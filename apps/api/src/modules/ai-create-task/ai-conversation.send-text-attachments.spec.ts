@@ -271,6 +271,7 @@ function createHarness(options?: {
     { publish: jest.fn() } as never,
     materialService,
     { resolve: jest.fn().mockResolvedValue(undefined) } as never,
+    { observe: () => ({ subscribe: () => ({ unsubscribe: () => undefined }) }), getCurrent: async () => null } as never,
   )
 
   return { service, storedObjectService, callOrder, prisma, tx }

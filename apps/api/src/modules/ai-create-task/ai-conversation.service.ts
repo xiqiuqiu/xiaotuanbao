@@ -5,7 +5,9 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
+  MessageEvent,
   NotFoundException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -46,6 +48,11 @@ import { PrismaService } from '../../database/prisma/prisma.service'
 import { AuthService } from '../auth/auth.service'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
+import {
+  AGENT_LIVE_OUTPUT,
+  type AgentLiveOutput,
+} from './agent-live-output'
+import { createConversationStream } from './conversation-stream'
 import {
   ABANDON_BATCH_OPERATION,
   CANCEL_INTERACTION_OPERATION,
@@ -142,6 +149,7 @@ export class AiConversationService {
     private readonly eventHub: AiConversationEventHub,
     private readonly materialService: DepartureMaterialService,
     private readonly pageLocatorResolver: PageLocatorResolver,
+    @Inject(AGENT_LIVE_OUTPUT) private readonly liveOutput: AgentLiveOutput,
   ) {}
 
   async openOrResume(
@@ -1856,7 +1864,7 @@ export class AiConversationService {
     userId: string,
     conversationId: string,
     afterSequence = 0,
-  ): Promise<Observable<{ id: string; data: AiConversationEventView }>> {
+  ): Promise<Observable<MessageEvent>> {
     await this.requireOwnedUserConversation(this.prisma, organizationId, userId, conversationId)
     return this.observeConversationEvents(conversationId, afterSequence)
   }
@@ -1867,7 +1875,7 @@ export class AiConversationService {
     taskId: string,
     conversationId: string,
     afterSequence = 0,
-  ): Promise<Observable<{ id: string; data: AiConversationEventView }>> {
+  ): Promise<Observable<MessageEvent>> {
     await this.assertAssistAccess(userId)
     await this.findOwnedInProgressTask(organizationId, userId, taskId)
     await this.requireOwnedConversation(organizationId, userId, taskId, conversationId)
@@ -1877,64 +1885,20 @@ export class AiConversationService {
   private observeConversationEvents(
     conversationId: string,
     afterSequence = 0,
-  ): Observable<{ id: string; data: AiConversationEventView }> {
-    return new Observable((subscriber) => {
-      let cancelled = false
-      let lastSeq = afterSequence
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const pending = new Map<number, AiConversationEventView>()
-      const emit = (event: AiConversationEventView) => {
-        if (event.sequence <= lastSeq) {
-          return
-        }
-        pending.set(event.sequence, event)
-        let next = pending.get(lastSeq + 1)
-        while (next) {
-          pending.delete(next.sequence)
-          lastSeq = next.sequence
-          subscriber.next({ id: String(next.sequence), data: next })
-          next = pending.get(lastSeq + 1)
-        }
-      }
-      const live = this.eventHub.observe(conversationId).subscribe(emit)
-
-      // Worker 与 API 分进程时内存 hub 收不到完成事件，按 sequence 轮询补读。
-      const poll = async () => {
-        if (cancelled) {
-          return
-        }
-        let foundEvents = false
-        try {
-          const events = await this.prisma.aiConversationEvent.findMany({
-            where: { conversationId, sequence: { gt: lastSeq } },
-            orderBy: { sequence: 'asc' },
-          })
-          if (cancelled) {
-            return
-          }
-          foundEvents = events.length > 0
-          for (const event of events) {
-            emit(toEventView(event))
-          }
-        } catch (error: unknown) {
-          if (!cancelled) {
-            subscriber.error(error)
-          }
-          return
-        }
-        timer = setTimeout(() => {
-          void poll()
-        }, nextSseCatchUpDelay(foundEvents))
-      }
-      void poll()
-
-      return () => {
-        cancelled = true
-        if (timer) {
-          clearTimeout(timer)
-        }
-        live.unsubscribe()
-      }
+  ): Observable<MessageEvent> {
+    return createConversationStream({
+      conversationId,
+      afterSequence,
+      eventHub: this.eventHub,
+      liveOutput: this.liveOutput,
+      loadEventsAfter: async (lastSeq) => {
+        const events = await this.prisma.aiConversationEvent.findMany({
+          where: { conversationId, sequence: { gt: lastSeq } },
+          orderBy: { sequence: 'asc' },
+        })
+        return events.map(toEventView)
+      },
+      nextCatchUpDelay: nextSseCatchUpDelay,
     })
   }
 
