@@ -3,6 +3,7 @@ import {
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
   AiCollaborationError,
   submitReviewPackageModelInputSchema,
+  uniqueCapabilityDefinitions,
   type HeadlessExecutionRequest,
   type ToolStepDiagnostic,
 } from '@xiaotuanbao/ai-contracts'
@@ -89,9 +90,10 @@ function toolStepsFromCalls(toolCalls: unknown[] | undefined): ToolStepDiagnosti
 }
 
 function capabilityForToolName(toolName: string) {
-  return [...AI_CREATE_CAPABILITY_DEFINITIONS, ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS].find(
-    (definition) => definition.toolName === toolName,
-  )
+  return uniqueCapabilityDefinitions([
+    ...AI_CREATE_CAPABILITY_DEFINITIONS,
+    ...CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  ]).find((definition) => definition.toolName === toolName)
 }
 
 function toolNameFromCall(call: unknown): string | null {

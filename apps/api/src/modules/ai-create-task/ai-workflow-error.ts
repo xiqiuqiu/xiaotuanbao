@@ -1,11 +1,13 @@
 import { ServiceUnavailableException } from '@nestjs/common'
 import { CONTEXT_CAPACITY_EXCEEDED, CONTEXT_PROFILE_MISSING } from './ai-context-budget'
+import { CONTEXT_PREPARE_FAILED } from './ai-context-compaction'
 import { ReviewProposalRejectedError } from './review-proposal.commit'
 
 const TYPED_WORKFLOW_ERROR_CODES = [
   'VERSION_CONFLICT',
   CONTEXT_CAPACITY_EXCEEDED,
   CONTEXT_PROFILE_MISSING,
+  CONTEXT_PREPARE_FAILED,
 ] as const
 
 export function workflowErrorCode(error: unknown): string {

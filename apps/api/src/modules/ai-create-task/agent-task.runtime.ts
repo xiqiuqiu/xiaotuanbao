@@ -83,6 +83,7 @@ export async function isolateOpenTaskRuntime(
         in: [
           AiInputBatchStatus.waiting_for_materials,
           AiInputBatchStatus.ready_for_agent,
+          AiInputBatchStatus.preparing_context,
           AiInputBatchStatus.agent_running,
           AiInputBatchStatus.awaiting_user_input,
           AiInputBatchStatus.awaiting_review,

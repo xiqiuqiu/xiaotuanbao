@@ -40,6 +40,13 @@ export type AiActionTargetResolveDeny = {
 
 export type AiActionTargetResolveResult = AiActionTargetResolveOk | AiActionTargetResolveDeny
 
+export type AiActionConversationSourceFact = {
+  id: string
+  organizationId: string
+  conversationId: string
+  parseVersion: number | null
+}
+
 export interface AiActionTargetAuthority {
   findTask(taskId: string): Promise<AiActionTaskFact | null>
   findMaterial(materialId: string): Promise<AiActionMaterialFact | null>
@@ -48,6 +55,10 @@ export interface AiActionTargetAuthority {
     materialId: string
   }): Promise<AiActionMaterialPinFact | null>
   findConversation(conversationId: string): Promise<AiActionConversationFact | null>
+  findConversationSource(params: {
+    sourceId: string
+    parseVersion: number
+  }): Promise<AiActionConversationSourceFact | null>
 }
 
 export function claimedStringField(input: unknown, field: string): string | null {

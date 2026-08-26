@@ -48,6 +48,8 @@ const PUBLIC_MUTATING_ALLOWLIST = new Set<string>([
   'POST /api/ai-tools/v1/propose-review-package',
   'POST /api/ai-tools/v1/search-route-templates',
   'POST /api/ai-tools/v1/get-material-parse-result',
+  'POST /api/ai-tools/v1/read-conversation-history',
+  'POST /api/ai-tools/v1/read-conversation-source',
 ])
 
 /**

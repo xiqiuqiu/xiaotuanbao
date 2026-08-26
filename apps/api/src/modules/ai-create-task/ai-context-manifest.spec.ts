@@ -240,10 +240,10 @@ describe('frozen context projection', () => {
     expect(projection.conversationBackground.summary).toBeNull()
   })
 
-  it('无任务会话 Manifest 记录 conversation.general 的 prompt 与空工具版本，而不是建团 readonly-assist', () => {
+  it('无任务会话 Manifest 记录 conversation.general 的 prompt 与回读工具版本，而不是建团 readonly-assist', () => {
     const budgeted = buildBudgetedContext({
       modelId: 'deterministic',
-      toolNames: [],
+      toolNames: ['readConversationHistory', 'readConversationSource'],
       systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
       systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
       toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
@@ -272,8 +272,8 @@ describe('frozen context projection', () => {
       sections: budgeted.sections,
     })
 
-    expect(manifest.systemPromptVersion).toBe('conversation-general/v1')
-    expect(manifest.toolSchemaVersion).toBe('conversation-general-no-tools/v1')
+    expect(manifest.systemPromptVersion).toBe('conversation-general/v2')
+    expect(manifest.toolSchemaVersion).toBe('conversation-general-recall/v1')
     expect(manifest.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(manifest.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
     expect(manifest.sections.find((section) => section.key === 'system_constraints')?.sha256).toBe(

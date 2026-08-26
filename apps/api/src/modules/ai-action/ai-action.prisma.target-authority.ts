@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import type {
   AiActionConversationFact,
+  AiActionConversationSourceFact,
   AiActionMaterialFact,
   AiActionMaterialPinFact,
   AiActionTargetAuthority,
@@ -12,6 +13,7 @@ import type {
 type TargetAuthorityDb = {
   agentTask: Prisma.TransactionClient['agentTask']
   conversationSource: Prisma.TransactionClient['conversationSource']
+  conversationSourceParseRun: Prisma.TransactionClient['conversationSourceParseRun']
   inputBatchSource: Prisma.TransactionClient['inputBatchSource']
   aiConversation: Prisma.TransactionClient['aiConversation']
 }
@@ -68,6 +70,29 @@ export function createPrismaAiActionTargetAuthority(client: TargetAuthorityDb): 
       })
       return conversation ? toConversationFact(conversation) : null
     },
+    async findConversationSource(params) {
+      const source = await client.conversationSource.findUnique({
+        where: { id: params.sourceId },
+        select: { id: true, organizationId: true, conversationId: true },
+      })
+      if (!source) {
+        return null
+      }
+      const run = await client.conversationSourceParseRun.findFirst({
+        where: {
+          sourceId: params.sourceId,
+          resultVersion: params.parseVersion,
+          status: 'succeeded',
+        },
+        select: { resultVersion: true },
+      })
+      return {
+        id: source.id,
+        organizationId: source.organizationId,
+        conversationId: source.conversationId,
+        parseVersion: run?.resultVersion ?? null,
+      }
+    },
   }
 }
 
@@ -96,6 +121,13 @@ export class PrismaAiActionTargetAuthority implements AiActionTargetAuthority {
 
   findConversation(conversationId: string): Promise<AiActionConversationFact | null> {
     return this.inner.findConversation(conversationId)
+  }
+
+  findConversationSource(params: {
+    sourceId: string
+    parseVersion: number
+  }): Promise<AiActionConversationSourceFact | null> {
+    return this.inner.findConversationSource(params)
   }
 }
 

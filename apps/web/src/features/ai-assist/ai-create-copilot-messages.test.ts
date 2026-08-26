@@ -7,6 +7,7 @@ import {
 describe('AI create chat status projection', () => {
   it('labels running, queued and waiting-for-answer from server status', () => {
     expect(batchStatusLabel('agent_running')).toBe('AI 处理中')
+    expect(batchStatusLabel('preparing_context')).toBe('正在整理会话上下文')
     expect(batchStatusLabel('ready_for_agent', null, { queued: true })).toBe('已排队')
     expect(batchStatusLabel('awaiting_user_input')).toBe('等待回答')
     expect(batchStatusLabel('awaiting_review')).toBe('等待表单审核')

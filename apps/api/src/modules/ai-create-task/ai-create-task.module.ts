@@ -6,6 +6,7 @@ import { PartnerModule } from '../partner/partner.module'
 import { StoredObjectModule } from '../stored-object/stored-object.module'
 import { AiConversationEventHub } from './ai-conversation-event.hub'
 import { AiConversationService } from './ai-conversation.service'
+import { AiConversationRecallService } from './ai-conversation-recall.service'
 import { AgentConversationController } from './agent-conversation.controller'
 import { AgentTaskController } from './agent-task.controller'
 import { AgentTaskService } from './agent-task.service'
@@ -39,6 +40,7 @@ import { ParseWorkerClient } from './parse-worker.client'
     AiCreateTaskService,
     AiToolHttpAdapter,
     AiConversationService,
+    AiConversationRecallService,
     AgentTaskService,
     AiConversationEventHub,
     AiHeadlessClient,

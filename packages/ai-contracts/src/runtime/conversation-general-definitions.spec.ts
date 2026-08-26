@@ -19,13 +19,30 @@ const requestContext = requestContextSchema.parse({
 describe('通用无任务会话 Definition', () => {
   it('登记纯文本回复 Capability，且不依赖建团任务或 departure:write', () => {
     expect(CONVERSATION_GENERAL_AGENT_DEFINITION.key).toBe('conversation.general')
-    expect(CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS).toEqual([
-      expect.objectContaining({
+    expect(CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS.map((definition) => ({
+      key: definition.key,
+      version: definition.version,
+      toolName: definition.toolName,
+      requiredPermissionKeys: definition.requiredPermissionKeys,
+    }))).toEqual([
+      {
         key: 'conversation.plaintext.reply',
         version: 1,
         toolName: 'replyPlaintext',
         requiredPermissionKeys: [],
-      }),
+      },
+      {
+        key: 'conversation.history.read',
+        version: 1,
+        toolName: 'readConversationHistory',
+        requiredPermissionKeys: [],
+      },
+      {
+        key: 'conversation.source.read',
+        version: 1,
+        toolName: 'readConversationSource',
+        requiredPermissionKeys: [],
+      },
     ])
 
     const result = capabilityGrantResolver.resolve({
@@ -37,7 +54,11 @@ describe('通用无任务会话 Definition', () => {
       riskPolicy: { allowedRisks: ['low'] },
     })
 
-    expect(result.granted).toEqual([{ key: 'conversation.plaintext.reply', version: 1 }])
+    expect(result.granted).toEqual([
+      { key: 'conversation.plaintext.reply', version: 1 },
+      { key: 'conversation.history.read', version: 1 },
+      { key: 'conversation.source.read', version: 1 },
+    ])
     expect(result.denied).toEqual([])
   })
 })

@@ -13,11 +13,8 @@ describe('workflowErrorCode', () => {
     )
   })
 
-  it('maps missing context-budget profile failures instead of collapsing them to AGENT_UNAVAILABLE', () => {
-    expect(workflowErrorCode(new Error('CONTEXT_PROFILE_MISSING'))).toBe('CONTEXT_PROFILE_MISSING')
-    expect(workflowErrorCode(new Error('CONTEXT_PROFILE_MISSING: unknown/model'))).toBe(
-      'CONTEXT_PROFILE_MISSING',
-    )
+  it('maps compaction prepare failures as retryable typed errors', () => {
+    expect(workflowErrorCode(new Error('CONTEXT_PREPARE_FAILED'))).toBe('CONTEXT_PREPARE_FAILED')
   })
 
   it('maps rejected review proposals to INVALID_FORMAT instead of retrying the Worker job', () => {

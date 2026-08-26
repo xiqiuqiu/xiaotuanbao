@@ -25,13 +25,14 @@ describe('isImmediateWorkflowFailure', () => {
     expect(isImmediateWorkflowFailure('CONTEXT_PROFILE_MISSING')).toBe(true)
     expect(isImmediateWorkflowFailure('INVALID_FORMAT')).toBe(true)
     expect(isImmediateWorkflowFailure('AGENT_UNAVAILABLE')).toBe(false)
+    expect(isImmediateWorkflowFailure('CONTEXT_PREPARE_FAILED')).toBe(false)
   })
 })
 
 describe('context contract versions', () => {
   it('does not reuse AI建团 readonly-assist prompt or tool schema ids for conversation.general', () => {
-    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).toBe('conversation-general/v1')
-    expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).toBe('conversation-general-no-tools/v1')
+    expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).toBe('conversation-general/v2')
+    expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).toBe('conversation-general-recall/v1')
     expect(CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
   })

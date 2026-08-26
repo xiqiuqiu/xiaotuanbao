@@ -15,6 +15,12 @@ import {
   proposeReviewPackageOutputSchema,
 } from '../tools/review-package'
 import {
+  CONVERSATION_HISTORY_READ_CAPABILITY,
+  CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+  CONVERSATION_SOURCE_READ_CAPABILITY,
+  CONVERSATION_SOURCE_READ_CAPABILITY_REF,
+} from './conversation-recall-definitions'
+import {
   CapabilityDefinitionRegistry,
   requestContextSchema,
   type AgentCapabilityDeclaration,
@@ -43,6 +49,8 @@ export const AI_CREATE_CAPABILITY_REFS_BY_TOOL = {
     key: 'departure.material-parse-result.read',
     version: GET_MATERIAL_PARSE_RESULT_TOOL.version,
   },
+  readConversationHistory: CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+  readConversationSource: CONVERSATION_SOURCE_READ_CAPABILITY_REF,
 } as const
 
 export const AI_CREATE_AGENT_CAPABILITY_DECLARATION = {
@@ -138,6 +146,8 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
       ],
     },
   },
+  CONVERSATION_HISTORY_READ_CAPABILITY,
+  CONVERSATION_SOURCE_READ_CAPABILITY,
 ] as const satisfies readonly CapabilityDefinition[]
 
 export const aiCreateCapabilityDefinitionRegistry = new CapabilityDefinitionRegistry(

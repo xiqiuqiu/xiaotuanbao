@@ -76,6 +76,7 @@ export function batchStatusLabel(
     return '资料处理中'
   }
   if (status === 'ready_for_agent') return extra?.queued ? '已排队' : '已发送'
+  if (status === 'preparing_context') return '正在整理会话上下文'
   if (status === 'agent_running') return 'AI 处理中'
   if (status === 'awaiting_user_input') return '等待回答'
   if (status === 'awaiting_review') return '等待表单审核'
@@ -98,6 +99,9 @@ function failedBatchLabel(errorCode?: string): string {
   }
   if (errorCode === 'CONTEXT_PROFILE_MISSING') {
     return '当前模型未配置上下文容量'
+  }
+  if (errorCode === 'CONTEXT_PREPARE_FAILED') {
+    return '会话上下文整理失败，将自动重试'
   }
   return '处理失败'
 }
@@ -408,6 +412,7 @@ export function toCopilotChatMessages(
           showMaterialActions: status === 'waiting_for_materials' && failedMaterials.length > 0,
           showStopAction:
             status === 'ready_for_agent' ||
+            status === 'preparing_context' ||
             status === 'agent_running' ||
             status === 'awaiting_user_input',
           showBatchRetryAction: status === 'failed',
@@ -445,6 +450,7 @@ export function toCopilotChatMessages(
         showMaterialActions: activeBatch.status === 'waiting_for_materials' && failedMaterials.length > 0,
         showStopAction:
           activeBatch.status === 'ready_for_agent' ||
+          activeBatch.status === 'preparing_context' ||
           activeBatch.status === 'agent_running' ||
           activeBatch.status === 'awaiting_user_input',
         showBatchRetryAction: activeBatch.status === 'failed',

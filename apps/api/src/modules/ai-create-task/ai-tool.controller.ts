@@ -60,4 +60,22 @@ export class AiToolController {
   ) {
     return this.aiToolHttpAdapter.getMaterialParseResult(request.user, body)
   }
+
+  @Post('v1/read-conversation-history')
+  @HttpCode(200)
+  readConversationHistory(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.readConversationHistory(request.user, body)
+  }
+
+  @Post('v1/read-conversation-source')
+  @HttpCode(200)
+  readConversationSource(
+    @Req() request: { user: AiToolRequestUser },
+    @Body() body: unknown,
+  ) {
+    return this.aiToolHttpAdapter.readConversationSource(request.user, body)
+  }
 }

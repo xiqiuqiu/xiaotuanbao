@@ -3,7 +3,9 @@ import {
   AI_CREATE_AGENT_DEFINITION_REF,
   AI_CREATE_CAPABILITY_REFS_BY_TOOL,
   CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  CONVERSATION_HISTORY_READ_CAPABILITY_REF,
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
+  CONVERSATION_SOURCE_READ_CAPABILITY_REF,
 } from '@xiaotuanbao/ai-contracts'
 import { authorityForActor, InMemoryAiActionTargetAuthority } from './ai-action.in-memory.target-authority'
 import {
@@ -1353,6 +1355,88 @@ describe('AiActionGateway.execute 权威目标解析', () => {
       decision: 'allow',
       targetRef: { kind: 'agent_conversation', id: 'conv-1' },
       executionStatus: 'succeeded',
+    })
+  })
+
+  it('forwards readConversationHistory against the trusted conversation', async () => {
+    const conversationActor: AiActionActor = {
+      ...actor,
+      grantedCapabilities: [CONVERSATION_HISTORY_READ_CAPABILITY_REF],
+    }
+    const { gateway } = createGateway(authorityForActor(conversationActor))
+    const seen: unknown[] = []
+    const result = await gateway.execute({
+      name: 'readConversationHistory',
+      actor: conversationActor,
+      input: { sequenceStart: 1, sequenceEnd: 2 },
+      forward: async ({ target }) => {
+        seen.push(target)
+        return { ok: true }
+      },
+    })
+    expect(seen).toEqual([
+      {
+        kind: 'agent_conversation',
+        id: 'conv-1',
+        organizationId: 'org-1',
+        version: null,
+      },
+    ])
+    expect(result.action).toMatchObject({
+      name: 'readConversationHistory',
+      decision: 'allow',
+      targetRef: { kind: 'agent_conversation', id: 'conv-1' },
+    })
+  })
+
+  it('does not forward readConversationSource when parseVersion is missing', async () => {
+    const conversationActor: AiActionActor = {
+      ...actor,
+      grantedCapabilities: [CONVERSATION_SOURCE_READ_CAPABILITY_REF],
+    }
+    const { gateway } = createGateway(authorityForActor(conversationActor))
+    const result = await gateway.execute({
+      name: 'readConversationSource',
+      actor: conversationActor,
+      input: { sourceId: 'src-1' },
+      forward: async () => ({ ok: true }),
+    })
+    expect(result.result).toBeUndefined()
+    expect(result.action).toMatchObject({
+      name: 'readConversationSource',
+      decision: 'deny',
+      reasonCode: 'TARGET_VERSION_MISMATCH',
+    })
+  })
+
+  it('forwards readConversationSource against a same-conversation parse version', async () => {
+    const conversationActor: AiActionActor = {
+      ...actor,
+      grantedCapabilities: [CONVERSATION_SOURCE_READ_CAPABILITY_REF],
+    }
+    const { gateway } = createGateway(authorityForActor(conversationActor))
+    const seen: unknown[] = []
+    const result = await gateway.execute({
+      name: 'readConversationSource',
+      actor: conversationActor,
+      input: { sourceId: 'src-1', parseVersion: 2 },
+      forward: async ({ target }) => {
+        seen.push(target)
+        return { ok: true }
+      },
+    })
+    expect(seen).toEqual([
+      {
+        kind: 'conversation_source',
+        id: 'src-1',
+        organizationId: 'org-1',
+        version: 2,
+      },
+    ])
+    expect(result.action).toMatchObject({
+      name: 'readConversationSource',
+      decision: 'allow',
+      targetRef: { kind: 'conversation_source', id: 'src-1' },
     })
   })
 })

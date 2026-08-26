@@ -129,6 +129,8 @@ describe('createGetMaterialParseResultTool', () => {
       'searchRouteTemplates',
       'proposeReviewPackage',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 

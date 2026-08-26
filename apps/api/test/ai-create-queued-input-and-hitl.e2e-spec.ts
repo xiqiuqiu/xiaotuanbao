@@ -532,7 +532,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const remaining = await prisma.aiInputBatch.count({
       where: {
         taskLinks: { some: { taskId } },
-        status: { in: ['ready_for_agent', 'agent_running'] },
+        status: { in: ['ready_for_agent', 'preparing_context', 'agent_running'] },
       },
     })
     expect(remaining).toBe(0)
@@ -622,7 +622,7 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
     const remaining = await prisma.aiInputBatch.count({
       where: {
         taskLinks: { some: { taskId } },
-        status: { in: ['waiting_for_materials', 'ready_for_agent', 'agent_running'] },
+        status: { in: ['waiting_for_materials', 'ready_for_agent', 'preparing_context', 'agent_running'] },
       },
     })
     expect(remaining).toBe(0)

@@ -239,6 +239,8 @@ describe('headless Agent runtime contract', () => {
         'searchRouteTemplates',
         'proposeReviewPackage',
         'getMaterialParseResult',
+        'readConversationHistory',
+        'readConversationSource',
       ])
     } finally {
       await runtime.close()

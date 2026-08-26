@@ -93,6 +93,7 @@ describe('ai-create-assist-polling', () => {
     expect(conversationCatchUpIntervalMs('completed')).toBe(CONVERSATION_IDLE_CATCH_UP_MS)
     expect(conversationCatchUpIntervalMs('awaiting_review')).toBe(CONVERSATION_IDLE_CATCH_UP_MS)
     expect(conversationCatchUpIntervalMs('agent_running')).toBe(CONVERSATION_ACTIVE_CATCH_UP_MS)
+    expect(conversationCatchUpIntervalMs('preparing_context')).toBe(CONVERSATION_ACTIVE_CATCH_UP_MS)
     expect(conversationCatchUpIntervalMs('waiting_for_materials')).toBe(
       CONVERSATION_ACTIVE_CATCH_UP_MS,
     )

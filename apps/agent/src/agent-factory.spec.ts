@@ -14,6 +14,8 @@ jest.mock('./get-task-context.tool', () => ({ createGetTaskContextTool: () => 't
 jest.mock('./search-route-templates.tool', () => ({ createSearchRouteTemplatesTool: () => 'route-tool' }))
 jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool: () => 'review-tool' }))
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
+jest.mock('./read-conversation-history.tool', () => ({ createReadConversationHistoryTool: () => 'history-tool' }))
+jest.mock('./read-conversation-source.tool', () => ({ createReadConversationSourceTool: () => 'source-tool' }))
 jest.mock('./restore-tool-reasoning', () => ({ wrapAgentStreamToRestoreToolReasoning: jest.fn() }))
 jest.mock('./sanitize-model-headers', () => ({ wrapAgentExecutionWithoutInboundAuth: jest.fn() }))
 const limiterConfigs: Array<{ limit: number; trimMode?: string }> = []
@@ -103,6 +105,35 @@ describe('Agent Factory', () => {
       },
     )
     expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual([])
+  })
+
+  it('生产 Agent 不挂载 Mastra Memory / Observational Memory', () => {
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
+      context,
+    )
+    const created = agentConfigs.at(-1) as { memory?: unknown } | undefined
+    expect(created?.memory).toBeUndefined()
+    expect(Object.keys(created ?? {})).not.toContain('memory')
+  })
+
+  it('通用会话授权回读 Capability 时只暴露原文回读工具', () => {
+    expect(
+      toolNamesForRequestContext({
+        ...context,
+        taskId: undefined,
+        runId: undefined,
+        agentDefinition: { key: 'conversation.general', version: 1 },
+        grantedCapabilities: [
+          { key: 'conversation.plaintext.reply', version: 1 },
+          { key: 'conversation.history.read', version: 1 },
+          { key: 'conversation.source.read', version: 1 },
+        ],
+        objectScopes: [
+          { organizationId: 'org-1', kind: 'agent_conversation', id: 'conversation-1' },
+        ],
+      }),
+    ).toEqual(['replyPlaintext', 'readConversationHistory', 'readConversationSource'])
   })
 
   it('拒绝上下文声明未注册的 Capability 版本', () => {

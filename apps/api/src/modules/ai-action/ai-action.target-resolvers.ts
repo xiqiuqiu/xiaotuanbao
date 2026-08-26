@@ -37,6 +37,8 @@ const TARGET_RESOLVERS: Record<string, TargetResolver> = {
   searchRouteTemplates: resolveRouteCatalog,
   proposeReviewPackage: resolveDepartureDraft,
   getMaterialParseResult: resolvePinnedMaterial,
+  readConversationHistory: resolveConversation,
+  readConversationSource: resolveConversationSource,
   replyPlaintext: resolveConversation,
 }
 
@@ -213,6 +215,56 @@ async function resolveConversation(
       id: conversation.id,
       organizationId: conversation.organizationId,
       version: null,
+    },
+  }
+}
+
+async function resolveConversationSource(
+  actor: AiActionActor,
+  input: unknown,
+  authority: AiActionTargetAuthority,
+): Promise<AiActionTargetResolveResult> {
+  const sourceId = claimedStringField(input, 'sourceId')
+  const mismatch = denyClaimedMismatch(actor, input, {
+    kind: 'conversation_source',
+    id: sourceId,
+  })
+  if (mismatch) {
+    return mismatch
+  }
+  if (!sourceId) {
+    return deny('TARGET_MISSING', { kind: 'conversation_source', id: null })
+  }
+  if (!actor.conversationId) {
+    return deny('TARGET_MISSING', { kind: 'conversation_source', id: sourceId })
+  }
+  const claimedVersion = claimedPositiveIntField(input, 'parseVersion')
+  if (claimedVersion === null) {
+    return deny('TARGET_VERSION_MISMATCH', { kind: 'conversation_source', id: sourceId })
+  }
+  const source = await authority.findConversationSource({
+    sourceId,
+    parseVersion: claimedVersion,
+  })
+  if (!source) {
+    return deny('TARGET_MISSING', { kind: 'conversation_source', id: sourceId })
+  }
+  if (source.organizationId !== actor.organizationId) {
+    return deny('CROSS_ORGANIZATION', { kind: 'conversation_source', id: sourceId })
+  }
+  if (source.conversationId !== actor.conversationId) {
+    return deny('OBJECT_SCOPE_DENIED', { kind: 'conversation_source', id: sourceId })
+  }
+  if (source.parseVersion == null) {
+    return deny('TARGET_VERSION_MISMATCH', { kind: 'conversation_source', id: sourceId })
+  }
+  return {
+    ok: true,
+    target: {
+      kind: 'conversation_source',
+      id: source.id,
+      organizationId: source.organizationId,
+      version: source.parseVersion,
     },
   }
 }

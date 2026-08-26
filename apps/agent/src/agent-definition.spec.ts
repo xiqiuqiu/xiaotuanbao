@@ -30,6 +30,8 @@ describe('现有建团 Agent Definition', () => {
       { key: 'departure.route-template.search', version: 1, toolName: 'searchRouteTemplates' },
       { key: 'departure.review-package.propose', version: 1, toolName: 'proposeReviewPackage' },
       { key: 'departure.material-parse-result.read', version: 1, toolName: 'getMaterialParseResult' },
+      { key: 'conversation.history.read', version: 1, toolName: 'readConversationHistory' },
+      { key: 'conversation.source.read', version: 1, toolName: 'readConversationSource' },
     ])
     for (const capability of AI_CREATE_CAPABILITY_DEFINITIONS) {
       expect(capabilityDefinitionRegistry.get(capability)).toBe(capability)

@@ -13,6 +13,8 @@ import {
 } from './agent-definition'
 import { createGetMaterialParseResultTool } from './get-material-parse-result.tool'
 import { createGetTaskContextTool, type GetTaskContextToolConfig } from './get-task-context.tool'
+import { createReadConversationHistoryTool } from './read-conversation-history.tool'
+import { createReadConversationSourceTool } from './read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
@@ -52,6 +54,8 @@ function createMastra(
     searchRouteTemplates: createSearchRouteTemplatesTool(config),
     proposeReviewPackage: createSubmitReviewPackageTool(config),
     getMaterialParseResult: createGetMaterialParseResultTool(config),
+    readConversationHistory: createReadConversationHistoryTool(config),
+    readConversationSource: createReadConversationSourceTool(config),
   }
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),

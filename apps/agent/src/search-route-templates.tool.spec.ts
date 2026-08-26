@@ -97,6 +97,8 @@ describe('createSearchRouteTemplatesTool', () => {
       'searchRouteTemplates',
       'proposeReviewPackage',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 

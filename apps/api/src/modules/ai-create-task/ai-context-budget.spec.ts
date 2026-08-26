@@ -1,4 +1,4 @@
-import { AI_CREATE_SYSTEM_INSTRUCTIONS, CONVERSATION_GENERAL_INSTRUCTIONS } from '@xiaotuanbao/ai-contracts'
+import { AI_CREATE_SYSTEM_INSTRUCTIONS, CONVERSATION_GENERAL_INSTRUCTIONS, CONVERSATION_RECALL_TOOL_NAMES } from '@xiaotuanbao/ai-contracts'
 import { digestExcerpt } from './ai-context-manifest'
 import { buildBudgetedContext } from './ai-context-budget'
 import {
@@ -214,10 +214,10 @@ describe('buildBudgetedContext', () => {
     ).toThrow('CONTEXT_CAPACITY_EXCEEDED')
   })
 
-  it('无任务会话按 conversation.general 计量指令与空工具 schema，不复用建团 readonly-assist 版本', () => {
+  it('无任务会话按 conversation.general 计量指令与回读工具 schema，不复用建团 readonly-assist 版本', () => {
     const result = buildBudgetedContext({
       modelId: 'deterministic',
-      toolNames: [],
+      toolNames: CONVERSATION_RECALL_TOOL_NAMES,
       systemInstructions: CONVERSATION_GENERAL_INSTRUCTIONS,
       systemPromptVersion: CONVERSATION_GENERAL_SYSTEM_PROMPT_VERSION,
       toolSchemaVersion: CONVERSATION_GENERAL_TOOL_SCHEMA_VERSION,
@@ -233,13 +233,15 @@ describe('buildBudgetedContext', () => {
     })
 
     expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
-      version: 'conversation-general/v1',
+      version: 'conversation-general/v2',
       sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({
-      version: 'conversation-general-no-tools/v1',
-      sha256: digestExcerpt('[]'),
+      version: 'conversation-general-recall/v1',
     })
+    expect(result.sections.find((section) => section.key === 'tool_schemas')?.sha256).not.toBe(
+      digestExcerpt('[]'),
+    )
     expect(result.sections.find((section) => section.key === 'system_constraints')?.sha256).not.toBe(
       digestExcerpt(AI_CREATE_SYSTEM_INSTRUCTIONS),
     )

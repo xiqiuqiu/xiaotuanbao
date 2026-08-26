@@ -169,6 +169,8 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
       'getTaskContext',
       'searchRouteTemplates',
       'getMaterialParseResult',
+      'readConversationHistory',
+      'readConversationSource',
     ])
   })
 

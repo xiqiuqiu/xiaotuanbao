@@ -30,6 +30,27 @@ export {
   type GetMaterialParseResultOutput,
 } from './tools/get-material-parse-result'
 export {
+  READ_CONVERSATION_HISTORY_TOOL,
+  CONVERSATION_HISTORY_READ_MAX_EVENTS,
+  CONVERSATION_HISTORY_READ_MAX_CHARS,
+  CONVERSATION_HISTORY_READ_PREFACE,
+  readConversationHistoryInputSchema,
+  readConversationHistoryModelInputSchema,
+  readConversationHistoryOutputSchema,
+  type ReadConversationHistoryInput,
+  type ReadConversationHistoryOutput,
+} from './tools/read-conversation-history'
+export {
+  READ_CONVERSATION_SOURCE_TOOL,
+  CONVERSATION_SOURCE_READ_MAX_CHARS,
+  CONVERSATION_SOURCE_READ_PREFACE,
+  readConversationSourceInputSchema,
+  readConversationSourceModelInputSchema,
+  readConversationSourceOutputSchema,
+  type ReadConversationSourceInput,
+  type ReadConversationSourceOutput,
+} from './tools/read-conversation-source'
+export {
   MATERIAL_PARSE_INDEX_EXCERPT_CHARS,
   MATERIAL_PARSE_INDEX_TOTAL_CHARS,
   MATERIAL_PARSE_TOOL_INLINE_CHARS,
@@ -45,6 +66,27 @@ export {
   type MaterialParsePage,
   type MaterialParseIndexItem,
 } from './context/material-parse-index'
+export {
+  CONTEXT_COMPACTION_POLICY_VERSION,
+  CONTEXT_COMPACTION_CONFIG_VERSION,
+  CONTEXT_COMPACTION_MODEL_ID,
+  CONTEXT_COMPACTION_EXCERPT_CHARS,
+  CONTEXT_COMPACTION_KEEP_TAIL,
+  CONTEXT_COMPACTION_BUFFER_RATIO,
+  CONTEXT_COMPACTION_ACTIVATE_RATIO,
+  CONTEXT_COMPACTION_DISCLAIMER,
+  COMPACTABLE_EVENT_KINDS,
+  selectCompactableEvents,
+  splitCompactionWindow,
+  compactConversationEvents,
+  buildCompactionVersion,
+  eventLocatorFor,
+  coveredSequenceSet,
+  type ConversationEventLocator,
+  type ConversationSourceLocator,
+  type CompactionInputEvent,
+  type ContextCompactionVersionRecord,
+} from './context/compaction'
 export {
   SEARCH_ROUTE_TEMPLATES_TOOL,
   SEARCH_ROUTE_TEMPLATES_LIMIT,
@@ -241,7 +283,17 @@ export {
 export {
   REGISTERED_CAPABILITY_DEFINITIONS,
   registeredCapabilityDefinitionForTool,
+  uniqueCapabilityDefinitions,
 } from './runtime/capability-catalog'
+export {
+  CONVERSATION_HISTORY_READ_CAPABILITY,
+  CONVERSATION_HISTORY_READ_CAPABILITY_REF,
+  CONVERSATION_SOURCE_READ_CAPABILITY,
+  CONVERSATION_SOURCE_READ_CAPABILITY_REF,
+  CONVERSATION_RECALL_CAPABILITY_DEFINITIONS,
+  CONVERSATION_RECALL_CAPABILITY_REFS,
+  CONVERSATION_RECALL_TOOL_NAMES,
+} from './runtime/conversation-recall-definitions'
 export {
   CONVERSATION_GENERAL_AGENT_CAPABILITY_DECLARATION,
   CONVERSATION_GENERAL_AGENT_DEFINITION,
