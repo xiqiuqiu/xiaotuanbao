@@ -273,8 +273,8 @@ describe('frozen context projection', () => {
       sections: budgeted.sections,
     })
 
-    expect(manifest.systemPromptVersion).toBe('conversation-general/v2')
-    expect(manifest.toolSchemaVersion).toBe('conversation-general-recall/v1')
+    expect(manifest.systemPromptVersion).toBe('conversation-general/v3')
+    expect(manifest.toolSchemaVersion).toBe('conversation-general-routing-recall/v2')
     expect(manifest.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(manifest.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
     expect(manifest.sections.find((section) => section.key === 'system_constraints')?.sha256).toBe(

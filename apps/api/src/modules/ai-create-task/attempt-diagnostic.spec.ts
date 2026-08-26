@@ -86,6 +86,28 @@ describe('Attempt diagnostic persist', () => {
     })
   })
 
+  it('recognizes a persisted registered intent as a recoverable completed attempt', () => {
+    expect(
+      recoveryFromAttempt({
+        status: 'completed',
+        errorCode: null,
+        resultJson: {
+          kind: 'registered_intent',
+          intent: {
+            key: 'task.departure-creation.requested',
+            confidence: 'high',
+          },
+          message: '准备建立出发任务。',
+        },
+        mastraTraceId: null,
+      }),
+    ).toEqual({
+      recoverable: true,
+      status: 'completed',
+      errorCode: null,
+    })
+  })
+
   it('copies provider usage onto the Context Manifest without forging actual tokens', () => {
     expect(
       manifestUsageUpdate({

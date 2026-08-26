@@ -25,6 +25,72 @@ const REVIEW_ARGS = {
 }
 
 describe('createMastraHeadlessExecutor', () => {
+  it('returns only the registered departure intent from an accepted bounded routing result', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个七月喀纳斯团',
+      generate: async () => ({
+        text: '正在准备建团任务。',
+        toolCalls: [{ toolName: 'routeConversation' }],
+        toolResults: [
+          {
+            toolName: 'routeConversation',
+            result: {
+              status: 'accepted',
+              decision: 'propose_departure_creation',
+              registeredIntent: {
+                key: 'task.departure-creation.requested',
+                confidence: 'high',
+                goal: '创建七月喀纳斯团',
+              },
+            },
+          },
+        ],
+      }),
+    })
+
+    await expect(executor(IDENTITY)).resolves.toMatchObject({
+      kind: 'registered_intent',
+      intent: {
+        key: 'task.departure-creation.requested',
+        confidence: 'high',
+        goal: '创建七月喀纳斯团',
+      },
+    })
+  })
+
+  it('turns an accepted ambiguous routing result into a persistent clarification outcome', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我处理一下发团',
+      generate: async () => ({
+        text: '需要确认你的目标。',
+        toolCalls: [{ toolName: 'routeConversation' }],
+        toolResults: [
+          {
+            payload: {
+              toolName: 'routeConversation',
+              result: {
+                status: 'accepted',
+                decision: 'request_clarification',
+                interaction: {
+                  type: 'free_text',
+                  prompt: '你希望新建发团，还是查询已有发团？',
+                },
+              },
+            },
+          },
+        ],
+      }),
+    })
+
+    await expect(executor(IDENTITY)).resolves.toMatchObject({
+      kind: 'awaiting_user_input',
+      interaction: {
+        type: 'free_text',
+        prompt: '你希望新建发团，还是查询已有发团？',
+      },
+    })
+  })
+
   it('passes the Worker User plaintext from the headless request into generate', async () => {
     const executor = createMastraHeadlessExecutor({
       readUserText: async (request) => request.userText,

@@ -17,6 +17,7 @@ import { createReadConversationHistoryTool } from './read-conversation-history.t
 import { createReadConversationSourceTool } from './read-conversation-source.tool'
 import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
+import { createConversationRoutingTool } from './conversation-routing.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
 import { wrapAgentExecutionWithoutInboundAuth } from './sanitize-model-headers'
 import { TokenLimiterProcessor } from '@mastra/core/processors'
@@ -56,6 +57,9 @@ function createMastra(
     getMaterialParseResult: createGetMaterialParseResultTool(config),
     readConversationHistory: createReadConversationHistoryTool(config),
     readConversationSource: createReadConversationSourceTool(config),
+    ...(definition.key === 'conversation.general'
+      ? { routeConversation: createConversationRoutingTool() }
+      : {}),
   }
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),

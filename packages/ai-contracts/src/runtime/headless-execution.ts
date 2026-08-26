@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { aiCollaborationErrorSchema } from '../errors/ai-collaboration-error'
 import { submitReviewPackageModelInputSchema } from '../tools/review-package'
+import { registeredAgentIntentSchema } from './conversation-routing'
 
 export const USAGE_SOURCES = ['missing', 'estimated', 'actual'] as const
 
@@ -84,6 +85,7 @@ export const headlessDiagnosticSchema = z
 
 export const HEADLESS_EXECUTION_OUTCOME_KINDS = [
   'completed',
+  'registered_intent',
   'awaiting_user_input',
   'awaiting_review',
   'failed',
@@ -111,6 +113,15 @@ export const headlessExecutionRequestSchema = headlessExecutionIdentitySchema
 export const headlessCompletedResultSchema = z
   .object({
     kind: z.literal('completed'),
+    message: z.string().min(1),
+    diagnostic: headlessDiagnosticSchema.optional(),
+  })
+  .strip()
+
+export const headlessRegisteredIntentResultSchema = z
+  .object({
+    kind: z.literal('registered_intent'),
+    intent: registeredAgentIntentSchema,
     message: z.string().min(1),
     diagnostic: headlessDiagnosticSchema.optional(),
   })
@@ -175,6 +186,7 @@ export const headlessFailedResultSchema = z
 
 export const headlessExecutionResultSchema = z.discriminatedUnion('kind', [
   headlessCompletedResultSchema,
+  headlessRegisteredIntentResultSchema,
   headlessAwaitingUserInputResultSchema,
   headlessAwaitingReviewResultSchema,
   headlessFailedResultSchema,
@@ -184,6 +196,7 @@ export type HeadlessExecutionIdentity = z.infer<typeof headlessExecutionIdentity
 export type HeadlessExecutionRequest = z.infer<typeof headlessExecutionRequestSchema>
 export type HeadlessExecutionResult = z.infer<typeof headlessExecutionResultSchema>
 export type HeadlessCompletedResult = z.infer<typeof headlessCompletedResultSchema>
+export type HeadlessRegisteredIntentResult = z.infer<typeof headlessRegisteredIntentResultSchema>
 export type HeadlessInteraction = z.infer<typeof headlessInteractionSchema>
 export type HeadlessAwaitingUserInputResult = z.infer<typeof headlessAwaitingUserInputResultSchema>
 export type HeadlessAwaitingReviewResult = z.infer<typeof headlessAwaitingReviewResultSchema>

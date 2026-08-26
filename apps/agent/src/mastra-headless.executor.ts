@@ -2,6 +2,8 @@ import {
   AI_CREATE_CAPABILITY_DEFINITIONS,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
   AiCollaborationError,
+  CONVERSATION_ROUTING_TOOL,
+  conversationRoutingOutputSchema,
   submitReviewPackageModelInputSchema,
   uniqueCapabilityDefinitions,
   type HeadlessExecutionRequest,
@@ -39,6 +41,22 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
         return { kind: 'awaiting_review', reviewPackage, diagnostic }
       }
       const message = output.text?.trim() || '已处理当前说明。'
+      const routing = acceptedConversationRoutingFromGenerate(output)
+      if (routing?.decision === 'propose_departure_creation') {
+        return {
+          kind: 'registered_intent',
+          intent: routing.registeredIntent,
+          message,
+          diagnostic,
+        }
+      }
+      if (routing?.decision === 'request_clarification') {
+        return {
+          kind: 'awaiting_user_input',
+          interaction: routing.interaction,
+          diagnostic,
+        }
+      }
       return { kind: 'completed', message, diagnostic }
     } catch (error) {
       const mapped = mapModelError(error)
@@ -124,6 +142,39 @@ function acceptedReviewPackageFromGenerate(output: MastraGenerateLike) {
     candidates: accepted.candidates,
   })
   return parsed.success ? parsed.data : null
+}
+
+function acceptedConversationRoutingFromGenerate(output: MastraGenerateLike) {
+  const result = lastToolResult(output.toolResults, CONVERSATION_ROUTING_TOOL.name)
+  const parsed = conversationRoutingOutputSchema.safeParse(result)
+  return parsed.success ? parsed.data : null
+}
+
+function lastToolResult(toolResults: unknown[] | undefined, expectedToolName: string): unknown {
+  if (!toolResults) {
+    return null
+  }
+  let last: unknown = null
+  for (const item of toolResults) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+    const candidate = item as {
+      toolName?: unknown
+      payload?: { toolName?: unknown; result?: unknown }
+      result?: unknown
+    }
+    const toolName =
+      typeof candidate.toolName === 'string'
+        ? candidate.toolName
+        : typeof candidate.payload?.toolName === 'string'
+          ? candidate.payload.toolName
+          : null
+    if (toolName === expectedToolName) {
+      last = candidate.result ?? candidate.payload?.result ?? null
+    }
+  }
+  return last
 }
 
 function lastAcceptedProposeResult(toolResults: unknown[] | undefined) {

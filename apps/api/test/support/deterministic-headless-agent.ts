@@ -14,6 +14,7 @@ export async function startDeterministicHeadlessAgent(options: {
   url: string
   origin: string
   setOutcome: (outcome: HeadlessExecutionResult) => void
+  setOutcomes: (outcomes: readonly HeadlessExecutionResult[]) => void
   holdNextCall: () => void
   release: () => void
   close: () => Promise<void>
@@ -22,7 +23,7 @@ export async function startDeterministicHeadlessAgent(options: {
   lastUserText: () => string | null
   failNextHttp: (status: number) => void
 }> {
-  let outcome = options.outcome
+  let outcomes = [options.outcome]
   let callCount = 0
   let lastContext: unknown = null
   let lastUserText: string | null = null
@@ -105,6 +106,7 @@ export async function startDeterministicHeadlessAgent(options: {
       if (hold) {
         await hold
       }
+      const outcome = outcomes.length > 1 ? outcomes.shift()! : outcomes[0]
       json(response, 200, { data: outcome })
       return
     }
@@ -121,7 +123,13 @@ export async function startDeterministicHeadlessAgent(options: {
     url: `http://127.0.0.1:${address.port}/v1/headless-runs`,
     origin: `http://127.0.0.1:${address.port}`,
     setOutcome: (next) => {
-      outcome = next
+      outcomes = [next]
+    },
+    setOutcomes: (next) => {
+      if (next.length === 0) {
+        throw new Error('deterministic outcomes must not be empty')
+      }
+      outcomes = [...next]
     },
     holdNextCall: () => {
       hold = new Promise((resolve) => {
