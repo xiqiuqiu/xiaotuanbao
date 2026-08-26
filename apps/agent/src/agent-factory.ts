@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 import {
   requestContextSchema,
+  tokenLimiterLimitForModel,
   type AgentDefinition,
   type RequestContext,
 } from '@xiaotuanbao/ai-contracts'
@@ -16,6 +17,8 @@ import { createSearchRouteTemplatesTool } from './search-route-templates.tool'
 import { createSubmitReviewPackageTool } from './submit-review-package.tool'
 import { wrapAgentStreamToRestoreToolReasoning } from './restore-tool-reasoning'
 import { wrapAgentExecutionWithoutInboundAuth } from './sanitize-model-headers'
+import { TokenLimiterProcessor } from '@mastra/core/processors'
+import { adaptMastraTokenLimiter, createTokenLimiterSafetyNet } from './token-limiter-safety-net'
 
 export const AI_CREATE_AGENT_ID = 'ai-create-readonly-assist'
 
@@ -53,6 +56,7 @@ function createMastra(
   const tools = Object.fromEntries(
     Object.entries(registeredTools).filter(([name]) => allowed.has(name)),
   ) as Partial<typeof registeredTools>
+  const limiterLimit = tokenLimiterLimitForModel(config.model ?? 'deepseek/deepseek-chat')
   const agent = new Agent({
     id: AI_CREATE_AGENT_ID,
     name: definition.name,
@@ -63,6 +67,17 @@ function createMastra(
       apiKey: config.modelApiKey || 'missing',
     },
     tools,
+    inputProcessors: [
+      createTokenLimiterSafetyNet({
+        limit: limiterLimit,
+        inner: adaptMastraTokenLimiter(
+          new TokenLimiterProcessor({
+            limit: limiterLimit,
+            trimMode: 'contiguous',
+          }),
+        ),
+      }),
+    ],
   })
 
   wrapAgentExecutionWithoutInboundAuth(agent)

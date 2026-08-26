@@ -31,6 +31,9 @@ describe('buildBudgetedContext', () => {
     expect(result.userText).toContain('"objectVersion":3')
     expect(result.userText).toContain('此前讨论采用三日行程')
     expect(result.budget.estimatorVersion).toBe('utf8-bytes-ceil-div3/v1')
+    expect(result.budget.tokenLimiterProcessorVersion).toBe('mastra-token-limiter-contiguous/v1')
+    expect(result.budget.tokenLimiterTrimMode).toBe('contiguous')
+    expect(result.budget.tokenLimiterLimitTokens).toBeGreaterThan(result.budget.softInputLimitTokens)
     expect(result.budget.outputReserveTokens).toBeGreaterThan(0)
     expect(result.budget.providerFramingTokens).toBeGreaterThan(0)
     expect(result.sections.map((section) => section.key)).toEqual([

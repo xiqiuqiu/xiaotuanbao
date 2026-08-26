@@ -31,6 +31,14 @@ describe('mapModelError', () => {
     expect(mapModelError(new Error('content filter refused the request')).code).toBe('MODEL_REFUSED')
   })
 
+  it('maps TokenLimiter tripwires to a recoverable capacity failure', () => {
+    const trip = new Error('TokenLimiterProcessor: No messages fit within the remaining token budget.')
+    trip.name = 'TripWire'
+    expect(mapModelError(trip).code).toBe('CONTEXT_CAPACITY_EXCEEDED')
+    expect(mapModelError(new Error('CONTEXT_CAPACITY_EXCEEDED')).code).toBe('CONTEXT_CAPACITY_EXCEEDED')
+    expect(mapModelError(new Error('CONTEXT_CAPACITY_EXCEEDED')).retryable).toBe(true)
+  })
+
   it('keeps existing collaboration errors', () => {
     const original = AiCollaborationError.fromCode('INVALID_FORMAT')
     expect(mapModelError(original)).toBe(original)

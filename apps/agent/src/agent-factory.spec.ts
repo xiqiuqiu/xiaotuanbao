@@ -1,7 +1,7 @@
 import { createAiCreateMastraFromDefinition, toolNamesForRequestContext } from './agent-factory'
 import { requestContextSchema } from '@xiaotuanbao/ai-contracts'
 
-const agentConfigs: Array<{ tools: Record<string, unknown> }> = []
+const agentConfigs: Array<{ tools: Record<string, unknown>; inputProcessors?: unknown[] }> = []
 jest.mock('@mastra/core', () => ({ Mastra: class Mastra {} }))
 jest.mock('@mastra/core/agent', () => ({
   Agent: class Agent {
@@ -16,6 +16,14 @@ jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
 jest.mock('./restore-tool-reasoning', () => ({ wrapAgentStreamToRestoreToolReasoning: jest.fn() }))
 jest.mock('./sanitize-model-headers', () => ({ wrapAgentExecutionWithoutInboundAuth: jest.fn() }))
+const limiterConfigs: Array<{ limit: number; trimMode?: string }> = []
+jest.mock('@mastra/core/processors', () => ({
+  TokenLimiterProcessor: class TokenLimiterProcessor {
+    constructor(options: { limit: number; trimMode?: string }) {
+      limiterConfigs.push(options)
+    }
+  },
+}))
 
 const context = requestContextSchema.parse({
   organizationId: 'org-1',
@@ -54,6 +62,17 @@ describe('Agent Factory', () => {
       'getTaskContext',
       'searchRouteTemplates',
     ])
+    const processors = agentConfigs.at(-1)?.inputProcessors as Array<{
+      trimMode?: string
+      limit?: number
+    }>
+    expect(processors).toHaveLength(1)
+    expect(processors[0]).toMatchObject({ trimMode: 'contiguous' })
+    expect(processors[0]?.limit).toBeGreaterThan(0)
+    expect(limiterConfigs.at(-1)).toMatchObject({
+      trimMode: 'contiguous',
+      limit: processors[0]?.limit,
+    })
   })
 
   it('通用纯文本 Capability 不向模型暴露建团工具', () => {

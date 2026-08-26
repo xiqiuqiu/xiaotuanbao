@@ -1749,6 +1749,10 @@ model AiContextManifest {
   excerptDigests           Json           @default("[]") @map("excerpt_digests")
   budget                   Json           @default("{}")
   sections                 Json           @default("[]")
+  processorVersion         String?        @map("processor_version")
+  usageSource              AiUsageSource  @default(missing) @map("usage_source")
+  usage                    Json?
+  stepUsages               Json           @default("[]") @map("step_usages")
   createdAt                DateTime       @default(now()) @map("created_at")
   attempts                 AiAgentAttempt[]
   aiActions                AiAction[]

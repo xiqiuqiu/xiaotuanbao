@@ -1,8 +1,11 @@
 import { AiCollaborationError } from '../errors/ai-collaboration-error'
 import {
+  aggregateUsageCounts,
   diagnosticFromResult,
   headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
+  resolveDiagnosticUsage,
+  usageCountsFromProvider,
 } from './headless-execution'
 
 const identity = {
@@ -204,6 +207,7 @@ describe('headless Agent execution contract', () => {
     ).toEqual({
       usageSource: 'missing',
       toolSteps: [],
+      modelSteps: [],
     })
   })
 
@@ -273,5 +277,32 @@ describe('headless Agent execution contract', () => {
         diagnostic: { usageSource: 'missing', usage: { total: 10 } },
       }),
     ).toThrow()
+  })
+
+  it('records provider usage as actual and never treats estimates as provider tokens', () => {
+    expect(usageCountsFromProvider({ inputTokens: 120, outputTokens: 40, totalTokens: 160 })).toEqual({
+      input: 120,
+      output: 40,
+      total: 160,
+    })
+    expect(resolveDiagnosticUsage({ provider: { inputTokens: 12, outputTokens: 3 } })).toEqual({
+      usageSource: 'actual',
+      usage: { input: 12, output: 3 },
+    })
+    expect(resolveDiagnosticUsage({ estimated: { total: 90 } })).toEqual({
+      usageSource: 'estimated',
+      usage: { total: 90 },
+    })
+    expect(resolveDiagnosticUsage({ provider: {}, estimated: { input: 80 } })).toEqual({
+      usageSource: 'estimated',
+      usage: { input: 80 },
+    })
+    expect(resolveDiagnosticUsage({})).toEqual({ usageSource: 'missing' })
+    expect(
+      aggregateUsageCounts([
+        { input: 10, output: 2, total: 12 },
+        { input: 20, output: 5, total: 25 },
+      ]),
+    ).toEqual({ input: 30, output: 7, total: 37 })
   })
 })

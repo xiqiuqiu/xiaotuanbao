@@ -563,7 +563,12 @@ describe('headless Agent runtime contract', () => {
         data: {
           kind: 'completed',
           message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
-          diagnostic: { usageSource: 'missing', toolSteps: [] },
+          diagnostic: {
+            processorVersion: 'mastra-token-limiter-contiguous/v1',
+            usageSource: 'missing',
+            toolSteps: [],
+            modelSteps: [],
+          },
         },
       })
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)

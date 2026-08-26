@@ -33,6 +33,28 @@ export function attemptDiagnosticUpdate(result?: HeadlessExecutionResult): {
   }
 }
 
+export function manifestUsageUpdate(result?: HeadlessExecutionResult): {
+  processorVersion?: string
+  usageSource: AiUsageSource
+  usage: Prisma.InputJsonValue | typeof Prisma.DbNull
+  stepUsages: Prisma.InputJsonValue
+} {
+  if (!result) {
+    return {
+      usageSource: 'missing',
+      usage: Prisma.DbNull,
+      stepUsages: [],
+    }
+  }
+  const record = attemptDiagnosticPersist(result)
+  return {
+    ...(record.processorVersion ? { processorVersion: record.processorVersion } : {}),
+    usageSource: record.usageSource,
+    usage: record.usage ?? Prisma.DbNull,
+    stepUsages: record.modelSteps as Prisma.InputJsonValue,
+  }
+}
+
 export function recoveryFromAttempt(attempt: {
   status: 'running' | 'completed' | 'failed'
   errorCode: string | null

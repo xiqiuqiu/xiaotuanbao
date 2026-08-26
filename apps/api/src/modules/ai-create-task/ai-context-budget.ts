@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto'
 import {
   AI_CREATE_SYSTEM_INSTRUCTIONS,
   PINNED_PARSE_CONTEXT_PREFACE,
+  TOKEN_ESTIMATOR_VERSION,
+  TOKEN_LIMITER_PROCESSOR_VERSION,
+  TOKEN_LIMITER_TRIM_MODE,
+  OUTPUT_RESERVE_VERSION,
+  PROVIDER_FRAMING_VERSION,
   aiCreateModelContractForTools,
+  contextCapacityProfileFor,
+  tokenLimiterLimitTokens,
   type ConversationEventForAgent,
   type MaterialParseIndexItem,
 } from '@xiaotuanbao/ai-contracts'
@@ -12,52 +19,7 @@ import {
 } from './ai-conversation.constants'
 
 export const CONTEXT_CAPACITY_EXCEEDED = 'CONTEXT_CAPACITY_EXCEEDED'
-export const CONTEXT_PROFILE_MISSING = 'CONTEXT_PROFILE_MISSING'
-
-const TOKEN_ESTIMATOR_VERSION = 'utf8-bytes-ceil-div3/v1'
-const PROVIDER_FRAMING_VERSION = 'openai-compatible-framing/v1'
-const OUTPUT_RESERVE_VERSION = 'ai-create-output-reserve/v1'
-
-interface ContextBudgetProfile {
-  profileVersion: string
-  contextWindowTokens: number
-  softInputLimitTokens: number
-  outputReserveTokens: number
-  providerFramingTokens: number
-  safetyMarginTokens: number
-}
-
-const CONTEXT_BUDGET_PROFILES: Readonly<Record<string, ContextBudgetProfile>> = {
-  deterministic: {
-    profileVersion: 'ai-create-deterministic-32k/v1',
-    contextWindowTokens: 32_768,
-    softInputLimitTokens: 24_576,
-    outputReserveTokens: 4_096,
-    providerFramingTokens: 1_024,
-    safetyMarginTokens: 2_048,
-  },
-  'deepseek/deepseek-chat': {
-    profileVersion: 'ai-create-deepseek-chat-32k/v1',
-    contextWindowTokens: 32_768,
-    softInputLimitTokens: 24_576,
-    outputReserveTokens: 4_096,
-    providerFramingTokens: 1_024,
-    safetyMarginTokens: 2_048,
-  },
-  'deepseek/deepseek-v4-flash': {
-    profileVersion: 'ai-create-deepseek-v4-flash-32k/v1',
-    contextWindowTokens: 32_768,
-    softInputLimitTokens: 24_576,
-    outputReserveTokens: 4_096,
-    providerFramingTokens: 1_024,
-    safetyMarginTokens: 2_048,
-  },
-}
-
-const MODEL_ID_ALIASES: Readonly<Record<string, string>> = {
-  'deepseek-chat': 'deepseek/deepseek-chat',
-  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
-}
+export { CONTEXT_PROFILE_MISSING } from '@xiaotuanbao/ai-contracts'
 
 export interface BudgetProjection {
   conversationBackground: { summary: string | null; summaryVersion: number | null }
@@ -87,11 +49,14 @@ export interface ContextBudgetRecord {
   estimatorVersion: string
   providerFramingVersion: string
   outputReserveVersion: string
+  tokenLimiterProcessorVersion: string
+  tokenLimiterTrimMode: 'contiguous'
   contextWindowTokens: number
   softInputLimitTokens: number
   outputReserveTokens: number
   providerFramingTokens: number
   safetyMarginTokens: number
+  tokenLimiterLimitTokens: number
   staticInputTokens: number
   dynamicBudgetTokens: number
   estimatedInputTokens: number
@@ -119,7 +84,8 @@ export function buildBudgetedContext(input: {
   systemPromptVersion?: string
   toolSchemaVersion?: string
 }): BudgetedContext {
-  const profile = contextBudgetProfileFor(input.modelId)
+  const profile = contextCapacityProfileFor(input.modelId)
+  const limiterLimit = tokenLimiterLimitTokens(profile)
   const modelContract = aiCreateModelContractForTools(input.toolNames)
   const businessFactsText = stableJson(input.businessFacts)
   const unresolvedStateText = stableJson(input.unresolvedState)
@@ -248,11 +214,14 @@ export function buildBudgetedContext(input: {
       estimatorVersion: TOKEN_ESTIMATOR_VERSION,
       providerFramingVersion: PROVIDER_FRAMING_VERSION,
       outputReserveVersion: OUTPUT_RESERVE_VERSION,
+      tokenLimiterProcessorVersion: TOKEN_LIMITER_PROCESSOR_VERSION,
+      tokenLimiterTrimMode: TOKEN_LIMITER_TRIM_MODE,
       contextWindowTokens: profile.contextWindowTokens,
       softInputLimitTokens: profile.softInputLimitTokens,
       outputReserveTokens: profile.outputReserveTokens,
       providerFramingTokens: profile.providerFramingTokens,
       safetyMarginTokens: profile.safetyMarginTokens,
+      tokenLimiterLimitTokens: limiterLimit,
       staticInputTokens,
       dynamicBudgetTokens,
       estimatedInputTokens,
@@ -261,15 +230,6 @@ export function buildBudgetedContext(input: {
     projection,
     truncationReasons: projection.truncationReasons,
   }
-}
-
-function contextBudgetProfileFor(modelId: string): ContextBudgetProfile {
-  const canonicalModelId = MODEL_ID_ALIASES[modelId] ?? modelId
-  const profile = CONTEXT_BUDGET_PROFILES[canonicalModelId]
-  if (!profile) {
-    throw new Error(`${CONTEXT_PROFILE_MISSING}: ${modelId}`)
-  }
-  return profile
 }
 
 function renderUserText(input: {

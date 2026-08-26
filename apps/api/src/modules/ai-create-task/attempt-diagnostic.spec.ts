@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
-import { attemptDiagnosticUpdate, recoveryFromAttempt } from './attempt-diagnostic'
+import { attemptDiagnosticUpdate, manifestUsageUpdate, recoveryFromAttempt } from './attempt-diagnostic'
 
 describe('Attempt diagnostic persist', () => {
   it('defaults omitted diagnostic to missing usage without inventing tokens', () => {
@@ -38,6 +38,7 @@ describe('Attempt diagnostic persist', () => {
               latencyMs: 32,
             },
           ],
+          modelSteps: [],
         },
       }),
     ).toMatchObject({
@@ -56,6 +57,7 @@ describe('Attempt diagnostic persist', () => {
           usage: { total: 90 },
           errorCode: 'INVALID_FORMAT',
           toolSteps: [],
+          modelSteps: [],
         },
       }),
     ).toMatchObject({
@@ -82,5 +84,39 @@ describe('Attempt diagnostic persist', () => {
       status: 'completed',
       errorCode: null,
     })
+  })
+
+  it('copies provider usage onto the Context Manifest without forging actual tokens', () => {
+    expect(
+      manifestUsageUpdate({
+        kind: 'completed',
+        message: 'ok',
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'actual',
+          usage: { input: 80, output: 20, total: 100 },
+          toolSteps: [],
+          modelSteps: [
+            { stepIndex: 0, usageSource: 'actual', usage: { input: 40, output: 8, total: 48 } },
+            { stepIndex: 1, usageSource: 'actual', usage: { input: 40, output: 12, total: 52 } },
+          ],
+        },
+      }),
+    ).toEqual({
+      processorVersion: 'mastra-token-limiter-contiguous/v1',
+      usageSource: 'actual',
+      usage: { input: 80, output: 20, total: 100 },
+      stepUsages: [
+        { stepIndex: 0, usageSource: 'actual', usage: { input: 40, output: 8, total: 48 } },
+        { stepIndex: 1, usageSource: 'actual', usage: { input: 40, output: 12, total: 52 } },
+      ],
+    })
+
+    expect(manifestUsageUpdate()).toEqual({
+      usageSource: 'missing',
+      usage: Prisma.DbNull,
+      stepUsages: [],
+    })
+    expect(manifestUsageUpdate()).not.toHaveProperty('processorVersion')
   })
 })
