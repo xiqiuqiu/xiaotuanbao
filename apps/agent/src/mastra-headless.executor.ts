@@ -1,21 +1,22 @@
 import {
   AI_CREATE_CAPABILITY_DEFINITIONS,
   CONVERSATION_GENERAL_CAPABILITY_DEFINITIONS,
+  AiCollaborationError,
   submitReviewPackageModelInputSchema,
-  type HeadlessDiagnostic,
   type HeadlessExecutionRequest,
   type ToolStepDiagnostic,
 } from '@xiaotuanbao/ai-contracts'
 import type { HeadlessExecutor } from './headless-execution'
 import { mapModelError } from './map-agent-error'
+import {
+  diagnosticFromMastraGenerate,
+  isCapacityTripwire,
+  type MastraGenerateLike,
+} from './provider-usage'
 
 const FALLBACK_USER_TEXT = '请根据 getTaskContext 处理当前输入批次。'
 
-export interface MastraGenerateLike {
-  text?: string
-  toolCalls?: unknown[]
-  toolResults?: unknown[]
-}
+export type { MastraGenerateLike }
 
 export interface MastraHeadlessExecutorDeps {
   readUserText: (request: HeadlessExecutionRequest) => Promise<string>
@@ -27,7 +28,11 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
     try {
       const userText = (await deps.readUserText(request)).trim() || FALLBACK_USER_TEXT
       const output = await deps.generate(userText)
-      const diagnostic = diagnosticFromGenerate(output.toolCalls)
+      const toolSteps = toolStepsFromCalls(output.toolCalls)
+      const diagnostic = diagnosticFromMastraGenerate(output, toolSteps)
+      if (isCapacityTripwire(output)) {
+        return capacityFailure(diagnostic)
+      }
       const reviewPackage = acceptedReviewPackageFromGenerate(output)
       if (reviewPackage) {
         return { kind: 'awaiting_review', reviewPackage, diagnostic }
@@ -40,19 +45,23 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
         kind: 'failed',
         error: mapped.toJSON(),
         diagnostic: {
-          usageSource: 'missing',
+          ...diagnosticFromMastraGenerate({}, []),
           errorCode: mapped.code,
-          toolSteps: [],
         },
       }
     }
   }
 }
 
-function diagnosticFromGenerate(toolCalls: unknown[] | undefined): HeadlessDiagnostic {
+function capacityFailure(diagnostic: ReturnType<typeof diagnosticFromMastraGenerate>) {
+  const error = AiCollaborationError.fromCode('CONTEXT_CAPACITY_EXCEEDED')
   return {
-    usageSource: 'missing',
-    toolSteps: toolStepsFromCalls(toolCalls),
+    kind: 'failed' as const,
+    error: error.toJSON(),
+    diagnostic: {
+      ...diagnostic,
+      errorCode: error.code,
+    },
   }
 }
 

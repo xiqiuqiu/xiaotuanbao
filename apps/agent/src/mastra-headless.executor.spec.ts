@@ -37,7 +37,12 @@ describe('createMastraHeadlessExecutor', () => {
     await expect(executor(IDENTITY)).resolves.toEqual({
       kind: 'completed',
       message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
-      diagnostic: { usageSource: 'missing', toolSteps: [] },
+      diagnostic: {
+        processorVersion: 'mastra-token-limiter-contiguous/v1',
+        usageSource: 'missing',
+        toolSteps: [],
+        modelSteps: [],
+      },
     })
   })
 
@@ -82,6 +87,7 @@ describe('createMastraHeadlessExecutor', () => {
       kind: 'awaiting_review',
       reviewPackage: REVIEW_ARGS,
       diagnostic: {
+        processorVersion: 'mastra-token-limiter-contiguous/v1',
         usageSource: 'missing',
         toolSteps: [
           {
@@ -92,6 +98,7 @@ describe('createMastraHeadlessExecutor', () => {
             status: 'succeeded',
           },
         ],
+        modelSteps: [],
       },
     })
   })
@@ -125,6 +132,7 @@ describe('createMastraHeadlessExecutor', () => {
       kind: 'completed',
       message: '摘录对不上冻结消息，请修正后再提。',
       diagnostic: {
+        processorVersion: 'mastra-token-limiter-contiguous/v1',
         usageSource: 'missing',
         toolSteps: [
           {
@@ -135,6 +143,7 @@ describe('createMastraHeadlessExecutor', () => {
             status: 'succeeded',
           },
         ],
+        modelSteps: [],
       },
     })
   })
@@ -151,10 +160,63 @@ describe('createMastraHeadlessExecutor', () => {
       kind: 'failed',
       error: AiCollaborationError.fromCode('MODEL_TIMEOUT').toJSON(),
       diagnostic: {
+        processorVersion: 'mastra-token-limiter-contiguous/v1',
         usageSource: 'missing',
         errorCode: 'MODEL_TIMEOUT',
         toolSteps: [],
+        modelSteps: [],
       },
+    })
+  })
+
+  it('associates provider usage with the Attempt diagnostic and keeps estimates distinct', async () => {
+    const withActual = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      generate: async () => ({
+        text: '已记下。',
+        totalUsage: { inputTokens: 80, outputTokens: 20, totalTokens: 100 },
+        steps: [
+          { usage: { inputTokens: 40, outputTokens: 8, totalTokens: 48 } },
+          { usage: { inputTokens: 40, outputTokens: 12, totalTokens: 52 } },
+        ],
+      }),
+    })
+    await expect(withActual(IDENTITY)).resolves.toMatchObject({
+      kind: 'completed',
+      diagnostic: {
+        usageSource: 'actual',
+        usage: { input: 80, output: 20, total: 100 },
+        modelSteps: [
+          { stepIndex: 0, usageSource: 'actual', usage: { input: 40, output: 8, total: 48 } },
+          { stepIndex: 1, usageSource: 'actual', usage: { input: 40, output: 12, total: 52 } },
+        ],
+      },
+    })
+
+    const withoutUsage = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      generate: async () => ({ text: '已记下。' }),
+    })
+    const missing = await withoutUsage(IDENTITY)
+    expect(missing).toMatchObject({ kind: 'completed', diagnostic: { usageSource: 'missing' } })
+    expect(missing.kind === 'completed' ? missing.diagnostic?.usage : 'x').toBeUndefined()
+  })
+
+  it('turns a TokenLimiter tripwire into a recoverable capacity failure', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      generate: async () => ({
+        tripwire: {
+          processorId: 'token-limiter',
+          reason: 'TokenLimiterProcessor: No messages fit within the remaining token budget.',
+        },
+      }),
+    })
+
+    await expect(executor(IDENTITY)).resolves.toMatchObject({
+      kind: 'failed',
+      error: { code: 'CONTEXT_CAPACITY_EXCEEDED', retryable: true },
+      diagnostic: { errorCode: 'CONTEXT_CAPACITY_EXCEEDED' },
     })
   })
 })

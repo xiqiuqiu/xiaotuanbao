@@ -166,6 +166,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
             latencyMs: 40,
           },
         ],
+        modelSteps: [],
       },
     }
   }

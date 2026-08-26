@@ -1,4 +1,5 @@
 import { AiCollaborationError, type AiCollaborationErrorCode } from '@xiaotuanbao/ai-contracts'
+import { isTokenLimiterTripWire } from './capacity-tripwire'
 
 export function mapAgentFetchError(payload: unknown): AiCollaborationError {
   if (payload && typeof payload === 'object' && 'code' in payload) {
@@ -26,6 +27,10 @@ export function mapModelError(error: unknown): AiCollaborationError {
     return error
   }
 
+  if (isTokenLimiterTripWire(error)) {
+    return AiCollaborationError.fromCode('CONTEXT_CAPACITY_EXCEEDED')
+  }
+
   const name = error instanceof Error ? error.name : ''
   const message = error instanceof Error ? error.message : String(error)
   if (name === 'TimeoutError' || name === 'AbortError' || /timeout|aborted/i.test(message)) {
@@ -47,6 +52,7 @@ function isCollaborationCode(code: unknown): code is AiCollaborationErrorCode {
     code === 'DELEGATION_INVALID' ||
     code === 'SERVICE_IDENTITY_INVALID' ||
     code === 'VERSION_CONFLICT' ||
-    code === 'REVIEW_PENDING'
+    code === 'REVIEW_PENDING' ||
+    code === 'CONTEXT_CAPACITY_EXCEEDED'
   )
 }

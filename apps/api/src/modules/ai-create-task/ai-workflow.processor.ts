@@ -15,6 +15,7 @@ import {
   capabilityGrantResolver,
   capabilitiesForPendingReview,
   requestContextSchema,
+  TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
   type RequestContext,
   versionedDefinitionRefSchema,
@@ -83,7 +84,7 @@ import {
   materialProgressFromDeps,
   parseErrorMessage,
 } from './departure-material.constants'
-import { attemptDiagnosticUpdate } from './attempt-diagnostic'
+import { attemptDiagnosticUpdate, manifestUsageUpdate } from './attempt-diagnostic'
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage } from './review-package.projection'
@@ -797,6 +798,7 @@ export class AiWorkflowProcessor {
               excerptDigests: JSON.parse(JSON.stringify(manifestRecord.excerptDigests)) as Prisma.InputJsonValue,
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
+              processorVersion: TOKEN_LIMITER_PROCESSOR_VERSION,
             },
           })
       const attempt = await tx.aiAgentAttempt.create({
@@ -1037,6 +1039,7 @@ export class AiWorkflowProcessor {
               excerptDigests: [],
               budget: JSON.parse(JSON.stringify(manifestRecord.budget)) as Prisma.InputJsonValue,
               sections: JSON.parse(JSON.stringify(manifestRecord.sections)) as Prisma.InputJsonValue,
+              processorVersion: TOKEN_LIMITER_PROCESSOR_VERSION,
             },
           })
       const attempt = await tx.aiAgentAttempt.create({
@@ -1301,6 +1304,7 @@ export class AiWorkflowProcessor {
           endedAt: new Date(),
         },
       })
+      await this.writeManifestUsage(tx, attemptId, result)
       await tx.aiWorkflowJob.update({
         where: { id: job.id },
         data: {
@@ -1505,13 +1509,14 @@ export class AiWorkflowProcessor {
             resultJson: (result ?? {
               kind: 'failed',
               error: AiCollaborationError.fromCode(
-                errorCode === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'AGENT_UNAVAILABLE',
+                collaborationErrorCodeForWorkflowFailure(errorCode),
               ).toJSON(),
             }) as unknown as Prisma.InputJsonValue,
             ...attemptDiagnosticUpdate(result),
             endedAt: new Date(),
           },
         })
+        await this.writeManifestUsage(tx, attemptId, result)
       }
       await tx.aiWorkflowJob.update({
         where: { id: job.id },
@@ -1543,6 +1548,24 @@ export class AiWorkflowProcessor {
         this.conversationService.publish(job.conversationId, event)
       }
     }
+  }
+
+  private async writeManifestUsage(
+    tx: Prisma.TransactionClient,
+    attemptId: string,
+    result?: HeadlessExecutionResult,
+  ): Promise<void> {
+    const attempt = await tx.aiAgentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { contextManifestId: true },
+    })
+    if (!attempt) {
+      return
+    }
+    await tx.aiContextManifest.update({
+      where: { id: attempt.contextManifestId },
+      data: manifestUsageUpdate(result),
+    })
   }
 
   private leaseUntil(): Date {
@@ -1831,6 +1854,15 @@ function isActivityRunCompleteBoundary(batchStatus: AiInputBatchStatus): boolean
     batchStatus === AiInputBatchStatus.awaiting_review ||
     batchStatus === AiInputBatchStatus.awaiting_user_input
   )
+}
+
+function collaborationErrorCodeForWorkflowFailure(
+  errorCode: string,
+): 'PERMISSION_DENIED' | 'CONTEXT_CAPACITY_EXCEEDED' | 'AGENT_UNAVAILABLE' {
+  if (errorCode === 'PERMISSION_DENIED' || errorCode === 'CONTEXT_CAPACITY_EXCEEDED') {
+    return errorCode
+  }
+  return 'AGENT_UNAVAILABLE'
 }
 
 function isUniqueViolation(error: unknown): boolean {

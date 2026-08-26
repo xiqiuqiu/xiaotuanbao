@@ -38,32 +38,49 @@ export const toolStepDiagnosticSchema = z
   })
   .strict()
 
+function refineUsageSource(
+  value: { usageSource: UsageSource; usage?: UsageCounts },
+  ctx: z.RefinementCtx,
+  pathPrefix: Array<string | number> = [],
+) {
+  if (value.usageSource === 'missing' && value.usage != null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'missing usage must not invent token counts',
+      path: [...pathPrefix, 'usage'],
+    })
+  }
+  if (value.usageSource === 'actual' && value.usage == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'actual usage requires provider token counts',
+      path: [...pathPrefix, 'usage'],
+    })
+  }
+}
+
+export const modelStepUsageSchema = z
+  .object({
+    stepIndex: z.number().int().nonnegative(),
+    usageSource: z.enum(USAGE_SOURCES),
+    usage: usageCountsSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => refineUsageSource(value, ctx))
+
 export const headlessDiagnosticSchema = z
   .object({
     mastraTraceId: z.string().min(1).optional(),
+    processorVersion: z.string().min(1).optional(),
     usageSource: z.enum(USAGE_SOURCES),
     usage: usageCountsSchema.optional(),
     latencyMs: z.number().int().nonnegative().optional(),
     errorCode: z.string().min(1).optional(),
     toolSteps: z.array(toolStepDiagnosticSchema).default([]),
+    modelSteps: z.array(modelStepUsageSchema).default([]),
   })
   .strict()
-  .superRefine((value, ctx) => {
-    if (value.usageSource === 'missing' && value.usage != null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'missing usage must not invent token counts',
-        path: ['usage'],
-      })
-    }
-    if (value.usageSource === 'actual' && value.usage == null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'actual usage requires provider token counts',
-        path: ['usage'],
-      })
-    }
-  })
+  .superRefine((value, ctx) => refineUsageSource(value, ctx))
 
 export const HEADLESS_EXECUTION_OUTCOME_KINDS = [
   'completed',
@@ -173,6 +190,7 @@ export type HeadlessAwaitingReviewResult = z.infer<typeof headlessAwaitingReview
 export type HeadlessFailedResult = z.infer<typeof headlessFailedResultSchema>
 export type UsageCounts = z.infer<typeof usageCountsSchema>
 export type ToolStepDiagnostic = z.infer<typeof toolStepDiagnosticSchema>
+export type ModelStepUsage = z.infer<typeof modelStepUsageSchema>
 export type HeadlessDiagnostic = z.infer<typeof headlessDiagnosticSchema>
 
 export function diagnosticFromResult(result: HeadlessExecutionResult): HeadlessDiagnostic {
@@ -180,30 +198,109 @@ export function diagnosticFromResult(result: HeadlessExecutionResult): HeadlessD
     result.diagnostic ?? {
       usageSource: 'missing',
       toolSteps: [],
+      modelSteps: [],
     }
   )
 }
 
 export interface AttemptDiagnosticRecord {
   mastraTraceId: string | null
+  processorVersion: string | null
   usageSource: UsageSource
   usage: UsageCounts | null
   latencyMs: number | null
   errorCode: string | null
   toolSteps: ToolStepDiagnostic[]
+  modelSteps: ModelStepUsage[]
 }
 
 export function attemptDiagnosticPersist(result: HeadlessExecutionResult): AttemptDiagnosticRecord {
   const diagnostic = diagnosticFromResult(result)
   return {
     mastraTraceId: diagnostic.mastraTraceId ?? null,
+    processorVersion: diagnostic.processorVersion ?? null,
     usageSource: diagnostic.usageSource,
     usage: diagnostic.usage ?? null,
     latencyMs: diagnostic.latencyMs ?? null,
     errorCode:
       diagnostic.errorCode ?? (result.kind === 'failed' ? result.error.code : null),
-    toolSteps: diagnostic.toolSteps,
+    toolSteps: diagnostic.toolSteps ?? [],
+    modelSteps: diagnostic.modelSteps ?? [],
   }
+}
+
+export function usageCountsFromProvider(value: unknown): UsageCounts | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const record = value as Record<string, unknown>
+  const input = nonNegativeInt(
+    record.input ?? record.inputTokens ?? record.promptTokens,
+  )
+  const output = nonNegativeInt(
+    record.output ?? record.outputTokens ?? record.completionTokens,
+  )
+  const total = nonNegativeInt(record.total ?? record.totalTokens)
+  if (input == null && output == null && total == null) {
+    return undefined
+  }
+  return {
+    ...(input != null ? { input } : {}),
+    ...(output != null ? { output } : {}),
+    ...(total != null ? { total } : {}),
+  }
+}
+
+export function resolveDiagnosticUsage(input: {
+  provider?: unknown
+  estimated?: UsageCounts
+}): Pick<HeadlessDiagnostic, 'usageSource' | 'usage'> {
+  const actual = usageCountsFromProvider(input.provider)
+  if (actual) {
+    return { usageSource: 'actual', usage: actual }
+  }
+  if (input.estimated) {
+    return { usageSource: 'estimated', usage: input.estimated }
+  }
+  return { usageSource: 'missing' }
+}
+
+export function aggregateUsageCounts(values: ReadonlyArray<UsageCounts | undefined>): UsageCounts | undefined {
+  let input = 0
+  let output = 0
+  let total = 0
+  let hasInput = false
+  let hasOutput = false
+  let hasTotal = false
+  for (const value of values) {
+    if (!value) {
+      continue
+    }
+    if (value.input != null) {
+      input += value.input
+      hasInput = true
+    }
+    if (value.output != null) {
+      output += value.output
+      hasOutput = true
+    }
+    if (value.total != null) {
+      total += value.total
+      hasTotal = true
+    }
+  }
+  if (!hasInput && !hasOutput && !hasTotal) {
+    return undefined
+  }
+  return {
+    ...(hasInput ? { input } : {}),
+    ...(hasOutput ? { output } : {}),
+    ...(hasTotal ? { total } : {}),
+  }
+}
+
+function nonNegativeInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined
 }
 
 export interface AttemptRecoverySnapshot {

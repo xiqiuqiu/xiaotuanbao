@@ -15,11 +15,13 @@ describe('Attempt diagnostic persist', () => {
 
     expect(attemptDiagnosticPersist(result)).toEqual({
       mastraTraceId: null,
+      processorVersion: null,
       usageSource: 'missing',
       usage: null,
       latencyMs: null,
       errorCode: null,
       toolSteps: [],
+      modelSteps: [],
     })
     expect(diagnosticFromResult(result).usage).toBeUndefined()
   })
@@ -50,6 +52,7 @@ describe('Attempt diagnostic persist', () => {
       ),
     ).toEqual({
       mastraTraceId: 'trace-actual',
+      processorVersion: null,
       usageSource: 'actual',
       usage: { input: 80, output: 20, total: 100 },
       latencyMs: 640,
@@ -64,6 +67,7 @@ describe('Attempt diagnostic persist', () => {
           latencyMs: 32,
         },
       ],
+      modelSteps: [],
     })
 
     expect(
