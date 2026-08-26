@@ -19,6 +19,7 @@ import {
   TOKEN_LIMITER_PROCESSOR_VERSION,
   type HeadlessExecutionResult,
   type RequestContext,
+  type VersionedDefinitionRef,
   versionedDefinitionRefSchema,
   type SubmitReviewPackageModelInput,
 } from '@xiaotuanbao/ai-contracts'
@@ -31,6 +32,7 @@ import {
   AiReviewPackageStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
+  InputBatchTaskRole,
   OrganizationStatus,
   TaskActivityKind,
   UserStatus,
@@ -74,13 +76,18 @@ import {
 } from './ai-conversation.constants'
 import { isAiCreateAssistEnabledForUser } from './ai-create-assist-access'
 import { isOpenAgentTaskStatus } from './agent-task.runtime'
+import {
+  AgentExecutionRouter,
+  type AgentExecutionRoute,
+  type FrozenAgentAssociation,
+} from './agent-execution-router'
 import { lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
 import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 import { DepartureMaterialService } from './departure-material.service'
-import { PageLocatorResolver } from './page-locator.resolver'
+import { PageLocatorResolver, type ResolvedPageContext } from './page-locator.resolver'
 import {
   PARSE_FAILED_ERROR_CODE,
   materialProgressFromDeps,
@@ -99,6 +106,7 @@ export class AiWorkflowProcessor {
   private readonly workerId = process.env.HOSTNAME?.trim() || `worker-${randomUUID()}`
   private parseInFlight = 0
   private agentInFlight = 0
+  private readonly executionRouter = new AgentExecutionRouter()
 
   constructor(
     private readonly prisma: PrismaService,
@@ -445,21 +453,34 @@ export class AiWorkflowProcessor {
       return
     }
 
-    const authorized = await this.recheckAuthorization(job)
-    if (!authorized.ok) {
-      await this.persistFailure(job, authorized.errorCode)
-      this.workflowLog('failed', {
-        job: job.id,
-        type: job.type,
-        reason: authorized.errorCode,
-        attempt: job.attemptCount,
-      })
-      return
-    }
-
     try {
+      const routing = await this.resolveExecutionRoute(job)
+      if (routing.route.kind !== 'execution_definition') {
+        throw new Error(`尚未实现的 Agent 执行路由结果: ${routing.route.kind}`)
+      }
+      const executionRoute = routing.route
+      const routedJob = executionRoute.taskId
+        ? { ...job, taskId: executionRoute.taskId }
+        : job
+      const authorized = await this.recheckAuthorization(routedJob, executionRoute)
+      if (!authorized.ok) {
+        await this.persistFailure(routedJob, authorized.errorCode)
+        this.workflowLog('failed', {
+          job: job.id,
+          type: job.type,
+          reason: authorized.errorCode,
+          attempt: job.attemptCount,
+        })
+        return
+      }
+
       // Attempt 与 batch_status:agent_running 在同一事务提交后，才开启模型流。
-      const prepared = await this.prepareAttempt(job, authorized.permissionKeys)
+      const prepared = await this.prepareAttempt(
+        routedJob,
+        authorized.permissionKeys,
+        executionRoute,
+        routing.pageAttachment,
+      )
       this.workflowLog('agent_started', {
         job: job.id,
         attemptId: prepared.attemptId,
@@ -472,7 +493,7 @@ export class AiWorkflowProcessor {
       }
       const result = await this.withHeartbeat(job.id, async () => {
         const outcome = await this.headlessClient.run(prepared.request, prepared.delegationToken)
-        await this.persistOutcome(job, prepared.attemptId, outcome)
+        await this.persistOutcome(routedJob, executionRoute, prepared.attemptId, outcome)
         return outcome
       })
       if (result.kind === 'failed') {
@@ -598,6 +619,7 @@ export class AiWorkflowProcessor {
 
   private async recheckAuthorization(
     job: ClaimedJob,
+    route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
   ): Promise<{ ok: true; permissionKeys: string[] } | { ok: false; errorCode: string }> {
     const user = await this.prisma.user.findFirst({
       where: {
@@ -612,8 +634,11 @@ export class AiWorkflowProcessor {
     if (!user) {
       return { ok: false, errorCode: 'PERMISSION_DENIED' }
     }
-    if (!job.taskId) {
+    if (route.agentDefinition.key === CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key) {
       return { ok: true, permissionKeys: [] }
+    }
+    if (!job.taskId || route.agentDefinition.key !== AI_CREATE_AGENT_DEFINITION_REF.key) {
+      return { ok: false, errorCode: 'PERMISSION_DENIED' }
     }
     if (!isAiCreateAssistEnabledForUser(this.configService, user.id)) {
       return { ok: false, errorCode: 'PERMISSION_DENIED' }
@@ -625,7 +650,100 @@ export class AiWorkflowProcessor {
     return { ok: true, permissionKeys }
   }
 
-  private async prepareAttempt(job: ClaimedJob, permissionKeys: readonly string[]): Promise<{
+  private async resolveExecutionRoute(job: ClaimedJob): Promise<{
+    route: AgentExecutionRoute
+    pageAttachment?: ResolvedPageContext
+  }> {
+    const [pageAttachment, taskLinks, interaction, versionEvent] = await Promise.all([
+      this.pageLocatorResolver.resolve(
+        job.organizationId,
+        job.inputBatch.creatorUserId,
+        job.inputBatch.pageLocator,
+      ),
+      this.prisma.inputBatchTaskLink.findMany({
+        where: { inputBatchId: job.inputBatchId, organizationId: job.organizationId },
+        select: { taskId: true, role: true, task: { select: { type: true } } },
+      }),
+      job.inputBatch.replyToEventId
+        ? this.prisma.aiConversationInteraction.findUnique({
+            where: { eventId: job.inputBatch.replyToEventId },
+            select: {
+              id: true,
+              inputBatch: {
+                select: {
+                  agentAttempts: {
+                    orderBy: { startedAt: 'desc' },
+                    take: 1,
+                    select: {
+                      taskId: true,
+                      agentDefinitionKey: true,
+                      agentDefinitionVersion: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : Promise.resolve(null),
+      this.prisma.aiConversationEvent.findFirst({
+        where: {
+          conversationId: job.conversationId,
+          organizationId: job.organizationId,
+          sequence: job.inputBatch.conversationVersion,
+        },
+        select: { payload: true },
+      }),
+    ])
+    const reviewPackageId = stringField(versionEvent?.payload, 'reviewPackageId')
+    const reviewPackage = reviewPackageId
+      ? await this.prisma.aiReviewPackage.findFirst({
+          where: { id: reviewPackageId, organizationId: job.organizationId },
+          select: {
+            id: true,
+            taskId: true,
+            attempt: {
+              select: { agentDefinitionKey: true, agentDefinitionVersion: true },
+            },
+          },
+        })
+      : null
+    const interactionAttempt = interaction?.inputBatch.agentAttempts[0]
+    const interactionAssociation = interactionAttempt
+      ? frozenAssociation(interaction.id, interactionAttempt, interactionAttempt.taskId)
+      : undefined
+    const reviewAssociation = reviewPackage?.attempt
+      ? frozenAssociation(reviewPackage.id, reviewPackage.attempt, reviewPackage.taskId)
+      : undefined
+
+    return {
+      route: this.executionRouter.route({
+        associations: {
+          ...(interactionAssociation ? { interaction: interactionAssociation } : {}),
+          ...(reviewAssociation ? { reviewPackage: reviewAssociation } : {}),
+          taskRefs: taskLinks
+            .filter(
+              (link) =>
+                link.role === InputBatchTaskRole.primary ||
+                link.role === InputBatchTaskRole.created,
+            )
+            .map((link) => ({
+              taskId: link.taskId,
+              role: link.role,
+              taskType: link.task.type,
+            })),
+        },
+        ...(pageAttachment ? { pageAttachment } : {}),
+      }),
+      ...(pageAttachment ? { pageAttachment } : {}),
+    }
+  }
+
+  private async prepareAttempt(
+    job: ClaimedJob,
+    permissionKeys: readonly string[],
+    route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
+    pageAttachment?: ResolvedPageContext,
+  ): Promise<{
     request: {
       taskId?: string
       conversationId: string
@@ -639,8 +757,11 @@ export class AiWorkflowProcessor {
     delegationToken: string
     requestContext: RequestContext
   }> {
-    if (!job.taskId) {
-      return this.prepareTasklessAttempt(job)
+    if (route.agentDefinition.key === CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key) {
+      return this.prepareTasklessAttempt(job, pageAttachment)
+    }
+    if (route.agentDefinition.key !== AI_CREATE_AGENT_DEFINITION_REF.key || !job.taskId) {
+      throw new Error(`不支持的 Agent 执行定义: ${definitionRefLog(route.agentDefinition)}`)
     }
     const taskId = job.taskId
     const userEvent = await this.prisma.aiConversationEvent.findUniqueOrThrow({
@@ -950,7 +1071,10 @@ export class AiWorkflowProcessor {
     }
   }
 
-  private async prepareTasklessAttempt(job: ClaimedJob): Promise<{
+  private async prepareTasklessAttempt(
+    job: ClaimedJob,
+    pageContext?: ResolvedPageContext,
+  ): Promise<{
     request: {
       conversationId: string
       inputBatchId: string
@@ -1006,11 +1130,6 @@ export class AiWorkflowProcessor {
       parseVersion: item.parseVersion as number,
       contentDigest: item.contentDigest ?? '',
     }))
-    const pageContext = await this.pageLocatorResolver.resolve(
-      job.organizationId,
-      job.inputBatch.creatorUserId,
-      job.inputBatch.pageLocator,
-    )
     const published: { conversationId: string; eventId: string }[] = []
     const prepared = await this.prisma.$transaction(async (tx) => {
       await lockConversationRuntime(tx, job.organizationId, job.conversationId)
@@ -1218,6 +1337,7 @@ export class AiWorkflowProcessor {
 
   private async persistOutcome(
     job: ClaimedJob,
+    route: Extract<AgentExecutionRoute, { kind: 'execution_definition' }>,
     attemptId: string,
     result: HeadlessExecutionResult,
   ): Promise<void> {
@@ -1270,7 +1390,7 @@ export class AiWorkflowProcessor {
           return
         }
       }
-      const finalAuthorization = await this.recheckAuthorization(job)
+      const finalAuthorization = await this.recheckAuthorization(job, route)
       if (!finalAuthorization.ok) {
         throw AiCollaborationError.fromCode('PERMISSION_DENIED')
       }
@@ -1903,6 +2023,26 @@ function definitionRefLog(ref: { key: string; version: number }): string {
 
 function capabilityRefsLog(refs: readonly { key: string; version: number }[]): string {
   return refs.map(definitionRefLog).join(',')
+}
+
+function frozenAssociation(
+  id: string,
+  attempt: { agentDefinitionKey: string; agentDefinitionVersion: number },
+  taskId?: string | null,
+): FrozenAgentAssociation {
+  const agentDefinition: VersionedDefinitionRef = versionedDefinitionRefSchema.parse({
+    key: attempt.agentDefinitionKey,
+    version: attempt.agentDefinitionVersion,
+  })
+  return { id, agentDefinition, ...(taskId ? { taskId } : {}) }
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const field = (value as Record<string, unknown>)[key]
+  return typeof field === 'string' && field.length > 0 ? field : undefined
 }
 
 function collaborationErrorCodeForWorkflowFailure(
