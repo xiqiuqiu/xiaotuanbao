@@ -425,22 +425,22 @@ describe('resolvePreparedProjection', () => {
     expect(resolved.summaryVersion).toBeNull()
   })
 
-  it('当前指令本身超出预算时失败为 CONTEXT_CAPACITY_EXCEEDED，不伪装成摘要准备失败', async () => {
+  it('当前指令本身超出预算时标记 currentInputOverflow，交由分块索引而不是直接容量失败', async () => {
     const events = bulkyEventsForHistoryRatio(CONTEXT_COMPACTION_ACTIVATE_RATIO + 0.05)
     const { prisma } = compactionTx({ failWrite: true })
-    await expect(
-      resolvePreparedProjection(prisma as never, {
-        ...plannerBase,
-        organizationId: 'org-1',
-        conversationVersion: 20,
-        currentUserMessageSequence: 20,
-        currentUserText: `本轮唯一指令：${'甲'.repeat(80_000)}`,
-        events: [
-          ...events,
-          { sequence: 20, kind: 'user_message', payload: { text: `本轮唯一指令：${'甲'.repeat(80_000)}` } },
-        ],
-      }),
-    ).rejects.toThrow(CONTEXT_CAPACITY_EXCEEDED)
+    const resolved = await resolvePreparedProjection(prisma as never, {
+      ...plannerBase,
+      organizationId: 'org-1',
+      conversationVersion: 20,
+      currentUserMessageSequence: 20,
+      currentUserText: `本轮唯一指令：${'甲'.repeat(80_000)}`,
+      events: [
+        ...events,
+        { sequence: 20, kind: 'user_message', payload: { text: `本轮唯一指令：${'甲'.repeat(80_000)}` } },
+      ],
+    })
+    expect(resolved.plan.currentInputOverflow).toBe(true)
+    expect(resolved.plan.useSummary).toBe(false)
   })
 })
 

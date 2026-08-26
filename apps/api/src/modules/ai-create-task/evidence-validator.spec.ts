@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { EvidenceProposalV1, MaterialParsePageV1 } from '@xiaotuanbao/ai-contracts'
+import { buildSourceIndex, sourceFactToUserMessageEvidence } from '@xiaotuanbao/ai-contracts'
 import { validateEvidenceProposal } from './evidence-validator'
 
 const ocrPage = {
@@ -455,6 +456,55 @@ describe('validateEvidenceProposal', () => {
     expect(result).toMatchObject({
       success: false,
       errors: [{ code: 'ATTEMPT_MANIFEST_MISMATCH' }],
+    })
+  })
+
+  it('分块抽取的关键字段可通过 locator 回到原文并进入通用证据校验', () => {
+    const original =
+      '请按资料建团。出团日期 2026-09-12。团费 12800元。姓名：张三。授权：可提交审核。'
+    const index = buildSourceIndex(
+      {
+        kind: 'user_message',
+        conversationId: 'conversation-1',
+        eventId: 'event-3',
+        sequence: 3,
+      },
+      original,
+    )
+    const date = index.facts.find((fact) => fact.kind === 'date')
+    if (!date) {
+      throw new Error('expected date fact')
+    }
+    const mapped = sourceFactToUserMessageEvidence(date)
+    const result = validateEvidenceProposal({
+      proposal: proposal([mapped]),
+      authority: {
+        ...authority,
+        events: [
+          {
+            id: 'event-3',
+            conversationId: 'conversation-1',
+            sequence: 3,
+            kind: 'user_message',
+            text: original,
+          },
+        ],
+      },
+      systemRules: {},
+    })
+
+    expect(original.slice(date.charRange.start, date.charRange.end)).toBe('2026-09-12')
+    expect(result).toMatchObject({
+      success: true,
+      normalizedProposal: {
+        evidenceCatalog: [
+          {
+            kind: 'user_message',
+            locator: { eventId: 'event-3', sequence: 3 },
+            excerpt: { text: '2026-09-12' },
+          },
+        ],
+      },
     })
   })
 })

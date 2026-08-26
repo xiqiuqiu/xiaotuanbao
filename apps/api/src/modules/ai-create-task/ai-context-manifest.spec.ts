@@ -214,6 +214,7 @@ describe('frozen context projection', () => {
     expect(left.budget.estimatorVersion).toBe('test-estimator/v1')
     expect(left.sections[0]?.sha256).toBe('b'.repeat(64))
     expect(left.summaryVersion).toBeNull()
+    expect(left.sourceIndexVersion).toBeNull()
     expect(left.excerptDigests[0]?.sha256).toBe(digestExcerpt('喀纳斯'))
   })
 

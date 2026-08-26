@@ -46,6 +46,7 @@ export interface ContextManifestInput {
   budget: ContextBudgetRecord
   sections: ContextSectionUsage[]
   summaryVersion?: number | null
+  sourceIndexVersion?: number | null
 }
 
 export interface ContextManifestRecord {
@@ -65,6 +66,7 @@ export interface ContextManifestRecord {
   inputHash: string
   truncationReasons: string[]
   summaryVersion: number | null
+  sourceIndexVersion: number | null
   excerptDigests: ExcerptDigest[]
   materialVersions: Array<{ materialId: string; parseResultVersion: number }>
   sourceVersions: Array<{ sourceId: string; parseVersion: number; contentDigest: string }>
@@ -128,6 +130,7 @@ export function buildContextManifest(input: ContextManifestInput): ContextManife
     inputHash: input.inputHash,
     truncationReasons,
     summaryVersion: input.summaryVersion ?? null,
+    sourceIndexVersion: input.sourceIndexVersion ?? null,
     excerptDigests,
     materialVersions,
     sourceVersions,
