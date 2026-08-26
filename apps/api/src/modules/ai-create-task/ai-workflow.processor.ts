@@ -892,7 +892,7 @@ export class AiWorkflowProcessor {
         where: { id: attempt.id },
         data: { grantedCapabilities: grants.granted },
       })
-      await this.appendAgentRunningStatus(tx, job, attempt.id, published)
+      await this.appendAgentRunningStatus(tx, job, attempt, published)
       return {
         runId: attempt.id,
         attemptId: attempt.id,
@@ -1163,7 +1163,7 @@ export class AiWorkflowProcessor {
         where: { id: attempt.id },
         data: { grantedCapabilities: grants.granted },
       })
-      await this.appendAgentRunningStatus(tx, job, attempt.id, published)
+      await this.appendAgentRunningStatus(tx, job, attempt, published)
       return {
         attemptId: attempt.id,
         contextManifestId: manifest.id,
@@ -1707,7 +1707,7 @@ export class AiWorkflowProcessor {
   private async appendAgentRunningStatus(
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
-    attemptId: string,
+    attempt: { id: string; generation: number },
     published: { conversationId: string; eventId: string }[],
   ): Promise<void> {
     const runningEventId = await markBatchAgentRunningAfterAttempt(
@@ -1717,8 +1717,8 @@ export class AiWorkflowProcessor {
         organizationId: job.organizationId,
         conversationId: job.conversationId,
         batchId: job.inputBatchId,
-        attemptId,
-        generation: job.generation,
+        attemptId: attempt.id,
+        generation: attempt.generation,
       },
     )
     published.push({ conversationId: job.conversationId, eventId: runningEventId })

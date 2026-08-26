@@ -32,7 +32,7 @@ type AppendEvent = (
   },
 ) => Promise<{ id: string }>
 
-/** 批次进入 AI 处理中：Attempt 行必须已经存在，再追加带 attemptId 与 generation 的 batch_status。 */
+/** 批次进入 AI 处理中：Attempt 行必须已经存在，再追加带 attemptId 与 generation 的 batch_status。已是 agent_running 时仍追加，让租约恢复的新 Attempt 也有稳定主键。 */
 export async function markBatchAgentRunningAfterAttempt(
   tx: Prisma.TransactionClient,
   appendEvent: AppendEvent,
