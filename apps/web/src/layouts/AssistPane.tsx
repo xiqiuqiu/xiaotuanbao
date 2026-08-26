@@ -6,7 +6,6 @@ import { ConversationHistoryTrigger } from '@/features/agent-conversation/Conver
 import { useExpandAgentConversation } from '@/features/agent-conversation/use-expand-agent-conversation'
 import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { useUiStore } from '@/app/store/ui.store'
-import { useAssistPaneSlot } from './assist-pane-slot'
 import styles from './AssistPane.module.css'
 
 export function AssistPane() {
@@ -15,9 +14,6 @@ export function AssistPane() {
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const startNewConversation = useAgentConversationStore((state) => state.startNewConversation)
   const expandToGlobal = useExpandAgentConversation()
-  const conversationView = useAgentConversationStore((state) => state.view)
-  const { content, headerExtra } = useAssistPaneSlot()
-  const showHistoryProjection = conversationView !== 'page' || !content
   return (
     <aside
       className={styles.slot}
@@ -45,7 +41,6 @@ export function AssistPane() {
               onClick={() => startNewConversation()}
               aria-label="新建会话"
             />
-            {headerExtra}
             <Tooltip title="进入全局模式" placement="bottom">
               <Button
                 className={`${styles.iconButton} ${styles.expand}`}
@@ -65,7 +60,7 @@ export function AssistPane() {
           </div>
         </div>
         <div className={styles.body}>
-          {showHistoryProjection ? <AgentConversationChat /> : content}
+          <AgentConversationChat />
         </div>
       </div>
     </aside>

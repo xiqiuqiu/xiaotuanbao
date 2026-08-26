@@ -10,13 +10,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { evaluateReviewConfirmMerge } from '@xiaotuanbao/ai-contracts'
 import { DepartureType } from '@xiaotuanbao/shared'
 import type {
-  AiCreateAssistSession,
   AiReviewPackageView,
   DepartureSummary,
   RouteTemplateDetailSummary,
 } from '@/types/api'
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { AssistPane } from '@/layouts/AssistPane'
 import { AssistPaneSlotProvider } from '@/layouts/assist-pane-slot'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
@@ -294,35 +294,6 @@ function renderWizard({ strict = false }: { strict?: boolean } = {}) {
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree)
 }
 
-function mockAssistSession(
-  overrides: Partial<AiCreateAssistSession> = {},
-): AiCreateAssistSession {
-  return {
-    task: {
-      id: 'task-assist',
-      status: 'in_progress',
-      currentPhase: 'basic_info',
-      departureId: null,
-      creatorUserId: 'user-1',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      draft: {
-        version: 1,
-        snapshot: { mode: 'manual', routeName: '' },
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-      pendingReview: null,
-    },
-    conversation: {
-      id: 'conv-1',
-      status: 'open',
-      events: [],
-      activeBatch: null,
-    },
-    ...overrides,
-  }
-}
-
 function mockPendingReview(
   overrides: Partial<AiReviewPackageView> = {},
 ): AiReviewPackageView {
@@ -435,12 +406,14 @@ describe('CreateDepartureWizard', () => {
     Modal.destroyAll()
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
+    useAgentConversationStore.getState().reset()
     hitlRegistration.current = null
   })
 
   beforeEach(() => {
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
+    useAgentConversationStore.getState().reset()
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
@@ -1105,50 +1078,25 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('opens AI assist from an empty form without posting an invalid draft or leaving the form', async () => {
+  it('opens the unified Agent pane from an empty form without starting a dedicated assist session', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: {
-        id: 'task-assist',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        departureId: null,
-        creatorUserId: 'user-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        draft: {
-          version: 1,
-          snapshot: { mode: 'manual', routeName: '' },
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        pendingReview: null,
-      },
-      conversation: {
-        id: 'conv-1',
-        status: 'open' as const,
-        events: [],
-        activeBatch: null,
-      },
     })
 
     renderWizard()
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
 
     expect(useUiStore.getState().assistPaneCollapsed).toBe(false)
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: '发团资料' })).toBeInTheDocument()
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
+    expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '发团资料' })).not.toBeInTheDocument()
     expect(screen.queryByText('AI 辅助建团')).not.toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '下一步' })).not.toBeInTheDocument()
     expect(saveDepartureCreationDraft).not.toHaveBeenCalled()
-    expect(startAiCreateAssistSession).toHaveBeenCalledWith({
-      taskId: undefined,
-      draft: expect.objectContaining({ mode: 'manual', routeName: '' }),
-    })
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
   it('shows persisted background work at the task entry without opening the assist pane', async () => {
@@ -1166,33 +1114,10 @@ describe('CreateDepartureWizard', () => {
     expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
-  it('starts assist when the pane expands without clicking AI 辅助', async () => {
+  it('uses the unified Agent pane when expanded without clicking AI 辅助', async () => {
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: {
-        id: 'task-assist',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        departureId: null,
-        creatorUserId: 'user-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        draft: {
-          version: 1,
-          snapshot: { mode: 'manual', routeName: '' },
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        pendingReview: null,
-      },
-      conversation: {
-        id: 'conv-1',
-        status: 'open' as const,
-        events: [],
-        activeBatch: null,
-      },
     })
 
     renderWizard()
@@ -1203,56 +1128,19 @@ describe('CreateDepartureWizard', () => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
 
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(startAiCreateAssistSession).toHaveBeenCalled()
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
+    expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /AI 辅助/ })).toBeInTheDocument()
     expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
   })
 
-  it('shows a loading transition while the assist session is starting', async () => {
-    let resolveSession!: (value: ReturnType<typeof mockAssistSession>) => void
-    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
-      enabled: true,
-      agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveSession = resolve
-        }),
-    )
-
-    renderWizard()
-    await screen.findByRole('button', { name: /AI 辅助/ })
-    act(() => {
-      useUiStore.setState({ assistPaneCollapsed: false })
-    })
-
-    expect(await screen.findByRole('status', { name: '正在读取发团草稿' })).toBeInTheDocument()
-    expect(screen.getByText('正在读取发团草稿…')).toBeInTheDocument()
-    expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
-
-    await act(async () => {
-      resolveSession(mockAssistSession())
-    })
-
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(screen.queryByText('正在读取发团草稿…')).not.toBeInTheDocument()
-  })
-
-  it('starts a new assist session when the header toggle reopens the pane', async () => {
+  it('reopening the pane keeps the unified Agent shell and does not start a dedicated session', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
     })
-    vi.mocked(startAiCreateAssistSession)
-      .mockResolvedValueOnce(mockAssistSession())
-      .mockResolvedValueOnce(
-        mockAssistSession({
-          conversation: { id: 'conv-2', status: 'open', events: [], activeBatch: null },
-        }),
-      )
 
     renderWizard()
     await screen.findByRole('button', { name: /AI 辅助/ })
@@ -1260,57 +1148,26 @@ describe('CreateDepartureWizard', () => {
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-authorization')
-    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-run-id')
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
     await waitFor(() => {
-      expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
-    }, { timeout: 700 })
+      expect(screen.queryByRole('complementary', { name: '电子化助理' })).not.toBeInTheDocument()
+    })
 
     act(() => {
       useUiStore.setState({ assistPaneCollapsed: false })
     })
 
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-    expect(startAiCreateAssistSession).toHaveBeenCalledTimes(2)
-    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-authorization')
-    expect(screen.getByTestId('copilot-kit')).not.toHaveAttribute('data-run-id')
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
   })
 
-  it('opens the AI sidebar without losing the form edit buffer', async () => {
+  it('opens the unified Agent pane without losing the form edit buffer', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: {
-        id: 'task-assist',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        departureId: null,
-        creatorUserId: 'user-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        draft: {
-          version: 1,
-          snapshot: {
-            mode: 'manual',
-            routeName: '喀纳斯阿勒泰10日线',
-            name: '喀纳斯阿勒泰10日线',
-          },
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        pendingReview: null,
-      },
-      conversation: {
-        id: 'conv-1',
-        status: 'open' as const,
-        events: [],
-        activeBatch: null,
-      },
     })
 
     renderWizard()
@@ -1320,28 +1177,26 @@ describe('CreateDepartureWizard', () => {
     await user.type(nameInput, '侧栏打开后仍在')
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
     expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
 
     await user.click(screen.getByRole('button', { name: '收起电子化助理' }))
     expect(screen.getByLabelText('团名')).toHaveValue('侧栏打开后仍在')
   })
 
-  it('keeps create departure available after a structured agent failure', async () => {
+  it('keeps create departure available after opening the unified Agent pane', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
     })
-    vi.mocked(startAiCreateAssistSession).mockRejectedValue(new Error('Agent unavailable'))
 
     renderWizard()
     await fillManualRouteAndContinue(user)
     await screen.findByLabelText('团名')
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    await waitFor(() => {
-      expect(startAiCreateAssistSession).toHaveBeenCalled()
-    })
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /创建发团/ }))
     await waitFor(() => {
@@ -1349,97 +1204,11 @@ describe('CreateDepartureWizard', () => {
     })
   })
 
-  it('shows the agreed assist error in the pane when bootstrap fails', async () => {
+  it('does not start a dedicated assist session or rewrite save status when opening the pane', async () => {
     const user = userEvent.setup()
     vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockRejectedValue(new Error('Agent unavailable'))
-
-    renderWizard()
-    await fillManualRouteAndContinue(user)
-    await screen.findByLabelText('团名')
-    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-
-    expect(await screen.findByText('Agent unavailable')).toBeInTheDocument()
-    expect(screen.queryByText('当前页尚未接入业务辅助')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /创建发团/ })).toBeInTheDocument()
-  })
-
-  it('replaces Copilot chat with the error copy when a later bootstrap fails', async () => {
-    const user = userEvent.setup()
-    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
-      enabled: true,
-      agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession)
-      .mockResolvedValueOnce({
-        task: {
-          id: 'task-assist',
-          status: 'in_progress',
-          currentPhase: 'basic_info',
-          departureId: null,
-          creatorUserId: 'user-1',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
-          draft: {
-            version: 1,
-            snapshot: { mode: 'manual', routeName: '' },
-            updatedAt: '2026-01-01T00:00:00.000Z',
-          },
-        },
-        conversation: {
-          id: 'conv-1',
-          status: 'open' as const,
-          events: [],
-          activeBatch: null,
-        },
-      })
-      .mockRejectedValueOnce(new Error('委托已过期'))
-
-    renderWizard()
-    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByText('委托已过期')).toBeInTheDocument()
-    expect(screen.queryByLabelText('询问当前发团草稿')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
-  })
-
-  it('does not mark the form saved when assist bootstrap flush fails', async () => {
-    const user = userEvent.setup()
-    vi.mocked(getAiCreateAssistAvailability).mockResolvedValue({
-      enabled: true,
-      agentRuntimeUrl: '/copilotkit',
-    })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: {
-        id: 'task-assist',
-        status: 'in_progress',
-        currentPhase: 'basic_info',
-        departureId: null,
-        creatorUserId: 'user-1',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        draft: {
-          version: 2,
-          snapshot: {
-            mode: 'manual',
-            routeName: '喀纳斯阿勒泰10日线',
-            name: '未落盘的团名',
-          },
-          updatedAt: '2026-01-01T00:00:00.000Z',
-        },
-        pendingReview: null,
-      },
-      conversation: {
-        id: 'conv-1',
-        status: 'open' as const,
-        events: [],
-        activeBatch: null,
-      },
     })
 
     renderWizard()
@@ -1451,13 +1220,9 @@ describe('CreateDepartureWizard', () => {
     await user.type(nameInput, '未落盘的团名')
 
     await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
+    expect(await screen.findByText('通用会话')).toBeInTheDocument()
+    expect(startAiCreateAssistSession).not.toHaveBeenCalled()
     expect(screen.queryByText('发团创建草稿已保存')).not.toBeInTheDocument()
-    expect(screen.getByText('发团创建草稿保存失败')).toBeInTheDocument()
-
-    mockNavigate.mockClear()
-    await user.click(screen.getByRole('button', { name: /返回发团列表/ }))
-    expect(mockNavigate).not.toHaveBeenCalledWith({ to: '/departure' })
   })
 
   it('shows the pending review overlay and sticky bar from the restored task, not the saved form value', async () => {
@@ -1585,15 +1350,6 @@ describe('CreateDepartureWizard', () => {
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
     })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: restored,
-      conversation: {
-        id: 'conv-1',
-        status: 'open' as const,
-        events: [],
-        activeBatch: null,
-      },
-    })
     vi.mocked(patchAiReviewPackage).mockResolvedValue(restored)
     vi.mocked(confirmAiReviewPackage).mockResolvedValue({
       ...restored,
@@ -1610,8 +1366,6 @@ describe('CreateDepartureWizard', () => {
 
     renderWizard()
     await screen.findByRole('button', { name: '确认写入草稿' })
-    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    await screen.findByLabelText('询问当前发团草稿')
     fireEvent.change(await screen.findByLabelText('团名候选'), { target: { value: '修正团名' } })
     await user.click(screen.getByRole('button', { name: '确认写入草稿' }))
 
@@ -1682,15 +1436,6 @@ describe('CreateDepartureWizard', () => {
       enabled: true,
       agentRuntimeUrl: '/copilotkit',
     })
-    vi.mocked(startAiCreateAssistSession).mockResolvedValue({
-      task: restored,
-      conversation: {
-        id: 'conv-1',
-        status: 'open',
-        events: [],
-        activeBatch: null,
-      },
-    })
     vi.mocked(confirmAiReviewPackage).mockResolvedValue({
       ...restored,
       pendingReview: newestOther,
@@ -1705,9 +1450,15 @@ describe('CreateDepartureWizard', () => {
       },
     })
 
+    useAgentConversationStore.setState({
+      view: 'history',
+      conversationId: 'conv-1',
+      title: '当前会话',
+      returnLocation: null,
+      historyRailCollapsed: false,
+      globalOpen: false,
+    })
     renderWizard()
-    await user.click(await screen.findByRole('button', { name: /AI 辅助/ }))
-    expect(await screen.findByLabelText('询问当前发团草稿')).toBeInTheDocument()
     expect(await screen.findByLabelText('团名候选')).toHaveValue('八月川西团')
     expect(screen.queryByDisplayValue('另一会话团名')).not.toBeInTheDocument()
 

@@ -127,4 +127,18 @@ test.describe('agent conversation modes #370', () => {
       })
       .toBe(1)
   })
+
+  test('新建发团侧栏使用统一 Agent 壳，而不是建团专用欢迎页', async ({ page }) => {
+    await loginAs(page, coordinatorUser)
+    await page.goto(paths.departureNew)
+    await expect(page.getByRole('heading', { name: '新建发团' })).toBeVisible()
+
+    await page.getByRole('button', { name: '展开电子化助理' }).click()
+    const pane = page.getByRole('complementary', { name: '电子化助理' })
+    await expect(pane).toBeVisible()
+    await expect(pane.getByRole('textbox', { name: '询问小团宝业务' })).toBeVisible()
+    await expect(pane.getByRole('button', { name: /补全团名和路线/ })).toHaveCount(0)
+    await expect(pane.getByRole('button', { name: '发团资料' })).toHaveCount(0)
+    await expect(pane.getByRole('region', { name: '电子化助理说明' })).toHaveCount(0)
+  })
 })

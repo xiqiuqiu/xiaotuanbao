@@ -87,21 +87,22 @@ describe('AssistPane', () => {
     expect(useUiStore.getState().assistPaneCollapsed).toBe(true)
   })
 
-  it('renders the registered page slot instead of the placeholder', () => {
+  it('keeps the unified Agent shell even when a page registers a dedicated slot', () => {
     useUiStore.setState({ assistPaneCollapsed: false })
     render(
       <QueryClientProvider client={new QueryClient()}>
         <AssistPaneSlotProvider>
-          <SlotSetter text="建团协助" />
+          <SlotSetter text="建团协助" extra="发团资料" />
           <AssistPane />
         </AssistPaneSlotProvider>
       </QueryClientProvider>,
     )
-    expect(screen.getByText('建团协助')).toBeInTheDocument()
-    expect(screen.queryByText('通用会话')).not.toBeInTheDocument()
+    expect(screen.getByText('通用会话')).toBeInTheDocument()
+    expect(screen.queryByText('建团协助')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '发团资料' })).not.toBeInTheDocument()
   })
 
-  it('replaces the page slot when a historical conversation is selected', () => {
+  it('keeps the unified Agent shell when a historical conversation is selected', () => {
     useUiStore.setState({ assistPaneCollapsed: false })
     useAgentConversationStore.setState({
       view: 'history',
@@ -121,20 +122,6 @@ describe('AssistPane', () => {
     )
     expect(screen.getByText('通用会话')).toBeInTheDocument()
     expect(screen.queryByText('建团协助')).not.toBeInTheDocument()
-  })
-
-  it('renders page header actions next to the close control', () => {
-    useUiStore.setState({ assistPaneCollapsed: false })
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AssistPaneSlotProvider>
-          <SlotSetter text="建团协助" extra="发团资料" />
-          <AssistPane />
-        </AssistPaneSlotProvider>
-      </QueryClientProvider>,
-    )
-    expect(screen.getByRole('button', { name: '发团资料' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '收起电子化助理' })).toBeInTheDocument()
   })
 
   it('expands the same Conversation into the global route and keeps the ID', async () => {

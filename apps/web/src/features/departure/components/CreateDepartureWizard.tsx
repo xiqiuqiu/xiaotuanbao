@@ -12,17 +12,13 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/app/store/auth.store'
 import { useUiStore } from '@/app/store/ui.store'
-import { useAssistPaneSlot } from '@/layouts/assist-pane-slot'
-import { AiCreateAssistChat } from '@/features/ai-assist/AiCreateAssistChat'
-import { AiCreateAssistLoading } from '@/features/ai-assist/AiCreateAssistLoading'
+import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
 import { AiReviewStickyBar } from '@/features/ai-assist/AiReviewStickyBar'
-import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
 import { REVIEW_FIELD_LABELS } from '@/features/ai-assist/review-field-labels'
 import {
   assistStateRefetchInterval,
   taskReviewRefetchInterval,
 } from '@/features/ai-assist/ai-create-assist-polling'
-import { useAiCreateAssistBootstrap } from '@/features/ai-assist/useAiCreateAssistBootstrap'
 import {
   confirmAiCreateTask,
   confirmAiReviewPackage,
@@ -85,7 +81,7 @@ function useCreateDepartureWizardController() {
   const user = useAuthStore((state) => state.user)
   const setAssistPaneCollapsed = useUiStore((state) => state.setAssistPaneCollapsed)
   const assistPaneCollapsed = useUiStore((state) => state.assistPaneCollapsed)
-  const { setContent } = useAssistPaneSlot()
+  const conversationId = useAgentConversationStore((state) => state.conversationId)
   const search = useSearch({ strict: false }) as { copyFrom?: string; taskId?: string }
   const copyFromId = search.copyFrom?.trim()
   const searchTaskId = search.taskId?.trim()
@@ -610,29 +606,13 @@ function useCreateDepartureWizardController() {
     ? ASSIST_TASK_STATUS_LABELS[assistTaskState.status]
     : undefined
 
-  const buildAssistDraft = useCallback(
-    () => buildDepartureCreationDraftSnapshot(routeValuesRef.current, infoForm.getFieldsValue(true)),
-    [infoForm],
-  )
-
-  const getAssistTaskId = useCallback(() => taskIdRef.current, [])
-
-  const { bootstrap, reset, session, error, loading } = useAiCreateAssistBootstrap({
-    enabled: Boolean(assistAvailability?.enabled),
-    flushDraft,
-    buildDraft: buildAssistDraft,
-    getTaskId: getAssistTaskId,
-    applySavedDraft,
-    syncTaskSearch,
-  })
-
-  const { data: taskReview, refetch: refetchTaskReview } = useQuery({
+  const { data: taskReview } = useQuery({
     queryKey: ['ai-create-task', taskId],
     queryFn: () => getAiCreateTask(taskId!),
     enabled: Boolean(taskId),
     refetchInterval: (current) =>
       taskReviewRefetchInterval({
-        paneOpen: Boolean(session && !assistPaneCollapsed),
+        paneOpen: !assistPaneCollapsed,
         hasPendingReview: Boolean(
           current.state.data?.pendingReview || (current.state.data?.pendingReviews?.length ?? 0) > 0,
         ),
@@ -640,11 +620,9 @@ function useCreateDepartureWizardController() {
       }),
     refetchIntervalInBackground: false,
   })
-  const pendingReview = session
-    ? ((taskReview?.pendingReviews ?? []).find(
-        (pkg) => pkg.conversationId === session.conversation.id,
-      ) ??
-      (taskReview?.pendingReview?.conversationId === session.conversation.id
+  const pendingReview = conversationId
+    ? ((taskReview?.pendingReviews ?? []).find((pkg) => pkg.conversationId === conversationId) ??
+      (taskReview?.pendingReview?.conversationId === conversationId
         ? taskReview.pendingReview
         : null))
     : (taskReview?.pendingReview ?? null)
@@ -801,99 +779,7 @@ function useCreateDepartureWizardController() {
 
   const openAssist = useCallback(() => {
     setAssistPaneCollapsed(false)
-    void bootstrap()
-  }, [bootstrap, setAssistPaneCollapsed])
-
-  const ASSIST_PANE_EXIT_MS = 400 /* 480px slide; must match AssistPane.module.css 0.4s */
-
-  useEffect(() => {
-    if (!assistPaneCollapsed) {
-      return
-    }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      reset()
-      return
-    }
-    const id = window.setTimeout(() => {
-      reset()
-    }, ASSIST_PANE_EXIT_MS)
-    return () => {
-      window.clearTimeout(id)
-    }
-  }, [assistPaneCollapsed, reset])
-
-  useEffect(() => {
-    if (!assistAvailability?.enabled || assistPaneCollapsed || session || error) {
-      return
-    }
-    void bootstrap()
-  }, [assistAvailability?.enabled, assistPaneCollapsed, bootstrap, error, session])
-
-  useEffect(() => {
-    if (!assistAvailability?.enabled) {
-      return
-    }
-
-    if (session) {
-      const currentTask = taskReview ?? session.task
-      setContent(
-        <AiCreateAssistChat
-          agentRuntimeUrl={assistAvailability.agentRuntimeUrl ?? '/copilotkit'}
-          taskId={session.task.id}
-          conversationId={session.conversation.id}
-          initialEvents={session.conversation.events}
-          initialActiveBatch={session.conversation.activeBatch}
-          initialDraft={session.conversation.draft}
-          snapshotVersion={currentTask.draft.version}
-          stageKey="basic_info"
-          runStatus="idle"
-          reviewPackageId={pendingReview?.id ?? null}
-          progress={pendingReview ? 'awaiting_review' : 'collecting'}
-          onReviewPackageSubmitted={() => {
-            void refetchTaskReview()
-          }}
-        />,
-      )
-
-      return () => {
-        setContent(null)
-      }
-    }
-
-    if (error) {
-      setContent(
-        <div className={styles.assistMessage}>
-          <p role="alert">{error.message.trim() || ASSIST_ERROR_TEXT}</p>
-          <Button aria-label="重试" onClick={() => void bootstrap()}>
-            重试
-          </Button>
-        </div>,
-      )
-
-      return () => {
-        setContent(null)
-      }
-    }
-
-    if (loading) {
-      setContent(<AiCreateAssistLoading />)
-
-      return () => {
-        setContent(null)
-      }
-    }
-  }, [
-    assistAvailability?.enabled,
-    assistAvailability?.agentRuntimeUrl,
-    error,
-    loading,
-    session,
-    setContent,
-    taskReview,
-    pendingReview,
-    bootstrap,
-    refetchTaskReview,
-  ])
+  }, [setAssistPaneCollapsed])
 
   const stepEnterKey = showCopyBootstrap ? 'bootstrap' : 'form'
 
