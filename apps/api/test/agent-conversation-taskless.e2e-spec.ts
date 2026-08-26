@@ -211,6 +211,55 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(opened.body.data.taskId).toBeUndefined()
   })
 
+  it('accepts and preserves a 100,000-character message for oversized-input indexing', async () => {
+    const text = `${testPrefix} 超长单条消息`.padEnd(100_000, '甲')
+    const sent = await sendFirst(
+      coordinatorToken,
+      text,
+      `${testPrefix}-oversized-message`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+
+    let events = await listEvents(coordinatorToken, conversationId)
+    const userMessage = events.events.find((event) => event.kind === 'user_message')
+    expect(userMessage?.payload.text).toBe(text)
+
+    await processor.processDueJobs(5)
+    events = await listEvents(coordinatorToken, conversationId)
+    expect(events.events.some((event) => event.kind === 'agent_message')).toBe(true)
+    expect(events.activeBatch).toBeNull()
+  })
+
+  it('saves and returns a 100,000-character conversation draft', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 超长草稿会话`,
+      `${testPrefix}-oversized-draft-first`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const text = `${testPrefix} 超长草稿`.padEnd(100_000, '乙')
+
+    const saved = await authRequest(app, coordinatorToken)
+      .put(`/api/agent/conversations/${conversationId}/draft`)
+      .send({ text, draftEpoch: 1 })
+      .expect(200)
+
+    expect(saved.body.data.text).toBe(text)
+  })
+
+  it('returns 413 when a JSON request exceeds the configured body limit', async () => {
+    const response = await authRequest(app, coordinatorToken)
+      .post('/api/agent/conversations/messages')
+      .send({ text: '甲'.repeat(200_000) })
+      .expect(413)
+
+    expect(response.body).toMatchObject({
+      code: 413,
+      message: '请求内容过大',
+      data: null,
+    })
+  })
+
   it('saves a taskless draft by conversation and rejects a stale epoch after send', async () => {
     const sent = await sendFirst(
       coordinatorToken,

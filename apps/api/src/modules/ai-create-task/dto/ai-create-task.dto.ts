@@ -17,6 +17,7 @@ import {
 } from 'class-validator'
 import { Transform, Type } from 'class-transformer'
 import { DepartureCreationDraftMode, DepartureType } from '@xiaotuanbao/shared'
+import { CONVERSATION_TEXT_MAX_CHARS } from '../ai-conversation.constants'
 
 export class DepartureCreationDraftSnapshotDto {
   @IsEnum(DepartureCreationDraftMode)
@@ -175,7 +176,9 @@ export class PatchAiReviewPackageDto {
 export class SendAiConversationMessageDto {
   @IsOptional()
   @IsString()
-  @MaxLength(8000)
+  @MaxLength(CONVERSATION_TEXT_MAX_CHARS, {
+    message: `消息内容不能超过 ${CONVERSATION_TEXT_MAX_CHARS} 个字符`,
+  })
   text?: string
 
   @IsOptional()
@@ -211,7 +214,9 @@ export class SendAiConversationMessageDto {
 
 export class SaveAiConversationTextDraftDto {
   @IsString()
-  @MaxLength(8000)
+  @MaxLength(CONVERSATION_TEXT_MAX_CHARS, {
+    message: `草稿内容不能超过 ${CONVERSATION_TEXT_MAX_CHARS} 个字符`,
+  })
   text!: string
 
   @Type(() => Number)

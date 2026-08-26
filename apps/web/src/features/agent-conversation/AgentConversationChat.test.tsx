@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
-import { sendAgentConversationText } from '@/services/agent-conversation.service'
+import {
+  saveAgentConversationDraft,
+  sendAgentConversationText,
+} from '@/services/agent-conversation.service'
+import { ApiError } from '@/lib/request'
 
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
@@ -57,7 +61,13 @@ vi.mock('@copilotkit/react-core/v2', () => ({
         value={inputValue ?? ''}
         onChange={(event) => onInputChange?.(event.target.value)}
       />
-      <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
+      <button
+        type="button"
+        onClick={() => {
+          onSubmitMessage?.(inputValue ?? '')
+          onInputChange?.('')
+        }}
+      >
         发送
       </button>
     </div>
@@ -90,6 +100,12 @@ describe('AgentConversationChat page locator #371', () => {
       id: 'c-1',
       title: '历史会话',
     })
+    vi.mocked(saveAgentConversationDraft).mockImplementation(async (conversationId, input) => ({
+      conversationId,
+      text: input.text,
+      draftEpoch: input.draftEpoch,
+      revision: 1,
+    }))
     render(<AgentConversationChat />)
     expect(screen.queryByText('当前合作伙伴往来账款')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取当前页面' })).toBeInTheDocument()
@@ -127,5 +143,27 @@ describe('AgentConversationChat page locator #371', () => {
       },
       expect.any(String),
     )
+  })
+
+  it('shows the API validation message and restores the draft when sending fails', async () => {
+    const user = userEvent.setup()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    vi.mocked(sendAgentConversationText).mockRejectedValue(
+      new ApiError('消息内容不能超过 100000 个字符', 400),
+    )
+    render(<AgentConversationChat />)
+
+    const composer = await screen.findByRole('textbox', { name: '询问小团宝业务' })
+    await user.type(composer, '需要保留的超长说明')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '消息内容不能超过 100000 个字符',
+    )
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    expect(composer).toHaveValue('需要保留的超长说明')
   })
 })

@@ -32,7 +32,7 @@ import {
   saveAiConversationDraft,
   stopConversationBatch,
 } from '@/services/ai-create-task.service'
-import { ASSIST_ERROR_TEXT } from './assist-error-text'
+import { ASSIST_ERROR_TEXT, getAssistErrorText } from './assist-error-text'
 import { formatReviewFieldList } from './review-field-labels'
 import {
   BATCH_STATUS_ACTIVITY_TYPE,
@@ -1182,8 +1182,8 @@ export function AiCreateAssistChat({
         if (files.length > 0 || result.events.some((event) => event.kind === 'batch_status')) {
           setMaterialsRefreshKey((key) => key + 1)
         }
-      } catch {
-        setErrorText(ASSIST_ERROR_TEXT)
+      } catch (error) {
+        setErrorText(getAssistErrorText(error))
         updateDraft(nextText)
         setPendingText(null)
         setPendingUploadCount(0)

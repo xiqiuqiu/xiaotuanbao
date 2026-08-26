@@ -21,7 +21,10 @@ import {
   toCopilotChatMessages,
 } from '@/features/ai-assist/ai-create-copilot-messages'
 import { conversationCatchUpIntervalMs } from '@/features/ai-assist/ai-create-assist-polling'
-import { ASSIST_ERROR_TEXT } from '@/features/ai-assist/assist-error-text'
+import {
+  ASSIST_ERROR_TEXT,
+  getAssistErrorText,
+} from '@/features/ai-assist/assist-error-text'
 import chatStyles from '@/features/ai-assist/AiCreateAssistChat.module.css'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -217,18 +220,18 @@ export function AgentConversationChat() {
             title: nextText.slice(0, 40),
           })
         }
-      } catch {
-        setErrorText(ASSIST_ERROR_TEXT)
+      } catch (error) {
+        setErrorText(getAssistErrorText(error))
+        updateDraft(nextText)
         useAgentConversationRuntimeStore.getState().hydrate({
           conversationId: conversationIdRef.current,
-          draft: nextText,
           pendingText: null,
           sending: false,
           sendIdempotencyKey: null,
         })
       }
     },
-    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation],
+    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation, updateDraft],
   )
 
   const messages = useMemo(

@@ -10,6 +10,7 @@ export const CANCEL_INTERACTION_OPERATION = 'ai-conversation.cancel-interaction'
 export const CANCEL_REVIEW_PACKAGE_OPERATION = 'ai-review-package.cancel'
 export const REVIEW_ALREADY_HANDLED_MESSAGE = '审核包已处理'
 export const CONVERSATION_TITLE_MAX_CHARS = 40
+export const CONVERSATION_TEXT_MAX_CHARS = 100_000
 
 /** 确认后续跑喂给模型的本轮原文；不写入 User 消息气泡。 */
 export const REVIEW_CONFIRM_CONTINUATION_TEXT =
