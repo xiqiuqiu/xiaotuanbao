@@ -24,7 +24,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let code = status
     let data: unknown = null
 
-    if (exception instanceof HttpException) {
+    if (isRequestBodyTooLarge(exception)) {
+      status = HttpStatus.PAYLOAD_TOO_LARGE
+      code = status
+      message = '请求内容过大'
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus()
       code = status
       const exceptionResponse = exception.getResponse()
@@ -73,4 +77,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json(body)
   }
+}
+
+function isRequestBodyTooLarge(exception: unknown): boolean {
+  if (!(exception instanceof Error)) {
+    return false
+  }
+  const candidate = exception as Error & {
+    status?: number
+    statusCode?: number
+    type?: string
+  }
+  return (
+    candidate.type === 'entity.too.large' ||
+    candidate.status === HttpStatus.PAYLOAD_TOO_LARGE ||
+    candidate.statusCode === HttpStatus.PAYLOAD_TOO_LARGE
+  )
 }

@@ -8,6 +8,7 @@ import {
   listAiConversationEvents,
   saveAiConversationDraft,
 } from '@/services/ai-create-task.service'
+import { ApiError } from '@/lib/request'
 
 const { addMessage, runAgent, useAgentContext } = vi.hoisted(() => ({
   addMessage: vi.fn(),
@@ -985,6 +986,21 @@ describe('AiCreateAssistChat', () => {
       'AI 辅助暂时不可用，请稍后重试或继续使用表单',
     )
     expect(textarea.value).toBe('保留这句')
+  })
+
+  it('shows the API validation message after a rejected send', async () => {
+    vi.mocked(sendAiConversationMessage).mockRejectedValue(
+      new ApiError('消息内容不能超过 100000 个字符', 400),
+    )
+    render(<AiCreateAssistChat {...chatProps} />)
+    const textarea = screen.getByLabelText('询问当前发团草稿')
+    fireEvent.change(textarea, { target: { value: '需要保留的超长说明' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '消息内容不能超过 100000 个字符',
+    )
+    expect(textarea.value).toBe('需要保留的超长说明')
   })
 
   it('catches up agent replies on mount without waiting for the event stream to error', async () => {

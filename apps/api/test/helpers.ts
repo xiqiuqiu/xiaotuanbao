@@ -1,9 +1,11 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import request from 'supertest'
 import { AppModule } from '../src/app.module'
 import { AllExceptionsFilter } from '../src/common/filters/all-exceptions.filter'
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor'
+import { configureHttpBodyParsers } from '../src/common/http-body-parser'
 import { PrismaService } from '../src/database/prisma/prisma.service'
 
 const TEST_ORIGIN = 'http://localhost:5173'
@@ -13,7 +15,8 @@ export async function createTestApp(): Promise<INestApplication> {
     imports: [AppModule],
   }).compile()
 
-  const app = moduleRef.createNestApplication()
+  const app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false })
+  configureHttpBodyParsers(app)
   app.setGlobalPrefix('api')
   app.useGlobalPipes(
     new ValidationPipe({
