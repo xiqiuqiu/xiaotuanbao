@@ -7,7 +7,8 @@ import type {
   SubmitReviewPackageOutput,
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
-import type { AiActionActor, AiActionForwardContext } from '../ai-action/ai-action.types'
+import { claimedPositiveIntField, claimedStringField } from '../ai-action/ai-action.target'
+import type { AiActionActor, AiActionForwardContext, AiActionNormalizedTarget } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import { AiCreateTaskService } from './ai-create-task.service'
 import type { AiToolRequestUser } from './ai-operation-delegation.guard'
@@ -21,8 +22,11 @@ export class AiToolHttpAdapter {
 
   getTaskContext(user: AiToolRequestUser, body: unknown): Promise<GetTaskContextOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.executeRegistered('getTaskContext', caller, body, () =>
-      this.tasks.getTaskContextForAgent(caller, body),
+    return this.executeRegistered('getTaskContext', caller, body, ({ target }) =>
+      this.tasks.getTaskContextForAgent(caller, {
+        taskId: target.id,
+        runId: caller.runId,
+      }),
     )
   }
 
@@ -31,8 +35,16 @@ export class AiToolHttpAdapter {
     body: unknown,
   ): Promise<SearchRouteTemplatesOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.executeRegistered('searchRouteTemplates', caller, body, () =>
-      this.tasks.searchRouteTemplatesForAgent(caller, body),
+    return this.executeRegistered('searchRouteTemplates', caller, body, ({ target }) =>
+      this.tasks.searchRouteTemplatesForAgent(
+        { ...caller, organizationId: target.id },
+        {
+          taskId: caller.taskId,
+          runId: caller.runId,
+          keyword: claimedStringField(body, 'keyword') ?? undefined,
+          dayCount: claimedPositiveIntField(body, 'dayCount') ?? undefined,
+        },
+      ),
     )
   }
 
@@ -41,8 +53,14 @@ export class AiToolHttpAdapter {
     body: unknown,
   ): Promise<GetMaterialParseResultOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.executeRegistered('getMaterialParseResult', caller, body, () =>
-      this.tasks.getMaterialParseResultForAgent(caller, body),
+    return this.executeRegistered('getMaterialParseResult', caller, body, ({ target }) =>
+      this.tasks.getMaterialParseResultForAgent(caller, {
+        taskId: caller.taskId,
+        runId: caller.runId,
+        materialId: target.id,
+        parseResultVersion: requireTargetVersion(target),
+        pageNumber: claimedPositiveIntField(body, 'pageNumber') ?? undefined,
+      }),
     )
   }
 
@@ -59,11 +77,21 @@ export class AiToolHttpAdapter {
     body: unknown,
   ): Promise<SubmitReviewPackageOutput> {
     const caller = requireTaskBoundUser(user)
-    return this.executeRegistered('proposeReviewPackage', caller, body, async ({ action }) => {
+    return this.executeRegistered('proposeReviewPackage', caller, body, async ({ action, target }) => {
       if (!action?.id) {
         throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
       }
-      return this.tasks.submitReviewPackageForAgent(caller, body, { sourceActionId: action.id })
+      return this.tasks.submitReviewPackageForAgent(
+        caller,
+        {
+          taskId: caller.taskId,
+          runId: caller.runId,
+          objectVersion: requireTargetVersion(target),
+          confirmationUnit: claimedStringField(body, 'confirmationUnit') ?? undefined,
+          candidates: isRecord(body) ? body.candidates : undefined,
+        },
+        { sourceActionId: action.id },
+      )
     })
   }
 
@@ -82,8 +110,22 @@ export class AiToolHttpAdapter {
     if (executed.result !== undefined) {
       return executed.result as T
     }
+    if (executed.action?.reasonCode === 'TARGET_VERSION_MISMATCH') {
+      throw AiCollaborationHttpException.fromCode('VERSION_CONFLICT')
+    }
     throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
   }
+}
+
+function requireTargetVersion(target: AiActionNormalizedTarget): number {
+  if (target.version == null) {
+    throw new Error('NORMALIZED_TARGET_VERSION_MISSING')
+  }
+  return target.version
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object'
 }
 
 function requireTaskBoundUser(

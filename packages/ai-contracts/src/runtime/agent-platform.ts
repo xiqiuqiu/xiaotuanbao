@@ -66,6 +66,7 @@ export interface CapabilityDefinition {
     actionKind: 'read' | 'write'
     decision: 'allow' | 'review' | 'deny'
     targetKind: string
+    denyCodes: readonly string[]
   }
 }
 
@@ -131,6 +132,17 @@ export const CAPABILITY_DENIAL_REASONS = [
   'ENTITLEMENT_UNAVAILABLE',
   'CAPABILITY_UNAVAILABLE',
 ] as const
+
+export const CAPABILITY_TARGET_DENY_CODES = [
+  'TARGET_MISSING',
+  'CROSS_ORGANIZATION',
+  'OBJECT_SCOPE_DENIED',
+  'TARGET_MISMATCH',
+  'TARGET_NOT_PINNED',
+  'TARGET_VERSION_MISMATCH',
+] as const
+
+export type CapabilityTargetDenyCode = (typeof CAPABILITY_TARGET_DENY_CODES)[number]
 
 export type CapabilityDenialReason = (typeof CAPABILITY_DENIAL_REASONS)[number]
 

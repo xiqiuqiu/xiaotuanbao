@@ -45,6 +45,7 @@ import type { AiOperationDelegationPayload } from '../../common/types/api-respon
 import { PrismaService } from '../../database/prisma/prisma.service'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { createPrismaAiActionStore } from '../ai-action/ai-action.prisma.store'
+import { createPrismaAiActionTargetAuthority } from '../ai-action/ai-action.prisma.target-authority'
 import { AuthService } from '../auth/auth.service'
 import {
   buildContextManifest,
@@ -1759,7 +1760,10 @@ export class AiWorkflowProcessor {
       authority,
     })
     const adapter = new AiToolWorkerAdapter(
-      new AiActionGateway(createPrismaAiActionStore(tx)),
+      new AiActionGateway(
+        createPrismaAiActionStore(tx),
+        createPrismaAiActionTargetAuthority(tx),
+      ),
     )
     const projected = await adapter.projectReviewPackage({
       actor: {
@@ -1780,9 +1784,12 @@ export class AiWorkflowProcessor {
           .parse(attempt.grantedCapabilities),
       },
       input: validated.reviewPackage,
-      persist: async ({ action }) => {
+      persist: async ({ action, target }) => {
         if (!action?.id) {
           throw new Error('REVIEW_PACKAGE_MISSING_ACTION')
+        }
+        if (target.version == null) {
+          throw new Error('NORMALIZED_TARGET_VERSION_MISSING')
         }
         return projectPendingReviewPackage(tx, {
           organizationId: job.organizationId,
@@ -1791,7 +1798,7 @@ export class AiWorkflowProcessor {
           inputBatchId: job.inputBatchId,
           attemptId,
           runId,
-          reviewPackage: validated.reviewPackage,
+          reviewPackage: { ...validated.reviewPackage, objectVersion: target.version },
           sourceActionId: action.id,
         })
       },

@@ -9,6 +9,13 @@ export type AiActionTargetRef = {
   id: string | null
 }
 
+export type AiActionNormalizedTarget = {
+  kind: string
+  id: string
+  organizationId: string
+  version: number | null
+}
+
 export type AiActionSummary = {
   id: string
   name: string
@@ -38,6 +45,7 @@ export type AiActionActor = {
 
 export type AiActionForwardContext = {
   action: AiActionSummary | null
+  target: AiActionNormalizedTarget
 }
 
 export type AiActionProposal = {

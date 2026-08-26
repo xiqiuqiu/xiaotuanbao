@@ -8,6 +8,7 @@ import {
 } from '@xiaotuanbao/ai-contracts'
 import { AiActionGateway } from '../ai-action/ai-action.gateway'
 import { FailingAiActionStore, InMemoryAiActionStore } from '../ai-action/ai-action.in-memory.store'
+import { authorityForActor } from '../ai-action/ai-action.in-memory.target-authority'
 import type { AiActionStore } from '../ai-action/ai-action.types'
 import { AiCollaborationHttpException } from './ai-collaboration.http-exception'
 import type { AiCreateTaskService } from './ai-create-task.service'
@@ -81,7 +82,10 @@ function adapterWith(
   methods: {
     getTaskContextForAgent?: () => Promise<GetTaskContextOutput>
     searchRouteTemplatesForAgent?: () => Promise<SearchRouteTemplatesOutput>
-    getMaterialParseResultForAgent?: () => Promise<GetMaterialParseResultOutput>
+    getMaterialParseResultForAgent?: (
+      caller?: AiToolRequestUser,
+      rawInput?: unknown,
+    ) => Promise<GetMaterialParseResultOutput>
     submitReviewPackageForAgent?: (
       caller: AiToolRequestUser,
       rawInput: unknown,
@@ -109,7 +113,7 @@ function adapterWith(
       },
     }),
   } as unknown as AiCreateTaskService
-  return new AiToolHttpAdapter(new AiActionGateway(store), tasks)
+  return new AiToolHttpAdapter(new AiActionGateway(store, authorityForActor(user)), tasks)
 }
 
 describe('AiToolHttpAdapter.getTaskContext', () => {
@@ -137,6 +141,24 @@ describe('AiToolHttpAdapter.getTaskContext', () => {
     await expect(adapter.getTaskContext(user, { taskId: 'task-1', runId: 'run-1' })).resolves.toBe(
       contextPayload,
     )
+  })
+
+  it('returns task context when the payload claims a leaked organizationId', async () => {
+    const store = new InMemoryAiActionStore()
+    const adapter = adapterWith(store)
+
+    const result = await adapter.getTaskContext(user, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      organizationId: 'leak',
+    })
+
+    expect(result).toBe(contextPayload)
+    expect(store.records[0]).toMatchObject({
+      name: 'getTaskContext',
+      decision: 'allow',
+      executionStatus: 'succeeded',
+    })
   })
 
   it('rejects a claimed task that is not the delegated task without returning context', async () => {
@@ -225,6 +247,34 @@ describe('AiToolHttpAdapter.getMaterialParseResult', () => {
     })
   })
 
+  it('forwards the normalized material target instead of rebuilding identity from the model payload', async () => {
+    const received: unknown[] = []
+    const adapter = adapterWith(new InMemoryAiActionStore(), {
+      getMaterialParseResultForAgent: async (_caller, rawInput) => {
+        received.push(rawInput)
+        return parsePayload
+      },
+    })
+
+    await adapter.getMaterialParseResult(user, {
+      taskId: 'task-1',
+      runId: 'run-1',
+      materialId: 'mat-1',
+      parseResultVersion: 1,
+      pageNumber: 1,
+    })
+
+    expect(received).toEqual([
+      {
+        taskId: 'task-1',
+        runId: 'run-1',
+        materialId: 'mat-1',
+        parseResultVersion: 1,
+        pageNumber: 1,
+      },
+    ])
+  })
+
   it('still returns the original parse result when the decision cannot persist', async () => {
     const adapter = adapterWith(new FailingAiActionStore())
 
@@ -262,10 +312,10 @@ describe('AiToolHttpAdapter.getMaterialParseResult', () => {
 describe('AiToolHttpAdapter.submitReviewPackage', () => {
   it('returns the original pending package result and leaves a review AI action', async () => {
     const store = new InMemoryAiActionStore()
-    const forwarded: Array<{ sourceActionId: string | undefined }> = []
+    const forwarded: Array<{ sourceActionId: string | undefined; input: unknown }> = []
     const adapter = adapterWith(store, {
-      submitReviewPackageForAgent: async (_caller, _input, options) => {
-        forwarded.push({ sourceActionId: options?.sourceActionId })
+      submitReviewPackageForAgent: async (_caller, rawInput, options) => {
+        forwarded.push({ sourceActionId: options?.sourceActionId, input: rawInput })
         return reviewOutput
       },
     })
@@ -273,7 +323,18 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     const result = await adapter.submitReviewPackage(user, reviewInput)
 
     expect(result).toBe(reviewOutput)
-    expect(forwarded).toEqual([{ sourceActionId: store.records[0]?.id }])
+    expect(forwarded).toEqual([
+      {
+        sourceActionId: store.records[0]?.id,
+        input: {
+          taskId: 'task-1',
+          runId: 'run-1',
+          objectVersion: 1,
+          confirmationUnit: 'basic_info_draft',
+          candidates: reviewInput.candidates,
+        },
+      },
+    ])
     expect(store.records).toHaveLength(1)
     expect(store.records[0]).toMatchObject({
       name: 'proposeReviewPackage',
@@ -281,7 +342,7 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
       decision: 'review',
       reasonCode: 'OBSERVATION_PERIOD',
       executionStatus: 'succeeded',
-      targetRef: { kind: 'departure_creation_draft', id: 'task-1' },
+      targetRef: { kind: 'departure_creation_draft', id: 'draft-1' },
       candidateFieldKeys: ['name'],
     })
     expect(JSON.stringify(store.records[0])).not.toContain('110101199001011234')
@@ -325,14 +386,16 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     expect(forwarded).toEqual([])
   })
 
-  it('prevalidates without creating an AI action', async () => {
-    const store = new InMemoryAiActionStore()
-    const adapter = adapterWith(store)
+  it('rejects a stale objectVersion as VERSION_CONFLICT instead of unauthorized', async () => {
+    const adapter = adapterWith(new InMemoryAiActionStore())
 
-    const result = await adapter.proposeReviewPackage(user, reviewInput)
-
-    expect(result.status).toBe('accepted')
-    expect(store.records).toHaveLength(0)
+    await expect(
+      adapter.submitReviewPackage(user, { ...reviewInput, objectVersion: 10 }),
+    ).rejects.toMatchObject({
+      response: {
+        data: { code: 'VERSION_CONFLICT' },
+      },
+    })
   })
 
   it('replays the same proposal without an attempt onto the same AI action using the activity run', async () => {
@@ -346,5 +409,17 @@ describe('AiToolHttpAdapter.submitReviewPackage', () => {
     expect(first).toBe(reviewOutput)
     expect(second).toBe(reviewOutput)
     expect(store.records).toHaveLength(1)
+  })
+})
+
+describe('AiToolHttpAdapter.proposeReviewPackage', () => {
+  it('prevalidates without creating an AI action', async () => {
+    const store = new InMemoryAiActionStore()
+    const adapter = adapterWith(store)
+
+    const result = await adapter.proposeReviewPackage(user, reviewInput)
+
+    expect(result.status).toBe('accepted')
+    expect(store.records).toHaveLength(0)
   })
 })

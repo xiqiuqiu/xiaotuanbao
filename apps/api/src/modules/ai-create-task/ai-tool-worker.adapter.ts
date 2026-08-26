@@ -23,6 +23,9 @@ export class AiToolWorkerAdapter {
       forward: params.persist,
     })
     if (typeof executed.result !== 'string' || executed.result.length === 0) {
+      if (executed.action?.reasonCode === 'TARGET_VERSION_MISMATCH') {
+        throw new Error('VERSION_CONFLICT')
+      }
       throw new Error('REVIEW_PACKAGE_PROJECTION_SKIPPED')
     }
     return { action: executed.action, reviewPackageId: executed.result }

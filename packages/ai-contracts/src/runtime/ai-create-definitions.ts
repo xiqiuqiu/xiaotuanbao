@@ -61,7 +61,12 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
     inputSchema: z.object({}).strict(),
     outputSchema: getTaskContextOutputSchema,
     contextSchema: requestContextSchema,
-    gateway: { actionKind: 'read', decision: 'allow', targetKind: 'ai_create_task' },
+    gateway: {
+      actionKind: 'read',
+      decision: 'allow',
+      targetKind: 'ai_create_task',
+      denyCodes: ['TARGET_MISSING', 'CROSS_ORGANIZATION', 'OBJECT_SCOPE_DENIED', 'TARGET_MISMATCH'],
+    },
   },
   {
     ...AI_CREATE_CAPABILITY_REFS_BY_TOOL.searchRouteTemplates,
@@ -73,7 +78,12 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
     inputSchema: searchRouteTemplatesModelInputSchema,
     outputSchema: searchRouteTemplatesOutputSchema,
     contextSchema: requestContextSchema,
-    gateway: { actionKind: 'read', decision: 'allow', targetKind: 'route_template_catalog' },
+    gateway: {
+      actionKind: 'read',
+      decision: 'allow',
+      targetKind: 'route_template_catalog',
+      denyCodes: ['TARGET_MISMATCH'],
+    },
   },
   {
     ...AI_CREATE_CAPABILITY_REFS_BY_TOOL.submitReviewPackage,
@@ -89,6 +99,13 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
       actionKind: 'write',
       decision: 'review',
       targetKind: 'departure_creation_draft',
+      denyCodes: [
+        'TARGET_MISSING',
+        'CROSS_ORGANIZATION',
+        'OBJECT_SCOPE_DENIED',
+        'TARGET_MISMATCH',
+        'TARGET_VERSION_MISMATCH',
+      ],
     },
   },
   {
@@ -107,7 +124,19 @@ export const AI_CREATE_CAPABILITY_DEFINITIONS = [
       .strict(),
     outputSchema: getMaterialParseResultOutputSchema,
     contextSchema: requestContextSchema,
-    gateway: { actionKind: 'read', decision: 'allow', targetKind: 'departure_material' },
+    gateway: {
+      actionKind: 'read',
+      decision: 'allow',
+      targetKind: 'departure_material',
+      denyCodes: [
+        'TARGET_MISSING',
+        'CROSS_ORGANIZATION',
+        'OBJECT_SCOPE_DENIED',
+        'TARGET_MISMATCH',
+        'TARGET_NOT_PINNED',
+        'TARGET_VERSION_MISMATCH',
+      ],
+    },
   },
 ] as const satisfies readonly CapabilityDefinition[]
 
