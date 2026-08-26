@@ -38,6 +38,54 @@ describe('agent conversation runtime store #370', () => {
     expect(useAgentConversationRuntimeStore.getState().events).toHaveLength(1)
   })
 
+  it('dedupes live assistant snapshots by revision and drops them after the persisted message', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '',
+      text: '已',
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '',
+      text: '已忽略',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant?.text).toBe('已')
+
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 3,
+      reasoningText: '',
+      text: '已整理',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant?.text).toBe('已整理')
+
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'agent_message',
+          payload: { text: '已整理当前资料。', attemptId: 'attempt-9' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
+  })
+
   it('clears runtime only when switching to a different Conversation', () => {
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',

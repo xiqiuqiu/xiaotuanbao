@@ -1,5 +1,10 @@
 import type { CopilotChatViewProps } from '@copilotkit/react-core/v2'
-import type { AiConversationEventView, AiInputBatchStatus, AiInputBatchView } from '@xiaotuanbao/shared'
+import type {
+  AiConversationEventView,
+  AiInputBatchStatus,
+  AiInputBatchView,
+  AssistantSnapshotFrame,
+} from '@xiaotuanbao/shared'
 
 export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
 export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
@@ -10,6 +15,9 @@ type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
 const RUNNING_BATCH_STATUSES: ReadonlySet<AiInputBatchStatus> = new Set([
   'waiting_for_materials',
+  'ready_for_agent',
+  'preparing_context',
+  'agent_running',
 ])
 
 export type FailedMaterialNotice = {
@@ -267,12 +275,23 @@ function failedMaterialsFromPayload(payload: Record<string, unknown>): FailedMat
   })
 }
 
+export type LiveAssistantSnapshot = Omit<AssistantSnapshotFrame, 'type'>
+
+export type ProjectConversationFrameInput = {
+  events: AiConversationEventView[]
+  pendingText: string | null
+  activeBatch?: AiInputBatchView | null
+  pendingUploadCount?: number
+  liveAssistant?: LiveAssistantSnapshot | null
+}
+
 export function isCopilotChatRunning(
   events: AiConversationEventView[],
   activeBatch: AiInputBatchView | null,
   pendingText: string | null,
+  liveAssistant?: LiveAssistantSnapshot | null,
 ): boolean {
-  if (pendingText) {
+  if (pendingText || (liveAssistant?.text && liveAssistant.text.length > 0)) {
     return true
   }
   const status = latestBatchStatus(events, activeBatch)
@@ -458,4 +477,77 @@ export function toCopilotChatMessages(
     }
   }
   return messages
+}
+
+function currentInFlightAttempt(events: AiConversationEventView[]): {
+  attemptId?: string
+  generation?: number
+} | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.kind !== 'batch_status') {
+      continue
+    }
+    const status = String(event.payload.status ?? '')
+    if (
+      status === 'ready_for_agent' ||
+      status === 'preparing_context' ||
+      status === 'agent_running'
+    ) {
+      return {
+        attemptId:
+          typeof event.payload.attemptId === 'string' ? event.payload.attemptId : undefined,
+        generation:
+          typeof event.payload.generation === 'number' ? event.payload.generation : undefined,
+      }
+    }
+  }
+  return null
+}
+
+function shouldProjectLiveAssistant(
+  events: AiConversationEventView[],
+  live: LiveAssistantSnapshot,
+): boolean {
+  if (!live.text) {
+    return false
+  }
+  if (
+    events.some(
+      (event) =>
+        event.kind === 'agent_message' && event.payload.attemptId === live.attemptId,
+    )
+  ) {
+    return false
+  }
+  const inFlight = currentInFlightAttempt(events)
+  if (inFlight?.attemptId && inFlight.attemptId !== live.attemptId) {
+    return false
+  }
+  if (typeof inFlight?.generation === 'number' && live.generation < inFlight.generation) {
+    return false
+  }
+  return true
+}
+
+/** 统一会话壳最高可见投影：持久事件 + 当前 Attempt 即时输出。 */
+export function projectConversationFrame(input: ProjectConversationFrameInput): ChatMessage[] {
+  const messages = toCopilotChatMessages(
+    input.events,
+    input.pendingText,
+    input.activeBatch ?? null,
+    input.pendingUploadCount ?? 0,
+  )
+  const live = input.liveAssistant
+  if (!live || !shouldProjectLiveAssistant(input.events, live)) {
+    return messages
+  }
+  return [
+    ...messages,
+    {
+      id: `live-assistant-${live.attemptId}`,
+      role: 'assistant',
+      content: live.text,
+    },
+  ]
 }

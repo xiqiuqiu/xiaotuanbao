@@ -7,10 +7,12 @@ import { Alert, Button, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   pageLocatorLabel,
+  parseConversationStreamFrame,
   type AiConversationEventView,
   type AiConversationView,
 } from '@xiaotuanbao/shared'
 import '@copilotkit/react-core/v2/styles.css'
+import { env } from '@/config/env'
 import {
   getAgentConversation,
   listAgentConversationEvents,
@@ -18,9 +20,12 @@ import {
 } from '@/services/agent-conversation.service'
 import {
   isCopilotChatRunning,
-  toCopilotChatMessages,
+  projectConversationFrame,
 } from '@/features/ai-assist/ai-create-copilot-messages'
-import { conversationCatchUpIntervalMs } from '@/features/ai-assist/ai-create-assist-polling'
+import {
+  CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
+  CONVERSATION_IDLE_CATCH_UP_MS,
+} from '@/features/ai-assist/ai-create-assist-polling'
 import {
   ASSIST_ERROR_TEXT,
   getAssistErrorText,
@@ -66,6 +71,7 @@ export function AgentConversationChat() {
   const persistConversation = useAgentConversationStore((state) => state.persistConversation)
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
+  const liveAssistant = useAgentConversationRuntimeStore((state) => state.liveAssistant)
   const draft = useAgentConversationRuntimeStore((state) => state.draft)
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
@@ -141,6 +147,7 @@ export function AgentConversationChat() {
     }
     const abort = new AbortController()
     let cancelled = false
+    let errorDebounce: ReturnType<typeof setTimeout> | undefined
     const catchUp = () =>
       listAgentConversationEvents(conversationId, lastSequenceRef.current, {
         signal: abort.signal,
@@ -165,14 +172,72 @@ export function AgentConversationChat() {
         })
         .catch(() => undefined)
 
-    const interval = window.setInterval(() => {
-      void catchUp()
-    }, conversationCatchUpIntervalMs(null))
+    const source = new EventSource(
+      `${env.apiBaseUrl}/agent/conversations/${conversationId}/stream?afterSequence=${lastSequenceRef.current}`,
+      { withCredentials: true },
+    )
+    source.onmessage = (message) => {
+      try {
+        const frame = parseConversationStreamFrame(JSON.parse(message.data) as unknown)
+        if (!frame) {
+          return
+        }
+        if (frame.type === 'assistant.snapshot') {
+          useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+            attemptId: frame.attemptId,
+            batchId: frame.batchId,
+            generation: frame.generation,
+            revision: frame.revision,
+            reasoningText: frame.reasoningText,
+            text: frame.text,
+          })
+          return
+        }
+        if (frame.type !== 'conversation.event') {
+          return
+        }
+        const parsed = frame.event
+        if (typeof parsed.sequence !== 'number' || typeof parsed.kind !== 'string') {
+          return
+        }
+        useAgentConversationRuntimeStore.getState().hydrate({
+          conversationId,
+          events: mergeEvents(useAgentConversationRuntimeStore.getState().events, [parsed]),
+        })
+      } catch {
+        // ignore malformed frames
+      }
+    }
+    source.onerror = () => {
+      if (cancelled || errorDebounce) {
+        return
+      }
+      errorDebounce = setTimeout(() => {
+        errorDebounce = undefined
+        void catchUp()
+      }, CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void catchUp()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    const idleCatchUp = window.setInterval(() => {
+      if (source.readyState === EventSource.CLOSED) {
+        void catchUp()
+      }
+    }, CONVERSATION_IDLE_CATCH_UP_MS)
     void catchUp()
     return () => {
       cancelled = true
       abort.abort()
-      window.clearInterval(interval)
+      source.close()
+      window.clearInterval(idleCatchUp)
+      if (errorDebounce) {
+        clearTimeout(errorDebounce)
+      }
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [applyServerDraft, conversationId])
 
@@ -235,10 +300,15 @@ export function AgentConversationChat() {
   )
 
   const messages = useMemo(
-    () => toCopilotChatMessages(events, pendingText, null, 0),
-    [events, pendingText],
+    () =>
+      projectConversationFrame({
+        events,
+        pendingText,
+        liveAssistant,
+      }),
+    [events, liveAssistant, pendingText],
   )
-  const isRunning = isCopilotChatRunning(events, null, pendingText)
+  const isRunning = isCopilotChatRunning(events, null, pendingText, liveAssistant)
 
   return (
     <div className={chatStyles.root}>
