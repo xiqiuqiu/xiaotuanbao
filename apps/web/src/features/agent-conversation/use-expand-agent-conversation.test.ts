@@ -44,7 +44,6 @@ describe('useExpandAgentConversation', () => {
         to: '/departure',
         search: { status: 'open' },
         hash: undefined,
-        unmaskOnReload: true,
       },
     })
   })

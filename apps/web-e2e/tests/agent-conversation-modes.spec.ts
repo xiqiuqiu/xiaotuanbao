@@ -43,11 +43,9 @@ test.describe('agent conversation modes #370', () => {
       .toBe('未发送草稿')
     await pane.getByRole('button', { name: '进入全局模式' }).click()
 
-    await expect(page).toHaveURL(/\/agent\/conversations\/[0-9a-f-]+$/)
-    expect(page.url()).toContain(`/agent/conversations/${conversationId}`)
+    await expect(page).toHaveURL(new RegExp(`${paths.departure}$`))
     const globalOverlay = page.getByRole('dialog', { name: '小团宝 Agent' })
     await expect(globalOverlay).toBeVisible()
-    await expect(page.getByRole('heading', { name: '发团管理' })).toBeAttached()
     await expect(globalOverlay.getByRole('complementary', { name: '会话历史导航' })).toBeVisible()
     await expect(globalOverlay.getByRole('button', { name: '返回业务页面' })).toBeVisible()
     await expect(globalOverlay.getByRole('button', { name: '折叠历史导航' })).toBeVisible()
@@ -56,8 +54,7 @@ test.describe('agent conversation modes #370', () => {
     )
 
     await page.reload()
-    await expect(page).toHaveURL(/\/agent\/conversations\/[0-9a-f-]+$/)
-    expect(page.url()).toContain(`/agent/conversations/${conversationId}`)
+    await expect(page).toHaveURL(new RegExp(`${paths.departure}$`))
     await expect(page.getByRole('dialog', { name: '小团宝 Agent' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: '询问小团宝业务' })).toHaveValue('未发送草稿')
 
@@ -112,7 +109,22 @@ test.describe('agent conversation modes #370', () => {
     await pane.getByRole('button', { name: '进入全局模式' }).click()
     const overlay = page.getByRole('dialog', { name: '小团宝 Agent' })
     await expect(overlay).toBeVisible()
-    expect(page.url()).toContain(`/agent/conversations/${conversationId}`)
+    await expect(page).toHaveURL(new RegExp(`${paths.departure}$`))
     await expect(overlay.getByText('切换中的提问')).toHaveCount(1)
+
+    await expect
+      .poll(async () => {
+        const current = await page.request.get(`/api/agent/conversations/${conversationId}`)
+        if (!current.ok()) {
+          return -1
+        }
+        const body = (await current.json()) as {
+          data?: { events?: Array<{ payload?: { text?: string } }> }
+        }
+        return (
+          body.data?.events?.filter((event) => event.payload?.text === '切换中的提问').length ?? 0
+        )
+      })
+      .toBe(1)
   })
 })

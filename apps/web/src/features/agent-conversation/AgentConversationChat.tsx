@@ -60,7 +60,7 @@ export function AgentConversationChat() {
   const detachCurrentPage = useAgentConversationStore((state) => state.detachCurrentPage)
   const syncDefaultPageLocator = useAgentConversationStore((state) => state.syncDefaultPageLocator)
   const currentPageLocator = useCurrentPageLocator()
-  const selectConversation = useAgentConversationStore((state) => state.selectConversation)
+  const persistConversation = useAgentConversationStore((state) => state.persistConversation)
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
   const draft = useAgentConversationRuntimeStore((state) => state.draft)
@@ -114,7 +114,7 @@ export function AgentConversationChat() {
           revision: conversation.draft?.revision ?? live.revision,
         })
         if (conversation.title) {
-          selectConversation({ id: conversation.id, title: conversation.title })
+          persistConversation({ id: conversation.id, title: conversation.title })
         }
       })
       .catch(() => {
@@ -130,7 +130,7 @@ export function AgentConversationChat() {
     return () => {
       cancelled = true
     }
-  }, [conversationId, runtimeConversationId, selectConversation])
+  }, [conversationId, persistConversation, runtimeConversationId])
 
   useEffect(() => {
     if (!conversationId) {
@@ -212,7 +212,7 @@ export function AgentConversationChat() {
           sendIdempotencyKey: null,
         })
         if (!conversationIdRef.current) {
-          selectConversation({
+          persistConversation({
             id: result.conversationId,
             title: nextText.slice(0, 40),
           })
@@ -228,7 +228,7 @@ export function AgentConversationChat() {
         })
       }
     },
-    [conversationIdRef, draftEpochRef, draftRevisionRef, selectConversation],
+    [conversationIdRef, draftEpochRef, draftRevisionRef, persistConversation],
   )
 
   const messages = useMemo(

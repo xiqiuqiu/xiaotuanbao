@@ -86,7 +86,7 @@ describe('AgentConversationChat page locator #371', () => {
   })
 
   it('does not auto-attach when opening a historical conversation', () => {
-    useAgentConversationStore.getState().selectConversation({
+    useAgentConversationStore.getState().openHistoricalConversation({
       id: 'c-1',
       title: '历史会话',
     })

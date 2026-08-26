@@ -21,13 +21,12 @@ export function useExpandAgentConversation() {
       search: location.searchStr,
       hash: location.hash,
     })
+    // Keep TanStack's temporary route in history state so a reload restores the
+    // same Agent overlay. `unmaskOnReload` would instead load the masked business route.
     void navigate({
       to: '/agent/conversations/$conversationId',
       params: { conversationId: result.conversationId ?? NEW_CONVERSATION_ROUTE_ID },
-      mask: {
-        ...mask,
-        unmaskOnReload: true,
-      },
+      mask,
     })
   }
 }
