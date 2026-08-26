@@ -61,6 +61,14 @@ vi.mock('@tanstack/react-router', () => ({
   ),
   useNavigate: () => mockNavigate,
   useSearch: () => mockSearch,
+  useRouterState: ({
+    select,
+  }: {
+    select: (state: { location: { pathname: string; searchStr: string; hash: string } }) => unknown
+  }) =>
+    select({
+      location: { pathname: '/departures/new', searchStr: '', hash: '' },
+    }),
 }))
 
 vi.mock('@/app/store/auth.store', () => ({

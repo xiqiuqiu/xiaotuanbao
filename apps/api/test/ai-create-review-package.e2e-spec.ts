@@ -94,7 +94,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     const taskId = created.body.data.id as string
     const version = created.body.data.draft.version as number
     const session = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ taskId })
       .expect(201)
 
@@ -142,7 +142,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     })
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
 
     expect(after.body.data.draft.version).toBe(opened.version)
@@ -205,7 +205,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     expect(replayed.body.data.reviewPackageId).toBe(submitted.body.data.reviewPackageId)
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
     expect(after.body.data.pendingReviews).toEqual(
       expect.arrayContaining([
@@ -227,7 +227,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     const packageId = submitted.body.data.reviewPackageId as string
 
     const patched = await authRequest(app, coordinatorToken)
-      .patch(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}`)
+      .patch(`/api/agent/review-packages/${packageId}`)
       .send({ corrections: { name: `${testPrefix}-修正团名` } })
       .expect(200)
     expect(patched.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
@@ -244,7 +244,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     }).expect(200)
     const rejected = await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${rejectedOpened.taskId}/review-packages/${rejectedSubmit.body.data.reviewPackageId}/reject`,
+        `/api/agent/review-packages/${rejectedSubmit.body.data.reviewPackageId}/reject`,
       )
       .send({ expectedPackageVersion: 1 })
       .expect(200)
@@ -253,7 +253,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     expect(rejected.body.data.draft.version).toBe(rejectedOpened.version)
 
     const confirmed = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
       .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(200)
 
@@ -298,7 +298,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     const packageId = submitted.body.data.reviewPackageId as string
 
     const patched = await authRequest(app, coordinatorToken)
-      .patch(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}`)
+      .patch(`/api/agent/review-packages/${packageId}`)
       .send({ corrections: { startDate: null, expectedGuestCountHint: null } })
       .expect(200)
     expect(patched.body.data.draft.snapshot.startDate).toBe('2026-09-01')
@@ -311,7 +311,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     )
 
     const confirmed = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
       .send({
         expectedVersion: opened.version,
         expectedPackageVersion: 1,
@@ -354,7 +354,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     expect(saved.body.data.pendingReview.id).toBe(packageId)
 
     const conflict = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
       .send({ expectedVersion: opened.version + 1, expectedPackageVersion: 1 })
       .expect(409)
 
@@ -366,7 +366,7 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     expect(conflict.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${opened.taskId}`)
+      .get(`/api/agent/tasks/${opened.taskId}`)
       .expect(200)
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)
     expect(after.body.data.pendingReview).toBeNull()
@@ -383,12 +383,12 @@ describe('AI review package confirm-to-draft (e2e) #298', () => {
     const packageId = submitted.body.data.reviewPackageId as string
 
     await authRequest(app, financeToken)
-      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
       .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })
       .expect(403)
 
     await request(app.getHttpServer())
-      .post(`/api/ai-create-tasks/${opened.taskId}/review-packages/${packageId}/confirm`)
+      .post(`/api/agent/review-packages/${packageId}/confirm`)
       .set('Authorization', `Bearer ${opened.delegationToken}`)
       .set('Origin', 'http://localhost:5173')
       .send({ expectedVersion: opened.version, expectedPackageVersion: 1 })

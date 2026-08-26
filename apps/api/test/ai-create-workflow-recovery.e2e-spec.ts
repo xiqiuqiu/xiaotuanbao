@@ -114,7 +114,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
 
   async function openSession() {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -140,20 +140,20 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     idempotencyKey: string,
   ) {
     return authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', idempotencyKey)
-      .send({ text })
+      .send({ text, primaryTaskId: taskId })
   }
 
   function retryBatch(
-    taskId: string,
+    _taskId: string,
     conversationId: string,
     batchId: string,
     idempotencyKey: string,
   ) {
     return authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry`,
+        `/api/agent/conversations/${conversationId}/batches/${batchId}/retry`,
       )
       .set('Idempotency-Key', idempotencyKey)
       .send({})
@@ -172,9 +172,9 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     return processor.processDueJobs(20)
   }
 
-  async function listEvents(taskId: string, conversationId: string) {
+  async function listEvents(_taskId: string, conversationId: string) {
     const response = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+      .get(`/api/agent/conversations/${conversationId}/events`)
       .expect(200)
     return response.body.data as {
       events: Array<{ kind: string; payload: Record<string, unknown> }>
@@ -261,7 +261,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     const batchId = sent.body.data.batch.id as string
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/stop`,
+        `/api/agent/conversations/${conversationId}/batches/${batchId}/stop`,
       )
       .set('Idempotency-Key', `e2e-stop-${taskId}`)
       .send({})
@@ -286,7 +286,7 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
 
     await authRequest(app, peerToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/batches/${batchId}/retry`,
+        `/api/agent/conversations/${conversationId}/batches/${batchId}/retry`,
       )
       .set('Idempotency-Key', `e2e-peer-retry-${taskId}`)
       .send({})
@@ -324,10 +324,11 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     const before = Date.now()
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${taskId}/conversations/${opened.conversation.id}/messages`,
+        `/api/agent/conversations/${opened.conversation.id}/messages`,
       )
       .set('Idempotency-Key', `e2e-parse-5xx-${taskId}`)
       .field('text', '请解析附件')
+      .field('primaryTaskId', taskId)
       .attach('files', PNG_1X1, { filename: '瞬时解析.png', contentType: 'image/png' })
       .expect(201)
     await runJobs()
@@ -468,10 +469,11 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
 
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${parseSession.task.id}/conversations/${parseSession.conversation.id}/messages`,
+        `/api/agent/conversations/${parseSession.conversation.id}/messages`,
       )
       .set('Idempotency-Key', `e2e-parse-slot-${parseSession.task.id}`)
       .field('text', '请解析附件')
+      .field('primaryTaskId', parseSession.task.id)
       .attach('files', PNG_1X1, { filename: '团期.png', contentType: 'image/png' })
       .expect(201)
     await sendText(
@@ -501,10 +503,11 @@ describe('AI workflow recovery and creator retry (e2e) #322', () => {
     const opened = await openSession()
     await authRequest(app, coordinatorToken)
       .post(
-        `/api/ai-create-tasks/${opened.task.id}/conversations/${opened.conversation.id}/messages`,
+        `/api/agent/conversations/${opened.conversation.id}/messages`,
       )
       .set('Idempotency-Key', `e2e-user-disabled-parse-${opened.task.id}`)
       .field('text', 'User 停用后仍应归档')
+      .field('primaryTaskId', opened.task.id)
       .attach('files', PNG_1X1, { filename: '停用后.png', contentType: 'image/png' })
       .expect(201)
     await prisma.user.update({

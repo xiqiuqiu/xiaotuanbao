@@ -12,13 +12,13 @@ vi.mock('@/services/ai-create-task.service', () => ({
   previewDepartureMaterial: vi.fn(),
 }))
 
-function renderTrigger(taskId = 'task-1') {
+function renderTrigger(conversationId = 'conv-1') {
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <ConfigProvider locale={zhCN}>
-        <AssistMaterialsTrigger taskId={taskId} />
+        <AssistMaterialsTrigger conversationId={conversationId} />
       </ConfigProvider>
     </QueryClientProvider>,
   )
@@ -57,7 +57,7 @@ describe('AssistMaterialsTrigger', () => {
     expect(screen.getByText('已解析')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '预览' }))
     await waitFor(() => {
-      expect(previewDepartureMaterial).toHaveBeenCalledWith('task-1', 'mat-1')
+      expect(previewDepartureMaterial).toHaveBeenCalledWith('conv-1', 'mat-1')
     })
     expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
   })
@@ -99,7 +99,7 @@ describe('AssistMaterialsTrigger', () => {
 
     cleanup()
     vi.mocked(listDepartureMaterials).mockRejectedValueOnce(new Error('network'))
-    renderTrigger('task-2')
+    renderTrigger('conv-2')
     await userEvent.click(await screen.findByRole('button', { name: '发团资料' }))
     expect(await screen.findByText('发团资料加载失败')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
@@ -129,7 +129,7 @@ describe('AssistMaterialsTrigger', () => {
     expect(await screen.findByText('解析中')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '预览' }))
     await waitFor(() => {
-      expect(previewDepartureMaterial).toHaveBeenCalledWith('task-1', 'mat-1')
+      expect(previewDepartureMaterial).toHaveBeenCalledWith('conv-1', 'mat-1')
     })
     expect(await screen.findByRole('img', { name: '团期.png' })).toBeInTheDocument()
   })

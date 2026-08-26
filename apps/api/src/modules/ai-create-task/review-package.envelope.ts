@@ -38,7 +38,6 @@ export function reviewDecisionRequestHash(payload: unknown): string {
 export function reviewPackageCreateData(params: {
   organizationId: string
   taskId: string
-  runId: string
   conversationId: string
   inputBatchId: string
   attemptId?: string | null
@@ -53,7 +52,6 @@ export function reviewPackageCreateData(params: {
   return {
     organization: { connect: { id: params.organizationId } },
     task: { connect: { id: params.taskId } },
-    run: { connect: { id: params.runId } },
     conversation: { connect: { id: params.conversationId } },
     inputBatch: { connect: { id: params.inputBatchId } },
     ...(params.attemptId ? { attempt: { connect: { id: params.attemptId } } } : {}),

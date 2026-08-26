@@ -81,7 +81,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
 
   async function openSession(taskId?: string) {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send(
         taskId
           ? { taskId }
@@ -117,15 +117,15 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     idempotencyKey: string,
   ) {
     return authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', idempotencyKey)
-      .send({ text })
+      .send({ text, primaryTaskId: taskId })
   }
 
-  async function listEvents(taskId: string, conversationId: string, afterSequence = 0) {
+  async function listEvents(_taskId: string, conversationId: string, afterSequence = 0) {
     const response = await authRequest(app, coordinatorToken)
       .get(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
+        `/api/agent/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
       )
       .expect(200)
     return response.body.data as {
@@ -140,10 +140,17 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     await prisma.aiWorkflowJob.updateMany({
       where: {
         organizationId,
-        task: { ownerUserId },
+        OR: [
+          { conversation: { creatorUserId: ownerUserId } },
+          { task: { ownerUserId } },
+        ],
         status: { in: ['pending', 'claimed'] },
       },
-      data: { status: 'failed', lastErrorCode: 'e2e-cancelled-for-cap-test' },
+      data: {
+        status: 'failed',
+        lastErrorCode: 'e2e-cancelled-for-cap-test',
+        leaseExpiresAt: null,
+      },
     })
     await prisma.aiInputBatch.updateMany({
       where: {
@@ -153,6 +160,14 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
       },
       data: { status: 'cancelled' },
     })
+    const leftover = await prisma.aiInputBatch.count({
+      where: {
+        organizationId,
+        creatorUserId: ownerUserId,
+        status: { in: ['waiting_for_materials', 'ready_for_agent', 'preparing_context', 'agent_running'] },
+      },
+    })
+    expect(leftover).toBe(0)
   }
 
   it('reuses the same unfinished conversation after close and re-entry', async () => {
@@ -260,11 +275,14 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     const taskId = opened.task.id
     const conversationId = opened.conversation.id
 
+    agent.holdNextCall()
     await sendText(taskId, conversationId, '第一批说明', `e2e-one-running-a-${taskId}`).expect(201)
     await sendText(taskId, conversationId, '第二批说明', `e2e-one-running-b-${taskId}`).expect(201)
 
-    agent.holdNextCall()
     const first = processor.processDueJobs(5)
+    await waitFor(async () => {
+      expect(agent.callCount()).toBeGreaterThan(0)
+    })
     await waitFor(async () => {
       const running = await prisma.aiInputBatch.count({
         where: { taskLinks: { some: { taskId } }, status: 'agent_running' },
@@ -369,15 +387,15 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     const conversationId = opened.conversation.id
 
     await authRequest(app, peerToken)
-      .get(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events`)
+      .get(`/api/agent/conversations/${conversationId}/events`)
       .expect(403)
     await authRequest(app, peerToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-peer-${taskId}`)
       .send({ text: '不应发送' })
       .expect(403)
     await authRequest(app, financeToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', `e2e-finance-${taskId}`)
       .send({ text: '财务不应发送' })
       .expect(403)
@@ -420,7 +438,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     const seen = await readSseUntil(
       app,
       coordinatorToken,
-      `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${afterSequence}`,
+      `/api/agent/conversations/${conversationId}/stream?afterSequence=${afterSequence}`,
       (events) => events.some((event) => event.kind === 'agent_message'),
       async () => {
         await processor.processDueJobs(5)
@@ -433,7 +451,7 @@ describe('Durable plaintext AI create conversation (e2e) #315', () => {
     await readSseUntil(
       app,
       coordinatorToken,
-      `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/stream?afterSequence=${afterSequence}`,
+      `/api/agent/conversations/${conversationId}/stream?afterSequence=${afterSequence}`,
       (events) => events.some((event) => event.kind === 'agent_message'),
       async () => undefined,
     )

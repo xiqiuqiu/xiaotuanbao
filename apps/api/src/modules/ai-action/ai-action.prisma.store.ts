@@ -36,7 +36,6 @@ export function createPrismaAiActionStore(client: AiActionDb): AiActionStore {
             taskId: draft.taskId,
             conversationId: draft.conversationId,
             inputBatchId: draft.inputBatchId,
-            runId: draft.runId,
             attemptId: draft.attemptId,
             contextManifestId: draft.contextManifestId,
             agentDefinitionKey: draft.agentDefinition.key,

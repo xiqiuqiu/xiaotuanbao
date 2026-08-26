@@ -134,7 +134,7 @@ describe('AI create task + departure creation draft (e2e) #296', () => {
     expect(saved.body.data.draft.snapshot.expectedGuestCountHint).toBe(20)
 
     const restored = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}`)
+      .get(`/api/agent/tasks/${taskId}`)
       .expect(200)
 
     expect(restored.body.data).toMatchObject({

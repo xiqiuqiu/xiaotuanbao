@@ -271,7 +271,7 @@ _Avoid_: 单一总分发布, LLM Judge独立放行, 全业务统一Token阈值, 
 _Avoid_: 只验证Worker重启, 无限自动重试, 专用运维重试界面, 公开重试API, 失败后沿用旧业务快照, 不核对Action和业务记录数量
 
 **Agent 平台架构切换**:
-开发阶段将现有AI建团竖切直接迁入通用Conversation、Task、InputBatch、Attempt、Action和HITL控制面，不把开发期Agent任务、会话、批次、来源、Attempt或审核记录当作必须迁移的历史资产。现有语义仍通用的控制面模型原位泛化或重命名，只为缺失概念新增模型，不建立平行可写的`Ai*`与`Agent*`表族。旧`ai-create`入口只可在前端切换的短窗口内把请求转换为同一通用命令且只写新结构；新会话UI接通后即删除旧运行链。开发环境可以重置Agent运行数据，但不得级联删除或覆盖Departure、客源、财务及已成为领域正式资料的业务数据。
+开发阶段将现有AI建团竖切直接迁入通用Conversation、Task、InputBatch、Attempt、Action和HITL控制面，不把开发期Agent任务、会话、批次、来源、Attempt或审核记录当作必须迁移的历史资产。现有语义仍通用的控制面模型原位泛化或重命名，只为缺失概念新增模型，不建立平行可写的`Ai*`与`Agent*`表族。旧`/ai-create-tasks/*`运行入口已删除；会话发送、事件、批次、来源与审核改走通用`/agent/conversations`、`/agent/tasks`和`/agent/review-packages`。`/ai-create-tasks`只保留发团创建草稿保存、正式发团确认与协助可用性查询。开发环境可通过`pnpm --filter api db:reset-agent-run-data`重置Agent运行数据，但不得级联删除或覆盖Departure、客源、财务及已成为领域正式资料的业务数据。
 _Avoid_: 编写开发期历史回填器, 新旧结构双写, shadow read, 平行Ai与Agent表族, 两套会话Worker审核Action, 长期兼容API, 为迁移清空正式业务数据, Agent表级联删除Departure, 旧入口继续承载新能力
 
 **Agent 任务共享身份**:
@@ -283,7 +283,7 @@ _Avoid_: 新旧任务双ID, 永久ID转换表, AiCreateTask直接泛化为所有
 _Avoid_: Conversation必属一个Task, Task删除级联会话, 从消息文本推断关联, 多任务复制会话, archived等同Task完成, 旧taskId双写或回填
 
 **Agent 运行任务引用**:
-运行链以Conversation与InputBatch为主轴，InputBatch可通过AgentInputBatchTask以`primary / referenced / created`关联零到多个AgentTask；Job与Attempt只沿批次执行，ContextManifest冻结本次实际taskRefs及所读取的目标和状态版本。Action与Review Package按真实业务目标和来源关联，taskId仅为可选引用；AiCreateActivityRun及运行表旧必填taskId不进入新平台契约。
+运行链以Conversation与InputBatch为主轴，InputBatch可通过AgentInputBatchTask以`primary / referenced / created`关联零到多个AgentTask；Job与Attempt只沿批次执行，ContextManifest冻结本次实际taskRefs及所读取的目标和状态版本。Action与Review Package按真实业务目标和来源关联，taskId仅为可选引用；运行身份以Attempt为准，不再写入或校验AiCreateActivityRun。
 _Avoid_: 运行对象必填一个Task, 从Conversation推断Task, 普通查询强制创建Task, AiCreateActivityRun作平台Attempt, Task充当Action业务目标, 审核包按Task唯一, 保留旧字段双写
 
 **Agent 平台复用竖切**:

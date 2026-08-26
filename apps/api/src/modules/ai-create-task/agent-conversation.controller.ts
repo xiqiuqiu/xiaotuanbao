@@ -4,11 +4,14 @@ import {
   Get,
   Headers,
   HttpCode,
+  MessageEvent,
   Param,
   Post,
   Put,
   Query,
   Req,
+  Res,
+  Sse,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -23,14 +26,21 @@ import type {
 } from '@xiaotuanbao/shared'
 import { FilesInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
+import type { Response } from 'express'
+import { Observable } from 'rxjs'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
+import { SkipResponseWrap } from '../../common/decorators/skip-response-wrap.decorator'
+import { buildStoredObjectContentDisposition } from '../stored-object/stored-object.helpers'
 import { AiConversationService } from './ai-conversation.service'
 import { DepartureMaterialService } from './departure-material.service'
 import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-material.constants'
 import {
+  CancelAiConversationInteractionDto,
   ListAgentConversationsQueryDto,
   ListAiConversationEventsQueryDto,
+  RemoveBatchMaterialsDto,
+  RetryFailedMaterialsDto,
   SaveAiConversationTextDraftDto,
   SendAiConversationMessageDto,
 } from './dto/ai-create-task.dto'
@@ -91,6 +101,7 @@ export class AgentConversationController {
         size: file.size,
       })),
       dto.pageLocator,
+      dto.primaryTaskId,
     )
   }
 
@@ -131,6 +142,7 @@ export class AgentConversationController {
         size: file.size,
       })),
       dto.pageLocator,
+      dto.primaryTaskId,
     )
   }
 
@@ -214,6 +226,29 @@ export class AgentConversationController {
     )
   }
 
+  @Get(':conversationId/sources/:sourceId/preview')
+  @SkipResponseWrap()
+  async previewSource(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('sourceId') sourceId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.materialService.previewConversationSource(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
+      sourceId,
+    )
+    res.setHeader('Content-Type', file.contentType)
+    res.setHeader(
+      'Content-Disposition',
+      buildStoredObjectContentDisposition(file.filename).replace(/^attachment/, 'inline'),
+    )
+    res.setHeader('Content-Length', String(file.buffer.byteLength))
+    res.send(file.buffer)
+  }
+
   @Get(':conversationId/events')
   listEvents(
     @Req() request: { user: { organizationId: string; userId: string } },
@@ -227,4 +262,145 @@ export class AgentConversationController {
       query.afterSequence ?? 0,
     )
   }
+
+  @Sse(':conversationId/stream')
+  @SkipResponseWrap()
+  streamEvents(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Query() query: ListAiConversationEventsQueryDto,
+    @Headers('last-event-id') lastEventId?: string,
+  ): Promise<Observable<MessageEvent>> {
+    return this.conversationService.streamOwnedEvents(
+      request.user.organizationId,
+      request.user.userId,
+      conversationId,
+      Math.max(query.afterSequence ?? 0, parseAfterSequence(lastEventId)),
+    )
+  }
+
+  @Post(':conversationId/interactions/:interactionId/cancel')
+  @HttpCode(200)
+  cancelInteraction(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('interactionId') interactionId: string,
+    @Body() dto: CancelAiConversationInteractionDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.cancelInteraction(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      interactionId,
+      dto.version,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/batches/:batchId/retry-failed-materials')
+  @HttpCode(200)
+  retryFailedMaterials(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: RetryFailedMaterialsDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.retryFailedMaterials(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      dto.materialIds,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/batches/:batchId/remove-materials')
+  @HttpCode(200)
+  removeBatchMaterials(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Body() dto: RemoveBatchMaterialsDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.removeMaterials(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      dto.materialIds,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/batches/:batchId/abandon')
+  @HttpCode(200)
+  abandonBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.abandonBatch(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/batches/:batchId/stop')
+  @HttpCode(200)
+  stopBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.stopBatch(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+
+  @Post(':conversationId/batches/:batchId/retry')
+  @HttpCode(200)
+  retryFailedBatch(
+    @Req() request: { user: { organizationId: string; userId: string } },
+    @Param('conversationId') conversationId: string,
+    @Param('batchId') batchId: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ): Promise<SendAiConversationMessageResult> {
+    return this.conversationService.retryFailedBatch(
+      request.user.organizationId,
+      request.user.userId,
+      undefined,
+      conversationId,
+      batchId,
+      idempotencyKey,
+    )
+  }
+}
+
+function parseAfterSequence(value?: string): number {
+  if (value == null || value.trim() === '') {
+    return 0
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0
+  }
+  return Math.floor(parsed)
 }

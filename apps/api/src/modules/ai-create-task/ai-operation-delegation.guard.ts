@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import type { Request } from 'express'
-import { OrganizationStatus, UserStatus, AiAgentAttemptStatus, AiCreateActivityRunStatus } from '@prisma/client'
+import { OrganizationStatus, UserStatus, AiAgentAttemptStatus } from '@prisma/client'
 import { requestContextSchema } from '@xiaotuanbao/ai-contracts'
 import {
   AI_OP_DELEGATION_JWT_AUD,
@@ -67,7 +67,10 @@ export class AiOperationDelegationGuard implements CanActivate {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
     const taskBound = Boolean(payload.taskId)
-    if (taskBound !== Boolean(payload.runId)) {
+    if (taskBound && payload.runId !== payload.attemptId) {
+      throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
+    }
+    if (!taskBound && payload.runId) {
       throw AiCollaborationHttpException.fromCode('DELEGATION_INVALID')
     }
 
@@ -120,13 +123,7 @@ export class AiOperationDelegationGuard implements CanActivate {
         organizationId: payload.organizationId,
         conversationId: payload.conversationId,
         inputBatchId: payload.inputBatchId,
-        ...(taskBound
-          ? {
-              taskId: payload.taskId,
-              activityRunId: payload.runId,
-              activityRun: { status: AiCreateActivityRunStatus.running },
-            }
-          : { taskId: null }),
+        ...(taskBound ? { taskId: payload.taskId } : { taskId: null }),
       },
       select: {
         id: true,

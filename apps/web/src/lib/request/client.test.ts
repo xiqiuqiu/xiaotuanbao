@@ -65,7 +65,7 @@ describe('authenticated request client', () => {
 
     const reviewConfirmHeaders = { has: vi.fn(() => false), set: vi.fn() }
     requestHandler({
-      url: '/ai-create-tasks/task-1/review-packages/pkg-1/confirm',
+      url: '/agent/review-packages/pkg-1/confirm',
       method: 'post',
       headers: reviewConfirmHeaders,
     })

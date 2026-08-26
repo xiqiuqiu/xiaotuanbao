@@ -27,7 +27,7 @@ describe('confirmAiReviewPackage', () => {
     await confirmAiReviewPackage('task-1', 'pkg-1', payload, 'decision-1')
 
     expect(post).toHaveBeenCalledWith(
-      '/ai-create-tasks/task-1/review-packages/pkg-1/confirm',
+      '/agent/review-packages/pkg-1/confirm',
       payload,
       { headers: { 'Idempotency-Key': 'decision-1' } },
     )

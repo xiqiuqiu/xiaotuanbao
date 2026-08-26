@@ -1270,7 +1270,7 @@ model AiCreateIdempotencyRecord {
   @@map("ai_create_idempotency_records")
 }
 
-/// AI 建团活动运行：同一任务同一时间至多一个 running。
+/// 遗留 AI 建团活动运行表。#373 后不再写入；运行身份以 Attempt 为准，本表待后续删除。
 model AiCreateActivityRun {
   id             String                     @id @default(cuid())
   organizationId String                     @map("organization_id")
@@ -1328,8 +1328,8 @@ model AiReviewPackage {
   organization       Organization          @relation(fields: [organizationId], references: [id])
   taskId             String?               @map("task_id")
   task               AgentTask?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  runId              String                @map("run_id")
-  run                AiCreateActivityRun   @relation(fields: [runId], references: [id])
+  runId              String?               @map("run_id")
+  run                AiCreateActivityRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
   conversationId     String?               @map("conversation_id")
   conversation       AiConversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   inputBatchId       String?               @map("input_batch_id")

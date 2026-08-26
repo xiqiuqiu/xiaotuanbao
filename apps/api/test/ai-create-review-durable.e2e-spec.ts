@@ -87,7 +87,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
   async function openSession() {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -112,15 +112,15 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
   function sendMessage(taskId: string, conversationId: string, text: string, key: string) {
     return authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/conversations/${conversationId}/messages`)
+      .post(`/api/agent/conversations/${conversationId}/messages`)
       .set('Idempotency-Key', key)
-      .send({ text })
+      .send({ text, primaryTaskId: taskId })
   }
 
-  async function listEvents(taskId: string, conversationId: string, afterSequence = 0) {
+  async function listEvents(_taskId: string, conversationId: string, afterSequence = 0) {
     const response = await authRequest(app, coordinatorToken)
       .get(
-        `/api/ai-create-tasks/${taskId}/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
+        `/api/agent/conversations/${conversationId}/events?afterSequence=${afterSequence}`,
       )
       .expect(200)
     return response.body.data as {
@@ -191,7 +191,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
 
     const task = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}`)
+      .get(`/api/agent/tasks/${taskId}`)
       .expect(200)
     expect(task.body.data.draft.version).toBe(opened.task.draft.version)
     expect(task.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
@@ -260,9 +260,8 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(
       await prisma.aiReviewPackage.findFirstOrThrow({ where: { id: pkg.id } }),
     ).toMatchObject({ attemptId: attempt.id, status: 'pending' })
-    const run = await prisma.aiCreateActivityRun.findFirstOrThrow({ where: { taskId } })
-    expect(run.status).toBe('completed')
-    expect(run.endedAt).not.toBeNull()
+    expect(recovered.status).toBe('completed')
+    expect(recovered.endedAt).not.toBeNull()
 
     const listed = await listEvents(taskId, conversationId)
     expect(listed.activeBatch).toMatchObject({ id: batch.id, status: 'awaiting_review' })
@@ -291,11 +290,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
 
     const pending = (
-      await authRequest(app, coordinatorToken).get(`/api/ai-create-tasks/${taskId}`).expect(200)
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
     const patched = await authRequest(app, coordinatorToken)
-      .patch(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}`)
+      .patch(`/api/agent/review-packages/${pending.id}`)
       .send({ corrections: { name: `${testPrefix}-修正团名` } })
       .expect(200)
     expect(patched.body.data.draft.snapshot.name).toBe(`${testPrefix}-原团名`)
@@ -305,7 +304,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
 
     agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
     const confirmed = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version,
         expectedPackageVersion: pending.version,
@@ -377,12 +376,12 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     })
 
     const pending = (
-      await authRequest(app, coordinatorToken).get(`/api/ai-create-tasks/${taskId}`).expect(200)
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
     agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
     await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version,
         expectedPackageVersion: pending.version,
@@ -408,11 +407,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     const callsAfterSubmit = agent.callCount()
 
     const pending = (
-      await authRequest(app, coordinatorToken).get(`/api/ai-create-tasks/${taskId}`).expect(200)
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
     const rejected = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/reject`)
+      .post(`/api/agent/review-packages/${pending.id}/reject`)
       .send({ expectedPackageVersion: pending.version })
       .expect(200)
 
@@ -468,7 +467,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
 
     const pending = (
-      await authRequest(app, coordinatorToken).get(`/api/ai-create-tasks/${taskId}`).expect(200)
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
     agent.setOutcome({ kind: 'completed', message: CONTINUATION_MESSAGE })
@@ -478,10 +477,10 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     }
     const [first, second] = await Promise.all([
       authRequest(app, coordinatorToken)
-        .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+        .post(`/api/agent/review-packages/${pending.id}/confirm`)
         .send(body),
       authRequest(app, coordinatorToken)
-        .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+        .post(`/api/agent/review-packages/${pending.id}/confirm`)
         .send(body),
     ])
     const statuses = [first.status, second.status].sort()
@@ -492,7 +491,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(conflict.body.data.draft.snapshot.name).toBe(`${testPrefix}-候选团名`)
 
     const late = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/reject`)
+      .post(`/api/agent/review-packages/${pending.id}/reject`)
       .send({ expectedPackageVersion: pending.version })
       .expect(409)
     expect(late.body.message).toContain('已处理')
@@ -524,11 +523,11 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     await submitAwaitingReview(taskId, conversationId, opened.task.draft.version)
 
     const pending = (
-      await authRequest(app, coordinatorToken).get(`/api/ai-create-tasks/${taskId}`).expect(200)
+      await authRequest(app, coordinatorToken).get(`/api/agent/tasks/${taskId}`).expect(200)
     ).body.data.pendingReview as { id: string; version: number }
 
     const staleVersion = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version,
         expectedPackageVersion: pending.version + 1,
@@ -537,7 +536,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(staleVersion.body.message).toMatch(/版本|已处理/)
 
     await authRequest(app, financeToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version,
         expectedPackageVersion: pending.version,
@@ -562,7 +561,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
       .expect(200)
 
     const staleDraft = await authRequest(app, coordinatorToken)
-      .post(`/api/ai-create-tasks/${taskId}/review-packages/${pending.id}/confirm`)
+      .post(`/api/agent/review-packages/${pending.id}/confirm`)
       .send({
         expectedVersion: opened.task.draft.version + 1,
         expectedPackageVersion: pending.version,
@@ -572,7 +571,7 @@ describe('Durable form review batch continuation (e2e) #319', () => {
     expect(staleDraft.body.data.reviewConflict.status).toBe('stale_target_version')
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}`)
+      .get(`/api/agent/tasks/${taskId}`)
       .expect(200)
     expect(after.body.data.pendingReview).toBeNull()
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-表单改名`)

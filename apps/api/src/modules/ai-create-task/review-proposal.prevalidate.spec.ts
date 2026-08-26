@@ -90,6 +90,7 @@ function createService() {
       }),
     },
     aiAgentAttempt: {
+      findFirst: jest.fn().mockResolvedValue({ id: attemptId }),
       findUnique: jest.fn().mockResolvedValue({
         id: attemptId,
         contextManifestId,

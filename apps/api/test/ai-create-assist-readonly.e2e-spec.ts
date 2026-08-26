@@ -73,7 +73,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
 
   it('lets a flagged coordinator open an assist session without a complete draft', async () => {
     const response = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -127,7 +127,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
     const versionBefore = created.body.data.draft.version as number
 
     const session = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ taskId })
       .expect(201)
 
@@ -172,7 +172,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
       })
 
     const after = await authRequest(app, coordinatorToken)
-      .get(`/api/ai-create-tasks/${taskId}`)
+      .get(`/api/agent/tasks/${taskId}`)
       .expect(200)
     expect(after.body.data.draft.version).toBe(versionBefore)
     expect(after.body.data.draft.snapshot.name).toBe(`${testPrefix}-完整`)
@@ -191,7 +191,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
 
   it('rejects a delegation token replayed as an xtb_session cookie', async () => {
     const session = await authRequest(app, coordinatorToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({
         draft: {
           mode: 'manual',
@@ -226,7 +226,7 @@ describe('AI create readonly tool chain (e2e) #297', () => {
 
   it('forbids finance from starting an assist session', async () => {
     await authRequest(app, financeToken)
-      .post('/api/ai-create-tasks/assist-session')
+      .post('/api/agent/tasks/departure-creation/sessions')
       .send({ draft: { mode: 'manual', routeName: `${testPrefix}-finance` } })
       .expect(403)
   })

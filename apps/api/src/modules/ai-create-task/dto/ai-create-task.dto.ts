@@ -202,6 +202,11 @@ export class SendAiConversationMessageDto {
   @IsOptional()
   @IsObject()
   pageLocator?: Record<string, unknown>
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  primaryTaskId?: string
 }
 
 export class SaveAiConversationTextDraftDto {

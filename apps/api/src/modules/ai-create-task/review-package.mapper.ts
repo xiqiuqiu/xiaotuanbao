@@ -78,7 +78,7 @@ export function toReviewPackageView(pkg: {
   payloadSchema?: string | null
   baseObjectVersion: number
   version: number
-  runId: string
+  runId?: string | null
   conversationId?: string | null
   inputBatchId?: string | null
   attemptId?: string | null
@@ -99,7 +99,7 @@ export function toReviewPackageView(pkg: {
     payloadSchema: 'departure.basic_info_draft@v1',
     baseObjectVersion: pkg.baseObjectVersion,
     version: pkg.version,
-    runId: pkg.runId,
+    runId: pkg.runId ?? null,
     conversationId: pkg.conversationId ?? null,
     inputBatchId: pkg.inputBatchId ?? null,
     attemptId: pkg.attemptId ?? null,

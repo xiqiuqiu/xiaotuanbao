@@ -69,14 +69,14 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   saveDepartureCreationDraft: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiCreateTask: { gating: 'departureWrite', endpointKey: 'departure:write' },
   startAiCreateAssistSession: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  sendAiConversationMessage: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  saveAiConversationDraft: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  cancelAiConversationInteraction: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  retryFailedConversationMaterials: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  removeConversationMaterials: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  abandonConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  stopConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
-  retryFailedConversationBatch: { gating: 'departureWrite', endpointKey: 'departure:write' },
+  sendAiConversationMessage: { gating: 'public', endpointKey: null },
+  saveAiConversationDraft: { gating: 'public', endpointKey: null },
+  cancelAiConversationInteraction: { gating: 'public', endpointKey: null },
+  retryFailedConversationMaterials: { gating: 'public', endpointKey: null },
+  removeConversationMaterials: { gating: 'public', endpointKey: null },
+  abandonConversationBatch: { gating: 'public', endpointKey: null },
+  stopConversationBatch: { gating: 'public', endpointKey: null },
+  retryFailedConversationBatch: { gating: 'public', endpointKey: null },
   patchAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   confirmAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
   rejectAiReviewPackage: { gating: 'departureWrite', endpointKey: 'departure:write' },
@@ -196,8 +196,6 @@ const GATING_AWARENESS_ALLOWLIST: Record<string, string> = {
     '新建/复制发团属 departure:write；本向导仅由 CreateDeparturePage 渲染，后者已做页面级 canEditDeparture 403，财务无法进入',
   '/src/features/ai-assist/useAiCreateAssistBootstrap.ts':
     '协助会话由 CreateDepartureWizard 调用，页面级 canEditDeparture 已挡住无写权限角色',
-  '/src/features/ai-assist/AiCreateAssistChat.tsx':
-    '发送会话消息由 CreateDepartureWizard 挂载，页面级 canEditDeparture 已挡住无写权限角色',
   '/src/features/departure/components/CreateDepartureStepRoute.tsx':
     '删除常用路线属 departure:write；整个新建向导由 CreateDeparturePage 页面级 canEditDeparture 挡住，财务无法进入',
   '/src/features/departure/components/SaveAsRouteTemplateModal.tsx':

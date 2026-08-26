@@ -33,10 +33,10 @@ function materialIcon(contentType: string) {
 }
 
 export function AssistMaterialsTrigger({
-  taskId,
+  conversationId,
   refreshKey = 0,
 }: {
-  taskId: string
+  conversationId: string
   refreshKey?: number
 }) {
   const [preview, setPreview] = useState<{
@@ -46,9 +46,9 @@ export function AssistMaterialsTrigger({
   } | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const query = useQuery({
-    queryKey: ['ai-create-materials', taskId, refreshKey],
-    queryFn: () => listDepartureMaterials(taskId),
-    enabled: Boolean(taskId),
+    queryKey: ['ai-create-materials', conversationId, refreshKey],
+    queryFn: () => listDepartureMaterials(conversationId),
+    enabled: Boolean(conversationId),
     refetchInterval: (current) => materialsRefetchInterval(current.state.data),
     refetchIntervalInBackground: false,
   })
@@ -64,7 +64,7 @@ export function AssistMaterialsTrigger({
 
   const openPreview = (material: DepartureMaterialView) => {
     setPreviewError(null)
-    void previewDepartureMaterial(taskId, material.id)
+    void previewDepartureMaterial(conversationId, material.id)
       .then(({ blob, filename }) => {
         setPreview({
           filename: filename || material.originalFilename,

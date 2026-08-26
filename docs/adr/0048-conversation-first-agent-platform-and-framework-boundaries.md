@@ -116,7 +116,7 @@ Action 的 taskId 保持可选，真实作用目标以服务端解析的 `target
 
 现有 `AiReviewPackage` 的开发期记录不回填；其 `basic_info_draft` candidates 契约重构为一种版本化建团载荷。建团能力迁到通用审核信封并通过确认、冲突与审计测试后，删除旧包对 taskId、draftVersion 与固定 confirmationUnit 的平台级依赖，不保留长期读取适配器。
 
-新平台 API 是唯一执行入口，新会话 UI 只调用通用 Conversation、InputBatch、Task 与 Review 契约。现有 `/ai-create-tasks/*` 路由仅可在前端切换的短窗口内把旧请求映射为同一通用命令，并且只写新结构；新 UI 接通后立即删除。迁移不实现新旧状态双写、影子读取、历史回滚或按 Organization 切读，新增客源、财务等能力也不得接入旧路由。
+新平台 API 是唯一执行入口，新会话 UI 只调用通用 Conversation、InputBatch、Task 与 Review 契约。`/ai-create-tasks/*` 旧运行路由已删除；建团协助、消息、批次、SSE、来源与审核改走 `/agent/conversations`、`/agent/tasks` 和 `/agent/review-packages`。`/ai-create-tasks` 仅保留发团创建草稿保存、正式发团确认与协助可用性查询。开发环境可用 `pnpm --filter api db:reset-agent-run-data` 清理 Agent 控制面，不得级联删除 Departure、客源、财务或正式附件。迁移不实现新旧状态双写、影子读取、历史回滚或按 Organization 切读，新增客源、财务等能力也不得接入旧路由。
 
 执行顺序固定为：先完成新模型与契约及数据库边界，再实现通用控制面和建团领域适配器，随后用全新 Agent 数据验证建团正常、审核、冲突、失败、恢复及证据链，接通新会话 API/UI，最后删除旧运行模型、路由和代码。验收必须证明会话可关联零到多个 Task、同一 Task 可由不同会话继续、多个审核包按目标版本解决冲突、Worker/Gateway/HITL/审计只有一套，并且第二领域无需复制 `ai-create-*` 基础设施。
 
@@ -158,7 +158,7 @@ Agent 路由按“确定性关联优先、模型辅助意图识别、服务端�
 
 第一阶段先建立版本化 Agent/能力注册表、服务端类型化 Request Context、工具 input/output/context Schema、统一 processor pipeline、structured output、调用 usage/trace 和离线 eval；随后用一个建团之外的只读或低风险竖切证明平台契约可复用。`TokenLimiterProcessor` 作为每个模型 step 的容量安全网；Observational Memory 只在解决 per-User/per-Organization resource 隔离后作为非权威技术会话压缩 PoC，并继续由 Context Builder 注入当前业务事实、由 Context Manifest 记录模型实际输入。
 
-#352 不再作为一个未排期的整体被动引用，而须拆成可独立交付的加固切片并接入本平台依赖图：证据契约与 Worker 原子审核提交是通用 Review Package 的前置，Gateway 权威目标解析是新增 Capability 的前置，当前消息去重与统一动态预算是通用会话运行前置，Mastra TokenLimiter 与实际 usage 是第一阶段退出条件，确定性压缩、版本化摘要和原文 locator 回读是长会话连续性验收前置，超长输入持久化、稳定分块与结构化合并是超长输入能力验收前置。任何子能力在对应切片完成前不得由 #363 或其子票宣称已经交付。
+#352 的加固切片已按依赖交付：证据契约与 Worker 原子审核提交（#379/#380）、Gateway 权威目标解析（#381）、当前消息去重与统一动态预算（#382）、Mastra TokenLimiter 与实际 usage（#383）、确定性压缩与原文 locator 回读（#384）、超长输入持久化分块与结构化合并（#385）。#373 作为开发期架构切换出口，不再把上述能力写成未落实的 Related hardening；Observational Memory、Agent Network 与完整 Organization Module Entitlement 仍未启用，不得据此宣称生产推广就绪。
 
 Mastra 分阶段采用的第一阶段固定为“可治理执行底座”：以版本化 AgentDefinition 与统一 Agent Factory 取代领域内散落的静态 Agent 实例；Factory 只通过类型化 RequestContext 接收服务端可信身份、组织、Attempt、Manifest 与授权集合，并从 CapabilityDefinition 装配本 Attempt 实际授予的 Tools。每个 Tool 具备 input/output/context Schema，所有模型调用经过统一 input/output processor pipeline，意图、追问和交互结果使用 Structured Output，并至少记录逐 step 的模型、Token、耗时和 Tool 调用用量。
 
