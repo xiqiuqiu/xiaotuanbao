@@ -58,6 +58,7 @@ import {
 import { buildBudgetedContext } from './ai-context-budget'
 import { resolvePreparedProjection } from './ai-context-compaction'
 import { resolveModelCurrentInput, userMessageSourceOrigin, withSourceIndexTruncation } from './ai-context-source-index'
+import { markBatchAgentRunningAfterAttempt } from './ai-workflow.agent-running'
 import { workflowErrorCode } from './ai-workflow-error'
 import { AiConversationService } from './ai-conversation.service'
 import {
@@ -457,6 +458,7 @@ export class AiWorkflowProcessor {
     }
 
     try {
+      // Attempt 与 batch_status:agent_running 在同一事务提交后，才开启模型流。
       const prepared = await this.prepareAttempt(job, authorized.permissionKeys)
       this.workflowLog('agent_started', {
         job: job.id,
@@ -746,10 +748,6 @@ export class AiWorkflowProcessor {
         originalText: userText,
         plan: preparedProjection.plan,
       })
-      const runningEventId = await this.markBatchAgentRunning(tx, job)
-      if (runningEventId) {
-        published.push({ conversationId: job.conversationId, eventId: runningEventId })
-      }
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: availableToolNames,
@@ -894,6 +892,7 @@ export class AiWorkflowProcessor {
         where: { id: attempt.id },
         data: { grantedCapabilities: grants.granted },
       })
+      await this.appendAgentRunningStatus(tx, job, attempt, published)
       return {
         runId: attempt.id,
         attemptId: attempt.id,
@@ -1044,10 +1043,6 @@ export class AiWorkflowProcessor {
         originalText: userText,
         plan: preparedProjection.plan,
       })
-      const runningEventId = await this.markBatchAgentRunning(tx, job)
-      if (runningEventId) {
-        published.push({ conversationId: job.conversationId, eventId: runningEventId })
-      }
       const budgetedContext = buildBudgetedContext({
         modelId,
         toolNames: CONVERSATION_RECALL_TOOL_NAMES,
@@ -1168,6 +1163,7 @@ export class AiWorkflowProcessor {
         where: { id: attempt.id },
         data: { grantedCapabilities: grants.granted },
       })
+      await this.appendAgentRunningStatus(tx, job, attempt, published)
       return {
         attemptId: attempt.id,
         contextManifestId: manifest.id,
@@ -1708,28 +1704,24 @@ export class AiWorkflowProcessor {
     })
   }
 
-  private async markBatchAgentRunning(
+  private async appendAgentRunningStatus(
     tx: Prisma.TransactionClient,
     job: ClaimedJob,
-  ): Promise<string | null> {
-    const batch = await tx.aiInputBatch.findUniqueOrThrow({
-      where: { id: job.inputBatchId },
-      select: { status: true },
-    })
-    if (batch.status === AiInputBatchStatus.agent_running) {
-      return null
-    }
-    await tx.aiInputBatch.update({
-      where: { id: job.inputBatchId },
-      data: { status: AiInputBatchStatus.agent_running },
-    })
-    const statusEvent = await this.conversationService.appendEvent(tx, {
-      organizationId: job.organizationId,
-      conversationId: job.conversationId,
-      kind: AiConversationEventKind.batch_status,
-      payload: { batchId: job.inputBatchId, status: AiInputBatchStatus.agent_running },
-    })
-    return statusEvent.id
+    attempt: { id: string; generation: number },
+    published: { conversationId: string; eventId: string }[],
+  ): Promise<void> {
+    const runningEventId = await markBatchAgentRunningAfterAttempt(
+      tx,
+      (inner, params) => this.conversationService.appendEvent(inner, params),
+      {
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        batchId: job.inputBatchId,
+        attemptId: attempt.id,
+        generation: attempt.generation,
+      },
+    )
+    published.push({ conversationId: job.conversationId, eventId: runningEventId })
   }
 
   private async organizationUsable(organizationId: string): Promise<boolean> {

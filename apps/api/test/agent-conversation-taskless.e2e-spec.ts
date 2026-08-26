@@ -331,6 +331,13 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       where: { conversationId },
       include: { contextManifest: true },
     })
+    const runningStatus = events.events.find(
+      (event) => event.kind === 'batch_status' && event.payload.status === 'agent_running',
+    )
+    expect(runningStatus?.payload).toMatchObject({
+      attemptId: attempt?.id,
+      generation: attempt?.generation,
+    })
     expect(attempt).toMatchObject({
       status: 'completed',
       taskId: null,
