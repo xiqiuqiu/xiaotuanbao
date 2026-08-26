@@ -33,13 +33,24 @@ jest.mock('./mastra-agent', () => {
     text: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
     toolCalls: [],
   })
+  const stream = jest.fn(async (userText: string) => {
+    const output = await generate(userText)
+    return {
+      fullStream: (async function* () {
+        if (typeof output.text === 'string' && output.text.length > 0) {
+          yield { type: 'text-delta', payload: { text: output.text } }
+        }
+      })(),
+      getFullOutput: async () => output,
+    }
+  })
   return {
     AI_CREATE_AGENT_ID: 'ai-create-readonly-assist',
     createAiCreateMastra: () => ({
-      getAgent: () => ({ generate }),
+      getAgent: () => ({ generate, stream }),
     }),
     createAiCreateDiscoveryMastra: () => ({
-      getAgent: () => ({ generate }),
+      getAgent: () => ({ generate, stream }),
     }),
     mastraGenerateMock: generate,
   }
@@ -152,6 +163,30 @@ async function listen() {
   }
 }
 
+function readNdjsonFrames(body: string): unknown[] {
+  return body
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as unknown)
+}
+
+async function readHeadlessOutcome(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? ''
+  if (contentType.includes('ndjson')) {
+    const frames = readNdjsonFrames(await response.text())
+    const completed = frames.find(
+      (frame) =>
+        Boolean(frame) &&
+        typeof frame === 'object' &&
+        (frame as { type?: unknown }).type === 'run.completed',
+    ) as { result?: unknown } | undefined
+    return completed?.result
+  }
+  const payload = (await response.json()) as { data?: unknown }
+  return payload.data
+}
+
 async function postHeadless(
   port: number,
   options: {
@@ -220,11 +255,21 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(runtime.port)
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({
-        data: {
-          kind: 'completed',
-          message: '已根据当前资料整理出团基础信息。',
-        },
+      expect(response.headers.get('content-type')).toContain('application/x-ndjson')
+      const frames = readNdjsonFrames(await response.clone().text())
+      expect(frames.map((frame) => (frame as { type: string }).type)).toEqual([
+        'run.started',
+        'message.delta',
+        'run.completed',
+      ])
+      expect(frames[1]).toEqual({
+        type: 'message.delta',
+        sequence: 1,
+        text: '已根据当前资料整理出团基础信息。',
+      })
+      expect(await readHeadlessOutcome(response)).toEqual({
+        kind: 'completed',
+        message: '已根据当前资料整理出团基础信息。',
       })
       expect(mockFetchTaskContext).toHaveBeenCalledWith(
         {
@@ -426,8 +471,8 @@ describe('headless Agent runtime contract', () => {
         },
       })
       expect(response.status).toBe(200)
-      expect(await response.json()).toMatchObject({
-        data: { kind: 'completed' },
+      expect(await readHeadlessOutcome(response)).toMatchObject({
+        kind: 'completed',
       })
       expect(mockFetchTaskContext).not.toHaveBeenCalled()
     } finally {
@@ -506,7 +551,7 @@ describe('headless Agent runtime contract', () => {
       try {
         const response = await postHeadless(port)
         expect(response.status).toBe(200)
-        expect(await response.json()).toEqual({ data: outcome })
+        expect(await readHeadlessOutcome(response)).toEqual(outcome)
       } finally {
         await new Promise<void>((resolve, reject) =>
           server.close((error) => (error ? reject(error) : resolve())),
@@ -530,14 +575,12 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({
-        data: {
-          kind: 'failed',
-          error: {
-            code: 'PERMISSION_DENIED',
-            message: '当前账号无权使用 AI 建团辅助',
-            retryable: false,
-          },
+      expect(await readHeadlessOutcome(response)).toEqual({
+        kind: 'failed',
+        error: {
+          code: 'PERMISSION_DENIED',
+          message: '当前账号无权使用 AI 建团辅助',
+          retryable: false,
         },
       })
       expect(mockFetchTaskContext).toHaveBeenCalled()
@@ -561,16 +604,14 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({
-        data: {
-          kind: 'completed',
-          message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
-          diagnostic: {
-            processorVersion: 'mastra-token-limiter-contiguous/v1',
-            usageSource: 'missing',
-            toolSteps: [],
-            modelSteps: [],
-          },
+      expect(await readHeadlessOutcome(response)).toEqual({
+        kind: 'completed',
+        message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'missing',
+          toolSteps: [],
+          modelSteps: [],
         },
       })
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
@@ -608,7 +649,7 @@ describe('headless Agent runtime contract', () => {
     try {
       const response = await postHeadless(port)
       expect(response.status).toBe(200)
-      expect(await response.json()).toMatchObject({ data: { kind: 'completed' } })
+      expect(await readHeadlessOutcome(response)).toMatchObject({ kind: 'completed' })
       expect(mockFetchParseResult).not.toHaveBeenCalled()
       expect(mockMastraGenerate).toHaveBeenCalledWith(USER_TEXT)
     } finally {

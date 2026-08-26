@@ -102,6 +102,77 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
+  it('parses NDJSON message.delta frames and still awaits the terminal result', async () => {
+    const deltas: string[] = []
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 1, text: '已' })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 2, text: '整理当前资料。' })}\n`,
+      )
+      response.end(
+        `${JSON.stringify({
+          type: 'run.completed',
+          result: { kind: 'completed', message: '已整理当前资料。' },
+        })}\n`,
+      )
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+
+    await expect(
+      client.run(request, 'delegation-token', {
+        onPublicText: (text) => {
+          deltas.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'completed',
+      message: '已整理当前资料。',
+    })
+    expect(deltas).toEqual(['已', '已整理当前资料。'])
+  })
+
+  it('ignores tool-shaped frames while still returning the completed result', async () => {
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(
+        `${JSON.stringify({
+          type: 'tool.call',
+          name: 'proposeReviewPackage',
+          args: { secret: 'must-not-surface' },
+        })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 1, text: '已整理当前资料。' })}\n`,
+      )
+      response.end(
+        `${JSON.stringify({
+          type: 'run.completed',
+          result: { kind: 'completed', message: '已整理当前资料。' },
+        })}\n`,
+      )
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(client.run(request, 'delegation-token')).resolves.toEqual({
+      kind: 'completed',
+      message: '已整理当前资料。',
+    })
+  })
+
   it('treats headless 5xx as retryable AGENT_UNAVAILABLE', async () => {
     server = createServer((_request, response) => {
       response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' })

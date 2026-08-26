@@ -4,6 +4,7 @@ import {
   diagnosticFromResult,
   headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
+  headlessRunFrameSchema,
   resolveDiagnosticUsage,
   usageCountsFromProvider,
 } from './headless-execution'
@@ -32,6 +33,40 @@ const reviewPackage = {
 }
 
 describe('headless Agent execution contract', () => {
+  it('accepts public-reply run frames and rejects tool args as protocol frames', () => {
+    expect(headlessRunFrameSchema.parse({ type: 'run.started' })).toEqual({ type: 'run.started' })
+    expect(
+      headlessRunFrameSchema.parse({ type: 'message.delta', sequence: 1, text: '已记下' }),
+    ).toEqual({ type: 'message.delta', sequence: 1, text: '已记下' })
+    expect(headlessRunFrameSchema.parse({ type: 'run.heartbeat' })).toEqual({ type: 'run.heartbeat' })
+    expect(
+      headlessRunFrameSchema.parse({
+        type: 'run.completed',
+        result: { kind: 'completed', message: '已根据当前资料整理出团基础信息。' },
+      }),
+    ).toEqual({
+      type: 'run.completed',
+      result: { kind: 'completed', message: '已根据当前资料整理出团基础信息。' },
+    })
+
+    expect(() =>
+      headlessRunFrameSchema.parse({
+        type: 'tool.call',
+        name: 'proposeReviewPackage',
+        args: { objectVersion: 1 },
+      }),
+    ).toThrow()
+    expect(() =>
+      headlessRunFrameSchema.parse({
+        type: 'system.instruction',
+        text: '你是内部助手',
+      }),
+    ).toThrow()
+    expect(() =>
+      headlessRunFrameSchema.parse({ type: 'message.delta', sequence: 0, text: 'x' }),
+    ).toThrow()
+  })
+
   it('requires conversation, input batch, attempt and context manifest identities', () => {
     expect(
       headlessExecutionRequestSchema.parse({
