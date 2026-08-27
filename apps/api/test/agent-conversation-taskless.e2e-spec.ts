@@ -7,9 +7,14 @@ import {
   AiInputBatchStatus,
   AiWorkflowJobStatus,
   AiWorkflowJobType,
+  InputBatchTaskRole,
   PrismaClient,
 } from '@prisma/client'
-import { CONVERSATION_GENERAL_AGENT_DEFINITION_REF } from '@xiaotuanbao/ai-contracts'
+import {
+  AI_CREATE_AGENT_DEFINITION_REF,
+  CONVERSATION_GENERAL_AGENT_DEFINITION_REF,
+  DEPARTURE_CREATION_GOAL_INTENT_KEY,
+} from '@xiaotuanbao/ai-contracts'
 import request from 'supertest'
 import { AiWorkflowProcessor } from '../src/modules/ai-create-task/ai-workflow.processor'
 import {
@@ -36,6 +41,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   let agent: Awaited<ReturnType<typeof startDeterministicHeadlessAgent>>
   const testPrefix = `e2e365-${Date.now()}`
   const createdIds: string[] = []
+  const createdTaskIds: string[] = []
 
   beforeAll(async () => {
     let apiBaseUrl = ''
@@ -74,6 +80,9 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   afterAll(async () => {
     if (createdIds.length > 0) {
       await prisma.aiConversation.deleteMany({ where: { id: { in: createdIds } } })
+    }
+    if (createdTaskIds.length > 0) {
+      await prisma.agentTask.deleteMany({ where: { id: { in: createdTaskIds } } })
     }
     await prisma.$disconnect()
     await agent.close()
@@ -349,12 +358,188 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       mastraTraceId: null,
       toolSteps: [],
       contextManifest: {
-        systemPromptVersion: 'conversation-general/v2',
-        toolSchemaVersion: 'conversation-general-recall/v1',
+        systemPromptVersion: 'conversation-general/v3',
+        toolSchemaVersion: 'conversation-general-routing-recall/v2',
       },
     })
     expect(attempt?.contextManifest?.systemPromptVersion).not.toBe(PLAINTEXT_SYSTEM_PROMPT_VERSION)
     expect(attempt?.contextManifest?.toolSchemaVersion).not.toBe(PLAINTEXT_TOOL_SCHEMA_VERSION)
+    expect(
+      await prisma.inputBatchTaskLink.count({ where: { inputBatch: { conversationId } } }),
+    ).toBe(0)
+  })
+
+  it('creates a departure task from a registered intent and continues on the same batch', async () => {
+    agent.setOutcomes([
+      {
+        kind: 'registered_intent',
+        intent: {
+          key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+          confidence: 'high',
+          goal: '创建七月喀纳斯发团',
+        },
+        message: '正在准备建团任务。',
+      },
+      { kind: 'completed', message: '已进入建团专长。' },
+    ])
+    const beforeWorker = agent.callCount()
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 帮我创建七月喀纳斯发团`,
+      `${testPrefix}-task-proposal`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const inputBatchId = sent.body.data.batch.id as string
+
+    await processor.processDueJobs(5)
+    await processor.processDueJobs(5)
+
+    const batch = await prisma.aiInputBatch.findUniqueOrThrow({
+      where: { id: inputBatchId },
+      include: {
+        taskLinks: true,
+        agentAttempts: {
+          orderBy: { startedAt: 'asc' },
+          include: { contextManifest: true },
+        },
+      },
+    })
+    expect(batch.status).toBe(AiInputBatchStatus.completed)
+    expect(agent.callCount()).toBe(beforeWorker + 2)
+    expect(batch.taskLinks).toHaveLength(1)
+    expect(batch.taskLinks[0].role).toBe(InputBatchTaskRole.created)
+    const taskId = batch.taskLinks[0].taskId
+    createdTaskIds.push(taskId)
+    expect(batch.agentAttempts).toHaveLength(2)
+    expect(batch.agentAttempts[0]).toMatchObject({
+      taskId: null,
+      agentDefinitionKey: CONVERSATION_GENERAL_AGENT_DEFINITION_REF.key,
+      resultJson: { kind: 'registered_intent' },
+    })
+    expect(batch.agentAttempts[0].contextManifest.taskRefs).toEqual([])
+    expect(batch.agentAttempts[1]).toMatchObject({
+      taskId,
+      agentDefinitionKey: AI_CREATE_AGENT_DEFINITION_REF.key,
+    })
+    expect(batch.agentAttempts[1].contextManifest.taskRefs).toEqual([
+      expect.objectContaining({ taskId, role: 'primary' }),
+    ])
+    expect(
+      await prisma.aiInputBatch.count({ where: { conversationId } }),
+    ).toBe(1)
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: AiConversationEventKind.user_message },
+      }),
+    ).toBe(1)
+    await expect(prisma.agentTask.findUniqueOrThrow({ where: { id: taskId } })).resolves.toMatchObject({
+      goal: '创建七月喀纳斯发团',
+      ownerUserId,
+      status: 'active',
+    })
+  })
+
+  it('ignores an unregistered intent and completes as a general reply', async () => {
+    agent.setOutcome({
+      kind: 'registered_intent',
+      intent: { key: 'partner.ledger.query', confidence: 'high', goal: '查询伙伴账款' },
+      message: '当前尚未登记这个能力。',
+    })
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 未登记意图`,
+      `${testPrefix}-unknown-intent`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+
+    await processor.processDueJobs(5)
+
+    expect(
+      await prisma.inputBatchTaskLink.count({ where: { inputBatch: { conversationId } } }),
+    ).toBe(0)
+    const events = await listEvents(coordinatorToken, conversationId)
+    expect(events.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'agent_message',
+          payload: expect.objectContaining({ text: '当前尚未登记这个能力。' }),
+        }),
+      ]),
+    )
+  })
+
+  it('stops a same-batch continuation before its second attempt starts', async () => {
+    agent.setOutcomes([
+      {
+        kind: 'registered_intent',
+        intent: {
+          key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+          confidence: 'high',
+          goal: `${testPrefix} 将停止的建团`,
+        },
+        message: '正在准备建团任务。',
+      },
+      { kind: 'completed', message: '不应执行的续跑。' },
+    ])
+    const beforeWorker = agent.callCount()
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 创建后停止`,
+      `${testPrefix}-proposal-stop`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+
+    await processor.processDueJobs(1)
+    const ready = await prisma.aiInputBatch.findFirstOrThrow({
+      where: { conversationId },
+      include: { taskLinks: true },
+    })
+    expect(ready.status).toBe(AiInputBatchStatus.ready_for_agent)
+    expect(ready.taskLinks).toHaveLength(1)
+    createdTaskIds.push(ready.taskLinks[0].taskId)
+
+    await authRequest(app, coordinatorToken)
+      .post(`/api/agent/conversations/${conversationId}/stop`)
+      .set('Idempotency-Key', `${testPrefix}-proposal-stop-command`)
+      .expect(200)
+    await processor.processDueJobs(5)
+
+    expect(agent.callCount()).toBe(beforeWorker + 1)
+    expect(
+      await prisma.aiAgentAttempt.count({ where: { conversationId } }),
+    ).toBe(1)
+    expect(
+      await prisma.aiInputBatch.findFirstOrThrow({ where: { conversationId } }),
+    ).toMatchObject({ status: AiInputBatchStatus.cancelled })
+  })
+
+  it('rejects a departure task proposal without departure:write', async () => {
+    agent.setOutcome({
+      kind: 'registered_intent',
+      intent: {
+        key: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+        confidence: 'high',
+        goal: `${testPrefix} 创建无权限发团`,
+      },
+      message: '正在准备建团任务。',
+    })
+    const sent = await sendFirst(
+      financeToken,
+      `${testPrefix} 财务尝试建团`,
+      `${testPrefix}-proposal-denied`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+
+    await processor.processDueJobs(5)
+
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { conversationId } })
+    expect(batch.status).toBe(AiInputBatchStatus.failed)
+    expect(await prisma.inputBatchTaskLink.count({ where: { inputBatchId: batch.id } })).toBe(0)
+    expect(
+      await prisma.agentTask.count({
+        where: { organizationId, goal: `${testPrefix} 创建无权限发团` },
+      }),
+    ).toBe(0)
   })
 
   it('queues later turns on the same conversation and runs them in server sequence', async () => {
@@ -440,11 +625,11 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
   it('ends the attempt and keeps the pending interaction when waiting for user input', async () => {
     agent.setOutcome({
       kind: 'awaiting_user_input',
-      interaction: { type: 'free_text', prompt: '还需要补充哪一段？' },
+      interaction: { type: 'free_text', prompt: '你希望新建发团，还是查询已有发团？' },
     })
     const sent = await sendFirst(
       coordinatorToken,
-      `${testPrefix} 进入等待用户`,
+      `${testPrefix} 帮我处理一下发团`,
       `${testPrefix}-hitl`,
     ).expect(201)
     const conversationId = track(sent.body.data.conversationId as string)
@@ -465,7 +650,7 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(asked.activeBatch?.status).toBe('awaiting_user_input')
     expect(asked.pendingInteraction).toMatchObject({
       type: 'free_text',
-      prompt: '还需要补充哪一段？',
+      prompt: '你希望新建发团，还是查询已有发团？',
       status: 'pending',
       version: 1,
     })

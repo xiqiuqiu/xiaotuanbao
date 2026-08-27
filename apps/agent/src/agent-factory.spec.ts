@@ -16,6 +16,7 @@ jest.mock('./submit-review-package.tool', () => ({ createSubmitReviewPackageTool
 jest.mock('./get-material-parse-result.tool', () => ({ createGetMaterialParseResultTool: () => 'material-tool' }))
 jest.mock('./read-conversation-history.tool', () => ({ createReadConversationHistoryTool: () => 'history-tool' }))
 jest.mock('./read-conversation-source.tool', () => ({ createReadConversationSourceTool: () => 'source-tool' }))
+jest.mock('./conversation-routing.tool', () => ({ createConversationRoutingTool: () => 'routing-tool' }))
 jest.mock('./restore-tool-reasoning', () => ({ wrapAgentStreamToRestoreToolReasoning: jest.fn() }))
 jest.mock('./sanitize-model-headers', () => ({ wrapAgentExecutionWithoutInboundAuth: jest.fn() }))
 const limiterConfigs: Array<{ limit: number; trimMode?: string }> = []
@@ -134,6 +135,26 @@ describe('Agent Factory', () => {
         ],
       }),
     ).toEqual(['replyPlaintext', 'readConversationHistory', 'readConversationSource'])
+  })
+
+  it('通用会话获授权后暴露受限意图路由工具', () => {
+    const routingContext = {
+      ...context,
+      taskId: undefined,
+      runId: undefined,
+      agentDefinition: { key: 'conversation.general', version: 1 },
+      grantedCapabilities: [{ key: 'conversation.intent.route', version: 1 }],
+      objectScopes: [
+        { organizationId: 'org-1', kind: 'agent_conversation' as const, id: 'conversation-1' },
+      ],
+    }
+    expect(toolNamesForRequestContext(routingContext)).toEqual(['routeConversation'])
+
+    createAiCreateMastraFromDefinition(
+      { apiBaseUrl: 'http://api.local', serviceSecret: 'secret' },
+      routingContext,
+    )
+    expect(Object.keys(agentConfigs.at(-1)?.tools ?? {})).toEqual(['routeConversation'])
   })
 
   it('拒绝上下文声明未注册的 Capability 版本', () => {

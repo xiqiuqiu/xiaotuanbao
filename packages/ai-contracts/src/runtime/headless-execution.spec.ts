@@ -118,6 +118,28 @@ describe('headless Agent execution contract', () => {
 
     expect(
       headlessExecutionResultSchema.parse({
+        kind: 'registered_intent',
+        intent: {
+          key: 'task.departure-creation.requested',
+          confidence: 'high',
+          goal: '创建七月喀纳斯发团',
+          agentDefinition: { key: 'departure.create', version: 1 },
+          grantedCapabilities: ['departure:write'],
+        },
+        message: '正在准备建团任务。',
+      }),
+    ).toEqual({
+      kind: 'registered_intent',
+      intent: {
+        key: 'task.departure-creation.requested',
+        confidence: 'high',
+        goal: '创建七月喀纳斯发团',
+      },
+      message: '正在准备建团任务。',
+    })
+
+    expect(
+      headlessExecutionResultSchema.parse({
         kind: 'awaiting_user_input',
         interaction: { type: 'free_text', prompt: '出团日期是哪一天？' },
       }),

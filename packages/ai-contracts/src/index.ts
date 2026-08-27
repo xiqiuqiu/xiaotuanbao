@@ -236,6 +236,7 @@ export {
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
   type HeadlessCompletedResult,
+  type HeadlessRegisteredIntentResult,
   type HeadlessInteraction,
   type HeadlessAwaitingUserInputResult,
   type HeadlessAwaitingReviewResult,
@@ -246,6 +247,16 @@ export {
   type UsageCounts,
   type UsageSource,
 } from './runtime/headless-execution'
+export {
+  CONVERSATION_ROUTING_TOOL,
+  DEPARTURE_CREATION_GOAL_INTENT_KEY,
+  conversationRoutingInputSchema,
+  conversationRoutingOutputSchema,
+  registeredAgentIntentSchema,
+  type ConversationRoutingInput,
+  type ConversationRoutingOutput,
+  type RegisteredAgentIntent,
+} from './runtime/conversation-routing'
 export {
   CONTEXT_PROFILE_MISSING,
   OUTPUT_RESERVE_VERSION,
@@ -333,6 +344,8 @@ export {
   CONVERSATION_GENERAL_INSTRUCTIONS,
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY,
   CONVERSATION_PLAINTEXT_REPLY_CAPABILITY_REF,
+  CONVERSATION_ROUTING_CAPABILITY,
+  CONVERSATION_ROUTING_CAPABILITY_REF,
   conversationGeneralCapabilityDefinitionRegistry,
 } from './runtime/conversation-general-definitions'
 export {

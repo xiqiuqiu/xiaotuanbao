@@ -32,6 +32,12 @@ describe('通用无任务会话 Definition', () => {
         requiredPermissionKeys: [],
       },
       {
+        key: 'conversation.intent.route',
+        version: 1,
+        toolName: 'routeConversation',
+        requiredPermissionKeys: [],
+      },
+      {
         key: 'conversation.history.read',
         version: 1,
         toolName: 'readConversationHistory',
@@ -56,6 +62,7 @@ describe('通用无任务会话 Definition', () => {
 
     expect(result.granted).toEqual([
       { key: 'conversation.plaintext.reply', version: 1 },
+      { key: 'conversation.intent.route', version: 1 },
       { key: 'conversation.history.read', version: 1 },
       { key: 'conversation.source.read', version: 1 },
     ])

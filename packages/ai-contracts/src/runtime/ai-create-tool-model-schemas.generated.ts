@@ -852,5 +852,47 @@ export const AI_CREATE_TOOL_MODEL_INPUT_SCHEMAS = {
       "parseVersion"
     ],
     "additionalProperties": false
+  },
+  "routeConversation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "decision": {
+        "type": "string",
+        "enum": [
+          "propose_departure_creation",
+          "request_clarification"
+        ]
+      },
+      "goal": {
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "options": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "label"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "decision"
+    ],
+    "additionalProperties": false
   }
 } as const
