@@ -23,7 +23,7 @@ describe('createConversationStream', () => {
       batchId: 'batch-1',
       generation: 1,
       revision: 3,
-      reasoningText: '',
+      reasoningText: '先核对出团日期',
       text: '已整理当前',
     })
     const hub = new Subject<AiConversationEventView>()
@@ -54,7 +54,7 @@ describe('createConversationStream', () => {
         batchId: 'batch-1',
         generation: 1,
         revision: 3,
-        reasoningText: '',
+        reasoningText: '先核对出团日期',
         text: '已整理当前',
       },
     })
@@ -62,6 +62,9 @@ describe('createConversationStream', () => {
     expect(frames.some((frame) => frame.id === '1' && (frame.data as { type: string }).type === 'conversation.event')).toBe(
       true,
     )
+    expect(
+      JSON.stringify(frames.filter((frame) => (frame.data as { type?: string }).type === 'conversation.event')),
+    ).not.toContain('先核对出团日期')
     expect(
       frames.some((frame) => frame.id === '2' && (frame.data as { type: string }).type === 'conversation.event'),
     ).toBe(true)

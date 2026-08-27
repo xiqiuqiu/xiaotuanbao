@@ -194,6 +194,14 @@ export const headlessMessageDeltaFrameSchema = z
   })
   .strict()
 
+export const headlessReasoningDeltaFrameSchema = z
+  .object({
+    type: z.literal('reasoning.delta'),
+    sequence: z.number().int().positive(),
+    text: z.string().min(1),
+  })
+  .strict()
+
 export const headlessRunHeartbeatFrameSchema = z
   .object({
     type: z.literal('run.heartbeat'),
@@ -209,6 +217,7 @@ export const headlessRunCompletedFrameSchema = z
 
 export const headlessRunFrameSchema = z.discriminatedUnion('type', [
   headlessRunStartedFrameSchema,
+  headlessReasoningDeltaFrameSchema,
   headlessMessageDeltaFrameSchema,
   headlessRunHeartbeatFrameSchema,
   headlessRunCompletedFrameSchema,

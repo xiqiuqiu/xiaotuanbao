@@ -54,13 +54,13 @@ describe('createMastraHeadlessExecutor', () => {
       readUserText: async () => '帮我建一个喀纳斯3日团',
       stream: async () => ({
         fullStream: (async function* () {
+          yield { type: 'reasoning-delta', payload: { text: '先核对出团日期' } }
           yield { type: 'text-delta', payload: { text: '已' } }
           yield {
             type: 'tool-call-delta',
             payload: { toolName: 'proposeReviewPackage', argsTextDelta: '{"secret":1}' },
           }
           yield { type: 'text-delta', payload: { text: '记下喀纳斯三日团。' } }
-          yield { type: 'reasoning-delta', payload: { text: '内部思考不得进入公开帧' } }
         })(),
         getFullOutput: async () => ({
           text: '已记下喀纳斯三日团。',
@@ -72,20 +72,72 @@ describe('createMastraHeadlessExecutor', () => {
     const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
     expect(frames.map((frame) => frame.type)).toEqual([
       'run.started',
+      'reasoning.delta',
       'message.delta',
       'message.delta',
       'run.completed',
     ])
-    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([
-      { type: 'message.delta', sequence: 1, text: '已' },
-      { type: 'message.delta', sequence: 2, text: '记下喀纳斯三日团。' },
+    expect(frames.filter((frame) => frame.type === 'reasoning.delta')).toEqual([
+      { type: 'reasoning.delta', sequence: 1, text: '先核对出团日期' },
     ])
+    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([
+      { type: 'message.delta', sequence: 2, text: '已' },
+      { type: 'message.delta', sequence: 3, text: '记下喀纳斯三日团。' },
+    ])
+    expect(JSON.stringify(frames.filter((frame) => frame.type === 'message.delta'))).not.toContain(
+      '先核对出团日期',
+    )
     expect(JSON.stringify(frames)).not.toContain('secret')
-    expect(JSON.stringify(frames)).not.toContain('内部思考')
     expect(result).toMatchObject({
       kind: 'completed',
       message: '已记下喀纳斯三日团。',
     })
+  })
+
+  it('overwrites previous-step reasoning and keeps public reply accumulating', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'reasoning-delta', payload: { text: '第一段思考' } }
+          yield { type: 'text-delta', payload: { text: '已记下路线。' } }
+          yield { type: 'step-finish' }
+          yield { type: 'reasoning-delta', payload: { text: '第二段思考' } }
+          yield { type: 'text-delta', payload: { text: '日期待核对。' } }
+        })(),
+        getFullOutput: async () => ({
+          text: '已记下路线。日期待核对。',
+          toolCalls: [],
+        }),
+      }),
+    })
+
+    const { frames } = await collectHeadlessRun(executor(IDENTITY))
+    const reasoning = frames.filter((frame) => frame.type === 'reasoning.delta')
+    const messages = frames.filter((frame) => frame.type === 'message.delta')
+    expect(reasoning.map((frame) => frame.text)).toEqual(['第一段思考', '第二段思考'])
+    expect(messages.map((frame) => frame.text)).toEqual(['已记下路线。', '日期待核对。'])
+    expect(frames.some((frame) => frame.type === 'run.heartbeat')).toBe(false)
+  })
+
+  it('accumulates reasoning.delta within one model step', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'reasoning-delta', payload: { text: '先核对' } }
+          yield { type: 'reasoning-delta', payload: { text: '日期' } }
+          yield { type: 'text-delta', payload: { text: '已记下。' } }
+        })(),
+        getFullOutput: async () => ({ text: '已记下。', toolCalls: [] }),
+      }),
+    })
+
+    const { frames } = await collectHeadlessRun(executor(IDENTITY))
+    expect(frames.filter((frame) => frame.type === 'reasoning.delta')).toEqual([
+      { type: 'reasoning.delta', sequence: 1, text: '先核对' },
+      { type: 'reasoning.delta', sequence: 2, text: '先核对日期' },
+    ])
   })
 
   it('returns awaiting_review only after proposeReviewPackage is accepted', async () => {

@@ -512,7 +512,10 @@ export class AiWorkflowProcessor {
             prepared.delegationToken,
             {
               onPublicText: (text) => {
-                flusher.push(text)
+                flusher.push({ text })
+              },
+              onReasoningText: (reasoningText) => {
+                flusher.push({ reasoningText })
               },
             },
           )

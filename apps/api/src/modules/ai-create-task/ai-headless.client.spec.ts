@@ -102,6 +102,61 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
+  it('maps reasoning.delta onto the current-step 思考过程 without mixing into the public reply', async () => {
+    const publicText: string[] = []
+    const reasoningText: string[] = []
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(
+        `${JSON.stringify({ type: 'reasoning.delta', sequence: 1, text: '先核对' })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'reasoning.delta', sequence: 2, text: '先核对日期' })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 3, text: '已记下路线。' })}\n`,
+      )
+      response.write(`${JSON.stringify({ type: 'run.heartbeat' })}\n`)
+      response.write(
+        `${JSON.stringify({ type: 'reasoning.delta', sequence: 4, text: '再核人数' })}\n`,
+      )
+      response.write(
+        `${JSON.stringify({ type: 'message.delta', sequence: 5, text: '日期待核对。' })}\n`,
+      )
+      response.end(
+        `${JSON.stringify({
+          type: 'run.completed',
+          result: { kind: 'completed', message: '已记下路线。日期待核对。' },
+        })}\n`,
+      )
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+
+    await expect(
+      client.run(request, 'delegation-token', {
+        onPublicText: (text) => {
+          publicText.push(text)
+        },
+        onReasoningText: (text) => {
+          reasoningText.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'completed',
+      message: '已记下路线。日期待核对。',
+    })
+    expect(reasoningText).toEqual(['先核对', '先核对日期', '再核人数'])
+    expect(publicText).toEqual(['已记下路线。', '已记下路线。日期待核对。'])
+    expect(publicText.join('')).not.toContain('先核对')
+    expect(publicText.join('')).not.toContain('再核人数')
+  })
+
   it('parses NDJSON message.delta frames and still awaits the terminal result', async () => {
     const deltas: string[] = []
     server = createServer((_incoming, response) => {

@@ -13,6 +13,7 @@ const DEFAULT_RUN_TIMEOUT_MS = 120_000
 
 export type HeadlessRunOptions = {
   onPublicText?: (text: string) => void
+  onReasoningText?: (text: string) => void
 }
 
 @Injectable()
@@ -165,6 +166,9 @@ async function readNdjsonResult(
         const parsed = headlessRunFrameSchema.safeParse(parsedJson)
         if (!parsed.success) {
           continue
+        }
+        if (parsed.data.type === 'reasoning.delta') {
+          options.onReasoningText?.(parsed.data.text)
         }
         if (parsed.data.type === 'message.delta') {
           publicText += parsed.data.text

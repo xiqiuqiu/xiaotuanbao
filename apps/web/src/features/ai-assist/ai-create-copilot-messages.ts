@@ -10,6 +10,7 @@ export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
 export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
 export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'ai-create-review-package'
 export const SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE = 'ai-create-search-route-templates'
+export const AGENT_REASONING_ACTIVITY_TYPE = 'ai-agent-reasoning'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
@@ -58,6 +59,10 @@ export type SearchRouteTemplatesActivityContent = {
     usageCount: number
     matchReasons: Array<Record<string, unknown>>
   }>
+}
+
+export type AgentReasoningActivityContent = {
+  reasoningText: string
 }
 
 type MaterialProgress = {
@@ -291,7 +296,7 @@ export function isCopilotChatRunning(
   pendingText: string | null,
   liveAssistant?: LiveAssistantSnapshot | null,
 ): boolean {
-  if (pendingText || (liveAssistant?.text && liveAssistant.text.length > 0)) {
+  if (pendingText || liveAssistant?.text || liveAssistant?.reasoningText) {
     return true
   }
   const status = latestBatchStatus(events, activeBatch)
@@ -492,7 +497,8 @@ function currentInFlightAttempt(events: AiConversationEventView[]): {
     if (
       status === 'ready_for_agent' ||
       status === 'preparing_context' ||
-      status === 'agent_running'
+      status === 'agent_running' ||
+      status === 'waiting_for_materials'
     ) {
       return {
         attemptId:
@@ -501,15 +507,16 @@ function currentInFlightAttempt(events: AiConversationEventView[]): {
           typeof event.payload.generation === 'number' ? event.payload.generation : undefined,
       }
     }
+    return null
   }
   return null
 }
 
-function shouldProjectLiveAssistant(
+export function shouldProjectLiveAssistant(
   events: AiConversationEventView[],
   live: LiveAssistantSnapshot,
 ): boolean {
-  if (!live.text) {
+  if (!live.text && !live.reasoningText) {
     return false
   }
   if (
@@ -521,6 +528,10 @@ function shouldProjectLiveAssistant(
     return false
   }
   const inFlight = currentInFlightAttempt(events)
+  const hasBatchStatus = events.some((event) => event.kind === 'batch_status')
+  if (hasBatchStatus && !inFlight) {
+    return false
+  }
   if (inFlight?.attemptId && inFlight.attemptId !== live.attemptId) {
     return false
   }
@@ -542,12 +553,21 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
   if (!live || !shouldProjectLiveAssistant(input.events, live)) {
     return messages
   }
-  return [
-    ...messages,
-    {
+  const liveParts: ChatMessage[] = []
+  if (live.reasoningText) {
+    liveParts.push({
+      id: `live-reasoning-${live.attemptId}`,
+      role: 'activity',
+      activityType: AGENT_REASONING_ACTIVITY_TYPE,
+      content: { reasoningText: live.reasoningText },
+    })
+  }
+  if (live.text) {
+    liveParts.push({
       id: `live-assistant-${live.attemptId}`,
       role: 'assistant',
       content: live.text,
-    },
-  ]
+    })
+  }
+  return [...messages, ...liveParts]
 }

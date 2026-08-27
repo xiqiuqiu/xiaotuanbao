@@ -54,8 +54,20 @@ export function createMastraHeadlessExecutor(deps: MastraHeadlessExecutorDeps): 
       const userText = (await deps.readUserText(request)).trim() || FALLBACK_USER_TEXT
       const streamed = deps.stream ? await deps.stream(userText, options?.signal) : null
       let sequence = 1
+      let stepReasoning = ''
       if (streamed?.fullStream) {
         for await (const chunk of iterateUnknownStream(streamed.fullStream)) {
+          if (isStepBoundaryChunk(chunk)) {
+            stepReasoning = ''
+            continue
+          }
+          const reasoning = reasoningTextFromChunk(chunk)
+          if (reasoning) {
+            stepReasoning += reasoning
+            yield { type: 'reasoning.delta', sequence, text: stepReasoning }
+            sequence += 1
+            continue
+          }
           const text = publicTextFromChunk(chunk)
           if (!text) {
             continue
@@ -130,11 +142,27 @@ async function maybePromise<T>(value: T | Promise<T> | undefined): Promise<T | u
 }
 
 function publicTextFromChunk(chunk: unknown): string | null {
+  return deltaTextFromChunk(chunk, 'text-delta')
+}
+
+function reasoningTextFromChunk(chunk: unknown): string | null {
+  return deltaTextFromChunk(chunk, 'reasoning-delta')
+}
+
+function isStepBoundaryChunk(chunk: unknown): boolean {
+  if (!chunk || typeof chunk !== 'object') {
+    return false
+  }
+  const type = (chunk as { type?: unknown }).type
+  return type === 'step-start' || type === 'step-finish'
+}
+
+function deltaTextFromChunk(chunk: unknown, expectedType: string): string | null {
   if (!chunk || typeof chunk !== 'object') {
     return null
   }
   const type = (chunk as { type?: unknown }).type
-  if (type !== 'text-delta') {
+  if (type !== expectedType) {
     return null
   }
   const record = chunk as {

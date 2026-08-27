@@ -292,6 +292,46 @@ describe('headless Agent runtime contract', () => {
     }
   })
 
+  it('streams reasoning.delta separately from message.delta over NDJSON', async () => {
+    const server = createAgentServer({
+      port: 0,
+      apiBaseUrl: 'http://api.local',
+      serviceSecret: 'secret',
+      allowedOrigins: ['http://localhost:5173'],
+      headlessExecutor: createDeterministicAgentAdapter(
+        { kind: 'completed', message: '已记下路线。' },
+        { reasoningDeltas: ['先核对出团日期'], messageDeltas: ['已记下路线。'] },
+      ),
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+    try {
+      const response = await postHeadless(port)
+      expect(response.status).toBe(200)
+      const frames = readNdjsonFrames(await response.text())
+      expect(frames.map((frame) => (frame as { type: string }).type)).toEqual([
+        'run.started',
+        'reasoning.delta',
+        'message.delta',
+        'run.completed',
+      ])
+      expect(frames[1]).toEqual({
+        type: 'reasoning.delta',
+        sequence: 1,
+        text: '先核对出团日期',
+      })
+      expect(frames[2]).toEqual({
+        type: 'message.delta',
+        sequence: 2,
+        text: '已记下路线。',
+      })
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
+    }
+  })
+
   it('rejects a missing or untrusted service identity without calling the API', async () => {
     const runtime = await listen()
     try {

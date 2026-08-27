@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import type { AiConversationEventView } from '@xiaotuanbao/shared'
-import type { LiveAssistantSnapshot } from '@/features/ai-assist/ai-create-copilot-messages'
+import {
+  shouldProjectLiveAssistant,
+  type LiveAssistantSnapshot,
+} from '@/features/ai-assist/ai-create-copilot-messages'
 
 export type AgentConversationRuntime = {
   conversationId: string | null
@@ -56,7 +59,7 @@ function liveAfterEvents(
   if (!live) {
     return null
   }
-  if (events.some((event) => event.kind === 'agent_message' && event.payload.attemptId === live.attemptId)) {
+  if (!shouldProjectLiveAssistant(events, live)) {
     return null
   }
   return live

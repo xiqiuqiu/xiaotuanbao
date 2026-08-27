@@ -5,10 +5,17 @@ import {
   type LiveOutputIdentity,
 } from './agent-live-output'
 
+export type LiveOutputUpdate = {
+  text?: string
+  reasoningText?: string
+}
+
 export class LiveOutputFlusher {
   private revision = 0
   private lastFlushedText: string | null = null
+  private lastFlushedReasoning: string | null = null
   private pendingText = ''
+  private pendingReasoning = ''
   private timer: ReturnType<typeof setTimeout> | null = null
   private firstFlushDone = false
   private chain: Promise<void> = Promise.resolve()
@@ -19,17 +26,26 @@ export class LiveOutputFlusher {
     private readonly identity: LiveOutputIdentity,
   ) {}
 
-  push(text: string): void {
+  push(update: LiveOutputUpdate): void {
     if (this.disposed) {
       return
     }
-    this.pendingText = text
-    if (!this.firstFlushDone) {
+    if (update.text !== undefined) {
+      this.pendingText = update.text
+    }
+    if (update.reasoningText !== undefined) {
+      this.pendingReasoning = update.reasoningText
+    }
+    if (!this.firstFlushDone || this.reasoningReplaced()) {
       this.firstFlushDone = true
       this.enqueueFlush()
       return
     }
-    const newly = Math.max(0, text.length - (this.lastFlushedText?.length ?? 0))
+    const newly = Math.max(
+      0,
+      this.pendingText.length - (this.lastFlushedText?.length ?? 0),
+      this.pendingReasoning.length - (this.lastFlushedReasoning?.length ?? 0),
+    )
     if (newly >= LIVE_OUTPUT_EARLY_FLUSH_CHARS) {
       this.clearTimer()
       this.enqueueFlush()
@@ -47,6 +63,14 @@ export class LiveOutputFlusher {
   dispose(): void {
     this.disposed = true
     this.clearTimer()
+  }
+
+  private reasoningReplaced(): boolean {
+    const previous = this.lastFlushedReasoning
+    if (previous == null || previous === '') {
+      return false
+    }
+    return this.pendingReasoning !== previous && !this.pendingReasoning.startsWith(previous)
   }
 
   private schedule(): void {
@@ -70,15 +94,17 @@ export class LiveOutputFlusher {
         return
       }
       const text = this.pendingText
-      if (this.lastFlushedText === text) {
+      const reasoningText = this.pendingReasoning
+      if (this.lastFlushedText === text && this.lastFlushedReasoning === reasoningText) {
         return
       }
       this.revision += 1
       this.lastFlushedText = text
+      this.lastFlushedReasoning = reasoningText
       await this.liveOutput.publish({
         ...this.identity,
         revision: this.revision,
-        reasoningText: '',
+        reasoningText,
         text,
       })
     })
