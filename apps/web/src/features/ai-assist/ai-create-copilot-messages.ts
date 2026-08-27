@@ -292,7 +292,10 @@ export function isCopilotChatRunning(
   pendingText: string | null,
   liveAssistant?: LiveAssistantSnapshot | null,
 ): boolean {
-  if (pendingText || liveAssistant?.text || liveAssistant?.reasoningText) {
+  if (pendingText) {
+    return true
+  }
+  if (liveAssistant && shouldProjectLiveAssistant(events, liveAssistant)) {
     return true
   }
   const status = latestBatchStatus(events, activeBatch)

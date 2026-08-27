@@ -157,6 +157,76 @@ describe('agent conversation runtime store #370', () => {
     })
   })
 
+  it('drops a late snapshot after user_stop so it cannot rewrite the current projection', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '先核对出团日期',
+      text: '已记下半段',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'cancelled',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            reason: 'user_stop',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
+    expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({})
+
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 99,
+      reasoningText: '迟到思考',
+      text: '停止后才赶到的半段',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
+    expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({})
+  })
+
   it('clears runtime only when switching to a different Conversation', () => {
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',

@@ -89,3 +89,18 @@ export async function sendAgentConversationText(
     },
   )
 }
+
+export async function stopAgentConversationBatch(
+  conversationId: string,
+  batchId: string,
+  idempotencyKey: string,
+): Promise<SendAiConversationMessageResult> {
+  return request.post<SendAiConversationMessageResult>(
+    `/agent/conversations/${conversationId}/batches/${batchId}/stop`,
+    {},
+    {
+      silentError: true,
+      headers: { 'Idempotency-Key': idempotencyKey },
+    },
+  )
+}

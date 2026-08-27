@@ -9,6 +9,7 @@ import {
   listAgentConversationEvents,
   saveAgentConversationDraft,
   sendAgentConversationText,
+  stopAgentConversationBatch,
 } from '@/services/agent-conversation.service'
 import { ApiError } from '@/lib/request'
 
@@ -47,6 +48,7 @@ vi.mock('@/services/agent-conversation.service', () => ({
     revision: 1,
   }),
   sendAgentConversationText: vi.fn(),
+  stopAgentConversationBatch: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -450,5 +452,111 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(await screen.findByText('已记下路线。可继续问。')).toBeInTheDocument()
     expect(screen.getByText('再核人数')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '思考过程' })).toBeInTheDocument()
+  })
+})
+
+describe('AgentConversationChat Agent 本次运行停止 #417', () => {
+  beforeEach(() => {
+    lastEventSource = null
+    vi.mocked(listAgentConversationEvents).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 0,
+    })
+    vi.mocked(stopAgentConversationBatch).mockReset()
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationStore.getState().reset()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-1',
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我查一下账款' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('posts stop-batch from 停止当前处理 and replaces live text with 已停止当前处理', async () => {
+    const user = userEvent.setup()
+    vi.mocked(stopAgentConversationBatch).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'cancelled',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            reason: 'user_stop',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      lastSequence: 3,
+    } as never)
+    render(<AgentConversationChat />)
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 2,
+            reasoningText: '先核对出团日期',
+            text: '已记下半段',
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已记下半段')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '停止当前处理' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '停止当前处理' }))
+    expect(stopAgentConversationBatch).toHaveBeenCalledWith('c-1', 'batch-1', expect.any(String))
+    expect(await screen.findByText('已停止当前处理')).toBeInTheDocument()
+    expect(screen.queryByText('已记下半段')).not.toBeInTheDocument()
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+  })
+
+  it('does not call stop when EventSource errors or the chat unmounts', async () => {
+    const { unmount } = render(<AgentConversationChat />)
+    expect(lastEventSource).not.toBeNull()
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+    unmount()
+
+    expect(stopAgentConversationBatch).not.toHaveBeenCalled()
+    expect(listAgentConversationEvents).toHaveBeenCalled()
   })
 })

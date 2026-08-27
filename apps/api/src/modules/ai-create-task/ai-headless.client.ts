@@ -14,6 +14,7 @@ const DEFAULT_RUN_TIMEOUT_MS = 120_000
 export type HeadlessRunOptions = {
   onPublicText?: (text: string) => void
   onReasoningText?: (text: string) => void
+  signal?: AbortSignal
 }
 
 @Injectable()
@@ -28,8 +29,11 @@ export class AiHeadlessClient {
     const parsedRequest = headlessExecutionRequestSchema.parse(request)
     const url = this.headlessRunUrl()
     const secret = this.configService.get<string>('app.aiCreateAssist.agentServiceSecret') ?? ''
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), this.runTimeoutMs())
+    const timeout = new AbortController()
+    const timer = setTimeout(() => timeout.abort(), this.runTimeoutMs())
+    const signal = options.signal
+      ? AbortSignal.any([timeout.signal, options.signal])
+      : timeout.signal
     try {
       let response: Response
       try {
@@ -42,7 +46,7 @@ export class AiHeadlessClient {
             'X-Agent-Service-Key': secret,
           },
           body: JSON.stringify(parsedRequest),
-          signal: controller.signal,
+          signal,
         })
       } catch {
         return unavailable()
@@ -51,18 +55,18 @@ export class AiHeadlessClient {
       const contentType = response.headers.get('content-type') ?? ''
       if (contentType.includes('ndjson')) {
         try {
-          return await readNdjsonResult(response, options, controller.signal.aborted)
+          return await readNdjsonResult(response, options, signal.aborted)
         } catch {
           return {
             kind: 'failed',
             error: AiCollaborationError.fromCode(
-              controller.signal.aborted ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
+              signal.aborted ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
             ).toJSON(),
           }
         }
       }
 
-      return await readJsonResult(response, controller.signal.aborted)
+      return await readJsonResult(response, signal.aborted)
     } finally {
       clearTimeout(timer)
     }

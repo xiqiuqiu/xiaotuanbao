@@ -921,6 +921,12 @@ describe('Queued input and Agent HITL replies (e2e) #318', () => {
           event.payload.batchId === sent.body.data.batch.id,
       ),
     ).toBe(true)
+    expect(
+      listed.events.some(
+        (event) =>
+          event.kind === 'agent_message' && event.payload.batchId === sent.body.data.batch.id,
+      ),
+    ).toBe(false)
     expect(listed.events.some((event) => event.payload.text === COMPLETED_MESSAGE)).toBe(true)
   })
 })

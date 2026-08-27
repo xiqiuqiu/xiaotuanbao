@@ -84,6 +84,31 @@ describe('AiHeadlessClient.run', () => {
     expect(elapsedMs).toBeLessThan(1_500)
   }, 3_000)
 
+  it('aborts a hung downstream fetch when the caller AbortSignal fires', async () => {
+    server = createServer(() => {
+      // Intentionally never respond — stop should not wait for the model.
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 5_000,
+    })
+    const abort = new AbortController()
+    const started = Date.now()
+    const running = client.run(request, 'delegation-token', { signal: abort.signal })
+    setTimeout(() => abort.abort(), 40)
+    await expect(running).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'AGENT_UNAVAILABLE',
+        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        retryable: true,
+      },
+    })
+    expect(Date.now() - started).toBeLessThan(1_500)
+  }, 3_000)
+
   it('still returns a completed result when the agent responds in time', async () => {
     server = createServer((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
