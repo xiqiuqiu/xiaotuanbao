@@ -17,6 +17,7 @@ import type {
 import { ApiError } from '@/lib/request'
 import { useUiStore } from '@/app/store/ui.store'
 import { useAgentConversationStore } from '@/features/agent-conversation/agent-conversation.store'
+import { useAgentConversationRuntimeStore } from '@/features/agent-conversation/agent-conversation-runtime.store'
 import { AssistPane } from '@/layouts/AssistPane'
 import { AssistPaneSlotProvider } from '@/layouts/assist-pane-slot'
 import { CreateDepartureWizard } from './CreateDepartureWizard'
@@ -407,6 +408,7 @@ describe('CreateDepartureWizard', () => {
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.getState().reset()
+    useAgentConversationRuntimeStore.getState().clear()
     hitlRegistration.current = null
   })
 
@@ -414,6 +416,7 @@ describe('CreateDepartureWizard', () => {
     mockSearch = {}
     useUiStore.setState({ assistPaneCollapsed: true })
     useAgentConversationStore.getState().reset()
+    useAgentConversationRuntimeStore.getState().clear()
     vi.mocked(previewDepartureNo).mockResolvedValue({ departureNo: 'XTB2026070001' })
     vi.mocked(createDeparture).mockResolvedValue(mockDeparture)
     vi.mocked(copyDeparture).mockResolvedValue(mockDeparture)
@@ -494,6 +497,152 @@ describe('CreateDepartureWizard', () => {
     expect(await screen.findByText('请填写路线名称')).toBeInTheDocument()
     expect(screen.queryByText('请先选择一条常用路线')).not.toBeInTheDocument()
     expect(confirmAiCreateTask).not.toHaveBeenCalled()
+  })
+
+  it('claims a task proposed in the active conversation and updates it on the first draft save', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'proposed-task',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 3,
+        snapshot: { mode: 'manual', routeName: '' },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+    renderWizard()
+
+    act(() => {
+      useAgentConversationStore
+        .getState()
+        .persistConversation({ id: 'conversation-1', title: '帮我建团' })
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: 'conversation-1',
+        events: [
+          {
+            sequence: 5,
+            kind: 'batch_status',
+            payload: { createdTaskId: 'proposed-task', continuation: true },
+            createdAt: '2026-08-27T00:00:00.000Z',
+          },
+        ],
+      })
+    })
+
+    await waitFor(() => {
+      expect(getAiCreateTask).toHaveBeenCalledWith('proposed-task')
+    })
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/departure/new',
+        search: { taskId: 'proposed-task' },
+        replace: true,
+      }),
+    )
+
+    await fillManualRouteAndContinue(user)
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls[0]?.[0]).toMatchObject({
+      taskId: 'proposed-task',
+      expectedVersion: 3,
+    })
+    expect(
+      vi.mocked(saveDepartureCreationDraft).mock.calls.some(([payload]) => !payload.taskId),
+    ).toBe(false)
+  })
+
+  it('does not claim a workbench proposal that predates opening the blank wizard', async () => {
+    const user = userEvent.setup()
+    useAgentConversationStore
+      .getState()
+      .persistConversation({ id: 'conversation-1', title: '工作台建团' })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'conversation-1',
+      events: [
+        {
+          sequence: 5,
+          kind: 'batch_status',
+          payload: { createdTaskId: 'workbench-task', continuation: true },
+          createdAt: '2026-08-27T00:00:00.000Z',
+        },
+      ],
+    })
+
+    renderWizard()
+    await fillManualRouteAndContinue(user)
+    await waitFor(() => {
+      expect(saveDepartureCreationDraft).toHaveBeenCalled()
+    })
+
+    expect(getAiCreateTask).not.toHaveBeenCalledWith('workbench-task')
+    expect(vi.mocked(saveDepartureCreationDraft).mock.calls[0]?.[0].taskId).toBeUndefined()
+  })
+
+  it('keeps an existing wizard task independent from a later conversation proposal', async () => {
+    mockSearch = { taskId: 'wizard-task' }
+    vi.mocked(getAiCreateTask).mockResolvedValue({
+      id: 'wizard-task',
+      status: 'in_progress',
+      currentPhase: 'basic_info',
+      departureId: null,
+      creatorUserId: 'user-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      draft: {
+        version: 2,
+        snapshot: {
+          mode: 'manual',
+          routeName: '原向导路线',
+          name: '原向导任务',
+          startDate: '2026-08-01',
+          endDate: '2026-08-01',
+          ownerUserId: 'user-1',
+        },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      pendingReview: null,
+    })
+    useAgentConversationStore
+      .getState()
+      .persistConversation({ id: 'conversation-1', title: '另一个提案' })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'conversation-1',
+      events: [],
+    })
+    renderWizard()
+    expect(await screen.findByLabelText('团名')).toHaveValue('原向导任务')
+
+    act(() => {
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: 'conversation-1',
+        events: [
+          {
+            sequence: 6,
+            kind: 'batch_status',
+            payload: { createdTaskId: 'proposed-task', continuation: true },
+            createdAt: '2026-08-27T00:00:00.000Z',
+          },
+        ],
+      })
+    })
+
+    await waitFor(() => {
+      expect(getAiCreateTask).toHaveBeenCalledWith('wizard-task')
+    })
+    expect(getAiCreateTask).toHaveBeenCalledWith('wizard-task')
+    expect(getAiCreateTask).not.toHaveBeenCalledWith('proposed-task')
+    expect(screen.getByLabelText('团名')).toHaveValue('原向导任务')
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ search: { taskId: 'proposed-task' } }),
+    )
   })
 
   it('creates a manual departure from the same form without a templateId', async () => {
