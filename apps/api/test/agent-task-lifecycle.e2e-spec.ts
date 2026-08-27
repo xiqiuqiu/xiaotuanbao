@@ -6,6 +6,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
   let app: INestApplication
   let prisma: PrismaClient
   let token: string
+  let peerToken: string
   let organizationId: string
   let userId: string
   const taskIds: string[] = []
@@ -16,6 +17,7 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
     app = await createTestApp()
     prisma = new PrismaClient()
     token = await loginAs(app, 'wangjie')
+    peerToken = await loginAs(app, 'mazong')
     const user = await prisma.user.findFirstOrThrow({ where: { username: 'wangjie' } })
     organizationId = user.organizationId
     userId = user.id
@@ -76,6 +78,38 @@ describe('Generic AgentTask lifecycle (e2e) #366', () => {
       }),
     ])
     expect(rows[0]?.goal).toContain('创建发团')
+  })
+
+  it('rejects a forged or another User task as the current-page primary candidate', async () => {
+    const own = await authRequest(app, token)
+      .post('/api/agent/tasks/departure-creation/sessions')
+      .send({ draft: { mode: 'manual', routeName: '川西' } })
+      .expect(201)
+    const peer = await authRequest(app, peerToken)
+      .post('/api/agent/tasks/departure-creation/sessions')
+      .send({ draft: { mode: 'manual', routeName: '云南' } })
+      .expect(201)
+    const ownConversationId = own.body.data.conversation.id as string
+    const peerTaskId = peer.body.data.task.id as string
+    taskIds.push(own.body.data.task.id as string, peerTaskId)
+    conversationIds.push(ownConversationId, peer.body.data.conversation.id as string)
+
+    const before = await prisma.aiInputBatch.count({
+      where: { conversationId: ownConversationId },
+    })
+    await authRequest(app, token)
+      .post(`/api/agent/conversations/${ownConversationId}/messages`)
+      .set('Idempotency-Key', `e2e411-peer-task-${Date.now()}`)
+      .send({ text: '继续建团', primaryTaskId: peerTaskId })
+      .expect(404)
+    await authRequest(app, token)
+      .post(`/api/agent/conversations/${ownConversationId}/messages`)
+      .set('Idempotency-Key', `e2e411-forged-task-${Date.now()}`)
+      .send({ text: '继续建团', primaryTaskId: 'forged-task-id' })
+      .expect(404)
+    expect(
+      await prisma.aiInputBatch.count({ where: { conversationId: ownConversationId } }),
+    ).toBe(before)
   })
 
   it('links multiple tasks to one conversation and continues one task from another conversation', async () => {

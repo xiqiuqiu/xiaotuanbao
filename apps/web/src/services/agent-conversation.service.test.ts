@@ -74,4 +74,18 @@ describe('agent conversation service', () => {
       { silentError: true, headers: { 'Idempotency-Key': 'key-2' } },
     )
   })
+
+  it('sends a selected departure-creation task as the primary candidate', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 1 })
+    await sendAgentConversationText(
+      'c-1',
+      { text: '继续建团', primaryTaskId: 'task-1' },
+      'key-3',
+    )
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/messages',
+      { text: '继续建团', primaryTaskId: 'task-1' },
+      { silentError: true, headers: { 'Idempotency-Key': 'key-3' } },
+    )
+  })
 })

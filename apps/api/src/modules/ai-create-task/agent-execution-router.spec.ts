@@ -143,4 +143,28 @@ describe('AgentExecutionRouter', () => {
       taskId: 'task-1',
     })
   })
+
+  it('does not let a partner page locator choose a definition for a create-departure intent', () => {
+    const routerWithIntent = new AgentExecutionRouter([
+      {
+        intentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+        kind: 'task_creation_proposal',
+        taskType: AgentTaskType.departure_creation,
+        requiredPermissionKey: 'departure:write',
+      },
+    ])
+
+    expect(
+      routerWithIntent.route({
+        associations: { taskRefs: [] },
+        pageAttachment: page('partner'),
+        registeredIntent: { key: DEPARTURE_CREATION_GOAL_INTENT_KEY },
+      }),
+    ).toEqual({
+      kind: 'task_creation_proposal',
+      registeredIntentKey: DEPARTURE_CREATION_GOAL_INTENT_KEY,
+      taskType: AgentTaskType.departure_creation,
+      requiredPermissionKey: 'departure:write',
+    })
+  })
 })
