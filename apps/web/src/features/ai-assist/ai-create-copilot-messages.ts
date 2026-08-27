@@ -10,7 +10,6 @@ export const BATCH_STATUS_ACTIVITY_TYPE = 'ai-create-batch-status'
 export const INTERACTION_ACTIVITY_TYPE = 'ai-create-interaction'
 export const REVIEW_PACKAGE_ACTIVITY_TYPE = 'ai-create-review-package'
 export const SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE = 'ai-create-search-route-templates'
-export const AGENT_REASONING_ACTIVITY_TYPE = 'ai-agent-reasoning'
 
 type ChatMessage = NonNullable<CopilotChatViewProps['messages']>[number]
 
@@ -59,10 +58,6 @@ export type SearchRouteTemplatesActivityContent = {
     usageCount: number
     matchReasons: Array<Record<string, unknown>>
   }>
-}
-
-export type AgentReasoningActivityContent = {
-  reasoningText: string
 }
 
 type MaterialProgress = {
@@ -288,6 +283,7 @@ export type ProjectConversationFrameInput = {
   activeBatch?: AiInputBatchView | null
   pendingUploadCount?: number
   liveAssistant?: LiveAssistantSnapshot | null
+  sessionReasoning?: Record<string, string>
 }
 
 export function isCopilotChatRunning(
@@ -527,11 +523,10 @@ export function shouldProjectLiveAssistant(
   ) {
     return false
   }
-  const inFlight = currentInFlightAttempt(events)
-  const hasBatchStatus = events.some((event) => event.kind === 'batch_status')
-  if (hasBatchStatus && !inFlight) {
+  if (isFailedOrCancelledAttempt(events, live.attemptId)) {
     return false
   }
+  const inFlight = currentInFlightAttempt(events)
   if (inFlight?.attemptId && inFlight.attemptId !== live.attemptId) {
     return false
   }
@@ -539,6 +534,75 @@ export function shouldProjectLiveAssistant(
     return false
   }
   return true
+}
+
+export function isFailedOrCancelledAttempt(
+  events: AiConversationEventView[],
+  attemptId: string,
+): boolean {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.kind !== 'batch_status' || event.payload.attemptId !== attemptId) {
+      continue
+    }
+    const status = String(event.payload.status ?? '')
+    return status === 'failed' || status === 'cancelled'
+  }
+  return false
+}
+
+export function pruneSessionReasoning(
+  events: AiConversationEventView[],
+  stash: Record<string, string>,
+): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const [attemptId, text] of Object.entries(stash)) {
+    if (text && !isFailedOrCancelledAttempt(events, attemptId)) {
+      next[attemptId] = text
+    }
+  }
+  return next
+}
+
+function reasoningMessage(attemptId: string, content: string): ChatMessage {
+  return {
+    id: `live-reasoning-${attemptId}`,
+    role: 'reasoning',
+    content,
+  }
+}
+
+function injectSessionReasoning(
+  messages: ChatMessage[],
+  events: AiConversationEventView[],
+  sessionReasoning: Record<string, string>,
+): ChatMessage[] {
+  const result = [...messages]
+  for (const event of events) {
+    if (event.kind !== 'agent_message') {
+      continue
+    }
+    const attemptId =
+      typeof event.payload.attemptId === 'string' ? event.payload.attemptId : undefined
+    if (!attemptId) {
+      continue
+    }
+    const text = sessionReasoning[attemptId]
+    if (!text || isFailedOrCancelledAttempt(events, attemptId)) {
+      continue
+    }
+    const assistantId = `event-${event.sequence}`
+    const index = result.findIndex((message) => message.id === assistantId)
+    if (index < 0) {
+      continue
+    }
+    const already = result[index - 1]?.id === `live-reasoning-${attemptId}`
+    if (already) {
+      continue
+    }
+    result.splice(index, 0, reasoningMessage(attemptId, text))
+  }
+  return result
 }
 
 /** 统一会话壳最高可见投影：持久事件 + 当前 Attempt 即时输出。 */
@@ -549,18 +613,15 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
     input.activeBatch ?? null,
     input.pendingUploadCount ?? 0,
   )
+  const sessionReasoning = pruneSessionReasoning(input.events, input.sessionReasoning ?? {})
+  const withHistory = injectSessionReasoning(messages, input.events, sessionReasoning)
   const live = input.liveAssistant
   if (!live || !shouldProjectLiveAssistant(input.events, live)) {
-    return messages
+    return withHistory
   }
   const liveParts: ChatMessage[] = []
   if (live.reasoningText) {
-    liveParts.push({
-      id: `live-reasoning-${live.attemptId}`,
-      role: 'activity',
-      activityType: AGENT_REASONING_ACTIVITY_TYPE,
-      content: { reasoningText: live.reasoningText },
-    })
+    liveParts.push(reasoningMessage(live.attemptId, live.reasoningText))
   }
   if (live.text) {
     liveParts.push({
@@ -569,5 +630,5 @@ export function projectConversationFrame(input: ProjectConversationFrameInput): 
       content: live.text,
     })
   }
-  return [...messages, ...liveParts]
+  return [...withHistory, ...liveParts]
 }

@@ -478,14 +478,11 @@ describe('projectConversationFrame live reasoning #416', () => {
       },
     })
     expect(messages.filter((message) => message.role === 'assistant')).toEqual([])
-    expect(
-      messages.filter((message) => message.activityType === 'ai-agent-reasoning'),
-    ).toEqual([
+    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
       {
         id: 'live-reasoning-attempt-9',
-        role: 'activity',
-        activityType: 'ai-agent-reasoning',
-        content: { reasoningText: '先核对出团日期' },
+        role: 'reasoning',
+        content: '先核对出团日期',
       },
     ])
   })
@@ -510,11 +507,13 @@ describe('projectConversationFrame live reasoning #416', () => {
         content: '已记下路线。',
       },
     ])
-    expect(
-      (firstStep.find((message) => message.activityType === 'ai-agent-reasoning')?.content as {
-        reasoningText?: string
-      }).reasoningText,
-    ).toBe('先核对出团日期')
+    expect(firstStep.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '先核对出团日期',
+      },
+    ])
 
     const nextStep = projectConversationFrame({
       events: runningEvents,
@@ -528,11 +527,13 @@ describe('projectConversationFrame live reasoning #416', () => {
         text: '已记下路线。日期待核对。',
       },
     })
-    expect(
-      nextStep
-        .filter((message) => message.activityType === 'ai-agent-reasoning')
-        .map((message) => (message.content as { reasoningText?: string }).reasoningText),
-    ).toEqual(['再核人数'])
+    expect(nextStep.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '再核人数',
+      },
+    ])
     expect(nextStep.filter((message) => message.role === 'assistant')).toEqual([
       {
         id: 'live-assistant-attempt-9',
@@ -542,21 +543,22 @@ describe('projectConversationFrame live reasoning #416', () => {
     ])
   })
 
-  it('drops 思考过程 when the persisted agent_message replaces the live reply', () => {
-    const messages = projectConversationFrame({
-      events: [
-        ...runningEvents,
-        {
-          sequence: 3,
-          kind: 'agent_message',
-          payload: {
-            text: '已记下路线。日期待核对。',
-            batchId: 'batch-1',
-            attemptId: 'attempt-9',
-          },
-          createdAt: '2026-08-26T00:00:02.000Z',
+  it('keeps 思考过程 as CopilotKit reasoning after agent_message when the session still has it', () => {
+    const completed = [
+      ...runningEvents,
+      {
+        sequence: 3,
+        kind: 'agent_message' as const,
+        payload: {
+          text: '已记下路线。日期待核对。',
+          batchId: 'batch-1',
+          attemptId: 'attempt-9',
         },
-      ],
+        createdAt: '2026-08-26T00:00:02.000Z',
+      },
+    ]
+    const refreshed = projectConversationFrame({
+      events: completed,
       pendingText: null,
       liveAssistant: {
         attemptId: 'attempt-9',
@@ -567,13 +569,89 @@ describe('projectConversationFrame live reasoning #416', () => {
         text: '已记下路线。日期待核对。',
       },
     })
-    expect(messages.some((message) => message.activityType === 'ai-agent-reasoning')).toBe(false)
-    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+    expect(refreshed.some((message) => message.role === 'reasoning')).toBe(false)
+    expect(refreshed.filter((message) => message.role === 'assistant')).toEqual([
       expect.objectContaining({
         id: 'event-3',
         role: 'assistant',
         content: '已记下路线。日期待核对。',
       }),
+    ])
+
+    const inSession = projectConversationFrame({
+      events: completed,
+      pendingText: null,
+      liveAssistant: null,
+      sessionReasoning: { 'attempt-9': '再核人数' },
+    })
+    const assistantIndex = inSession.findIndex((message) => message.id === 'event-3')
+    expect(inSession[assistantIndex - 1]).toEqual({
+      id: 'live-reasoning-attempt-9',
+      role: 'reasoning',
+      content: '再核人数',
+    })
+    expect(inSession[assistantIndex]).toEqual(
+      expect.objectContaining({
+        id: 'event-3',
+        role: 'assistant',
+        content: '已记下路线。日期待核对。',
+      }),
+    )
+  })
+
+  it('still shows 思考过程 on the next turn after the previous batch completed', () => {
+    const messages = projectConversationFrame({
+      events: [
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'agent_message',
+          payload: {
+            text: '已记下路线。',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+        {
+          sequence: 4,
+          kind: 'batch_status',
+          payload: {
+            status: 'completed',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+          },
+          createdAt: '2026-08-26T00:00:03.000Z',
+        },
+        {
+          sequence: 5,
+          kind: 'user_message',
+          payload: { text: '人数呢' },
+          createdAt: '2026-08-26T00:00:04.000Z',
+        },
+      ],
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-10',
+        batchId: 'batch-2',
+        generation: 4,
+        revision: 1,
+        reasoningText: '再核第二轮人数',
+        text: '',
+      },
+      sessionReasoning: { 'attempt-9': '先核对出团日期' },
+    })
+    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '先核对出团日期',
+      },
+      {
+        id: 'live-reasoning-attempt-10',
+        role: 'reasoning',
+        content: '再核第二轮人数',
+      },
     ])
   })
 
@@ -594,11 +672,13 @@ describe('projectConversationFrame live reasoning #416', () => {
       false,
     )
     expect(JSON.stringify(messages)).not.toContain('tool.call')
-    expect(
-      (messages.find((message) => message.activityType === 'ai-agent-reasoning')?.content as {
-        reasoningText?: string
-      }).reasoningText,
-    ).toBe('可以调用 proposeReviewPackage 再核对')
+    expect(messages.filter((message) => message.role === 'reasoning')).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'reasoning',
+        content: '可以调用 proposeReviewPackage 再核对',
+      },
+    ])
   })
 
   it('drops 思考过程 after a failed batch_status so it is not treated as a finished answer', () => {
@@ -626,8 +706,9 @@ describe('projectConversationFrame live reasoning #416', () => {
         reasoningText: '先核对出团日期',
         text: '半段回复',
       },
+      sessionReasoning: { 'attempt-9': '先核对出团日期' },
     })
-    expect(messages.some((message) => message.activityType === 'ai-agent-reasoning')).toBe(false)
+    expect(messages.some((message) => message.role === 'reasoning')).toBe(false)
     expect(messages.some((message) => message.content === '半段回复')).toBe(false)
   })
 })

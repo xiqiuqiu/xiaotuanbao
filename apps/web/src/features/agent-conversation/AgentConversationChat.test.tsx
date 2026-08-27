@@ -1,5 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
@@ -14,6 +15,18 @@ import { ApiError } from '@/lib/request'
 const routerState = vi.hoisted(() => ({
   location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
 }))
+
+function MockReasoningMessage({ content }: { content: string }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div>
+      <button type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        思考过程
+      </button>
+      <div hidden={!open}>{content}</div>
+    </div>
+  )
+}
 
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
@@ -66,6 +79,14 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     return <div>{children}</div>
   },
   CopilotChatConfigurationProvider: ({ children }: { children: React.ReactNode }) => children,
+  CopilotChatReasoningMessage: Object.assign(
+    () => null,
+    {
+      Header: () => null,
+      Content: () => null,
+      Toggle: () => null,
+    },
+  ),
   CopilotChatView: ({
     inputValue,
     onInputChange,
@@ -84,6 +105,11 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   }) => (
     <div>
       {(messages ?? []).map((message) => {
+        if (message.role === 'reasoning' && typeof message.content === 'string') {
+          return (
+            <MockReasoningMessage key={message.id} content={message.content} />
+          )
+        }
         if (message.role === 'activity' && message.content && typeof message.content === 'object') {
           const renderer = capturedActivityRenderers.find(
             (item) => item.activityType === message.activityType,
@@ -356,7 +382,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
   })
 
-  it('shows collapsible 思考过程 from the first reasoning token and drops it after agent_message', async () => {
+  it('shows collapsible 思考过程 from the first reasoning token and keeps it after agent_message', async () => {
     const user = userEvent.setup()
     render(<AgentConversationChat />)
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
@@ -422,7 +448,7 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
       )
     })
     expect(await screen.findByText('已记下路线。可继续问。')).toBeInTheDocument()
-    expect(screen.queryByText('再核人数')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '思考过程' })).not.toBeInTheDocument()
+    expect(screen.getByText('再核人数')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '思考过程' })).toBeInTheDocument()
   })
 })
