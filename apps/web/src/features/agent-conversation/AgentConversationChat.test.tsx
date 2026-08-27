@@ -46,8 +46,25 @@ vi.mock('@tanstack/react-router', () => ({
   },
 }))
 
+let capturedActivityRenderers: Array<{
+  activityType?: string
+  render?: (props: { content: unknown }) => React.ReactNode
+}> = []
+
 vi.mock('@copilotkit/react-core/v2', () => ({
-  CopilotKit: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  CopilotKit: ({
+    children,
+    renderActivityMessages,
+  }: {
+    children: React.ReactNode
+    renderActivityMessages?: Array<{
+      activityType?: string
+      render?: (props: { content: unknown }) => React.ReactNode
+    }>
+  }) => {
+    capturedActivityRenderers = renderActivityMessages ?? []
+    return <div>{children}</div>
+  },
   CopilotChatConfigurationProvider: ({ children }: { children: React.ReactNode }) => children,
   CopilotChatView: ({
     inputValue,
@@ -58,14 +75,27 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue?: string
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
-    messages?: Array<{ id?: string; role?: string; content?: unknown }>
+    messages?: Array<{
+      id?: string
+      role?: string
+      content?: unknown
+      activityType?: string
+    }>
   }) => (
     <div>
-      {(messages ?? []).map((message) =>
-        typeof message.content === 'string' ? (
+      {(messages ?? []).map((message) => {
+        if (message.role === 'activity' && message.content && typeof message.content === 'object') {
+          const renderer = capturedActivityRenderers.find(
+            (item) => item.activityType === message.activityType,
+          )
+          if (renderer?.render) {
+            return <div key={message.id}>{renderer.render({ content: message.content })}</div>
+          }
+        }
+        return typeof message.content === 'string' ? (
           <div key={message.id ?? `${message.role}-${message.content}`}>{message.content}</div>
-        ) : null,
-      )}
+        ) : null
+      })}
       <textarea
         aria-label="询问小团宝业务"
         value={inputValue ?? ''}
@@ -324,5 +354,75 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     })
     expect(await screen.findByText('已整理当前资料。可继续问。')).toBeInTheDocument()
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
+  })
+
+  it('shows collapsible 思考过程 from the first reasoning token and drops it after agent_message', async () => {
+    const user = userEvent.setup()
+    render(<AgentConversationChat />)
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 1,
+            reasoningText: '先核对出团日期',
+            text: '',
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('先核对出团日期')).toBeInTheDocument()
+    const toggle = screen.getByRole('button', { name: '思考过程' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 2,
+            reasoningText: '再核人数',
+            text: '已记下路线。',
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已记下路线。')).toBeInTheDocument()
+    expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
+    expect(screen.getByText('再核人数')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'conversation.event',
+            event: {
+              id: 'e-3',
+              sequence: 3,
+              kind: 'agent_message',
+              payload: {
+                text: '已记下路线。可继续问。',
+                batchId: 'batch-1',
+                attemptId: 'attempt-9',
+              },
+              createdAt: '2026-08-26T00:00:02.000Z',
+            },
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已记下路线。可继续问。')).toBeInTheDocument()
+    expect(screen.queryByText('再核人数')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '思考过程' })).not.toBeInTheDocument()
   })
 })

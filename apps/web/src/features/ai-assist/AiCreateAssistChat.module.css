@@ -73,6 +73,11 @@
   gap: 8px;
 }
 
+.reasoningText {
+  display: block;
+  white-space: pre-wrap;
+}
+
 .failedMaterial {
   display: flex;
   align-items: center;

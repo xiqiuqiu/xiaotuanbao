@@ -21,6 +21,7 @@ import {
   isCopilotChatRunning,
   projectConversationFrame,
 } from '@/features/ai-assist/ai-create-copilot-messages'
+import { createAgentReasoningActivityRenderer } from './agent-reasoning-activity'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
@@ -330,6 +331,7 @@ export function AgentConversationChat() {
     [events, liveAssistant, pendingText],
   )
   const isRunning = isCopilotChatRunning(events, null, pendingText, liveAssistant)
+  const activityRenderers = useMemo(() => [createAgentReasoningActivityRenderer()], [])
 
   return (
     <div className={chatStyles.root}>
@@ -360,7 +362,12 @@ export function AgentConversationChat() {
       {loading ? (
         <Typography.Text type="secondary">正在加载会话</Typography.Text>
       ) : (
-        <CopilotKit runtimeUrl="/copilotkit" useSingleEndpoint={false} enableInspector={false}>
+        <CopilotKit
+          runtimeUrl="/copilotkit"
+          useSingleEndpoint={false}
+          enableInspector={false}
+          renderActivityMessages={activityRenderers}
+        >
           <CopilotChatConfigurationProvider
             agentId={AGENT_ID}
             threadId={conversationId ?? 'new'}

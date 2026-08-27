@@ -64,6 +64,28 @@ describe('InMemoryAgentLiveOutput', () => {
 })
 
 describe('LiveOutputFlusher', () => {
+  it('flushes the first 思考过程 token immediately and overwrites the previous step', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    const seen: Array<{ reasoningText: string; text: string }> = []
+    const sub = live.observe(identity.conversationId).subscribe((snapshot) => {
+      seen.push({ reasoningText: snapshot.reasoningText, text: snapshot.text })
+    })
+    const flusher = new LiveOutputFlusher(live, identity)
+
+    flusher.push({ reasoningText: '先核对日期' })
+    await flusher.flush()
+    expect(seen).toEqual([{ reasoningText: '先核对日期', text: '' }])
+
+    flusher.push({ text: '已记下路线。' })
+    await flusher.flush()
+    expect(seen.at(-1)).toEqual({ reasoningText: '先核对日期', text: '已记下路线。' })
+
+    flusher.push({ reasoningText: '再核人数' })
+    await flusher.flush()
+    expect(seen.at(-1)).toEqual({ reasoningText: '再核人数', text: '已记下路线。' })
+    sub.unsubscribe()
+  })
+
   it('flushes the first public token immediately without a character gate', async () => {
     const live = new InMemoryAgentLiveOutput()
     const seen: string[] = []
@@ -72,7 +94,7 @@ describe('LiveOutputFlusher', () => {
     })
     const flusher = new LiveOutputFlusher(live, identity)
 
-    flusher.push('已')
+    flusher.push({ text: '已' })
     await flusher.flush()
 
     expect(seen).toEqual(['已'])
@@ -92,11 +114,11 @@ describe('LiveOutputFlusher', () => {
     })
     const flusher = new LiveOutputFlusher(live, identity)
 
-    flusher.push('已')
+    flusher.push({ text: '已' })
     await flusher.flush()
     expect(seen).toEqual([{ text: '已', revision: 1 }])
 
-    flusher.push('已整理')
+    flusher.push({ text: '已整理' })
     await new Promise((resolve) => setTimeout(resolve, LIVE_OUTPUT_FLUSH_MS - 20))
     expect(seen).toHaveLength(1)
 
@@ -107,7 +129,7 @@ describe('LiveOutputFlusher', () => {
     ])
 
     const early = `${'已整理'}${'字'.repeat(128)}`
-    flusher.push(early)
+    flusher.push({ text: early })
     await flusher.flush()
     expect(seen.at(-1)).toEqual({ text: early, revision: 3 })
     sub.unsubscribe()

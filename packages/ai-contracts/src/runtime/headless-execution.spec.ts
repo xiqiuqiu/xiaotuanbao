@@ -36,8 +36,11 @@ describe('headless Agent execution contract', () => {
   it('accepts public-reply run frames and rejects tool args as protocol frames', () => {
     expect(headlessRunFrameSchema.parse({ type: 'run.started' })).toEqual({ type: 'run.started' })
     expect(
-      headlessRunFrameSchema.parse({ type: 'message.delta', sequence: 1, text: '已记下' }),
-    ).toEqual({ type: 'message.delta', sequence: 1, text: '已记下' })
+      headlessRunFrameSchema.parse({ type: 'reasoning.delta', sequence: 1, text: '先核对出团日期' }),
+    ).toEqual({ type: 'reasoning.delta', sequence: 1, text: '先核对出团日期' })
+    expect(
+      headlessRunFrameSchema.parse({ type: 'message.delta', sequence: 2, text: '已记下' }),
+    ).toEqual({ type: 'message.delta', sequence: 2, text: '已记下' })
     expect(headlessRunFrameSchema.parse({ type: 'run.heartbeat' })).toEqual({ type: 'run.heartbeat' })
     expect(
       headlessRunFrameSchema.parse({

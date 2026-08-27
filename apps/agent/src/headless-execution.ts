@@ -34,25 +34,41 @@ export interface HeadlessRunConfig {
   headlessExecutor?: HeadlessExecutor
 }
 
+type DeterministicHeadlessDelta =
+  | { type: 'reasoning.delta'; text: string }
+  | { type: 'message.delta'; text: string }
+
 export function createDeterministicAgentAdapter(
   outcome: HeadlessExecutionResult,
-  options?: { messageDeltas?: string[] },
+  options?: { messageDeltas?: string[]; reasoningDeltas?: string[] },
 ): HeadlessExecutor {
   const scripted = headlessExecutionResultSchema.parse(outcome)
   return async function* streamDeterministicRun(): AsyncIterable<HeadlessRunFrame> {
     yield { type: 'run.started' }
-    const deltas =
-      options?.messageDeltas ?? (scripted.kind === 'completed' ? [scripted.message] : [])
     let sequence = 1
-    for (const text of deltas) {
-      if (!text) {
+    for (const delta of scriptedDeltas(scripted, options)) {
+      if (!delta.text) {
         continue
       }
-      yield { type: 'message.delta', sequence, text }
+      yield { type: delta.type, sequence, text: delta.text }
       sequence += 1
     }
     yield { type: 'run.completed', result: scripted }
   }
+}
+
+function scriptedDeltas(
+  scripted: HeadlessExecutionResult,
+  options?: { messageDeltas?: string[]; reasoningDeltas?: string[] },
+): DeterministicHeadlessDelta[] {
+  const reasoning = (options?.reasoningDeltas ?? []).map((text) => ({
+    type: 'reasoning.delta' as const,
+    text,
+  }))
+  const messages = (
+    options?.messageDeltas ?? (scripted.kind === 'completed' ? [scripted.message] : [])
+  ).map((text) => ({ type: 'message.delta' as const, text }))
+  return [...reasoning, ...messages]
 }
 
 export async function collectHeadlessRun(

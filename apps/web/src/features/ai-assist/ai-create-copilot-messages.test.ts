@@ -443,6 +443,195 @@ describe('projectConversationFrame live assistant #415', () => {
   })
 })
 
+describe('projectConversationFrame live reasoning #416', () => {
+  const runningEvents = [
+    {
+      sequence: 1,
+      kind: 'user_message' as const,
+      payload: { text: '帮我查一下账款' },
+      createdAt: '2026-08-26T00:00:00.000Z',
+    },
+    {
+      sequence: 2,
+      kind: 'batch_status' as const,
+      payload: {
+        status: 'agent_running',
+        batchId: 'batch-1',
+        attemptId: 'attempt-9',
+        generation: 3,
+      },
+      createdAt: '2026-08-26T00:00:01.000Z',
+    },
+  ]
+
+  it('shows collapsible 思考过程 after the first reasoning token before any public reply', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 1,
+        reasoningText: '先核对出团日期',
+        text: '',
+      },
+    })
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([])
+    expect(
+      messages.filter((message) => message.activityType === 'ai-agent-reasoning'),
+    ).toEqual([
+      {
+        id: 'live-reasoning-attempt-9',
+        role: 'activity',
+        activityType: 'ai-agent-reasoning',
+        content: { reasoningText: '先核对出团日期' },
+      },
+    ])
+  })
+
+  it('keeps 思考过程 beside the growing reply and overwrites the previous step', () => {
+    const firstStep = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 2,
+        reasoningText: '先核对出团日期',
+        text: '已记下路线。',
+      },
+    })
+    expect(firstStep.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: '已记下路线。',
+      },
+    ])
+    expect(
+      (firstStep.find((message) => message.activityType === 'ai-agent-reasoning')?.content as {
+        reasoningText?: string
+      }).reasoningText,
+    ).toBe('先核对出团日期')
+
+    const nextStep = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 3,
+        reasoningText: '再核人数',
+        text: '已记下路线。日期待核对。',
+      },
+    })
+    expect(
+      nextStep
+        .filter((message) => message.activityType === 'ai-agent-reasoning')
+        .map((message) => (message.content as { reasoningText?: string }).reasoningText),
+    ).toEqual(['再核人数'])
+    expect(nextStep.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: '已记下路线。日期待核对。',
+      },
+    ])
+  })
+
+  it('drops 思考过程 when the persisted agent_message replaces the live reply', () => {
+    const messages = projectConversationFrame({
+      events: [
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'agent_message',
+          payload: {
+            text: '已记下路线。日期待核对。',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 4,
+        reasoningText: '再核人数',
+        text: '已记下路线。日期待核对。',
+      },
+    })
+    expect(messages.some((message) => message.activityType === 'ai-agent-reasoning')).toBe(false)
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+      expect.objectContaining({
+        id: 'event-3',
+        role: 'assistant',
+        content: '已记下路线。日期待核对。',
+      }),
+    ])
+  })
+
+  it('does not promote tool names mentioned in 思考过程 into a structured tool frame', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 1,
+        reasoningText: '可以调用 proposeReviewPackage 再核对',
+        text: '',
+      },
+    })
+    expect(messages.some((message) => message.activityType === 'ai-create-review-package')).toBe(
+      false,
+    )
+    expect(JSON.stringify(messages)).not.toContain('tool.call')
+    expect(
+      (messages.find((message) => message.activityType === 'ai-agent-reasoning')?.content as {
+        reasoningText?: string
+      }).reasoningText,
+    ).toBe('可以调用 proposeReviewPackage 再核对')
+  })
+
+  it('drops 思考过程 after a failed batch_status so it is not treated as a finished answer', () => {
+    const messages = projectConversationFrame({
+      events: [
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'failed',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            errorCode: 'MODEL_TIMEOUT',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 2,
+        reasoningText: '先核对出团日期',
+        text: '半段回复',
+      },
+    })
+    expect(messages.some((message) => message.activityType === 'ai-agent-reasoning')).toBe(false)
+    expect(messages.some((message) => message.content === '半段回复')).toBe(false)
+  })
+})
+
 describe('isCopilotChatRunning in-flight statuses #415', () => {
   it('treats ready_for_agent, preparing_context and agent_running as running', () => {
     expect(
