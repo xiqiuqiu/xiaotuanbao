@@ -1,13 +1,16 @@
 import { useRouterState } from '@tanstack/react-router'
-import { parsePageLocatorFromLocation, type PageLocator } from '@xiaotuanbao/shared'
 import { useAgentConversationStore } from './agent-conversation.store'
+import {
+  currentPageAttachmentFromLocation,
+  type AgentCurrentPageAttachment,
+} from './page-locator-attachment'
 
-export function useCurrentPageLocator(): PageLocator | null {
+export function useCurrentPageAttachment(): AgentCurrentPageAttachment | null {
   const location = useRouterState({ select: (state) => state.location })
   const returnLocation = useAgentConversationStore((state) => state.returnLocation)
   const source = returnLocation ?? {
     pathname: location.pathname,
     search: location.searchStr,
   }
-  return parsePageLocatorFromLocation(source.pathname, source.search)
+  return currentPageAttachmentFromLocation(source.pathname, source.search)
 }

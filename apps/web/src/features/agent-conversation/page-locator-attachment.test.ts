@@ -1,60 +1,62 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { parsePageLocatorFromLocation } from '@xiaotuanbao/shared'
-import { useAgentConversationStore } from './agent-conversation.store'
-import { nextPageLocatorAttachment } from './page-locator-attachment'
+import { describe, expect, it } from 'vitest'
+import {
+  currentPageAttachmentFromLocation,
+  nextPageAttachment,
+} from './page-locator-attachment'
 
-describe('page locator attachment #371', () => {
-  afterEach(() => {
-    useAgentConversationStore.setState({
-      view: 'page',
-      conversationId: null,
-      title: '新会话',
+describe('current page attachment #371 #411', () => {
+  it('has no attachment on workbench, list, and unsaved departure-creation pages', () => {
+    expect(currentPageAttachmentFromLocation('/', '')).toBeNull()
+    expect(currentPageAttachmentFromLocation('/partner', '')).toBeNull()
+    expect(currentPageAttachmentFromLocation('/departure', '')).toBeNull()
+    expect(currentPageAttachmentFromLocation('/departure/new', '')).toBeNull()
+  })
+
+  it('derives an object locator on supported detail pages', () => {
+    expect(
+      currentPageAttachmentFromLocation('/partner/partner-1', '?tab=accounts'),
+    ).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'partner', objectId: 'partner-1', section: 'accounts' },
+    })
+    expect(
+      currentPageAttachmentFromLocation('/departure/departure-1', '?tab=overview'),
+    ).toEqual({
+      kind: 'page_locator',
+      locator: { kind: 'departure', objectId: 'departure-1', section: 'overview' },
     })
   })
 
-  it('attaches a removable locator when a new conversation starts on a supported page', () => {
-    useAgentConversationStore.getState().startNewConversation()
-    const locator = parsePageLocatorFromLocation('/partner/partner-1', '?tab=accounts')
+  it('derives one task attachment when the departure wizard has a persisted task', () => {
     expect(
-      nextPageLocatorAttachment({
-        view: 'new',
-        conversationId: null,
-        currentLocator: locator,
-        attachedLocator: null,
-        captured: false,
-      }),
-    ).toEqual(locator)
+      currentPageAttachmentFromLocation('/departure/new', '?taskId=task-1'),
+    ).toEqual({ kind: 'departure_creation_task', taskId: 'task-1' })
   })
 
   it('does not auto-attach when switching to a historical conversation', () => {
-    useAgentConversationStore.getState().openHistoricalConversation({
-      id: 'c-1',
-      title: '历史会话',
-    })
     expect(
-      nextPageLocatorAttachment({
+      nextPageAttachment({
         view: 'history',
-        conversationId: 'c-1',
-        currentLocator: parsePageLocatorFromLocation('/partner/partner-1'),
-        attachedLocator: parsePageLocatorFromLocation('/partner/partner-1'),
+        currentAttachment: {
+          kind: 'page_locator',
+          locator: { kind: 'partner', objectId: 'partner-1' },
+        },
         captured: false,
       }),
     ).toBeNull()
   })
 
   it('attaches only after the user explicitly captures the current page', () => {
+    const currentAttachment = {
+      kind: 'departure_creation_task' as const,
+      taskId: 'task-1',
+    }
     expect(
-      nextPageLocatorAttachment({
+      nextPageAttachment({
         view: 'history',
-        conversationId: 'c-1',
-        currentLocator: parsePageLocatorFromLocation('/departure/departure-1', '?tab=overview'),
-        attachedLocator: null,
+        currentAttachment,
         captured: true,
       }),
-    ).toEqual({
-      kind: 'departure',
-      objectId: 'departure-1',
-      section: 'overview',
-    })
+    ).toEqual(currentAttachment)
   })
 })
