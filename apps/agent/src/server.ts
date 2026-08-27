@@ -20,6 +20,7 @@ import { getAssistRequestContext } from './assist-request-context'
 import { AI_CREATE_CAPABILITY_DEFINITIONS } from './agent-definition'
 
 export {
+  collectHeadlessRun,
   createDeterministicAgentAdapter,
   loadDeterministicAgentAdapterFromEnv,
   type HeadlessExecutor,
@@ -58,11 +59,13 @@ export function createAgentServer(config: AgentServerConfig) {
       async readUserText(request) {
         return request.userText.trim()
       },
-      generate: (userText) => {
+      stream: (userText, signal) => {
         const { delegationToken: _delegationToken, ...requestContext } = getAssistRequestContext()
         const trusted = requestContextSchema.parse(requestContext)
         const attemptMastra = createAiCreateMastra(config, trusted)
-        return attemptMastra.getAgent(AI_CREATE_AGENT_ID).generate(userText)
+        return attemptMastra.getAgent(AI_CREATE_AGENT_ID).stream(userText, {
+          abortSignal: signal,
+        })
       },
     })
 

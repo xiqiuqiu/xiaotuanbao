@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import { DepartureType, PrismaClient } from '@prisma/client'
+import { parseConversationStreamFrame } from '@xiaotuanbao/shared'
 import { authRequest, createTestApp, loginAs } from './helpers'
 
 describe('AI create multi-device conversation draft (e2e) #320', () => {
@@ -116,10 +117,21 @@ describe('AI create multi-device conversation draft (e2e) #320', () => {
           continue
         }
         const frame = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
         const id = Number(frame.match(/^id: (\d+)$/m)?.[1])
-        const data = frame.match(/^data: (.+)$/m)?.[1]
-        if (Number.isInteger(id) && data) {
-          return { id, data: JSON.parse(data) as { sequence: number } }
+        const dataLine = frame.match(/^data: (.+)$/m)?.[1]
+        if (!dataLine) {
+          continue
+        }
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(dataLine) as unknown
+        } catch {
+          continue
+        }
+        const streamFrame = parseConversationStreamFrame(parsed)
+        if (streamFrame?.type === 'conversation.event' && Number.isInteger(id)) {
+          return { id, data: streamFrame.event }
         }
       }
     } finally {

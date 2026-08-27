@@ -14,10 +14,11 @@ import {
   type AiCreateSharedLightState,
   type RouteTemplateMatchReason,
 } from '@xiaotuanbao/ai-contracts'
-import type {
-  AiConversationEventView,
-  AiConversationDraftView,
-  AiInputBatchView,
+import {
+  parseConversationStreamFrame,
+  type AiConversationEventView,
+  type AiConversationDraftView,
+  type AiInputBatchView,
 } from '@xiaotuanbao/shared'
 import { env } from '@/config/env'
 import { useOptionalAssistPaneSlot } from '@/layouts/assist-pane-slot'
@@ -684,7 +685,11 @@ function useConversationEventSync({
     )
     source.onmessage = (message) => {
       try {
-        const parsed = JSON.parse(message.data) as AiConversationEventView
+        const frame = parseConversationStreamFrame(JSON.parse(message.data) as unknown)
+        if (!frame || frame.type !== 'conversation.event') {
+          return
+        }
+        const parsed = frame.event
         if (typeof parsed.sequence !== 'number' || typeof parsed.kind !== 'string') return
         sink.mergeEvents([parsed])
         if (parsed.kind === 'batch_status') {

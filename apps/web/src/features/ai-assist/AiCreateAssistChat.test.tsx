@@ -1447,7 +1447,7 @@ describe('AiCreateAssistChat', () => {
     expect(await screen.findByText('已上传 1 个，解析 0/1')).toBeInTheDocument()
   })
 
-  it('shows queued and waiting-for-answer states without locking the composer', () => {
+  it('shows queued and in-flight statuses with isRunning covering ready_for_agent', () => {
     render(
       <AiCreateAssistChat
         {...chatProps}
@@ -1482,7 +1482,7 @@ describe('AiCreateAssistChat', () => {
 
     expect(screen.getByText('AI 处理中')).toBeInTheDocument()
     expect(screen.getByText('已排队')).toBeInTheDocument()
-    expect(capturedView.isRunning).toBe(false)
+    expect(capturedView.isRunning).toBe(true)
   })
 
   it('restores a free-text question card from persisted interaction events', () => {

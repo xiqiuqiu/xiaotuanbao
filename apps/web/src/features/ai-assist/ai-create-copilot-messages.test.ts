@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   batchStatusLabel,
+  isCopilotChatRunning,
+  projectConversationFrame,
   toCopilotChatMessages,
 } from './ai-create-copilot-messages'
 
@@ -338,3 +340,139 @@ describe('AI create chat status projection', () => {
     )
   })
 })
+
+describe('projectConversationFrame live assistant #415', () => {
+  const runningEvents = [
+    {
+      sequence: 1,
+      kind: 'user_message' as const,
+      payload: { text: '帮我查一下账款' },
+      createdAt: '2026-08-26T00:00:00.000Z',
+    },
+    {
+      sequence: 2,
+      kind: 'batch_status' as const,
+      payload: {
+        status: 'agent_running',
+        batchId: 'batch-1',
+        attemptId: 'attempt-9',
+        generation: 3,
+      },
+      createdAt: '2026-08-26T00:00:01.000Z',
+    },
+  ]
+
+  it('keeps batch_status and does not invent a blank assistant before public tokens', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: null,
+    })
+    expect(messages.some((message) => message.role === 'assistant')).toBe(false)
+    expect(
+      messages.some(
+        (message) =>
+          message.activityType === 'ai-create-batch-status' &&
+          (message.content as { label?: string }).label === 'AI 处理中',
+      ),
+    ).toBe(true)
+  })
+
+  it('grows one in-progress assistant and replaces it with the persisted agent_message', () => {
+    const live = {
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '',
+      text: '已整理当前资料。',
+    }
+    const growing = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: live,
+    })
+    expect(growing.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: '已整理当前资料。',
+      },
+    ])
+
+    const replaced = projectConversationFrame({
+      events: [
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'agent_message',
+          payload: {
+            text: '已整理当前资料。可继续问。',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      pendingText: null,
+      liveAssistant: live,
+    })
+    expect(replaced.filter((message) => message.role === 'assistant')).toEqual([
+      expect.objectContaining({
+        id: 'event-3',
+        role: 'assistant',
+        content: '已整理当前资料。可继续问。',
+      }),
+    ])
+  })
+
+  it('ignores an older generation snapshot after a newer Attempt is running', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-old',
+        batchId: 'batch-1',
+        generation: 2,
+        revision: 8,
+        reasoningText: '',
+        text: '上一代残留',
+      },
+    })
+    expect(messages.some((message) => message.content === '上一代残留')).toBe(false)
+  })
+})
+
+describe('isCopilotChatRunning in-flight statuses #415', () => {
+  it('treats ready_for_agent, preparing_context and agent_running as running', () => {
+    expect(
+      isCopilotChatRunning(
+        [{ sequence: 1, kind: 'batch_status', payload: { status: 'ready_for_agent' }, createdAt: '2026-08-26T00:00:00.000Z' }],
+        null,
+        null,
+      ),
+    ).toBe(true)
+    expect(
+      isCopilotChatRunning(
+        [{ sequence: 1, kind: 'batch_status', payload: { status: 'preparing_context' }, createdAt: '2026-08-26T00:00:00.000Z' }],
+        null,
+        null,
+      ),
+    ).toBe(true)
+    expect(
+      isCopilotChatRunning(
+        [{ sequence: 1, kind: 'batch_status', payload: { status: 'agent_running' }, createdAt: '2026-08-26T00:00:00.000Z' }],
+        null,
+        null,
+      ),
+    ).toBe(true)
+    expect(
+      isCopilotChatRunning(
+        [{ sequence: 1, kind: 'batch_status', payload: { status: 'completed' }, createdAt: '2026-08-26T00:00:00.000Z' }],
+        null,
+        null,
+      ),
+    ).toBe(false)
+  })
+})
+

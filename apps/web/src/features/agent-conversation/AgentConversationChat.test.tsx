@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentConversationChat } from './AgentConversationChat'
 import { useAgentConversationStore } from './agent-conversation.store'
 import { useAgentConversationRuntimeStore } from './agent-conversation-runtime.store'
 import {
+  listAgentConversationEvents,
   saveAgentConversationDraft,
   sendAgentConversationText,
 } from '@/services/agent-conversation.service'
@@ -50,12 +51,19 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue,
     onInputChange,
     onSubmitMessage,
+    messages,
   }: {
     inputValue?: string
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
+    messages?: Array<{ id?: string; role?: string; content?: unknown }>
   }) => (
     <div>
+      {(messages ?? []).map((message) =>
+        typeof message.content === 'string' ? (
+          <div key={message.id ?? `${message.role}-${message.content}`}>{message.content}</div>
+        ) : null,
+      )}
       <textarea
         aria-label="询问小团宝业务"
         value={inputValue ?? ''}
@@ -74,8 +82,26 @@ vi.mock('@copilotkit/react-core/v2', () => ({
   ),
 }))
 
+class MockEventSource {
+  url: string
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onerror: ((event: Event) => void) | null = null
+  readyState = 1
+  constructor(url: string, _init?: EventSourceInit) {
+    this.url = url
+    lastEventSource = this
+  }
+  close() {
+    this.readyState = 2
+  }
+}
+
+let lastEventSource: MockEventSource | null = null
+vi.stubGlobal('EventSource', MockEventSource)
+
 describe('AgentConversationChat page locator #371', () => {
   beforeEach(() => {
+    lastEventSource = null
     vi.mocked(sendAgentConversationText).mockReset()
     useAgentConversationRuntimeStore.getState().clear()
     useAgentConversationStore.getState().reset()
@@ -167,3 +193,95 @@ describe('AgentConversationChat page locator #371', () => {
     expect(composer).toHaveValue('需要保留的超长说明')
   })
 })
+
+describe('AgentConversationChat live assistant snapshot #415', () => {
+  beforeEach(() => {
+    lastEventSource = null
+    vi.mocked(listAgentConversationEvents).mockResolvedValue({
+      conversationId: 'c-1',
+      events: [],
+      lastSequence: 0,
+    })
+    useAgentConversationRuntimeStore.getState().clear()
+    useAgentConversationStore.getState().reset()
+    useAgentConversationStore.getState().openHistoricalConversation({
+      id: 'c-1',
+      title: '历史会话',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-1',
+          sequence: 1,
+          kind: 'user_message',
+          payload: { text: '帮我查一下账款' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('projects growing assistant text from SSE snapshots and replaces it with agent_message', async () => {
+    render(<AgentConversationChat />)
+    expect(lastEventSource).not.toBeNull()
+    expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 1,
+            reasoningText: '',
+            text: '已整理当前资料。',
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已整理当前资料。')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'conversation.event',
+            event: {
+              id: 'e-3',
+              sequence: 3,
+              kind: 'agent_message',
+              payload: {
+                text: '已整理当前资料。可继续问。',
+                batchId: 'batch-1',
+                attemptId: 'attempt-9',
+              },
+              createdAt: '2026-08-26T00:00:02.000Z',
+            },
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已整理当前资料。可继续问。')).toBeInTheDocument()
+    expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
+  })
+})
+

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
+import { Injectable, Inject, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import {
@@ -85,6 +85,11 @@ import { lockConversationRuntime } from './ai-create-task.lock'
 import { isFailedDependency, toFailedMaterialPayload } from './ai-conversation.mapper'
 import { responseSchemaFor } from './ai-conversation.interaction'
 import { AiHeadlessClient } from './ai-headless.client'
+import {
+  AGENT_LIVE_OUTPUT,
+  type AgentLiveOutput,
+} from './agent-live-output'
+import { LiveOutputFlusher } from './live-output-flusher'
 import { AiToolWorkerAdapter } from './ai-tool-worker.adapter'
 import { DepartureMaterialService } from './departure-material.service'
 import { PageLocatorResolver, type ResolvedPageContext } from './page-locator.resolver'
@@ -117,6 +122,7 @@ export class AiWorkflowProcessor {
     private readonly headlessClient: AiHeadlessClient,
     private readonly materialService: DepartureMaterialService,
     private readonly pageLocatorResolver: PageLocatorResolver,
+    @Inject(AGENT_LIVE_OUTPUT) private readonly liveOutput: AgentLiveOutput,
   ) {}
 
   async processDueJobs(limit = 10): Promise<number> {
@@ -481,32 +487,58 @@ export class AiWorkflowProcessor {
         executionRoute,
         routing.pageAttachment,
       )
+      await this.liveOutput.supersede(job.conversationId, prepared.attemptId)
       this.workflowLog('agent_started', {
         job: job.id,
         attemptId: prepared.attemptId,
         agentDefinition: definitionRefLog(prepared.requestContext.agentDefinition),
         capabilities: capabilityRefsLog(prepared.requestContext.grantedCapabilities),
       })
-      const renewed = await this.renewLease(job.id)
-      if (!renewed) {
-        return
-      }
-      const result = await this.withHeartbeat(job.id, async () => {
-        const outcome = await this.headlessClient.run(prepared.request, prepared.delegationToken)
-        await this.persistOutcome(routedJob, executionRoute, prepared.attemptId, outcome)
-        return outcome
+      const flusher = new LiveOutputFlusher(this.liveOutput, {
+        attemptId: prepared.attemptId,
+        organizationId: job.organizationId,
+        conversationId: job.conversationId,
+        batchId: job.inputBatchId,
+        generation: job.generation,
       })
-      if (result.kind === 'failed') {
-        return
+      try {
+        const renewed = await this.renewLease(job.id)
+        if (!renewed) {
+          return
+        }
+        const result = await this.withHeartbeat(job.id, async () => {
+          const outcome = await this.headlessClient.run(
+            prepared.request,
+            prepared.delegationToken,
+            {
+              onPublicText: (text) => {
+                flusher.push(text)
+              },
+            },
+          )
+          await flusher.flush()
+          await this.persistOutcome(routedJob, executionRoute, prepared.attemptId, outcome)
+          return outcome
+        })
+        if (result.kind === 'failed') {
+          return
+        }
+        this.workflowLog('agent_done', {
+          job: job.id,
+          durationMs: Date.now() - startedAt,
+          attempt: job.attemptCount,
+          result: result.kind,
+          agentDefinition: definitionRefLog(prepared.requestContext.agentDefinition),
+          capabilities: capabilityRefsLog(prepared.requestContext.grantedCapabilities),
+        })
+      } finally {
+        flusher.dispose()
+        try {
+          await this.liveOutput.clear(prepared.attemptId)
+        } catch (error: unknown) {
+          this.logger.warn(`清除即时输出失败 attempt=${prepared.attemptId}: ${String(error)}`)
+        }
       }
-      this.workflowLog('agent_done', {
-        job: job.id,
-        durationMs: Date.now() - startedAt,
-        attempt: job.attemptCount,
-        result: result.kind,
-        agentDefinition: definitionRefLog(prepared.requestContext.agentDefinition),
-        capabilities: capabilityRefsLog(prepared.requestContext.grantedCapabilities),
-      })
     } catch (error) {
       const errorCode = workflowErrorCode(error)
       this.logger.warn(`Agent 批次执行失败 job=${job.id}: ${String(error)}`)

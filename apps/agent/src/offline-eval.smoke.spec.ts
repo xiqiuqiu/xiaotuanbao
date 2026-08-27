@@ -7,6 +7,7 @@ import {
   submitReviewPackageModelInputSchema,
 } from '@xiaotuanbao/ai-contracts'
 import { createMastraHeadlessExecutor } from './mastra-headless.executor'
+import { collectHeadlessRun } from './headless-execution'
 
 const IDENTITY = {
   taskId: 'task-1',
@@ -69,7 +70,7 @@ describe('真实 Mastra offline Eval smoke', () => {
         ],
       }),
     })
-    const outcome = await executor(IDENTITY)
+    const { result: outcome } = await collectHeadlessRun(executor(IDENTITY))
     const latencyMs = Date.now() - started
     expect(outcome.kind).toBe('awaiting_review')
     expect(outcome.diagnostic?.toolSteps).toEqual([

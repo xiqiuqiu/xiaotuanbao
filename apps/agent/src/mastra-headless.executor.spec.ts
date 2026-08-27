@@ -1,4 +1,5 @@
 import { AiCollaborationError } from '@xiaotuanbao/ai-contracts'
+import { collectHeadlessRun } from './headless-execution'
 import { createMastraHeadlessExecutor } from './mastra-headless.executor'
 
 const IDENTITY = {
@@ -34,15 +35,56 @@ describe('createMastraHeadlessExecutor', () => {
       },
     })
 
-    await expect(executor(IDENTITY)).resolves.toEqual({
-      kind: 'completed',
-      message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
-      diagnostic: {
-        processorVersion: 'mastra-token-limiter-contiguous/v1',
-        usageSource: 'missing',
-        toolSteps: [],
-        modelSteps: [],
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'completed',
+        message: '已记下喀纳斯三日团的说明，请在表单核对路线和日期。',
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'missing',
+          toolSteps: [],
+          modelSteps: [],
+        },
       },
+    })
+  })
+
+  it('maps public text-delta chunks to message.delta and never emits tool args', async () => {
+    const executor = createMastraHeadlessExecutor({
+      readUserText: async () => '帮我建一个喀纳斯3日团',
+      stream: async () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', payload: { text: '已' } }
+          yield {
+            type: 'tool-call-delta',
+            payload: { toolName: 'proposeReviewPackage', argsTextDelta: '{"secret":1}' },
+          }
+          yield { type: 'text-delta', payload: { text: '记下喀纳斯三日团。' } }
+          yield { type: 'reasoning-delta', payload: { text: '内部思考不得进入公开帧' } }
+        })(),
+        getFullOutput: async () => ({
+          text: '已记下喀纳斯三日团。',
+          toolCalls: [{ toolName: 'proposeReviewPackage', args: REVIEW_ARGS }],
+        }),
+      }),
+    })
+
+    const { frames, result } = await collectHeadlessRun(executor(IDENTITY))
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'run.started',
+      'message.delta',
+      'message.delta',
+      'run.completed',
+    ])
+    expect(frames.filter((frame) => frame.type === 'message.delta')).toEqual([
+      { type: 'message.delta', sequence: 1, text: '已' },
+      { type: 'message.delta', sequence: 2, text: '记下喀纳斯三日团。' },
+    ])
+    expect(JSON.stringify(frames)).not.toContain('secret')
+    expect(JSON.stringify(frames)).not.toContain('内部思考')
+    expect(result).toMatchObject({
+      kind: 'completed',
+      message: '已记下喀纳斯三日团。',
     })
   })
 
@@ -83,22 +125,24 @@ describe('createMastraHeadlessExecutor', () => {
       }),
     })
 
-    await expect(executor(IDENTITY)).resolves.toEqual({
-      kind: 'awaiting_review',
-      reviewPackage: REVIEW_ARGS,
-      diagnostic: {
-        processorVersion: 'mastra-token-limiter-contiguous/v1',
-        usageSource: 'missing',
-        toolSteps: [
-          {
-            stepId: 'tool-1',
-            toolName: 'proposeReviewPackage',
-            capabilityKey: 'departure.review-package.propose',
-            capabilityVersion: 1,
-            status: 'succeeded',
-          },
-        ],
-        modelSteps: [],
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'awaiting_review',
+        reviewPackage: REVIEW_ARGS,
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'missing',
+          toolSteps: [
+            {
+              stepId: 'tool-1',
+              toolName: 'proposeReviewPackage',
+              capabilityKey: 'departure.review-package.propose',
+              capabilityVersion: 1,
+              status: 'succeeded',
+            },
+          ],
+          modelSteps: [],
+        },
       },
     })
   })
@@ -128,22 +172,24 @@ describe('createMastraHeadlessExecutor', () => {
       }),
     })
 
-    await expect(executor(IDENTITY)).resolves.toEqual({
-      kind: 'completed',
-      message: '摘录对不上冻结消息，请修正后再提。',
-      diagnostic: {
-        processorVersion: 'mastra-token-limiter-contiguous/v1',
-        usageSource: 'missing',
-        toolSteps: [
-          {
-            stepId: 'tool-1',
-            toolName: 'proposeReviewPackage',
-            capabilityKey: 'departure.review-package.propose',
-            capabilityVersion: 1,
-            status: 'succeeded',
-          },
-        ],
-        modelSteps: [],
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'completed',
+        message: '摘录对不上冻结消息，请修正后再提。',
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'missing',
+          toolSteps: [
+            {
+              stepId: 'tool-1',
+              toolName: 'proposeReviewPackage',
+              capabilityKey: 'departure.review-package.propose',
+              capabilityVersion: 1,
+              status: 'succeeded',
+            },
+          ],
+          modelSteps: [],
+        },
       },
     })
   })
@@ -156,15 +202,17 @@ describe('createMastraHeadlessExecutor', () => {
       },
     })
 
-    await expect(executor(IDENTITY)).resolves.toEqual({
-      kind: 'failed',
-      error: AiCollaborationError.fromCode('MODEL_TIMEOUT').toJSON(),
-      diagnostic: {
-        processorVersion: 'mastra-token-limiter-contiguous/v1',
-        usageSource: 'missing',
-        errorCode: 'MODEL_TIMEOUT',
-        toolSteps: [],
-        modelSteps: [],
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: AiCollaborationError.fromCode('MODEL_TIMEOUT').toJSON(),
+        diagnostic: {
+          processorVersion: 'mastra-token-limiter-contiguous/v1',
+          usageSource: 'missing',
+          errorCode: 'MODEL_TIMEOUT',
+          toolSteps: [],
+          modelSteps: [],
+        },
       },
     })
   })
@@ -181,15 +229,17 @@ describe('createMastraHeadlessExecutor', () => {
         ],
       }),
     })
-    await expect(withActual(IDENTITY)).resolves.toMatchObject({
-      kind: 'completed',
-      diagnostic: {
-        usageSource: 'actual',
-        usage: { input: 80, output: 20, total: 100 },
-        modelSteps: [
-          { stepIndex: 0, usageSource: 'actual', usage: { input: 40, output: 8, total: 48 } },
-          { stepIndex: 1, usageSource: 'actual', usage: { input: 40, output: 12, total: 52 } },
-        ],
+    await expect(collectHeadlessRun(withActual(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'completed',
+        diagnostic: {
+          usageSource: 'actual',
+          usage: { input: 80, output: 20, total: 100 },
+          modelSteps: [
+            { stepIndex: 0, usageSource: 'actual', usage: { input: 40, output: 8, total: 48 } },
+            { stepIndex: 1, usageSource: 'actual', usage: { input: 40, output: 12, total: 52 } },
+          ],
+        },
       },
     })
 
@@ -197,9 +247,9 @@ describe('createMastraHeadlessExecutor', () => {
       readUserText: async () => '帮我建一个喀纳斯3日团',
       generate: async () => ({ text: '已记下。' }),
     })
-    const missing = await withoutUsage(IDENTITY)
-    expect(missing).toMatchObject({ kind: 'completed', diagnostic: { usageSource: 'missing' } })
-    expect(missing.kind === 'completed' ? missing.diagnostic?.usage : 'x').toBeUndefined()
+    const missing = await collectHeadlessRun(withoutUsage(IDENTITY))
+    expect(missing.result).toMatchObject({ kind: 'completed', diagnostic: { usageSource: 'missing' } })
+    expect(missing.result.kind === 'completed' ? missing.result.diagnostic?.usage : 'x').toBeUndefined()
   })
 
   it('turns a TokenLimiter tripwire into a recoverable capacity failure', async () => {
@@ -213,10 +263,12 @@ describe('createMastraHeadlessExecutor', () => {
       }),
     })
 
-    await expect(executor(IDENTITY)).resolves.toMatchObject({
-      kind: 'failed',
-      error: { code: 'CONTEXT_CAPACITY_EXCEEDED', retryable: true },
-      diagnostic: { errorCode: 'CONTEXT_CAPACITY_EXCEEDED' },
+    await expect(collectHeadlessRun(executor(IDENTITY))).resolves.toMatchObject({
+      result: {
+        kind: 'failed',
+        error: { code: 'CONTEXT_CAPACITY_EXCEEDED', retryable: true },
+        diagnostic: { errorCode: 'CONTEXT_CAPACITY_EXCEEDED' },
+      },
     })
   })
 })

@@ -180,9 +180,44 @@ export const headlessExecutionResultSchema = z.discriminatedUnion('kind', [
   headlessFailedResultSchema,
 ])
 
+export const headlessRunStartedFrameSchema = z
+  .object({
+    type: z.literal('run.started'),
+  })
+  .strict()
+
+export const headlessMessageDeltaFrameSchema = z
+  .object({
+    type: z.literal('message.delta'),
+    sequence: z.number().int().positive(),
+    text: z.string().min(1),
+  })
+  .strict()
+
+export const headlessRunHeartbeatFrameSchema = z
+  .object({
+    type: z.literal('run.heartbeat'),
+  })
+  .strict()
+
+export const headlessRunCompletedFrameSchema = z
+  .object({
+    type: z.literal('run.completed'),
+    result: headlessExecutionResultSchema,
+  })
+  .strict()
+
+export const headlessRunFrameSchema = z.discriminatedUnion('type', [
+  headlessRunStartedFrameSchema,
+  headlessMessageDeltaFrameSchema,
+  headlessRunHeartbeatFrameSchema,
+  headlessRunCompletedFrameSchema,
+])
+
 export type HeadlessExecutionIdentity = z.infer<typeof headlessExecutionIdentitySchema>
 export type HeadlessExecutionRequest = z.infer<typeof headlessExecutionRequestSchema>
 export type HeadlessExecutionResult = z.infer<typeof headlessExecutionResultSchema>
+export type HeadlessRunFrame = z.infer<typeof headlessRunFrameSchema>
 export type HeadlessCompletedResult = z.infer<typeof headlessCompletedResultSchema>
 export type HeadlessInteraction = z.infer<typeof headlessInteractionSchema>
 export type HeadlessAwaitingUserInputResult = z.infer<typeof headlessAwaitingUserInputResultSchema>

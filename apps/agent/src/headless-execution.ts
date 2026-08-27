@@ -5,9 +5,11 @@ import {
   headlessExecutionIdentitySchema,
   headlessExecutionRequestSchema,
   headlessExecutionResultSchema,
+  headlessRunFrameSchema,
   type HeadlessExecutionIdentity,
   type HeadlessExecutionRequest,
   type HeadlessExecutionResult,
+  type HeadlessRunFrame,
   requestContextSchema,
   type RequestContext,
 } from '@xiaotuanbao/ai-contracts'
@@ -18,10 +20,13 @@ import { mapAgentFetchError, mapModelError } from './map-agent-error'
 
 const AGENT_SERVICE_KEY_HEADER = 'x-agent-service-key'
 const AI_OP_DELEGATION_TYP = 'ai-op-delegation'
+const NDJSON_CONTENT_TYPE = 'application/x-ndjson; charset=utf-8'
+const HEADLESS_HEARTBEAT_MS = 10_000
 
 export type HeadlessExecutor = (
   request: HeadlessExecutionRequest,
-) => Promise<HeadlessExecutionResult>
+  options?: { signal?: AbortSignal },
+) => Promise<HeadlessExecutionResult> | AsyncIterable<HeadlessRunFrame>
 
 export interface HeadlessRunConfig {
   apiBaseUrl: string
@@ -31,9 +36,51 @@ export interface HeadlessRunConfig {
 
 export function createDeterministicAgentAdapter(
   outcome: HeadlessExecutionResult,
+  options?: { messageDeltas?: string[] },
 ): HeadlessExecutor {
   const scripted = headlessExecutionResultSchema.parse(outcome)
-  return async () => scripted
+  return async function* streamDeterministicRun(): AsyncIterable<HeadlessRunFrame> {
+    yield { type: 'run.started' }
+    const deltas =
+      options?.messageDeltas ?? (scripted.kind === 'completed' ? [scripted.message] : [])
+    let sequence = 1
+    for (const text of deltas) {
+      if (!text) {
+        continue
+      }
+      yield { type: 'message.delta', sequence, text }
+      sequence += 1
+    }
+    yield { type: 'run.completed', result: scripted }
+  }
+}
+
+export async function collectHeadlessRun(
+  run: Promise<HeadlessExecutionResult> | AsyncIterable<HeadlessRunFrame>,
+): Promise<{ frames: HeadlessRunFrame[]; result: HeadlessExecutionResult }> {
+  if (isAsyncIterable(run)) {
+    const frames: HeadlessRunFrame[] = []
+    let result: HeadlessExecutionResult | undefined
+    for await (const frame of run) {
+      const parsed = headlessRunFrameSchema.parse(frame)
+      frames.push(parsed)
+      if (parsed.type === 'run.completed') {
+        result = parsed.result
+      }
+    }
+    if (!result) {
+      throw new Error('headless run ended without run.completed')
+    }
+    return { frames, result }
+  }
+  const result = headlessExecutionResultSchema.parse(await run)
+  return {
+    frames: [
+      { type: 'run.started' },
+      { type: 'run.completed', result },
+    ],
+    result,
+  }
 }
 
 export function loadDeterministicAgentAdapterFromEnv(
@@ -132,11 +179,15 @@ export async function handleHeadlessRun(
 
   const executor = config.headlessExecutor
   if (!executor) {
-    json(response, 200, {
-      data: {
-        kind: 'failed',
-        error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
-      },
+    await writeNdjsonRun(request, response, async function* () {
+      yield { type: 'run.started' as const }
+      yield {
+        type: 'run.completed' as const,
+        result: {
+          kind: 'failed' as const,
+          error: AiCollaborationError.fromCode('AGENT_UNAVAILABLE').toJSON(),
+        },
+      }
     })
     return
   }
@@ -145,27 +196,23 @@ export async function handleHeadlessRun(
   const requestContext = bound.requestContext
 
   try {
-    const result = await runWithAssistRequestContext(
-      {
-        delegationToken,
-        ...requestContext,
-      },
-      () => executor({ ...parsedRequest.data, userText }),
+    await runWithAssistRequestContext({ delegationToken, ...requestContext }, () =>
+      writeNdjsonRun(request, response, (signal) =>
+        iterateHeadlessFrames(executor, { ...parsedRequest.data, userText }, signal),
+      ),
     )
-    const parsedResult = headlessExecutionResultSchema.safeParse(result)
-    if (!parsedResult.success) {
-      json(response, 200, {
-        data: {
-          kind: 'failed',
-          error: AiCollaborationError.fromCode('INVALID_FORMAT').toJSON(),
-        },
-      })
-      return
-    }
-    json(response, 200, { data: parsedResult.data })
   } catch (error) {
     const mapped = error instanceof AiCollaborationError ? error : mapModelError(error)
-    json(response, 200, { data: { kind: 'failed', error: mapped.toJSON() } })
+    if (response.headersSent) {
+      return
+    }
+    await writeNdjsonRun(request, response, async function* () {
+      yield { type: 'run.started' as const }
+      yield {
+        type: 'run.completed' as const,
+        result: { kind: 'failed' as const, error: mapped.toJSON() },
+      }
+    })
   }
 }
 
@@ -277,4 +324,109 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
     return {}
   }
   return JSON.parse(raw) as unknown
+}
+
+function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
+  return Boolean(value && typeof value === 'object' && Symbol.asyncIterator in value)
+}
+
+async function* iterateHeadlessFrames(
+  executor: HeadlessExecutor,
+  request: HeadlessExecutionRequest,
+  signal?: AbortSignal,
+): AsyncIterable<HeadlessRunFrame> {
+  const output = executor(request, { signal })
+  if (isAsyncIterable<HeadlessRunFrame>(output)) {
+    yield* output
+    return
+  }
+  yield { type: 'run.started' }
+  const result = headlessExecutionResultSchema.parse(await output)
+  yield { type: 'run.completed', result }
+}
+
+async function writeNdjsonRun(
+  request: IncomingMessage,
+  response: ServerResponse,
+  frames:
+    | ((signal: AbortSignal) => AsyncIterable<HeadlessRunFrame> | Promise<AsyncIterable<HeadlessRunFrame>>)
+    | (() => AsyncIterable<HeadlessRunFrame> | Promise<AsyncIterable<HeadlessRunFrame>>),
+): Promise<void> {
+  if (response.headersSent) {
+    return
+  }
+  response.writeHead(200, {
+    'Content-Type': NDJSON_CONTENT_TYPE,
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+  })
+  if (typeof response.flushHeaders === 'function') {
+    response.flushHeaders()
+  }
+
+  const abort = new AbortController()
+  const onClose = () => abort.abort()
+  request.once('close', onClose)
+
+  let writeChain = Promise.resolve()
+  const writeFrame = (frame: HeadlessRunFrame) => {
+    writeChain = writeChain.then(() => writeNdjsonLine(response, frame))
+    return writeChain
+  }
+
+  let lastWriteAt = Date.now()
+  const heartbeat = setInterval(() => {
+    if (abort.signal.aborted || response.writableEnded) {
+      return
+    }
+    if (Date.now() - lastWriteAt >= HEADLESS_HEARTBEAT_MS) {
+      lastWriteAt = Date.now()
+      void writeFrame({ type: 'run.heartbeat' })
+    }
+  }, 1_000)
+
+  try {
+    const iterable = await frames(abort.signal)
+    for await (const frame of iterable) {
+      if (abort.signal.aborted || response.writableEnded) {
+        break
+      }
+      const parsed = headlessRunFrameSchema.safeParse(frame)
+      if (!parsed.success) {
+        continue
+      }
+      lastWriteAt = Date.now()
+      await writeFrame(parsed.data)
+      if (parsed.data.type === 'run.completed') {
+        break
+      }
+    }
+    await writeChain
+  } catch (error) {
+    const mapped = error instanceof AiCollaborationError ? error : mapModelError(error)
+    await writeFrame({
+      type: 'run.completed',
+      result: { kind: 'failed', error: mapped.toJSON() },
+    })
+    await writeChain
+  } finally {
+    clearInterval(heartbeat)
+    request.off('close', onClose)
+    if (!response.writableEnded) {
+      response.end()
+    }
+  }
+}
+
+function writeNdjsonLine(response: ServerResponse, frame: HeadlessRunFrame): Promise<void> {
+  if (response.writableEnded) {
+    return Promise.resolve()
+  }
+  const line = `${JSON.stringify(frame)}\n`
+  if (response.write(line)) {
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => {
+    response.once('drain', resolve)
+  })
 }
