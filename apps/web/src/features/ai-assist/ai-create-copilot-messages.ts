@@ -540,14 +540,50 @@ export function shouldProjectLiveAssistant(
   if (isFailedOrCancelledAttempt(events, live.attemptId)) {
     return false
   }
-  const inFlight = currentInFlightAttempt(events)
-  if (inFlight?.attemptId && inFlight.attemptId !== live.attemptId) {
+  if (isLiveClearedByTerminalBatch(events, live)) {
     return false
+  }
+  const inFlight = currentInFlightAttempt(events)
+  if (typeof inFlight?.generation === 'number' && live.generation > inFlight.generation) {
+    return true
   }
   if (typeof inFlight?.generation === 'number' && live.generation < inFlight.generation) {
     return false
   }
+  if (inFlight?.attemptId && inFlight.attemptId !== live.attemptId) {
+    return false
+  }
   return true
+}
+
+function isLiveClearedByTerminalBatch(
+  events: AiConversationEventView[],
+  live: LiveAssistantSnapshot,
+): boolean {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.kind !== 'batch_status') {
+      continue
+    }
+    const status = String(event.payload.status ?? '')
+    if (RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
+      return false
+    }
+    if (status !== 'failed' && status !== 'cancelled' && status !== 'completed') {
+      return false
+    }
+    const attemptId =
+      typeof event.payload.attemptId === 'string' ? event.payload.attemptId : undefined
+    const batchId = typeof event.payload.batchId === 'string' ? event.payload.batchId : undefined
+    if (attemptId && attemptId === live.attemptId) {
+      return true
+    }
+    if (batchId && batchId === live.batchId) {
+      return true
+    }
+    return false
+  }
+  return false
 }
 
 export function isFailedOrCancelledAttempt(

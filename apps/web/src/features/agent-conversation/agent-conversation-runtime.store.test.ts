@@ -227,6 +227,86 @@ describe('agent conversation runtime store #370', () => {
     expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({})
   })
 
+  it('keeps the current live assistant when a stale generation arrives with a larger revision', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '',
+      text: '当前尝试',
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-old',
+      batchId: 'batch-1',
+      generation: 2,
+      revision: 99,
+      reasoningText: '',
+      text: '上一代迟到',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toMatchObject({
+      attemptId: 'attempt-9',
+      text: '当前尝试',
+    })
+  })
+
+  it('replaces live text when a newer generation first frame arrives', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'batch_status',
+          payload: {
+            status: 'agent_running',
+            batchId: 'batch-1',
+            attemptId: 'attempt-9',
+            generation: 3,
+          },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 2,
+      reasoningText: '',
+      text: '上一代半段',
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-10',
+      batchId: 'batch-1',
+      generation: 4,
+      revision: 1,
+      reasoningText: '',
+      text: '重试后的第一句',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toMatchObject({
+      attemptId: 'attempt-10',
+      text: '重试后的第一句',
+    })
+  })
+
   it('clears runtime only when switching to a different Conversation', () => {
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',

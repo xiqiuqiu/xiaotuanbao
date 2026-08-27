@@ -10,6 +10,32 @@ export type AssistantSnapshotFrame = {
   text: string
 }
 
+export type LiveOutputIdentityKey = {
+  attemptId: string
+  generation: number
+  revision: number
+}
+
+/** 当前即时输出只接受更新的 revision，或更高 generation 的新 Attempt；失配代次即使 revision 更大也丢弃。 */
+export function shouldReplaceLiveOutput(
+  current: LiveOutputIdentityKey | null,
+  incoming: LiveOutputIdentityKey,
+): boolean {
+  if (!current) {
+    return true
+  }
+  if (incoming.generation < current.generation) {
+    return false
+  }
+  if (incoming.generation === current.generation && incoming.attemptId !== current.attemptId) {
+    return false
+  }
+  if (incoming.attemptId === current.attemptId && incoming.revision <= current.revision) {
+    return false
+  }
+  return true
+}
+
 export type ConversationStreamFrame =
   | { type: 'conversation.event'; event: AiConversationEventView }
   | AssistantSnapshotFrame

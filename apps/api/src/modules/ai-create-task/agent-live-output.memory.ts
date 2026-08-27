@@ -1,15 +1,22 @@
 import { EventEmitter } from 'node:events'
 import { Injectable } from '@nestjs/common'
 import { Observable } from 'rxjs'
-import type { AgentLiveOutput, LiveOutputSnapshot } from './agent-live-output'
+import { shouldReplaceLiveOutput } from '@xiaotuanbao/shared'
+import {
+  LIVE_OUTPUT_TTL_MS,
+  type AgentLiveOutput,
+  type LiveOutputSnapshot,
+} from './agent-live-output'
+
+type StoredSnapshot = LiveOutputSnapshot & { expiresAt: number }
 
 @Injectable()
 export class InMemoryAgentLiveOutput implements AgentLiveOutput {
-  private readonly byAttempt = new Map<string, LiveOutputSnapshot>()
+  private readonly byAttempt = new Map<string, StoredSnapshot>()
   private readonly cleared = new Set<string>()
   private readonly emitter = new EventEmitter()
 
-  constructor() {
+  constructor(private readonly now: () => number = Date.now) {
     this.emitter.setMaxListeners(100)
   }
 
@@ -17,8 +24,15 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
     if (this.cleared.has(snapshot.attemptId)) {
       return
     }
+    const current = await this.getCurrent(snapshot.conversationId)
+    if (!shouldReplaceLiveOutput(current, snapshot)) {
+      return
+    }
     await this.supersede(snapshot.conversationId, snapshot.attemptId)
-    this.byAttempt.set(snapshot.attemptId, snapshot)
+    this.byAttempt.set(snapshot.attemptId, {
+      ...snapshot,
+      expiresAt: this.now() + LIVE_OUTPUT_TTL_MS,
+    })
     this.emitter.emit(snapshot.conversationId, snapshot)
   }
 
@@ -35,18 +49,20 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
   }
 
   async getCurrent(conversationId: string): Promise<LiveOutputSnapshot | null> {
+    const now = this.now()
     const matches = [...this.byAttempt.values()].filter(
-      (snapshot) => snapshot.conversationId === conversationId,
+      (snapshot) => snapshot.conversationId === conversationId && snapshot.expiresAt > now,
     )
     if (matches.length === 0) {
       return null
     }
-    return matches.reduce((latest, item) =>
-      item.generation > latest.generation ||
-      (item.generation === latest.generation && item.revision > latest.revision)
+    const latest = matches.reduce((current, item) =>
+      item.generation > current.generation ||
+      (item.generation === current.generation && item.revision > current.revision)
         ? item
-        : latest,
+        : current,
     )
+    return toPublicSnapshot(latest)
   }
 
   async clear(attemptId: string): Promise<void> {
@@ -60,5 +76,18 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
         this.byAttempt.delete(id)
       }
     }
+  }
+}
+
+function toPublicSnapshot(snapshot: StoredSnapshot): LiveOutputSnapshot {
+  return {
+    attemptId: snapshot.attemptId,
+    organizationId: snapshot.organizationId,
+    conversationId: snapshot.conversationId,
+    batchId: snapshot.batchId,
+    generation: snapshot.generation,
+    revision: snapshot.revision,
+    reasoningText: snapshot.reasoningText,
+    text: snapshot.text,
   }
 }

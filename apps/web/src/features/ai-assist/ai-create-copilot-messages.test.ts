@@ -863,6 +863,125 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
   })
 })
 
+describe('projectConversationFrame retry and stale generation #418', () => {
+  const runningEvents = [
+    {
+      sequence: 1,
+      kind: 'user_message' as const,
+      payload: { text: '帮我查一下账款' },
+      createdAt: '2026-08-26T00:00:00.000Z',
+    },
+    {
+      sequence: 2,
+      kind: 'batch_status' as const,
+      payload: {
+        status: 'agent_running',
+        batchId: 'batch-1',
+        attemptId: 'attempt-9',
+        generation: 3,
+      },
+      createdAt: '2026-08-26T00:00:01.000Z',
+    },
+  ]
+
+  it('replaces previous Attempt live text as soon as the new generation first frame arrives', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-10',
+        batchId: 'batch-1',
+        generation: 4,
+        revision: 1,
+        reasoningText: '',
+        text: '重试后的第一句',
+      },
+    })
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-10',
+        role: 'assistant',
+        content: '重试后的第一句',
+      },
+    ])
+  })
+
+  it('ignores a mismatched attemptId even when revision is larger', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-old',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 99,
+        reasoningText: '',
+        text: '同代次迟到',
+      },
+    })
+    expect(messages.some((message) => message.content === '同代次迟到')).toBe(false)
+  })
+
+  it('keeps persist-failure retry text as in-progress and does not invent a finished agent_message', () => {
+    const live = {
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 4,
+      reasoningText: '',
+      text: '半段将重试',
+    }
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: live,
+    })
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: '半段将重试',
+      },
+    ])
+    expect(
+      messages.some(
+        (message) => message.role === 'assistant' && String(message.id).startsWith('event-'),
+      ),
+    ).toBe(false)
+    expect(isCopilotChatRunning(runningEvents, null, null, live)).toBe(true)
+  })
+
+  it('does not keep live text after a failed batch even when the failure event omits attemptId', () => {
+    const messages = projectConversationFrame({
+      events: [
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'failed',
+            batchId: 'batch-1',
+            errorCode: 'AGENT_UNAVAILABLE',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ],
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 4,
+        reasoningText: '先核对出团日期',
+        text: '半段回复',
+      },
+    })
+    expect(messages.some((message) => message.content === '半段回复')).toBe(false)
+    expect(messages.some((message) => message.role === 'assistant')).toBe(false)
+    expect(messages.some((message) => message.role === 'reasoning')).toBe(false)
+  })
+})
+
 describe('isCopilotChatRunning in-flight statuses #415', () => {
   it('treats ready_for_agent, preparing_context and agent_running as running', () => {
     expect(

@@ -1,6 +1,6 @@
 import { InMemoryAgentLiveOutput } from './agent-live-output.memory'
 import { LiveOutputFlusher } from './live-output-flusher'
-import { LIVE_OUTPUT_FLUSH_MS } from './agent-live-output'
+import { LIVE_OUTPUT_FLUSH_MS, LIVE_OUTPUT_TTL_MS } from './agent-live-output'
 
 const identity = {
   attemptId: 'attempt-1',
@@ -80,6 +80,80 @@ describe('InMemoryAgentLiveOutput', () => {
       attemptId: 'attempt-2',
       text: '新尝试',
     })
+  })
+
+  it('does not let a late older generation overwrite the current Attempt even with a larger revision', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    await live.publish({
+      ...identity,
+      attemptId: 'attempt-2',
+      generation: 3,
+      revision: 1,
+      reasoningText: '',
+      text: '当前尝试',
+    })
+    const seen: string[] = []
+    const sub = live.observe(identity.conversationId).subscribe((snapshot) => {
+      seen.push(snapshot.text)
+    })
+
+    await live.publish({
+      ...identity,
+      attemptId: 'attempt-1',
+      generation: 2,
+      revision: 99,
+      reasoningText: '旧思考',
+      text: '上一代迟到',
+    })
+
+    expect(await live.getCurrent(identity.conversationId)).toMatchObject({
+      attemptId: 'attempt-2',
+      generation: 3,
+      text: '当前尝试',
+    })
+    expect(seen).toEqual([])
+    sub.unsubscribe()
+  })
+
+  it('does not let a mismatched Attempt at the same generation overwrite even with a larger revision', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    await live.publish({
+      ...identity,
+      attemptId: 'attempt-2',
+      generation: 3,
+      revision: 1,
+      reasoningText: '',
+      text: '当前尝试',
+    })
+
+    await live.publish({
+      ...identity,
+      attemptId: 'attempt-stale',
+      generation: 3,
+      revision: 50,
+      reasoningText: '',
+      text: '同代次另一 Attempt',
+    })
+
+    expect(await live.getCurrent(identity.conversationId)).toMatchObject({
+      attemptId: 'attempt-2',
+      text: '当前尝试',
+    })
+  })
+
+  it('does not treat a Worker-crash leftover as current after expires_at', async () => {
+    let now = 1_000
+    const live = new InMemoryAgentLiveOutput(() => now)
+    await live.publish({
+      ...identity,
+      revision: 1,
+      reasoningText: '崩溃前思考',
+      text: '崩溃残留',
+    })
+    expect(await live.getCurrent(identity.conversationId)).toMatchObject({ text: '崩溃残留' })
+
+    now += LIVE_OUTPUT_TTL_MS + 1
+    expect(await live.getCurrent(identity.conversationId)).toBeNull()
   })
 })
 

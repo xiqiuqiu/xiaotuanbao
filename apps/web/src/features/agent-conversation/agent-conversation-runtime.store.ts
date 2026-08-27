@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AiConversationEventView } from '@xiaotuanbao/shared'
+import { shouldReplaceLiveOutput, type AiConversationEventView } from '@xiaotuanbao/shared'
 import {
   pruneSessionReasoning,
   shouldProjectLiveAssistant,
@@ -39,22 +39,6 @@ interface AgentConversationRuntimeState extends AgentConversationRuntime {
   clear: () => void
 }
 
-function shouldAcceptLiveAssistant(
-  current: LiveAssistantSnapshot | null,
-  next: LiveAssistantSnapshot,
-): boolean {
-  if (!current) {
-    return true
-  }
-  if (next.generation < current.generation) {
-    return false
-  }
-  if (next.attemptId === current.attemptId && next.revision <= current.revision) {
-    return false
-  }
-  return true
-}
-
 function liveAfterEvents(
   events: AiConversationEventView[],
   live: LiveAssistantSnapshot | null,
@@ -90,7 +74,7 @@ export const useAgentConversationRuntimeStore = create<AgentConversationRuntimeS
   },
   acceptLiveAssistant: (snapshot) => {
     const current = get()
-    if (!shouldAcceptLiveAssistant(current.liveAssistant, snapshot)) {
+    if (!shouldReplaceLiveOutput(current.liveAssistant, snapshot)) {
       return
     }
     const sessionReasoning = pruneSessionReasoning(

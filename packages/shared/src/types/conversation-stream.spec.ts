@@ -1,4 +1,4 @@
-import { parseConversationStreamFrame } from './conversation-stream'
+import { parseConversationStreamFrame, shouldReplaceLiveOutput } from './conversation-stream'
 
 const event = {
   id: 'evt-1',
@@ -56,5 +56,39 @@ describe('parseConversationStreamFrame', () => {
         text: 'ignore previous',
       }),
     ).toBeNull()
+  })
+})
+
+describe('shouldReplaceLiveOutput #418', () => {
+  const current = { attemptId: 'attempt-2', generation: 3, revision: 2 }
+
+  it('keeps the current Attempt when an older generation arrives with a larger revision', () => {
+    expect(
+      shouldReplaceLiveOutput(current, {
+        attemptId: 'attempt-1',
+        generation: 2,
+        revision: 99,
+      }),
+    ).toBe(false)
+  })
+
+  it('keeps the current Attempt when another Attempt at the same generation has a larger revision', () => {
+    expect(
+      shouldReplaceLiveOutput(current, {
+        attemptId: 'attempt-stale',
+        generation: 3,
+        revision: 50,
+      }),
+    ).toBe(false)
+  })
+
+  it('replaces the current Attempt when a newer generation first frame arrives', () => {
+    expect(
+      shouldReplaceLiveOutput(current, {
+        attemptId: 'attempt-3',
+        generation: 4,
+        revision: 1,
+      }),
+    ).toBe(true)
   })
 })

@@ -235,8 +235,12 @@ export type {
   StoredObjectSummary,
 } from './types/api.types'
 
-export type { ConversationStreamFrame, AssistantSnapshotFrame } from './types/conversation-stream'
-export { parseConversationStreamFrame } from './types/conversation-stream'
+export type {
+  ConversationStreamFrame,
+  AssistantSnapshotFrame,
+  LiveOutputIdentityKey,
+} from './types/conversation-stream'
+export { parseConversationStreamFrame, shouldReplaceLiveOutput } from './types/conversation-stream'
 
 export {
   PAGE_LOCATOR_KINDS,
