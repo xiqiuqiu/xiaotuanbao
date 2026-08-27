@@ -2,6 +2,17 @@
     root * /srv/web
     encode gzip zstd
 
+    handle /api/agent/conversations/*/stream {
+        encode off
+        reverse_proxy api:3000 {
+            flush_interval -1
+            header_up Accept-Encoding identity
+            header_down -Content-Encoding
+            header_down Cache-Control "no-cache, no-transform"
+            header_down X-Accel-Buffering "no"
+        }
+    }
+
     handle /api/* {
         reverse_proxy api:3000
     }

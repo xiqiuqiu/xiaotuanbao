@@ -1,3 +1,4 @@
+import http from 'node:http'
 import { randomUUID } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
@@ -987,7 +988,266 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
       .send({ text: `${testPrefix} 未登录` })
       .expect(401)
   })
+
+  it('keeps the Worker running after SSE disconnect and restores the current snapshot on reconnect #419', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 断线重连恢复即时输出`,
+      `${testPrefix}-sse-reconnect`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    const lastSequence = sent.body.data.lastSequence as number
+    agent.holdNextCall()
+    const running = processor.processDueJobs(5)
+    await waitFor(async () => {
+      const attempt = await prisma.aiAgentAttempt.findFirst({
+        where: { conversationId, status: AiAgentAttemptStatus.running },
+      })
+      expect(attempt).toBeTruthy()
+    })
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { conversationId, status: AiAgentAttemptStatus.running },
+    })
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId, type: AiWorkflowJobType.agent_batch },
+    })
+    await prisma.aiAgentLiveOutput.create({
+      data: {
+        attemptId: attempt.id,
+        organizationId,
+        conversationId,
+        inputBatchId: job.inputBatchId,
+        generation: attempt.generation,
+        revision: 4,
+        reasoningText: '先核对出团日期',
+        text: '已整理当前资料。',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    })
+
+    const first = await readSseFramesUntil(
+      app,
+      coordinatorToken,
+      `/api/agent/conversations/${conversationId}/stream?afterSequence=${lastSequence}`,
+      (frames) => frames.some((frame) => frame.data.type === 'assistant.snapshot'),
+    )
+    expect(first.headers['x-accel-buffering']).toBe('no')
+    expect(String(first.headers['cache-control'] ?? '')).toContain('no-transform')
+    expect(first.frames[0]).not.toHaveProperty('id')
+    expect(first.frames[0]?.data).toMatchObject({
+      type: 'assistant.snapshot',
+      attemptId: attempt.id,
+      reasoningText: '先核对出团日期',
+      text: '已整理当前资料。',
+    })
+
+    const afterDisconnect = await prisma.aiWorkflowJob.findFirstOrThrow({ where: { id: job.id } })
+    expect(afterDisconnect.status).toBe(AiWorkflowJobStatus.claimed)
+    expect(afterDisconnect.claimedBy).toBeTruthy()
+    expect(
+      await prisma.aiAgentAttempt.count({
+        where: { conversationId, status: AiAgentAttemptStatus.running },
+      }),
+    ).toBe(1)
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: AiConversationEventKind.agent_message },
+      }),
+    ).toBe(0)
+
+    const reconnected = await readSseFramesUntil(
+      app,
+      coordinatorToken,
+      `/api/agent/conversations/${conversationId}/stream`,
+      (frames) => frames.some((frame) => frame.data.type === 'assistant.snapshot'),
+      { lastEventId: String(lastSequence) },
+    )
+    const snapshotIndex = reconnected.frames.findIndex(
+      (frame) => frame.data.type === 'assistant.snapshot',
+    )
+    const eventIndex = reconnected.frames.findIndex(
+      (frame) => frame.data.type === 'conversation.event',
+    )
+    expect(snapshotIndex).toBe(0)
+    expect(reconnected.frames[0]).not.toHaveProperty('id')
+    expect(reconnected.frames[0]?.data).toMatchObject({
+      type: 'assistant.snapshot',
+      text: '已整理当前资料。',
+      reasoningText: '先核对出团日期',
+    })
+    if (eventIndex >= 0) {
+      expect(eventIndex).toBeGreaterThan(snapshotIndex)
+      expect(reconnected.frames[eventIndex]?.id).toBeDefined()
+    }
+
+    agent.release()
+    await running
+    await waitFor(async () => {
+      expect(
+        await prisma.aiConversationEvent.count({
+          where: { conversationId, kind: AiConversationEventKind.agent_message },
+        }),
+      ).toBe(1)
+    })
+    const completed = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { id: attempt.id },
+    })
+    expect(completed.status).toBe(AiAgentAttemptStatus.completed)
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: AiConversationEventKind.agent_message },
+      }),
+    ).toBe(1)
+  })
+
+  it('does not persist a final agent_message when the Agent rate-limits the run #419', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 限流不回滚终态`,
+      `${testPrefix}-rate-limit`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    agent.failNextHttp(429)
+    await processor.processDueJobs(5)
+
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: AiConversationEventKind.agent_message },
+      }),
+    ).toBe(0)
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId, type: AiWorkflowJobType.agent_batch },
+    })
+    expect(job.status).toBe(AiWorkflowJobStatus.pending)
+    expect(job.lastErrorCode).toBe('AGENT_UNAVAILABLE')
+    const batch = await prisma.aiInputBatch.findFirstOrThrow({ where: { conversationId } })
+    expect(batch.status).not.toBe(AiInputBatchStatus.completed)
+    expect(batch.status).not.toBe(AiInputBatchStatus.failed)
+    expect(batch.status).not.toBe(AiInputBatchStatus.cancelled)
+  })
+
+  it('does not persist a final agent_message when Agent NDJSON is illegal #419', async () => {
+    const sent = await sendFirst(
+      coordinatorToken,
+      `${testPrefix} 非法 NDJSON 不落终态`,
+      `${testPrefix}-illegal-ndjson`,
+    ).expect(201)
+    const conversationId = track(sent.body.data.conversationId as string)
+    agent.failNextNdjson('illegal')
+    await processor.processDueJobs(5)
+
+    expect(
+      await prisma.aiConversationEvent.count({
+        where: { conversationId, kind: AiConversationEventKind.agent_message },
+      }),
+    ).toBe(0)
+    const job = await prisma.aiWorkflowJob.findFirstOrThrow({
+      where: { conversationId, type: AiWorkflowJobType.agent_batch },
+    })
+    expect(job.status).toBe(AiWorkflowJobStatus.failed)
+    expect(job.lastErrorCode).toBe('INVALID_FORMAT')
+    const attempt = await prisma.aiAgentAttempt.findFirstOrThrow({
+      where: { conversationId },
+      orderBy: { startedAt: 'desc' },
+    })
+    expect(attempt.status).toBe(AiAgentAttemptStatus.failed)
+    expect(attempt.errorCode).toBe('INVALID_FORMAT')
+  })
 })
+
+async function readSseFramesUntil(
+  app: INestApplication,
+  sessionCookie: string,
+  path: string,
+  predicate: (frames: Array<{ id?: string; data: Record<string, unknown> }>) => boolean,
+  options: { lastEventId?: string } = {},
+): Promise<{
+  headers: http.IncomingHttpHeaders
+  frames: Array<{ id?: string; data: Record<string, unknown> }>
+}> {
+  const address = app.getHttpServer().address() as AddressInfo
+  const frames: Array<{ id?: string; data: Record<string, unknown> }> = []
+  let headers: http.IncomingHttpHeaders = {}
+  let buffer = ''
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      client.destroy()
+      reject(new Error('SSE timed out'))
+    }, 8_000)
+    const client = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: address.port,
+        path,
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          Cookie: sessionCookie,
+          ...(options.lastEventId ? { 'Last-Event-ID': options.lastEventId } : {}),
+        },
+      },
+      (response) => {
+        headers = response.headers
+        response.on('data', (chunk: Buffer) => {
+          buffer += chunk.toString('utf8')
+          buffer = parseSseFrames(buffer, frames)
+          if (predicate(frames)) {
+            clearTimeout(timeout)
+            client.destroy()
+            resolve()
+          }
+        })
+      },
+    )
+    client.on('error', (error) => {
+      if ((error as NodeJS.ErrnoException).code !== 'ECONNRESET') {
+        clearTimeout(timeout)
+        reject(error)
+      }
+    })
+    client.end()
+  })
+
+  return { headers, frames }
+}
+
+function parseSseFrames(
+  buffer: string,
+  frames: Array<{ id?: string; data: Record<string, unknown> }>,
+): string {
+  let remaining = buffer
+  while (true) {
+    const boundary = remaining.indexOf('\n\n')
+    if (boundary < 0) {
+      return remaining
+    }
+    const block = remaining.slice(0, boundary)
+    remaining = remaining.slice(boundary + 2)
+    if (!block.trim()) {
+      continue
+    }
+    let id: string | undefined
+    let dataLine: string | undefined
+    for (const line of block.split('\n')) {
+      if (line.startsWith('id:')) {
+        id = line.slice('id:'.length).trim()
+      }
+      if (line.startsWith('data:')) {
+        dataLine = line
+      }
+    }
+    if (!dataLine) {
+      continue
+    }
+    try {
+      const parsed = JSON.parse(dataLine.slice('data:'.length).trim()) as Record<string, unknown>
+      frames.push(id ? { id, data: parsed } : { data: parsed })
+    } catch {
+      // ignore incomplete frames
+    }
+  }
+}
 
 async function waitFor(assert: () => Promise<void>, timeoutMs = 5_000): Promise<void> {
   const started = Date.now()

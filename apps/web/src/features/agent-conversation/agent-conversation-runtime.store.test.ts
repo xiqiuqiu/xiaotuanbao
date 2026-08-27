@@ -86,6 +86,34 @@ describe('agent conversation runtime store #370', () => {
     expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
   })
 
+  it('replaces a missed snapshot revision with the later cumulative text', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 1,
+      reasoningText: '先核对',
+      text: '已',
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 3,
+      reasoningText: '先核对出团日期',
+      text: '已整理当前资料。',
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toMatchObject({
+      revision: 3,
+      reasoningText: '先核对出团日期',
+      text: '已整理当前资料。',
+    })
+  })
+
   it('keeps session 思考过程 after agent_message and drops it after failure', () => {
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',
