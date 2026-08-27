@@ -425,6 +425,15 @@ describe('Taskless agent conversation runtime (e2e) #365', () => {
     expect(batch.agentAttempts[1].contextManifest.taskRefs).toEqual([
       expect.objectContaining({ taskId, role: 'primary' }),
     ])
+    expect(batch.agentAttempts[0].contextManifestId).not.toBe(
+      batch.agentAttempts[1].contextManifestId,
+    )
+    expect(batch.agentAttempts[0].contextManifest.inputHash).not.toBe(
+      batch.agentAttempts[1].contextManifest.inputHash,
+    )
+    expect(
+      await prisma.aiContextManifest.count({ where: { inputBatchId } }),
+    ).toBe(2)
     expect(
       await prisma.aiInputBatch.count({ where: { conversationId } }),
     ).toBe(1)
