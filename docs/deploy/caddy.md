@@ -9,6 +9,17 @@
     root * /srv/web
     encode gzip zstd
 
+    handle /api/agent/conversations/*/stream {
+        encode off
+        reverse_proxy api:3000 {
+            flush_interval -1
+            header_up Accept-Encoding identity
+            header_down -Content-Encoding
+            header_down Cache-Control "no-cache, no-transform"
+            header_down X-Accel-Buffering "no"
+        }
+    }
+
     handle /api/* {
         reverse_proxy api:3000
     }
@@ -26,9 +37,10 @@
 | ---- | ---- |
 | `{$DOMAIN}` | 站点地址，由环境变量 `CADDY_DOMAIN` 注入 |
 | `root * /srv/web` | 前端静态资源目录（web_dist volume） |
-| `handle /api/*` | API 请求反向代理到 `api:3000` |
+| `handle /api/agent/conversations/*/stream` | 会话 SSE：关闭压缩并立即 flush，避免首个 token 被反向代理缓冲 |
+| `handle /api/*` | 其余 API 请求反向代理到 `api:3000` |
 | `try_files {path} /index.html` | SPA 路由刷新回退 |
-| `encode gzip zstd` | 响应压缩 |
+| `encode gzip zstd` | 静态资源与普通 API 响应压缩 |
 
 ## 环境变量
 

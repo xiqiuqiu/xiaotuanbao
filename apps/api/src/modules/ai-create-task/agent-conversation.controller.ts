@@ -4,14 +4,12 @@ import {
   Get,
   Headers,
   HttpCode,
-  MessageEvent,
   Param,
   Post,
   Put,
   Query,
   Req,
   Res,
-  Sse,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -27,11 +25,11 @@ import type {
 import { FilesInterceptor } from '@nestjs/platform-express'
 import { memoryStorage } from 'multer'
 import type { Response } from 'express'
-import { Observable } from 'rxjs'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { MenuPermissionGuard } from '../../common/guards/menu-permission.guard'
 import { SkipResponseWrap } from '../../common/decorators/skip-response-wrap.decorator'
 import { buildStoredObjectContentDisposition } from '../stored-object/stored-object.helpers'
+import { writeConversationSse } from './conversation-stream'
 import { AiConversationService } from './ai-conversation.service'
 import { DepartureMaterialService } from './departure-material.service'
 import { MATERIAL_MAX_BYTES, MATERIAL_MAX_FILES_PER_SEND } from './departure-material.constants'
@@ -263,20 +261,22 @@ export class AgentConversationController {
     )
   }
 
-  @Sse(':conversationId/stream')
+  @Get(':conversationId/stream')
   @SkipResponseWrap()
-  streamEvents(
+  async streamEvents(
     @Req() request: { user: { organizationId: string; userId: string } },
     @Param('conversationId') conversationId: string,
     @Query() query: ListAiConversationEventsQueryDto,
-    @Headers('last-event-id') lastEventId?: string,
-  ): Promise<Observable<MessageEvent>> {
-    return this.conversationService.streamOwnedEvents(
+    @Headers('last-event-id') lastEventId: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const stream = await this.conversationService.streamOwnedEvents(
       request.user.organizationId,
       request.user.userId,
       conversationId,
       Math.max(query.afterSequence ?? 0, parseAfterSequence(lastEventId)),
     )
+    writeConversationSse(res, stream)
   }
 
   @Post(':conversationId/interactions/:interactionId/cancel')

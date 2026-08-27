@@ -379,6 +379,30 @@ describe('projectConversationFrame live assistant #415', () => {
     ).toBe(true)
   })
 
+  it('keeps the later cumulative snapshot when an earlier revision was missed', () => {
+    const messages = projectConversationFrame({
+      events: runningEvents,
+      pendingText: null,
+      liveAssistant: {
+        attemptId: 'attempt-9',
+        batchId: 'batch-1',
+        generation: 3,
+        revision: 3,
+        reasoningText: '先核对出团日期',
+        text: '已整理当前资料。',
+      },
+    })
+    expect(messages.filter((message) => message.role === 'assistant')).toEqual([
+      {
+        id: 'live-assistant-attempt-9',
+        role: 'assistant',
+        content: '已整理当前资料。',
+      },
+    ])
+    expect(messages.some((message) => message.role === 'reasoning')).toBe(true)
+    expect(messages.some((message) => message.content === '已')).toBe(false)
+  })
+
   it('grows one in-progress assistant and replaces it with the persisted agent_message', () => {
     const live = {
       attemptId: 'attempt-9',

@@ -22,6 +22,7 @@ export async function startDeterministicHeadlessAgent(options: {
   lastTaskContext: () => unknown
   lastUserText: () => string | null
   failNextHttp: (status: number) => void
+  failNextNdjson: (kind: 'illegal' | 'disconnect') => void
 }> {
   let outcomes = [options.outcome]
   let callCount = 0
@@ -30,6 +31,7 @@ export async function startDeterministicHeadlessAgent(options: {
   let hold: Promise<void> | null = null
   let releaseHold: (() => void) | null = null
   let nextHttpError: number | null = null
+  let nextNdjsonFault: 'illegal' | 'disconnect' | null = null
 
   const server = createServer((request, response) => {
     void handle(request, response)
@@ -107,6 +109,23 @@ export async function startDeterministicHeadlessAgent(options: {
         await hold
       }
       const outcome = outcomes.length > 1 ? outcomes.shift()! : outcomes[0]
+      if (nextNdjsonFault) {
+        const fault = nextNdjsonFault
+        nextNdjsonFault = null
+        response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+        if (fault === 'illegal') {
+          response.write('not-json\n')
+          response.write('{broken\n')
+          response.end(`${JSON.stringify({ type: 'tool.call', name: 'x' })}\n`)
+          return
+        }
+        response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+        response.write(
+          `${JSON.stringify({ type: 'message.delta', sequence: 1, text: '已记下半段' })}\n`,
+        )
+        response.end()
+        return
+      }
       json(response, 200, { data: outcome })
       return
     }
@@ -151,6 +170,9 @@ export async function startDeterministicHeadlessAgent(options: {
     lastUserText: () => lastUserText,
     failNextHttp: (status: number) => {
       nextHttpError = status
+    },
+    failNextNdjson: (kind) => {
+      nextNdjsonFault = kind
     },
   }
 }

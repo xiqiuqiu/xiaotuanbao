@@ -52,6 +52,10 @@ export class AiHeadlessClient {
         return unavailable()
       }
 
+      if (isRetryableHttpStatus(response.status)) {
+        return unavailable()
+      }
+
       const contentType = response.headers.get('content-type') ?? ''
       if (contentType.includes('ndjson')) {
         try {
@@ -107,6 +111,10 @@ function invalidFormat(): HeadlessExecutionResult {
   }
 }
 
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
 async function readJsonResult(response: Response, aborted: boolean): Promise<HeadlessExecutionResult> {
   let payload: unknown
   try {
@@ -128,7 +136,7 @@ async function readJsonResult(response: Response, aborted: boolean): Promise<Hea
       return {
         kind: 'failed',
         error: AiCollaborationError.fromCode(
-          response.status >= 500 ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
+          isRetryableHttpStatus(response.status) ? 'AGENT_UNAVAILABLE' : 'INVALID_FORMAT',
         ).toJSON(),
       }
     }
@@ -149,6 +157,7 @@ async function readNdjsonResult(
   const decoder = new TextDecoder()
   let buffer = ''
   let publicText = ''
+  let sawValidFrame = false
   let completed: HeadlessExecutionResult | undefined
   try {
     for (;;) {
@@ -171,6 +180,7 @@ async function readNdjsonResult(
         if (!parsed.success) {
           continue
         }
+        sawValidFrame = true
         if (parsed.data.type === 'reasoning.delta') {
           options.onReasoningText?.(parsed.data.text)
         }
@@ -192,5 +202,8 @@ async function readNdjsonResult(
   if (completed) {
     return completed
   }
-  return aborted ? unavailable() : invalidFormat()
+  if (aborted || sawValidFrame) {
+    return unavailable()
+  }
+  return invalidFormat()
 }

@@ -567,6 +567,41 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     expect(screen.queryByText('先核对出团日期')).not.toBeInTheDocument()
   })
 
+  it('restores the current cumulative snapshot after EventSource reconnect without calling stop', async () => {
+    const { unmount } = render(<AgentConversationChat />)
+    expect(lastEventSource).not.toBeNull()
+
+    await act(async () => {
+      lastEventSource?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'assistant.snapshot',
+            attemptId: 'attempt-9',
+            batchId: 'batch-1',
+            generation: 3,
+            revision: 4,
+            reasoningText: '先核对出团日期',
+            text: '已整理当前资料。',
+          }),
+        }),
+      )
+    })
+    expect(await screen.findByText('已整理当前资料。')).toBeInTheDocument()
+    expect(screen.getByText('先核对出团日期')).toBeInTheDocument()
+
+    await act(async () => {
+      lastEventSource?.onerror?.(new Event('error'))
+    })
+    unmount()
+
+    expect(stopAgentConversationBatch).not.toHaveBeenCalled()
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toMatchObject({
+      revision: 4,
+      text: '已整理当前资料。',
+      reasoningText: '先核对出团日期',
+    })
+  })
+
   it('does not call stop when EventSource errors or the chat unmounts', async () => {
     const { unmount } = render(<AgentConversationChat />)
     expect(lastEventSource).not.toBeNull()

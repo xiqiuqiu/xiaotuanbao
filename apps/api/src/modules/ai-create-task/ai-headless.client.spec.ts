@@ -274,6 +274,123 @@ describe('AiHeadlessClient.run', () => {
     })
   })
 
+  it('treats a 429 rate limit as retryable AGENT_UNAVAILABLE', async () => {
+    server = createServer((_request, response) => {
+      response.writeHead(429, { 'Content-Type': 'application/json; charset=utf-8' })
+      response.end(JSON.stringify({ message: 'rate limited' }))
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(client.run(request, 'delegation-token')).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'AGENT_UNAVAILABLE',
+        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        retryable: true,
+      },
+    })
+  })
+
+  it('keeps the completed result when illegal NDJSON lines appear before run.completed', async () => {
+    const publicText: string[] = []
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write('not-json\n')
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(`${JSON.stringify({ type: 'message.delta', sequence: 1, text: '已整理当前资料。' })}\n`)
+      response.write('{broken\n')
+      response.write(
+        `${JSON.stringify({
+          type: 'tool.call',
+          name: 'proposeReviewPackage',
+          args: { secret: 'must-not-surface' },
+        })}\n`,
+      )
+      response.end(
+        `${JSON.stringify({
+          type: 'run.completed',
+          result: { kind: 'completed', message: '已整理当前资料。' },
+        })}\n`,
+      )
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(
+      client.run(request, 'delegation-token', {
+        onPublicText: (text) => {
+          publicText.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'completed',
+      message: '已整理当前资料。',
+    })
+    expect(publicText).toEqual(['已整理当前资料。'])
+    expect(publicText.join('')).not.toContain('must-not-surface')
+  })
+
+  it('treats a stream of illegal NDJSON without run.completed as INVALID_FORMAT', async () => {
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write('not-json\n')
+      response.write('{broken\n')
+      response.end(`${JSON.stringify({ type: 'tool.call', name: 'x' })}\n`)
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(client.run(request, 'delegation-token')).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'INVALID_FORMAT',
+        message: '模型输出格式异常，本轮未形成任何候选',
+        retryable: false,
+      },
+    })
+  })
+
+  it('treats an Agent disconnect after live deltas as retryable AGENT_UNAVAILABLE', async () => {
+    const publicText: string[] = []
+    server = createServer((_incoming, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8' })
+      response.write(`${JSON.stringify({ type: 'run.started' })}\n`)
+      response.write(`${JSON.stringify({ type: 'message.delta', sequence: 1, text: '已记下半段' })}\n`)
+      response.end()
+    })
+    const origin = await listen(server)
+    const client = createClient({
+      'app.aiCreateAssist.agentInternalUrl': origin,
+      'app.aiCreateAssist.agentServiceSecret': 'secret',
+      'app.aiCreateAssist.runTimeoutMs': 1_000,
+    })
+    await expect(
+      client.run(request, 'delegation-token', {
+        onPublicText: (text) => {
+          publicText.push(text)
+        },
+      }),
+    ).resolves.toEqual({
+      kind: 'failed',
+      error: {
+        code: 'AGENT_UNAVAILABLE',
+        message: 'AI 辅助暂时不可用，请稍后重试或继续使用表单',
+        retryable: true,
+      },
+    })
+    expect(publicText).toEqual(['已记下半段'])
+  })
+
   it('treats headless 4xx as non-retryable INVALID_FORMAT', async () => {
     server = createServer((_request, response) => {
       response.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' })
