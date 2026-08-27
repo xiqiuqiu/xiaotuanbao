@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import { Client } from 'pg'
 import { Observable } from 'rxjs'
 import { AiAgentAttemptStatus } from '@prisma/client'
+import { shouldReplaceLiveOutput } from '@xiaotuanbao/shared'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
   LIVE_OUTPUT_NOTIFY_CHANNEL,
@@ -42,6 +43,24 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
         select: { status: true },
       })
       if (attempt?.status !== AiAgentAttemptStatus.running) {
+        return false
+      }
+      const current = await tx.aiAgentLiveOutput.findFirst({
+        where: { conversationId: snapshot.conversationId, expiresAt: { gt: new Date() } },
+        orderBy: [{ generation: 'desc' }, { revision: 'desc' }],
+      })
+      if (
+        !shouldReplaceLiveOutput(
+          current
+            ? {
+                attemptId: current.attemptId,
+                generation: current.generation,
+                revision: current.revision,
+              }
+            : null,
+          snapshot,
+        )
+      ) {
         return false
       }
       await tx.aiAgentLiveOutput.deleteMany({

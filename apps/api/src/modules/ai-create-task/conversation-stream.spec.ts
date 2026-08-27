@@ -1,6 +1,7 @@
 import type { AiConversationEventView } from '@xiaotuanbao/shared'
 import { Subject, firstValueFrom, take } from 'rxjs'
 import { InMemoryAgentLiveOutput } from './agent-live-output.memory'
+import { LIVE_OUTPUT_TTL_MS } from './agent-live-output'
 import { createConversationStream } from './conversation-stream'
 
 function eventView(sequence: number, kind: string, payload: Record<string, unknown> = {}): AiConversationEventView {
@@ -86,5 +87,42 @@ describe('createConversationStream', () => {
     const frame = await firstValueFrom(stream.pipe(take(1)))
     expect(frame).toEqual({ data: { type: 'heartbeat' } })
     expect(frame.id).toBeUndefined()
+  })
+
+  it('does not emit an expired leftover snapshot as the current SSE output', async () => {
+    let now = 1_000
+    const live = new InMemoryAgentLiveOutput(() => now)
+    await live.publish({
+      attemptId: 'attempt-1',
+      organizationId: 'org-1',
+      conversationId: 'conversation-1',
+      batchId: 'batch-1',
+      generation: 1,
+      revision: 3,
+      reasoningText: '',
+      text: '崩溃残留',
+    })
+    now += LIVE_OUTPUT_TTL_MS + 1
+
+    const hub = new Subject<AiConversationEventView>()
+    const frames: Array<{ id?: string; data: unknown }> = []
+    const stream = createConversationStream({
+      conversationId: 'conversation-1',
+      afterSequence: 0,
+      eventHub: { observe: () => hub.asObservable() },
+      liveOutput: live,
+      loadEventsAfter: async () => [],
+      nextCatchUpDelay: () => 60_000,
+      heartbeatMs: 60_000,
+    })
+    const sub = stream.subscribe((frame) => {
+      frames.push(frame)
+    })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(
+      frames.some((frame) => (frame.data as { type?: string }).type === 'assistant.snapshot'),
+    ).toBe(false)
+    sub.unsubscribe()
   })
 })

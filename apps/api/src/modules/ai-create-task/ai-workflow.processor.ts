@@ -105,6 +105,10 @@ import {
   parseErrorMessage,
 } from './departure-material.constants'
 import { attemptDiagnosticUpdate, manifestUsageUpdate } from './attempt-diagnostic'
+import {
+  canCommitAttemptTerminal,
+  notifyCommittedConversationEvents,
+} from './attempt-terminal-commit'
 import { loadEvidenceAuthority } from './evidence-authority'
 import { requireValidReviewProposal } from './review-proposal.commit'
 import { projectPendingReviewPackage } from './review-package.projection'
@@ -1456,9 +1460,9 @@ export class AiWorkflowProcessor {
       const currentJob = await tx.aiWorkflowJob.findUniqueOrThrow({ where: { id: job.id } })
       const currentAttempt = await tx.aiAgentAttempt.findUnique({
         where: { id: attemptId },
-        select: { generation: true },
+        select: { generation: true, status: true },
       })
-      if (!currentAttempt || currentAttempt.generation !== currentJob.generation) {
+      if (!canCommitAttemptTerminal(currentAttempt, currentJob.generation)) {
         return
       }
       if (job.taskId) {
@@ -1622,12 +1626,7 @@ export class AiWorkflowProcessor {
       })
     })
 
-    for (const eventId of published) {
-      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
-      if (event) {
-        this.conversationService.publish(job.conversationId, event)
-      }
-    }
+    await this.publishCommittedEvents(job.conversationId, published)
   }
 
   private async persistTaskCreationProposal(
@@ -1670,9 +1669,9 @@ export class AiWorkflowProcessor {
       const currentJob = await tx.aiWorkflowJob.findUniqueOrThrow({ where: { id: job.id } })
       const currentAttempt = await tx.aiAgentAttempt.findUnique({
         where: { id: attemptId },
-        select: { generation: true },
+        select: { generation: true, status: true },
       })
-      if (!currentAttempt || currentAttempt.generation !== currentJob.generation) {
+      if (!canCommitAttemptTerminal(currentAttempt, currentJob.generation)) {
         return
       }
 
@@ -1770,12 +1769,7 @@ export class AiWorkflowProcessor {
       })
     })
 
-    for (const eventId of published) {
-      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
-      if (event) {
-        this.conversationService.publish(job.conversationId, event)
-      }
-    }
+    await this.publishCommittedEvents(job.conversationId, published)
   }
 
   private async persistParseBarrierFailure(job: ClaimedJob, errorCode: string): Promise<void> {
@@ -1849,12 +1843,7 @@ export class AiWorkflowProcessor {
       published.push(statusEvent.id)
     })
 
-    for (const eventId of published) {
-      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
-      if (event) {
-        this.conversationService.publish(job.conversationId, event)
-      }
-    }
+    await this.publishCommittedEvents(job.conversationId, published)
   }
 
   private async persistFailure(
@@ -1873,9 +1862,9 @@ export class AiWorkflowProcessor {
         const currentJob = await tx.aiWorkflowJob.findUniqueOrThrow({ where: { id: job.id } })
         const currentAttempt = await tx.aiAgentAttempt.findUnique({
           where: { id: attemptId },
-          select: { generation: true },
+          select: { generation: true, status: true },
         })
-        if (!currentAttempt || currentAttempt.generation !== currentJob.generation) {
+        if (!canCommitAttemptTerminal(currentAttempt, currentJob.generation)) {
           return
         }
       }
@@ -1894,6 +1883,7 @@ export class AiWorkflowProcessor {
           batchId: job.inputBatchId,
           status: AiInputBatchStatus.failed,
           errorCode,
+          ...(attemptId ? { attemptId } : {}),
         },
       })
       published.push(statusEvent.id)
@@ -1934,12 +1924,7 @@ export class AiWorkflowProcessor {
       })
     })
 
-    for (const eventId of published) {
-      const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
-      if (event) {
-        this.conversationService.publish(job.conversationId, event)
-      }
-    }
+    await this.publishCommittedEvents(job.conversationId, published)
   }
 
   private async writeManifestUsage(
@@ -2150,6 +2135,27 @@ export class AiWorkflowProcessor {
       select: { id: true },
     })
     return blocking != null
+  }
+
+  private async publishCommittedEvents(
+    conversationId: string,
+    eventIds: string[],
+  ): Promise<void> {
+    await notifyCommittedConversationEvents(
+      async () => {
+        for (const eventId of eventIds) {
+          const event = await this.prisma.aiConversationEvent.findUnique({ where: { id: eventId } })
+          if (event) {
+            this.conversationService.publish(conversationId, event)
+          }
+        }
+      },
+      (error) => {
+        this.logger.warn(
+          `会话事件已提交但即时中继失败 conversation=${conversationId}: ${String(error)}`,
+        )
+      },
+    )
   }
 
   private async ownsClaimedJob(tx: Prisma.TransactionClient, jobId: string): Promise<boolean> {
