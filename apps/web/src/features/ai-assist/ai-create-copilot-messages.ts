@@ -436,19 +436,20 @@ export function toCopilotChatMessages(
       continue
     }
     if (event.kind === 'batch_status') {
-      const status = String(event.payload.status ?? '')
-      const progress = progressFromPayload(event.payload)
+      const payload = event.payload
+      const status = String(payload.status ?? '')
+      const progress = progressFromPayload(payload)
       const errorCode =
-        typeof event.payload.errorCode === 'string' ? event.payload.errorCode : undefined
+        typeof payload.errorCode === 'string' ? payload.errorCode : undefined
       const label = batchStatusLabel(status, progress, {
-        queued: event.payload.queued === true,
-        reason: typeof event.payload.reason === 'string' ? event.payload.reason : undefined,
+        queued: payload.queued === true,
+        reason: typeof payload.reason === 'string' ? payload.reason : undefined,
         disposition:
-          typeof event.payload.disposition === 'string' ? event.payload.disposition : undefined,
+          typeof payload.disposition === 'string' ? payload.disposition : undefined,
         errorCode,
       })
       if (label) {
-        const failedMaterials = failedMaterialsFromPayload(event.payload)
+        const failedMaterials = failedMaterialsFromPayload(payload)
         upsertStatus({
           label,
           batchId,

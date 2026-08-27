@@ -18,11 +18,11 @@ export function ConversationHistoryTrigger() {
   }
 
   const panel = (
-    <div
+    <dialog
+      open={open}
       className={styles.panel}
-      role="dialog"
       aria-label="会话历史"
-      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown={(event: KeyboardEvent<HTMLDialogElement>) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
           closeAndRestoreFocus()
@@ -34,7 +34,7 @@ export function ConversationHistoryTrigger() {
         onSelect={closeAndRestoreFocus}
         onCreate={closeAndRestoreFocus}
       />
-    </div>
+    </dialog>
   )
 
   return (

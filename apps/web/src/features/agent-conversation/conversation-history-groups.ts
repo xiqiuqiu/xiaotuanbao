@@ -19,11 +19,21 @@ export function groupConversationHistory(
   for (const item of items) {
     buckets[item.activityGroup].push(item)
   }
-  return (Object.keys(HISTORY_GROUP_LABELS) as Array<ConversationHistoryItem['activityGroup']>)
-    .filter((key) => buckets[key].length > 0)
-    .map((key) => ({
-      key,
-      label: HISTORY_GROUP_LABELS[key],
-      items: buckets[key],
-    }))
+  const groups: Array<{
+    key: ConversationHistoryItem['activityGroup']
+    label: string
+    items: ConversationHistoryItem[]
+  }> = []
+  for (const key of Object.keys(HISTORY_GROUP_LABELS) as Array<
+    ConversationHistoryItem['activityGroup']
+  >) {
+    if (buckets[key].length > 0) {
+      groups.push({
+        key,
+        label: HISTORY_GROUP_LABELS[key],
+        items: buckets[key],
+      })
+    }
+  }
+  return groups
 }

@@ -11,8 +11,14 @@
 }
 
 .panel {
+  position: static;
   width: 320px;
   max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;

@@ -940,20 +940,22 @@ function AiCreateAssistChatView({
   )
 }
 
-export function AiCreateAssistChat({
-  agentRuntimeUrl,
+function useAiCreateAssistChatController({
   taskId,
   conversationId,
   initialEvents = [],
   initialActiveBatch = null,
   initialDraft,
-  snapshotVersion,
-  stageKey,
-  runStatus,
-  reviewPackageId,
-  progress,
   onReviewPackageSubmitted,
-}: AiCreateAssistChatProps) {
+}: Pick<
+  AiCreateAssistChatProps,
+  | 'taskId'
+  | 'conversationId'
+  | 'initialEvents'
+  | 'initialActiveBatch'
+  | 'initialDraft'
+  | 'onReviewPackageSubmitted'
+>) {
   const [events, setEvents] = useState<AiConversationEventView[]>(initialEvents)
   const [activeBatch, setActiveBatch] = useState<AiInputBatchView | null>(
     initialActiveBatch ?? null,
@@ -1226,6 +1228,54 @@ export function AiCreateAssistChat({
     )
   }, [activeBatch, conversationId, events, runBatchCommand, taskId])
 
+  return {
+    activityRenderers,
+    draft,
+    errorText,
+    isRunning,
+    messages,
+    pendingText,
+    send,
+    stop: stoppableBatchId ? stop : undefined,
+    updateDraft,
+    WelcomeScreen,
+  }
+}
+
+export function AiCreateAssistChat({
+  agentRuntimeUrl,
+  taskId,
+  conversationId,
+  initialEvents = [],
+  initialActiveBatch = null,
+  initialDraft,
+  snapshotVersion,
+  stageKey,
+  runStatus,
+  reviewPackageId,
+  progress,
+  onReviewPackageSubmitted,
+}: AiCreateAssistChatProps) {
+  const {
+    activityRenderers,
+    draft,
+    errorText,
+    isRunning,
+    messages,
+    pendingText,
+    send,
+    stop,
+    updateDraft,
+    WelcomeScreen,
+  } = useAiCreateAssistChatController({
+    taskId,
+    conversationId,
+    initialEvents,
+    initialActiveBatch,
+    initialDraft,
+    onReviewPackageSubmitted,
+  })
+
   return (
     <AiCreateAssistChatView
       errorText={errorText}
@@ -1244,7 +1294,7 @@ export function AiCreateAssistChat({
       pendingText={pendingText}
       updateDraft={updateDraft}
       send={send}
-      stop={stoppableBatchId ? stop : undefined}
+      stop={stop}
       WelcomeScreen={WelcomeScreen}
     />
   )

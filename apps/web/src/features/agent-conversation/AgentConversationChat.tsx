@@ -96,7 +96,7 @@ function mergeEvents(
   return [...bySequence.values()].sort((left, right) => left.sequence - right.sequence)
 }
 
-export function AgentConversationChat() {
+function useAgentConversationChatController() {
   const conversationId = useAgentConversationStore((state) => state.conversationId)
   const conversationView = useAgentConversationStore((state) => state.view)
   const attachedPageAttachment = useAgentConversationStore(
@@ -120,7 +120,7 @@ export function AgentConversationChat() {
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [commandPending, setCommandPending] = useState(false)
+  const commandPendingRef = useRef(false)
   const lastSequenceRef = useRef(0)
   const { applyServerDraft, updateDraft, conversationIdRef, draftEpochRef, draftRevisionRef } =
     useAgentConversationDraft(conversationId)
@@ -361,11 +361,11 @@ export function AgentConversationChat() {
   const stop = useCallback(async () => {
     const currentConversationId = conversationIdRef.current
     const batchId = currentStoppableBatchId(useAgentConversationRuntimeStore.getState().events)
-    if (!currentConversationId || !batchId || commandPending) {
+    if (!currentConversationId || !batchId || commandPendingRef.current) {
       return
     }
     setErrorText(null)
-    setCommandPending(true)
+    commandPendingRef.current = true
     try {
       const result = await stopAgentConversationBatch(
         currentConversationId,
@@ -379,9 +379,9 @@ export function AgentConversationChat() {
     } catch (error) {
       setErrorText(getAssistErrorText(error))
     } finally {
-      setCommandPending(false)
+      commandPendingRef.current = false
     }
-  }, [commandPending, conversationIdRef])
+  }, [conversationIdRef])
 
   const messages = useMemo(
     () =>
@@ -400,6 +400,48 @@ export function AgentConversationChat() {
     [],
   )
   const activityRenderers = useMemo(() => [createBatchStatusActivityRenderer()], [])
+
+  return {
+    activityRenderers,
+    attachCurrentPage,
+    attachedPageAttachment,
+    conversationId,
+    currentPageAttachment,
+    detachCurrentPage,
+    draft,
+    errorText,
+    isRunning,
+    loading,
+    messages,
+    messageView,
+    pendingText,
+    send,
+    stop,
+    stoppableBatchId,
+    updateDraft,
+  }
+}
+
+export function AgentConversationChat() {
+  const {
+    activityRenderers,
+    attachCurrentPage,
+    attachedPageAttachment,
+    conversationId,
+    currentPageAttachment,
+    detachCurrentPage,
+    draft,
+    errorText,
+    isRunning,
+    loading,
+    messages,
+    messageView,
+    pendingText,
+    send,
+    stop,
+    stoppableBatchId,
+    updateDraft,
+  } = useAgentConversationChatController()
 
   return (
     <div className={chatStyles.root}>
