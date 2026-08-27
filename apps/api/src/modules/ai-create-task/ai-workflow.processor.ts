@@ -524,11 +524,13 @@ export class AiWorkflowProcessor {
         if (!renewed) {
           return
         }
+        const abort = new AbortController()
         const result = await this.withHeartbeat(job.id, async () => {
           const outcome = await this.headlessClient.run(
             prepared.request,
             prepared.delegationToken,
             {
+              signal: abort.signal,
               onPublicText: (text) => {
                 flusher.push({ text })
               },
@@ -546,7 +548,7 @@ export class AiWorkflowProcessor {
             outcome,
           )
           return outcome
-        })
+        }, abort)
         if (result.kind === 'failed') {
           return
         }
@@ -1974,9 +1976,17 @@ export class AiWorkflowProcessor {
     return result.count === 1
   }
 
-  private async withHeartbeat<T>(jobId: string, work: () => Promise<T>): Promise<T> {
+  private async withHeartbeat<T>(
+    jobId: string,
+    work: () => Promise<T>,
+    abort?: AbortController,
+  ): Promise<T> {
     const timer = setInterval(() => {
-      void this.renewLease(jobId)
+      void this.renewLease(jobId).then((owned) => {
+        if (!owned) {
+          abort?.abort()
+        }
+      })
     }, this.heartbeatMs())
     try {
       return await work()

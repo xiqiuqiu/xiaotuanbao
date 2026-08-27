@@ -18,6 +18,7 @@ import {
   listAgentConversations,
   saveAgentConversationDraft,
   sendAgentConversationText,
+  stopAgentConversationBatch,
 } from './agent-conversation.service'
 
 describe('agent conversation service', () => {
@@ -86,6 +87,16 @@ describe('agent conversation service', () => {
       '/agent/conversations/c-1/messages',
       { text: '继续建团', primaryTaskId: 'task-1' },
       { silentError: true, headers: { 'Idempotency-Key': 'key-3' } },
+    )
+  })
+
+  it('stops the current batch with an idempotency key', async () => {
+    post.mockResolvedValue({ conversationId: 'c-1', events: [], lastSequence: 3 })
+    await stopAgentConversationBatch('c-1', 'batch-1', 'key-stop')
+    expect(post).toHaveBeenCalledWith(
+      '/agent/conversations/c-1/batches/batch-1/stop',
+      {},
+      { silentError: true, headers: { 'Idempotency-Key': 'key-stop' } },
     )
   })
 })

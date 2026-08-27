@@ -7,6 +7,7 @@ import {
   sendAiConversationMessage,
   listAiConversationEvents,
   saveAiConversationDraft,
+  stopConversationBatch,
 } from '@/services/ai-create-task.service'
 import { ApiError } from '@/lib/request'
 
@@ -36,6 +37,7 @@ let capturedView: {
   inputValue?: string
   onSubmitMessage?: (value: string) => void
   onInputChange?: (value: string) => void
+  onStop?: () => void
 } = {}
 let capturedRenderTool: {
   name?: string
@@ -111,6 +113,7 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue,
     onInputChange,
     onSubmitMessage,
+    onStop,
     welcomeScreen,
     suggestions,
     onSelectSuggestion,
@@ -125,13 +128,14 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue?: string
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
+    onStop?: () => void
     welcomeScreen?:
       | false
       | ((props: { input?: ReactNode; suggestionView?: ReactNode }) => ReactNode)
     suggestions?: Array<{ title: string; message: string }>
     onSelectSuggestion?: (suggestion: { title: string; message: string }, index: number) => void
   }) => {
-    capturedView = { messages, isRunning, inputValue, onInputChange, onSubmitMessage }
+    capturedView = { messages, isRunning, inputValue, onInputChange, onSubmitMessage, onStop }
     const input = (
       <textarea
         aria-label="询问当前发团草稿"
@@ -224,6 +228,11 @@ vi.mock('@copilotkit/react-core/v2', () => ({
         <button type="button" onClick={() => onSubmitMessage?.(inputValue ?? '')}>
           发送
         </button>
+        {isRunning && onStop ? (
+          <button type="button" onClick={() => onStop()}>
+            停止当前处理
+          </button>
+        ) : null}
       </div>
     )
   },
@@ -1483,6 +1492,54 @@ describe('AiCreateAssistChat', () => {
     expect(screen.getByText('AI 处理中')).toBeInTheDocument()
     expect(screen.getByText('已排队')).toBeInTheDocument()
     expect(capturedView.isRunning).toBe(true)
+  })
+
+  it('stops the in-flight batch from the running composer, not a status button', async () => {
+    vi.mocked(stopConversationBatch).mockResolvedValue({
+      conversationId: 'conv-1',
+      events: [
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'cancelled', batchId: 'batch-1', reason: 'user_stop' },
+          createdAt: '2026-08-15T00:00:02.000Z',
+        },
+      ],
+      lastSequence: 3,
+    } as never)
+    render(
+      <AiCreateAssistChat
+        {...chatProps}
+        initialEvents={[
+          {
+            sequence: 1,
+            kind: 'user_message',
+            payload: { text: '第一批' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+          {
+            sequence: 2,
+            kind: 'batch_status',
+            payload: { status: 'agent_running', batchId: 'batch-1' },
+            createdAt: '2026-08-15T00:00:00.000Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('AI 处理中')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '停止当前处理' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: '停止当前处理' }))
+
+    await waitFor(() => {
+      expect(stopConversationBatch).toHaveBeenCalledWith(
+        'task-assist',
+        'conv-1',
+        'batch-1',
+        expect.any(String),
+      )
+    })
+    expect(await screen.findByText('已停止当前处理')).toBeInTheDocument()
   })
 
   it('restores a free-text question card from persisted interaction events', () => {

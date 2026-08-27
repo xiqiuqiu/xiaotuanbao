@@ -154,6 +154,7 @@ const WRITE_SERVICES: Record<string, WriteServiceSpec> = {
   // 通用无任务会话：认证 + 所有者隔离，不挂业务菜单。
   saveAgentConversationDraft: { gating: 'public', endpointKey: null },
   sendAgentConversationText: { gating: 'public', endpointKey: null },
+  stopAgentConversationBatch: { gating: 'public', endpointKey: null },
 }
 
 /** 需要按钮级 gating 的能力归类。 */

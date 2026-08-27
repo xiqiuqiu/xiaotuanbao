@@ -6,6 +6,7 @@ import type { AgentLiveOutput, LiveOutputSnapshot } from './agent-live-output'
 @Injectable()
 export class InMemoryAgentLiveOutput implements AgentLiveOutput {
   private readonly byAttempt = new Map<string, LiveOutputSnapshot>()
+  private readonly cleared = new Set<string>()
   private readonly emitter = new EventEmitter()
 
   constructor() {
@@ -13,6 +14,9 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
   }
 
   async publish(snapshot: LiveOutputSnapshot): Promise<void> {
+    if (this.cleared.has(snapshot.attemptId)) {
+      return
+    }
     await this.supersede(snapshot.conversationId, snapshot.attemptId)
     this.byAttempt.set(snapshot.attemptId, snapshot)
     this.emitter.emit(snapshot.conversationId, snapshot)
@@ -47,6 +51,7 @@ export class InMemoryAgentLiveOutput implements AgentLiveOutput {
 
   async clear(attemptId: string): Promise<void> {
     this.byAttempt.delete(attemptId)
+    this.cleared.add(attemptId)
   }
 
   async supersede(conversationId: string, attemptId: string): Promise<void> {

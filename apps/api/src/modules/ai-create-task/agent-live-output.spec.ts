@@ -37,6 +37,26 @@ describe('InMemoryAgentLiveOutput', () => {
     expect(await live.getCurrent(identity.conversationId)).toBeNull()
   })
 
+  it('does not restore a snapshot published after the Attempt was cleared', async () => {
+    const live = new InMemoryAgentLiveOutput()
+    await live.publish({
+      ...identity,
+      revision: 4,
+      reasoningText: '先核对出团日期',
+      text: '已记下半段',
+    })
+    await live.clear(identity.attemptId)
+
+    await live.publish({
+      ...identity,
+      revision: 5,
+      reasoningText: '迟到思考',
+      text: '停止后才赶到的半段',
+    })
+
+    expect(await live.getCurrent(identity.conversationId)).toBeNull()
+  })
+
   it('drops older Attempt leftovers when a new Attempt claims the conversation', async () => {
     const live = new InMemoryAgentLiveOutput()
     await live.publish({

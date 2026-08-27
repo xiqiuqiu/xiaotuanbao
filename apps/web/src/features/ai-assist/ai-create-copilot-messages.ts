@@ -31,7 +31,6 @@ export type BatchStatusActivityContent = {
   batchId?: string
   failedMaterials?: FailedMaterialNotice[]
   showMaterialActions?: boolean
-  showStopAction?: boolean
   showBatchRetryAction?: boolean
 }
 
@@ -292,7 +291,10 @@ export function isCopilotChatRunning(
   pendingText: string | null,
   liveAssistant?: LiveAssistantSnapshot | null,
 ): boolean {
-  if (pendingText || liveAssistant?.text || liveAssistant?.reasoningText) {
+  if (pendingText) {
+    return true
+  }
+  if (liveAssistant && shouldProjectLiveAssistant(events, liveAssistant)) {
     return true
   }
   const status = latestBatchStatus(events, activeBatch)
@@ -301,6 +303,28 @@ export function isCopilotChatRunning(
     return failed === 0
   }
   return status !== null && RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)
+}
+
+/** Composer 停止对应的当前 InputBatch；无进行中批次时返回 null。 */
+export function currentStoppableBatchId(
+  events: AiConversationEventView[],
+  activeBatch: AiInputBatchView | null = null,
+): string | null {
+  const status = latestBatchStatus(events, activeBatch)
+  if (status === 'waiting_for_materials' && latestFailedCount(events, activeBatch) > 0) {
+    return null
+  }
+  if (!status || !RUNNING_BATCH_STATUSES.has(status as AiInputBatchStatus)) {
+    return null
+  }
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.kind !== 'batch_status') {
+      continue
+    }
+    return typeof event.payload.batchId === 'string' ? event.payload.batchId : null
+  }
+  return activeBatch?.id ?? null
 }
 
 function latestFailedCount(
@@ -430,11 +454,6 @@ export function toCopilotChatMessages(
           batchId,
           failedMaterials,
           showMaterialActions: status === 'waiting_for_materials' && failedMaterials.length > 0,
-          showStopAction:
-            status === 'ready_for_agent' ||
-            status === 'preparing_context' ||
-            status === 'agent_running' ||
-            status === 'awaiting_user_input',
           showBatchRetryAction: status === 'failed',
         })
       }
@@ -468,11 +487,6 @@ export function toCopilotChatMessages(
         batchId: activeBatch.id,
         failedMaterials,
         showMaterialActions: activeBatch.status === 'waiting_for_materials' && failedMaterials.length > 0,
-        showStopAction:
-          activeBatch.status === 'ready_for_agent' ||
-          activeBatch.status === 'preparing_context' ||
-          activeBatch.status === 'agent_running' ||
-          activeBatch.status === 'awaiting_user_input',
         showBatchRetryAction: activeBatch.status === 'failed',
       })
     }

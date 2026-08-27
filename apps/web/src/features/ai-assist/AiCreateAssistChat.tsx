@@ -41,6 +41,7 @@ import {
   REVIEW_PACKAGE_ACTIVITY_TYPE,
   SEARCH_ROUTE_TEMPLATES_ACTIVITY_TYPE,
   isCopilotChatRunning,
+  currentStoppableBatchId,
   toCopilotChatMessages,
   type BatchStatusActivityContent,
   type InteractionActivityContent,
@@ -196,7 +197,6 @@ function createBatchStatusActivityRenderer(handlers: {
   onRetryBatch: (batchId: string) => void
   onRemove: (batchId: string, materialId: string) => void
   onAbandon: (batchId: string) => void
-  onStop: (batchId: string) => void
 }): ReactActivityMessageRenderer<BatchStatusActivityContent> {
   return {
     activityType: BATCH_STATUS_ACTIVITY_TYPE,
@@ -259,18 +259,6 @@ function createBatchStatusActivityRenderer(handlers: {
               onClick={() => handlers.onAbandon(content.batchId!)}
             >
               放弃本批
-            </Button>
-          </Space>
-        ) : null}
-        {content.showStopAction && content.batchId ? (
-          <Space size={8} className={styles.failedActions}>
-            <Button
-              danger
-              size="small"
-              loading={handlers.pending}
-              onClick={() => handlers.onStop(content.batchId!)}
-            >
-              停止当前处理
             </Button>
           </Space>
         ) : null}
@@ -491,6 +479,7 @@ function ChatComposer({
   pendingText,
   setDraft,
   onSend,
+  onStop,
   WelcomeScreen,
 }: {
   messages: ReturnType<typeof toCopilotChatMessages>
@@ -499,6 +488,7 @@ function ChatComposer({
   pendingText: string | null
   setDraft: (value: string) => void
   onSend: (text: string, files: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  onStop?: () => void
   WelcomeScreen: (props: { input?: ReactNode }) => ReactNode
 }) {
   const {
@@ -556,6 +546,7 @@ function ChatComposer({
           const files = filesFromAttachmentSources(ready)
           void onSend(value, files, () => processFiles(files))
         }}
+        onStop={onStop}
         welcomeScreen={WelcomeScreen}
         attachments={attachments}
         onRemoveAttachment={(id) => {
@@ -570,6 +561,7 @@ function ChatComposer({
         }}
         input={{
           textArea: { 'aria-label': '询问当前发团草稿' },
+          sendButton: { 'aria-label': isRunning && onStop ? '停止当前处理' : '发送' },
         }}
       />
     </div>
@@ -831,11 +823,6 @@ function useActivityRenderers({
             abandonConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
           )
         },
-        onStop: (batchId) => {
-          void run(() =>
-            stopConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
-          )
-        },
       }),
       createInteractionActivityRenderer({
         pending,
@@ -891,6 +878,7 @@ function AiCreateAssistChatView({
   pendingText,
   updateDraft,
   send,
+  stop,
   WelcomeScreen,
 }: Pick<
   AiCreateAssistChatProps,
@@ -911,6 +899,7 @@ function AiCreateAssistChatView({
   pendingText: string | null
   updateDraft: (value: string) => void
   send: (text: string, files?: File[], restoreFiles?: () => Promise<void>) => Promise<void>
+  stop?: () => void
   WelcomeScreen: (props: { input?: ReactNode }) => ReactNode
 }) {
   return (
@@ -942,6 +931,7 @@ function AiCreateAssistChatView({
             pendingText={pendingText}
             setDraft={updateDraft}
             onSend={send}
+            onStop={stop}
             WelcomeScreen={WelcomeScreen}
           />
         </CopilotChatConfigurationProvider>
@@ -1225,6 +1215,16 @@ export function AiCreateAssistChat({
     [activeBatch, events, pendingText, pendingUploadCount],
   )
   const isRunning = isCopilotChatRunning(events, activeBatch, pendingText)
+  const stoppableBatchId = currentStoppableBatchId(events, activeBatch)
+  const stop = useCallback(() => {
+    const batchId = currentStoppableBatchId(events, activeBatch)
+    if (!batchId) {
+      return
+    }
+    void runBatchCommand(() =>
+      stopConversationBatch(taskId, conversationId, batchId, crypto.randomUUID()),
+    )
+  }, [activeBatch, conversationId, events, runBatchCommand, taskId])
 
   return (
     <AiCreateAssistChatView
@@ -1244,6 +1244,7 @@ export function AiCreateAssistChat({
       pendingText={pendingText}
       updateDraft={updateDraft}
       send={send}
+      stop={stoppableBatchId ? stop : undefined}
       WelcomeScreen={WelcomeScreen}
     />
   )

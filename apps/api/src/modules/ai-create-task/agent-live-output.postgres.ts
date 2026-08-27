@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common'
 import { EventEmitter } from 'node:events'
 import { Client } from 'pg'
 import { Observable } from 'rxjs'
+import { AiAgentAttemptStatus } from '@prisma/client'
 import { PrismaService } from '../../database/prisma/prisma.service'
 import {
   LIVE_OUTPUT_NOTIFY_CHANNEL,
@@ -35,7 +36,14 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
 
   async publish(snapshot: LiveOutputSnapshot): Promise<void> {
     const expiresAt = new Date(Date.now() + LIVE_OUTPUT_TTL_MS)
-    await this.prisma.$transaction(async (tx) => {
+    const published = await this.prisma.$transaction(async (tx) => {
+      const attempt = await tx.aiAgentAttempt.findUnique({
+        where: { id: snapshot.attemptId },
+        select: { status: true },
+      })
+      if (attempt?.status !== AiAgentAttemptStatus.running) {
+        return false
+      }
       await tx.aiAgentLiveOutput.deleteMany({
         where: {
           conversationId: snapshot.conversationId,
@@ -64,8 +72,11 @@ export class PostgresAgentLiveOutput implements AgentLiveOutput, OnModuleDestroy
         },
       })
       await tx.$executeRaw`SELECT pg_notify(${LIVE_OUTPUT_NOTIFY_CHANNEL}, ${snapshot.attemptId})`
+      return true
     })
-    this.emitter.emit(snapshot.conversationId, snapshot)
+    if (published) {
+      this.emitter.emit(snapshot.conversationId, snapshot)
+    }
   }
 
   observe(conversationId: string): Observable<LiveOutputSnapshot> {

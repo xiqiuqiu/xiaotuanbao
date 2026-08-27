@@ -108,6 +108,7 @@ import {
   materialFileKey,
   type IncomingMaterialFile,
 } from './departure-material.service'
+import { discardLiveOutputAfterUserStop } from './discard-stopped-live-output'
 import { PageLocatorResolver } from './page-locator.resolver'
 
 const TASK_INCLUDE = {
@@ -695,6 +696,7 @@ export class AiConversationService {
     for (const event of published) {
       this.eventHub.publish(conversationId, event)
     }
+    await discardLiveOutputAfterUserStop(this.liveOutput, conversationId, result.events)
     return result
   }
 
@@ -1574,7 +1576,7 @@ export class AiConversationService {
     batchId: string,
     idempotencyKey: string | undefined,
   ): Promise<SendAiConversationMessageResult> {
-    return this.runBatchCommand({
+    const result = await this.runBatchCommand({
       organizationId,
       userId,
       taskId,
@@ -1649,6 +1651,8 @@ export class AiConversationService {
         return { batch: updated, events: [statusEvent] }
       },
     })
+    await discardLiveOutputAfterUserStop(this.liveOutput, conversationId, result.events)
+    return result
   }
 
   async retryFailedBatch(

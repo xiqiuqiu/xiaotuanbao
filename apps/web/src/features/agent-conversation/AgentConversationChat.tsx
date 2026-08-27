@@ -2,6 +2,7 @@ import {
   CopilotChatConfigurationProvider,
   CopilotChatView,
   CopilotKit,
+  type ReactActivityMessageRenderer,
 } from '@copilotkit/react-core/v2'
 import { Alert, Button, Tag, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,10 +17,14 @@ import {
   getAgentConversation,
   listAgentConversationEvents,
   sendAgentConversationText,
+  stopAgentConversationBatch,
 } from '@/services/agent-conversation.service'
 import {
+  BATCH_STATUS_ACTIVITY_TYPE,
+  currentStoppableBatchId,
   isCopilotChatRunning,
   projectConversationFrame,
+  type BatchStatusActivityContent,
 } from '@/features/ai-assist/ai-create-copilot-messages'
 import { AgentReasoningHeader } from './agent-reasoning-message'
 import {
@@ -37,7 +42,37 @@ import { useAgentConversationDraft } from './use-agent-conversation-draft'
 import { currentPageAttachmentLabel } from './page-locator-attachment'
 import { useCurrentPageAttachment } from './use-current-page-locator'
 
-const AGENT_ID = 'conversation-general'
+/** CopilotKit runtime 注册名（apps/agent）；不是 conversation-general 领域指令版本。 */
+const COPILOTKIT_RUNTIME_AGENT_ID = 'ai-create-readonly-assist'
+
+function createBatchStatusActivityRenderer(): ReactActivityMessageRenderer<BatchStatusActivityContent> {
+  return {
+    activityType: BATCH_STATUS_ACTIVITY_TYPE,
+    content: {
+      '~standard': {
+        version: 1,
+        vendor: 'xiaotuanbao',
+        validate(value) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            typeof (value as { label?: unknown }).label === 'string'
+          ) {
+            return { value: value as BatchStatusActivityContent }
+          }
+          return { issues: [{ message: 'invalid batch status activity' }] }
+        },
+      },
+    },
+    render: ({ content }) => (
+      <div className={chatStyles.noticeBlock}>
+        <p className={chatStyles.notice} role="status">
+          {content.label}
+        </p>
+      </div>
+    ),
+  }
+}
 
 function getContiguousSequence(events: AiConversationEventView[]): number {
   let last = 0
@@ -85,6 +120,7 @@ export function AgentConversationChat() {
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [commandPending, setCommandPending] = useState(false)
   const lastSequenceRef = useRef(0)
   const { applyServerDraft, updateDraft, conversationIdRef, draftEpochRef, draftRevisionRef } =
     useAgentConversationDraft(conversationId)
@@ -322,6 +358,31 @@ export function AgentConversationChat() {
     ],
   )
 
+  const stop = useCallback(async () => {
+    const currentConversationId = conversationIdRef.current
+    const batchId = currentStoppableBatchId(useAgentConversationRuntimeStore.getState().events)
+    if (!currentConversationId || !batchId || commandPending) {
+      return
+    }
+    setErrorText(null)
+    setCommandPending(true)
+    try {
+      const result = await stopAgentConversationBatch(
+        currentConversationId,
+        batchId,
+        crypto.randomUUID(),
+      )
+      useAgentConversationRuntimeStore.getState().hydrate({
+        conversationId: currentConversationId,
+        events: mergeEvents(useAgentConversationRuntimeStore.getState().events, result.events),
+      })
+    } catch (error) {
+      setErrorText(getAssistErrorText(error))
+    } finally {
+      setCommandPending(false)
+    }
+  }, [commandPending, conversationIdRef])
+
   const messages = useMemo(
     () =>
       projectConversationFrame({
@@ -333,10 +394,12 @@ export function AgentConversationChat() {
     [events, liveAssistant, pendingText, sessionReasoning],
   )
   const isRunning = isCopilotChatRunning(events, null, pendingText, liveAssistant)
+  const stoppableBatchId = currentStoppableBatchId(events)
   const messageView = useMemo(
     () => ({ reasoningMessage: { header: AgentReasoningHeader } }),
     [],
   )
+  const activityRenderers = useMemo(() => [createBatchStatusActivityRenderer()], [])
 
   return (
     <div className={chatStyles.root}>
@@ -371,9 +434,10 @@ export function AgentConversationChat() {
           runtimeUrl="/copilotkit"
           useSingleEndpoint={false}
           enableInspector={false}
+          renderActivityMessages={activityRenderers}
         >
           <CopilotChatConfigurationProvider
-            agentId={AGENT_ID}
+            agentId={COPILOTKIT_RUNTIME_AGENT_ID}
             threadId={conversationId ?? 'new'}
             labels={{ chatInputPlaceholder: '询问小团宝业务…' }}
           >
@@ -388,8 +452,18 @@ export function AgentConversationChat() {
                 onSubmitMessage={(value) => {
                   void send(value)
                 }}
+                onStop={
+                  stoppableBatchId
+                    ? () => {
+                        void stop()
+                      }
+                    : undefined
+                }
                 input={{
                   textArea: { 'aria-label': '询问小团宝业务' },
+                  sendButton: {
+                    'aria-label': isRunning && stoppableBatchId ? '停止当前处理' : '发送',
+                  },
                 }}
               />
             </div>
