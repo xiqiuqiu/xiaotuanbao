@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type { PageLocator } from '@xiaotuanbao/shared'
 import {
   agentConversationPath,
   captureReturnLocation,
@@ -8,7 +7,10 @@ import {
   readPersistedReturnLocation,
   type AgentReturnLocation,
 } from './agent-conversation-location'
-import { nextPageLocatorAttachment } from './page-locator-attachment'
+import {
+  nextPageAttachment,
+  type AgentCurrentPageAttachment,
+} from './page-locator-attachment'
 
 export const NEW_CONVERSATION_TITLE = '新会话'
 
@@ -21,14 +23,15 @@ interface AgentConversationState {
   returnLocation: AgentReturnLocation | null
   historyRailCollapsed: boolean
   globalOpen: boolean
-  attachedPageLocator: PageLocator | null
+  attachedPageAttachment: AgentCurrentPageAttachment | null
   persistConversation: (conversation: { id: string; title: string }) => void
   openHistoricalConversation: (conversation: { id: string; title: string }) => void
-  startNewConversation: (currentLocator?: PageLocator | null) => void
+  startNewConversation: (currentAttachment?: AgentCurrentPageAttachment | null) => void
   pageContextDismissed: boolean
-  attachCurrentPage: (currentLocator: PageLocator | null) => void
+  attachCurrentPage: (currentAttachment: AgentCurrentPageAttachment | null) => void
   detachCurrentPage: () => void
-  syncDefaultPageLocator: (currentLocator: PageLocator | null) => void
+  restoreCurrentPageAfterSend: (currentAttachment: AgentCurrentPageAttachment | null) => void
+  syncDefaultPageAttachment: (currentAttachment: AgentCurrentPageAttachment | null) => void
   expandToGlobal: (location: {
     pathname: string
     search?: string
@@ -48,7 +51,7 @@ const INITIAL_CONVERSATION_STATE = {
   returnLocation: null as AgentReturnLocation | null,
   historyRailCollapsed: false,
   globalOpen: false,
-  attachedPageLocator: null as PageLocator | null,
+  attachedPageAttachment: null as AgentCurrentPageAttachment | null,
   pageContextDismissed: false,
 }
 
@@ -67,50 +70,50 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
       view: 'history',
       conversationId: conversation.id,
       title: conversation.title || NEW_CONVERSATION_TITLE,
-      attachedPageLocator: reopeningCurrentHistory ? current.attachedPageLocator : null,
+      attachedPageAttachment: reopeningCurrentHistory ? current.attachedPageAttachment : null,
       pageContextDismissed: false,
     })
   },
-  startNewConversation: (currentLocator = null) =>
+  startNewConversation: (currentAttachment = null) =>
     set({
       view: 'new',
       conversationId: null,
       title: NEW_CONVERSATION_TITLE,
-      attachedPageLocator: nextPageLocatorAttachment({
+      attachedPageAttachment: nextPageAttachment({
         view: 'new',
-        conversationId: null,
-        currentLocator,
-        attachedLocator: null,
+        currentAttachment,
         captured: false,
       }),
       pageContextDismissed: false,
     }),
-  attachCurrentPage: (currentLocator) =>
+  attachCurrentPage: (currentAttachment) =>
     set({
-      attachedPageLocator: nextPageLocatorAttachment({
+      attachedPageAttachment: nextPageAttachment({
         view: get().view,
-        conversationId: get().conversationId,
-        currentLocator,
-        attachedLocator: get().attachedPageLocator,
+        currentAttachment,
         captured: true,
       }),
       pageContextDismissed: false,
     }),
-  detachCurrentPage: () => set({ attachedPageLocator: null, pageContextDismissed: true }),
-  syncDefaultPageLocator: (currentLocator) => {
-    const current = get()
-    if (current.conversationId || current.view === 'history' || current.pageContextDismissed) {
+  detachCurrentPage: () => set({ attachedPageAttachment: null, pageContextDismissed: true }),
+  restoreCurrentPageAfterSend: (currentAttachment) => {
+    if (!get().pageContextDismissed) {
       return
     }
-    const next = nextPageLocatorAttachment({
+    set({ attachedPageAttachment: currentAttachment, pageContextDismissed: false })
+  },
+  syncDefaultPageAttachment: (currentAttachment) => {
+    const current = get()
+    if (current.view === 'history' || current.pageContextDismissed) {
+      return
+    }
+    const next = nextPageAttachment({
       view: current.view === 'page' ? 'new' : current.view,
-      conversationId: current.conversationId,
-      currentLocator,
-      attachedLocator: current.attachedPageLocator,
+      currentAttachment,
       captured: false,
     })
-    if (next && !current.attachedPageLocator) {
-      set({ attachedPageLocator: next })
+    if (next && !current.attachedPageAttachment) {
+      set({ attachedPageAttachment: next })
     }
   },
   expandToGlobal: (location) => {
@@ -142,11 +145,9 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         view: 'history',
         conversationId,
         title: current.title || NEW_CONVERSATION_TITLE,
-        attachedPageLocator: nextPageLocatorAttachment({
+        attachedPageAttachment: nextPageAttachment({
           view: 'history',
-          conversationId,
-          currentLocator: null,
-          attachedLocator: current.attachedPageLocator,
+          currentAttachment: null,
           captured: false,
         }),
         pageContextDismissed: false,
@@ -159,7 +160,7 @@ export const useAgentConversationStore = create<AgentConversationState>((set, ge
         view: 'new',
         conversationId: null,
         title: NEW_CONVERSATION_TITLE,
-        attachedPageLocator: current.attachedPageLocator,
+        attachedPageAttachment: current.attachedPageAttachment,
       })
       return
     }

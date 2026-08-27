@@ -233,11 +233,11 @@ describe('buildBudgetedContext', () => {
     })
 
     expect(result.sections.find((section) => section.key === 'system_constraints')).toMatchObject({
-      version: 'conversation-general/v2',
+      version: 'conversation-general/v3',
       sha256: digestExcerpt(CONVERSATION_GENERAL_INSTRUCTIONS),
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')).toMatchObject({
-      version: 'conversation-general-recall/v1',
+      version: 'conversation-general-routing-recall/v2',
     })
     expect(result.sections.find((section) => section.key === 'tool_schemas')?.sha256).not.toBe(
       digestExcerpt('[]'),

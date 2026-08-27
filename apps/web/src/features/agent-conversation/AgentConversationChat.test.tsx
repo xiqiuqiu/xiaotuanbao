@@ -11,6 +11,10 @@ import {
 } from '@/services/agent-conversation.service'
 import { ApiError } from '@/lib/request'
 
+const routerState = vi.hoisted(() => ({
+  location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
+}))
+
 vi.mock('@/services/agent-conversation.service', () => ({
   getAgentConversation: vi.fn().mockResolvedValue({
     id: 'c-1',
@@ -37,9 +41,7 @@ vi.mock('@tanstack/react-router', () => ({
   useRouterState: (options?: {
     select?: (state: { location: { pathname: string; searchStr: string; hash: string } }) => unknown
   }) => {
-    const state = {
-      location: { pathname: '/partner/partner-1', searchStr: '?tab=accounts', hash: '' },
-    }
+    const state = routerState
     return options?.select ? options.select(state) : state
   },
 }))
@@ -102,6 +104,11 @@ vi.stubGlobal('EventSource', MockEventSource)
 describe('AgentConversationChat page locator #371', () => {
   beforeEach(() => {
     lastEventSource = null
+    routerState.location = {
+      pathname: '/partner/partner-1',
+      searchStr: '?tab=accounts',
+      hash: '',
+    }
     vi.mocked(sendAgentConversationText).mockReset()
     useAgentConversationRuntimeStore.getState().clear()
     useAgentConversationStore.getState().reset()
@@ -163,12 +170,47 @@ describe('AgentConversationChat page locator #371', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
     expect(sendAgentConversationText).toHaveBeenLastCalledWith(
       expect.any(String),
-      {
-        text: '不带页面',
-        pageLocator: null,
-      },
+      { text: '不带页面' },
       expect.any(String),
     )
+    expect(await screen.findByText('当前合作伙伴往来账款')).toBeInTheDocument()
+  })
+
+  it('shows one task chip and sends it as the primary task candidate', async () => {
+    const user = userEvent.setup()
+    vi.mocked(sendAgentConversationText).mockResolvedValue({
+      conversationId: 'c-new',
+      events: [],
+      lastSequence: 1,
+    } as never)
+    routerState.location = {
+      pathname: '/departure/new',
+      searchStr: '?taskId=task-1',
+      hash: '',
+    }
+
+    render(<AgentConversationChat />)
+
+    expect(await screen.findByText('当前建团工作')).toBeInTheDocument()
+    expect(screen.getAllByTestId('current-page-chip')).toHaveLength(1)
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '继续补充行程')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    expect(sendAgentConversationText).toHaveBeenCalledWith(
+      null,
+      { text: '继续补充行程', primaryTaskId: 'task-1' },
+      expect.any(String),
+    )
+
+    await user.click(screen.getByRole('button', { name: '移除当前页面' }))
+    await user.type(screen.getByRole('textbox', { name: '询问小团宝业务' }), '不带任务')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+    expect(sendAgentConversationText).toHaveBeenLastCalledWith(
+      expect.any(String),
+      { text: '不带任务' },
+      expect.any(String),
+    )
+    expect(await screen.findByText('当前建团工作')).toBeInTheDocument()
   })
 
   it('shows the API validation message and restores the draft when sending fails', async () => {
@@ -284,4 +326,3 @@ describe('AgentConversationChat live assistant snapshot #415', () => {
     expect(screen.queryByText('已整理当前资料。')).not.toBeInTheDocument()
   })
 })
-
