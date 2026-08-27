@@ -86,6 +86,77 @@ describe('agent conversation runtime store #370', () => {
     expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
   })
 
+  it('keeps session 思考过程 after agent_message and drops it after failure', () => {
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-9',
+      batchId: 'batch-1',
+      generation: 3,
+      revision: 1,
+      reasoningText: '先核对出团日期',
+      text: '',
+    })
+    expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({
+      'attempt-9': '先核对出团日期',
+    })
+
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-2',
+          sequence: 2,
+          kind: 'agent_message',
+          payload: { text: '已记下路线。', attemptId: 'attempt-9' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(useAgentConversationRuntimeStore.getState().liveAssistant).toBeNull()
+    expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({
+      'attempt-9': '先核对出团日期',
+    })
+
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'failed', attemptId: 'attempt-10' },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+    useAgentConversationRuntimeStore.getState().acceptLiveAssistant({
+      attemptId: 'attempt-10',
+      batchId: 'batch-2',
+      generation: 4,
+      revision: 1,
+      reasoningText: '失败前的思考',
+      text: '半段',
+    })
+    useAgentConversationRuntimeStore.getState().hydrate({
+      conversationId: 'c-1',
+      events: [
+        {
+          id: 'e-3',
+          sequence: 3,
+          kind: 'batch_status',
+          payload: { status: 'failed', attemptId: 'attempt-10' },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ],
+    })
+    expect(useAgentConversationRuntimeStore.getState().sessionReasoning).toEqual({
+      'attempt-9': '先核对出团日期',
+    })
+  })
+
   it('clears runtime only when switching to a different Conversation', () => {
     useAgentConversationRuntimeStore.getState().hydrate({
       conversationId: 'c-1',

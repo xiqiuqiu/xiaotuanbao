@@ -21,7 +21,7 @@ import {
   isCopilotChatRunning,
   projectConversationFrame,
 } from '@/features/ai-assist/ai-create-copilot-messages'
-import { createAgentReasoningActivityRenderer } from './agent-reasoning-activity'
+import { AgentReasoningHeader } from './agent-reasoning-message'
 import {
   CONVERSATION_ERROR_CATCH_UP_DEBOUNCE_MS,
   CONVERSATION_IDLE_CATCH_UP_MS,
@@ -80,6 +80,7 @@ export function AgentConversationChat() {
   const runtimeConversationId = useAgentConversationRuntimeStore((state) => state.conversationId)
   const events = useAgentConversationRuntimeStore((state) => state.events)
   const liveAssistant = useAgentConversationRuntimeStore((state) => state.liveAssistant)
+  const sessionReasoning = useAgentConversationRuntimeStore((state) => state.sessionReasoning)
   const draft = useAgentConversationRuntimeStore((state) => state.draft)
   const pendingText = useAgentConversationRuntimeStore((state) => state.pendingText)
   const [errorText, setErrorText] = useState<string | null>(null)
@@ -327,11 +328,15 @@ export function AgentConversationChat() {
         events,
         pendingText,
         liveAssistant,
+        sessionReasoning,
       }),
-    [events, liveAssistant, pendingText],
+    [events, liveAssistant, pendingText, sessionReasoning],
   )
   const isRunning = isCopilotChatRunning(events, null, pendingText, liveAssistant)
-  const activityRenderers = useMemo(() => [createAgentReasoningActivityRenderer()], [])
+  const messageView = useMemo(
+    () => ({ reasoningMessage: { header: AgentReasoningHeader } }),
+    [],
+  )
 
   return (
     <div className={chatStyles.root}>
@@ -366,7 +371,6 @@ export function AgentConversationChat() {
           runtimeUrl="/copilotkit"
           useSingleEndpoint={false}
           enableInspector={false}
-          renderActivityMessages={activityRenderers}
         >
           <CopilotChatConfigurationProvider
             agentId={AGENT_ID}
@@ -378,6 +382,7 @@ export function AgentConversationChat() {
                 className={chatStyles.chat}
                 messages={messages}
                 isRunning={isRunning}
+                messageView={messageView}
                 inputValue={pendingText ? '' : draft}
                 onInputChange={updateDraft}
                 onSubmitMessage={(value) => {

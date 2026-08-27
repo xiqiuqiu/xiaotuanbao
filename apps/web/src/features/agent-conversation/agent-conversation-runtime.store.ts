@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { AiConversationEventView } from '@xiaotuanbao/shared'
 import {
+  pruneSessionReasoning,
   shouldProjectLiveAssistant,
   type LiveAssistantSnapshot,
 } from '@/features/ai-assist/ai-create-copilot-messages'
@@ -15,6 +16,7 @@ export type AgentConversationRuntime = {
   sending: boolean
   sendIdempotencyKey: string | null
   liveAssistant: LiveAssistantSnapshot | null
+  sessionReasoning: Record<string, string>
 }
 
 const EMPTY_RUNTIME: AgentConversationRuntime = {
@@ -27,6 +29,7 @@ const EMPTY_RUNTIME: AgentConversationRuntime = {
   sending: false,
   sendIdempotencyKey: null,
   liveAssistant: null,
+  sessionReasoning: {},
 }
 
 interface AgentConversationRuntimeState extends AgentConversationRuntime {
@@ -72,8 +75,13 @@ export const useAgentConversationRuntimeStore = create<AgentConversationRuntimeS
       ...get(),
       ...next,
     }
+    const sessionReasoning = pruneSessionReasoning(
+      merged.events,
+      next.sessionReasoning ?? merged.sessionReasoning,
+    )
     set({
       ...merged,
+      sessionReasoning,
       liveAssistant:
         next.liveAssistant !== undefined
           ? next.liveAssistant
@@ -85,8 +93,15 @@ export const useAgentConversationRuntimeStore = create<AgentConversationRuntimeS
     if (!shouldAcceptLiveAssistant(current.liveAssistant, snapshot)) {
       return
     }
+    const sessionReasoning = pruneSessionReasoning(
+      current.events,
+      snapshot.reasoningText
+        ? { ...current.sessionReasoning, [snapshot.attemptId]: snapshot.reasoningText }
+        : current.sessionReasoning,
+    )
     set({
       liveAssistant: liveAfterEvents(current.events, snapshot),
+      sessionReasoning,
     })
   },
   resetIfConversationChanged: (conversationId) => {
