@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   batchStatusLabel,
+  currentStoppableBatchId,
   isCopilotChatRunning,
   projectConversationFrame,
   toCopilotChatMessages,
@@ -743,30 +744,28 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
     text: '已记下半段',
   }
 
-  it('offers 停止当前处理 while ready_for_agent, preparing_context or agent_running', () => {
+  it('does not put a stop control on batch status; composer owns stop while the batch is in flight', () => {
     for (const status of ['ready_for_agent', 'preparing_context', 'agent_running'] as const) {
-      const messages = toCopilotChatMessages(
-        [
-          {
-            sequence: 1,
-            kind: 'user_message',
-            payload: { text: '帮我查一下账款' },
-            createdAt: '2026-08-26T00:00:00.000Z',
-          },
-          {
-            sequence: 2,
-            kind: 'batch_status',
-            payload: { status, batchId: 'batch-1' },
-            createdAt: '2026-08-26T00:00:01.000Z',
-          },
-        ],
-        null,
-        null,
-      )
-      const statusContent = messages
+      const events = [
+        {
+          sequence: 1,
+          kind: 'user_message' as const,
+          payload: { text: '帮我查一下账款' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+        {
+          sequence: 2,
+          kind: 'batch_status' as const,
+          payload: { status, batchId: 'batch-1' },
+          createdAt: '2026-08-26T00:00:01.000Z',
+        },
+      ]
+      const statusContent = toCopilotChatMessages(events, null, null)
         .filter((message) => message.activityType === 'ai-create-batch-status')
         .map((message) => message.content as { showStopAction?: boolean; batchId?: string })
-      expect(statusContent).toEqual([expect.objectContaining({ showStopAction: true, batchId: 'batch-1' })])
+      expect(statusContent).toEqual([expect.objectContaining({ batchId: 'batch-1' })])
+      expect(statusContent.some((item) => item.showStopAction)).toBe(false)
+      expect(currentStoppableBatchId(events)).toBe('batch-1')
     }
   })
 
@@ -826,6 +825,41 @@ describe('projectConversationFrame Agent 本次运行停止 #417', () => {
     })
     expect(messages.some((message) => message.content === '停止后才赶到的半段')).toBe(false)
     expect(isCopilotChatRunning(stopped, null, null, { ...livePartial, revision: 99 })).toBe(false)
+  })
+
+  it('resolves the latest in-flight batch for composer stop and ignores cancelled or HITL wait', () => {
+    expect(currentStoppableBatchId(runningEvents)).toBe('batch-1')
+    expect(
+      currentStoppableBatchId([
+        ...runningEvents,
+        {
+          sequence: 3,
+          kind: 'batch_status',
+          payload: {
+            status: 'cancelled',
+            batchId: 'batch-1',
+            reason: 'user_stop',
+          },
+          createdAt: '2026-08-26T00:00:02.000Z',
+        },
+      ]),
+    ).toBeNull()
+    expect(
+      currentStoppableBatchId([
+        {
+          sequence: 1,
+          kind: 'batch_status',
+          payload: { status: 'awaiting_user_input', batchId: 'batch-1' },
+          createdAt: '2026-08-26T00:00:00.000Z',
+        },
+      ]),
+    ).toBeNull()
+    expect(
+      currentStoppableBatchId([], {
+        id: 'batch-active',
+        status: 'agent_running',
+      } as never),
+    ).toBe('batch-active')
   })
 })
 

@@ -65,6 +65,7 @@ let capturedActivityRenderers: Array<{
   activityType?: string
   render?: (props: { content: unknown }) => React.ReactNode
 }> = []
+let capturedChatConfig: { agentId?: string } = {}
 
 vi.mock('@copilotkit/react-core/v2', () => ({
   CopilotKit: ({
@@ -80,7 +81,16 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     capturedActivityRenderers = renderActivityMessages ?? []
     return <div>{children}</div>
   },
-  CopilotChatConfigurationProvider: ({ children }: { children: React.ReactNode }) => children,
+  CopilotChatConfigurationProvider: ({
+    children,
+    agentId,
+  }: {
+    children: React.ReactNode
+    agentId?: string
+  }) => {
+    capturedChatConfig = { agentId }
+    return children
+  },
   CopilotChatReasoningMessage: Object.assign(
     () => null,
     {
@@ -93,11 +103,15 @@ vi.mock('@copilotkit/react-core/v2', () => ({
     inputValue,
     onInputChange,
     onSubmitMessage,
+    onStop,
+    isRunning,
     messages,
   }: {
     inputValue?: string
     onInputChange?: (value: string) => void
     onSubmitMessage?: (value: string) => void
+    onStop?: () => void
+    isRunning?: boolean
     messages?: Array<{
       id?: string
       role?: string
@@ -131,12 +145,17 @@ vi.mock('@copilotkit/react-core/v2', () => ({
       />
       <button
         type="button"
+        aria-label={isRunning && onStop ? '停止当前处理' : '发送'}
         onClick={() => {
+          if (isRunning && onStop) {
+            onStop()
+            return
+          }
           onSubmitMessage?.(inputValue ?? '')
           onInputChange?.('')
         }}
       >
-        发送
+        {isRunning && onStop ? '停止当前处理' : '发送'}
       </button>
     </div>
   ),
@@ -500,7 +519,7 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
     cleanup()
   })
 
-  it('posts stop-batch from 停止当前处理 and replaces live text with 已停止当前处理', async () => {
+  it('posts stop-batch from the running composer button and replaces live text with 已停止当前处理', async () => {
     const user = userEvent.setup()
     vi.mocked(stopAgentConversationBatch).mockResolvedValue({
       conversationId: 'c-1',
@@ -538,7 +557,8 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
       )
     })
     expect(await screen.findByText('已记下半段')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '停止当前处理' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: '停止当前处理' })).toHaveLength(1)
+    expect(screen.getByText('AI 处理中')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '停止当前处理' }))
     expect(stopAgentConversationBatch).toHaveBeenCalledWith('c-1', 'batch-1', expect.any(String))
@@ -558,5 +578,11 @@ describe('AgentConversationChat Agent 本次运行停止 #417', () => {
 
     expect(stopAgentConversationBatch).not.toHaveBeenCalled()
     expect(listAgentConversationEvents).toHaveBeenCalled()
+  })
+
+  it('uses the CopilotKit runtime agent id so getAgent does not warn Agent not found', async () => {
+    render(<AgentConversationChat />)
+    await screen.findByRole('textbox', { name: '询问小团宝业务' })
+    expect(capturedChatConfig.agentId).toBe('ai-create-readonly-assist')
   })
 })
